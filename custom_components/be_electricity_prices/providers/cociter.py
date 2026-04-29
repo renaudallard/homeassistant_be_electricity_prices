@@ -134,19 +134,23 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
         )
 
     # cociter_dynamic
+    # Cociter's formula always ends with "+ N% TVA" right after the parens;
+    # capture N so the conversion follows whatever VAT the PDF actually applies.
     formula = re.search(
-        r"Compteur SMR3\s*\(([\d,]+)\s*x\s*QUARTER\s*HOURL\s*Y\s*BELPEX\s*\+\s*([\d,]+)\)",
+        r"Compteur SMR3\s*\(([\d,]+)\s*x\s*QUARTER\s*HOURL\s*Y\s*BELPEX\s*\+\s*"
+        r"([\d,]+)\)\s*\+\s*(\d+)\s*%\s*TVA",
         text,
     )
     if not formula:
         raise ExtractorError("could not parse Cociter dynamic formula")
     factor_pdf = to_float(formula.group(1))
     base_pre_vat_cents = to_float(formula.group(2))
+    vat_multiplier = 1.0 + to_float(formula.group(3)) / 100.0
     # PDF formula yields c€/kWh from BELPEX in €/MWh; convert to EUR/kWh
-    # against spot already in EUR/kWh: factor *= 10.6, base = base_c * 1.06 / 100.
+    # against spot already in EUR/kWh: factor *= vat_mult * 10, base = base_c * vat_mult / 100.
     return DynamicRates(
-        factor=factor_pdf * 10.6,
-        base=base_pre_vat_cents * 1.06 / 100.0,
+        factor=factor_pdf * vat_multiplier * 10.0,
+        base=base_pre_vat_cents * vat_multiplier / 100.0,
         yearly_fixed_fee=yearly_fee,
     )
 
