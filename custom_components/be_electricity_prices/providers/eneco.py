@@ -171,12 +171,18 @@ def _extract_dynamic(text: str) -> DynamicRates:
     )
     if not yearly_fee_match or not formula_match:
         raise ExtractorError("could not parse Eneco dynamic energy block")
-    factor = to_float(formula_match.group(1))
+    factor_pdf = to_float(formula_match.group(1))
     base_pre_vat_cents = to_float(formula_match.group(2))
-    base_eur_per_kwh = base_pre_vat_cents / 100.0 * 1.06
-    factor_with_vat = factor * 1.06 / 100.0
+    # PDF formula yields c€/kWh from BELPEX in €/MWh:
+    #   energy_c_eur_kwh = (factor_pdf * BELPEX_eur_mwh + base_cents) * 1.06
+    # ENTSO-E client returns spot in EUR/kWh = BELPEX_eur_mwh / 1000.
+    # Convert to: energy_eur_kwh = factor * spot_eur_kwh + base
+    #   factor = factor_pdf * 1.06 * 1000 / 100 = factor_pdf * 10.6
+    #   base   = base_cents  * 1.06 / 100
+    base_eur_per_kwh = base_pre_vat_cents * 1.06 / 100.0
+    factor_eur_per_kwh = factor_pdf * 1.06 * 10.0
     return DynamicRates(
-        factor=factor_with_vat,
+        factor=factor_eur_per_kwh,
         base=base_eur_per_kwh,
         yearly_fixed_fee=to_float(yearly_fee_match.group(1)),
     )

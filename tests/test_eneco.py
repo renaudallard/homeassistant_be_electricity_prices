@@ -103,12 +103,15 @@ def test_flex_extracts_current_monthly_rate() -> None:
 def test_dynamic_extracts_factor_and_base() -> None:
     snap = parse_snapshot(_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
     assert isinstance(snap.energy, DynamicRates)
-    # PDF formula: (0.102 X BELPEX-H + 1) X 1.06 c€/kWh
-    # so factor = 0.102 * 1.06 / 100 EUR/kWh per (EUR/MWh? actually per c€/kWh of spot)
-    # See eneco.py - we keep coefficients in EUR/kWh terms for the pricing engine.
-    assert snap.energy.factor == pytest.approx(0.102 * 1.06 / 100, rel=1e-4)
-    assert snap.energy.base == pytest.approx(1.0 / 100 * 1.06)
+    # PDF formula: (0.102 x BELPEX-H_eur_per_mwh + 1) x 1.06  c€/kWh
+    # ENTSO-E client gives spot in EUR/kWh, so the integration uses:
+    #   energy_eur_per_kwh = factor * spot_eur_per_kwh + base
+    # where factor = 0.102 * 10.6 = 1.0812 and base = 1 * 1.06 / 100 = 0.0106.
+    assert snap.energy.factor == pytest.approx(0.102 * 10.6, rel=1e-4)
+    assert snap.energy.base == pytest.approx(0.0106)
     assert snap.energy.yearly_fixed_fee == pytest.approx(100.0)
+    # Realism check: at 100 EUR/MWh spot, all-in energy is ~0.119 EUR/kWh.
+    assert snap.energy.factor * 0.10 + snap.energy.base == pytest.approx(0.11872)
 
 
 def test_dynamic_publication_label_present() -> None:
