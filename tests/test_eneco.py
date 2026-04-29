@@ -70,8 +70,10 @@ def test_fix_extracts_taxes() -> None:
     snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
     assert snap.taxes.federal_excise == pytest.approx(0.050329)
     assert snap.taxes.energy_contribution == pytest.approx(0.002042)
-    # Wallonia "Bijdrage groene stroom" 3.13 c/kWh wins over Flanders WKK 1.52.
-    assert snap.taxes.regional_renewables == pytest.approx(0.0313)
+    # Both regional rates are populated from the PDF; the pricing engine
+    # picks the right one per region.
+    assert snap.taxes.flanders_renewables == pytest.approx(0.0152)
+    assert snap.taxes.wallonia_renewables == pytest.approx(0.0313)
     assert snap.taxes.region_connection_fee == pytest.approx(0.00075)
     assert snap.taxes.vat_rate == 0.0
     assert snap.publication_label.lower().startswith(

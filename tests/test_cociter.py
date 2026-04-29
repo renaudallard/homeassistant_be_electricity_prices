@@ -98,7 +98,9 @@ def test_variable_extracts_taxes() -> None:
     assert snap.taxes.federal_excise == pytest.approx(0.0503288)
     assert snap.taxes.energy_contribution == pytest.approx(0.00204167)
     assert snap.taxes.region_connection_fee == pytest.approx(0.00075)
-    assert snap.taxes.regional_renewables == pytest.approx(0.02968)
+    # Cociter only operates in Wallonia.
+    assert snap.taxes.wallonia_renewables == pytest.approx(0.02968)
+    assert snap.taxes.flanders_renewables == 0.0
     assert snap.taxes.vat_rate == 0.0
 
 

@@ -201,10 +201,11 @@ def _extract_taxes(text: str) -> TaxOverlay:
     federal_excise = to_float(taxes_block.group(2)) / 100.0
     connection_fee = to_float(taxes_block.group(3)) / 100.0
 
+    # Cociter only operates in Wallonia; Flanders renewables stay at 0.
     return TaxOverlay(
         federal_excise=federal_excise,
         energy_contribution=energy_contrib,
-        regional_renewables=to_float(renewables.group(1)) / 100.0
+        wallonia_renewables=to_float(renewables.group(1)) / 100.0
         if renewables
         else 0.0,
         region_connection_fee=connection_fee,

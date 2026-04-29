@@ -119,11 +119,13 @@ def network_eur_per_kwh(
 
 def taxes_eur_per_kwh(taxes: TaxOverlay, region: str) -> float:
     """Per-kWh levies for the configured region."""
+    from .const import REGION_FLANDERS, REGION_WALLONIA
+
     out = taxes.federal_excise + taxes.energy_contribution
-    if region == "wallonia":
-        out += taxes.region_connection_fee + taxes.regional_renewables
-    elif region == "flanders":
-        out += taxes.regional_renewables
+    if region == REGION_WALLONIA:
+        out += taxes.region_connection_fee + taxes.wallonia_renewables
+    elif region == REGION_FLANDERS:
+        out += taxes.flanders_renewables
     return out
 
 

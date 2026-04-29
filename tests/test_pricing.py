@@ -65,7 +65,8 @@ def _snapshot(energy: EnergyRates, vat: float = 0.0) -> SupplierSnapshot:
         taxes=TaxOverlay(
             federal_excise=0.05,
             energy_contribution=0.002,
-            regional_renewables=0.015,
+            flanders_renewables=0.015,
+            wallonia_renewables=0.015,
             region_connection_fee=0.001,
             vat_rate=vat,
         ),
@@ -165,16 +166,18 @@ def test_taxes_brussels_excludes_regional() -> None:
     t = TaxOverlay(
         federal_excise=0.05,
         energy_contribution=0.002,
-        regional_renewables=0.015,
+        flanders_renewables=0.015,
+        wallonia_renewables=0.0313,
     )
     assert taxes_eur_per_kwh(t, "brussels") == pytest.approx(0.052)
 
 
-def test_taxes_wallonia_includes_connection_and_renewables() -> None:
+def test_taxes_wallonia_includes_connection_and_wallonia_renewables() -> None:
     t = TaxOverlay(
         federal_excise=0.05,
         energy_contribution=0.002,
-        regional_renewables=0.0313,
+        flanders_renewables=0.015,
+        wallonia_renewables=0.0313,
         region_connection_fee=0.00075,
     )
     assert taxes_eur_per_kwh(t, "wallonia") == pytest.approx(
@@ -182,13 +185,15 @@ def test_taxes_wallonia_includes_connection_and_renewables() -> None:
     )
 
 
-def test_taxes_flanders_includes_renewables() -> None:
+def test_taxes_flanders_uses_flanders_renewables_only() -> None:
+    # Flanders entry must NOT pick up the Wallonia rate, even if both are set.
     t = TaxOverlay(
         federal_excise=0.05,
         energy_contribution=0.002,
-        regional_renewables=0.015,
+        flanders_renewables=0.0152,
+        wallonia_renewables=0.0313,
     )
-    assert taxes_eur_per_kwh(t, "flanders") == pytest.approx(0.067)
+    assert taxes_eur_per_kwh(t, "flanders") == pytest.approx(0.05 + 0.002 + 0.0152)
 
 
 def test_compute_breakdown_with_vat_inclusive_snapshot() -> None:

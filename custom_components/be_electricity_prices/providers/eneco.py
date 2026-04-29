@@ -261,10 +261,11 @@ def _extract_taxes(text: str) -> TaxOverlay:
     return TaxOverlay(
         federal_excise=excise,
         energy_contribution=contribution,
-        regional_renewables=(
+        flanders_renewables=to_float(wkk.group(1)) / 100.0 if wkk else 0.0,
+        wallonia_renewables=(
             to_float(wallonia_renewables.group(1)) / 100.0
             if wallonia_renewables
-            else (to_float(wkk.group(1)) / 100.0 if wkk else 0.0)
+            else 0.0
         ),
         region_connection_fee=(
             to_float(connection.group(1)) / 100.0 if connection else 0.0
