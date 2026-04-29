@@ -135,6 +135,14 @@ and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. Snapshots older than 7 days
 are flagged stale.
 
+## Changing parameters after install
+
+Settings -> Devices & services -> *Belgian Electricity Prices* -> **Configure**
+walks the same six steps as the initial setup, pre-filled with the current
+values. Change supplier, contract, region, DSO, meter, ENTSO-E API key or
+capacity peak source - anything. The integration reloads automatically when
+you finish, picking the new tariff card on the next refresh.
+
 ## Development
 
 ```bash

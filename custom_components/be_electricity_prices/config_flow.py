@@ -25,13 +25,19 @@
 
 """Config flow for the Belgian Electricity Prices integration.
 
-Steps:
+Both ConfigFlow and OptionsFlow walk the same chain of steps:
 
   user      -> supplier (registry) + region
   contract  -> contract (filtered by supplier)
   dso       -> DSO (filtered by region)
+  meter     -> mono / bi / dynamic
   api_key   -> ENTSO-E key (only when chosen contract is dynamic)
   capacity  -> Flemish capacity peak source (only when region = flanders)
+
+OptionsFlow pre-fills every field with the current value, so the user can
+change anything (including supplier/contract/region) post-install. On
+finalize, OptionsFlow writes back to ``entry.data`` and updates the entry
+title.
 
 No EUR values are asked. Energy + network + tax rates are fetched live by
 the coordinator from each supplier's own publication.
@@ -86,8 +92,15 @@ from .providers import all_extractors, get as get_extractor
 from .providers.base import Contract
 
 
+# ---- shared schema builders ---------------------------------------------------
+
+
 def _supplier_options() -> list[SelectOptionDict]:
     return [SelectOptionDict(value=e.id, label=e.label) for e in all_extractors()]
+
+
+def _contracts_for(supplier_id: str) -> tuple[Contract, ...]:
+    return get_extractor(supplier_id).contracts
 
 
 def _region_dsos(region: str) -> tuple[str, ...]:
@@ -98,8 +111,143 @@ def _region_dsos(region: str) -> tuple[str, ...]:
     return ("sibelga",)
 
 
-def _contracts_for(supplier_id: str) -> tuple[Contract, ...]:
-    return get_extractor(supplier_id).contracts
+def _contract_kind(supplier_id: str, contract_id: str) -> str:
+    for c in _contracts_for(supplier_id):
+        if c.id == contract_id:
+            return c.kind
+    return "fixed"
+
+
+def _user_schema(defaults: dict[str, Any]) -> vol.Schema:
+    fields: dict[Any, Any] = {}
+    if (current := defaults.get(CONF_SUPPLIER)) is not None:
+        fields[vol.Required(CONF_SUPPLIER, default=current)] = SelectSelector(
+            SelectSelectorConfig(
+                options=_supplier_options(), mode=SelectSelectorMode.DROPDOWN
+            )
+        )
+    else:
+        fields[vol.Required(CONF_SUPPLIER)] = SelectSelector(
+            SelectSelectorConfig(
+                options=_supplier_options(), mode=SelectSelectorMode.DROPDOWN
+            )
+        )
+    if (region := defaults.get(CONF_REGION)) is not None:
+        fields[vol.Required(CONF_REGION, default=region)] = SelectSelector(
+            SelectSelectorConfig(
+                options=list(REGIONS),
+                mode=SelectSelectorMode.DROPDOWN,
+                translation_key="region",
+            )
+        )
+    else:
+        fields[vol.Required(CONF_REGION)] = SelectSelector(
+            SelectSelectorConfig(
+                options=list(REGIONS),
+                mode=SelectSelectorMode.DROPDOWN,
+                translation_key="region",
+            )
+        )
+    return vol.Schema(fields)
+
+
+def _contract_schema(supplier_id: str, defaults: dict[str, Any]) -> vol.Schema:
+    contracts = _contracts_for(supplier_id)
+    options = [SelectOptionDict(value=c.id, label=c.label) for c in contracts]
+    valid_ids = {c.id for c in contracts}
+    current = defaults.get(CONF_CONTRACT)
+    selector = SelectSelector(
+        SelectSelectorConfig(options=options, mode=SelectSelectorMode.LIST)
+    )
+    if current in valid_ids:
+        return vol.Schema({vol.Required(CONF_CONTRACT, default=current): selector})
+    return vol.Schema({vol.Required(CONF_CONTRACT): selector})
+
+
+def _dso_schema(region: str, defaults: dict[str, Any]) -> vol.Schema:
+    valid = _region_dsos(region)
+    current = defaults.get(CONF_DSO)
+    selector = SelectSelector(
+        SelectSelectorConfig(
+            options=list(valid),
+            mode=SelectSelectorMode.DROPDOWN,
+            translation_key="dso",
+        )
+    )
+    if current in valid:
+        return vol.Schema({vol.Required(CONF_DSO, default=current): selector})
+    return vol.Schema({vol.Required(CONF_DSO): selector})
+
+
+def _meter_schema(
+    supplier_id: str, contract_id: str, defaults: dict[str, Any]
+) -> vol.Schema:
+    fallback = (
+        METER_DYNAMIC
+        if _contract_kind(supplier_id, contract_id) == "dynamic"
+        else METER_MONO
+    )
+    current = defaults.get(CONF_METER) or fallback
+    return vol.Schema(
+        {
+            vol.Required(CONF_METER, default=current): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(METER_TYPES),
+                    mode=SelectSelectorMode.LIST,
+                    translation_key="meter",
+                )
+            ),
+        }
+    )
+
+
+def _api_key_schema(defaults: dict[str, Any]) -> vol.Schema:
+    current = defaults.get(CONF_API_KEY, "")
+    return vol.Schema({vol.Required(CONF_API_KEY, default=current): TextSelector()})
+
+
+def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
+    fields: dict[Any, Any] = {
+        vol.Required(
+            CONF_CAPACITY_MODE,
+            default=defaults.get(CONF_CAPACITY_MODE, CAPACITY_MODE_SENSOR),
+        ): SelectSelector(
+            SelectSelectorConfig(
+                options=[CAPACITY_MODE_SENSOR, CAPACITY_MODE_FIXED],
+                mode=SelectSelectorMode.LIST,
+                translation_key="capacity_mode",
+            )
+        ),
+    }
+    if (sensor := defaults.get(CONF_CAPACITY_PEAK_SENSOR)) is not None:
+        fields[vol.Optional(CONF_CAPACITY_PEAK_SENSOR, default=sensor)] = (
+            EntitySelector(EntitySelectorConfig(domain="sensor"))
+        )
+    else:
+        fields[vol.Optional(CONF_CAPACITY_PEAK_SENSOR)] = EntitySelector(
+            EntitySelectorConfig(domain="sensor")
+        )
+    fields[
+        vol.Optional(
+            CONF_CAPACITY_FIXED_KW,
+            default=defaults.get(CONF_CAPACITY_FIXED_KW, DEFAULT_CAPACITY_FIXED_KW),
+        )
+    ] = NumberSelector(
+        NumberSelectorConfig(min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX)
+    )
+    return vol.Schema(fields)
+
+
+def _entry_title(data: dict[str, Any]) -> str:
+    extractor = get_extractor(data[CONF_SUPPLIER])
+    contract_label = next(
+        (c.label for c in extractor.contracts if c.id == data[CONF_CONTRACT]),
+        data[CONF_CONTRACT],
+    )
+    return f"{extractor.label} - {contract_label} ({data[CONF_REGION].capitalize()})"
+
+
+# ---- ConfigFlow ---------------------------------------------------------------
 
 
 class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -117,25 +265,9 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_contract()
-
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_SUPPLIER): SelectSelector(
-                    SelectSelectorConfig(
-                        options=_supplier_options(),
-                        mode=SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-                vol.Required(CONF_REGION): SelectSelector(
-                    SelectSelectorConfig(
-                        options=list(REGIONS),
-                        mode=SelectSelectorMode.DROPDOWN,
-                        translation_key="region",
-                    )
-                ),
-            }
+        return self.async_show_form(
+            step_id="user", data_schema=_user_schema(self._data)
         )
-        return self.async_show_form(step_id="user", data_schema=schema)
 
     async def async_step_contract(
         self, user_input: dict[str, Any] | None = None
@@ -143,20 +275,10 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_dso()
-
-        contracts = _contracts_for(self._data[CONF_SUPPLIER])
-        options = [SelectOptionDict(value=c.id, label=c.label) for c in contracts]
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_CONTRACT): SelectSelector(
-                    SelectSelectorConfig(
-                        options=options,
-                        mode=SelectSelectorMode.LIST,
-                    )
-                ),
-            }
+        return self.async_show_form(
+            step_id="contract",
+            data_schema=_contract_schema(self._data[CONF_SUPPLIER], self._data),
         )
-        return self.async_show_form(step_id="contract", data_schema=schema)
 
     async def async_step_dso(
         self, user_input: dict[str, Any] | None = None
@@ -164,56 +286,33 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_meter()
-
-        dsos = _region_dsos(self._data[CONF_REGION])
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_DSO): SelectSelector(
-                    SelectSelectorConfig(
-                        options=list(dsos),
-                        mode=SelectSelectorMode.DROPDOWN,
-                        translation_key="dso",
-                    )
-                ),
-            }
+        return self.async_show_form(
+            step_id="dso",
+            data_schema=_dso_schema(self._data[CONF_REGION], self._data),
         )
-        return self.async_show_form(step_id="dso", data_schema=schema)
 
     async def async_step_meter(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            if self._is_dynamic_contract():
-                return await self.async_step_api_key()
-            if self._data[CONF_REGION] == REGION_FLANDERS:
-                return await self.async_step_capacity()
-            return self._finalize()
-
-        default = METER_DYNAMIC if self._is_dynamic_contract() else METER_MONO
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_METER, default=default): SelectSelector(
-                    SelectSelectorConfig(
-                        options=list(METER_TYPES),
-                        mode=SelectSelectorMode.LIST,
-                        translation_key="meter",
-                    )
-                ),
-            }
+            return await self._after_meter()
+        return self.async_show_form(
+            step_id="meter",
+            data_schema=_meter_schema(
+                self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT], self._data
+            ),
         )
-        return self.async_show_form(step_id="meter", data_schema=schema)
 
     async def async_step_api_key(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            if self._data[CONF_REGION] == REGION_FLANDERS:
-                return await self.async_step_capacity()
-            return self._finalize()
-        schema = vol.Schema({vol.Required(CONF_API_KEY): TextSelector()})
-        return self.async_show_form(step_id="api_key", data_schema=schema)
+            return await self._after_api_key()
+        return self.async_show_form(
+            step_id="api_key", data_schema=_api_key_schema(self._data)
+        )
 
     async def async_step_capacity(
         self, user_input: dict[str, Any] | None = None
@@ -221,48 +320,27 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._data.update(user_input)
             return self._finalize()
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_CAPACITY_MODE, default=CAPACITY_MODE_SENSOR
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        options=[CAPACITY_MODE_SENSOR, CAPACITY_MODE_FIXED],
-                        mode=SelectSelectorMode.LIST,
-                        translation_key="capacity_mode",
-                    )
-                ),
-                vol.Optional(CONF_CAPACITY_PEAK_SENSOR): EntitySelector(
-                    EntitySelectorConfig(domain="sensor")
-                ),
-                vol.Optional(
-                    CONF_CAPACITY_FIXED_KW, default=DEFAULT_CAPACITY_FIXED_KW
-                ): NumberSelector(
-                    NumberSelectorConfig(
-                        min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX
-                    )
-                ),
-            }
+        return self.async_show_form(
+            step_id="capacity", data_schema=_capacity_schema(self._data)
         )
-        return self.async_show_form(step_id="capacity", data_schema=schema)
 
-    def _is_dynamic_contract(self) -> bool:
-        for c in _contracts_for(self._data[CONF_SUPPLIER]):
-            if c.id == self._data[CONF_CONTRACT]:
-                return c.kind == "dynamic"
-        return False
+    async def _after_meter(self) -> ConfigFlowResult:
+        if (
+            _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
+            == "dynamic"
+        ):
+            return await self.async_step_api_key()
+        if self._data[CONF_REGION] == REGION_FLANDERS:
+            return await self.async_step_capacity()
+        return self._finalize()
+
+    async def _after_api_key(self) -> ConfigFlowResult:
+        if self._data[CONF_REGION] == REGION_FLANDERS:
+            return await self.async_step_capacity()
+        return self._finalize()
 
     def _finalize(self) -> ConfigFlowResult:
-        extractor = get_extractor(self._data[CONF_SUPPLIER])
-        contract_label = next(
-            (c.label for c in extractor.contracts if c.id == self._data[CONF_CONTRACT]),
-            self._data[CONF_CONTRACT],
-        )
-        title = (
-            f"{extractor.label} - {contract_label}"
-            f" ({self._data[CONF_REGION].capitalize()})"
-        )
-        return self.async_create_entry(title=title, data=self._data)
+        return self.async_create_entry(title=_entry_title(self._data), data=self._data)
 
     @staticmethod
     @callback
@@ -270,32 +348,104 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
         return BePricesOptionsFlow()
 
 
+# ---- OptionsFlow --------------------------------------------------------------
+
+
 class BePricesOptionsFlow(OptionsFlow):
-    """Update the API key (no other knobs - prices come from the live source)."""
+    """Walk every config step pre-filled, save back to entry.data."""
+
+    _data: dict[str, Any]
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        if not hasattr(self, "_data"):
+            self._data = {**self.config_entry.data, **self.config_entry.options}
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            self._data.update(user_input)
+            return await self.async_step_contract()
+        return self.async_show_form(
+            step_id="init", data_schema=_user_schema(self._data)
+        )
 
-        merged = {**self.config_entry.data, **self.config_entry.options}
-        fields: dict[Any, Any] = {}
-        if _is_dynamic(merged):
-            fields[vol.Required(CONF_API_KEY, default=merged.get(CONF_API_KEY, ""))] = (
-                TextSelector()
-            )
-        if not fields:
-            return self.async_create_entry(title="", data={})
-        return self.async_show_form(step_id="init", data_schema=vol.Schema(fields))
+    async def async_step_contract(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_dso()
+        return self.async_show_form(
+            step_id="contract",
+            data_schema=_contract_schema(self._data[CONF_SUPPLIER], self._data),
+        )
 
+    async def async_step_dso(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_meter()
+        return self.async_show_form(
+            step_id="dso",
+            data_schema=_dso_schema(self._data[CONF_REGION], self._data),
+        )
 
-def _is_dynamic(merged: dict[str, Any]) -> bool:
-    try:
-        contracts = _contracts_for(merged[CONF_SUPPLIER])
-    except Exception:
-        return False
-    for c in contracts:
-        if c.id == merged.get(CONF_CONTRACT):
-            return c.kind == "dynamic"
-    return False
+    async def async_step_meter(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self._after_meter()
+        return self.async_show_form(
+            step_id="meter",
+            data_schema=_meter_schema(
+                self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT], self._data
+            ),
+        )
+
+    async def async_step_api_key(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self._after_api_key()
+        return self.async_show_form(
+            step_id="api_key", data_schema=_api_key_schema(self._data)
+        )
+
+    async def async_step_capacity(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return self._finalize()
+        return self.async_show_form(
+            step_id="capacity", data_schema=_capacity_schema(self._data)
+        )
+
+    async def _after_meter(self) -> ConfigFlowResult:
+        if (
+            _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
+            == "dynamic"
+        ):
+            return await self.async_step_api_key()
+        if self._data[CONF_REGION] == REGION_FLANDERS:
+            return await self.async_step_capacity()
+        return self._finalize()
+
+    async def _after_api_key(self) -> ConfigFlowResult:
+        if self._data[CONF_REGION] == REGION_FLANDERS:
+            return await self.async_step_capacity()
+        return self._finalize()
+
+    def _finalize(self) -> ConfigFlowResult:
+        # Persist back to entry.data so the new values are the baseline,
+        # discard any stale options, and update the title to reflect the
+        # current supplier / contract / region.
+        self.hass.config_entries.async_update_entry(
+            self.config_entry,
+            data=self._data,
+            options={},
+            title=_entry_title(self._data),
+        )
+        return self.async_create_entry(title="", data={})
