@@ -58,8 +58,56 @@
   "options": {
     "step": {
       "init": {
-        "title": "Optionen Belgische Strompreise",
-        "description": "ENTSO-E API-Schluessel fuer dynamische Vertraege aktualisieren. Andere Tarife werden automatisch geholt."
+        "title": "[%key:component::be_electricity_prices::config::step::user::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::user::description%]",
+        "data": {
+          "supplier": "[%key:component::be_electricity_prices::config::step::user::data::supplier%]",
+          "region": "[%key:component::be_electricity_prices::config::step::user::data::region%]"
+        }
+      },
+      "contract": {
+        "title": "[%key:component::be_electricity_prices::config::step::contract::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::contract::description%]",
+        "data": {
+          "contract": "[%key:component::be_electricity_prices::config::step::contract::data::contract%]"
+        }
+      },
+      "dso": {
+        "title": "[%key:component::be_electricity_prices::config::step::dso::title%]",
+        "data": {
+          "dso": "[%key:component::be_electricity_prices::config::step::dso::data::dso%]"
+        }
+      },
+      "meter": {
+        "title": "[%key:component::be_electricity_prices::config::step::meter::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::meter::description%]",
+        "data": {
+          "meter": "[%key:component::be_electricity_prices::config::step::meter::data::meter%]"
+        }
+      },
+      "api_key": {
+        "title": "[%key:component::be_electricity_prices::config::step::api_key::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::api_key::description%]",
+        "data": {
+          "api_key": "[%key:component::be_electricity_prices::config::step::api_key::data::api_key%]"
+        }
+      },
+      "capacity": {
+        "title": "[%key:component::be_electricity_prices::config::step::capacity::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::capacity::description%]",
+        "data": {
+          "capacity_mode": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_mode%]",
+          "capacity_peak_sensor": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_peak_sensor%]",
+          "capacity_fixed_kw": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_fixed_kw%]"
+        }
+      },
+      "solar": {
+        "title": "[%key:component::be_electricity_prices::config::step::solar::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::solar::description%]",
+        "data": {
+          "solar_kva": "[%key:component::be_electricity_prices::config::step::solar::data::solar_kva%]",
+          "solar_regime": "[%key:component::be_electricity_prices::config::step::solar::data::solar_regime%]"
+        }
       }
     }
   },
