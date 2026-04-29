@@ -63,17 +63,6 @@
         "brussels": "Brussel"
       }
     },
-    "dso": {
-      "options": {
-        "fluvius": "Fluvius",
-        "ores": "ORES",
-        "resa": "RESA",
-        "aieg": "AIEG",
-        "aiesh": "AIESH",
-        "rew": "Regie de Wavre",
-        "sibelga": "Sibelga"
-      }
-    },
     "capacity_mode": {
       "options": {
         "sensor": "Vanuit een vermogenssensor",
@@ -90,16 +79,36 @@
   },
   "entity": {
     "sensor": {
-      "current_price": { "name": "Huidige prijs" },
-      "next_hour_price": { "name": "Prijs volgend uur" },
-      "today_average": { "name": "Gemiddelde vandaag" },
-      "today_min": { "name": "Minimum vandaag" },
-      "today_max": { "name": "Maximum vandaag" },
-      "energy_component": { "name": "Energiecomponent" },
-      "network_component": { "name": "Netwerkcomponent" },
-      "taxes_component": { "name": "Belastingcomponent" },
-      "capacity_cost": { "name": "Capaciteitskost" },
-      "monthly_peak_kw": { "name": "Maandelijkse vermogenspiek" }
+      "current_price": {
+        "name": "Huidige prijs"
+      },
+      "next_hour_price": {
+        "name": "Prijs volgend uur"
+      },
+      "today_average": {
+        "name": "Gemiddelde vandaag"
+      },
+      "today_min": {
+        "name": "Minimum vandaag"
+      },
+      "today_max": {
+        "name": "Maximum vandaag"
+      },
+      "energy_component": {
+        "name": "Energiecomponent"
+      },
+      "network_component": {
+        "name": "Netwerkcomponent"
+      },
+      "taxes_component": {
+        "name": "Belastingcomponent"
+      },
+      "capacity_cost": {
+        "name": "Capaciteitskost"
+      },
+      "monthly_peak_kw": {
+        "name": "Maandelijkse vermogenspiek"
+      }
     }
   }
 }

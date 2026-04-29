@@ -66,16 +66,31 @@ _CONTRACT_URLS = {
     "power_dynamic": f"{_BASE_URL}/BC_032_012604_NL_ENECO_POWER_DYNAMIC.pdf",
 }
 
-# DSO row label as printed in the PDF -> integration DSO key.
-# Eneco prints multiple Fluvius and ORES sub-areas; we keep the first one
-# encountered as the canonical row for the top-level DSO key.
-_DSO_LABEL_TO_KEY: dict[str, str] = {
+# Wallonia DSO labels (column layout: 4 distribution + optional [MEDIUM PIC ECO]
+# + transport + databeheer + prosument). ORES sub-zones share a uniform rate so
+# we just keep the first one encountered as the canonical "ores" row.
+_WALLONIA_LABELS: dict[str, str] = {
     "AIEG": "aieg",
     "AIESH": "aiesh",
     "ORES (Brabant Wallon)": "ores",
     "REGIE DE WAVRE": "rew",
     "TECTEO RESA": "resa",
-    "FLUVIUS ANTWERPEN": "fluvius",
+}
+
+# Flanders Fluvius digital-meter sub-areas (column layout: Normaal,
+# Uitsluitend nacht, SMR1 databeheer, SMR3 databeheer, capaciteitstarief,
+# then two `-` placeholders). Each sub-area has its own distribution and
+# capacity rates. Transport is not in the row; the Wallonia rows carry the
+# (national) Elia transport value, which we propagate.
+_FLUVIUS_LABELS: dict[str, str] = {
+    "FLUVIUS HALLE VILVOORDE": "fluvius_halle_vilvoorde",
+    "FLUVIUS ANTWERPEN": "fluvius_antwerpen",
+    "FLUVIUS IMEWO": "fluvius_imewo",
+    "FLUVIUS LIMBURG": "fluvius_limburg",
+    "FLUVIUS WEST": "fluvius_west",
+    "FLUVIUS MIDDEN VLAANDEREN (INTERGEM)": "fluvius_intergem",
+    "FLUVIUS KEMPEN (IVEKA)": "fluvius_iveka",
+    "FLUVIUS ZENNE DIJLE": "fluvius_zenne_dijle",
 }
 
 _NUM = r"(\d{1,3}(?:[\.,]\d{1,4})?)"
@@ -190,17 +205,26 @@ def _extract_dynamic(text: str) -> DynamicRates:
 
 def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
-    for pdf_label, key in _DSO_LABEL_TO_KEY.items():
+    transport = _extract_transport(text)
+    for pdf_label, key in _WALLONIA_LABELS.items():
         if key in out:
             continue
-        row = _find_dso_row(text, pdf_label)
-        if row is None:
-            continue
-        out[key] = row
+        row = _find_wallonia_row(text, pdf_label)
+        if row is not None:
+            out[key] = row
+    for pdf_label, key in _FLUVIUS_LABELS.items():
+        row = _find_fluvius_row(text, pdf_label, transport)
+        if row is not None:
+            out[key] = row
     return out
 
 
-def _find_dso_row(text: str, label: str) -> DsoOverlay | None:
+def _find_wallonia_row(text: str, label: str) -> DsoOverlay | None:
+    """Wallonia rows carry 7 (Power Dynamic) or 10 (Power Fix) numbers.
+
+    Layout: Enkelvoudig | Dag | Nacht | Uitsl. nacht | [MEDIUM PIC ECO] |
+            Transport | Databeheer (€/jaar) | Prosument (€/kVA/jaar)
+    """
     escaped = re.escape(label)
     pattern = re.compile(
         rf"{escaped}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}"
@@ -211,18 +235,60 @@ def _find_dso_row(text: str, label: str) -> DsoOverlay | None:
     if not match:
         return None
     groups = [g for g in match.groups() if g is not None]
-    single = to_float(groups[0]) / 100.0
-    day = to_float(groups[1]) / 100.0
-    night = to_float(groups[2]) / 100.0
-    transport = to_float(groups[-3]) / 100.0
-    data_year = to_float(groups[-2])
     return DsoOverlay(
-        distribution_single=single,
-        distribution_peak=day,
-        distribution_offpeak=night,
-        transport=transport,
-        data_management_per_year=data_year,
+        distribution_single=to_float(groups[0]) / 100.0,
+        distribution_peak=to_float(groups[1]) / 100.0,
+        distribution_offpeak=to_float(groups[2]) / 100.0,
+        transport=to_float(groups[-3]) / 100.0,
+        data_management_per_year=to_float(groups[-2]),
     )
+
+
+def _find_fluvius_row(text: str, label: str, transport: float) -> DsoOverlay | None:
+    """Fluvius digital-meter rows: 5 numbers + 2 placeholder dashes.
+
+    Layout: Normaal | Uitsl. nacht | SMR1 (€/jaar) | SMR3 (€/jaar) |
+            Capaciteitstarief (€/kW/jaar) | -- | --
+    """
+    escaped = re.escape(label)
+    # Anchor on the digital-meter Fluvius section so we don't accidentally
+    # pick up the analoge meter row that follows further down.
+    digital_match = re.search(
+        rf"DIGITALE METER.*?{escaped}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}",
+        text,
+        re.S,
+    )
+    if not digital_match:
+        return None
+    return DsoOverlay(
+        distribution_single=to_float(digital_match.group(1)) / 100.0,
+        # Post-capacity-tariff Flemish meters bill at a single rate; the
+        # Uitsl. nacht column only matters for exclusive-night meters which
+        # we surface as exclusive_night for completeness but do not yet
+        # use in pricing.
+        distribution_peak=None,
+        distribution_offpeak=None,
+        transport=transport,
+        data_management_per_year=to_float(digital_match.group(4)),
+        capacity_eur_per_kw_year=to_float(digital_match.group(5)),
+    )
+
+
+def _extract_transport(text: str) -> float:
+    """Pull the (national) Elia transport rate from the first Wallonia row.
+
+    The Fluvius rows omit transport from their layout, but it is the same
+    regulated value across all DSOs.
+    """
+    aieg = _find_wallonia_row(text, "AIEG")
+    if aieg is not None:
+        return aieg.transport
+    # Fallback: any Wallonia row.
+    for label in _WALLONIA_LABELS:
+        row = _find_wallonia_row(text, label)
+        if row is not None:
+            return row.transport
+    return 0.0
 
 
 def _extract_taxes(text: str) -> TaxOverlay:
@@ -286,5 +352,5 @@ EXTRACTOR = SupplierExtractor(
         ),
     ),
     fetch=fetch,
-    dso_keys=tuple(set(_DSO_LABEL_TO_KEY.values())),
+    dso_keys=tuple(_WALLONIA_LABELS.values()) + tuple(_FLUVIUS_LABELS.values()),
 )

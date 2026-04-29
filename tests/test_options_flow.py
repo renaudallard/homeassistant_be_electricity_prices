@@ -142,7 +142,7 @@ async def test_options_flow_flanders_branch_asks_capacity(
             "supplier": "eneco",
             "contract": "power_fix",
             "region": "flanders",
-            "dso": "fluvius",
+            "dso": "fluvius_antwerpen",
             "meter": "mono",
             "capacity_mode": "fixed",
             "capacity_fixed_kw": 2.5,
@@ -159,7 +159,7 @@ async def test_options_flow_flanders_branch_asks_capacity(
         result["flow_id"], {"contract": "power_fix"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"dso": "fluvius"}
+        result["flow_id"], {"dso": "fluvius_antwerpen"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"meter": "mono"}

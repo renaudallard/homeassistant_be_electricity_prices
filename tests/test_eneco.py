@@ -66,6 +66,45 @@ def test_fix_extracts_dso_overlay() -> None:
     assert aieg.data_management_per_year == pytest.approx(19.49)
 
 
+def test_fix_extracts_all_fluvius_sub_areas() -> None:
+    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    expected_keys = {
+        "fluvius_halle_vilvoorde",
+        "fluvius_antwerpen",
+        "fluvius_imewo",
+        "fluvius_limburg",
+        "fluvius_west",
+        "fluvius_intergem",
+        "fluvius_iveka",
+        "fluvius_zenne_dijle",
+    }
+    assert expected_keys <= set(snap.dsos)
+
+    # Antwerpen is the digital-meter row "FLUVIUS ANTWERPEN 5,35 4,81 18,92
+    # 18,92 52,37 - -" -> distribution 5.35 c/kWh, capacity 52.37 EUR/kW/yr.
+    antwerpen = snap.dsos["fluvius_antwerpen"]
+    assert antwerpen.distribution_single == pytest.approx(0.0535)
+    # No peak/offpeak split for Flemish digital meters post-capacity-tariff.
+    assert antwerpen.distribution_peak is None
+    assert antwerpen.distribution_offpeak is None
+    # Transport is the (national) Elia rate, propagated from the Wallonia rows.
+    assert antwerpen.transport == pytest.approx(0.0274)
+    assert antwerpen.data_management_per_year == pytest.approx(18.92)
+    assert antwerpen.capacity_eur_per_kw_year == pytest.approx(52.37)
+
+
+def test_fix_fluvius_sub_areas_have_distinct_rates() -> None:
+    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    rates = {
+        key: snap.dsos[key].distribution_single
+        for key in snap.dsos
+        if key.startswith("fluvius_")
+    }
+    # Fluvius sub-areas publish materially different distribution rates;
+    # if all eight collapsed to one value something is wrong upstream.
+    assert len(set(rates.values())) > 1
+
+
 def test_fix_extracts_taxes() -> None:
     snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
     assert snap.taxes.federal_excise == pytest.approx(0.050329)

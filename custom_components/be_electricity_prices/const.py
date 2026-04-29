@@ -42,6 +42,30 @@ REGION_BRUSSELS: Final = "brussels"
 
 REGIONS: Final = (REGION_FLANDERS, REGION_WALLONIA, REGION_BRUSSELS)
 
+# DSO selection per region. Flanders has eight Fluvius sub-areas with
+# materially different distribution rates; Wallonia DSOs are uniform per
+# operator; Brussels has one (Sibelga).
+DSO_CHOICES: Final[dict[str, tuple[tuple[str, str], ...]]] = {
+    REGION_FLANDERS: (
+        ("fluvius_antwerpen", "Fluvius Antwerpen"),
+        ("fluvius_halle_vilvoorde", "Fluvius Halle-Vilvoorde"),
+        ("fluvius_imewo", "Fluvius Imewo"),
+        ("fluvius_intergem", "Fluvius Midden-Vlaanderen (Intergem)"),
+        ("fluvius_iveka", "Fluvius Kempen (Iveka)"),
+        ("fluvius_limburg", "Fluvius Limburg"),
+        ("fluvius_west", "Fluvius West"),
+        ("fluvius_zenne_dijle", "Fluvius Zenne-Dijle"),
+    ),
+    REGION_WALLONIA: (
+        ("aieg", "AIEG"),
+        ("aiesh", "AIESH"),
+        ("ores", "ORES"),
+        ("resa", "RESA"),
+        ("rew", "Regie de Wavre"),
+    ),
+    REGION_BRUSSELS: (("sibelga", "Sibelga"),),
+}
+
 TARIFF_FIXED: Final = "fixed"
 TARIFF_VARIABLE: Final = "variable"
 TARIFF_DYNAMIC: Final = "dynamic"

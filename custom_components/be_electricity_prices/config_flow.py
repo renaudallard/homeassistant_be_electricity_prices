@@ -82,6 +82,7 @@ from .const import (
     CONF_SUPPLIER,
     DEFAULT_CAPACITY_FIXED_KW,
     DOMAIN,
+    DSO_CHOICES,
     METER_DYNAMIC,
     METER_MONO,
     METER_TYPES,
@@ -103,12 +104,15 @@ def _contracts_for(supplier_id: str) -> tuple[Contract, ...]:
     return get_extractor(supplier_id).contracts
 
 
-def _region_dsos(region: str) -> tuple[str, ...]:
-    if region == REGION_FLANDERS:
-        return ("fluvius",)
-    if region == "wallonia":
-        return ("ores", "resa", "aieg", "aiesh", "rew")
-    return ("sibelga",)
+def _region_dso_options(region: str) -> list[SelectOptionDict]:
+    return [
+        SelectOptionDict(value=slug, label=label)
+        for slug, label in DSO_CHOICES.get(region, ())
+    ]
+
+
+def _region_dso_slugs(region: str) -> tuple[str, ...]:
+    return tuple(slug for slug, _ in DSO_CHOICES.get(region, ()))
 
 
 def _contract_kind(supplier_id: str, contract_id: str) -> str:
@@ -165,14 +169,11 @@ def _contract_schema(supplier_id: str, defaults: dict[str, Any]) -> vol.Schema:
 
 
 def _dso_schema(region: str, defaults: dict[str, Any]) -> vol.Schema:
-    valid = _region_dsos(region)
+    options = _region_dso_options(region)
+    valid = set(_region_dso_slugs(region))
     current = defaults.get(CONF_DSO)
     selector = SelectSelector(
-        SelectSelectorConfig(
-            options=list(valid),
-            mode=SelectSelectorMode.DROPDOWN,
-            translation_key="dso",
-        )
+        SelectSelectorConfig(options=options, mode=SelectSelectorMode.DROPDOWN)
     )
     if current in valid:
         return vol.Schema({vol.Required(CONF_DSO, default=current): selector})

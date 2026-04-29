@@ -63,17 +63,6 @@
         "brussels": "Brussels"
       }
     },
-    "dso": {
-      "options": {
-        "fluvius": "Fluvius",
-        "ores": "ORES",
-        "resa": "RESA",
-        "aieg": "AIEG",
-        "aiesh": "AIESH",
-        "rew": "Regie de Wavre",
-        "sibelga": "Sibelga"
-      }
-    },
     "capacity_mode": {
       "options": {
         "sensor": "From a power sensor",
@@ -90,16 +79,36 @@
   },
   "entity": {
     "sensor": {
-      "current_price": { "name": "Current price" },
-      "next_hour_price": { "name": "Next hour price" },
-      "today_average": { "name": "Today average" },
-      "today_min": { "name": "Today minimum" },
-      "today_max": { "name": "Today maximum" },
-      "energy_component": { "name": "Energy component" },
-      "network_component": { "name": "Network component" },
-      "taxes_component": { "name": "Taxes component" },
-      "capacity_cost": { "name": "Capacity cost" },
-      "monthly_peak_kw": { "name": "Monthly peak power" }
+      "current_price": {
+        "name": "Current price"
+      },
+      "next_hour_price": {
+        "name": "Next hour price"
+      },
+      "today_average": {
+        "name": "Today average"
+      },
+      "today_min": {
+        "name": "Today minimum"
+      },
+      "today_max": {
+        "name": "Today maximum"
+      },
+      "energy_component": {
+        "name": "Energy component"
+      },
+      "network_component": {
+        "name": "Network component"
+      },
+      "taxes_component": {
+        "name": "Taxes component"
+      },
+      "capacity_cost": {
+        "name": "Capacity cost"
+      },
+      "monthly_peak_kw": {
+        "name": "Monthly peak power"
+      }
     }
   }
 }

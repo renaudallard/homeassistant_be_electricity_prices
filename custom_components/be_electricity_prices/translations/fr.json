@@ -63,17 +63,6 @@
         "brussels": "Bruxelles"
       }
     },
-    "dso": {
-      "options": {
-        "fluvius": "Fluvius",
-        "ores": "ORES",
-        "resa": "RESA",
-        "aieg": "AIEG",
-        "aiesh": "AIESH",
-        "rew": "Regie de Wavre",
-        "sibelga": "Sibelga"
-      }
-    },
     "capacity_mode": {
       "options": {
         "sensor": "Depuis un capteur de puissance",
@@ -90,16 +79,36 @@
   },
   "entity": {
     "sensor": {
-      "current_price": { "name": "Prix actuel" },
-      "next_hour_price": { "name": "Prix heure suivante" },
-      "today_average": { "name": "Moyenne aujourd'hui" },
-      "today_min": { "name": "Minimum aujourd'hui" },
-      "today_max": { "name": "Maximum aujourd'hui" },
-      "energy_component": { "name": "Composante energie" },
-      "network_component": { "name": "Composante reseau" },
-      "taxes_component": { "name": "Composante taxes" },
-      "capacity_cost": { "name": "Cout capacitaire" },
-      "monthly_peak_kw": { "name": "Pic de puissance mensuel" }
+      "current_price": {
+        "name": "Prix actuel"
+      },
+      "next_hour_price": {
+        "name": "Prix heure suivante"
+      },
+      "today_average": {
+        "name": "Moyenne aujourd'hui"
+      },
+      "today_min": {
+        "name": "Minimum aujourd'hui"
+      },
+      "today_max": {
+        "name": "Maximum aujourd'hui"
+      },
+      "energy_component": {
+        "name": "Composante energie"
+      },
+      "network_component": {
+        "name": "Composante reseau"
+      },
+      "taxes_component": {
+        "name": "Composante taxes"
+      },
+      "capacity_cost": {
+        "name": "Cout capacitaire"
+      },
+      "monthly_peak_kw": {
+        "name": "Pic de puissance mensuel"
+      }
     }
   }
 }
