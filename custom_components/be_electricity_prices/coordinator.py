@@ -253,8 +253,10 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
     async def _track_monthly_peak(self) -> None:
         if self.entry.data.get(CONF_REGION) != REGION_FLANDERS:
             return
-        now = dt_util.utcnow()
-        current_month = date(now.year, now.month, 1)
+        # Roll over on the local 1st-of-month; using UTC would lag CET/CEST
+        # users by 1-2 hours on the boundary and miss late-Dec-31 / early-Jan-1.
+        local_now = dt_util.now()
+        current_month = date(local_now.year, local_now.month, 1)
         if self._peak_month != current_month:
             self._peak_month = current_month
             self._peak_kw = 0.0
