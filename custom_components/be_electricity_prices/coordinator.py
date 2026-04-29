@@ -154,8 +154,14 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             try:
                 self._snapshot = _snapshot_from_dict(snap)
                 self._snapshot_fetched_at = datetime.fromisoformat(snap["_cached_at"])
-            except (KeyError, ValueError, TypeError):
+            except (KeyError, ValueError, TypeError) as err:
+                _LOGGER.warning(
+                    "discarding cached snapshot for %s: %s",
+                    self.entry.entry_id,
+                    err,
+                )
                 self._snapshot = None
+                self._snapshot_fetched_at = None
         peak = stored.get("peak")
         if isinstance(peak, dict):
             value = peak.get("kw")
