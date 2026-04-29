@@ -306,11 +306,15 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 )
             return hourly
 
-        local_now = dt_util.now()
-        start = local_now.replace(minute=0, second=0, microsecond=0)
+        # Iterate in UTC so a DST spring-forward day still yields 48 distinct
+        # entries; deriving local from a fixed-step UTC anchor preserves the
+        # gap correctly. Naively walking local-time + timedelta would either
+        # collide two hours into one UTC slot (spring) or duplicate a UTC slot
+        # (fall) and silently drop one breakdown.
+        start_utc = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
         for offset in range(48):
-            local = start + timedelta(hours=offset)
-            utc = local.astimezone(UTC)
+            utc = start_utc + timedelta(hours=offset)
+            local = dt_util.as_local(utc)
             hourly[utc] = compute_breakdown(snap, dso, region, local, None, meter)
         return hourly
 
