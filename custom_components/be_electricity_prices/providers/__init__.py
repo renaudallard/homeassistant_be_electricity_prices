@@ -44,6 +44,7 @@ from .base import (
     TaxOverlay,
     VariableRates,
 )
+from .bolt import EXTRACTOR as _BOLT
 from .cociter import EXTRACTOR as _COCITER
 from .eneco import EXTRACTOR as _ENECO
 from .engie import EXTRACTOR as _ENGIE
@@ -57,6 +58,7 @@ EXTRACTORS: dict[str, SupplierExtractor] = {
     _TOTALENERGIES.id: _TOTALENERGIES,
     _LUMINUS.id: _LUMINUS,
     _MEGA.id: _MEGA,
+    _BOLT.id: _BOLT,
     _COCITER.id: _COCITER,
 }
 

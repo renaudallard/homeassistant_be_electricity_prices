@@ -80,7 +80,8 @@ def _load_providers() -> tuple[types.ModuleType, types.ModuleType]:
     totalenergies = _load(
         "be_pkg.providers.totalenergies", PKG / "providers" / "totalenergies.py"
     )
-    return eneco, cociter, engie, luminus, mega, totalenergies
+    bolt = _load("be_pkg.providers.bolt", PKG / "providers" / "bolt.py")
+    return eneco, cociter, engie, luminus, mega, totalenergies, bolt
 
 
 @dataclass
@@ -242,6 +243,56 @@ async def _check_luminus(
             _expect(
                 f"{prefix}: energy contribution > 0",
                 snap.taxes.energy_contribution > 0,
+                detail=str(snap.taxes),
+            )
+            _validate_energy(prefix, cid, snap.energy)
+
+
+async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) -> None:
+    # Bolt's PDFs are nationwide (one file per contract, all 3 regions
+    # in one document), so we walk every (contract, region) pair just to
+    # verify the parsing path for each region works.
+    expected_dsos = {
+        "flanders": {
+            "fluvius_antwerpen",
+            "fluvius_halle_vilvoorde",
+            "fluvius_imewo",
+            "fluvius_intergem",
+            "fluvius_iveka",
+            "fluvius_limburg",
+            "fluvius_west",
+            "fluvius_zenne_dijle",
+        },
+        "wallonia": {"aieg", "aiesh", "ores", "rew"},
+        "brussels": {"sibelga"},
+    }
+    renewables_field = {
+        "flanders": "flanders_renewables",
+        "wallonia": "wallonia_renewables",
+        "brussels": "brussels_renewables",
+    }
+    for contract in bolt._CONTRACTS:
+        cid = contract.contract_id
+        for region_key in ("flanders", "wallonia", "brussels"):
+            prefix = f"bolt/{cid}/{region_key}"
+            try:
+                snap = await bolt.fetch(session, cid, region_key)
+            except Exception as err:
+                _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+                continue
+            _expect(
+                f"{prefix}: expected DSOs present",
+                expected_dsos[region_key] <= set(snap.dsos),
+                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
+            )
+            _expect(
+                f"{prefix}: regional renewables > 0",
+                getattr(snap.taxes, renewables_field[region_key]) > 0,
+                detail=str(snap.taxes),
+            )
+            _expect(
+                f"{prefix}: federal excise > 0",
+                snap.taxes.federal_excise > 0,
                 detail=str(snap.taxes),
             )
             _validate_energy(prefix, cid, snap.energy)
@@ -468,7 +519,7 @@ def _render_report(checks: Iterable[Check]) -> str:
 
 
 async def _run() -> int:
-    eneco, cociter, engie, luminus, mega, totalenergies = _load_providers()
+    eneco, cociter, engie, luminus, mega, totalenergies, bolt = _load_providers()
     timeout = aiohttp.ClientTimeout(total=60)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         await _check_eneco(session, eneco)
@@ -477,6 +528,7 @@ async def _run() -> int:
         await _check_luminus(session, luminus)
         await _check_mega(session, mega)
         await _check_totalenergies(session, totalenergies)
+        await _check_bolt(session, bolt)
     print(_render_report(CHECKS))
     return 1 if any(not c.ok for c in CHECKS) else 0
 
