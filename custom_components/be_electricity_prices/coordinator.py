@@ -256,7 +256,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return
         try:
             extractor = get_extractor(self.entry.data[CONF_SUPPLIER])
-            snap = await extractor.fetch(self._session, self.entry.data[CONF_CONTRACT])
+            snap = await extractor.fetch(
+                self._session,
+                self.entry.data[CONF_CONTRACT],
+                self.entry.data[CONF_REGION],
+            )
             self._snapshot = snap
             self._snapshot_fetched_at = dt_util.utcnow()
             self._last_error = ""

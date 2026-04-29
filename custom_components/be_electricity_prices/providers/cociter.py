@@ -73,7 +73,11 @@ _DSO_LABELS = ("AIEG", "AIESH", "ORES", "RESA", "REW")
 _DSO_KEY = {label: label.lower() for label in _DSO_LABELS}
 
 
-async def fetch(session: aiohttp.ClientSession, contract_id: str) -> SupplierSnapshot:
+async def fetch(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # noqa: ARG001 - Cociter only sells in Wallonia.
+) -> SupplierSnapshot:
     """Fetch + parse Cociter's latest published card for ``contract_id``."""
     if contract_id == "cociter_variable":
         pattern = _VAR_RE

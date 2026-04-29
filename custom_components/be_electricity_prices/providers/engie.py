@@ -205,7 +205,11 @@ def _document_url(c: _ContractDef, region_code: str) -> str:
 # ---- top-level fetch + parser -------------------------------------------------
 
 
-async def fetch(session: aiohttp.ClientSession, contract_id: str) -> SupplierSnapshot:
+async def fetch(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # noqa: ARG001 - the optimization to fetch only this region lands separately.
+) -> SupplierSnapshot:
     """Fetch every supported region's PDF for ``contract_id`` and merge."""
     if contract_id not in _CONTRACTS_BY_ID:
         raise ExtractorError(f"unknown Engie contract {contract_id!r}")

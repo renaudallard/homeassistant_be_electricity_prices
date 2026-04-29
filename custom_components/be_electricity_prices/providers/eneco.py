@@ -98,7 +98,11 @@ _NUM = r"(\d{1,3}(?:[\.,]\d{1,4})?)"
 _WS = r"[\s\xa0]"
 
 
-async def fetch(session: aiohttp.ClientSession, contract_id: str) -> SupplierSnapshot:
+async def fetch(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # noqa: ARG001 - Eneco's PDF covers every region in one document.
+) -> SupplierSnapshot:
     """Fetch and parse the Eneco tariff card for ``contract_id``."""
     if contract_id not in _CONTRACT_URLS:
         raise ExtractorError(f"unknown Eneco contract {contract_id!r}")

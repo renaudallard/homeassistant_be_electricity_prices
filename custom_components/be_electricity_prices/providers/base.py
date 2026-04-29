@@ -183,7 +183,9 @@ class SupplierSnapshot:
     injection: InjectionRates | None = None
 
 
-SnapshotFetcher = Callable[[aiohttp.ClientSession, str], Awaitable[SupplierSnapshot]]
+SnapshotFetcher = Callable[
+    [aiohttp.ClientSession, str, str], Awaitable[SupplierSnapshot]
+]
 
 
 @dataclass(frozen=True, kw_only=True)

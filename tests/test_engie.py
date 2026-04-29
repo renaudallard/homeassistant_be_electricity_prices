@@ -226,7 +226,7 @@ def test_easy_variable_uses_monthly_not_annual_estimate() -> None:
 def test_unknown_contract_raises() -> None:
     async def _run() -> None:
         with pytest.raises(ExtractorError, match="unknown Engie contract"):
-            await EXTRACTORS["engie"].fetch(None, "bogus")  # type: ignore[arg-type]
+            await EXTRACTORS["engie"].fetch(None, "bogus", "flanders")  # type: ignore[arg-type]
 
     asyncio.run(_run())
 

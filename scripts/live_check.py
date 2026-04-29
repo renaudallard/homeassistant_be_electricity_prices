@@ -118,7 +118,8 @@ async def _check_eneco(session: aiohttp.ClientSession, eneco: types.ModuleType) 
     for cid in ("power_fix", "power_flex", "power_dynamic"):
         prefix = f"eneco/{cid}"
         try:
-            snap = await eneco.fetch(session, cid)
+            # Eneco's PDF carries every region; any one is fine.
+            snap = await eneco.fetch(session, cid, "flanders")
         except Exception as err:
             _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
             continue
@@ -162,7 +163,7 @@ async def _check_cociter(
     for cid in ("cociter_variable", "cociter_dynamic"):
         prefix = f"cociter/{cid}"
         try:
-            snap = await cociter.fetch(session, cid)
+            snap = await cociter.fetch(session, cid, "wallonia")
         except Exception as err:
             _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
             continue
@@ -206,7 +207,9 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
         cid = contract.contract_id
         prefix = f"engie/{cid}"
         try:
-            snap = await engie.fetch(session, cid)
+            # Engie still merges every region's PDF in this commit; the
+            # region-aware optimization lands separately.
+            snap = await engie.fetch(session, cid, "flanders")
         except Exception as err:
             _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
             continue

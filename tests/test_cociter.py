@@ -185,6 +185,6 @@ def test_dynamic_extracts_injection_formula() -> None:
 def test_unknown_contract_raises() -> None:
     async def _run() -> None:
         with pytest.raises(ExtractorError, match="unknown Cociter contract"):
-            await EXTRACTORS["cociter"].fetch(None, "bogus")  # type: ignore[arg-type]
+            await EXTRACTORS["cociter"].fetch(None, "bogus", "wallonia")  # type: ignore[arg-type]
 
     asyncio.run(_run())
