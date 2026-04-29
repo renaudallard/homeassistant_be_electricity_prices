@@ -1,0 +1,63 @@
+name: Autorelease
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - custom_components/be_electricity_prices/manifest.json
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: |
+          ver=$(jq -r .version custom_components/be_electricity_prices/manifest.json)
+          if [ -z "$ver" ] || [ "$ver" = "null" ]; then
+            echo "no version in manifest.json" >&2
+            exit 1
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "tag=v$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Check if tag exists
+        id: check
+        run: |
+          if git tag -l "${{ steps.version.outputs.tag }}" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build release zip
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          mkdir -p dist
+          cd custom_components/be_electricity_prices
+          zip -qr ../../dist/be_electricity_prices.zip . \
+            -x '*.pyc' '__pycache__/*' '*/__pycache__/*'
+          cd ../..
+          unzip -l dist/be_electricity_prices.zip
+
+      - name: Tag and release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          git tag "$tag"
+          git push origin "$tag"
+          gh release create "$tag" \
+            --title "$tag" \
+            --generate-notes \
+            dist/be_electricity_prices.zip
