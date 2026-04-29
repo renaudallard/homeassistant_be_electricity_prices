@@ -27,7 +27,9 @@
 
 from __future__ import annotations
 
+import json
 from io import BytesIO
+from pathlib import Path
 
 import aiohttp
 import pypdf
@@ -35,12 +37,23 @@ import pypdf
 from .base import ExtractorError
 
 
+def _read_version() -> str:
+    manifest = Path(__file__).resolve().parent.parent / "manifest.json"
+    try:
+        return str(json.loads(manifest.read_text(encoding="utf-8")).get("version", "0"))
+    except (OSError, ValueError):
+        return "0"
+
+
+USER_AGENT = f"Home Assistant be_electricity_prices/{_read_version()}"
+
+
 async def fetch_pdf_text(session: aiohttp.ClientSession, url: str) -> str:
     """Download ``url`` and return the concatenated extracted text."""
     try:
         async with session.get(
             url,
-            headers={"User-Agent": "Home Assistant be_electricity_prices/0.1"},
+            headers={"User-Agent": USER_AGENT},
             timeout=aiohttp.ClientTimeout(total=30),
         ) as resp:
             if resp.status >= 400:

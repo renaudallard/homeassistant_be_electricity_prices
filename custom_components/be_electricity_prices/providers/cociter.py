@@ -45,7 +45,7 @@ from datetime import UTC, datetime
 
 import aiohttp
 
-from ._pdf import fetch_pdf_text, to_float
+from ._pdf import USER_AGENT, fetch_pdf_text, to_float
 from .base import (
     Contract,
     DsoOverlay,
@@ -270,7 +270,7 @@ async def _find_latest(
     try:
         async with session.get(
             _INDEX_URL,
-            headers={"User-Agent": "Home Assistant be_electricity_prices/0.1"},
+            headers={"User-Agent": USER_AGENT},
             timeout=aiohttp.ClientTimeout(total=20),
         ) as resp:
             if resp.status >= 400:
