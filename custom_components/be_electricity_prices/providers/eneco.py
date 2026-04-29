@@ -180,22 +180,25 @@ def _extract_dynamic(text: str) -> DynamicRates:
         r"Enkelvoudige meter\s*\n\s*" + _NUM,
         text,
     )
+    # Capture the VAT multiplier the PDF actually applies (e.g. 1,06 for the
+    # current 6% residential rate, 1,21 if Belgium reverts to 21% VAT).
     formula_match = re.search(
-        r"\((0,\d+)\s*X\s*BELPEX[\w\-]+\s*\+\s*(\d+(?:,\d+)?)\)\s*X\s*1,06",
+        r"\((0,\d+)\s*X\s*BELPEX[\w\-]+\s*\+\s*(\d+(?:,\d+)?)\)\s*X\s*(\d+,\d+)",
         text,
     )
     if not yearly_fee_match or not formula_match:
         raise ExtractorError("could not parse Eneco dynamic energy block")
     factor_pdf = to_float(formula_match.group(1))
     base_pre_vat_cents = to_float(formula_match.group(2))
+    vat_multiplier = to_float(formula_match.group(3))
     # PDF formula yields c€/kWh from BELPEX in €/MWh:
-    #   energy_c_eur_kwh = (factor_pdf * BELPEX_eur_mwh + base_cents) * 1.06
+    #   energy_c_eur_kwh = (factor_pdf * BELPEX_eur_mwh + base_cents) * vat_mult
     # ENTSO-E client returns spot in EUR/kWh = BELPEX_eur_mwh / 1000.
     # Convert to: energy_eur_kwh = factor * spot_eur_kwh + base
-    #   factor = factor_pdf * 1.06 * 1000 / 100 = factor_pdf * 10.6
-    #   base   = base_cents  * 1.06 / 100
-    base_eur_per_kwh = base_pre_vat_cents * 1.06 / 100.0
-    factor_eur_per_kwh = factor_pdf * 1.06 * 10.0
+    #   factor = factor_pdf * vat_mult * 1000 / 100 = factor_pdf * vat_mult * 10
+    #   base   = base_cents  * vat_mult / 100
+    base_eur_per_kwh = base_pre_vat_cents * vat_multiplier / 100.0
+    factor_eur_per_kwh = factor_pdf * vat_multiplier * 10.0
     return DynamicRates(
         factor=factor_eur_per_kwh,
         base=base_eur_per_kwh,
