@@ -178,14 +178,17 @@ def _extract_transport(text: str) -> float:
 
 
 def _extract_taxes(text: str) -> TaxOverlay:
-    # Cociter renewable contribution (page 1 of the energy block).
+    # The energy block labels the renewable contribution with quoted text:
+    #   "énergies renouvelables" ... TVAC <X> c€/kWh
+    # PDFs use straight "..." or curly “…” depending on the export; accept any
+    # adjacent quote glyph and require the literal heading near the number to
+    # avoid silently grabbing some other 'TVAC ... c€/kWh' value.
     renewables = re.search(
-        r"['’]\s*énergies renouvelables['’]?[^\n]*?TVAC\s*([\d,]+)\s*c€/kWh",
+        r"[\"'“”«»]?\s*énergies renouvelables"
+        r"[\"'“”«»]?.{0,200}?TVAC\s*([\d,]+)\s*c€/kWh",
         text,
         re.S,
     )
-    if not renewables:
-        renewables = re.search(r"TVAC\s+([\d,]+)\s*c€/kWh", text)
 
     # The "Taxes et redevances" block lists three numbers on one line:
     #   Cotisation énergie | Droit d'accises spécial | Redevance de raccordement
