@@ -1,0 +1,91 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Prix de l'electricite en Belgique",
+        "description": "Choisissez votre fournisseur et votre region. L'energie et les tarifs reseau sont recuperes en direct depuis la publication du fournisseur.",
+        "data": {
+          "supplier": "Fournisseur",
+          "region": "Region"
+        }
+      },
+      "contract": {
+        "title": "Contrat",
+        "description": "Choisissez votre contrat. L'integration recupere la carte tarifaire courante a chaque rafraichissement.",
+        "data": {
+          "contract": "Contrat"
+        }
+      },
+      "dso": {
+        "title": "Gestionnaire de reseau",
+        "data": {
+          "dso": "GRD"
+        }
+      },
+      "api_key": {
+        "title": "Cle API ENTSO-E",
+        "description": "Necessaire pour les contrats dynamiques. Cle gratuite sur transparency.entsoe.eu.",
+        "data": {
+          "api_key": "Cle API ENTSO-E"
+        }
+      },
+      "capacity": {
+        "title": "Tarif capacitaire (Flandre)",
+        "description": "Choisissez un capteur exposant le pic mensuel en kW ou une valeur fixe.",
+        "data": {
+          "capacity_mode": "Source du pic",
+          "capacity_peak_sensor": "Capteur de puissance",
+          "capacity_fixed_kw": "Pic fixe (kW)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options des prix de l'electricite",
+        "description": "Mettez a jour la cle API ENTSO-E pour les contrats dynamiques. Les autres tarifs sont recuperes automatiquement."
+      }
+    }
+  },
+  "selector": {
+    "region": {
+      "options": {
+        "flanders": "Flandre",
+        "wallonia": "Wallonie",
+        "brussels": "Bruxelles"
+      }
+    },
+    "dso": {
+      "options": {
+        "fluvius": "Fluvius",
+        "ores": "ORES",
+        "resa": "RESA",
+        "aieg": "AIEG",
+        "aiesh": "AIESH",
+        "rew": "Regie de Wavre",
+        "sibelga": "Sibelga"
+      }
+    },
+    "capacity_mode": {
+      "options": {
+        "sensor": "Depuis un capteur de puissance",
+        "fixed": "Valeur fixe en kW"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_price": { "name": "Prix actuel" },
+      "next_hour_price": { "name": "Prix heure suivante" },
+      "today_average": { "name": "Moyenne aujourd'hui" },
+      "today_min": { "name": "Minimum aujourd'hui" },
+      "today_max": { "name": "Maximum aujourd'hui" },
+      "energy_component": { "name": "Composante energie" },
+      "network_component": { "name": "Composante reseau" },
+      "taxes_component": { "name": "Composante taxes" },
+      "capacity_cost": { "name": "Cout capacitaire" },
+      "monthly_peak_kw": { "name": "Pic de puissance mensuel" }
+    }
+  }
+}

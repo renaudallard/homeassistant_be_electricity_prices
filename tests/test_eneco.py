@@ -1,0 +1,116 @@
+# Copyright (c) 2026, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+"""Unit tests for the Eneco PDF extractor (run against fixture PDFs)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from custom_components.be_electricity_prices.providers._pdf import extract_pdf_text
+from custom_components.be_electricity_prices.providers.base import (
+    DynamicRates,
+    FixedRates,
+    VariableRates,
+)
+from custom_components.be_electricity_prices.providers.eneco import parse_snapshot
+
+FIX = Path(__file__).parent / "fixtures"
+
+
+def _text(name: str) -> str:
+    return extract_pdf_text((FIX / name).read_bytes())
+
+
+def test_fix_extracts_energy_block() -> None:
+    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(0.1865)
+    assert snap.energy.peak == pytest.approx(0.2055)
+    assert snap.energy.offpeak == pytest.approx(0.1699)
+    assert snap.energy.exclusive_night == pytest.approx(0.1699)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+
+
+def test_fix_extracts_dso_overlay() -> None:
+    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    aieg = snap.dsos["aieg"]
+    assert aieg.distribution_single == pytest.approx(0.1087)
+    assert aieg.distribution_peak == pytest.approx(0.1205)
+    assert aieg.distribution_offpeak == pytest.approx(0.0666)
+    assert aieg.transport == pytest.approx(0.0274)
+    assert aieg.data_management_per_year == pytest.approx(19.49)
+
+
+def test_fix_extracts_taxes() -> None:
+    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    assert snap.taxes.federal_excise == pytest.approx(0.050329)
+    assert snap.taxes.energy_contribution == pytest.approx(0.002042)
+    # Wallonia "Bijdrage groene stroom" 3.13 c/kWh wins over Flanders WKK 1.52.
+    assert snap.taxes.regional_renewables == pytest.approx(0.0313)
+    assert snap.taxes.region_connection_fee == pytest.approx(0.00075)
+    assert snap.taxes.vat_rate == 0.0
+    assert snap.publication_label.lower().startswith(
+        (
+            "january",
+            "februari",
+            "maart",
+            "april",
+            "mei",
+            "juni",
+            "juli",
+            "augustus",
+            "september",
+            "oktober",
+            "november",
+            "december",
+        )
+    )
+
+
+def test_flex_extracts_current_monthly_rate() -> None:
+    snap = parse_snapshot(_text("eneco_flex.pdf"), "power_flex", "test://flex")
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current == pytest.approx(0.1390)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+    assert snap.energy.formula is not None and "BELPEX" in snap.energy.formula
+
+
+def test_dynamic_extracts_factor_and_base() -> None:
+    snap = parse_snapshot(_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
+    assert isinstance(snap.energy, DynamicRates)
+    # PDF formula: (0.102 X BELPEX-H + 1) X 1.06 c€/kWh
+    # so factor = 0.102 * 1.06 / 100 EUR/kWh per (EUR/MWh? actually per c€/kWh of spot)
+    # See eneco.py - we keep coefficients in EUR/kWh terms for the pricing engine.
+    assert snap.energy.factor == pytest.approx(0.102 * 1.06 / 100, rel=1e-4)
+    assert snap.energy.base == pytest.approx(1.0 / 100 * 1.06)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(100.0)
+
+
+def test_dynamic_publication_label_present() -> None:
+    snap = parse_snapshot(_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
+    assert snap.publication_label  # non-empty

@@ -1,0 +1,91 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Belgische Strompreise",
+        "description": "Lieferant und Region waehlen. Energie- und Netztarife werden live aus der Veroeffentlichung des Lieferanten geholt.",
+        "data": {
+          "supplier": "Lieferant",
+          "region": "Region"
+        }
+      },
+      "contract": {
+        "title": "Vertrag",
+        "description": "Vertrag waehlen. Die Integration holt bei jeder Aktualisierung die aktuelle Tarifkarte.",
+        "data": {
+          "contract": "Vertrag"
+        }
+      },
+      "dso": {
+        "title": "Verteilnetzbetreiber",
+        "data": {
+          "dso": "VNB"
+        }
+      },
+      "api_key": {
+        "title": "ENTSO-E API-Schluessel",
+        "description": "Erforderlich fuer dynamische Vertraege. Kostenlos bei transparency.entsoe.eu anfordern.",
+        "data": {
+          "api_key": "ENTSO-E API-Schluessel"
+        }
+      },
+      "capacity": {
+        "title": "Kapazitaetstarif (Flandern)",
+        "description": "Sensor mit der monatlichen Spitzenleistung in kW oder festen Wert waehlen.",
+        "data": {
+          "capacity_mode": "Quelle der Spitze",
+          "capacity_peak_sensor": "Leistungssensor",
+          "capacity_fixed_kw": "Feste Spitze (kW)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Optionen Belgische Strompreise",
+        "description": "ENTSO-E API-Schluessel fuer dynamische Vertraege aktualisieren. Andere Tarife werden automatisch geholt."
+      }
+    }
+  },
+  "selector": {
+    "region": {
+      "options": {
+        "flanders": "Flandern",
+        "wallonia": "Wallonien",
+        "brussels": "Bruessel"
+      }
+    },
+    "dso": {
+      "options": {
+        "fluvius": "Fluvius",
+        "ores": "ORES",
+        "resa": "RESA",
+        "aieg": "AIEG",
+        "aiesh": "AIESH",
+        "rew": "Regie de Wavre",
+        "sibelga": "Sibelga"
+      }
+    },
+    "capacity_mode": {
+      "options": {
+        "sensor": "Aus einem Leistungssensor",
+        "fixed": "Fester kW-Wert"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_price": { "name": "Aktueller Preis" },
+      "next_hour_price": { "name": "Preis naechste Stunde" },
+      "today_average": { "name": "Durchschnitt heute" },
+      "today_min": { "name": "Minimum heute" },
+      "today_max": { "name": "Maximum heute" },
+      "energy_component": { "name": "Energiekomponente" },
+      "network_component": { "name": "Netzkomponente" },
+      "taxes_component": { "name": "Abgabenkomponente" },
+      "capacity_cost": { "name": "Kapazitaetskosten" },
+      "monthly_peak_kw": { "name": "Monatliche Spitzenleistung" }
+    }
+  }
+}

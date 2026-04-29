@@ -1,0 +1,286 @@
+# Copyright (c) 2026, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+"""Sensor platform for the Belgian Electricity Prices integration."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import timedelta
+from typing import Any
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
+
+from .const import (
+    CONF_REGION,
+    CONF_SUPPLIER,
+    DOMAIN,
+    REGION_FLANDERS,
+)
+from .coordinator import BePricesCoordinator, CoordinatorData
+from .pricing import PriceBreakdown
+from .providers import get as get_extractor
+
+
+@dataclass(frozen=True, kw_only=True)
+class BePriceSensorDescription(SensorEntityDescription):
+    """Sensor description with a pure value extractor."""
+
+    value_fn: Callable[[CoordinatorData], float | None]
+
+
+def _current(data: CoordinatorData) -> PriceBreakdown | None:
+    if not data.hourly:
+        return None
+    now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    if (exact := data.hourly.get(now)) is not None:
+        return exact
+    nearest_hour = min(
+        data.hourly.keys(),
+        key=lambda h: abs((h - now).total_seconds()),
+    )
+    return data.hourly[nearest_hour]
+
+
+def _next_hour(data: CoordinatorData) -> PriceBreakdown | None:
+    if not data.hourly:
+        return None
+    target = dt_util.utcnow().replace(minute=0, second=0, microsecond=0) + timedelta(
+        hours=1
+    )
+    return data.hourly.get(target)
+
+
+def _today_hours(data: CoordinatorData) -> list[PriceBreakdown]:
+    today = dt_util.now().date()
+    return [
+        bd for hour, bd in data.hourly.items() if dt_util.as_local(hour).date() == today
+    ]
+
+
+def _today_avg(data: CoordinatorData) -> float | None:
+    hours = _today_hours(data)
+    if not hours:
+        return None
+    return sum(h.all_in for h in hours) / len(hours)
+
+
+def _today_min(data: CoordinatorData) -> float | None:
+    hours = _today_hours(data)
+    if not hours:
+        return None
+    return min(h.all_in for h in hours)
+
+
+def _today_max(data: CoordinatorData) -> float | None:
+    hours = _today_hours(data)
+    if not hours:
+        return None
+    return max(h.all_in for h in hours)
+
+
+def _current_field(field: str) -> Callable[[CoordinatorData], float | None]:
+    def _inner(data: CoordinatorData) -> float | None:
+        bd = _current(data)
+        return None if bd is None else getattr(bd, field)
+
+    return _inner
+
+
+SENSORS: tuple[BePriceSensorDescription, ...] = (
+    BePriceSensorDescription(
+        key="current_price",
+        translation_key="current_price",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=_current_field("all_in"),
+    ),
+    BePriceSensorDescription(
+        key="next_hour_price",
+        translation_key="next_hour_price",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=lambda d: None if (bd := _next_hour(d)) is None else bd.all_in,
+    ),
+    BePriceSensorDescription(
+        key="today_average",
+        translation_key="today_average",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=_today_avg,
+    ),
+    BePriceSensorDescription(
+        key="today_min",
+        translation_key="today_min",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=_today_min,
+    ),
+    BePriceSensorDescription(
+        key="today_max",
+        translation_key="today_max",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=_today_max,
+    ),
+    BePriceSensorDescription(
+        key="energy_component",
+        translation_key="energy_component",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=_current_field("energy"),
+    ),
+    BePriceSensorDescription(
+        key="network_component",
+        translation_key="network_component",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=_current_field("network"),
+    ),
+    BePriceSensorDescription(
+        key="taxes_component",
+        translation_key="taxes_component",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=_current_field("taxes"),
+    ),
+)
+
+CAPACITY_SENSORS: tuple[BePriceSensorDescription, ...] = (
+    BePriceSensorDescription(
+        key="capacity_cost",
+        translation_key="capacity_cost",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR",
+        suggested_display_precision=2,
+        value_fn=lambda d: d.capacity_cost_eur,
+    ),
+    BePriceSensorDescription(
+        key="monthly_peak_kw",
+        translation_key="monthly_peak_kw",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="kW",
+        suggested_display_precision=2,
+        value_fn=lambda d: d.monthly_peak_kw,
+    ),
+)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Create entities for one config entry."""
+    coordinator: BePricesCoordinator = entry.runtime_data
+
+    descriptions: list[BePriceSensorDescription] = list(SENSORS)
+    if entry.data.get(CONF_REGION) == REGION_FLANDERS:
+        descriptions.extend(CAPACITY_SENSORS)
+
+    async_add_entities(BePriceSensor(coordinator, desc) for desc in descriptions)
+
+
+class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
+    """A single all-in electricity price sensor."""
+
+    _attr_has_entity_name = True
+    entity_description: BePriceSensorDescription
+
+    def __init__(
+        self,
+        coordinator: BePricesCoordinator,
+        description: BePriceSensorDescription,
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_{description.key}"
+        supplier_id = coordinator.entry.data.get(CONF_SUPPLIER, "")
+        try:
+            device_name = get_extractor(str(supplier_id)).label
+        except Exception:
+            device_name = str(supplier_id) or "Belgian Electricity"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.entry.entry_id)},
+            name=device_name,
+            manufacturer="be_electricity_prices",
+            entry_type=None,
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        return self.entity_description.value_fn(self.coordinator.data)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if self.entity_description.key != "current_price":
+            return {}
+        data = self.coordinator.data
+        hourly = sorted(data.hourly.items())
+        return {
+            "snapshot_publication": data.snapshot_publication,
+            "snapshot_age_hours": round(data.snapshot_age_hours, 2),
+            "snapshot_stale": data.snapshot_stale,
+            "last_error": data.last_error,
+            "hours": [
+                {
+                    "start": dt_util.as_local(h).isoformat(),
+                    "energy": round(bd.energy, 6),
+                    "network": round(bd.network, 6),
+                    "taxes": round(bd.taxes, 6),
+                    "all_in": round(bd.all_in, 6),
+                }
+                for h, bd in hourly
+            ],
+        }

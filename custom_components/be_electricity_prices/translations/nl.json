@@ -1,0 +1,91 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Belgische elektriciteitsprijzen",
+        "description": "Kies je leverancier en regio. Energie- en nettarieven worden live opgehaald uit de eigen publicatie van de leverancier.",
+        "data": {
+          "supplier": "Leverancier",
+          "region": "Regio"
+        }
+      },
+      "contract": {
+        "title": "Contract",
+        "description": "Kies je contract. De integratie haalt bij elke verversing de actuele tariefkaart op.",
+        "data": {
+          "contract": "Contract"
+        }
+      },
+      "dso": {
+        "title": "Distributienetbeheerder",
+        "data": {
+          "dso": "DNB"
+        }
+      },
+      "api_key": {
+        "title": "ENTSO-E API-sleutel",
+        "description": "Vereist voor dynamische contracten. Gratis aan te vragen op transparency.entsoe.eu.",
+        "data": {
+          "api_key": "ENTSO-E API-sleutel"
+        }
+      },
+      "capacity": {
+        "title": "Capaciteitstarief (Vlaanderen)",
+        "description": "Kies een sensor met je maandpiek in kW of een vaste waarde.",
+        "data": {
+          "capacity_mode": "Bron van de piek",
+          "capacity_peak_sensor": "Vermogenssensor",
+          "capacity_fixed_kw": "Vaste piek (kW)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opties Belgische elektriciteitsprijzen",
+        "description": "Werk de ENTSO-E API-sleutel bij voor dynamische contracten. Andere tarieven worden automatisch opgehaald."
+      }
+    }
+  },
+  "selector": {
+    "region": {
+      "options": {
+        "flanders": "Vlaanderen",
+        "wallonia": "Wallonie",
+        "brussels": "Brussel"
+      }
+    },
+    "dso": {
+      "options": {
+        "fluvius": "Fluvius",
+        "ores": "ORES",
+        "resa": "RESA",
+        "aieg": "AIEG",
+        "aiesh": "AIESH",
+        "rew": "Regie de Wavre",
+        "sibelga": "Sibelga"
+      }
+    },
+    "capacity_mode": {
+      "options": {
+        "sensor": "Vanuit een vermogenssensor",
+        "fixed": "Vaste kW-waarde"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_price": { "name": "Huidige prijs" },
+      "next_hour_price": { "name": "Prijs volgend uur" },
+      "today_average": { "name": "Gemiddelde vandaag" },
+      "today_min": { "name": "Minimum vandaag" },
+      "today_max": { "name": "Maximum vandaag" },
+      "energy_component": { "name": "Energiecomponent" },
+      "network_component": { "name": "Netwerkcomponent" },
+      "taxes_component": { "name": "Belastingcomponent" },
+      "capacity_cost": { "name": "Capaciteitskost" },
+      "monthly_peak_kw": { "name": "Maandelijkse vermogenspiek" }
+    }
+  }
+}

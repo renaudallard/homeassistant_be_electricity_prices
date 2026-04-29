@@ -1,0 +1,91 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Belgian Electricity Prices",
+        "description": "Pick your supplier and region. Energy and grid rates are fetched live from the supplier's own publication.",
+        "data": {
+          "supplier": "Supplier",
+          "region": "Region"
+        }
+      },
+      "contract": {
+        "title": "Contract",
+        "description": "Pick your contract. The integration fetches its current rate sheet on every refresh.",
+        "data": {
+          "contract": "Contract"
+        }
+      },
+      "dso": {
+        "title": "Distribution operator",
+        "data": {
+          "dso": "DSO"
+        }
+      },
+      "api_key": {
+        "title": "ENTSO-E API key",
+        "description": "Required for dynamic contracts. Request one for free at transparency.entsoe.eu.",
+        "data": {
+          "api_key": "ENTSO-E API key"
+        }
+      },
+      "capacity": {
+        "title": "Capacity tariff (Flanders)",
+        "description": "Pick a sensor that exposes your monthly peak in kW or use a fixed value.",
+        "data": {
+          "capacity_mode": "Peak source",
+          "capacity_peak_sensor": "Peak power sensor",
+          "capacity_fixed_kw": "Fixed peak (kW)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Belgian Electricity Prices options",
+        "description": "Update the ENTSO-E API key for dynamic contracts. All other rates are auto-fetched."
+      }
+    }
+  },
+  "selector": {
+    "region": {
+      "options": {
+        "flanders": "Flanders",
+        "wallonia": "Wallonia",
+        "brussels": "Brussels"
+      }
+    },
+    "dso": {
+      "options": {
+        "fluvius": "Fluvius",
+        "ores": "ORES",
+        "resa": "RESA",
+        "aieg": "AIEG",
+        "aiesh": "AIESH",
+        "rew": "Regie de Wavre",
+        "sibelga": "Sibelga"
+      }
+    },
+    "capacity_mode": {
+      "options": {
+        "sensor": "From a power sensor",
+        "fixed": "Fixed kW value"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_price": { "name": "Current price" },
+      "next_hour_price": { "name": "Next hour price" },
+      "today_average": { "name": "Today average" },
+      "today_min": { "name": "Today minimum" },
+      "today_max": { "name": "Today maximum" },
+      "energy_component": { "name": "Energy component" },
+      "network_component": { "name": "Network component" },
+      "taxes_component": { "name": "Taxes component" },
+      "capacity_cost": { "name": "Capacity cost" },
+      "monthly_peak_kw": { "name": "Monthly peak power" }
+    }
+  }
+}
