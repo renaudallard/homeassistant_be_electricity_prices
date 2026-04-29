@@ -34,8 +34,10 @@ through a public REST endpoint:
 The DOC_CODE is built from the contract family + green/grey + fixed/
 indexed + duration + region + language family. Engie ships up to three
 regional documents per contract (V/W/B for Vlaanderen / Wallonie /
-Bruxelles); the extractor fetches every supported region in parallel and
-merges the per-region DSO overlays into one snapshot.
+Bruxelles); the extractor fetches the configured region's PDF on demand,
+since the energy formula is region-uniform but the DSO overlay is not.
+``parse_snapshot`` still accepts a multi-region map so tests can exercise
+the merge path.
 
 All values are 6% VAT inclusive. The Dynamic formula is printed pre-VAT,
 so the extractor scales factor and base by the parsed VAT multiplier.
@@ -43,7 +45,6 @@ so the extractor scales factor and base by the parsed VAT multiplier.
 
 from __future__ import annotations
 
-import asyncio
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -208,35 +209,21 @@ def _document_url(c: _ContractDef, region_code: str) -> str:
 async def fetch(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - the optimization to fetch only this region lands separately.
+    region: str,
 ) -> SupplierSnapshot:
-    """Fetch every supported region's PDF for ``contract_id`` and merge."""
+    """Fetch the configured region's PDF for ``contract_id``."""
     if contract_id not in _CONTRACTS_BY_ID:
         raise ExtractorError(f"unknown Engie contract {contract_id!r}")
     contract = _CONTRACTS_BY_ID[contract_id]
 
-    region_keys: list[str] = []
-    coros = []
-    for region_key, region_code in _REGION_TO_CODE.items():
-        if region_code not in contract.months_per_region:
-            continue
-        region_keys.append(region_key)
-        coros.append(fetch_pdf_text(session, _document_url(contract, region_code)))
+    region_code = _REGION_TO_CODE.get(region)
+    if region_code is None:
+        raise ExtractorError(f"Engie: unknown region {region!r}")
+    if region_code not in contract.months_per_region:
+        raise ExtractorError(f"Engie {contract_id}: not available in region {region!r}")
 
-    results = await asyncio.gather(*coros, return_exceptions=True)
-    region_texts: dict[str, str] = {}
-    last_error: BaseException | None = None
-    for region_key, result in zip(region_keys, results, strict=True):
-        if isinstance(result, BaseException):
-            last_error = result
-            continue
-        region_texts[region_key] = result
-
-    if not region_texts:
-        raise ExtractorError(
-            f"Engie {contract_id}: every region failed; last error: {last_error}"
-        )
-    return parse_snapshot(contract_id, region_texts)
+    text = await fetch_pdf_text(session, _document_url(contract, region_code))
+    return parse_snapshot(contract_id, {region: text})
 
 
 def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSnapshot:

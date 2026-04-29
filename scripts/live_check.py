@@ -187,75 +187,58 @@ async def _check_cociter(
 
 
 async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) -> None:
-    # Walk every contract in the Engie registry. Each contract fetches up
-    # to three regional PDFs and their merge must yield the right set of
-    # DSOs; if anything shifts on Engie's side, the check below catches
-    # it before users do.
-    expected_flanders = {
-        "fluvius_antwerpen",
-        "fluvius_halle_vilvoorde",
-        "fluvius_imewo",
-        "fluvius_intergem",
-        "fluvius_iveka",
-        "fluvius_limburg",
-        "fluvius_west",
-        "fluvius_zenne_dijle",
+    # Engie now fetches one PDF per (contract, region) on demand, so the
+    # check walks every supported region per contract instead of asking
+    # for a single merged snapshot. If a region fetch ever stops working
+    # the report flags the specific (contract, region) pair.
+    expected_dsos = {
+        "flanders": {
+            "fluvius_antwerpen",
+            "fluvius_halle_vilvoorde",
+            "fluvius_imewo",
+            "fluvius_intergem",
+            "fluvius_iveka",
+            "fluvius_limburg",
+            "fluvius_west",
+            "fluvius_zenne_dijle",
+        },
+        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
+        "brussels": {"sibelga"},
     }
-    expected_wallonia = {"aieg", "aiesh", "ores", "resa", "rew"}
-    expected_brussels = {"sibelga"}
+    region_letter = {"flanders": "V", "wallonia": "W", "brussels": "B"}
+    renewables_field = {
+        "flanders": "flanders_renewables",
+        "wallonia": "wallonia_renewables",
+        "brussels": "brussels_renewables",
+    }
     for contract in engie._CONTRACTS:
         cid = contract.contract_id
-        prefix = f"engie/{cid}"
-        try:
-            # Engie still merges every region's PDF in this commit; the
-            # region-aware optimization lands separately.
-            snap = await engie.fetch(session, cid, "flanders")
-        except Exception as err:
-            _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
-            continue
-        _expect(f"{prefix}: publication label", bool(snap.publication_label))
-        # A contract is only required to expose DSOs for the regions it
-        # actually publishes (Basic Online has no Brussels variant).
-        regions = set(contract.months_per_region)
-        if "V" in regions:
+        for region_key, letter in region_letter.items():
+            if letter not in contract.months_per_region:
+                continue
+            prefix = f"engie/{cid}/{region_key}"
+            try:
+                snap = await engie.fetch(session, cid, region_key)
+            except Exception as err:
+                _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+                continue
+            _expect(f"{prefix}: publication label", bool(snap.publication_label))
             _expect(
-                f"{prefix}: all 8 Fluvius sub-areas present",
-                expected_flanders <= set(snap.dsos),
-                detail=f"missing: {sorted(expected_flanders - set(snap.dsos))}",
+                f"{prefix}: expected DSOs present",
+                expected_dsos[region_key] <= set(snap.dsos),
+                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
             )
             _expect(
-                f"{prefix}: flanders renewables > 0",
-                snap.taxes.flanders_renewables > 0,
+                f"{prefix}: regional renewables > 0",
+                getattr(snap.taxes, renewables_field[region_key]) > 0,
                 detail=str(snap.taxes),
             )
-        if "W" in regions:
             _expect(
-                f"{prefix}: all 5 Wallonia DSOs present",
-                expected_wallonia <= set(snap.dsos),
-                detail=f"missing: {sorted(expected_wallonia - set(snap.dsos))}",
-            )
-            _expect(
-                f"{prefix}: wallonia renewables > 0",
-                snap.taxes.wallonia_renewables > 0,
+                f"{prefix}: federal excise > 0",
+                snap.taxes.federal_excise > 0,
                 detail=str(snap.taxes),
             )
-        if "B" in regions:
-            _expect(
-                f"{prefix}: sibelga present",
-                expected_brussels <= set(snap.dsos),
-                detail=f"got: {sorted(snap.dsos)}",
-            )
-            _expect(
-                f"{prefix}: brussels renewables > 0",
-                snap.taxes.brussels_renewables > 0,
-                detail=str(snap.taxes),
-            )
-        _expect(
-            f"{prefix}: federal excise > 0",
-            snap.taxes.federal_excise > 0,
-            detail=str(snap.taxes),
-        )
-        _validate_energy(prefix, cid, snap.energy)
+            _validate_energy(prefix, cid, snap.energy)
 
 
 def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
