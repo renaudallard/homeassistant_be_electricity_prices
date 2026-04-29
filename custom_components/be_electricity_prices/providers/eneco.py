@@ -244,6 +244,7 @@ def _find_wallonia_row(text: str, label: str) -> DsoOverlay | None:
         distribution_offpeak=to_float(groups[2]) / 100.0,
         transport=to_float(groups[-3]) / 100.0,
         data_management_per_year=to_float(groups[-2]),
+        prosumer_eur_per_kva_year=to_float(groups[-1]),
     )
 
 

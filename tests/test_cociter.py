@@ -86,6 +86,20 @@ def test_variable_extracts_dso_overlay() -> None:
     assert aieg.distribution_offpeak == pytest.approx(0.0666)
     assert aieg.transport == pytest.approx(0.0274252)
     assert aieg.data_management_per_year == pytest.approx(19.49)
+    # Variable PDF prints the compensation-regime prosumer tariff per DSO.
+    assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.03)
+
+
+def test_dynamic_has_no_prosumer_rate() -> None:
+    # Dynamic SMR3 contract has no compensation regime - the row swaps the
+    # prosumer column for three Tarif Impact columns.
+    snap = parse_snapshot(
+        _text("cociter_dyn_2604.pdf"),
+        "cociter_dynamic",
+        "test://dyn",
+        "2026-04",
+    )
+    assert snap.dsos["aieg"].prosumer_eur_per_kva_year is None
 
 
 def test_variable_extracts_taxes() -> None:

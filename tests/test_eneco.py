@@ -64,6 +64,16 @@ def test_fix_extracts_dso_overlay() -> None:
     assert aieg.distribution_offpeak == pytest.approx(0.0666)
     assert aieg.transport == pytest.approx(0.0274)
     assert aieg.data_management_per_year == pytest.approx(19.49)
+    # Wallonia DSOs publish a prosumer (compensation-regime) tariff in the
+    # last column. AIEG row trails with "81,04" EUR/kVA/year.
+    assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.04)
+
+
+def test_fix_fluvius_has_no_prosumer_rate() -> None:
+    # Flemish digital meter rows print "-" for the prosumer column - SMR3
+    # connections don't sit under the compensation regime.
+    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    assert snap.dsos["fluvius_antwerpen"].prosumer_eur_per_kva_year is None
 
 
 def test_fix_extracts_all_fluvius_sub_areas() -> None:

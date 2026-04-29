@@ -159,19 +159,36 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     transport = _extract_transport(text)
     out: dict[str, DsoOverlay] = {}
     for label in _DSO_LABELS:
+        # Variable PDF row layout: yearly | mono | dag | nacht | uitsl_nacht
+        # | tarif_prosumer (€/kVA/yr). Dynamic PDF substitutes the prosumer
+        # column with three Tarif Impact columns (PIC / MEDIUM / ECO) and
+        # has no prosumer fee since SMR3 dispenses with compensation regime.
         row = re.search(
-            rf"^{label}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)",
+            rf"^{label}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)"
+            rf"(?:\s+([\d,]+))?",
             text,
             re.MULTILINE,
         )
         if not row:
             continue
+        # Group 6 is present only when one trailing number remains, i.e. the
+        # variable card. The dynamic card has three trailing numbers and
+        # group 6 captures the first of them - which we discard.
+        prosumer_match = re.search(
+            rf"^{label}\s+(?:[\d,]+\s+){{5}}([\d,]+)\s*$",
+            text,
+            re.MULTILINE,
+        )
+        prosumer_rate: float | None = None
+        if prosumer_match:
+            prosumer_rate = to_float(prosumer_match.group(1))
         out[_DSO_KEY[label]] = DsoOverlay(
             distribution_single=to_float(row.group(2)) / 100.0,
             distribution_peak=to_float(row.group(3)) / 100.0,
             distribution_offpeak=to_float(row.group(4)) / 100.0,
             transport=transport,
             data_management_per_year=to_float(row.group(1)),
+            prosumer_eur_per_kva_year=prosumer_rate,
         )
     return out
 
