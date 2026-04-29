@@ -64,7 +64,6 @@ from .const import (
     DOMAIN,
     METER_MONO,
     REGION_FLANDERS,
-    STORAGE_KEY,
     STORAGE_VERSION,
     UPDATE_INTERVAL_DYNAMIC_MINUTES,
     UPDATE_INTERVAL_STATIC_MINUTES,
@@ -122,7 +121,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             update_interval=timedelta(minutes=interval),
         )
         self._session: aiohttp.ClientSession = async_get_clientsession(hass)
-        self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+        self._store: Store[dict[str, Any]] = Store(
+            hass, STORAGE_VERSION, f"{DOMAIN}_cache_{entry.entry_id}"
+        )
         self._snapshot: SupplierSnapshot | None = None
         self._snapshot_fetched_at: datetime | None = None
         self._spot_cache: dict[datetime, float] = {}
