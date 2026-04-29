@@ -115,7 +115,7 @@ def _contract_kind(supplier_id: str, contract_id: str) -> str:
     for c in _contracts_for(supplier_id):
         if c.id == contract_id:
             return c.kind
-    return "fixed"
+    raise ValueError(f"unknown contract {contract_id!r} for supplier {supplier_id!r}")
 
 
 def _user_schema(defaults: dict[str, Any]) -> vol.Schema:

@@ -65,8 +65,7 @@ from .const import (
     METER_MONO,
     REGION_FLANDERS,
     STORAGE_VERSION,
-    UPDATE_INTERVAL_DYNAMIC_MINUTES,
-    UPDATE_INTERVAL_STATIC_MINUTES,
+    UPDATE_INTERVAL_MINUTES,
 )
 from .pricing import PriceBreakdown, compute_breakdown
 from .providers import (
@@ -108,17 +107,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.entry = entry
-        is_dynamic = self._is_dynamic_contract()
-        interval = (
-            UPDATE_INTERVAL_DYNAMIC_MINUTES
-            if is_dynamic
-            else UPDATE_INTERVAL_STATIC_MINUTES
-        )
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_{entry.entry_id}",
-            update_interval=timedelta(minutes=interval),
+            update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES),
         )
         self._session: aiohttp.ClientSession = async_get_clientsession(hass)
         self._store: Store[dict[str, Any]] = Store(
@@ -132,17 +125,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._peak_kw: float = 0.0
         self._peak_month: date | None = None
         self._last_error: str = ""
-
-    def _is_dynamic_contract(self) -> bool:
-        try:
-            extractor = get_extractor(self.entry.data[CONF_SUPPLIER])
-        except ExtractorError:
-            return False
-        contract_id = self.entry.data.get(CONF_CONTRACT)
-        for c in extractor.contracts:
-            if c.id == contract_id:
-                return c.kind == "dynamic"
-        return False
 
     async def async_load_persistent(self) -> None:
         """Restore the latest snapshot + monthly peak from HA Store."""

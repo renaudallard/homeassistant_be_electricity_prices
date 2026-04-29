@@ -116,9 +116,13 @@ def parse_day_ahead_xml(xml: str) -> dict[datetime, float]:
             price_text = point.findtext("ns:price.amount", default="", namespaces=_NS)
             if not price_text:
                 continue
-            position = int(position_text)
+            try:
+                position = int(position_text)
+                price = float(price_text)
+            except ValueError as err:
+                raise EntsoeError(f"malformed point in document: {err}") from err
             ts_start = start + step * (position - 1)
-            out[ts_start] = float(price_text) / 1000.0
+            out[ts_start] = price / 1000.0
     return out
 
 

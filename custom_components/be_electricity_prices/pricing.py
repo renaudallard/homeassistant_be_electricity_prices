@@ -48,6 +48,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+from .const import REGION_FLANDERS, REGION_WALLONIA
 from .providers.base import (
     DsoOverlay,
     DynamicRates,
@@ -119,8 +120,6 @@ def network_eur_per_kwh(
 
 def taxes_eur_per_kwh(taxes: TaxOverlay, region: str) -> float:
     """Per-kWh levies for the configured region."""
-    from .const import REGION_FLANDERS, REGION_WALLONIA
-
     out = taxes.federal_excise + taxes.energy_contribution
     if region == REGION_WALLONIA:
         out += taxes.region_connection_fee + taxes.wallonia_renewables

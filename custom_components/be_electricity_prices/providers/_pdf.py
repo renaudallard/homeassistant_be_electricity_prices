@@ -62,5 +62,7 @@ def extract_pdf_text(payload: bytes) -> str:
 
 def to_float(text: str) -> float:
     """Parse a Belgian / French decimal number ('15,93' or '0.102')."""
+    # First strips a non-breaking space (U+00A0) which Belgian PDFs use
+    # around units; visually identical to a regular space, do not collapse.
     cleaned = text.strip().replace(" ", "").replace(" ", "").replace(",", ".")
     return float(cleaned)

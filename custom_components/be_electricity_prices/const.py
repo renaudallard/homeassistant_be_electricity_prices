@@ -71,8 +71,8 @@ DEFAULT_CAPACITY_FIXED_KW: Final = 2.5
 ENTSOE_BASE_URL: Final = "https://web-api.tp.entsoe.eu/api"
 ENTSOE_BE_DOMAIN: Final = "10YBE----------2"
 
-UPDATE_INTERVAL_DYNAMIC_MINUTES: Final = 60
-UPDATE_INTERVAL_STATIC_MINUTES: Final = 60
-CATALOG_REFRESH_HOURS: Final = 24
+# Coordinator refreshes every hour for both static and dynamic contracts;
+# the dynamic branch piggybacks on this tick to refresh ENTSO-E spots.
+UPDATE_INTERVAL_MINUTES: Final = 60
 
 STORAGE_VERSION: Final = 2
