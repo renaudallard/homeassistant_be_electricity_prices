@@ -136,7 +136,16 @@ def compute_breakdown(
     spot_eur_per_kwh: float | None = None,
     meter: MeterType = "mono",
 ) -> PriceBreakdown:
-    """Return the all-in EUR/kWh breakdown for one hour."""
+    """Return the all-in EUR/kWh breakdown for one hour.
+
+    Each component (energy, network, taxes) is reported VAT-inclusive,
+    so ``energy + network + taxes == all_in`` exactly. With the current
+    convention ``vat_rate = 0.0`` (snapshots already parse VAT-incl
+    numbers) the multiplier is 1.0 and components match what the PDF
+    prints. If a future extractor parses ex-VAT numbers and sets
+    ``vat_rate = 0.06``, VAT applies uniformly to each component
+    instead of being rolled into the taxes component.
+    """
     overlay = snapshot.dsos.get(dso_key)
     if overlay is None:
         raise KeyError(
@@ -147,11 +156,10 @@ def compute_breakdown(
     energy = energy_eur_per_kwh(snapshot.energy, when, spot_eur_per_kwh, meter)
     network = network_eur_per_kwh(overlay, when, meter)
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
-    pre_vat = energy + network + taxes
-    all_in = pre_vat * (1.0 + snapshot.taxes.vat_rate)
+    vat_factor = 1.0 + snapshot.taxes.vat_rate
     return PriceBreakdown(
-        energy=energy,
-        network=network,
-        taxes=all_in - energy - network,
-        all_in=all_in,
+        energy=energy * vat_factor,
+        network=network * vat_factor,
+        taxes=taxes * vat_factor,
+        all_in=(energy + network + taxes) * vat_factor,
     )

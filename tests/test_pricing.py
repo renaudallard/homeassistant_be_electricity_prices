@@ -210,6 +210,12 @@ def test_compute_breakdown_with_vat_exclusive_snapshot() -> None:
     bd = compute_breakdown(snap, "fluvius", "flanders", datetime(2026, 4, 29, 12))
     expected = (0.18 + 0.065 + 0.067) * 1.06
     assert bd.all_in == pytest.approx(expected)
+    # VAT must spread across every component, not get lumped into taxes.
+    assert bd.energy == pytest.approx(0.18 * 1.06)
+    assert bd.network == pytest.approx(0.065 * 1.06)
+    assert bd.taxes == pytest.approx(0.067 * 1.06)
+    # And the components must always sum to all_in to the cent.
+    assert bd.energy + bd.network + bd.taxes == pytest.approx(bd.all_in)
 
 
 def test_compute_breakdown_unknown_dso_raises() -> None:

@@ -79,7 +79,7 @@ Per config entry, grouped on a single device:
 | `today_min` / `today_max` | Daily extremes. |
 | `energy_component` | Energy-only EUR/kWh now. |
 | `network_component` | Distribution + transport EUR/kWh now. |
-| `taxes_component` | Levies + VAT EUR/kWh now. |
+| `taxes_component` | Levies EUR/kWh now (VAT-inclusive). `energy + network + taxes` always equals `all_in`. |
 | `capacity_cost` | Flanders only - current monthly capacity cost in EUR. |
 | `monthly_peak_kw` | Flanders only - running monthly peak power in kW. |
 | `prosumer_cost` | Compensation-regime users only (Wallonian installations certified before 2024-01-01) - monthly DSO fee = `inverter_kVA × DSO_prosumer_rate / 12`, in EUR. Compensation regime ends 2030-12-31; post-2024 installations are on the injection tariff and don't get this sensor. |
