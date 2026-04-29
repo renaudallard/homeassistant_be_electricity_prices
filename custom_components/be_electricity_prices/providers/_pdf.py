@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from io import BytesIO
 from pathlib import Path
@@ -62,7 +63,9 @@ async def fetch_pdf_text(session: aiohttp.ClientSession, url: str) -> str:
     except aiohttp.ClientError as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
 
-    return extract_pdf_text(payload)
+    # pypdf does pure-Python parsing; offload to a worker thread so a
+    # multi-page tariff card never stalls Home Assistant's event loop.
+    return await asyncio.to_thread(extract_pdf_text, payload)
 
 
 def extract_pdf_text(payload: bytes) -> str:
