@@ -180,15 +180,11 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         rate="I",
         months_per_region={_V: "00", _W: "00", _B: "00"},
     ),
-    _ContractDef(
-        contract_id="engie_social",
-        label="Engie Tarif Social",
-        kind="fixed",
-        family="SOCIAL",
-        color="GREY",
-        rate="F",
-        months_per_region={_V: "00", _W: "00", _B: "00"},
-    ),
+    # Engie's Tarif Social (E_SOCIAL_R_GREY_C_F) is omitted on purpose: the
+    # social tariff is set quarterly by the CREG and is auto-assigned to
+    # protected customers (they don't pick it from a list). Its PDF carries
+    # an all-in regulated price with no DSO breakdown, so it doesn't fit
+    # the integration's energy-plus-network-plus-tax model.
 )
 
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
@@ -332,16 +328,39 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             yearly_fixed_fee=yearly_fee,
         )
 
-    consumption = re.search(
-        r"Consommation\(2\)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)",
-        text,
-    )
+    # Capture the whole Consommation(2) row up to the newline. Most
+    # contracts have 4 prices + 1 trailing renewables column; Empty House
+    # and similar mono-only tariffs have just 1 price + 1 renewables.
+    consumption = re.search(r"Consommation\(2\)([^\n]+)", text)
     if not consumption:
         raise ExtractorError(f"could not parse Engie {kind} consumption block")
-    mono = to_float(consumption.group(1)) / 100.0
-    peak = to_float(consumption.group(2)) / 100.0
-    offpeak = to_float(consumption.group(3)) / 100.0
-    excl_night = to_float(consumption.group(4)) / 100.0
+    nums = [to_float(n) for n in re.findall(r"[\d,]+", consumption.group(1))]
+    # Last column is the regional renewables levy; drop it, what remains
+    # is the price columns.
+    prices = nums[:-1] if len(nums) >= 2 else nums
+    peak: float | None
+    offpeak: float | None
+    excl_night: float | None
+    if len(prices) == 4:
+        # Standard layout: Normal | Bi-pleines | Bi-creuses | Excl. nuit
+        mono, peak, offpeak, excl_night = (p / 100.0 for p in prices)
+    elif len(prices) == 7:
+        # Empower Variable with Flextime: Normal | Bi-pleines | Bi-creuses
+        # | Flextime pleines | Flextime creuses | Flextime super-creuses |
+        # Exclusif nuit. We expose mono / peak / offpeak / excl_night and
+        # skip the Flextime tiers, which require a separate meter setup.
+        mono = prices[0] / 100.0
+        peak = prices[1] / 100.0
+        offpeak = prices[2] / 100.0
+        excl_night = prices[6] / 100.0
+    elif len(prices) == 1:
+        # Mono-only tariffs (e.g. Empty House for vacant properties).
+        mono = prices[0] / 100.0
+        peak = offpeak = excl_night = None
+    else:
+        raise ExtractorError(
+            f"unexpected price column count for Engie {kind}: {len(prices)}"
+        )
 
     if kind == "fixed":
         return FixedRates(

@@ -171,6 +171,42 @@ def test_easy_fixed_extracts_bihourly_rates() -> None:
     assert snap.injection.factor is None and snap.injection.base is None
 
 
+def test_empower_variable_skips_flextime_tiers() -> None:
+    # Empower Variable's Consommation row has 7 price columns: standard
+    # mono / bi-pleines / bi-creuses, then three Flextime variants
+    # (heures pleines / creuses / super-creuses), then exclusive-night.
+    # The integration's pricing model only carries mono + bi + excl_night,
+    # so the Flextime middle three are skipped on purpose.
+    snap = parse_snapshot(
+        "engie_empower_variable",
+        {REGION_FLANDERS: _text("engie_empower_variable_v.pdf")},
+    )
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current == pytest.approx(0.13775)
+    assert snap.energy.peak == pytest.approx(0.15058)
+    assert snap.energy.offpeak == pytest.approx(0.11625)
+    # Last price column on the 8-number row is exclusive-night, NOT the
+    # Flextime super-creuses (9,796) which is the cheapest visible value.
+    assert snap.energy.exclusive_night == pytest.approx(0.12460)
+
+
+def test_empty_house_is_mono_only() -> None:
+    # The 'Tarif bâtiment vide' card has a single rate (no bihoraire, no
+    # exclusive-night) because vacant homes don't run time-of-use loads.
+    # The parser must accept the 1-price-+-1-renewables row layout
+    # instead of the standard 4-prices-+-1-renewables.
+    snap = parse_snapshot(
+        "engie_empty_house",
+        {REGION_FLANDERS: _text("engie_empty_house_v.pdf")},
+    )
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current == pytest.approx(0.24505)
+    assert snap.energy.peak is None
+    assert snap.energy.offpeak is None
+    assert snap.energy.exclusive_night is None
+    assert snap.taxes.flanders_renewables == pytest.approx(0.01582)
+
+
 def test_easy_variable_uses_monthly_not_annual_estimate() -> None:
     snap = parse_snapshot(
         "engie_easy_variable",
