@@ -80,7 +80,7 @@ from .const import (
     CONF_METER,
     CONF_REGION,
     CONF_SUPPLIER,
-    DEFAULT_CAPACITY_FIXED_KW,
+    VREG_CAPACITY_FLOOR_KW,
     DOMAIN,
     DSO_CHOICES,
     METER_DYNAMIC,
@@ -231,7 +231,7 @@ def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
     fields[
         vol.Optional(
             CONF_CAPACITY_FIXED_KW,
-            default=defaults.get(CONF_CAPACITY_FIXED_KW, DEFAULT_CAPACITY_FIXED_KW),
+            default=defaults.get(CONF_CAPACITY_FIXED_KW, VREG_CAPACITY_FLOOR_KW),
         )
     ] = NumberSelector(
         NumberSelectorConfig(min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX)

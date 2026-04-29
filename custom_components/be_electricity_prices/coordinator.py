@@ -60,7 +60,7 @@ from .const import (
     CONF_METER,
     CONF_REGION,
     CONF_SUPPLIER,
-    DEFAULT_CAPACITY_FIXED_KW,
+    VREG_CAPACITY_FLOOR_KW,
     DOMAIN,
     METER_MONO,
     REGION_FLANDERS,
@@ -252,23 +252,24 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         mode = self.entry.data.get(CONF_CAPACITY_MODE)
         if mode == CAPACITY_MODE_FIXED:
             fixed = float(
-                self.entry.data.get(CONF_CAPACITY_FIXED_KW, DEFAULT_CAPACITY_FIXED_KW)
+                self.entry.data.get(CONF_CAPACITY_FIXED_KW, VREG_CAPACITY_FLOOR_KW)
             )
             self._peak_kw = max(self._peak_kw, fixed)
-            return
-        if mode == CAPACITY_MODE_SENSOR:
+        elif mode == CAPACITY_MODE_SENSOR:
             entity_id = self.entry.data.get(CONF_CAPACITY_PEAK_SENSOR)
-            if not entity_id:
-                return
-            state: State | None = self.hass.states.get(entity_id)
-            if state is None or state.state in ("unknown", "unavailable"):
-                return
-            try:
-                value = float(state.state)
-            except (TypeError, ValueError):
-                return
-            if value > self._peak_kw:
-                self._peak_kw = value
+            state: State | None = self.hass.states.get(entity_id) if entity_id else None
+            if state is not None and state.state not in ("unknown", "unavailable"):
+                try:
+                    value = float(state.state)
+                except (TypeError, ValueError):
+                    value = 0.0
+                if value > self._peak_kw:
+                    self._peak_kw = value
+
+        # Apply the regulated VREG floor regardless of mode - Fluvius bills
+        # max(measured_peak, floor), so a household whose monthly peak stays
+        # below 2.5 kW still pays the floor in the capacity_cost sensor.
+        self._peak_kw = max(self._peak_kw, VREG_CAPACITY_FLOOR_KW)
 
     def _build_hourly(
         self, spot_prices: dict[datetime, float]

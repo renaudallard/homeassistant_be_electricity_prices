@@ -90,7 +90,11 @@ CONF_CAPACITY_FIXED_KW: Final = "capacity_fixed_kw"
 CAPACITY_MODE_SENSOR: Final = "sensor"
 CAPACITY_MODE_FIXED: Final = "fixed"
 
-DEFAULT_CAPACITY_FIXED_KW: Final = 2.5
+# Regulated minimum monthly peak that Fluvius bills against in Flanders -
+# the user's actual peak is taken as max(measured, floor) before being
+# multiplied by capacity_eur_per_kw_year. Set by VREG when the capacity
+# tariff was introduced in January 2023 and unchanged since.
+VREG_CAPACITY_FLOOR_KW: Final = 2.5
 
 ENTSOE_BASE_URL: Final = "https://web-api.tp.entsoe.eu/api"
 ENTSOE_BE_DOMAIN: Final = "10YBE----------2"
