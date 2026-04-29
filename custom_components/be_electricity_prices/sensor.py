@@ -210,6 +210,7 @@ CAPACITY_SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="monthly_peak_kw",
         translation_key="monthly_peak_kw",
+        device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="kW",
         suggested_display_precision=2,
