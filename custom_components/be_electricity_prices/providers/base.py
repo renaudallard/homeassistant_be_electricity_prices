@@ -128,7 +128,10 @@ class TaxOverlay:
     wallonia_renewables: float = 0.0
     region_connection_fee: float = 0.0
     energy_fund_eur_per_month: float = 0.0
-    vat_rate: float = 0.06
+    # 0.0 means the snapshot's prices are already VAT-incl (the convention
+    # for both Eneco and Cociter today). An extractor that starts shipping
+    # ex-VAT numbers must set this to the parsed rate explicitly.
+    vat_rate: float = 0.0
 
 
 @dataclass(frozen=True, kw_only=True)
