@@ -74,13 +74,23 @@ def test_today_ranked_returns_empty_lists_when_no_hours_today() -> None:
     assert most_expensive == []
 
 
-def test_today_ranked_with_fewer_hours_than_count_overlaps() -> None:
+def test_today_ranked_lists_are_disjoint_when_few_hours() -> None:
     # Right after midnight on a static contract there may be only a couple
-    # of today-hours. Both lists then describe the same hours - that's an
-    # accepted property, not a bug, but pin it down so future refactors
-    # don't quietly change the contract.
+    # of today-hours. The cheapest list takes its share first; the
+    # most-expensive list gets only what remains, so the two lists never
+    # share an hour.
     cheapest, most_expensive = _today_ranked(_today_data([0.20, 0.10]), 4)
-    assert len(cheapest) == 2
-    assert len(most_expensive) == 2
     assert {c["price"] for c in cheapest} == {0.10, 0.20}
-    assert {c["price"] for c in most_expensive} == {0.10, 0.20}
+    assert most_expensive == []
+
+
+def test_today_ranked_partitions_when_count_falls_in_middle() -> None:
+    # 6 hours, count=4: cheapest takes the first 4, most-expensive takes
+    # the remaining 2. Together they cover all hours exactly once.
+    cheapest, most_expensive = _today_ranked(
+        _today_data([0.10, 0.12, 0.14, 0.16, 0.18, 0.20]), 4
+    )
+    assert {c["price"] for c in cheapest} == {0.10, 0.12, 0.14, 0.16}
+    assert {c["price"] for c in most_expensive} == {0.18, 0.20}
+    starts = {c["start"] for c in cheapest} | {c["start"] for c in most_expensive}
+    assert len(starts) == 6

@@ -121,6 +121,13 @@ def _today_max(data: CoordinatorData) -> float | None:
 def _today_ranked(
     data: CoordinatorData, count: int
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Pick the ``count`` cheapest and ``count`` most-expensive today-hours.
+
+    The two lists are always disjoint: when fewer than ``2 * count`` today
+    hours are populated (e.g. right after midnight on a static contract),
+    the cheapest take their share first and the most-expensive list gets
+    only what remains. Each list is returned in chronological order.
+    """
     today = dt_util.now().date()
     pairs = [
         (h, bd) for h, bd in data.hourly.items() if dt_util.as_local(h).date() == today
@@ -128,8 +135,11 @@ def _today_ranked(
     if not pairs:
         return [], []
     by_price_asc = sorted(pairs, key=lambda x: x[1].all_in)
-    cheapest = sorted(by_price_asc[:count], key=lambda x: x[0])
-    most_expensive = sorted(by_price_asc[-count:], key=lambda x: x[0])
+    cheapest_pairs = by_price_asc[:count]
+    remaining = by_price_asc[count:]
+    most_expensive_pairs = remaining[-count:] if remaining else []
+    cheapest = sorted(cheapest_pairs, key=lambda x: x[0])
+    most_expensive = sorted(most_expensive_pairs, key=lambda x: x[0])
 
     def _fmt(h: Any, bd: PriceBreakdown) -> dict[str, Any]:
         return {

@@ -73,7 +73,7 @@ Per config entry, grouped on a single device:
 
 | Sensor | Description |
 | --- | --- |
-| `current_price` | All-in EUR/kWh now. Attributes: hourly breakdown, snapshot age, last fetch error, `cheapest_4h_today` and `most_expensive_4h_today` (chronologically sorted lists of `{start, price}`). |
+| `current_price` | All-in EUR/kWh now. Attributes: hourly breakdown, snapshot age, last fetch error, `cheapest_4h_today` and `most_expensive_4h_today` (chronologically sorted, disjoint lists of `{start, price}`). |
 | `next_hour_price` | All-in EUR/kWh for the next hour. |
 | `today_average` | Daily average all-in EUR/kWh. |
 | `today_min` / `today_max` | Daily extremes. |
