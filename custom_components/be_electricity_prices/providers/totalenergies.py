@@ -1,0 +1,592 @@
+# Copyright (c) 2026, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+"""TotalEnergies Belgium tariff card extractor.
+
+TotalEnergies publishes the current month's tariff card per (product,
+region) at stable URLs:
+
+    https://totalenergies.be/static/marketing-documents/b2c/tariff-card/
+        latest/<PRODUCT>_ELECTRICITY_<REGION>_FR.pdf
+
+The ``/latest/`` segment auto-rolls each month so no listing scrape is
+needed. All nine residential electricity products are registered. Each
+is available in V/W/B (TotalEnergies serves all three regions).
+
+The PDFs include rotated DSO / tax columns that pypdf cannot extract
+('Rotated text discovered. Output will be incomplete.'). The extractor
+uses pdfplumber for the layout-aware extraction it needs to read those
+cells; the other extractors keep using pypdf since their cards are
+horizontal-text-only.
+
+Dynamic formula format: ``0.1034 * BELPEXH + 1.75`` (HTVA, c€/kWh).
+The parser scales factor and base by the parsed VAT multiplier - same
+pattern as Engie/Luminus.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+import aiohttp
+
+from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
+from ._pdf import fetch_pdf_text_layout, to_float
+from .base import (
+    Contract,
+    DsoOverlay,
+    DynamicRates,
+    EnergyRates,
+    ExtractorError,
+    FixedRates,
+    InjectionRates,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TariffKind,
+    TaxOverlay,
+    VariableRates,
+)
+
+_BASE_URL = "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest"
+
+_REGION_TO_CODE: dict[str, str] = {
+    REGION_FLANDERS: "VL",
+    REGION_WALLONIA: "WAL",
+    REGION_BRUSSELS: "BXL",
+}
+
+
+_ALL_REGIONS: frozenset[str] = frozenset(
+    {REGION_FLANDERS, REGION_WALLONIA, REGION_BRUSSELS}
+)
+
+
+@dataclass(frozen=True)
+class _ContractDef:
+    contract_id: str
+    label: str
+    kind: TariffKind
+    slug: str  # the file prefix in TotalEnergies's URL
+    # Regions the product is actually published in. TotalEnergies's
+    # listing page advertises every product in V/W/B but a few only
+    # have a Wallonia PDF; the others return a 200 OK HTML 404 page.
+    regions: frozenset[str] = _ALL_REGIONS
+
+
+_CONTRACTS: tuple[_ContractDef, ...] = (
+    _ContractDef(
+        "totalenergies_electricite_fixe",
+        "TotalEnergies Electricité Fixe",
+        "fixed",
+        "ELECTRICITE-FIXE",
+    ),
+    _ContractDef(
+        "totalenergies_electricite_variable",
+        "TotalEnergies Electricité Variable",
+        "variable",
+        "ELECTRICITE-VARIABLE",
+    ),
+    _ContractDef(
+        "totalenergies_impact",
+        "TotalEnergies Impact",
+        "variable",
+        "IMPACT",
+        regions=frozenset({REGION_WALLONIA}),
+    ),
+    _ContractDef(
+        "totalenergies_mycomfort",
+        "TotalEnergies myComfort",
+        "variable",
+        "MYCOMFORT",
+    ),
+    _ContractDef(
+        "totalenergies_mycomfort_fixed",
+        "TotalEnergies myComfort Fixe",
+        "fixed",
+        "MYCOMFORT-FIXED",
+    ),
+    _ContractDef(
+        "totalenergies_mydrive",
+        "TotalEnergies myDrive",
+        "variable",
+        "MYDRIVE",
+    ),
+    _ContractDef(
+        "totalenergies_mydynamic",
+        "TotalEnergies myDynamic",
+        "dynamic",
+        "MYDYNAMIC",
+    ),
+    _ContractDef(
+        "totalenergies_myessential",
+        "TotalEnergies myEssential",
+        "variable",
+        "MYESSENTIAL",
+    ),
+    _ContractDef(
+        "totalenergies_myessential_fixed",
+        "TotalEnergies myEssential Fixe",
+        "fixed",
+        "MYESSENTIAL-FIXED",
+    ),
+)
+
+_CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
+
+
+def _document_url(slug: str, region: str) -> str:
+    region_code = _REGION_TO_CODE[region]
+    return f"{_BASE_URL}/{slug}_ELECTRICITY_{region_code}_FR.pdf"
+
+
+# ---- top-level fetch + parser -------------------------------------------------
+
+
+async def fetch(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+) -> SupplierSnapshot:
+    """Fetch the configured region's PDF for ``contract_id``."""
+    if contract_id not in _CONTRACTS_BY_ID:
+        raise ExtractorError(f"unknown TotalEnergies contract {contract_id!r}")
+    contract = _CONTRACTS_BY_ID[contract_id]
+    if region not in _REGION_TO_CODE:
+        raise ExtractorError(f"TotalEnergies: unknown region {region!r}")
+    if region not in contract.regions:
+        raise ExtractorError(
+            f"TotalEnergies {contract_id}: not available in region {region!r}"
+        )
+    url = _document_url(contract.slug, region)
+    text = await fetch_pdf_text_layout(session, url)
+    return parse_snapshot(contract_id, text, region, url)
+
+
+def parse_snapshot(
+    contract_id: str, text: str, region: str, source_url: str = _BASE_URL
+) -> SupplierSnapshot:
+    """Pure parser exposed for unit tests."""
+    if contract_id not in _CONTRACTS_BY_ID:
+        raise ExtractorError(f"unknown TotalEnergies contract {contract_id!r}")
+    contract = _CONTRACTS_BY_ID[contract_id]
+
+    energy = _extract_energy(text, contract.kind)
+    injection = _extract_injection(text, contract.kind)
+    publication_label = _extract_publication_month(text)
+    federal_excise = _extract_federal_excise(text)
+    energy_contribution = _extract_energy_contribution(text)
+    region_connection_fee = (
+        _extract_connection_fee(text) if region == REGION_WALLONIA else 0.0
+    )
+    energy_fund = _extract_energy_fund(text) if region == REGION_FLANDERS else 0.0
+
+    flanders_renewables = 0.0
+    wallonia_renewables = 0.0
+    brussels_renewables = 0.0
+    if region == REGION_FLANDERS:
+        flanders_renewables = _extract_renewables(text, "Flandre")
+        dsos = _extract_flanders_dsos(text)
+    elif region == REGION_WALLONIA:
+        wallonia_renewables = _extract_renewables(text, "Wallonie")
+        dsos = _extract_wallonia_dsos(text)
+    else:
+        brussels_renewables = _extract_renewables(text, "Bruxelles")
+        dsos = _extract_brussels_dsos(text)
+
+    return SupplierSnapshot(
+        supplier="totalenergies",
+        contract=contract_id,
+        energy=energy,
+        dsos=dsos,
+        taxes=TaxOverlay(
+            federal_excise=federal_excise,
+            energy_contribution=energy_contribution,
+            flanders_renewables=flanders_renewables,
+            wallonia_renewables=wallonia_renewables,
+            brussels_renewables=brussels_renewables,
+            region_connection_fee=region_connection_fee,
+            energy_fund_eur_per_month=energy_fund,
+            vat_rate=0.0,
+        ),
+        source_url=source_url,
+        fetched_at_iso=datetime.now(UTC).isoformat(timespec="seconds"),
+        publication_label=publication_label,
+        injection=injection,
+    )
+
+
+# ---- energy block -------------------------------------------------------------
+
+
+_DYNAMIC_FORMULA_RE = re.compile(
+    # Standalone factor*BELPEXH+base, base must NOT be followed by another
+    # `* BELPEXH` (that'd be the next column's formula). Wallonia and
+    # Flanders match this directly.
+    r"([\d.,]+)\s*\*\s*BELPEXH\s*([+\-–—])\s*([\d.,]+)(?!\s*\*\s*BELPEXH)"
+)
+# Brussels Dynamic prints "<factor> * BELPEXH +" on one line and the bases
+# on the next: "0.1034 * BELPEXH + ... + Formule tarifaire\n3.85 3.85 ...".
+_FACTOR_ONLY_RE = re.compile(r"([\d.,]+)\s*\*\s*BELPEXH\s*([+\-–—])")
+_BASE_AFTER_FORMULE_RE = re.compile(r"Formule tarifaire\s*\n\s*([\d.,]+)")
+
+
+def _resolve_consumption_formula(text: str) -> tuple[float, float, float] | None:
+    """Return ``(factor, sign, base_cents)`` for the consumption formula.
+
+    The consumption formula always appears before the injection formula
+    in TotalEnergies's PDFs, so the FIRST ``factor * BELPEXH`` match is
+    always the consumption one. Wallonia and Flanders print the base on
+    the same line (``0.1034 * BELPEXH + 1.75``); Brussels splits the
+    formula across two lines (``0.1034 * BELPEXH +`` then ``3.85`` after
+    ``Formule tarifaire``).
+    """
+    first_match = _FACTOR_ONLY_RE.search(text)
+    if first_match is None:
+        return None
+    factor = to_float(first_match.group(1))
+    sign = -1.0 if first_match.group(2) in ("-", "–", "—") else 1.0
+
+    # Same-line base: a complete number, terminated by whitespace or
+    # end-of-string, that is NOT followed by another ``* BELPEXH``
+    # (which would be the next column's formula). The trailing
+    # ``(?=\s|$)`` blocks the regex engine from backing off ``[\d.,]+``
+    # to a shorter match (e.g. capturing ``0.103`` out of ``0.1034``).
+    tail_re = re.compile(
+        re.escape(first_match.group(0)) + r"\s*([\d.,]+)(?=\s|$)(?!\s*\*\s*BELPEXH)"
+    )
+    tail = tail_re.search(text)
+    if tail is not None:
+        return factor, sign, to_float(tail.group(1))
+
+    after_formule = _BASE_AFTER_FORMULE_RE.search(text)
+    if after_formule is None:
+        return None
+    return factor, sign, to_float(after_formule.group(1))
+
+
+def _vat_multiplier(text: str) -> float:
+    match = re.search(r"TVA\s*(\d+)\s*%", text)
+    return 1.0 + (int(match.group(1)) / 100.0) if match else 1.06
+
+
+def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
+    yearly_fee = _extract_yearly_fee(text)
+    if kind == "dynamic":
+        consumption = _resolve_consumption_formula(text)
+        if consumption is None:
+            raise ExtractorError("could not parse TotalEnergies dynamic formula")
+        factor_pdf, sign, base_pre_vat_cents_value = consumption
+        vat = _vat_multiplier(text)
+        # PDF formula yields c€/kWh (HTVA) from BELPEX in EUR/MWh; spot
+        # is EUR/kWh = EUR/MWh / 1000:
+        #   factor_eur_kwh = factor_pdf * vat * 1000 / 100 = factor_pdf * vat * 10
+        #   base_eur_kwh   = base_cents  * vat / 100
+        return DynamicRates(
+            factor=factor_pdf * vat * 10.0,
+            base=sign * base_pre_vat_cents_value * vat / 100.0,
+            yearly_fixed_fee=yearly_fee,
+        )
+
+    # Static / variable: the consumption row is 4 space-separated values
+    # (mono / jour / nuit / excl_nuit). The layout drifts per contract:
+    # asterisk count after "Consommation" varies (0-3); for static the
+    # values follow directly, for variable a "Tarif mensuel" label sits
+    # between. One regex covers all cases.
+    consumption_match = re.search(
+        r"Consommation\*{0,5}\s*\n(?:\s*Tarif\s+(?:annuel|mensuel)\s*\n)?\s*"
+        r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
+        text,
+    )
+    if not consumption_match:
+        raise ExtractorError(f"could not parse TotalEnergies {kind} consumption block")
+    mono = to_float(consumption_match.group(1)) / 100.0
+    peak = to_float(consumption_match.group(2)) / 100.0
+    offpeak = to_float(consumption_match.group(3)) / 100.0
+    excl_night = to_float(consumption_match.group(4)) / 100.0
+    if kind == "fixed":
+        return FixedRates(
+            single=mono,
+            peak=peak,
+            offpeak=offpeak,
+            exclusive_night=excl_night,
+            yearly_fixed_fee=yearly_fee,
+        )
+    return VariableRates(
+        current=mono,
+        peak=peak,
+        offpeak=offpeak,
+        exclusive_night=excl_night,
+        yearly_fixed_fee=yearly_fee,
+    )
+
+
+def _extract_fee_and_renewables(text: str) -> tuple[float, float]:
+    """Pull the (yearly_fee_eur, renewables_eur_per_kwh) pair.
+
+    TotalEnergies prints them on a dedicated 2-number line in the energy
+    block: ``90,00 1,57``. The position of the line varies per contract
+    (after the consumption row for variable/dynamic, between Tarif annuel
+    and Injection for static), so we anchor on the value shape: a 2-3
+    digit fee with 2 decimals plus a 1-digit renewables with 2-3 decimals.
+    Other rows (consumption indicative, injection indicative) have all
+    2-digit integer parts so they don't match.
+    """
+    match = re.search(
+        r"^(\d{2,3}[.,]\d{1,2})\s+(\d[.,]\d{1,3})\s*$",
+        text,
+        re.MULTILINE,
+    )
+    if not match:
+        return 0.0, 0.0
+    return to_float(match.group(1)), to_float(match.group(2)) / 100.0
+
+
+def _extract_yearly_fee(text: str) -> float:
+    fee, _ = _extract_fee_and_renewables(text)
+    return fee
+
+
+def _extract_publication_month(text: str) -> str:
+    match = re.search(
+        r"TotalEnergies\s+(?:my\w+|Electricit[eé]\w*|Impact)[^\n]*\n([a-zéûÉ]+\s+\d{4})",
+        text,
+    )
+    return match.group(1) if match else ""
+
+
+def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
+    indicative = re.search(
+        r"Injection\*{0,5}[^\n]*\n\s*([\d.,]+)",
+        text,
+    )
+    current = to_float(indicative.group(1)) / 100.0 if indicative else None
+
+    factor: float | None = None
+    base: float | None = None
+    formula: str | None = None
+    if kind == "dynamic":
+        # Injection block always prints the formula cleanly on one line
+        # ("0.1 * BELPEXH -1.3 ..."). Anchor the search after "Injection"
+        # so the consumption formula above can never be picked up.
+        match = re.search(
+            r"Injection\*{0,5}[^\n]*\n[^\n]*\n\s*([\d.,]+)\s*\*\s*BELPEXH\s*"
+            r"([+\-–—])\s*([\d.,]+)",
+            text,
+        )
+        if match is not None:
+            f_pdf = to_float(match.group(1))
+            sign = -1.0 if match.group(2) in ("-", "–", "—") else 1.0
+            b_cents = sign * to_float(match.group(3))
+            # Injection is VAT-exempt residential.
+            factor = f_pdf * 10.0
+            base = b_cents / 100.0
+            formula = match.group(0)
+
+    if current is None and factor is None:
+        return None
+    return InjectionRates(current=current, factor=factor, base=base, formula=formula)
+
+
+# ---- taxes --------------------------------------------------------------------
+
+
+def _extract_federal_excise(text: str) -> float:
+    """First excise tier (0-3000 kWh)."""
+    match = re.search(
+        r"Consommation entre 0 et 3\.000 kWh\s+([\d.,]+)",
+        text,
+    )
+    return to_float(match.group(1)) / 100.0 if match else 0.0
+
+
+def _extract_energy_contribution(text: str) -> float:
+    match = re.search(r"Cotisation sur l[\"'’]\s*énergie\s+([\d.,]+)", text)
+    return to_float(match.group(1)) / 100.0 if match else 0.0
+
+
+def _extract_connection_fee(text: str) -> float:
+    match = re.search(r"Redevance de raccordement\s+([\d.,]+)", text)
+    return to_float(match.group(1)) / 100.0 if match else 0.0
+
+
+def _extract_energy_fund(text: str) -> float:
+    """Flanders 'Cotisations Fonds Energie' line, principal-with-domicile entry."""
+    match = re.search(
+        r"Résidence principale\s+sans\s+tarif\s+social\s+([\d.,]+)",
+        text,
+    )
+    return to_float(match.group(1)) if match else 0.0
+
+
+def _extract_renewables(text: str, region_label: str) -> float:
+    """The renewables value is the second number on the fee+renewables line.
+
+    Each PDF is region-specific so the label is informational only - we
+    just pick the value next to the yearly fee.
+    """
+    del region_label
+    _, renewables = _extract_fee_and_renewables(text)
+    return renewables
+
+
+# ---- DSO row parsers ----------------------------------------------------------
+
+
+_FLANDERS_LABELS: dict[str, str] = {
+    "Fluvius Antwerpen": "fluvius_antwerpen",
+    "Fluvius Halle-Vilvoorde": "fluvius_halle_vilvoorde",
+    "Fluvius Imewo": "fluvius_imewo",
+    "Fluvius Kempen": "fluvius_iveka",
+    "Fluvius Limburg": "fluvius_limburg",
+    "Fluvius Midden-Vlaanderen": "fluvius_intergem",
+    "Fluvius West": "fluvius_west",
+    "Fluvius Zenne-Dijle": "fluvius_zenne_dijle",
+}
+
+
+def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
+    """Flanders Fluvius rows (9 numbers each).
+
+    Layout:
+      dist_digital_mono | capacity_digital | dist_classic_mono |
+      dist_classic_excl_night | data_mgmt_classic | data_mgmt_digital |
+      tarif_capacity_max | cotisation_energie | prosumer
+
+    Distribution already includes transport (same convention as
+    Engie/Luminus/Mega Flanders).
+    """
+    out: dict[str, DsoOverlay] = {}
+    for label, key in _FLANDERS_LABELS.items():
+        match = re.search(
+            rf"{re.escape(label)}\s+"
+            rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
+            rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
+            text,
+        )
+        if not match:
+            continue
+        dist_digital = to_float(match.group(1))
+        capacity = to_float(match.group(2))
+        data_mgmt = to_float(match.group(6))  # digital meter column
+        prosumer = to_float(match.group(9))
+        out[key] = DsoOverlay(
+            distribution_single=dist_digital / 100.0,
+            transport=0.0,
+            data_management_per_year=data_mgmt,
+            capacity_eur_per_kw_year=capacity,
+            prosumer_eur_per_kva_year=prosumer,
+        )
+    return out
+
+
+_WALLONIA_LABELS: dict[str, str] = {
+    "AIEG": "aieg",
+    "AIESH": "aiesh",
+    "ORES (Namur - Namen)": "ores",
+    "REGIE DE WAVRE": "rew",
+    "RESA SA": "resa",
+}
+
+
+def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
+    """Wallonia rows (12 numbers each).
+
+    Layout:
+      mono | jour | nuit | excl_nuit | PIC | MEDIUM | ECO |
+      terme_fixe (€/an) | transport (c€/kWh) | prosumer (€/kVA/an) |
+      cap_base | cap_supplementary
+    """
+    out: dict[str, DsoOverlay] = {}
+    for label, key in _WALLONIA_LABELS.items():
+        match = re.search(
+            rf"{re.escape(label)}\s+"
+            rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
+            rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
+            rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
+            text,
+        )
+        if not match:
+            continue
+        mono = to_float(match.group(1))
+        peak = to_float(match.group(2))
+        offpeak = to_float(match.group(3))
+        terme_fixe = to_float(match.group(8))
+        transport = to_float(match.group(9))
+        prosumer = to_float(match.group(10))
+        out[key] = DsoOverlay(
+            distribution_single=mono / 100.0,
+            distribution_peak=peak / 100.0,
+            distribution_offpeak=offpeak / 100.0,
+            transport=transport / 100.0,
+            data_management_per_year=terme_fixe,
+            prosumer_eur_per_kva_year=prosumer,
+        )
+    return out
+
+
+def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
+    """Brussels Sibelga row (7 numbers).
+
+    Layout: mono | jour | nuit | excl_nuit | mesure_comptage (€/an) |
+            transport (c€/kWh) | cotisation_energie (c€/kWh)
+    """
+    match = re.search(
+        r"SIBELGA\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
+        r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
+        text,
+    )
+    if not match:
+        return {}
+    mono = to_float(match.group(1))
+    peak = to_float(match.group(2))
+    offpeak = to_float(match.group(3))
+    mesure = to_float(match.group(5))
+    transport = to_float(match.group(6))
+    return {
+        "sibelga": DsoOverlay(
+            distribution_single=mono / 100.0,
+            distribution_peak=peak / 100.0,
+            distribution_offpeak=offpeak / 100.0,
+            transport=transport / 100.0,
+            data_management_per_year=mesure,
+        )
+    }
+
+
+EXTRACTOR = SupplierExtractor(
+    id="totalenergies",
+    label="TotalEnergies",
+    contracts=tuple(
+        Contract(id=c.contract_id, label=c.label, kind=c.kind) for c in _CONTRACTS
+    ),
+    fetch=fetch,
+    dso_keys=(
+        tuple(_FLANDERS_LABELS.values())
+        + tuple(_WALLONIA_LABELS.values())
+        + ("sibelga",)
+    ),
+)

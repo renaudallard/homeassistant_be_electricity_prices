@@ -76,6 +76,48 @@ def extract_pdf_text(payload: bytes) -> str:
         raise ExtractorError(f"PDF parse error: {err}") from err
 
 
+def extract_pdf_text_layout(payload: bytes) -> str:
+    """Extract PDF text via pdfplumber, preserving table layout.
+
+    Used by suppliers (e.g. TotalEnergies) whose tariff cards include
+    rotated DSO / tax columns that pypdf drops silently. pdfplumber
+    walks the underlying pdfminer character stream and reassembles rows
+    using glyph coordinates, so each DSO row comes out as one line with
+    every numeric column in the right order.
+    """
+    try:
+        import pdfplumber
+
+        with pdfplumber.open(BytesIO(payload)) as pdf:
+            return "\n".join((page.extract_text() or "") for page in pdf.pages)
+    except Exception as err:
+        raise ExtractorError(f"PDF layout parse error: {err}") from err
+
+
+async def fetch_pdf_text_layout(session: aiohttp.ClientSession, url: str) -> str:
+    """Layout-preserving variant of :func:`fetch_pdf_text`.
+
+    Some CDNs return HTTP 200 with ``text/html`` for missing PDFs (404
+    pages disguised as success). We treat those as fetch failures so the
+    parser never tries to read a PDF that isn't.
+    """
+    try:
+        async with session.get(
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=30),
+        ) as resp:
+            if resp.status >= 400:
+                raise ExtractorError(f"HTTP {resp.status} fetching {url}")
+            content_type = resp.headers.get("content-type", "")
+            if "pdf" not in content_type.lower():
+                raise ExtractorError(f"expected a PDF at {url}, got {content_type!r}")
+            payload = await resp.read()
+    except aiohttp.ClientError as err:
+        raise ExtractorError(f"network error fetching {url}: {err}") from err
+    return await asyncio.to_thread(extract_pdf_text_layout, payload)
+
+
 def to_float(text: str) -> float:
     """Parse a Belgian / French decimal number ('15,93' or '0.102')."""
     # First strips a non-breaking space (U+00A0) which Belgian PDFs use
