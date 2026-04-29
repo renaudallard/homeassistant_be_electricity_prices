@@ -1,0 +1,84 @@
+name: Live extractor check
+
+on:
+  schedule:
+    # 06:00 UTC = 07:00 CET / 08:00 CEST (after suppliers' overnight publication).
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pypdf aiohttp
+
+      - name: Run live check (up to 5 attempts)
+        id: check
+        run: |
+          set +e
+          attempts=5
+          delays="10 30 60 120 300"
+          set -- $delays
+          for i in $(seq 1 "$attempts"); do
+            echo "::group::attempt $i"
+            python scripts/live_check.py > report.md
+            rc=$?
+            cat report.md
+            echo "::endgroup::"
+            if [ "$rc" -eq 0 ]; then
+              break
+            fi
+            if [ "$i" -lt "$attempts" ]; then
+              sleep_for=$1
+              shift
+              echo "attempt $i failed (exit $rc), sleeping ${sleep_for}s..." >&2
+              sleep "$sleep_for"
+            fi
+          done
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Open or update issue on persistent failure
+        if: failure() && steps.check.outputs.rc != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # De-dup on a stable title prefix; cheaper than relying on a label.
+          title_prefix='[live-check] supplier extractor broken'
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          {
+            echo "## Run"
+            echo
+            echo "$run_url"
+            echo
+            echo "## Last report"
+            echo
+            cat report.md
+          } > issue_body.md
+
+          existing=$(gh issue list \
+            --state open \
+            --search "\"$title_prefix\" in:title" \
+            --json number,title \
+            --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            echo "appending comment to issue #$existing"
+            gh issue comment "$existing" --body-file issue_body.md
+          else
+            gh issue create \
+              --title "$title_prefix ($(date -u +%Y-%m-%d))" \
+              --body-file issue_body.md
+          fi

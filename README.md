@@ -150,11 +150,19 @@ ruff check .
 ruff format --check .
 mypy --strict custom_components/be_electricity_prices
 pytest tests/
+python scripts/live_check.py    # hits real supplier endpoints
 ```
 
 Tests run against fixture PDFs in `tests/fixtures/` (real Eneco + Cociter
 tariff cards captured 2026-04-29). Refresh fixtures with the supplier's
 current PDF to re-run the tests against new data.
+
+A daily GitHub Actions workflow (`.github/workflows/live_check.yml`)
+exercises every extractor against its real publication, retries up to
+five times with exponential backoff, and opens or updates a GitHub issue
+titled `[live-check] supplier extractor broken …` on persistent failure.
+This catches supplier URL changes and PDF layout shifts that would
+silently break parsing.
 
 ## License
 
