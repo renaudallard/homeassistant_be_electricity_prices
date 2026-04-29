@@ -126,7 +126,6 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="current_price",
         translation_key="current_price",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="EUR/kWh",
         suggested_display_precision=4,
@@ -135,7 +134,6 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="next_hour_price",
         translation_key="next_hour_price",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="EUR/kWh",
         suggested_display_precision=4,
@@ -144,7 +142,6 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="today_average",
         translation_key="today_average",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="EUR/kWh",
         suggested_display_precision=4,
@@ -153,7 +150,6 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="today_min",
         translation_key="today_min",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="EUR/kWh",
         suggested_display_precision=4,
@@ -162,7 +158,6 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="today_max",
         translation_key="today_max",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="EUR/kWh",
         suggested_display_precision=4,
@@ -171,7 +166,6 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="energy_component",
         translation_key="energy_component",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="EUR/kWh",
         suggested_display_precision=4,
@@ -180,7 +174,6 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="network_component",
         translation_key="network_component",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="EUR/kWh",
         suggested_display_precision=4,
@@ -189,7 +182,6 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="taxes_component",
         translation_key="taxes_component",
-        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="EUR/kWh",
         suggested_display_precision=4,
@@ -201,7 +193,10 @@ CAPACITY_SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="capacity_cost",
         translation_key="capacity_cost",
-        device_class=SensorDeviceClass.MONETARY,
+        # MONETARY device class would require state_class=TOTAL with a
+        # last_reset attribute on the monthly boundary; we are showing a
+        # rolling instant estimate ("if the month ended now") so plain
+        # MEASUREMENT with the EUR unit is the honest fit.
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="EUR",
         suggested_display_precision=2,
