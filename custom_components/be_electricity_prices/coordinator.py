@@ -364,9 +364,18 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
 # ---- snapshot serialization for the HA Store ----------------------------------
 
 
+# Bump when a new field is added to the serialized snapshot so old caches
+# get invalidated and re-fetched on first load instead of silently lacking
+# the new field. Loading a snapshot whose schema_version is below this
+# raises in _snapshot_from_dict; async_load_persistent then discards the
+# cache and the coordinator's first refresh repopulates from the supplier.
+_SNAPSHOT_SCHEMA_VERSION = 2
+
+
 def _snapshot_to_dict(snap: SupplierSnapshot, fetched_at: datetime) -> dict[str, Any]:
     return {
         "_cached_at": fetched_at.isoformat(),
+        "_schema_version": _SNAPSHOT_SCHEMA_VERSION,
         "supplier": snap.supplier,
         "contract": snap.contract,
         "energy_kind": _energy_kind(snap.energy),
@@ -380,6 +389,11 @@ def _snapshot_to_dict(snap: SupplierSnapshot, fetched_at: datetime) -> dict[str,
 
 
 def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
+    if data.get("_schema_version", 1) < _SNAPSHOT_SCHEMA_VERSION:
+        raise ValueError(
+            "snapshot schema is older than the running integration; "
+            "discarding cache so the next refresh re-fetches"
+        )
     energy_kind = data["energy_kind"]
     energy_args = data["energy"]
     energy: EnergyRates
