@@ -17,8 +17,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # icons are being designed; drop this once brand/icon.png lands.
-          ignore: brands
 
   hassfest:
     name: Hassfest
