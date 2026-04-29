@@ -186,10 +186,10 @@ async def _check_cociter(
 
 
 async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) -> None:
-    # Three contracts span every parsing path: a fixed rate, an indexed
-    # variable rate and a hourly dynamic formula. The eight other Engie
-    # products share these parsers, so passing the trio is a strong
-    # signal that nothing has shifted on the supplier side.
+    # Walk every contract in the Engie registry. Each contract fetches up
+    # to three regional PDFs and their merge must yield the right set of
+    # DSOs; if anything shifts on Engie's side, the check below catches
+    # it before users do.
     expected_flanders = {
         "fluvius_antwerpen",
         "fluvius_halle_vilvoorde",
@@ -202,7 +202,8 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
     }
     expected_wallonia = {"aieg", "aiesh", "ores", "resa", "rew"}
     expected_brussels = {"sibelga"}
-    for cid in ("engie_easy_fixed", "engie_easy_variable", "engie_dynamic"):
+    for contract in engie._CONTRACTS:
+        cid = contract.contract_id
         prefix = f"engie/{cid}"
         try:
             snap = await engie.fetch(session, cid)
@@ -210,31 +211,45 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
             _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
             continue
         _expect(f"{prefix}: publication label", bool(snap.publication_label))
-        _expect(
-            f"{prefix}: all three regions present",
-            expected_flanders <= set(snap.dsos)
-            and expected_wallonia <= set(snap.dsos)
-            and expected_brussels <= set(snap.dsos),
-            detail=f"got DSOs: {sorted(snap.dsos)}",
-        )
+        # A contract is only required to expose DSOs for the regions it
+        # actually publishes (Basic Online has no Brussels variant).
+        regions = set(contract.months_per_region)
+        if "V" in regions:
+            _expect(
+                f"{prefix}: all 8 Fluvius sub-areas present",
+                expected_flanders <= set(snap.dsos),
+                detail=f"missing: {sorted(expected_flanders - set(snap.dsos))}",
+            )
+            _expect(
+                f"{prefix}: flanders renewables > 0",
+                snap.taxes.flanders_renewables > 0,
+                detail=str(snap.taxes),
+            )
+        if "W" in regions:
+            _expect(
+                f"{prefix}: all 5 Wallonia DSOs present",
+                expected_wallonia <= set(snap.dsos),
+                detail=f"missing: {sorted(expected_wallonia - set(snap.dsos))}",
+            )
+            _expect(
+                f"{prefix}: wallonia renewables > 0",
+                snap.taxes.wallonia_renewables > 0,
+                detail=str(snap.taxes),
+            )
+        if "B" in regions:
+            _expect(
+                f"{prefix}: sibelga present",
+                expected_brussels <= set(snap.dsos),
+                detail=f"got: {sorted(snap.dsos)}",
+            )
+            _expect(
+                f"{prefix}: brussels renewables > 0",
+                snap.taxes.brussels_renewables > 0,
+                detail=str(snap.taxes),
+            )
         _expect(
             f"{prefix}: federal excise > 0",
             snap.taxes.federal_excise > 0,
-            detail=str(snap.taxes),
-        )
-        _expect(
-            f"{prefix}: flanders renewables > 0",
-            snap.taxes.flanders_renewables > 0,
-            detail=str(snap.taxes),
-        )
-        _expect(
-            f"{prefix}: wallonia renewables > 0",
-            snap.taxes.wallonia_renewables > 0,
-            detail=str(snap.taxes),
-        )
-        _expect(
-            f"{prefix}: brussels renewables > 0",
-            snap.taxes.brussels_renewables > 0,
             detail=str(snap.taxes),
         )
         _validate_energy(prefix, cid, snap.energy)
