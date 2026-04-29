@@ -50,7 +50,14 @@ CONF_REGION: Final = "region"
 CONF_DSO: Final = "dso"
 CONF_SUPPLIER: Final = "supplier"
 CONF_CONTRACT: Final = "contract"
+CONF_METER: Final = "meter"
 CONF_API_KEY: Final = "api_key"
+
+METER_MONO: Final = "mono"
+METER_BI: Final = "bi"
+METER_DYNAMIC: Final = "dynamic"
+
+METER_TYPES: Final = (METER_MONO, METER_BI, METER_DYNAMIC)
 
 CONF_CAPACITY_MODE: Final = "capacity_mode"
 CONF_CAPACITY_PEAK_SENSOR: Final = "capacity_peak_sensor"

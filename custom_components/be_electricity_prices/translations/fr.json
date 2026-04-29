@@ -22,6 +22,13 @@
           "dso": "GRD"
         }
       },
+      "meter": {
+        "title": "Type de compteur",
+        "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique.",
+        "data": {
+          "meter": "Compteur"
+        }
+      },
       "api_key": {
         "title": "Cle API ENTSO-E",
         "description": "Necessaire pour les contrats dynamiques. Cle gratuite sur transparency.entsoe.eu.",
@@ -71,6 +78,13 @@
       "options": {
         "sensor": "Depuis un capteur de puissance",
         "fixed": "Valeur fixe en kW"
+      }
+    },
+    "meter": {
+      "options": {
+        "mono": "Mono (tarif unique)",
+        "bi": "Bi-horaire (jour / nuit)",
+        "dynamic": "Dynamique (compteur intelligent)"
       }
     }
   },

@@ -91,8 +91,8 @@ def test_energy_fixed_single() -> None:
 
 def test_energy_fixed_bihourly_picks_offpeak() -> None:
     e = FixedRates(single=0.20, peak=0.22, offpeak=0.18)
-    assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 23), None, True) == 0.18
-    assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 12), None, True) == 0.22
+    assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 23), None, "bi") == 0.18
+    assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 12), None, "bi") == 0.22
 
 
 def test_energy_variable_uses_current() -> None:
@@ -133,8 +133,32 @@ def test_network_bihourly_at_night() -> None:
         transport=0.015,
     )
     assert network_eur_per_kwh(
-        overlay, datetime(2026, 4, 29, 23), True
+        overlay, datetime(2026, 4, 29, 23), "bi"
     ) == pytest.approx(0.055)
+
+
+def test_network_dynamic_meter_uses_single_rate() -> None:
+    overlay = DsoOverlay(
+        distribution_single=0.05,
+        distribution_peak=0.06,
+        distribution_offpeak=0.04,
+        transport=0.015,
+    )
+    assert network_eur_per_kwh(
+        overlay, datetime(2026, 4, 29, 23), "dynamic"
+    ) == pytest.approx(0.065)
+
+
+def test_compute_breakdown_meter_bi_picks_offpeak_at_night() -> None:
+    snap = _snapshot(FixedRates(single=0.20, peak=0.22, offpeak=0.18), vat=0.0)
+    night = compute_breakdown(
+        snap, "fluvius", "flanders", datetime(2026, 4, 29, 23), meter="bi"
+    )
+    day = compute_breakdown(
+        snap, "fluvius", "flanders", datetime(2026, 4, 29, 12), meter="bi"
+    )
+    assert night.energy == 0.18
+    assert day.energy == 0.22
 
 
 def test_taxes_brussels_excludes_regional() -> None:

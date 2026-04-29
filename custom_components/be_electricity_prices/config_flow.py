@@ -71,10 +71,14 @@ from .const import (
     CONF_CAPACITY_PEAK_SENSOR,
     CONF_CONTRACT,
     CONF_DSO,
+    CONF_METER,
     CONF_REGION,
     CONF_SUPPLIER,
     DEFAULT_CAPACITY_FIXED_KW,
     DOMAIN,
+    METER_DYNAMIC,
+    METER_MONO,
+    METER_TYPES,
     REGION_FLANDERS,
     REGIONS,
 )
@@ -159,11 +163,7 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            if self._is_dynamic_contract():
-                return await self.async_step_api_key()
-            if self._data[CONF_REGION] == REGION_FLANDERS:
-                return await self.async_step_capacity()
-            return self._finalize()
+            return await self.async_step_meter()
 
         dsos = _region_dsos(self._data[CONF_REGION])
         schema = vol.Schema(
@@ -178,6 +178,31 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(step_id="dso", data_schema=schema)
+
+    async def async_step_meter(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            if self._is_dynamic_contract():
+                return await self.async_step_api_key()
+            if self._data[CONF_REGION] == REGION_FLANDERS:
+                return await self.async_step_capacity()
+            return self._finalize()
+
+        default = METER_DYNAMIC if self._is_dynamic_contract() else METER_MONO
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_METER, default=default): SelectSelector(
+                    SelectSelectorConfig(
+                        options=list(METER_TYPES),
+                        mode=SelectSelectorMode.LIST,
+                        translation_key="meter",
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="meter", data_schema=schema)
 
     async def async_step_api_key(
         self, user_input: dict[str, Any] | None = None

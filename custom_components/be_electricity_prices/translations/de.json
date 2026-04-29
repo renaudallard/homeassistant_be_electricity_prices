@@ -22,6 +22,13 @@
           "dso": "VNB"
         }
       },
+      "meter": {
+        "title": "Zaehlertyp",
+        "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege.",
+        "data": {
+          "meter": "Zaehler"
+        }
+      },
       "api_key": {
         "title": "ENTSO-E API-Schluessel",
         "description": "Erforderlich fuer dynamische Vertraege. Kostenlos bei transparency.entsoe.eu anfordern.",
@@ -71,6 +78,13 @@
       "options": {
         "sensor": "Aus einem Leistungssensor",
         "fixed": "Fester kW-Wert"
+      }
+    },
+    "meter": {
+      "options": {
+        "mono": "Mono (Eintarif)",
+        "bi": "Doppeltarif (Tag / Nacht)",
+        "dynamic": "Dynamisch (intelligenter Zaehler)"
       }
     }
   },

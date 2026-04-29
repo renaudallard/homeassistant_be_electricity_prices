@@ -27,17 +27,26 @@
 
 Pure functions, no Home Assistant dependencies.
 
-The breakdown for one hour is
+Meter types follow the Belgian convention:
 
-    energy + network + taxes_per_kwh         (pre-VAT or VAT-incl, per snapshot)
-  multiplied by (1 + vat) when vat_rate > 0  (it is 0 when the supplier
-                                              already publishes VAT-incl)
+  - ``mono``    - single-rate meter (compteur simple / enkelvoudige meter).
+                  Energy and distribution billed at the supplier's single rate.
+  - ``bi``      - bi-hourly meter (compteur bi-horaire / tweevoudige meter).
+                  Day rate weekdays 07:00-22:00, night rate the rest of the
+                  time and full weekends.
+  - ``dynamic`` - smart meter (digitale meter) capable of hourly readings.
+                  For dynamic contracts, energy is computed as
+                  ``factor x spot + base`` per hour. For fixed or variable
+                  contracts on a smart meter, billing degrades to the
+                  single rate (smart metering does not by itself imply
+                  time-of-use pricing).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 from .providers.base import (
     DsoOverlay,
@@ -48,6 +57,8 @@ from .providers.base import (
     TaxOverlay,
     VariableRates,
 )
+
+MeterType = Literal["mono", "bi", "dynamic"]
 
 
 @dataclass(frozen=True)
@@ -71,11 +82,11 @@ def energy_eur_per_kwh(
     energy: EnergyRates,
     when: datetime,
     spot_eur_per_kwh: float | None,
-    use_bihourly: bool = False,
+    meter: MeterType = "mono",
 ) -> float:
     """Return the energy component in EUR/kWh for the given hour."""
     if isinstance(energy, FixedRates):
-        if use_bihourly and energy.peak is not None and energy.offpeak is not None:
+        if meter == "bi" and energy.peak is not None and energy.offpeak is not None:
             return energy.offpeak if is_offpeak(when) else energy.peak
         return energy.single
     if isinstance(energy, VariableRates):
@@ -90,11 +101,11 @@ def energy_eur_per_kwh(
 def network_eur_per_kwh(
     dso: DsoOverlay,
     when: datetime,
-    use_bihourly: bool = False,
+    meter: MeterType = "mono",
 ) -> float:
     """Distribution + transport (EUR/kWh) for the given hour."""
     if (
-        use_bihourly
+        meter == "bi"
         and dso.distribution_peak is not None
         and dso.distribution_offpeak is not None
     ):
@@ -120,7 +131,7 @@ def compute_breakdown(
     region: str,
     when: datetime,
     spot_eur_per_kwh: float | None = None,
-    use_bihourly: bool = False,
+    meter: MeterType = "mono",
 ) -> PriceBreakdown:
     """Return the all-in EUR/kWh breakdown for one hour."""
     overlay = snapshot.dsos.get(dso_key)
@@ -130,13 +141,11 @@ def compute_breakdown(
             f"{snapshot.supplier}/{snapshot.contract}; "
             f"available: {sorted(snapshot.dsos)}"
         )
-    energy = energy_eur_per_kwh(snapshot.energy, when, spot_eur_per_kwh, use_bihourly)
-    network = network_eur_per_kwh(overlay, when, use_bihourly)
+    energy = energy_eur_per_kwh(snapshot.energy, when, spot_eur_per_kwh, meter)
+    network = network_eur_per_kwh(overlay, when, meter)
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
     pre_vat = energy + network + taxes
     all_in = pre_vat * (1.0 + snapshot.taxes.vat_rate)
-    # If snapshot is VAT-incl (vat_rate=0) the components are already final
-    # and the multiplication is a no-op.
     return PriceBreakdown(
         energy=energy,
         network=network,

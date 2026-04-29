@@ -102,13 +102,16 @@ automatically from the manifest.
 
 ## Configuration
 
-The UI flow asks five things at most:
+The UI flow asks six things at most:
 
 1. **Supplier** + **Region** (Flanders / Wallonia / Brussels).
 2. **Contract** filtered by supplier (populated from the registry).
 3. **DSO** filtered by region.
-4. **ENTSO-E API key** - only when the chosen contract is dynamic.
-5. **Capacity tariff peak source** - only when region is Flanders. Either a power
+4. **Meter type** - mono (single rate), bi (peak / off-peak), or dynamic (smart
+   meter). Drives whether energy and distribution are billed at single or
+   time-of-use rates.
+5. **ENTSO-E API key** - only when the chosen contract is dynamic.
+6. **Capacity tariff peak source** - only when region is Flanders. Either a power
    sensor reporting your live kW draw, or a fixed kW value (default 2.5 kW).
 
 No EUR values are asked. Energy + DSO + tax rates all come from the

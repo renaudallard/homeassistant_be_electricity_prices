@@ -57,10 +57,12 @@ from .const import (
     CONF_CAPACITY_PEAK_SENSOR,
     CONF_CONTRACT,
     CONF_DSO,
+    CONF_METER,
     CONF_REGION,
     CONF_SUPPLIER,
     DEFAULT_CAPACITY_FIXED_KW,
     DOMAIN,
+    METER_MONO,
     REGION_FLANDERS,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -284,12 +286,15 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         assert snap is not None
         dso = self.entry.data[CONF_DSO]
         region = self.entry.data[CONF_REGION]
+        meter = self.entry.data.get(CONF_METER, METER_MONO)
 
         hourly: dict[datetime, PriceBreakdown] = {}
         if isinstance(snap.energy, DynamicRates):
             for utc_hour, spot in spot_prices.items():
                 local = dt_util.as_local(utc_hour)
-                hourly[utc_hour] = compute_breakdown(snap, dso, region, local, spot)
+                hourly[utc_hour] = compute_breakdown(
+                    snap, dso, region, local, spot, meter
+                )
             return hourly
 
         local_now = dt_util.now()
@@ -297,7 +302,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         for offset in range(48):
             local = start + timedelta(hours=offset)
             utc = local.astimezone(UTC)
-            hourly[utc] = compute_breakdown(snap, dso, region, local, None)
+            hourly[utc] = compute_breakdown(snap, dso, region, local, None, meter)
         return hourly
 
     def _snapshot_age_hours(self) -> float:
