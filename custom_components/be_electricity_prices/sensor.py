@@ -54,6 +54,7 @@ from .const import (
 from .coordinator import BePricesCoordinator, CoordinatorData
 from .pricing import PriceBreakdown
 from .providers import get as get_extractor
+from .providers.base import ExtractorError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -249,7 +250,7 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
         supplier_id = coordinator.entry.data.get(CONF_SUPPLIER, "")
         try:
             device_name = get_extractor(str(supplier_id)).label
-        except Exception:
+        except ExtractorError:
             device_name = str(supplier_id) or "Belgian Electricity"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
