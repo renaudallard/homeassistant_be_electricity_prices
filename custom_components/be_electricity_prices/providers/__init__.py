@@ -47,10 +47,12 @@ from .base import (
 from .cociter import EXTRACTOR as _COCITER
 from .eneco import EXTRACTOR as _ENECO
 from .engie import EXTRACTOR as _ENGIE
+from .luminus import EXTRACTOR as _LUMINUS
 
 EXTRACTORS: dict[str, SupplierExtractor] = {
     _ENECO.id: _ENECO,
     _ENGIE.id: _ENGIE,
+    _LUMINUS.id: _LUMINUS,
     _COCITER.id: _COCITER,
 }
 
