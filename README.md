@@ -47,7 +47,7 @@ publication and how to parse it.
 | Supplier | Status | Source |
 | --- | --- | --- |
 | **Eneco** | Working - Power Fix / Flex / Dynamic | [Eneco PDF tariff cards](https://eneco.be/nl/elektriciteit-gas/tariefkaarten/) |
-| **Cociter** | Working - Tarif Indexé (latest published `Tarifs_Elec_*.pdf`; Cociter rarely raises rates so cards stay representative) | [`providers/cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) |
+| **Cociter** | Working - Tarif Variable (BELIX-indexed) + Tarif Dynamique (quarter-hourly BELPEX). Monthly cards `RCVar_YMR_Coop-YYMM-fr.pdf` / `RCDyn_SM3_Coop-YYMM-fr.pdf`. | [`providers/cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) |
 
 Adding another supplier is a self-contained PR: drop a new module under
 [`custom_components/be_electricity_prices/providers/`](./custom_components/be_electricity_prices/providers/),

@@ -23,7 +23,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Cociter PDF extractor tests."""
+"""Cociter PDF extractor tests against April 2026 fixtures."""
 
 from __future__ import annotations
 
@@ -34,28 +34,88 @@ import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers._pdf import extract_pdf_text
-from custom_components.be_electricity_prices.providers.base import ExtractorError
-from custom_components.be_electricity_prices.providers.cociter import parse_energy_block
+from custom_components.be_electricity_prices.providers.base import (
+    DynamicRates,
+    ExtractorError,
+    VariableRates,
+)
+from custom_components.be_electricity_prices.providers.cociter import parse_snapshot
 
 FIX = Path(__file__).parent / "fixtures"
+
+
+def _text(name: str) -> str:
+    return extract_pdf_text((FIX / name).read_bytes())
 
 
 def test_cociter_is_registered() -> None:
     assert "cociter" in EXTRACTORS
     assert EXTRACTORS["cociter"].label == "Cociter"
     contract_ids = {c.id for c in EXTRACTORS["cociter"].contracts}
-    assert contract_ids == {"cociter_variable"}
+    assert contract_ids == {"cociter_variable", "cociter_dynamic"}
 
 
-def test_parse_energy_block_extracts_rate_fee_and_renewables() -> None:
-    text = extract_pdf_text((FIX / "cociter_2023_11.pdf").read_bytes())
-    energy, renewables = parse_energy_block(text)
-    # First "Coûts de l’énergie" line in the card is the single-meter rate.
-    assert energy.current == pytest.approx(0.120888)
-    assert energy.yearly_fixed_fee == pytest.approx(53.0)
-    assert energy.formula is not None and "BELIX" in energy.formula
-    # "Contribution énergie renouvelable ... 2,953160 c€/kWh"
-    assert renewables == pytest.approx(0.0295316)
+def test_variable_extracts_indicative_rates() -> None:
+    snap = parse_snapshot(
+        _text("cociter_var_2604.pdf"),
+        "cociter_variable",
+        "test://var",
+        "2026-04",
+    )
+    assert isinstance(snap.energy, VariableRates)
+    # Indicative rates printed in the PDF (TVAC).
+    assert snap.energy.current == pytest.approx(0.126625)
+    assert snap.energy.peak == pytest.approx(0.136442)
+    assert snap.energy.offpeak == pytest.approx(0.116808)
+    assert snap.energy.exclusive_night == pytest.approx(0.116808)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(53.0)
+    assert snap.energy.formula is not None and "BELIX" in snap.energy.formula
+
+
+def test_variable_extracts_dso_overlay() -> None:
+    snap = parse_snapshot(
+        _text("cociter_var_2604.pdf"),
+        "cociter_variable",
+        "test://var",
+        "2026-04",
+    )
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    aieg = snap.dsos["aieg"]
+    assert aieg.distribution_single == pytest.approx(0.1087)
+    assert aieg.distribution_peak == pytest.approx(0.1205)
+    assert aieg.distribution_offpeak == pytest.approx(0.0666)
+    assert aieg.transport == pytest.approx(0.0274252)
+    assert aieg.data_management_per_year == pytest.approx(19.49)
+
+
+def test_variable_extracts_taxes() -> None:
+    snap = parse_snapshot(
+        _text("cociter_var_2604.pdf"),
+        "cociter_variable",
+        "test://var",
+        "2026-04",
+    )
+    assert snap.taxes.federal_excise == pytest.approx(0.0503288)
+    assert snap.taxes.energy_contribution == pytest.approx(0.00204167)
+    assert snap.taxes.region_connection_fee == pytest.approx(0.00075)
+    assert snap.taxes.regional_renewables == pytest.approx(0.02968)
+    assert snap.taxes.vat_rate == 0.0
+
+
+def test_dynamic_extracts_factor_and_base() -> None:
+    snap = parse_snapshot(
+        _text("cociter_dyn_2604.pdf"),
+        "cociter_dynamic",
+        "test://dyn",
+        "2026-04",
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    # PDF: (0.103 x QUARTER_HOURLY_BELPEX_eur_per_mwh + 3) x 1.06 c€/kWh
+    # -> factor = 0.103 * 10.6 = 1.0918, base = 3 * 1.06 / 100 = 0.0318
+    assert snap.energy.factor == pytest.approx(0.103 * 10.6, rel=1e-4)
+    assert snap.energy.base == pytest.approx(0.0318, rel=1e-4)
+    # At spot = 100 EUR/MWh = 0.10 EUR/kWh, all-in energy is ~0.14098 EUR/kWh.
+    assert snap.energy.factor * 0.10 + snap.energy.base == pytest.approx(0.14098)
 
 
 def test_unknown_contract_raises() -> None:

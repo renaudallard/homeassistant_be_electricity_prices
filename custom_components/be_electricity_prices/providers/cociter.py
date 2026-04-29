@@ -25,22 +25,17 @@
 
 """Cociter (Wallonian citizen cooperative) tariff extractor.
 
-Cociter publishes monthly tariff cards as ``Tarifs_Elec_*.pdf`` files
-linked from https://www.cociter.be/electricite/cartes-tarifaires/.
-Cociter rarely raises rates, so the most recently published card is
-usually still representative even if its date is older. The extractor:
+Cociter publishes monthly tariff cards under predictable filenames at
+https://www.cociter.be/electricite/cartes-tarifaires/:
 
-  1. fetches the index page and picks the most recently dated PDF
-     (filenames embed YYYY-MM),
-  2. parses the energy formula + single-meter effective rate +
-     yearly fee + renewable contribution from that card,
-  3. borrows the regulated DSO / transport / federal-tax overlay from
-     Eneco's tariff card - those values are set by the regulator and
-     do not depend on which energy supplier you have.
+    RCVar_YMR_Coop-YYMM-fr.pdf   - variable contract (BELIX-indexed)
+    RCDyn_SM3_Coop-YYMM-fr.pdf   - dynamic contract (quarter-hourly BELPEX)
 
-The snapshot's ``publication_label`` makes the publication date visible
-("(latest published)" suffix) and ``snapshot_age_hours`` exposes the age
-to entities. Cociter only sells in Wallonia.
+YYMM is e.g. ``2604`` for April 2026. Each card includes the energy
+formula plus the full DSO + tax overlay for every Wallonian DSO Cociter
+serves (AIEG, AIESH, ORES, RESA, REW). All values are VAT-inclusive.
+
+Cociter only sells in Wallonia.
 """
 
 from __future__ import annotations
@@ -50,10 +45,12 @@ from datetime import UTC, datetime
 
 import aiohttp
 
-from . import eneco
 from ._pdf import fetch_pdf_text, to_float
 from .base import (
     Contract,
+    DsoOverlay,
+    DynamicRates,
+    EnergyRates,
     ExtractorError,
     SupplierExtractor,
     SupplierSnapshot,
@@ -62,85 +59,161 @@ from .base import (
 )
 
 _INDEX_URL = "https://www.cociter.be/electricite/cartes-tarifaires/"
-_PDF_RE = re.compile(
-    r'href="(https?://[^"]*Tarifs_Elec[^"]*?(\d{4}[-_]\d{2})[^"]*\.pdf)"',
-    re.IGNORECASE,
+
+# Cociter's current monthly publication patterns. The 4-digit group is YYMM.
+_VAR_RE = re.compile(
+    r'href="(https?://[^"]*RCVar_YMR_Coop-(\d{4})-fr\.pdf)"', re.IGNORECASE
 )
+_DYN_RE = re.compile(
+    r'href="(https?://[^"]*RCDyn_SM3_Coop-(\d{4})-fr\.pdf)"', re.IGNORECASE
+)
+
+_DSO_LABELS = ("AIEG", "AIESH", "ORES", "RESA", "REW")
+_DSO_KEY = {label: label.lower() for label in _DSO_LABELS}
 
 
 async def fetch(session: aiohttp.ClientSession, contract_id: str) -> SupplierSnapshot:
-    """Fetch + parse Cociter's latest published variable contract card."""
-    if contract_id != "cociter_variable":
+    """Fetch + parse Cociter's latest published card for ``contract_id``."""
+    if contract_id == "cociter_variable":
+        pattern = _VAR_RE
+    elif contract_id == "cociter_dynamic":
+        pattern = _DYN_RE
+    else:
         raise ExtractorError(f"unknown Cociter contract {contract_id!r}")
 
-    pdf_url, label = await _find_latest_card(session)
+    pdf_url, label = await _find_latest(session, pattern)
     text = await fetch_pdf_text(session, pdf_url)
-    energy, renewables = parse_energy_block(text)
-    eneco_snap = await eneco.fetch(session, "power_fix")
+    return parse_snapshot(text, contract_id, pdf_url, label)
+
+
+def parse_snapshot(
+    text: str, contract_id: str, source_url: str, publication_label: str
+) -> SupplierSnapshot:
+    """Pure parser exposed for unit tests."""
+    energy = _extract_energy(text, contract_id)
     return SupplierSnapshot(
         supplier="cociter",
         contract=contract_id,
         energy=energy,
-        dsos=eneco_snap.dsos,
-        taxes=TaxOverlay(
-            federal_excise=eneco_snap.taxes.federal_excise,
-            energy_contribution=eneco_snap.taxes.energy_contribution,
-            regional_renewables=renewables,
-            region_connection_fee=eneco_snap.taxes.region_connection_fee,
-            vat_rate=0.0,
-        ),
-        source_url=pdf_url,
+        dsos=_extract_dsos(text),
+        taxes=_extract_taxes(text),
+        source_url=source_url,
         fetched_at_iso=datetime.now(UTC).isoformat(timespec="seconds"),
-        publication_label=f"{label} (latest published)",
+        publication_label=publication_label,
     )
 
 
-def parse_energy_block(text: str) -> tuple[VariableRates, float]:
-    """Pure parser exposed for unit tests.
+def _extract_energy(text: str, contract_id: str) -> EnergyRates:
+    yearly_fee_match = re.search(r"(\d+,\d+)\s*€/an\s*\n?\s*TVAC", text)
+    yearly_fee = to_float(yearly_fee_match.group(1)) if yearly_fee_match else 0.0
 
-    Returns the single-meter ``VariableRates`` and the regional renewable
-    contribution in EUR/kWh.
-    """
-    rate_match = re.search(
-        r"Co[uû]ts? de l[’']énergie\s+([\d,]+)\s*c€/kWh",
-        text,
-    )
-    if not rate_match:
-        raise ExtractorError("could not find Cociter single-meter rate")
-    fee_match = re.search(
-        r'Abonnement annuel "?coop[eé]rateur"?\s+([\d,]+)\s*€/an',
-        text,
-    )
-    formula_match = re.search(
-        r"Formule de prix variable\s+TVAc?:\s*([\d,]+)\s*\+\s*([\d,]+)"
-        r"\s*x\s*BEL\s*I\s*X",
-        text,
-        re.IGNORECASE,
-    )
-    rate_eur = to_float(rate_match.group(1)) / 100.0
-    fee = to_float(fee_match.group(1)) if fee_match else 0.0
-    formula: str | None = None
-    if formula_match:
-        formula = (
-            f"({formula_match.group(1)} + {formula_match.group(2)} x BELIX) c€/kWh "
-            "(VAT-incl)"
+    if contract_id == "cociter_variable":
+        mono = re.search(r"Compteur monohoraire[^\n]*?(\d+,\d+)\s*c€/kWh", text)
+        peak = re.search(r"Heures pleines[^\n]*?(\d+,\d+)\s*c€/kWh", text)
+        offpeak = re.search(r"Heures creuses[^\n]*?(\d+,\d+)\s*c€/kWh", text)
+        excl = re.search(r"Compteur exclusif nuit[^\n]*?(\d+,\d+)\s*c€/kWh", text)
+        if not mono:
+            raise ExtractorError(
+                "could not parse Cociter variable monohoraire indicative rate"
+            )
+        formula = re.search(
+            r"Compteur monohoraire\s*\(([\d,]+)\s*x\s*BELIX\s*\+\s*([\d,]+)\)",
+            text,
+        )
+        return VariableRates(
+            current=to_float(mono.group(1)) / 100.0,
+            peak=to_float(peak.group(1)) / 100.0 if peak else None,
+            offpeak=to_float(offpeak.group(1)) / 100.0 if offpeak else None,
+            exclusive_night=to_float(excl.group(1)) / 100.0 if excl else None,
+            yearly_fixed_fee=yearly_fee,
+            formula=(
+                f"({formula.group(1)} x BELIX + {formula.group(2)}) c€/kWh + 6% VAT"
+                if formula
+                else None
+            ),
         )
 
-    renewables_match = re.search(
-        r"Contribution énergie renouvelable[^\n]*?([\d,]+)\s*c€/kWh",
+    # cociter_dynamic
+    formula = re.search(
+        r"Compteur SMR3\s*\(([\d,]+)\s*x\s*QUARTER\s*HOURL\s*Y\s*BELPEX\s*\+\s*([\d,]+)\)",
         text,
     )
-    renewables = (
-        to_float(renewables_match.group(1)) / 100.0 if renewables_match else 0.0
-    )
-    return (
-        VariableRates(current=rate_eur, yearly_fixed_fee=fee, formula=formula),
-        renewables,
+    if not formula:
+        raise ExtractorError("could not parse Cociter dynamic formula")
+    factor_pdf = to_float(formula.group(1))
+    base_pre_vat_cents = to_float(formula.group(2))
+    # PDF formula yields c€/kWh from BELPEX in €/MWh; convert to EUR/kWh
+    # against spot already in EUR/kWh: factor *= 10.6, base = base_c * 1.06 / 100.
+    return DynamicRates(
+        factor=factor_pdf * 10.6,
+        base=base_pre_vat_cents * 1.06 / 100.0,
+        yearly_fixed_fee=yearly_fee,
     )
 
 
-async def _find_latest_card(
-    session: aiohttp.ClientSession,
+def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
+    transport = _extract_transport(text)
+    out: dict[str, DsoOverlay] = {}
+    for label in _DSO_LABELS:
+        row = re.search(
+            rf"^{label}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)",
+            text,
+            re.MULTILINE,
+        )
+        if not row:
+            continue
+        out[_DSO_KEY[label]] = DsoOverlay(
+            distribution_single=to_float(row.group(2)) / 100.0,
+            distribution_peak=to_float(row.group(3)) / 100.0,
+            distribution_offpeak=to_float(row.group(4)) / 100.0,
+            transport=transport,
+            data_management_per_year=to_float(row.group(1)),
+        )
+    return out
+
+
+def _extract_transport(text: str) -> float:
+    match = re.search(r"Tarifs de transport TVAC[^\n]*?([\d,]+)", text)
+    return to_float(match.group(1)) / 100.0 if match else 0.0
+
+
+def _extract_taxes(text: str) -> TaxOverlay:
+    # Cociter renewable contribution (page 1 of the energy block).
+    renewables = re.search(
+        r"['’]\s*énergies renouvelables['’]?[^\n]*?TVAC\s*([\d,]+)\s*c€/kWh",
+        text,
+        re.S,
+    )
+    if not renewables:
+        renewables = re.search(r"TVAC\s+([\d,]+)\s*c€/kWh", text)
+
+    # The "Taxes et redevances" block lists three numbers on one line:
+    #   Cotisation énergie | Droit d'accises spécial | Redevance de raccordement
+    taxes_block = re.search(
+        r"Taxes et redevances.*?([\d,]+)\s+([\d,]+)\s+([\d,]+)",
+        text,
+        re.S,
+    )
+    if not taxes_block:
+        raise ExtractorError("could not parse Cociter taxes block")
+
+    energy_contrib = to_float(taxes_block.group(1)) / 100.0
+    federal_excise = to_float(taxes_block.group(2)) / 100.0
+    connection_fee = to_float(taxes_block.group(3)) / 100.0
+
+    return TaxOverlay(
+        federal_excise=federal_excise,
+        energy_contribution=energy_contrib,
+        regional_renewables=to_float(renewables.group(1)) / 100.0
+        if renewables
+        else 0.0,
+        region_connection_fee=connection_fee,
+        vat_rate=0.0,
+    )
+
+
+async def _find_latest(
+    session: aiohttp.ClientSession, pattern: re.Pattern[str]
 ) -> tuple[str, str]:
     try:
         async with session.get(
@@ -154,19 +227,30 @@ async def _find_latest_card(
     except aiohttp.ClientError as err:
         raise ExtractorError(f"network error fetching {_INDEX_URL}: {err}") from err
 
-    matches = _PDF_RE.findall(html)
+    matches = pattern.findall(html)
     if not matches:
-        raise ExtractorError("no Tarifs_Elec PDF linked on the Cociter cards page")
-    matches.sort(key=lambda m: m[1].replace("_", "-"))
-    url, label = matches[-1]
+        raise ExtractorError(f"no matching tariff card linked at {_INDEX_URL}")
+    matches.sort(key=lambda m: m[1])
+    url, yymm = matches[-1]
+    label = _yymm_to_label(yymm)
     return url, label
+
+
+def _yymm_to_label(yymm: str) -> str:
+    """Convert ``2604`` -> ``2026-04``."""
+    if len(yymm) == 4 and yymm.isdigit():
+        return f"20{yymm[:2]}-{yymm[2:]}"
+    return yymm
 
 
 EXTRACTOR = SupplierExtractor(
     id="cociter",
     label="Cociter",
     contracts=(
-        Contract(id="cociter_variable", label="Cociter Tarif Indexé", kind="variable"),
+        Contract(
+            id="cociter_variable", label="Cociter Tarif Variable", kind="variable"
+        ),
+        Contract(id="cociter_dynamic", label="Cociter Tarif Dynamique", kind="dynamic"),
     ),
     fetch=fetch,
 )
