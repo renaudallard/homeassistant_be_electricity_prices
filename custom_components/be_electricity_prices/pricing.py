@@ -90,6 +90,8 @@ def energy_eur_per_kwh(
             return energy.offpeak if is_offpeak(when) else energy.peak
         return energy.single
     if isinstance(energy, VariableRates):
+        if meter == "bi" and energy.peak is not None and energy.offpeak is not None:
+            return energy.offpeak if is_offpeak(when) else energy.peak
         return energy.current
     if isinstance(energy, DynamicRates):
         if spot_eur_per_kwh is None:

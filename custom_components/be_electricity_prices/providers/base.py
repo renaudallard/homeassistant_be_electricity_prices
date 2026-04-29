@@ -72,9 +72,18 @@ class FixedRates:
 
 @dataclass(frozen=True, kw_only=True)
 class VariableRates:
-    """Variable energy contract: current month's effective EUR/kWh."""
+    """Variable energy contract: current month's effective EUR/kWh.
+
+    Suppliers that publish per-meter indicative monthly rates (e.g. Cociter)
+    populate ``peak`` / ``offpeak`` so a bi-hourly meter gets its own rate.
+    Suppliers that publish a single rate (e.g. Eneco Power Flex) leave them
+    None and the pricing engine falls back to ``current`` for any meter type.
+    """
 
     current: float
+    peak: float | None = None
+    offpeak: float | None = None
+    exclusive_night: float | None = None
     yearly_fixed_fee: float = 0.0
     formula: str | None = None
 
