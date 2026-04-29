@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 256" width="1024" height="256">
+    <g transform="translate(16,16) scale(0.875)">
+      <rect x="40" y="170" width="22" height="46" fill="#0F0F10" rx="2"></rect>
+      <rect x="68" y="142" width="22" height="74" fill="#0F0F10" rx="2"></rect>
+      <rect x="96" y="108" width="22" height="108" fill="#FAE042" rx="2"></rect>
+      <rect x="124" y="82" width="22" height="134" fill="#FAE042" rx="2"></rect>
+      <rect x="152" y="60" width="22" height="156" fill="#EF3340" rx="2"></rect>
+      <rect x="180" y="40" width="22" height="176" fill="#EF3340" rx="2"></rect>
+      <path d="M148 28 L72 138 L116 138 L96 228 L184 110 L138 110 L158 28 Z" fill="#1A1A1C" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path>
+    </g>
+    <text x="276" y="124" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="76" letter-spacing="-2" fill="#EF3340">BE</text>
+    <text x="386" y="124" font-family="Inter, system-ui, sans-serif" font-weight="600" font-size="76" letter-spacing="-2" fill="#1A1A1C">electricity</text>
+    <text x="276" y="178" font-family="Inter, system-ui, sans-serif" font-weight="500" font-size="28" letter-spacing="6" fill="#6B6B70">REAL-TIME PRICES</text>
+  </svg>

@@ -1,9 +1,32 @@
-# Belgian Electricity Prices
+<p align="center">
+  <img src="logo.svg" alt="BE electricity - real-time prices" width="640"/>
+</p>
 
-[![Latest release](https://img.shields.io/github/v/release/renaudallard/homeassistant_be_electricity_prices?label=release&sort=semver)](https://github.com/renaudallard/homeassistant_be_electricity_prices/releases)
-[![License](https://img.shields.io/github/license/renaudallard/homeassistant_be_electricity_prices)](./LICENSE)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.4%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
-[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
+<p align="center">
+  <a href="https://github.com/renaudallard/homeassistant_be_electricity_prices/releases/latest">
+    <img src="https://img.shields.io/github/v/release/renaudallard/homeassistant_be_electricity_prices?label=version&style=flat-square&sort=semver" alt="Latest release"/>
+  </a>
+  <a href="https://github.com/renaudallard/homeassistant_be_electricity_prices/actions/workflows/validate.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/renaudallard/homeassistant_be_electricity_prices/validate.yml?style=flat-square&label=hacs%20%2F%20hassfest" alt="Validate"/>
+  </a>
+  <a href="https://github.com/renaudallard/homeassistant_be_electricity_prices/actions/workflows/test.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/renaudallard/homeassistant_be_electricity_prices/test.yml?style=flat-square&label=tests" alt="Tests"/>
+  </a>
+  <a href="https://www.home-assistant.io/">
+    <img src="https://img.shields.io/badge/Home%20Assistant-2026.4%2B-41BDF5?logo=home-assistant&logoColor=white&style=flat-square" alt="Home Assistant"/>
+  </a>
+  <a href="https://hacs.xyz">
+    <img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square" alt="HACS"/>
+  </a>
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/github/license/renaudallard/homeassistant_be_electricity_prices?style=flat-square" alt="License"/>
+  </a>
+  <a href="https://www.paypal.me/RenaudAllard">
+    <img src="https://img.shields.io/badge/PayPal-Donate-blue.svg?logo=paypal&style=flat-square" alt="PayPal"/>
+  </a>
+</p>
+
+---
 
 Home Assistant integration that exposes the **all-in real EUR/kWh paid** for
 Belgian electricity, taking into account every component of a Belgian bill
