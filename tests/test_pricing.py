@@ -162,14 +162,17 @@ def test_compute_breakdown_meter_bi_picks_offpeak_at_night() -> None:
     assert day.energy == 0.22
 
 
-def test_taxes_brussels_excludes_regional() -> None:
+def test_taxes_brussels_uses_brussels_renewables_only() -> None:
+    # A Brussels entry must NOT pick up the Flemish/Walloon rate, even if
+    # both are set; only its own brussels_renewables.
     t = TaxOverlay(
         federal_excise=0.05,
         energy_contribution=0.002,
         flanders_renewables=0.015,
         wallonia_renewables=0.0313,
+        brussels_renewables=0.0265,
     )
-    assert taxes_eur_per_kwh(t, "brussels") == pytest.approx(0.052)
+    assert taxes_eur_per_kwh(t, "brussels") == pytest.approx(0.05 + 0.002 + 0.0265)
 
 
 def test_taxes_wallonia_includes_connection_and_wallonia_renewables() -> None:

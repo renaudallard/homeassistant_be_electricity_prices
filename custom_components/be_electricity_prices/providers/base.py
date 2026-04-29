@@ -144,16 +144,18 @@ class DsoOverlay:
 class TaxOverlay:
     """Federal + regional levies, all in EUR/kWh except the energy fund.
 
-    Regional renewables differ between Flanders (cogen + green-energy
-    surcharge, ~1.5 c/kWh) and Wallonia (green energy contribution,
-    ~3.1 c/kWh). The pricing engine picks the right one per region; an
-    extractor that only operates in one region leaves the other at 0.
+    Regional renewables differ across the three regions: Flanders
+    (cogen + green-energy surcharge, ~1.5 c/kWh), Wallonia (green energy
+    contribution, ~3.1 c/kWh) and Brussels (green energy, ~2.7 c/kWh).
+    The pricing engine picks the right one per region; an extractor that
+    only operates in one or two of them leaves the others at 0.
     """
 
     federal_excise: float
     energy_contribution: float
     flanders_renewables: float = 0.0
     wallonia_renewables: float = 0.0
+    brussels_renewables: float = 0.0
     region_connection_fee: float = 0.0
     energy_fund_eur_per_month: float = 0.0
     # 0.0 means the snapshot's prices are already VAT-incl (the convention

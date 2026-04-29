@@ -48,7 +48,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from .const import REGION_FLANDERS, REGION_WALLONIA
+from .const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
 from .providers.base import (
     DsoOverlay,
     DynamicRates,
@@ -125,6 +125,8 @@ def taxes_eur_per_kwh(taxes: TaxOverlay, region: str) -> float:
         out += taxes.region_connection_fee + taxes.wallonia_renewables
     elif region == REGION_FLANDERS:
         out += taxes.flanders_renewables
+    elif region == REGION_BRUSSELS:
+        out += taxes.brussels_renewables
     return out
 
 
