@@ -89,6 +89,20 @@ CONF_CAPACITY_FIXED_KW: Final = "capacity_fixed_kw"
 
 # Solar inverter capacity in kVA. 0 means no panels (no prosumer cost).
 CONF_SOLAR_KVA: Final = "solar_kva"
+CONF_SOLAR_REGIME: Final = "solar_regime"
+
+# Walloon compensation regime ("compteur qui tourne a l'envers") only applies
+# to installations certified before 2024-01-01 and stays valid until
+# 2030-12-31 (CWaPE / EU directive transition). Newer installations are
+# under the injection tariff. Flemish digital meters are SMR3 from the start.
+SOLAR_REGIME_NONE: Final = "none"
+SOLAR_REGIME_COMPENSATION: Final = "compensation"
+SOLAR_REGIME_INJECTION: Final = "injection"
+SOLAR_REGIMES: Final = (
+    SOLAR_REGIME_NONE,
+    SOLAR_REGIME_COMPENSATION,
+    SOLAR_REGIME_INJECTION,
+)
 
 CAPACITY_MODE_SENSOR: Final = "sensor"
 CAPACITY_MODE_FIXED: Final = "fixed"

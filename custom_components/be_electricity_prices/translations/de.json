@@ -47,9 +47,10 @@
       },
       "solar": {
         "title": "Solaranlage",
-        "description": "Wechselrichterleistung in kVA (0 = keine Anlage). Zeigt einen monatlichen Prosumer-Kosten-Sensor wenn > 0. Kompensationsregelung in Wallonien gueltig bis 2030.",
+        "description": "Wechselrichterleistung in kVA und das fuer Ihre Anlage geltende Regime. Die Wallonische Kompensationsregelung gilt nur fuer vor 2024-01-01 zertifizierte Anlagen und bleibt bis 2030-12-31 in Kraft; neue Anlagen und flaemische intelligente Zaehler sind im Einspeisetarif.",
         "data": {
-          "solar_kva": "Wechselrichter (kVA)"
+          "solar_kva": "Wechselrichter (kVA)",
+          "solar_regime": "Regime"
         }
       }
     }
@@ -81,6 +82,13 @@
         "mono": "Mono (Eintarif)",
         "bi": "Doppeltarif (Tag / Nacht)",
         "dynamic": "Dynamisch (intelligenter Zaehler)"
+      }
+    },
+    "solar_regime": {
+      "options": {
+        "none": "Keine Solaranlage",
+        "compensation": "Kompensationsregelung (Wallonien, vor 2024-01-01 zertifiziert, bis 2030)",
+        "injection": "Einspeisetarif (nach-2024 Anlage oder intelligenter Zaehler)"
       }
     }
   },

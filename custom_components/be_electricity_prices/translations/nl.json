@@ -47,9 +47,10 @@
       },
       "solar": {
         "title": "Zonnepanelen",
-        "description": "Vermogen van de omvormer in kVA (0 = geen panelen). Toont een maandelijkse prosumentkost-sensor als > 0. Compensatieregeling in Wallonië van toepassing tot 2030.",
+        "description": "Vermogen van de omvormer in kVA en het regime dat van toepassing is op je installatie. De Waalse compensatieregeling geldt enkel voor installaties gecertificeerd voor 2024-01-01 en blijft geldig tot 2030-12-31; nieuwe installaties en Vlaamse digitale meters vallen onder het injectietarief.",
         "data": {
-          "solar_kva": "Vermogen omvormer (kVA)"
+          "solar_kva": "Vermogen omvormer (kVA)",
+          "solar_regime": "Regime"
         }
       }
     }
@@ -81,6 +82,13 @@
         "mono": "Mono (enkel tarief)",
         "bi": "Bi-uurlijks (dag / nacht)",
         "dynamic": "Dynamisch (digitale meter)"
+      }
+    },
+    "solar_regime": {
+      "options": {
+        "none": "Geen zonnepanelen",
+        "compensation": "Compensatieregeling (Wallonie, gecertificeerd voor 2024-01-01, tot 2030)",
+        "injection": "Injectietarief (na-2024 installatie of digitale meter)"
       }
     }
   },

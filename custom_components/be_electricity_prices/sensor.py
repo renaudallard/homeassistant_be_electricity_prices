@@ -48,9 +48,11 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_REGION,
     CONF_SOLAR_KVA,
+    CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     DOMAIN,
     REGION_FLANDERS,
+    SOLAR_REGIME_COMPENSATION,
 )
 from .coordinator import BePricesCoordinator, CoordinatorData
 from .pricing import PriceBreakdown
@@ -241,7 +243,8 @@ async def async_setup_entry(
         solar_kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
     except (TypeError, ValueError):
         solar_kva = 0.0
-    if solar_kva > 0.0:
+    on_compensation = entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_COMPENSATION
+    if solar_kva > 0.0 and on_compensation:
         descriptions.extend(PROSUMER_SENSORS)
 
     async_add_entities(BePriceSensor(coordinator, desc) for desc in descriptions)

@@ -47,9 +47,10 @@
       },
       "solar": {
         "title": "Panneaux solaires",
-        "description": "Puissance de l'onduleur en kVA (0 = pas de panneaux). Ajoute un capteur de coût prosumer mensuel si > 0. Le régime de compensation s'applique en Wallonie jusqu'en 2030.",
+        "description": "Puissance de l'onduleur en kVA et regime applicable a votre installation. Le regime de compensation wallon n'est valable que pour les installations certifiees avant le 2024-01-01 et reste applicable jusqu'au 2030-12-31; les nouvelles installations et les compteurs intelligents flamands sont au tarif d'injection.",
         "data": {
-          "solar_kva": "Puissance onduleur (kVA)"
+          "solar_kva": "Puissance onduleur (kVA)",
+          "solar_regime": "Regime"
         }
       }
     }
@@ -81,6 +82,13 @@
         "mono": "Mono (tarif unique)",
         "bi": "Bi-horaire (jour / nuit)",
         "dynamic": "Dynamique (compteur intelligent)"
+      }
+    },
+    "solar_regime": {
+      "options": {
+        "none": "Pas de panneaux",
+        "compensation": "Regime de compensation (Wallonie, certifie avant 2024-01-01, jusqu'en 2030)",
+        "injection": "Tarif d'injection (installation post-2024 ou compteur intelligent)"
       }
     }
   },

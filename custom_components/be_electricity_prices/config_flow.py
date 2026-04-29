@@ -80,7 +80,10 @@ from .const import (
     CONF_METER,
     CONF_REGION,
     CONF_SOLAR_KVA,
+    CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
+    SOLAR_REGIME_NONE,
+    SOLAR_REGIMES,
     VREG_CAPACITY_FLOOR_KW,
     DOMAIN,
     DSO_CHOICES,
@@ -249,6 +252,16 @@ def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
             ): NumberSelector(
                 NumberSelectorConfig(
                     min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX
+                )
+            ),
+            vol.Required(
+                CONF_SOLAR_REGIME,
+                default=defaults.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(SOLAR_REGIMES),
+                    mode=SelectSelectorMode.LIST,
+                    translation_key="solar_regime",
                 )
             ),
         }

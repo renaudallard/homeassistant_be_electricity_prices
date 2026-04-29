@@ -63,7 +63,9 @@ def _snapshot(prosumer: float | None, capacity: float | None) -> SupplierSnapsho
 
 
 def _entry(**data: object) -> MockConfigEntry:
-    base = {"dso": "ores", "solar_kva": 0.0}
+    # Default to compensation regime so tests focus on math; override
+    # with solar_regime= when testing the gating logic.
+    base = {"dso": "ores", "solar_kva": 0.0, "solar_regime": "compensation"}
     base.update(data)
     return MockConfigEntry(domain=DOMAIN, data=base)
 
@@ -102,6 +104,24 @@ def test_prosumer_ignores_negative_kva() -> None:
     cost = _compute_prosumer(
         _snapshot(prosumer=85.0, capacity=None),
         _entry(solar_kva=-3.0),
+    )
+    assert cost == 0.0
+
+
+def test_prosumer_injection_regime_returns_zero() -> None:
+    # Post-2024 Walloon installations are on the injection tariff and pay
+    # no compensation-regime per-kVA fee, even if the DSO publishes one.
+    cost = _compute_prosumer(
+        _snapshot(prosumer=85.0, capacity=None),
+        _entry(solar_kva=5.0, solar_regime="injection"),
+    )
+    assert cost == 0.0
+
+
+def test_prosumer_no_regime_set_returns_zero() -> None:
+    cost = _compute_prosumer(
+        _snapshot(prosumer=85.0, capacity=None),
+        _entry(solar_kva=5.0, solar_regime="none"),
     )
     assert cost == 0.0
 

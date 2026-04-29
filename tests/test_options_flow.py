@@ -95,7 +95,7 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
     # Solar step is the new last step; submit 0 kVA (no panels).
     assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0}
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
     )
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
 
@@ -134,7 +134,7 @@ async def test_options_flow_dynamic_branch_asks_api_key(
     )
     assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0}
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
     )
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert entry.data["api_key"] == "new-key-456"
@@ -182,10 +182,12 @@ async def test_options_flow_flanders_branch_asks_capacity(
         },
     )
     assert result["step_id"] == "solar"
-    # User has solar this time - 5 kVA inverter.
+    # User has solar this time - 5 kVA inverter on the injection tariff (this
+    # entry is in Flanders so compensation regime doesn't apply anyway).
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 5.0}
+        result["flow_id"], {"solar_kva": 5.0, "solar_regime": "injection"}
     )
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert entry.data["capacity_fixed_kw"] == 4.0
     assert entry.data["solar_kva"] == 5.0
+    assert entry.data["solar_regime"] == "injection"

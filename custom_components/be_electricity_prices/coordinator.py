@@ -60,11 +60,13 @@ from .const import (
     CONF_METER,
     CONF_REGION,
     CONF_SOLAR_KVA,
+    CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     VREG_CAPACITY_FLOOR_KW,
     DOMAIN,
     METER_MONO,
     REGION_FLANDERS,
+    SOLAR_REGIME_COMPENSATION,
     STORAGE_VERSION,
     UPDATE_INTERVAL_MINUTES,
 )
@@ -337,10 +339,16 @@ def _compute_capacity(
 def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
     """Monthly prosumer (compensation regime) cost in EUR.
 
-    Returns 0 when the user has no solar (kVA == 0), the snapshot's DSO has
-    no prosumer rate (Flanders digital meters, Cociter SMR3), or the
-    configured DSO is not in the snapshot.
+    Only Walloon installations certified before 2024-01-01 are under the
+    compensation regime, and only until 2030-12-31. Post-2024 installations
+    are on the injection tariff (no per-kVA fee). Returns 0 when:
+      - the user has no solar (kVA <= 0),
+      - the regime is not 'compensation',
+      - the configured DSO has no prosumer rate in the snapshot
+        (Flemish digital meters, Cociter SMR3 dynamic).
     """
+    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_COMPENSATION:
+        return 0.0
     try:
         kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
     except (TypeError, ValueError):

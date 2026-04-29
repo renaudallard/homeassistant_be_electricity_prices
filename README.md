@@ -82,7 +82,7 @@ Per config entry, grouped on a single device:
 | `taxes_component` | Levies + VAT EUR/kWh now. |
 | `capacity_cost` | Flanders only - current monthly capacity cost in EUR. |
 | `monthly_peak_kw` | Flanders only - running monthly peak power in kW. |
-| `prosumer_cost` | Solar users only - monthly DSO compensation-regime fee = `inverter_kVA × DSO_prosumer_rate / 12`, in EUR. Wallonia compensation regime applies until 2030. |
+| `prosumer_cost` | Compensation-regime users only (Wallonian installations certified before 2024-01-01) - monthly DSO fee = `inverter_kVA × DSO_prosumer_rate / 12`, in EUR. Compensation regime ends 2030-12-31; post-2024 installations are on the injection tariff and don't get this sensor. |
 
 ## Installation
 
@@ -114,9 +114,16 @@ The UI flow asks seven things at most:
 5. **ENTSO-E API key** - only when the chosen contract is dynamic.
 6. **Capacity tariff peak source** - only when region is Flanders. Either a power
    sensor reporting your live kW draw, or a fixed kW value (default 2.5 kW).
-7. **Solar panels** - inverter capacity in kVA (0 = no panels). When greater than
-   zero a `prosumer_cost` sensor reports the monthly DSO compensation-regime
-   fee for your inverter capacity.
+7. **Solar panels** - inverter capacity in kVA + the solar regime that applies
+   to your installation:
+   - *no solar panels* (default).
+   - *compensation regime* — Wallonia only, installations **certified before
+     2024-01-01**, valid until 2030-12-31. The `prosumer_cost` sensor is
+     created and reports the monthly DSO compensation fee
+     (`kVA × DSO_prosumer_rate / 12`).
+   - *injection tariff* — post-2024 Walloon installations and Flemish smart
+     meters. No `prosumer_cost` sensor (per-kWh injection pricing is a
+     separate Tier B feature, not yet implemented).
 
 No EUR values are asked. Energy + DSO + tax rates all come from the
 supplier's tariff card.
