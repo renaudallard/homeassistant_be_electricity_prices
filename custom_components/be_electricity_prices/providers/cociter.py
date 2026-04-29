@@ -183,32 +183,34 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
 
 
 def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
+    """Parse the per-DSO row of the Cociter tariff card.
+
+    The variable card has 6 numbers per row:
+        yearly | mono | dag | nacht | uitsl_nacht | tarif_prosumer
+    The dynamic (SMR3) card has 8, with the prosumer column replaced by
+    three Tarif Impact columns (PIC / MEDIUM / ECO) since SMR3 dispenses
+    with the compensation regime.
+
+    The first 6 columns are positionally identical between the two cards,
+    but column 6 means different things. We discriminate by looking for
+    the literal table header "Tarif prosumer" in the document - this is
+    robust against future column additions and avoids the previous
+    end-of-line anchor that would silently lose the prosumer value if a
+    7th column were ever added to the variable card.
+    """
     transport = _extract_transport(text)
+    has_prosumer_column = "Tarif prosumer" in text
     out: dict[str, DsoOverlay] = {}
     for label in _DSO_LABELS:
-        # Variable PDF row layout: yearly | mono | dag | nacht | uitsl_nacht
-        # | tarif_prosumer (€/kVA/yr). Dynamic PDF substitutes the prosumer
-        # column with three Tarif Impact columns (PIC / MEDIUM / ECO) and
-        # has no prosumer fee since SMR3 dispenses with compensation regime.
         row = re.search(
             rf"^{label}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)"
-            rf"(?:\s+([\d,]+))?",
+            rf"\s+([\d,]+)",
             text,
             re.MULTILINE,
         )
         if not row:
             continue
-        # Group 6 is present only when one trailing number remains, i.e. the
-        # variable card. The dynamic card has three trailing numbers and
-        # group 6 captures the first of them - which we discard.
-        prosumer_match = re.search(
-            rf"^{label}\s+(?:[\d,]+\s+){{5}}([\d,]+)\s*$",
-            text,
-            re.MULTILINE,
-        )
-        prosumer_rate: float | None = None
-        if prosumer_match:
-            prosumer_rate = to_float(prosumer_match.group(1))
+        prosumer_rate = to_float(row.group(6)) if has_prosumer_column else None
         out[_DSO_KEY[label]] = DsoOverlay(
             distribution_single=to_float(row.group(2)) / 100.0,
             distribution_peak=to_float(row.group(3)) / 100.0,

@@ -102,6 +102,24 @@ def test_dynamic_has_no_prosumer_rate() -> None:
     assert snap.dsos["aieg"].prosumer_eur_per_kva_year is None
 
 
+def test_dso_extraction_keys_off_header_not_column_count() -> None:
+    # A future card layout could grow extra columns, but we discriminate
+    # by the literal "Tarif prosumer" header text rather than column
+    # count. Strip the header out of the variable card and the parser
+    # must report no prosumer rate even though column 6 still has a
+    # number that looks like one.
+    raw = _text("cociter_var_2604.pdf")
+    without_header = raw.replace("Tarif prosumer", "Tarif Impact")
+    from custom_components.be_electricity_prices.providers.cociter import (
+        _extract_dsos,
+    )
+
+    overlay = _extract_dsos(without_header)["aieg"]
+    assert overlay.prosumer_eur_per_kva_year is None
+    # Distribution rates still parse - they don't depend on the header.
+    assert overlay.distribution_single == pytest.approx(0.1087)
+
+
 def test_variable_extracts_taxes() -> None:
     snap = parse_snapshot(
         _text("cociter_var_2604.pdf"),
