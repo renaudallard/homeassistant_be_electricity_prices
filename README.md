@@ -83,6 +83,7 @@ Per config entry, grouped on a single device:
 | `capacity_cost` | Flanders only - current monthly capacity cost in EUR. |
 | `monthly_peak_kw` | Flanders only - running monthly peak power in kW. |
 | `prosumer_cost` | Compensation-regime users only (Wallonian installations certified before 2024-01-01) - monthly DSO fee = `inverter_kVA × DSO_prosumer_rate / 12`, in EUR. Compensation regime ends 2030-12-31; post-2024 installations are on the injection tariff and don't get this sensor. |
+| `injection_price` | Injection-tariff users only - EUR/kWh paid for energy fed back to the grid. Dynamic contracts get `factor × spot + base` from the supplier's PDF using the live ENTSO-E spot; static contracts get the supplier's printed monthly indicative. Plug into HA Energy's "Solar production" → "I receive variable compensation based on a tariff" slot. Can go negative at low spot (you pay to inject). |
 
 ## Installation
 
@@ -122,8 +123,9 @@ The UI flow asks seven things at most:
      created and reports the monthly DSO compensation fee
      (`kVA × DSO_prosumer_rate / 12`).
    - *injection tariff* — post-2024 Walloon installations and Flemish smart
-     meters. No `prosumer_cost` sensor (per-kWh injection pricing is a
-     separate Tier B feature, not yet implemented).
+     meters. The `injection_price` sensor (EUR/kWh) is created using each
+     supplier's published injection formula. Plug it directly into HA Energy's
+     solar compensation tariff slot.
 
 No EUR values are asked. Energy + DSO + tax rates all come from the
 supplier's tariff card.
