@@ -30,7 +30,7 @@ from __future__ import annotations
 from io import BytesIO
 
 import aiohttp
-import pypdf  # type: ignore[import-not-found]
+import pypdf
 
 from .base import ExtractorError
 
