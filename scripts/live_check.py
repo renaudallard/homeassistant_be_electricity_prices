@@ -76,7 +76,8 @@ def _load_providers() -> tuple[types.ModuleType, types.ModuleType]:
     cociter = _load("be_pkg.providers.cociter", PKG / "providers" / "cociter.py")
     engie = _load("be_pkg.providers.engie", PKG / "providers" / "engie.py")
     luminus = _load("be_pkg.providers.luminus", PKG / "providers" / "luminus.py")
-    return eneco, cociter, engie, luminus
+    mega = _load("be_pkg.providers.mega", PKG / "providers" / "mega.py")
+    return eneco, cociter, engie, luminus, mega
 
 
 @dataclass
@@ -243,6 +244,56 @@ async def _check_luminus(
             _validate_energy(prefix, cid, snap.energy)
 
 
+async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) -> None:
+    # Mega serves all 3 regions for every contract and resolves the URL
+    # by scraping mega.be/fr/cartes-tarifaires; walk every (contract,
+    # region) pair to verify both the listing scrape and the PDF parse.
+    expected_dsos = {
+        "flanders": {
+            "fluvius_antwerpen",
+            "fluvius_halle_vilvoorde",
+            "fluvius_imewo",
+            "fluvius_intergem",
+            "fluvius_iveka",
+            "fluvius_limburg",
+            "fluvius_west",
+            "fluvius_zenne_dijle",
+        },
+        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
+        "brussels": {"sibelga"},
+    }
+    renewables_field = {
+        "flanders": "flanders_renewables",
+        "wallonia": "wallonia_renewables",
+        "brussels": "brussels_renewables",
+    }
+    for contract in mega._CONTRACTS:
+        cid = contract.contract_id
+        for region_key in ("flanders", "wallonia", "brussels"):
+            prefix = f"mega/{cid}/{region_key}"
+            try:
+                snap = await mega.fetch(session, cid, region_key)
+            except Exception as err:
+                _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+                continue
+            _expect(
+                f"{prefix}: expected DSOs present",
+                expected_dsos[region_key] <= set(snap.dsos),
+                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
+            )
+            _expect(
+                f"{prefix}: regional renewables > 0",
+                getattr(snap.taxes, renewables_field[region_key]) > 0,
+                detail=str(snap.taxes),
+            )
+            _expect(
+                f"{prefix}: federal excise > 0",
+                snap.taxes.federal_excise > 0,
+                detail=str(snap.taxes),
+            )
+            _validate_energy(prefix, cid, snap.energy)
+
+
 async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) -> None:
     # Engie now fetches one PDF per (contract, region) on demand, so the
     # check walks every supported region per contract instead of asking
@@ -361,13 +412,14 @@ def _render_report(checks: Iterable[Check]) -> str:
 
 
 async def _run() -> int:
-    eneco, cociter, engie, luminus = _load_providers()
+    eneco, cociter, engie, luminus, mega = _load_providers()
     timeout = aiohttp.ClientTimeout(total=60)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         await _check_eneco(session, eneco)
         await _check_cociter(session, cociter)
         await _check_engie(session, engie)
         await _check_luminus(session, luminus)
+        await _check_mega(session, mega)
     print(_render_report(CHECKS))
     return 1 if any(not c.ok for c in CHECKS) else 0
 

@@ -1,0 +1,204 @@
+# Copyright (c) 2026, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+"""Mega PDF extractor tests against April 2026 fixtures."""
+
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+
+import pytest
+
+from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers._pdf import extract_pdf_text
+from custom_components.be_electricity_prices.providers.base import (
+    DynamicRates,
+    ExtractorError,
+    FixedRates,
+    VariableRates,
+)
+from custom_components.be_electricity_prices.providers.mega import (
+    _find_pdf_url,
+    parse_snapshot,
+)
+
+FIX = Path(__file__).parent / "fixtures"
+
+
+def _text(name: str) -> str:
+    return extract_pdf_text((FIX / name).read_bytes())
+
+
+def test_mega_is_registered() -> None:
+    assert "mega" in EXTRACTORS
+    assert EXTRACTORS["mega"].label == "Mega"
+    contract_ids = {c.id for c in EXTRACTORS["mega"].contracts}
+    # Spot-check the flagship products.
+    assert "mega_smart_fixed" in contract_ids
+    assert "mega_smart_flex" in contract_ids
+    assert "mega_zen_fixed" in contract_ids
+    assert "mega_dynamic" in contract_ids
+    assert len(contract_ids) == 13
+
+
+def test_listing_url_finder_picks_electricity_for_region() -> None:
+    listing = (FIX / "mega_listing.html").read_text()
+    url = _find_pdf_url(listing, "Smart Fixed", "WL")
+    assert url is not None
+    assert url.startswith("https://my.mega.be/resources/tarif/")
+    assert "Mega-FR-EL-B2C-WL-" in url
+    assert url.endswith("Smart2204-Fixed.pdf")
+    # The same listing has gas variants and other regions; they must NOT
+    # match Smart Fixed/Wallonia.
+    assert "NG" not in url
+
+
+def test_listing_url_finder_returns_none_for_unknown_product() -> None:
+    listing = (FIX / "mega_listing.html").read_text()
+    assert _find_pdf_url(listing, "Bogus Product", "WL") is None
+
+
+def test_dynamic_extracts_consumption_formula_tvac() -> None:
+    snap = parse_snapshot("mega_dynamic", _text("mega_dynamic_w.pdf"), "wallonia")
+    assert isinstance(snap.energy, DynamicRates)
+    # Mega's PDF: "formule tarifaire suivante : Day Ahead Epex Spot
+    # * 1,05 + 1,35 c€/kWh" - already TVAC, spot is in c€/kWh.
+    # In our model (spot in EUR/kWh): factor = 1.05, base = 0.0135 EUR.
+    assert snap.energy.factor == pytest.approx(1.05)
+    assert snap.energy.base == pytest.approx(0.0135)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(42.4)
+
+
+def test_dynamic_injection_uses_separate_htva_formula_with_endash() -> None:
+    snap = parse_snapshot("mega_dynamic", _text("mega_dynamic_w.pdf"), "wallonia")
+    inj = snap.injection
+    assert inj is not None
+    # Injection block: "formule suivante (HTVA) : Day Ahead EPEX SPOT
+    # Belgium * 1 – 4 c€/kWh". The dash here is a Unicode en-dash, not
+    # an ASCII hyphen - the parser must read it as negative.
+    assert inj.factor == pytest.approx(1.0)
+    assert inj.base == pytest.approx(-0.04)
+
+
+def test_dynamic_consumption_and_injection_are_not_swapped() -> None:
+    # Mega prints the injection formula BEFORE the consumption formula
+    # in the document. A naive 'first formula' / 'second formula' policy
+    # gets them backwards. The parser anchors on each formula's distinct
+    # label ('formule tarifaire suivante' vs 'formule suivante (HTVA)').
+    snap = parse_snapshot("mega_dynamic", _text("mega_dynamic_w.pdf"), "wallonia")
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.injection is not None
+    # Consumption factor is higher and base is positive.
+    assert snap.energy.factor > snap.injection.factor
+    assert snap.energy.base > 0.0
+    # Injection base is negative (you pay to inject at low spot).
+    assert snap.injection.base < 0.0
+
+
+def test_smart_fixed_wallonia_extracts_bihourly_rates() -> None:
+    snap = parse_snapshot(
+        "mega_smart_fixed", _text("mega_smart_fixed_w.pdf"), "wallonia"
+    )
+    assert isinstance(snap.energy, FixedRates)
+    # PDF: 17.12 (mono), 19.38 (jour), 15.49 (nuit / excl_nuit).
+    assert snap.energy.single == pytest.approx(0.1712)
+    assert snap.energy.peak == pytest.approx(0.1938)
+    assert snap.energy.offpeak == pytest.approx(0.1549)
+    assert snap.energy.exclusive_night == pytest.approx(0.1549)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(111.3)
+
+
+def test_smart_fixed_brussels_extracts_sibelga_row() -> None:
+    snap = parse_snapshot(
+        "mega_smart_fixed", _text("mega_smart_fixed_b.pdf"), "brussels"
+    )
+    sibelga = snap.dsos["sibelga"]
+    assert sibelga.distribution_single == pytest.approx(0.0996)
+    assert sibelga.distribution_peak == pytest.approx(0.0996)
+    assert sibelga.distribution_offpeak == pytest.approx(0.0753)
+    assert sibelga.transport == pytest.approx(0.0227)
+    assert sibelga.data_management_per_year == pytest.approx(14.73)
+
+
+def test_wallonia_dso_carries_prosumer_rate_from_separate_table() -> None:
+    # Mega lists prosumer rates in their own small table further down
+    # the PDF, separate from the main DSO row. The parser cross-references
+    # the two and still produces a complete DsoOverlay.
+    snap = parse_snapshot(
+        "mega_smart_fixed", _text("mega_smart_fixed_w.pdf"), "wallonia"
+    )
+    aieg = snap.dsos["aieg"]
+    assert aieg.distribution_single == pytest.approx(0.1087)
+    assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.03)
+
+
+def test_flanders_dynamic_smaller_dso_table_with_external_data_fee() -> None:
+    # Dynamic V cards list only 2 columns per Fluvius row (digital meter
+    # only). The Tarif de gestion des données fee is broken out in a
+    # separate paragraph - the parser pulls it from there.
+    snap = parse_snapshot("mega_dynamic", _text("mega_dynamic_v.pdf"), "flanders")
+    antwerpen = snap.dsos["fluvius_antwerpen"]
+    assert antwerpen.capacity_eur_per_kw_year == pytest.approx(52.3679)
+    assert antwerpen.distribution_single == pytest.approx(0.053533)
+    assert antwerpen.transport == 0.0  # Rolled into distribution.
+    assert antwerpen.data_management_per_year == pytest.approx(18.92)
+
+
+def test_taxes_split_correctly_per_region() -> None:
+    w = parse_snapshot("mega_dynamic", _text("mega_dynamic_w.pdf"), "wallonia")
+    v = parse_snapshot("mega_smart_fixed", _text("mega_smart_fixed_v.pdf"), "flanders")
+    b = parse_snapshot("mega_smart_fixed", _text("mega_smart_fixed_b.pdf"), "brussels")
+    # Federal excise + energy contribution match across regions.
+    assert w.taxes.federal_excise == pytest.approx(0.0503288)
+    assert v.taxes.federal_excise == pytest.approx(0.0503288)
+    assert b.taxes.federal_excise == pytest.approx(0.0503288)
+    assert w.taxes.energy_contribution == pytest.approx(0.0020417)
+    # Wallonia: Cotisation Verte + Redevance de raccordement.
+    assert w.taxes.wallonia_renewables == pytest.approx(0.03008)
+    assert w.taxes.region_connection_fee == pytest.approx(0.00075)
+    # Flanders: combined green + cogeneration into flanders_renewables.
+    assert v.taxes.flanders_renewables > 0.0
+    assert v.taxes.region_connection_fee == 0.0
+    # Brussels: brussels_renewables only.
+    assert b.taxes.brussels_renewables > 0.0
+    assert b.taxes.flanders_renewables == 0.0
+    assert b.taxes.wallonia_renewables == 0.0
+
+
+def test_smart_flex_is_a_variable_contract() -> None:
+    snap = parse_snapshot("mega_smart_flex", _text("mega_smart_flex_w.pdf"), "wallonia")
+    assert isinstance(snap.energy, VariableRates)
+    # Mega 'Flex' product values change month to month; just assert the
+    # current rate is in a plausible Belgian residential range.
+    assert 0.10 <= snap.energy.current <= 0.30
+
+
+def test_unknown_contract_raises() -> None:
+    async def _run() -> None:
+        with pytest.raises(ExtractorError, match="unknown Mega contract"):
+            await EXTRACTORS["mega"].fetch(None, "bogus", "wallonia")  # type: ignore[arg-type]
+
+    asyncio.run(_run())
