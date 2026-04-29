@@ -148,6 +148,13 @@ and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. Snapshots older than 7 days
 are flagged stale.
 
+## Diagnostics
+
+Settings -> Devices & services -> *Belgian Electricity Prices* -> three-dot
+menu -> **Download diagnostics** dumps the active config (with the ENTSO-E
+API key redacted), the latest snapshot metadata, and the full hourly
+breakdown for today + tomorrow. Useful when reporting an issue.
+
 ## Changing parameters after install
 
 Settings -> Devices & services -> *Belgian Electricity Prices* -> **Configure**
