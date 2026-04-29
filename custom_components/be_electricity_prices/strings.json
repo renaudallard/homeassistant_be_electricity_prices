@@ -44,6 +44,13 @@
           "capacity_peak_sensor": "Peak power sensor",
           "capacity_fixed_kw": "Fixed peak (kW)"
         }
+      },
+      "solar": {
+        "title": "Solar panels",
+        "description": "Inverter capacity in kVA (0 = no panels). Adds a monthly prosumer cost sensor when greater than 0. Compensation regime applies in Wallonia until 2030.",
+        "data": {
+          "solar_kva": "Inverter capacity (kVA)"
+        }
       }
     }
   },
@@ -108,6 +115,9 @@
       },
       "monthly_peak_kw": {
         "name": "Monthly peak power"
+      },
+      "prosumer_cost": {
+        "name": "Prosumer cost"
       }
     }
   }

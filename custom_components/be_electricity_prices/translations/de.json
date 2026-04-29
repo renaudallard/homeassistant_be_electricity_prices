@@ -44,6 +44,13 @@
           "capacity_peak_sensor": "Leistungssensor",
           "capacity_fixed_kw": "Feste Spitze (kW)"
         }
+      },
+      "solar": {
+        "title": "Solaranlage",
+        "description": "Wechselrichterleistung in kVA (0 = keine Anlage). Zeigt einen monatlichen Prosumer-Kosten-Sensor wenn > 0. Kompensationsregelung in Wallonien gueltig bis 2030.",
+        "data": {
+          "solar_kva": "Wechselrichter (kVA)"
+        }
       }
     }
   },
@@ -108,6 +115,9 @@
       },
       "monthly_peak_kw": {
         "name": "Monatliche Spitzenleistung"
+      },
+      "prosumer_cost": {
+        "name": "Prosumer-Kosten"
       }
     }
   }

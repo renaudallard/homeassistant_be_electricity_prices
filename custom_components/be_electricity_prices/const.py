@@ -87,6 +87,9 @@ CONF_CAPACITY_MODE: Final = "capacity_mode"
 CONF_CAPACITY_PEAK_SENSOR: Final = "capacity_peak_sensor"
 CONF_CAPACITY_FIXED_KW: Final = "capacity_fixed_kw"
 
+# Solar inverter capacity in kVA. 0 means no panels (no prosumer cost).
+CONF_SOLAR_KVA: Final = "solar_kva"
+
 CAPACITY_MODE_SENSOR: Final = "sensor"
 CAPACITY_MODE_FIXED: Final = "fixed"
 

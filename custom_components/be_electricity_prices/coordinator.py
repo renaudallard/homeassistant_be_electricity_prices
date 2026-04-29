@@ -59,6 +59,7 @@ from .const import (
     CONF_DSO,
     CONF_METER,
     CONF_REGION,
+    CONF_SOLAR_KVA,
     CONF_SUPPLIER,
     VREG_CAPACITY_FLOOR_KW,
     DOMAIN,
@@ -100,6 +101,7 @@ class CoordinatorData:
     monthly_peak_kw: float = 0.0
     monthly_peak_month: date | None = None
     capacity_cost_eur: float = 0.0
+    prosumer_cost_eur: float = 0.0
 
 
 class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -179,6 +181,8 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if self.entry.data.get(CONF_REGION) == REGION_FLANDERS:
             capacity_cost = _compute_capacity(self._snapshot, self.entry, self._peak_kw)
 
+        prosumer_cost = _compute_prosumer(self._snapshot, self.entry)
+
         await self._save_persistent()
 
         age = self._snapshot_age_hours()
@@ -191,6 +195,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             monthly_peak_kw=self._peak_kw,
             monthly_peak_month=self._peak_month,
             capacity_cost_eur=capacity_cost,
+            prosumer_cost_eur=prosumer_cost,
         )
 
     async def _maybe_refresh_snapshot(self) -> None:
@@ -327,6 +332,25 @@ def _compute_capacity(
     if overlay is None or overlay.capacity_eur_per_kw_year is None:
         return 0.0
     return peak_kw * overlay.capacity_eur_per_kw_year / 12.0
+
+
+def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
+    """Monthly prosumer (compensation regime) cost in EUR.
+
+    Returns 0 when the user has no solar (kVA == 0), the snapshot's DSO has
+    no prosumer rate (Flanders digital meters, Cociter SMR3), or the
+    configured DSO is not in the snapshot.
+    """
+    try:
+        kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+    if kva <= 0.0:
+        return 0.0
+    overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
+    if overlay is None or overlay.prosumer_eur_per_kva_year is None:
+        return 0.0
+    return kva * overlay.prosumer_eur_per_kva_year / 12.0
 
 
 # ---- snapshot serialization for the HA Store ----------------------------------

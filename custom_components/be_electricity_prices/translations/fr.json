@@ -44,6 +44,13 @@
           "capacity_peak_sensor": "Capteur de puissance",
           "capacity_fixed_kw": "Pic fixe (kW)"
         }
+      },
+      "solar": {
+        "title": "Panneaux solaires",
+        "description": "Puissance de l'onduleur en kVA (0 = pas de panneaux). Ajoute un capteur de coût prosumer mensuel si > 0. Le régime de compensation s'applique en Wallonie jusqu'en 2030.",
+        "data": {
+          "solar_kva": "Puissance onduleur (kVA)"
+        }
       }
     }
   },
@@ -108,6 +115,9 @@
       },
       "monthly_peak_kw": {
         "name": "Pic de puissance mensuel"
+      },
+      "prosumer_cost": {
+        "name": "Coût prosumer"
       }
     }
   }

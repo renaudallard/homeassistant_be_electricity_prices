@@ -79,6 +79,7 @@ from .const import (
     CONF_DSO,
     CONF_METER,
     CONF_REGION,
+    CONF_SOLAR_KVA,
     CONF_SUPPLIER,
     VREG_CAPACITY_FLOOR_KW,
     DOMAIN,
@@ -239,6 +240,21 @@ def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(fields)
 
 
+def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_SOLAR_KVA,
+                default=defaults.get(CONF_SOLAR_KVA, 0.0),
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX
+                )
+            ),
+        }
+    )
+
+
 def _entry_title(data: dict[str, Any]) -> str:
     extractor = get_extractor(data[CONF_SUPPLIER])
     contract_label = next(
@@ -320,9 +336,19 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            return self._finalize()
+            return await self.async_step_solar()
         return self.async_show_form(
             step_id="capacity", data_schema=_capacity_schema(self._data)
+        )
+
+    async def async_step_solar(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return self._finalize()
+        return self.async_show_form(
+            step_id="solar", data_schema=_solar_schema(self._data)
         )
 
     async def _after_meter(self) -> ConfigFlowResult:
@@ -333,12 +359,12 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self.async_step_api_key()
         if self._data[CONF_REGION] == REGION_FLANDERS:
             return await self.async_step_capacity()
-        return self._finalize()
+        return await self.async_step_solar()
 
     async def _after_api_key(self) -> ConfigFlowResult:
         if self._data[CONF_REGION] == REGION_FLANDERS:
             return await self.async_step_capacity()
-        return self._finalize()
+        return await self.async_step_solar()
 
     def _finalize(self) -> ConfigFlowResult:
         return self.async_create_entry(title=_entry_title(self._data), data=self._data)
@@ -419,9 +445,19 @@ class BePricesOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            return self._finalize()
+            return await self.async_step_solar()
         return self.async_show_form(
             step_id="capacity", data_schema=_capacity_schema(self._data)
+        )
+
+    async def async_step_solar(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return self._finalize()
+        return self.async_show_form(
+            step_id="solar", data_schema=_solar_schema(self._data)
         )
 
     async def _after_meter(self) -> ConfigFlowResult:
@@ -432,12 +468,12 @@ class BePricesOptionsFlow(OptionsFlow):
             return await self.async_step_api_key()
         if self._data[CONF_REGION] == REGION_FLANDERS:
             return await self.async_step_capacity()
-        return self._finalize()
+        return await self.async_step_solar()
 
     async def _after_api_key(self) -> ConfigFlowResult:
         if self._data[CONF_REGION] == REGION_FLANDERS:
             return await self.async_step_capacity()
-        return self._finalize()
+        return await self.async_step_solar()
 
     def _finalize(self) -> ConfigFlowResult:
         # Persist back to entry.data so the new values are the baseline,

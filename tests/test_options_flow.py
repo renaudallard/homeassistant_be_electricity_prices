@@ -92,7 +92,11 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"meter": "bi"}
     )
-    # Variable contract + non-Flanders region -> done.
+    # Solar step is the new last step; submit 0 kVA (no panels).
+    assert result["step_id"] == "solar"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0}
+    )
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
 
     # Verify the entry was rewritten end-to-end.
@@ -127,6 +131,10 @@ async def test_options_flow_dynamic_branch_asks_api_key(
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"api_key": "new-key-456"}
+    )
+    assert result["step_id"] == "solar"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0}
     )
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert entry.data["api_key"] == "new-key-456"
@@ -173,5 +181,11 @@ async def test_options_flow_flanders_branch_asks_capacity(
             "capacity_fixed_kw": 4.0,
         },
     )
+    assert result["step_id"] == "solar"
+    # User has solar this time - 5 kVA inverter.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 5.0}
+    )
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert entry.data["capacity_fixed_kw"] == 4.0
+    assert entry.data["solar_kva"] == 5.0

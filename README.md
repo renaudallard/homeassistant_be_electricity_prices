@@ -82,6 +82,7 @@ Per config entry, grouped on a single device:
 | `taxes_component` | Levies + VAT EUR/kWh now. |
 | `capacity_cost` | Flanders only - current monthly capacity cost in EUR. |
 | `monthly_peak_kw` | Flanders only - running monthly peak power in kW. |
+| `prosumer_cost` | Solar users only - monthly DSO compensation-regime fee = `inverter_kVA × DSO_prosumer_rate / 12`, in EUR. Wallonia compensation regime applies until 2030. |
 
 ## Installation
 
@@ -102,7 +103,7 @@ automatically from the manifest.
 
 ## Configuration
 
-The UI flow asks six things at most:
+The UI flow asks seven things at most:
 
 1. **Supplier** + **Region** (Flanders / Wallonia / Brussels).
 2. **Contract** filtered by supplier (populated from the registry).
@@ -113,6 +114,9 @@ The UI flow asks six things at most:
 5. **ENTSO-E API key** - only when the chosen contract is dynamic.
 6. **Capacity tariff peak source** - only when region is Flanders. Either a power
    sensor reporting your live kW draw, or a fixed kW value (default 2.5 kW).
+7. **Solar panels** - inverter capacity in kVA (0 = no panels). When greater than
+   zero a `prosumer_cost` sensor reports the monthly DSO compensation-regime
+   fee for your inverter capacity.
 
 No EUR values are asked. Energy + DSO + tax rates all come from the
 supplier's tariff card.

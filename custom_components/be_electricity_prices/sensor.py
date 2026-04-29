@@ -47,6 +47,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_REGION,
+    CONF_SOLAR_KVA,
     CONF_SUPPLIER,
     DOMAIN,
     REGION_FLANDERS,
@@ -189,6 +190,17 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
     ),
 )
 
+PROSUMER_SENSORS: tuple[BePriceSensorDescription, ...] = (
+    BePriceSensorDescription(
+        key="prosumer_cost",
+        translation_key="prosumer_cost",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR",
+        suggested_display_precision=2,
+        value_fn=lambda d: d.prosumer_cost_eur,
+    ),
+)
+
 CAPACITY_SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="capacity_cost",
@@ -225,6 +237,12 @@ async def async_setup_entry(
     descriptions: list[BePriceSensorDescription] = list(SENSORS)
     if entry.data.get(CONF_REGION) == REGION_FLANDERS:
         descriptions.extend(CAPACITY_SENSORS)
+    try:
+        solar_kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
+    except (TypeError, ValueError):
+        solar_kva = 0.0
+    if solar_kva > 0.0:
+        descriptions.extend(PROSUMER_SENSORS)
 
     async_add_entities(BePriceSensor(coordinator, desc) for desc in descriptions)
 

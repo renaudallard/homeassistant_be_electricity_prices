@@ -44,6 +44,13 @@
           "capacity_peak_sensor": "Vermogenssensor",
           "capacity_fixed_kw": "Vaste piek (kW)"
         }
+      },
+      "solar": {
+        "title": "Zonnepanelen",
+        "description": "Vermogen van de omvormer in kVA (0 = geen panelen). Toont een maandelijkse prosumentkost-sensor als > 0. Compensatieregeling in Wallonië van toepassing tot 2030.",
+        "data": {
+          "solar_kva": "Vermogen omvormer (kVA)"
+        }
       }
     }
   },
@@ -108,6 +115,9 @@
       },
       "monthly_peak_kw": {
         "name": "Maandelijkse vermogenspiek"
+      },
+      "prosumer_cost": {
+        "name": "Prosumentkost"
       }
     }
   }
