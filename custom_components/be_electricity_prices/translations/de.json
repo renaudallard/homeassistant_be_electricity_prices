@@ -98,6 +98,12 @@
       "description": "Erzwingt fuer jeden Belgian Electricity Prices Eintrag das sofortige erneute Abrufen des Lieferanten-Snapshots und der ENTSO-E Spotpreise, ohne auf den naechsten 24h-Zyklus zu warten."
     }
   },
+  "issues": {
+    "snapshot_stale": {
+      "title": "Tarifdaten fuer {supplier} ({contract}) sind aelter als {days} Tage",
+      "description": "Die Integration konnte die Tarifkarte beim Lieferanten nicht aktualisieren und verwendet einen Cache, der aelter als {days} Tage ist. Letzter Fehler: {last_error}. Die Preise spiegeln moeglicherweise nicht mehr wider, was tatsaechlich abgerechnet wird. Versuchen Sie den Dienst be_electricity_prices.refresh, pruefen Sie Ihr Netzwerk, oder oeffnen Sie ein Issue auf GitHub, wenn das Problem weiter besteht."
+    }
+  },
   "entity": {
     "sensor": {
       "current_price": {

@@ -98,6 +98,12 @@
       "description": "Force chaque entree Belgian Electricity Prices a re-recuperer son releve fournisseur et les prix spot ENTSO-E immediatement, sans attendre le prochain cycle de 24h."
     }
   },
+  "issues": {
+    "snapshot_stale": {
+      "title": "Les donnees tarifaires de {supplier} ({contract}) ont plus de {days} jours",
+      "description": "L'integration n'a pas pu rafraichir la carte tarifaire chez le fournisseur et utilise un cache de plus de {days} jours. Derniere erreur : {last_error}. Les prix peuvent ne plus refleter ce qui est facture. Essayez le service be_electricity_prices.refresh, verifiez votre reseau, ou ouvrez un ticket sur GitHub si le probleme persiste."
+    }
+  },
   "entity": {
     "sensor": {
       "current_price": {

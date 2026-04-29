@@ -146,7 +146,9 @@ Required only for dynamic contracts. Register on the
 If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. Snapshots older than 7 days
-are flagged stale.
+are flagged stale and surface a repair issue under
+*Settings -> System -> Repairs* so the warning is visible without having
+to inspect attributes; the issue auto-clears when the snapshot refreshes.
 
 ## Services
 

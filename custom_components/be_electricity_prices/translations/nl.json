@@ -98,6 +98,12 @@
       "description": "Forceer elke Belgian Electricity Prices invoer om de leveranciersmomentopname en ENTSO-E spotprijzen onmiddellijk opnieuw op te halen, in plaats van te wachten op de volgende 24u-cyclus."
     }
   },
+  "issues": {
+    "snapshot_stale": {
+      "title": "Tariefgegevens voor {supplier} ({contract}) zijn ouder dan {days} dagen",
+      "description": "De integratie kon de tariefkaart niet bij de leverancier vernieuwen en gebruikt een cache van meer dan {days} dagen oud. Laatste fout: {last_error}. Prijzen geven mogelijk niet meer weer wat werkelijk wordt gefactureerd. Probeer de service be_electricity_prices.refresh, controleer je netwerk, of open een issue op GitHub als het probleem aanhoudt."
+    }
+  },
   "entity": {
     "sensor": {
       "current_price": {

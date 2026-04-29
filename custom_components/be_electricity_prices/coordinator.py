@@ -42,6 +42,7 @@ from typing import Any
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, State
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -198,11 +199,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         await self._save_persistent()
 
         age = self._snapshot_age_hours()
+        stale = age > SNAPSHOT_STALE_DAYS * 24
+        self._sync_stale_issue(stale)
         return CoordinatorData(
             hourly=hourly,
             snapshot_publication=self._snapshot.publication_label,
             snapshot_age_hours=age,
-            snapshot_stale=age > SNAPSHOT_STALE_DAYS * 24,
+            snapshot_stale=stale,
             last_error=self._last_error,
             monthly_peak_kw=self._peak_kw,
             monthly_peak_month=self._peak_month,
@@ -210,6 +213,27 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             prosumer_cost_eur=prosumer_cost,
             injection_price_eur_per_kwh=injection_price,
         )
+
+    def _sync_stale_issue(self, stale: bool) -> None:
+        """Raise or clear the 'snapshot stale' repair issue for this entry."""
+        issue_id = f"snapshot_stale_{self.entry.entry_id}"
+        if stale:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="snapshot_stale",
+                translation_placeholders={
+                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
+                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
+                    "days": str(SNAPSHOT_STALE_DAYS),
+                    "last_error": self._last_error or "unknown",
+                },
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     async def async_force_refresh(self) -> None:
         """Drop cached snapshot + spot prices and re-fetch immediately.
