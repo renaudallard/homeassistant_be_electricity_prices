@@ -74,7 +74,8 @@ def _load_providers() -> tuple[types.ModuleType, types.ModuleType]:
     _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
     eneco = _load("be_pkg.providers.eneco", PKG / "providers" / "eneco.py")
     cociter = _load("be_pkg.providers.cociter", PKG / "providers" / "cociter.py")
-    return eneco, cociter
+    engie = _load("be_pkg.providers.engie", PKG / "providers" / "engie.py")
+    return eneco, cociter, engie
 
 
 @dataclass
@@ -184,6 +185,61 @@ async def _check_cociter(
         _validate_energy(prefix, cid, snap.energy)
 
 
+async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) -> None:
+    # Three contracts span every parsing path: a fixed rate, an indexed
+    # variable rate and a hourly dynamic formula. The eight other Engie
+    # products share these parsers, so passing the trio is a strong
+    # signal that nothing has shifted on the supplier side.
+    expected_flanders = {
+        "fluvius_antwerpen",
+        "fluvius_halle_vilvoorde",
+        "fluvius_imewo",
+        "fluvius_intergem",
+        "fluvius_iveka",
+        "fluvius_limburg",
+        "fluvius_west",
+        "fluvius_zenne_dijle",
+    }
+    expected_wallonia = {"aieg", "aiesh", "ores", "resa", "rew"}
+    expected_brussels = {"sibelga"}
+    for cid in ("engie_easy_fixed", "engie_easy_variable", "engie_dynamic"):
+        prefix = f"engie/{cid}"
+        try:
+            snap = await engie.fetch(session, cid)
+        except Exception as err:
+            _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+            continue
+        _expect(f"{prefix}: publication label", bool(snap.publication_label))
+        _expect(
+            f"{prefix}: all three regions present",
+            expected_flanders <= set(snap.dsos)
+            and expected_wallonia <= set(snap.dsos)
+            and expected_brussels <= set(snap.dsos),
+            detail=f"got DSOs: {sorted(snap.dsos)}",
+        )
+        _expect(
+            f"{prefix}: federal excise > 0",
+            snap.taxes.federal_excise > 0,
+            detail=str(snap.taxes),
+        )
+        _expect(
+            f"{prefix}: flanders renewables > 0",
+            snap.taxes.flanders_renewables > 0,
+            detail=str(snap.taxes),
+        )
+        _expect(
+            f"{prefix}: wallonia renewables > 0",
+            snap.taxes.wallonia_renewables > 0,
+            detail=str(snap.taxes),
+        )
+        _expect(
+            f"{prefix}: brussels renewables > 0",
+            snap.taxes.brussels_renewables > 0,
+            detail=str(snap.taxes),
+        )
+        _validate_energy(prefix, cid, snap.energy)
+
+
 def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
     kind = type(energy).__name__
     if kind == "FixedRates":
@@ -247,11 +303,12 @@ def _render_report(checks: Iterable[Check]) -> str:
 
 
 async def _run() -> int:
-    eneco, cociter = _load_providers()
+    eneco, cociter, engie = _load_providers()
     timeout = aiohttp.ClientTimeout(total=60)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         await _check_eneco(session, eneco)
         await _check_cociter(session, cociter)
+        await _check_engie(session, engie)
     print(_render_report(CHECKS))
     return 1 if any(not c.ok for c in CHECKS) else 0
 
