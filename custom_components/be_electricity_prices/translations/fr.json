@@ -92,6 +92,12 @@
       }
     }
   },
+  "services": {
+    "refresh": {
+      "name": "Rafraichir",
+      "description": "Force chaque entree Belgian Electricity Prices a re-recuperer son releve fournisseur et les prix spot ENTSO-E immediatement, sans attendre le prochain cycle de 24h."
+    }
+  },
   "entity": {
     "sensor": {
       "current_price": {

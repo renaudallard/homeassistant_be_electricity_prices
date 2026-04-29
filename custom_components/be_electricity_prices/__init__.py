@@ -28,12 +28,14 @@
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 
-from .const import PLATFORMS
+from .const import DOMAIN, PLATFORMS
 from .coordinator import BePricesCoordinator
 
 type BePricesConfigEntry = ConfigEntry[BePricesCoordinator]
+
+SERVICE_REFRESH = "refresh"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> bool:
@@ -46,15 +48,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    if not hass.services.has_service(DOMAIN, SERVICE_REFRESH):
+        hass.services.async_register(DOMAIN, SERVICE_REFRESH, _async_refresh_service)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> bool:
     """Unload one config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded and not hass.config_entries.async_loaded_entries(DOMAIN):
+        hass.services.async_remove(DOMAIN, SERVICE_REFRESH)
+    return unloaded
 
 
 async def _async_options_updated(
     hass: HomeAssistant, entry: BePricesConfigEntry
 ) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def _async_refresh_service(call: ServiceCall) -> None:
+    """Force every loaded entry to re-fetch its supplier snapshot now."""
+    for entry in call.hass.config_entries.async_loaded_entries(DOMAIN):
+        coordinator: BePricesCoordinator = entry.runtime_data
+        await coordinator.async_force_refresh()

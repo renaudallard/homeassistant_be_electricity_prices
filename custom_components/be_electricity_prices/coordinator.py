@@ -211,6 +211,19 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             injection_price_eur_per_kwh=injection_price,
         )
 
+    async def async_force_refresh(self) -> None:
+        """Drop cached snapshot + spot prices and re-fetch immediately.
+
+        Invoked by the be_electricity_prices.refresh service when the user
+        wants the integration to pick up a new tariff card or correct an
+        error without waiting for the 24h refresh tick.
+        """
+        self._snapshot_fetched_at = None
+        self._spot_cache = {}
+        self._spot_cache_day = None
+        self._spot_cache_includes_tomorrow = False
+        await self.async_request_refresh()
+
     async def _maybe_refresh_snapshot(self) -> None:
         if self._snapshot_fetched_at and (
             dt_util.utcnow() - self._snapshot_fetched_at

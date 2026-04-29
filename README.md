@@ -148,6 +148,13 @@ and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. Snapshots older than 7 days
 are flagged stale.
 
+## Services
+
+`be_electricity_prices.refresh` — drops the cached supplier snapshot and
+the ENTSO-E spot cache for every loaded entry, then re-fetches both
+immediately. Handy after a tariff card update or to clear a transient
+fetch error without waiting for the next 24h tick. No fields.
+
 ## Diagnostics
 
 Settings -> Devices & services -> *Belgian Electricity Prices* -> three-dot

@@ -92,6 +92,12 @@
       }
     }
   },
+  "services": {
+    "refresh": {
+      "name": "Vernieuwen",
+      "description": "Forceer elke Belgian Electricity Prices invoer om de leveranciersmomentopname en ENTSO-E spotprijzen onmiddellijk opnieuw op te halen, in plaats van te wachten op de volgende 24u-cyclus."
+    }
+  },
   "entity": {
     "sensor": {
       "current_price": {
