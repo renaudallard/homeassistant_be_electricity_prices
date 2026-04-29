@@ -118,6 +118,31 @@ def _today_max(data: CoordinatorData) -> float | None:
     return max(h.all_in for h in hours)
 
 
+def _today_ranked(
+    data: CoordinatorData, count: int
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    today = dt_util.now().date()
+    pairs = [
+        (h, bd) for h, bd in data.hourly.items() if dt_util.as_local(h).date() == today
+    ]
+    if not pairs:
+        return [], []
+    by_price_asc = sorted(pairs, key=lambda x: x[1].all_in)
+    cheapest = sorted(by_price_asc[:count], key=lambda x: x[0])
+    most_expensive = sorted(by_price_asc[-count:], key=lambda x: x[0])
+
+    def _fmt(h: Any, bd: PriceBreakdown) -> dict[str, Any]:
+        return {
+            "start": dt_util.as_local(h).isoformat(),
+            "price": round(bd.all_in, 6),
+        }
+
+    return (
+        [_fmt(h, bd) for h, bd in cheapest],
+        [_fmt(h, bd) for h, bd in most_expensive],
+    )
+
+
 def _current_field(field: str) -> Callable[[CoordinatorData], float | None]:
     def _inner(data: CoordinatorData) -> float | None:
         bd = _current(data)
@@ -300,11 +325,14 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             return {}
         data = self.coordinator.data
         hourly = sorted(data.hourly.items())
+        cheapest, most_expensive = _today_ranked(data, 4)
         return {
             "snapshot_publication": data.snapshot_publication,
             "snapshot_age_hours": round(data.snapshot_age_hours, 2),
             "snapshot_stale": data.snapshot_stale,
             "last_error": data.last_error,
+            "cheapest_4h_today": cheapest,
+            "most_expensive_4h_today": most_expensive,
             "hours": [
                 {
                     "start": dt_util.as_local(h).isoformat(),
