@@ -134,6 +134,36 @@ def test_dynamic_extracts_factor_and_base() -> None:
     assert snap.energy.factor * 0.10 + snap.energy.base == pytest.approx(0.14098)
 
 
+def test_variable_extracts_injection_formula() -> None:
+    snap = parse_snapshot(
+        _text("cociter_var_2604.pdf"),
+        "cociter_variable",
+        "test://var",
+        "2026-04",
+    )
+    inj = snap.injection
+    assert inj is not None
+    # PDF: "(0,097 x BELPEX – 2,1)" -> factor 0.97, base -0.021 (VAT-exempt).
+    assert inj.factor == pytest.approx(0.97)
+    assert inj.base == pytest.approx(-0.021)
+    # No "maandprijs" printed for hourly-injection - current stays None.
+    assert inj.current is None
+
+
+def test_dynamic_extracts_injection_formula() -> None:
+    snap = parse_snapshot(
+        _text("cociter_dyn_2604.pdf"),
+        "cociter_dynamic",
+        "test://dyn",
+        "2026-04",
+    )
+    inj = snap.injection
+    assert inj is not None
+    # SMR3 quarter-hourly formula: same coefficients as variable.
+    assert inj.factor == pytest.approx(0.97)
+    assert inj.base == pytest.approx(-0.021)
+
+
 def test_unknown_contract_raises() -> None:
     async def _run() -> None:
         with pytest.raises(ExtractorError, match="unknown Cociter contract"):

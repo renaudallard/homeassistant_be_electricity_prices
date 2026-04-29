@@ -101,6 +101,29 @@ EnergyRates = FixedRates | VariableRates | DynamicRates
 
 
 @dataclass(frozen=True, kw_only=True)
+class InjectionRates:
+    """Injection (solar feed-in) compensation, in EUR/kWh.
+
+    Belgian residential injection is exempt from VAT, so values here are
+    NEVER VAT-incl regardless of the consumption snapshot's vat_rate. At
+    least one of (current, factor+base) must be populated:
+
+      - ``current`` is the supplier's monthly indicative price (e.g. Eneco's
+        "Maandprijs" of 4.76 c/kWh on Power Fix). Used when no live spot is
+        available.
+      - ``factor`` and ``base`` define the hourly formula
+        ``injection_eur_per_kwh = factor * spot_eur_per_kwh + base``.
+        Belgian formulas can produce negative values at low spot - the
+        producer pays to inject - and the pricing engine respects that.
+    """
+
+    current: float | None = None
+    factor: float | None = None
+    base: float | None = None
+    formula: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
 class DsoOverlay:
     """Network + capacity costs for one DSO sub-area, in EUR/kWh and EUR/kW/yr."""
 
@@ -155,6 +178,7 @@ class SupplierSnapshot:
     source_url: str
     fetched_at_iso: str
     publication_label: str = ""
+    injection: InjectionRates | None = None
 
 
 SnapshotFetcher = Callable[[aiohttp.ClientSession, str], Awaitable[SupplierSnapshot]]

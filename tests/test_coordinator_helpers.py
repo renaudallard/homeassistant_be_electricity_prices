@@ -33,17 +33,23 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import (
     _compute_capacity,
+    _compute_injection_price,
     _compute_prosumer,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
     FixedRates,
+    InjectionRates,
     SupplierSnapshot,
     TaxOverlay,
 )
 
 
-def _snapshot(prosumer: float | None, capacity: float | None) -> SupplierSnapshot:
+def _snapshot(
+    prosumer: float | None,
+    capacity: float | None,
+    injection: InjectionRates | None = None,
+) -> SupplierSnapshot:
     return SupplierSnapshot(
         supplier="test",
         contract="test",
@@ -59,6 +65,7 @@ def _snapshot(prosumer: float | None, capacity: float | None) -> SupplierSnapsho
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002, vat_rate=0.0),
         source_url="test://",
         fetched_at_iso="2026-04-29T12:00:00+00:00",
+        injection=injection,
     )
 
 
@@ -136,3 +143,51 @@ def test_capacity_monthly_cost() -> None:
     # 60 EUR/kW/yr x 4 kW peak = 240 EUR/yr -> 20 EUR/month.
     cost = _compute_capacity(_snapshot(prosumer=None, capacity=60.0), _entry(), 4.0)
     assert cost == pytest.approx(20.0)
+
+
+def test_injection_price_returns_none_outside_injection_regime() -> None:
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        injection=InjectionRates(current=0.05),
+    )
+    # Compensation regime users don't get the injection sensor.
+    entry = _entry(solar_regime="compensation")
+    assert _compute_injection_price(snap, entry, {}) is None
+
+
+def test_injection_price_static_fallback_when_no_spot() -> None:
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        injection=InjectionRates(current=0.0476),
+    )
+    entry = _entry(solar_regime="injection")
+    # No spot prices passed -> static current is used.
+    assert _compute_injection_price(snap, entry, {}) == pytest.approx(0.0476)
+
+
+def test_injection_price_uses_formula_when_spot_available() -> None:
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        injection=InjectionRates(factor=0.97, base=-0.021, current=None),
+    )
+    entry = _entry(solar_regime="injection")
+    # 0.10 EUR/kWh spot (= 100 EUR/MWh) -> 0.97 * 0.10 - 0.021 = 0.076.
+    from homeassistant.util import dt as dt_util
+
+    now_hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    spot = {now_hour: 0.10}
+    assert _compute_injection_price(snap, entry, spot) == pytest.approx(0.076)
+    # And it can go negative at low spot - producer pays to inject.
+    spot_low = {now_hour: 0.005}
+    assert _compute_injection_price(snap, entry, spot_low) == pytest.approx(
+        0.97 * 0.005 - 0.021
+    )
+
+
+def test_injection_price_returns_none_when_no_data() -> None:
+    snap = _snapshot(prosumer=None, capacity=None, injection=None)
+    entry = _entry(solar_regime="injection")
+    assert _compute_injection_price(snap, entry, {}) is None

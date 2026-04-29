@@ -52,6 +52,7 @@ from .base import (
     EnergyRates,
     ExtractorError,
     FixedRates,
+    InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
@@ -119,6 +120,7 @@ def parse_snapshot(text: str, contract_id: str, source_url: str) -> SupplierSnap
         source_url=source_url,
         fetched_at_iso=datetime.now(UTC).isoformat(timespec="seconds"),
         publication_label=_extract_publication_month(text),
+        injection=_extract_injection(text, contract_id),
     )
 
 
@@ -342,6 +344,76 @@ def _extract_taxes(text: str) -> TaxOverlay:
         ),
         energy_fund_eur_per_month=to_float(fund.group(1)) if fund else 0.0,
         vat_rate=0.0,
+    )
+
+
+def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
+    """Parse the injection block of an Eneco tariff card.
+
+    Layout (every contract):
+
+      INJECTIE / VALORISATIE
+       ... [optional 'Zie afname' recap block on Power Dynamic] ...
+       INJECTIE
+        <c/kWh value(s)> Geschatte jaarprijs
+        [<c/kWh value(s)> Maandprijs]                    (Fix/Flex only)
+        <factor> X BELPEX[-H] [+-] <base> Tariefformule
+
+    Power Fix and Flex use Belpex monthly; Power Dynamic uses Belpex-H
+    (hourly). Injection is VAT-exempt for residential, so values are
+    EUR/kWh = c/kWh / 100.
+    """
+    anchor = re.search(r"INJECTIE\s*/\s*VALORISATIE", text)
+    if not anchor:
+        return None
+    section = text[anchor.end() :]
+    # Restrict to the section before the next ALL-CAPS heading so unrelated
+    # blocks ('ENERGIEDELEN', 'BELASTINGEN', ...) don't pollute the matches.
+    cutoff = re.search(
+        r"\n(?:ENERGIEDELEN|BELASTINGEN|TAXES|De opgewekte|Voorwaarden)", section
+    )
+    if cutoff:
+        section = section[: cutoff.start()]
+
+    # Numeric prefix only: dodges "Zie afname Geschatte jaarprijs" lines on
+    # Power Dynamic (the Zie-afname block is the consumption recap).
+    maand = re.search(rf"((?:{_NUM}\s+){{1,4}}){_WS}*Maandprijs", section)
+    yearly = re.search(rf"((?:{_NUM}\s+){{1,4}}){_WS}*Geschatte jaarprijs", section)
+    formula = re.search(
+        r"(0,\d+)\s*X\s*BELPEX[\w\-]*\s*([+-])\s*(\d+(?:,\d+)?)",
+        section,
+    )
+
+    def _first_num(m: re.Match[str] | None) -> float | None:
+        if m is None:
+            return None
+        first = re.search(_NUM, m.group(1))
+        return to_float(first.group(0)) if first else None
+
+    current_cents = _first_num(maand)
+    if current_cents is None:
+        current_cents = _first_num(yearly)
+
+    factor: float | None = None
+    base: float | None = None
+    if formula:
+        factor_pdf = to_float(formula.group(1))
+        sign = -1.0 if formula.group(2) == "-" else 1.0
+        base_pdf_cents = to_float(formula.group(3)) * sign
+        # PDF formula yields c/kWh (no VAT) from BELPEX in EUR/MWh; spot is
+        # EUR/kWh = EUR/MWh / 1000:
+        #   factor_eur_kwh = factor_pdf * 1000 / 100 = factor_pdf * 10
+        #   base_eur_kwh   = base_cents / 100
+        factor = factor_pdf * 10.0
+        base = base_pdf_cents / 100.0
+
+    if current_cents is None and factor is None:
+        return None
+    return InjectionRates(
+        current=current_cents / 100.0 if current_cents is not None else None,
+        factor=factor,
+        base=base,
+        formula=formula.group(0) if formula else None,
     )
 
 

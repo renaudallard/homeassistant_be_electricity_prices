@@ -67,6 +67,7 @@ from .const import (
     METER_MONO,
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
+    SOLAR_REGIME_INJECTION,
     STORAGE_VERSION,
     UPDATE_INTERVAL_MINUTES,
 )
@@ -81,6 +82,7 @@ from .providers.base import (
     DsoOverlay,
     EnergyRates,
     FixedRates,
+    InjectionRates,
     TaxOverlay,
     VariableRates,
 )
@@ -104,6 +106,11 @@ class CoordinatorData:
     monthly_peak_month: date | None = None
     capacity_cost_eur: float = 0.0
     prosumer_cost_eur: float = 0.0
+    # EUR/kWh injection price for the current hour. None when:
+    #   - the user is not on the injection regime, or
+    #   - the snapshot's injection block has no usable data (formula needs
+    #     spot but contract is variable so we don't fetch ENTSO-E).
+    injection_price_eur_per_kwh: float | None = None
 
 
 class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -184,6 +191,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             capacity_cost = _compute_capacity(self._snapshot, self.entry, self._peak_kw)
 
         prosumer_cost = _compute_prosumer(self._snapshot, self.entry)
+        injection_price = _compute_injection_price(
+            self._snapshot, self.entry, spot_prices
+        )
 
         await self._save_persistent()
 
@@ -198,6 +208,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             monthly_peak_month=self._peak_month,
             capacity_cost_eur=capacity_cost,
             prosumer_cost_eur=prosumer_cost,
+            injection_price_eur_per_kwh=injection_price,
         )
 
     async def _maybe_refresh_snapshot(self) -> None:
@@ -336,6 +347,41 @@ def _compute_capacity(
     return peak_kw * overlay.capacity_eur_per_kw_year / 12.0
 
 
+def _compute_injection_price(
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    spot_prices: dict[datetime, float],
+) -> float | None:
+    """Current-hour injection price in EUR/kWh for HA Energy's price entity.
+
+    Only returned when the user is on the injection regime AND the supplier's
+    snapshot has injection data. Prefers the formula+spot when a spot is
+    available (dynamic contracts), otherwise falls back to the snapshot's
+    static "current" indicative (Eneco Fix/Flex monthly value).
+    """
+    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
+        return None
+    inj = snapshot.injection
+    if inj is None:
+        return None
+    # Hourly path: pick the spot for the current hour if we have one.
+    if inj.factor is not None and inj.base is not None and spot_prices:
+        now_hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+        spot = spot_prices.get(now_hour)
+        if spot is None:
+            # ENTSO-E publishes hour-aligned values; if today's curve doesn't
+            # have our hour (rare DST / publication-lag edge), fall back to
+            # the temporally nearest hour we have.
+            nearest = min(
+                spot_prices.keys(),
+                key=lambda h: abs((h - now_hour).total_seconds()),
+            )
+            spot = spot_prices[nearest]
+        return inj.factor * spot + inj.base
+    # Static fallback: the supplier's printed monthly indicative.
+    return inj.current
+
+
 def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
     """Monthly prosumer (compensation regime) cost in EUR.
 
@@ -369,7 +415,7 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
 # the new field. Loading a snapshot whose schema_version is below this
 # raises in _snapshot_from_dict; async_load_persistent then discards the
 # cache and the coordinator's first refresh repopulates from the supplier.
-_SNAPSHOT_SCHEMA_VERSION = 2
+_SNAPSHOT_SCHEMA_VERSION = 3
 
 
 def _snapshot_to_dict(snap: SupplierSnapshot, fetched_at: datetime) -> dict[str, Any]:
@@ -385,6 +431,7 @@ def _snapshot_to_dict(snap: SupplierSnapshot, fetched_at: datetime) -> dict[str,
         "source_url": snap.source_url,
         "fetched_at_iso": snap.fetched_at_iso,
         "publication_label": snap.publication_label,
+        "injection": snap.injection.__dict__ if snap.injection else None,
     }
 
 
@@ -405,6 +452,7 @@ def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
         energy = DynamicRates(**energy_args)
     else:
         raise ValueError(f"unknown energy kind {energy_kind!r}")
+    injection_data = data.get("injection")
     return SupplierSnapshot(
         supplier=data["supplier"],
         contract=data["contract"],
@@ -414,6 +462,7 @@ def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
         source_url=data["source_url"],
         fetched_at_iso=data["fetched_at_iso"],
         publication_label=data.get("publication_label", ""),
+        injection=InjectionRates(**injection_data) if injection_data else None,
     )
 
 

@@ -126,6 +126,9 @@
       },
       "prosumer_cost": {
         "name": "Prosumentkost"
+      },
+      "injection_price": {
+        "name": "Injectieprijs"
       }
     }
   }

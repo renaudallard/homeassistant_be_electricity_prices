@@ -52,6 +52,7 @@ from .base import (
     DynamicRates,
     EnergyRates,
     ExtractorError,
+    InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
@@ -100,6 +101,32 @@ def parse_snapshot(
         source_url=source_url,
         fetched_at_iso=datetime.now(UTC).isoformat(timespec="seconds"),
         publication_label=publication_label,
+        injection=_extract_injection(text),
+    )
+
+
+def _extract_injection(text: str) -> InjectionRates | None:
+    """Parse Cociter's injection formula.
+
+    The variable PDF prints ``(0,097 x BELPEX – 2,1)`` (hourly, hTVA).
+    The dynamic PDF prints ``(0,097 x QUARTER HOURLY BELPEX – 2,1)``.
+    Injection is VAT-exempt for residential.
+    """
+    formula = re.search(
+        r"(?:Tout compteur[^\n]*|Compteur SMR3)\s*"
+        r"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
+        r"[–—\-]\s*([\d,]+)\)",
+        text,
+    )
+    if not formula:
+        return None
+    factor_pdf = to_float(formula.group(1))
+    base_pdf_cents = -to_float(formula.group(2))
+    return InjectionRates(
+        current=None,
+        factor=factor_pdf * 10.0,
+        base=base_pdf_cents / 100.0,
+        formula=formula.group(0),
     )
 
 

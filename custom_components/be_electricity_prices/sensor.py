@@ -53,6 +53,7 @@ from .const import (
     DOMAIN,
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
+    SOLAR_REGIME_INJECTION,
 )
 from .coordinator import BePricesCoordinator, CoordinatorData
 from .pricing import PriceBreakdown
@@ -203,6 +204,17 @@ PROSUMER_SENSORS: tuple[BePriceSensorDescription, ...] = (
     ),
 )
 
+INJECTION_SENSORS: tuple[BePriceSensorDescription, ...] = (
+    BePriceSensorDescription(
+        key="injection_price",
+        translation_key="injection_price",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=lambda d: d.injection_price_eur_per_kwh,
+    ),
+)
+
 CAPACITY_SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="capacity_cost",
@@ -243,9 +255,11 @@ async def async_setup_entry(
         solar_kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
     except (TypeError, ValueError):
         solar_kva = 0.0
-    on_compensation = entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_COMPENSATION
-    if solar_kva > 0.0 and on_compensation:
+    regime = entry.data.get(CONF_SOLAR_REGIME)
+    if solar_kva > 0.0 and regime == SOLAR_REGIME_COMPENSATION:
         descriptions.extend(PROSUMER_SENSORS)
+    if regime == SOLAR_REGIME_INJECTION:
+        descriptions.extend(INJECTION_SENSORS)
 
     async_add_entities(BePriceSensor(coordinator, desc) for desc in descriptions)
 

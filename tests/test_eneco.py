@@ -168,3 +168,25 @@ def test_dynamic_extracts_factor_and_base() -> None:
 def test_dynamic_publication_label_present() -> None:
     snap = parse_snapshot(_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
     assert snap.publication_label  # non-empty
+
+
+def test_fix_extracts_injection_rates() -> None:
+    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    inj = snap.injection
+    assert inj is not None
+    # Power Fix prints "Maandprijs 4,76 c/kWh" + formula "0,08 X BELPEX -2,65".
+    assert inj.current == pytest.approx(0.0476)
+    assert inj.factor == pytest.approx(0.8)  # 0.08 * 10
+    assert inj.base == pytest.approx(-0.0265)  # -2.65 / 100
+    assert inj.formula is not None and "BELPEX" in inj.formula
+
+
+def test_dynamic_extracts_injection_rates() -> None:
+    snap = parse_snapshot(_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
+    inj = snap.injection
+    assert inj is not None
+    # Power Dynamic formula: "0,1 X BELPEX-H -1,188". No "Maandprijs" - falls
+    # back to "Geschatte jaarprijs" 5,92 c/kWh.
+    assert inj.factor == pytest.approx(1.0)
+    assert inj.base == pytest.approx(-0.01188)
+    assert inj.current == pytest.approx(0.0592)

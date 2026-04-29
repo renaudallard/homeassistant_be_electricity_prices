@@ -126,6 +126,9 @@
       },
       "prosumer_cost": {
         "name": "Coût prosumer"
+      },
+      "injection_price": {
+        "name": "Prix d'injection"
       }
     }
   }
