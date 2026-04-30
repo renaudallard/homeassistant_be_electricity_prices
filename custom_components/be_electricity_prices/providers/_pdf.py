@@ -107,12 +107,20 @@ def extract_pdf_text_layout(payload: bytes) -> str:
     walks the underlying pdfminer character stream and reassembles rows
     using glyph coordinates, so each DSO row comes out as one line with
     every numeric column in the right order.
+
+    Pages are passed through ``dedupe_chars()`` first: TotalEnergies
+    occasionally publishes cards with duplicated glyphs stacked at the
+    same coordinates (e.g. ORES Namur ECO band rendered as ``55,,09``
+    instead of ``5,09`` in the April-2026 myDrive Wallonia card). The
+    dedupe drops those overlapped copies before text reconstruction.
     """
     try:
         import pdfplumber
 
         with pdfplumber.open(BytesIO(payload)) as pdf:
-            return "\n".join((page.extract_text() or "") for page in pdf.pages)
+            return "\n".join(
+                (page.dedupe_chars().extract_text() or "") for page in pdf.pages
+            )
     except Exception as err:
         raise ExtractorError(f"PDF layout parse error: {err}") from err
 
