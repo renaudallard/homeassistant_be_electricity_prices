@@ -191,3 +191,39 @@ def test_injection_price_returns_none_when_no_data() -> None:
     snap = _snapshot(prosumer=None, capacity=None, injection=None)
     entry = _entry(solar_regime="injection")
     assert _compute_injection_price(snap, entry, {}) is None
+
+
+def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:
+    # Sibelga has no per-kVA prosumer fee and no per-kW capacity fee.
+    # A Brussels prosumer (smart meter on injection regime) must therefore
+    # pay nothing on those lines, regardless of inverter capacity or peak.
+    sibelga = DsoOverlay(
+        distribution_single=0.0996,
+        distribution_peak=0.0996,
+        distribution_offpeak=0.0753,
+        transport=0.0227,
+    )
+    snap = SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.18),
+        dsos={"sibelga": sibelga},
+        taxes=TaxOverlay(
+            federal_excise=0.05, energy_contribution=0.002, brussels_renewables=0.0265
+        ),
+        source_url="test://",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+        injection=InjectionRates(current=0.0476),
+    )
+    brussels_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "dso": "sibelga",
+            "solar_kva": 5.0,
+            "solar_regime": "injection",
+        },
+    )
+    assert _compute_prosumer(snap, brussels_entry) == 0.0
+    assert _compute_capacity(snap, brussels_entry, 4.0) == 0.0
+    # Supplier-side injection tariff applies uniformly across regions.
+    assert _compute_injection_price(snap, brussels_entry, {}) == pytest.approx(0.0476)
