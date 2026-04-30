@@ -595,6 +595,27 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
             base is not None and 0.0 <= base <= 0.10,
             detail=f"base={base}",
         )
+    elif kind == "TimeOfUseRates":
+        peak = getattr(energy, "peak", None)
+        transition = getattr(energy, "transition", None)
+        offpeak = getattr(energy, "offpeak", None)
+        for label, rate in (
+            ("peak", peak),
+            ("transition", transition),
+            ("offpeak", offpeak),
+        ):
+            _expect(
+                f"{prefix}: TOU {label} in [0.05, 0.50] EUR/kWh",
+                rate is not None and 0.05 <= rate <= 0.50,
+                detail=f"{label}={rate}",
+            )
+        # peak should be the most expensive band, offpeak the cheapest.
+        if peak is not None and transition is not None and offpeak is not None:
+            _expect(
+                f"{prefix}: TOU bands ordered peak >= transition >= offpeak",
+                peak >= transition >= offpeak,
+                detail=f"peak={peak}, transition={transition}, offpeak={offpeak}",
+            )
     else:
         _record(
             f"{prefix}: energy type",
