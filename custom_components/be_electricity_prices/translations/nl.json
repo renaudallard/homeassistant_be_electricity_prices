@@ -194,6 +194,28 @@
           "description": "Optioneel. Standaard: einde van de cache."
         }
       }
+    },
+    "most_expensive_window": {
+      "name": "Duurste tijdvak",
+      "description": "Geeft het duurste aaneengesloten venster van N uur in de prijstabel terug.",
+      "fields": {
+        "duration_hours": {
+          "name": "Duur",
+          "description": "Lengte van het venster in uren (afgerond op hele uren)."
+        },
+        "entry_id": {
+          "name": "Entry-ID",
+          "description": "Configuratie-entry om te targeten (optioneel)."
+        },
+        "earliest_start": {
+          "name": "Vroegste start",
+          "description": "Optioneel. Standaard: nu."
+        },
+        "latest_end": {
+          "name": "Laatste einde",
+          "description": "Optioneel. Standaard: einde van de cache."
+        }
+      }
     }
   },
   "issues": {

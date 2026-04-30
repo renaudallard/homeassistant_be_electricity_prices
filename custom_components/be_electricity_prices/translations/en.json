@@ -194,6 +194,28 @@
           "description": "Optional. Defaults to the end of the cached price table."
         }
       }
+    },
+    "most_expensive_window": {
+      "name": "Most expensive window",
+      "description": "Return the most expensive contiguous window of N hours in the upcoming price table.",
+      "fields": {
+        "duration_hours": {
+          "name": "Duration",
+          "description": "Window length in hours (rounded up to whole hours)."
+        },
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Optional config entry to target."
+        },
+        "earliest_start": {
+          "name": "Earliest start",
+          "description": "Optional. Defaults to now."
+        },
+        "latest_end": {
+          "name": "Latest end",
+          "description": "Optional. Defaults to the end of the cached price table."
+        }
+      }
     }
   },
   "issues": {

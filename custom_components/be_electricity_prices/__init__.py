@@ -49,8 +49,9 @@ type BePricesConfigEntry = ConfigEntry[BePricesCoordinator]
 
 SERVICE_REFRESH = "refresh"
 SERVICE_CHEAPEST_WINDOW = "cheapest_window"
+SERVICE_MOST_EXPENSIVE_WINDOW = "most_expensive_window"
 
-CHEAPEST_WINDOW_SCHEMA = vol.Schema(
+WINDOW_SCHEMA = vol.Schema(
     {
         vol.Required("duration_hours"): vol.All(
             vol.Coerce(float), vol.Range(min=0.5, max=48.0)
@@ -80,7 +81,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
             DOMAIN,
             SERVICE_CHEAPEST_WINDOW,
             _async_cheapest_window_service,
-            schema=CHEAPEST_WINDOW_SCHEMA,
+            schema=WINDOW_SCHEMA,
+            supports_response=SupportsResponse.ONLY,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_MOST_EXPENSIVE_WINDOW):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_MOST_EXPENSIVE_WINDOW,
+            _async_most_expensive_window_service,
+            schema=WINDOW_SCHEMA,
             supports_response=SupportsResponse.ONLY,
         )
     return True
@@ -92,6 +101,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
     if unloaded and not hass.config_entries.async_loaded_entries(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE_REFRESH)
         hass.services.async_remove(DOMAIN, SERVICE_CHEAPEST_WINDOW)
+        hass.services.async_remove(DOMAIN, SERVICE_MOST_EXPENSIVE_WINDOW)
     return unloaded
 
 
@@ -205,3 +215,9 @@ async def _async_cheapest_window_service(call: ServiceCall) -> ServiceResponse:
     """Find the cheapest contiguous N-hour window in the upcoming price table."""
     hourly, slots, earliest, latest = _resolve_window_inputs(call)
     return _find_window(hourly, slots, earliest, latest, minimize=True)
+
+
+async def _async_most_expensive_window_service(call: ServiceCall) -> ServiceResponse:
+    """Find the most-expensive contiguous N-hour window in the upcoming price table."""
+    hourly, slots, earliest, latest = _resolve_window_inputs(call)
+    return _find_window(hourly, slots, earliest, latest, minimize=False)

@@ -194,6 +194,28 @@
           "description": "Optional. Standard: Ende des Cache."
         }
       }
+    },
+    "most_expensive_window": {
+      "name": "Teuerstes Zeitfenster",
+      "description": "Liefert das teuerste zusammenhaengende N-Stunden-Fenster aus der Preistabelle.",
+      "fields": {
+        "duration_hours": {
+          "name": "Dauer",
+          "description": "Fensterlaenge in Stunden (auf volle Stunden aufgerundet)."
+        },
+        "entry_id": {
+          "name": "Entry-ID",
+          "description": "Konfigurationseintrag (optional)."
+        },
+        "earliest_start": {
+          "name": "Frueher Beginn",
+          "description": "Optional. Standard: jetzt."
+        },
+        "latest_end": {
+          "name": "Spaetestes Ende",
+          "description": "Optional. Standard: Ende des Cache."
+        }
+      }
     }
   },
   "issues": {

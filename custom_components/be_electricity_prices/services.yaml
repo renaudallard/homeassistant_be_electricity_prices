@@ -45,3 +45,44 @@ cheapest_window:
       example: "2026-05-01T08:00:00+02:00"
       selector:
         datetime:
+
+most_expensive_window:
+  name: Most expensive window
+  description: >-
+    Find the most expensive contiguous window of N hours within the
+    upcoming price table. Returns start, end, average EUR/kWh and the
+    per-hour breakdown. Useful as a guard for "don't run heavy loads
+    during the daily peak" automations.
+  fields:
+    duration_hours:
+      name: Duration
+      description: Window length in hours (rounded up to whole hours).
+      required: true
+      example: 3
+      selector:
+        number:
+          min: 0.5
+          max: 48
+          step: 0.5
+          unit_of_measurement: h
+    entry_id:
+      name: Entry ID
+      description: >-
+        Target a specific config entry. Defaults to the first loaded entry
+        when omitted (only matters if multiple suppliers are configured).
+      example: 4f3c8...
+      selector:
+        config_entry:
+          integration: be_electricity_prices
+    earliest_start:
+      name: Earliest start
+      description: Don't consider windows starting before this time. Default = now.
+      example: "2026-04-30T20:00:00+02:00"
+      selector:
+        datetime:
+    latest_end:
+      name: Latest end
+      description: Don't consider windows ending after this time.
+      example: "2026-05-01T08:00:00+02:00"
+      selector:
+        datetime:
