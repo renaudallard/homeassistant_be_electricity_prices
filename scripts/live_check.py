@@ -83,6 +83,7 @@ def _load_providers() -> tuple[
     _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
     eneco = _load("be_pkg.providers.eneco", PKG / "providers" / "eneco.py")
     cociter = _load("be_pkg.providers.cociter", PKG / "providers" / "cociter.py")
+    ecopower = _load("be_pkg.providers.ecopower", PKG / "providers" / "ecopower.py")
     engie = _load("be_pkg.providers.engie", PKG / "providers" / "engie.py")
     luminus = _load("be_pkg.providers.luminus", PKG / "providers" / "luminus.py")
     mega = _load("be_pkg.providers.mega", PKG / "providers" / "mega.py")
@@ -91,7 +92,17 @@ def _load_providers() -> tuple[
     )
     bolt = _load("be_pkg.providers.bolt", PKG / "providers" / "bolt.py")
     octaplus = _load("be_pkg.providers.octaplus", PKG / "providers" / "octaplus.py")
-    return eneco, cociter, engie, luminus, mega, totalenergies, bolt, octaplus
+    return (
+        eneco,
+        cociter,
+        ecopower,
+        engie,
+        luminus,
+        mega,
+        totalenergies,
+        bolt,
+        octaplus,
+    )
 
 
 @dataclass
@@ -205,6 +216,59 @@ async def _check_cociter(
             detail=str(snap.taxes),
         )
         _validate_energy(prefix, cid, snap.energy)
+
+
+async def _check_ecopower(
+    session: aiohttp.ClientSession, ecopower: types.ModuleType
+) -> None:
+    expected_dso_keys = {
+        "fluvius_antwerpen",
+        "fluvius_halle_vilvoorde",
+        "fluvius_imewo",
+        "fluvius_intergem",
+        "fluvius_iveka",
+        "fluvius_limburg",
+        "fluvius_west",
+        "fluvius_zenne_dijle",
+    }
+    cid = "ecopower_burgerstroom"
+    prefix = f"ecopower/{cid}"
+    try:
+        snap = await ecopower.fetch(session, cid, "flanders")
+    except Exception as err:
+        _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+        return
+    _expect(f"{prefix}: publication label", bool(snap.publication_label))
+    _expect(
+        f"{prefix}: all eight Fluvius DSOs present",
+        expected_dso_keys <= set(snap.dsos),
+        detail=f"missing: {sorted(expected_dso_keys - set(snap.dsos))}",
+    )
+    _expect(
+        f"{prefix}: federal excise > 0",
+        snap.taxes.federal_excise > 0,
+        detail=str(snap.taxes),
+    )
+    _expect(
+        f"{prefix}: flanders renewables > 0",
+        snap.taxes.flanders_renewables > 0,
+        detail=str(snap.taxes),
+    )
+    # Ecopower publishes HTVA values; vat_rate must be 0.06.
+    _expect(
+        f"{prefix}: vat_rate is 0.06",
+        snap.taxes.vat_rate == 0.06,
+        detail=str(snap.taxes),
+    )
+    _validate_energy(prefix, cid, snap.energy)
+    if "fluvius_antwerpen" in snap.dsos:
+        a = snap.dsos["fluvius_antwerpen"]
+        _expect(
+            f"{prefix}: fluvius capacity tariff in [20, 200] EUR/kW/yr",
+            a.capacity_eur_per_kw_year is not None
+            and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
+            detail=str(a),
+        )
 
 
 async def _check_luminus(
@@ -546,6 +610,7 @@ async def _check_catalogs(
         "totalenergies": {c.slug for c in modules["totalenergies"]._CONTRACTS},
         "octaplus": {c.slug for c in modules["octaplus"]._CONTRACTS},
         "cociter": {"cociter_variable", "cociter_dynamic"},
+        "ecopower": {"ecopower_burgerstroom"},
     }
     for name, mod in modules.items():
         discover = getattr(mod, "discover", None)
@@ -658,12 +723,21 @@ def _render_report(checks: Iterable[Check]) -> str:
 
 
 async def _run() -> int:
-    eneco, cociter, engie, luminus, mega, totalenergies, bolt, octaplus = (
-        _load_providers()
-    )
+    (
+        eneco,
+        cociter,
+        ecopower,
+        engie,
+        luminus,
+        mega,
+        totalenergies,
+        bolt,
+        octaplus,
+    ) = _load_providers()
     modules = {
         "eneco": eneco,
         "cociter": cociter,
+        "ecopower": ecopower,
         "engie": engie,
         "luminus": luminus,
         "mega": mega,
@@ -675,6 +749,7 @@ async def _run() -> int:
     async with aiohttp.ClientSession(timeout=timeout) as session:
         await _check_eneco(session, eneco)
         await _check_cociter(session, cociter)
+        await _check_ecopower(session, ecopower)
         await _check_engie(session, engie)
         await _check_luminus(session, luminus)
         await _check_mega(session, mega)

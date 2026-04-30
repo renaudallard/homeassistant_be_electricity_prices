@@ -46,6 +46,7 @@ from .base import (
 )
 from .bolt import EXTRACTOR as _BOLT
 from .cociter import EXTRACTOR as _COCITER
+from .ecopower import EXTRACTOR as _ECOPOWER
 from .eneco import EXTRACTOR as _ENECO
 from .engie import EXTRACTOR as _ENGIE
 from .luminus import EXTRACTOR as _LUMINUS
@@ -61,6 +62,7 @@ EXTRACTORS: dict[str, SupplierExtractor] = {
     _MEGA.id: _MEGA,
     _BOLT.id: _BOLT,
     _COCITER.id: _COCITER,
+    _ECOPOWER.id: _ECOPOWER,
     _OCTAPLUS.id: _OCTAPLUS,
 }
 
