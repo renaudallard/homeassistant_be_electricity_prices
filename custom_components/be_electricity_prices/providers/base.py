@@ -49,7 +49,7 @@ import aiohttp
 
 from ..const import REGIONS
 
-TariffKind = Literal["fixed", "variable", "dynamic"]
+TariffKind = Literal["fixed", "variable", "dynamic", "tou"]
 
 _ALL_REGIONS: frozenset[str] = frozenset(REGIONS)
 
@@ -105,7 +105,28 @@ class DynamicRates:
     yearly_fixed_fee: float = 0.0
 
 
-EnergyRates = FixedRates | VariableRates | DynamicRates
+@dataclass(frozen=True, kw_only=True)
+class TimeOfUseRates:
+    """Time-of-use energy contract: 3 slots by hour-of-day.
+
+    Belgian TOU convention (Luminus SmartFlex):
+      peak       : Mon-Fri 07:00-11:00 + 17:00-22:00 (high-cost)
+      transition : Mon-Fri 11:00-17:00              (mid-cost)
+      offpeak    : Mon-Fri 22:00-07:00 + weekends   (low-cost)
+
+    Requires a smart meter (SMR3). Like ``VariableRates``, the rates
+    can be re-published monthly; the formula field carries the
+    indexation expression if the supplier publishes one.
+    """
+
+    peak: float
+    transition: float
+    offpeak: float
+    yearly_fixed_fee: float = 0.0
+    formula: str | None = None
+
+
+EnergyRates = FixedRates | VariableRates | DynamicRates | TimeOfUseRates
 
 
 @dataclass(frozen=True, kw_only=True)

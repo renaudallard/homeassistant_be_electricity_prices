@@ -37,6 +37,7 @@ from custom_components.be_electricity_prices.pricing import (
     is_offpeak,
     network_eur_per_kwh,
     taxes_eur_per_kwh,
+    tou_slot,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
@@ -45,6 +46,7 @@ from custom_components.be_electricity_prices.providers.base import (
     FixedRates,
     SupplierSnapshot,
     TaxOverlay,
+    TimeOfUseRates,
     VariableRates,
 )
 
@@ -83,6 +85,44 @@ def test_offpeak_weekday_night() -> None:
 
 def test_offpeak_weekend_always_offpeak() -> None:
     assert is_offpeak(datetime(2026, 5, 2, 12, 0))
+
+
+# Wednesday 2026-04-29 is a non-holiday weekday for the boundary tests.
+def test_tou_slot_weekday_morning_peak() -> None:
+    assert tou_slot(datetime(2026, 4, 29, 7, 0)) == "peak"
+    assert tou_slot(datetime(2026, 4, 29, 10, 59)) == "peak"
+
+
+def test_tou_slot_weekday_midday_transition() -> None:
+    assert tou_slot(datetime(2026, 4, 29, 11, 0)) == "transition"
+    assert tou_slot(datetime(2026, 4, 29, 16, 59)) == "transition"
+
+
+def test_tou_slot_weekday_evening_peak() -> None:
+    assert tou_slot(datetime(2026, 4, 29, 17, 0)) == "peak"
+    assert tou_slot(datetime(2026, 4, 29, 21, 59)) == "peak"
+
+
+def test_tou_slot_weekday_night_offpeak() -> None:
+    assert tou_slot(datetime(2026, 4, 29, 22, 0)) == "offpeak"
+    assert tou_slot(datetime(2026, 4, 29, 6, 59)) == "offpeak"
+    assert tou_slot(datetime(2026, 4, 29, 0, 0)) == "offpeak"
+
+
+def test_tou_slot_weekend_always_offpeak() -> None:
+    # Saturday lunchtime: would be peak on a weekday, off-peak here.
+    assert tou_slot(datetime(2026, 5, 2, 9, 0)) == "offpeak"
+    assert tou_slot(datetime(2026, 5, 2, 19, 0)) == "offpeak"
+    # Sunday morning, same.
+    assert tou_slot(datetime(2026, 5, 3, 8, 0)) == "offpeak"
+
+
+def test_energy_tou_dispatches_by_slot() -> None:
+    e = TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10)
+    assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 9), None) == 0.30
+    assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 13), None) == 0.20
+    assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 23), None) == 0.10
+    assert energy_eur_per_kwh(e, datetime(2026, 5, 2, 9), None) == 0.10  # weekend
 
 
 def test_energy_fixed_single() -> None:

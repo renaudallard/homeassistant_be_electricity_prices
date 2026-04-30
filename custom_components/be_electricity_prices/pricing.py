@@ -56,6 +56,7 @@ from .providers.base import (
     FixedRates,
     SupplierSnapshot,
     TaxOverlay,
+    TimeOfUseRates,
     VariableRates,
 )
 
@@ -79,6 +80,26 @@ def is_offpeak(when: datetime) -> bool:
     return when.hour < 7 or when.hour >= 22
 
 
+TouSlot = Literal["peak", "transition", "offpeak"]
+
+
+def tou_slot(when: datetime) -> TouSlot:
+    """Map a local datetime to its Belgian TOU slot.
+
+    Slot definition is Luminus SmartFlex's; the same windows are used
+    by Engie Empower Flextime if/when that gets supported. Weekends
+    are entirely off-peak, matching the bi-hourly convention.
+    """
+    if when.weekday() >= 5:
+        return "offpeak"
+    h = when.hour
+    if h < 7 or h >= 22:
+        return "offpeak"
+    if 11 <= h < 17:
+        return "transition"
+    return "peak"  # 07-11 + 17-22
+
+
 def energy_eur_per_kwh(
     energy: EnergyRates,
     when: datetime,
@@ -98,6 +119,13 @@ def energy_eur_per_kwh(
         if spot_eur_per_kwh is None:
             raise ValueError("dynamic tariff needs a spot price")
         return energy.factor * spot_eur_per_kwh + energy.base
+    if isinstance(energy, TimeOfUseRates):
+        slot = tou_slot(when)
+        if slot == "peak":
+            return energy.peak
+        if slot == "transition":
+            return energy.transition
+        return energy.offpeak
     raise TypeError(f"unknown energy rates type: {type(energy).__name__}")
 
 
