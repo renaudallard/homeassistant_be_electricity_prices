@@ -245,10 +245,15 @@ def _extract_taxes(text: str) -> TaxOverlay:
         re.S,
     )
 
-    # The "Taxes et redevances" block lists three numbers on one line:
+    # The "Taxes et redevances" block lists three values on one line:
     #   Cotisation énergie | Droit d'accises spécial | Redevance de raccordement
+    # Anchor on the literal label trio so a future footnote/inserted
+    # number above the values can't be mistaken for the row.
     taxes_block = re.search(
-        r"Taxes et redevances.*?([\d,]+)\s+([\d,]+)\s+([\d,]+)",
+        r"Cotisation énergie.*?"
+        r"Droit d'accises spécial.*?"
+        r"Redevance de raccordement.*?"
+        r"([\d,]+)\s+([\d,]+)\s+([\d,]+)",
         text,
         re.S,
     )
