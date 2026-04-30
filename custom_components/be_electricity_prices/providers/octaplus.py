@@ -173,6 +173,19 @@ def _extract_yearly_fee(text: str) -> float:
     return to_float(match.group(1)) if match else 0.0
 
 
+def _vat_multiplier(text: str) -> float:
+    """Read the VAT % from the card header ('Tarifs 6% TVAC').
+
+    Falls back to 1.06 (the current Belgian residential rate) if the
+    header has been reshaped, but reads it whenever it can so the
+    parser tracks future VAT changes without a code update.
+    """
+    match = re.search(r"Tarifs\s+(\d+(?:[.,]\d+)?)\s*%\s*TVAC", text)
+    if match:
+        return 1.0 + to_float(match.group(1)) / 100.0
+    return 1.06
+
+
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     yearly_fee = _extract_yearly_fee(text)
     if kind == "dynamic":
@@ -191,14 +204,14 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         factor_pdf = to_float(formula.group(1))
         sign = -1.0 if formula.group(2) in ("-", "–", "—") else 1.0
         base_pdf_eur_mwh = sign * to_float(formula.group(3))
-        # Formula is HTVA (6% residential VAT in Belgium):
-        #   c€/kWh = factor_pdf * Epex_eur_mwh + base_eur_mwh / 10
-        # then VAT-adjust. spot in our model is EUR/kWh so:
-        #   factor_eur_kwh = factor_pdf * 1.06
-        #   base_eur_kwh   = base_eur_mwh / 1000 * 1.06
+        vat = _vat_multiplier(text)
+        # Formula is HTVA; the rest of the snapshot is TVAC, so apply
+        # the parsed VAT multiplier. spot in our model is EUR/kWh so:
+        #   factor_eur_kwh = factor_pdf * vat
+        #   base_eur_kwh   = base_eur_mwh / 1000 * vat
         return DynamicRates(
-            factor=factor_pdf * 1.06,
-            base=base_pdf_eur_mwh / 1000.0 * 1.06,
+            factor=factor_pdf * vat,
+            base=base_pdf_eur_mwh / 1000.0 * vat,
             yearly_fixed_fee=yearly_fee,
         )
 
