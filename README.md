@@ -49,6 +49,10 @@ publication and how to parse it.
 - **Tarif Impact (Wallonia)** — opt-in CWaPE 3-band distribution pricing (PIC 17–22, MEDIUM 7–11 + 22–1, ECO 1–7 + 11–17), orthogonal to the supplier tariff.
 - **Flanders capacity tariff** — monthly peak tracked from any kW sensor or a fixed value; billed against the configured Fluvius sub-area.
 - **Solar** — prosumer fee for the Walloon compensation regime (until 2030-12-31), and a per-kWh injection price entity that plugs straight into HA Energy.
+- **Year-to-date cost** — `current_year_cost` sensor reports your running bill in EUR since Jan 1 (energy × rate, injection netted per regime, fees included). Two input modes: 4 day/night meter registers, or 2 cumulative totals (the integration splits deltas into day/night via the bi-hourly schedule and persists across restarts).
+- **Cheapest / most-expensive window services** — find the optimal contiguous N-hour window in the upcoming price table for EV charging, heat-pump cycles, or peak avoidance.
+- **Tomorrow-available trigger** — `tomorrow_prices_available` binary sensor flips ON once ENTSO-E publishes the next-day curve, so dynamic automations don't fire too early.
+- **ENTSO-E key validated at setup** — the config flow hits the real endpoint with the entered token and rejects bad keys before the entry is saved.
 - **Translated UI** — English, French, Dutch and German.
 - **Self-healing** — last-known prices keep serving on outage; a repair issue surfaces if the snapshot goes stale.
 - **Catalog drift detection** — the daily live-check diffs each supplier's public catalog against the registry and opens a GitHub issue when a new product appears.
@@ -57,12 +61,12 @@ publication and how to parse it.
 
 | Supplier | Contracts | Source |
 | --- | --- | --- |
-| **Eneco** | Power Fix · Power Flex · Power Dynamic | [`providers/eneco.py`](./custom_components/be_electricity_prices/providers/eneco.py) — stable URLs at `cdn.eneco.be/downloads/nl/general/tk/BC_032_012604_NL_ENECO_POWER_<FIX\|FLEX\|DYNAMIC>.pdf`, V/W only (no Brussels) |
+| **Eneco** | Zon & Wind Vast · Zon & Wind Flex · Zon & Wind Dynamisch | [`providers/eneco.py`](./custom_components/be_electricity_prices/providers/eneco.py) — stable URLs at `cdn.eneco.be/downloads/nl/general/tk/BC_032_012604_NL_ENECO_POWER_<FIX\|FLEX\|DYNAMIC>.pdf`, V/W only (no Brussels) |
 | **Engie** | Easy Fixed · Easy Variable · Direct Online · Basic Online · Dynamic · Empower Fixed · Empower Variable · Empower Flextime *(TOU)* · Flow · Empty House | [`providers/engie.py`](./custom_components/be_electricity_prices/providers/engie.py) — Engie's public REST endpoint at `engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF`, one PDF per (contract, region) |
 | **TotalEnergies** | Electricité Fixe/Variable · Impact · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe | [`providers/totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) — stable URLs at `totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/`, parsed via `pdfplumber` (rotated columns) |
 | **Luminus** | Comfy · Comfy+ · ComfyFlex · ComfyFlex+ · MaxxFix · MaxxFlex · BasicFix · BasicFlex · SmartFlex *(TOU)* · Dynamic | [`providers/luminus.py`](./custom_components/be_electricity_prices/providers/luminus.py) — Luminus's public REST endpoint at `luminus.be/api-next/get-pricelist/`, V/W only (no Brussels for market products) |
 | **Mega** | Smart Fixed/Flex · Zen Fixed · Online Fixed/Flex · Cosy Fixed/Flex · Prepaid Fixed/Flex · Off-peak Fixed/Flex · Dynamic · Cap | [`providers/mega.py`](./custom_components/be_electricity_prices/providers/mega.py) — scrapes the public listing at `mega.be/fr/cartes-tarifaires` to resolve each `(product, region)` to its current PDF on `my.mega.be` |
-| **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty · Bolt Online · Bolt Plenty Online | [`providers/bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) — stable URLs at `files.boltenergie.be/pricelists/<fix\|var>/`, parsed via `pdfplumber` (rotated columns + Unicode line-separators) |
+| **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty Variable · Bolt Online · Bolt Plenty Online | [`providers/bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) — stable URLs at `files.boltenergie.be/pricelists/<fix\|var>/`, parsed via `pdfplumber` (rotated columns + Unicode line-separators) |
 | **Cociter** | Tarif Variable (BELIX) · Tarif Dynamique (quarter-hourly BELPEX) | [`providers/cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) — monthly cards `RCVar_YMR_Coop-YYMM-fr.pdf` / `RCDyn_SM3_Coop-YYMM-fr.pdf` |
 | **OCTA+** | Fixed · Eco Fixed · Smart Variable · Flux · Eco Flux · Dynamic · Eco Dynamic | [`providers/octaplus.py`](./custom_components/be_electricity_prices/providers/octaplus.py) — stable URLs at `files.octaplus.be/tariffs/E_OCTA_<PRODUCT>_RE_<VL\|WL>_FR.pdf`, parsed via word-coordinate alignment (heavy character spacing in the tax block) — Flanders + Wallonia only |
 
@@ -103,7 +107,9 @@ All sensors share one device per config entry.
 | `energy_component` | Energy-only EUR/kWh now (VAT-inclusive). |
 | `network_component` | Distribution + transport EUR/kWh now (VAT-inclusive). |
 | `taxes_component` | Levies EUR/kWh now (VAT-inclusive). |
-| `current_year_cost` | Running bill **since Jan 1 of the current year** (or since first refresh, whichever is later). Configure once in the **Energy meters** step, two ways: (a) point at the four day/night register sensors directly (preferred when available — anchored to a Jan-1 baseline so `current − baseline` resets every year); or (b) point at single cumulative consumption / injection sensors (the integration splits deltas into day/night buckets via the bi-hourly schedule, persists them across restarts, and zeroes them every Jan 1). Resets to ~`fixed_fee + 12 × energy_fund` on Jan 1 (annual fees stay full-year). Goes negative under Walloon compensation when injection > consumption (uncapped — surplus is theoretically credited at the consumption rate, even though most suppliers floor the actual bill at zero). Always numeric: missing meter inputs and dynamic / TOU contracts collapse to the fees-only floor instead of going unknown. |
+| `fixed_fee_eur_per_year` | Supplier's flat annual subscription fee (EUR/year), parsed from the tariff card. |
+| `energy_fund_eur_per_month` | Flemish Energiefonds in EUR/month (€0 outside Flanders, and €0 in Flanders for domiciled customers). |
+| `current_year_cost` | Running bill **since Jan 1 of the current year** (or since first refresh, whichever is later). Configure once in the **Energy meters** step, two ways: (a) point at the four day/night register sensors directly (preferred when available — anchored to a Jan-1 baseline so `current − baseline` resets every year); or (b) point at single cumulative consumption / injection sensors (the integration splits deltas into day/night buckets via the bi-hourly schedule, persists them across restarts, and zeroes them every Jan 1). On Jan 1 the sensor snaps to the **fees-only floor** = `yearly_fixed_fee + 12 × energy_fund_eur_per_month + 12 × prosumer_cost` (annual fees stay full-year). Goes negative under Walloon compensation when injection > consumption (uncapped — surplus is theoretically credited at the consumption rate, even though most suppliers floor the actual bill at zero). Always numeric: missing meter inputs and dynamic / TOU contracts collapse to the same fees-only floor instead of going unknown. |
 | `tomorrow_prices_available` | Binary sensor. ON once the price table covers at least one hour with tomorrow's local date. Useful as a trigger for dynamic-tariff automations that should only fire after ENTSO-E publishes the next-day curve (~13:00 CET); always ON for fixed/variable contracts. |
 
 ### Conditional
@@ -135,7 +141,7 @@ Assistant installs them automatically from the manifest.
 
 ## Configuration
 
-The UI walks **up to eight steps**, depending on contract type and region.
+The UI walks **up to nine steps**, depending on contract type and region.
 No EUR values are asked — energy, DSO and tax rates all come from the
 supplier's tariff card.
 
@@ -151,7 +157,9 @@ supplier's tariff card.
    Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
    requires a smart meter; Simple and Bi-horaire follow the existing
    meter convention.
-6. **ENTSO-E API key** — only when the chosen contract is dynamic.
+6. **ENTSO-E API key** *(dynamic contract only)* — validated against the
+   real ENTSO-E endpoint at submission; bad keys are rejected before the
+   entry is saved.
 7. **Capacity tariff peak source** *(Flanders only)* — either a power sensor
    reporting your live kW draw, or a fixed kW value (default 2.5 kW, the VREG
    regulated minimum).
@@ -161,6 +169,19 @@ supplier's tariff card.
      2024-01-01**, valid until 2030-12-31. Creates `prosumer_cost`.
    - **Injection tariff** — post-2024 Walloon installations and Flemish smart
      meters. Creates `injection_price`, ready for HA Energy.
+9. **Energy meters** *(optional, all four / two fields are skippable)* —
+   feeds the `current_year_cost` sensor. Two ways to wire it:
+   - **Day/night register sensors** (4 fields): point at the cumulative
+     kWh registers from your meter. Anchored to a Jan-1 baseline so the
+     sensor reads 0 + fees right after each year rollover.
+   - **Cumulative total sensors** (2 fields): point at a single running
+     consumption sensor and a single running injection sensor. The
+     integration subscribes to state changes, splits each delta into a
+     day or night bucket via the bi-hourly schedule, and zeroes the
+     buckets every Jan 1. Useful when your P1 / digital-meter
+     integration only exposes totals (the standard HA case).
+   - When both are filled the day/night registers win. Missing inputs
+     collapse to the fees-only floor — the sensor never goes unknown.
 
 ### Getting an ENTSO-E API key
 
@@ -182,9 +203,16 @@ next refresh.
 
 ### Refresh cadence
 
-- **Supplier snapshot** — refreshed every 24 h.
+- **Supplier snapshot** — refreshed every 24 h. Multiple entries pointing
+  at the same `(supplier, contract, region)` tuple share their fetched
+  snapshot through an in-memory cache, so the same PDF is never polled twice.
 - **Spot prices** *(dynamic only)* — hourly via ENTSO-E; tomorrow's curve picked up after publication around midday CET.
 - **Monthly capacity peak** *(Flanders)* — tracked continuously, resets on the 1st of each local month.
+- **`current_year_cost`** — register baselines and bucket counters reset on
+  Jan 1 of the local calendar year, then `current_year_cost` snaps to ~fees-only.
+  Baselines top up automatically on the next refresh whenever a configured
+  meter sensor first becomes readable (no need to wait for Jan 1 if you
+  add the sensors mid-year).
 
 ### Failure mode
 
@@ -239,7 +267,7 @@ trigger:
     at: "13:30:00"  # ENTSO-E next-day curve is published around 13:00 CET
 condition:
   - condition: state
-    entity_id: binary_sensor.eneco_zon_wind_dynamisch_wallonia_tomorrow_prices_available
+    entity_id: binary_sensor.<your_entry>_tomorrow_prices_available
     state: "on"
 action:
   - service: be_electricity_prices.cheapest_window
