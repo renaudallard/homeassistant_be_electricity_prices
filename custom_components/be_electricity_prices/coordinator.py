@@ -148,6 +148,10 @@ class CoordinatorData:
     snapshot_publication: str = ""
     snapshot_age_hours: float = 0.0
     snapshot_stale: bool = False
+    # Last calendar day the snapshot's rates apply to. ``None`` means
+    # the extractor couldn't parse a validity end -- callers should
+    # fall back to "treat as valid".
+    snapshot_valid_until: date | None = None
     last_error: str = ""
     monthly_peak_kw: float = 0.0
     monthly_peak_month: date | None = None
@@ -398,6 +402,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             snapshot_publication=self._snapshot.publication_label,
             snapshot_age_hours=age,
             snapshot_stale=stale,
+            snapshot_valid_until=self._snapshot.valid_until,
             last_error=self._last_error,
             monthly_peak_kw=self._peak_kw,
             monthly_peak_month=self._peak_month,
@@ -924,7 +929,7 @@ def _compute_current_year_cost(
 # the new field. Loading a snapshot whose schema_version is below this
 # raises in _snapshot_from_dict; async_load_persistent then discards the
 # cache and the coordinator's first refresh repopulates from the supplier.
-_SNAPSHOT_SCHEMA_VERSION = 4
+_SNAPSHOT_SCHEMA_VERSION = 5
 
 
 def _snapshot_to_dict(snap: SupplierSnapshot, fetched_at: datetime) -> dict[str, Any]:
@@ -940,6 +945,7 @@ def _snapshot_to_dict(snap: SupplierSnapshot, fetched_at: datetime) -> dict[str,
         "source_url": snap.source_url,
         "fetched_at_iso": snap.fetched_at_iso,
         "publication_label": snap.publication_label,
+        "valid_until": snap.valid_until.isoformat() if snap.valid_until else None,
         "injection": snap.injection.__dict__ if snap.injection else None,
     }
 
@@ -962,6 +968,13 @@ def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
     else:
         raise ValueError(f"unknown energy kind {energy_kind!r}")
     injection_data = data.get("injection")
+    valid_until_iso = data.get("valid_until")
+    valid_until: date | None = None
+    if isinstance(valid_until_iso, str):
+        try:
+            valid_until = date.fromisoformat(valid_until_iso)
+        except ValueError:
+            valid_until = None
     return SupplierSnapshot(
         supplier=data["supplier"],
         contract=data["contract"],
@@ -971,6 +984,7 @@ def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
         source_url=data["source_url"],
         fetched_at_iso=data["fetched_at_iso"],
         publication_label=data.get("publication_label", ""),
+        valid_until=valid_until,
         injection=InjectionRates(**injection_data) if injection_data else None,
     )
 

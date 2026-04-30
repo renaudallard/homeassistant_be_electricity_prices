@@ -43,6 +43,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Literal, Protocol
 
 import aiohttp
@@ -235,6 +236,14 @@ class SupplierSnapshot:
     fetched_at_iso: str
     publication_label: str = ""
     injection: InjectionRates | None = None
+    # Last calendar day the published rates apply to (typically the last
+    # day of the supplier's pricing month). ``None`` when the extractor
+    # couldn't parse a validity period from the card. Consumers that
+    # need to know whether tomorrow's rates are *actually* the right
+    # ones (the tomorrow_prices_available binary sensor, in particular)
+    # check ``date.today() <= valid_until``; ``None`` means we don't
+    # know, so callers should fall back to "treat as available".
+    valid_until: date | None = None
 
 
 SnapshotFetcher = Callable[

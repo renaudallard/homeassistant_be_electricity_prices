@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 
 from homeassistant.util import dt as dt_util
@@ -106,3 +106,51 @@ def test_entity_uses_supplier_label_for_manufacturer() -> None:
     # only when the extractor lookup raises (unknown supplier).
     assert sensor.device_info is not None
     assert sensor.device_info["manufacturer"] == "Eneco"
+
+
+def test_entity_is_off_when_snapshot_validity_is_today() -> None:
+    """Snapshot's published validity ends today (e.g. Eneco April card on
+    April 30) -> tomorrow's prices haven't been published yet, so the
+    sensor must flip OFF even though the price table forward-fills 48h."""
+    entry = _entry()
+    today = dt_util.now().date()
+    data = _today_and_tomorrow_data(24, 24)
+    data = CoordinatorData(hourly=data.hourly, snapshot_valid_until=today)
+    coordinator = _coord(data, entry)
+    sensor = TomorrowPricesAvailable(coordinator)  # type: ignore[arg-type]
+    assert sensor.is_on is False
+
+
+def test_entity_is_on_when_snapshot_validity_covers_tomorrow() -> None:
+    entry = _entry()
+    tomorrow = dt_util.now().date() + timedelta(days=1)
+    data = _today_and_tomorrow_data(24, 24)
+    data = CoordinatorData(hourly=data.hourly, snapshot_valid_until=tomorrow)
+    coordinator = _coord(data, entry)
+    sensor = TomorrowPricesAvailable(coordinator)  # type: ignore[arg-type]
+    assert sensor.is_on is True
+
+
+def test_entity_treats_unknown_validity_as_available() -> None:
+    """``snapshot_valid_until=None`` means the extractor couldn't parse
+    a validity end. Falls back to "trust the price table" -- the sensor
+    is ON if tomorrow's hours are populated."""
+    entry = _entry()
+    data = _today_and_tomorrow_data(24, 24)
+    # snapshot_valid_until defaults to None
+    assert data.snapshot_valid_until is None
+    coordinator = _coord(data, entry)
+    sensor = TomorrowPricesAvailable(coordinator)  # type: ignore[arg-type]
+    assert sensor.is_on is True
+
+
+def test_entity_remains_off_when_validity_is_in_the_past() -> None:
+    entry = _entry()
+    yesterday = dt_util.now().date() - timedelta(days=1)
+    data = _today_and_tomorrow_data(24, 24)
+    data = CoordinatorData(hourly=data.hourly, snapshot_valid_until=yesterday)
+    coordinator = _coord(data, entry)
+    sensor = TomorrowPricesAvailable(coordinator)  # type: ignore[arg-type]
+    assert sensor.is_on is False
+    # Helps mypy stay happy while keeping the date import in scope.
+    assert yesterday < dt_util.now().date() and isinstance(yesterday, date)

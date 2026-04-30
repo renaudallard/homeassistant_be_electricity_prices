@@ -28,7 +28,10 @@
 from __future__ import annotations
 
 import asyncio
+import calendar
 import json
+import re
+from datetime import date
 from io import BytesIO
 from pathlib import Path
 
@@ -254,3 +257,127 @@ def to_float(text: str) -> float:
     for sep in _NUMERIC_SEPARATORS:
         cleaned = cleaned.replace(sep, "")
     return float(cleaned.replace(",", "."))
+
+
+# Month names recognised in publication strings, mapped to their 1-12
+# index. Each language's full name + a few common abbreviations Belgian
+# tariff cards use. The lookup key is lowercase, accent-stripped not
+# guaranteed (we accept both forms explicitly).
+_MONTH_NAMES: dict[str, int] = {
+    # Dutch
+    "januari": 1,
+    "februari": 2,
+    "maart": 3,
+    "april": 4,
+    "mei": 5,
+    "juni": 6,
+    "juli": 7,
+    "augustus": 8,
+    "september": 9,
+    "oktober": 10,
+    "november": 11,
+    "december": 12,
+    # French (with and without accents)
+    "janvier": 1,
+    "fevrier": 2,
+    "février": 2,
+    "mars": 3,
+    "avril": 4,
+    "juin": 6,
+    "juillet": 7,
+    "aout": 8,
+    "août": 8,
+    "septembre": 9,
+    "octobre": 10,
+    "novembre": 11,
+    "decembre": 12,
+    "décembre": 12,
+    # English (some cards mix languages on cross-region documents)
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "october": 10,
+}
+
+
+_VALID_KEYWORDS = ("geldig", "valable", "validit", "valid ")
+
+
+def parse_valid_until(text: str) -> date | None:
+    """Best-effort parse of a "valid until" date from a tariff card.
+
+    Anchored on a validity keyword (``geldig``, ``valable``,
+    ``validit``, ``valid``) -- the parser only considers dates that
+    appear within a short window (~200 chars) **after** one of these
+    keywords. This avoids picking up unrelated dates elsewhere in the
+    document (contract end dates, regulatory dates, footer
+    boilerplate).
+
+    Inside each window we try, in order:
+
+      1. Spelled-out ``<day> <month-name> <year>``
+         ("30 april 2026", "30 avril 2026").
+      2. Numeric ``DD/MM/YYYY``.
+      3. Bare ``<month-name> <year>``, returning the last day of that
+         month -- e.g. "Tariefkaart april 2026" implies "valid until
+         the last day of April".
+
+    Returns the latest matching date across all windows, or ``None``
+    when no pattern matches. ``None`` is the right signal for callers
+    to fall back to "treat as available" rather than locking the entry.
+    """
+    lower = text.lower()
+    name_alt = "|".join(re.escape(m) for m in _MONTH_NAMES)
+    spelled_re = re.compile(rf"\b(\d{{1,2}})\s+({name_alt})\s+(20\d{{2}})\b")
+    numeric_re = re.compile(r"(\d{1,2})/(\d{1,2})/(20\d{2})")
+    bare_month_re = re.compile(rf"\b({name_alt})\s+(20\d{{2}})\b")
+
+    # Build the set of windows to scan: every occurrence of a validity
+    # keyword + the next ~200 chars. Stops at the next validity
+    # keyword to avoid bleed between adjacent statements.
+    windows: list[str] = []
+    for keyword in _VALID_KEYWORDS:
+        start = 0
+        while True:
+            idx = lower.find(keyword, start)
+            if idx < 0:
+                break
+            windows.append(lower[idx : idx + 200])
+            start = idx + len(keyword)
+
+    if not windows:
+        return None
+
+    candidates: list[date] = []
+    for window in windows:
+        for match in spelled_re.finditer(window):
+            day, month_name, year = match.group(1), match.group(2), match.group(3)
+            try:
+                candidates.append(date(int(year), _MONTH_NAMES[month_name], int(day)))
+            except ValueError:
+                continue
+        for match in numeric_re.finditer(window):
+            day, month, year = match.group(1), match.group(2), match.group(3)
+            try:
+                candidates.append(date(int(year), int(month), int(day)))
+            except ValueError:
+                continue
+
+    if candidates:
+        return max(candidates)
+
+    # Fall back to bare "<month> <year>" inside any validity window.
+    for window in windows:
+        for match in bare_month_re.finditer(window):
+            month_name, year = match.group(1), match.group(2)
+            try:
+                month = _MONTH_NAMES[month_name]
+                last_day = calendar.monthrange(int(year), month)[1]
+                candidates.append(date(int(year), month, last_day))
+            except (KeyError, ValueError):
+                continue
+    return max(candidates) if candidates else None

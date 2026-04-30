@@ -172,6 +172,21 @@ def test_dynamic_publication_label_present() -> None:
     assert snap.publication_label  # non-empty
 
 
+def test_extracts_valid_until_from_geldig_line() -> None:
+    """Eneco's April-2026 cards print "Geldig van 1 april 2026 t.e.m
+    30 april 2026"; the snapshot must surface the end date so the
+    tomorrow_prices_available binary sensor flips OFF on April 30."""
+    from datetime import date
+
+    for fixture, contract in (
+        ("eneco_fix.pdf", "power_fix"),
+        ("eneco_flex.pdf", "power_flex"),
+        ("eneco_dyn.pdf", "power_dynamic"),
+    ):
+        snap = parse_snapshot(_text(fixture), contract, f"test://{fixture}")
+        assert snap.valid_until == date(2026, 4, 30), fixture
+
+
 def test_fix_extracts_injection_rates() -> None:
     snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
     inj = snap.injection

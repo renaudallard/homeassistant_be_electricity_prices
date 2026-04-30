@@ -55,7 +55,7 @@ from datetime import UTC, datetime
 import aiohttp
 
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import USER_AGENT, fetch_pdf_text_layout, to_float
+from ._pdf import USER_AGENT, fetch_pdf_text_layout, parse_valid_until, to_float
 from .base import (
     Contract,
     DsoOverlay,
@@ -270,6 +270,7 @@ def parse_snapshot(
         source_url=source_url,
         fetched_at_iso=datetime.now(UTC).isoformat(timespec="seconds"),
         publication_label=publication_label,
+        valid_until=parse_valid_until(text),
         injection=injection,
     )
 

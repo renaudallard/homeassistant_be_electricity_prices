@@ -47,9 +47,27 @@ from .providers.base import ExtractorError
 
 
 def _has_tomorrow(data: CoordinatorData) -> bool:
+    """Whether the integration knows tomorrow's *actually-billable* rates.
+
+    Two gates, both required:
+
+      1. The price table has at least one hour with tomorrow's local
+         date. For dynamic contracts this only happens after ENTSO-E
+         publishes the next-day curve; for fixed/variable/TOU contracts
+         the coordinator forward-fills 48 hours so this is always true.
+      2. The supplier snapshot's published validity period covers
+         tomorrow. For monthly variable cards (Eneco, Mega...) the
+         month-end rollover invalidates the previously-extrapolated
+         "tomorrow" hours -- the supplier hasn't published the new
+         month's rates yet, so we shouldn't claim they're available.
+         When the extractor couldn't parse a validity end (None), we
+         skip this gate and trust the price table alone.
+    """
     if not data.hourly:
         return False
     tomorrow = dt_util.now().date() + timedelta(days=1)
+    if data.snapshot_valid_until is not None and tomorrow > data.snapshot_valid_until:
+        return False
     return any(dt_util.as_local(h).date() == tomorrow for h in data.hourly)
 
 

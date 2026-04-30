@@ -44,7 +44,7 @@ from datetime import UTC, datetime
 
 import aiohttp
 
-from ._pdf import USER_AGENT, fetch_pdf_text, to_float
+from ._pdf import USER_AGENT, fetch_pdf_text, parse_valid_until, to_float
 from .base import (
     Contract,
     DsoOverlay,
@@ -149,6 +149,7 @@ def parse_snapshot(text: str, contract_id: str, source_url: str) -> SupplierSnap
         source_url=source_url,
         fetched_at_iso=datetime.now(UTC).isoformat(timespec="seconds"),
         publication_label=_extract_publication_month(text),
+        valid_until=parse_valid_until(text),
         injection=_extract_injection(text, contract_id),
     )
 
