@@ -54,7 +54,7 @@ publication and how to parse it.
 
 | Supplier | Contracts | Source |
 | --- | --- | --- |
-| **Eneco** | Power Fix · Power Flex · Power Dynamic | [Eneco PDF tariff cards](https://eneco.be/nl/elektriciteit-gas/tariefkaarten/) |
+| **Eneco** | Power Fix · Power Flex · Power Dynamic | [`providers/eneco.py`](./custom_components/be_electricity_prices/providers/eneco.py) — stable URLs at `cdn.eneco.be/downloads/nl/general/tk/BC_032_012604_NL_ENECO_POWER_<FIX\|FLEX\|DYNAMIC>.pdf`, V/W only (no Brussels) |
 | **Engie** | Easy Fixed · Easy Variable · Direct Online · Basic Online · Dynamic · Empower Fixed · Empower Variable · Flow · Empty House | [`providers/engie.py`](./custom_components/be_electricity_prices/providers/engie.py) — Engie's public REST endpoint at `engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF`, one PDF per (contract, region) |
 | **TotalEnergies** | Electricité Fixe/Variable · Impact · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe | [`providers/totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) — stable URLs at `totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/`, parsed via `pdfplumber` (rotated columns) |
 | **Luminus** | Comfy · Comfy+ · ComfyFlex · MaxxFix · BasicFix · BasicFlex · Dynamic | [`providers/luminus.py`](./custom_components/be_electricity_prices/providers/luminus.py) — Luminus's public REST endpoint at `luminus.be/api-next/get-pricelist/`, V/W only (no Brussels for market products) |
