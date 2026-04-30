@@ -168,6 +168,28 @@
     "refresh": {
       "name": "Refresh",
       "description": "Force every Belgian Electricity Prices entry to re-fetch its supplier snapshot and ENTSO-E spot prices immediately, instead of waiting for the next 24h tick."
+    },
+    "cheapest_window": {
+      "name": "Cheapest window",
+      "description": "Return the cheapest contiguous window of N hours in the upcoming price table.",
+      "fields": {
+        "duration_hours": {
+          "name": "Duration",
+          "description": "Window length in hours (rounded up to whole hours)."
+        },
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Optional config entry to target."
+        },
+        "earliest_start": {
+          "name": "Earliest start",
+          "description": "Optional. Defaults to now."
+        },
+        "latest_end": {
+          "name": "Latest end",
+          "description": "Optional. Defaults to the end of the cached price table."
+        }
+      }
     }
   },
   "issues": {

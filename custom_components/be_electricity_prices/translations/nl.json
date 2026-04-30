@@ -168,6 +168,28 @@
     "refresh": {
       "name": "Vernieuwen",
       "description": "Forceer elke Belgian Electricity Prices invoer om de leveranciersmomentopname en ENTSO-E spotprijzen onmiddellijk opnieuw op te halen, in plaats van te wachten op de volgende 24u-cyclus."
+    },
+    "cheapest_window": {
+      "name": "Goedkoopste tijdvak",
+      "description": "Geeft het goedkoopste aaneengesloten venster van N uur in de prijstabel terug.",
+      "fields": {
+        "duration_hours": {
+          "name": "Duur",
+          "description": "Lengte van het venster in uren (afgerond op hele uren)."
+        },
+        "entry_id": {
+          "name": "Entry-ID",
+          "description": "Configuratie-entry om te targeten (optioneel)."
+        },
+        "earliest_start": {
+          "name": "Vroegste start",
+          "description": "Optioneel. Standaard: nu."
+        },
+        "latest_end": {
+          "name": "Laatste einde",
+          "description": "Optioneel. Standaard: einde van de cache."
+        }
+      }
     }
   },
   "issues": {

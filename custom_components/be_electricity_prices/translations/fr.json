@@ -168,6 +168,28 @@
     "refresh": {
       "name": "Rafraichir",
       "description": "Force chaque entree Belgian Electricity Prices a re-recuperer son releve fournisseur et les prix spot ENTSO-E immediatement, sans attendre le prochain cycle de 24h."
+    },
+    "cheapest_window": {
+      "name": "Plage la moins chere",
+      "description": "Renvoie la plage contigue de N heures la moins chere dans la table de prix.",
+      "fields": {
+        "duration_hours": {
+          "name": "Duree",
+          "description": "Longueur de la plage en heures (arrondie a l'heure)."
+        },
+        "entry_id": {
+          "name": "ID de l'entree",
+          "description": "Entree de configuration ciblee (optionnel)."
+        },
+        "earliest_start": {
+          "name": "Debut au plus tot",
+          "description": "Optionnel. Par defaut: maintenant."
+        },
+        "latest_end": {
+          "name": "Fin au plus tard",
+          "description": "Optionnel. Par defaut: fin de la table en cache."
+        }
+      }
     }
   },
   "issues": {
