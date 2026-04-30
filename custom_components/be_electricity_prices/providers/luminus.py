@@ -110,6 +110,20 @@ def _document_url(slug: str, region: str) -> str:
     )
 
 
+async def discover(
+    session: aiohttp.ClientSession,  # noqa: ARG001 - no public catalog endpoint
+) -> set[str]:
+    """Return an empty set: Luminus has no public product catalog.
+
+    The pricelist API takes a slug as input but offers no list
+    endpoint. luminus.be doesn't have a single canonical inventory
+    page either — product pages are scattered across the site with
+    FAQ entries dominating the sitemap. New products have to be added
+    manually based on press releases or user reports.
+    """
+    return set()
+
+
 # ---- top-level fetch + parser -------------------------------------------------
 
 
