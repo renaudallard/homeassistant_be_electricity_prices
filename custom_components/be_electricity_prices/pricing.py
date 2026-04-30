@@ -45,7 +45,7 @@ Meter types follow the Belgian convention:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 from .const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
@@ -73,9 +73,49 @@ class PriceBreakdown:
     all_in: float
 
 
+def _easter_sunday(year: int) -> date:
+    """Anonymous Gregorian computus for Western (Catholic) Easter Sunday."""
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    L = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * L) // 451
+    month = (h + L - 7 * m + 114) // 31
+    day = ((h + L - 7 * m + 114) % 31) + 1
+    return date(year, month, day)
+
+
+def is_belgian_holiday(d: date) -> bool:
+    """Federal Belgian public holidays.
+
+    Fixed dates: New Year (1/1), Labour Day (1/5), National Day (21/7),
+    Assumption (15/8), All Saints (1/11), Armistice (11/11), Christmas
+    (25/12). Easter-derived: Easter Monday (+1), Ascension (+39),
+    Pentecost Monday (+50). Regional holidays (Walloon, Flemish,
+    Brussels) are deliberately excluded — DSO billing applies federal
+    rules uniformly.
+    """
+    fixed = {(1, 1), (5, 1), (7, 21), (8, 15), (11, 1), (11, 11), (12, 25)}
+    if (d.month, d.day) in fixed:
+        return True
+    easter = _easter_sunday(d.year)
+    if d == easter + timedelta(days=1):  # Easter Monday
+        return True
+    if d == easter + timedelta(days=39):  # Ascension (Thursday)
+        return True
+    if d == easter + timedelta(days=50):  # Pentecost Monday
+        return True
+    return False
+
+
 def is_offpeak(when: datetime) -> bool:
-    """Belgian bi-hourly convention: weekdays 22:00-07:00 and weekends."""
-    if when.weekday() >= 5:
+    """Belgian bi-hourly convention: weekdays 22:00-07:00, weekends,
+    and federal public holidays."""
+    if when.weekday() >= 5 or is_belgian_holiday(when.date()):
         return True
     return when.hour < 7 or when.hour >= 22
 

@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 
@@ -35,6 +35,7 @@ from custom_components.be_electricity_prices.pricing import (
     compute_breakdown,
     dso_impact_band,
     energy_eur_per_kwh,
+    is_belgian_holiday,
     is_offpeak,
     network_eur_per_kwh,
     taxes_eur_per_kwh,
@@ -86,6 +87,38 @@ def test_offpeak_weekday_night() -> None:
 
 def test_offpeak_weekend_always_offpeak() -> None:
     assert is_offpeak(datetime(2026, 5, 2, 12, 0))
+
+
+def test_belgian_holidays_2026() -> None:
+    # Fixed dates.
+    assert is_belgian_holiday(date(2026, 1, 1))  # New Year
+    assert is_belgian_holiday(date(2026, 5, 1))  # Labour Day
+    assert is_belgian_holiday(date(2026, 7, 21))  # National Day
+    assert is_belgian_holiday(date(2026, 8, 15))  # Assumption
+    assert is_belgian_holiday(date(2026, 11, 1))  # All Saints
+    assert is_belgian_holiday(date(2026, 11, 11))  # Armistice
+    assert is_belgian_holiday(date(2026, 12, 25))  # Christmas
+    # Easter-derived 2026 (Easter Sunday = April 5, 2026).
+    assert is_belgian_holiday(date(2026, 4, 6))  # Easter Monday
+    assert is_belgian_holiday(date(2026, 5, 14))  # Ascension (+39)
+    assert is_belgian_holiday(date(2026, 5, 25))  # Pentecost Monday (+50)
+    # Non-holidays.
+    assert not is_belgian_holiday(
+        date(2026, 4, 5)
+    )  # Easter Sunday itself isn't a separate holiday (and it's a weekend anyway)
+    assert not is_belgian_holiday(date(2026, 4, 7))  # Tuesday after Easter Monday
+    assert not is_belgian_holiday(
+        date(2026, 7, 11)
+    )  # Flemish regional holiday — federal-only set
+    assert not is_belgian_holiday(date(2026, 9, 27))  # French Community holiday — same
+
+
+def test_offpeak_treats_weekday_holiday_as_offpeak() -> None:
+    # May 1, 2026 is a Friday. Without the holiday rule it would be peak
+    # at noon; with it, it's off-peak (matching bi-hourly billing).
+    assert is_offpeak(datetime(2026, 5, 1, 12, 0))
+    # Christmas Day 2026 is a Friday — same.
+    assert is_offpeak(datetime(2026, 12, 25, 14, 0))
 
 
 # Wednesday 2026-04-29 is a non-holiday weekday for the boundary tests.
