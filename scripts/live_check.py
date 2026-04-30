@@ -264,7 +264,7 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
             "fluvius_west",
             "fluvius_zenne_dijle",
         },
-        "wallonia": {"aieg", "aiesh", "ores", "rew"},
+        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
         "brussels": {"sibelga"},
     }
     renewables_field = {
