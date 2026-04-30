@@ -68,9 +68,10 @@ def test_dynamic_wallonia_extracts_consumption_formula() -> None:
         "totalenergies_mydynamic", _text("totalenergies_dynamic_w.pdf"), "wallonia"
     )
     assert isinstance(snap.energy, DynamicRates)
-    # PDF: 0.1034 * BELPEXH + 1.75 (HTVA, 6% VAT).
-    assert snap.energy.factor == pytest.approx(0.1034 * 1.06 * 10.0)
-    assert snap.energy.base == pytest.approx(1.75 * 1.06 / 100.0)
+    # PDF prints "0.1034 * BELPEXH + 1.75" (HTVA, 6% VAT).
+    # Literal pinning so a 1.06 ⇄ 10 unit-conversion swap can't cancel.
+    assert snap.energy.factor == pytest.approx(1.09604)
+    assert snap.energy.base == pytest.approx(0.01855)
     assert snap.energy.yearly_fixed_fee == pytest.approx(90.0)
 
 
@@ -85,8 +86,8 @@ def test_dynamic_brussels_pulls_base_from_split_layout() -> None:
         "totalenergies_mydynamic", _text("totalenergies_dynamic_b.pdf"), "brussels"
     )
     assert isinstance(snap.energy, DynamicRates)
-    assert snap.energy.factor == pytest.approx(0.1034 * 1.06 * 10.0)
-    assert snap.energy.base == pytest.approx(3.85 * 1.06 / 100.0)
+    assert snap.energy.factor == pytest.approx(1.09604)
+    assert snap.energy.base == pytest.approx(0.04081)
 
 
 def test_dynamic_injection_formula_uses_distinct_anchor() -> None:

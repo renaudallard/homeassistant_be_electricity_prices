@@ -80,11 +80,11 @@ def test_luminus_is_registered() -> None:
 def test_dynamic_wallonia_extracts_consumption_formula() -> None:
     snap = _dynamic_w()
     assert isinstance(snap.energy, DynamicRates)
-    # PDF: hors TVA  0,1019 x Belpex H + 2,4591 at 6% VAT.
-    # factor = 0.1019 * 1.06 * 10 = 1.08014
-    # base   = 2.4591 * 1.06 / 100 = 0.02607
-    assert snap.energy.factor == pytest.approx(0.1019 * 1.06 * 10.0)
-    assert snap.energy.base == pytest.approx(2.4591 * 1.06 / 100.0)
+    # PDF prints "hors TVA  0,1019 x Belpex H + 2,4591" at 6% VAT.
+    # Literal pinning (vs `0.1019 * 1.06 * 10`) so a unit-conversion
+    # swap of 1.06 ⇄ 10 can't cancel out and pass the assertion.
+    assert snap.energy.factor == pytest.approx(1.08014)
+    assert snap.energy.base == pytest.approx(0.02606646)
     assert snap.energy.yearly_fixed_fee == pytest.approx(75.0)
 
 
@@ -100,7 +100,7 @@ def test_dynamic_flanders_has_a_different_base() -> None:
     assert isinstance(v.energy, DynamicRates)
     assert w.energy.factor == pytest.approx(v.energy.factor)
     assert w.energy.base != v.energy.base
-    assert v.energy.base == pytest.approx(1.9591 * 1.06 / 100.0)
+    assert v.energy.base == pytest.approx(0.02076646)
 
 
 def test_dynamic_extracts_injection_formula_with_negative_base() -> None:

@@ -74,11 +74,12 @@ def test_engie_is_registered() -> None:
 def test_dynamic_extracts_consumption_formula() -> None:
     snap = parse_snapshot("engie_dynamic", _dynamic_three_regions())
     assert isinstance(snap.energy, DynamicRates)
-    # PDF: hors TVA  0,8702 + (0,1039 x eSpot_15) at 6% VAT.
-    # spot in EUR/kWh, factor = 0.1039 * 1.06 * 10 = 1.10134
-    # base   = 0.8702 * 1.06 / 100 = 0.00922412
-    assert snap.energy.factor == pytest.approx(0.1039 * 1.06 * 10.0)
-    assert snap.energy.base == pytest.approx(0.8702 * 1.06 / 100.0)
+    # PDF prints "hors TVA  0,8702 + (0,1039 x eSpot_15)" at 6% VAT.
+    # Pinned literal so a unit-conversion bug that swaps 1.06 ⇄ 10
+    # (visually identical: 0.1039 * 10.6 == 0.1039 * 1.06 * 10) can't
+    # cancel out and pass the assertion.
+    assert snap.energy.factor == pytest.approx(1.10134)
+    assert snap.energy.base == pytest.approx(0.00922412)
     assert snap.energy.yearly_fixed_fee == pytest.approx(100.7)
 
 

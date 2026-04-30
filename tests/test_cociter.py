@@ -145,8 +145,8 @@ def test_dynamic_extracts_factor_and_base() -> None:
     )
     assert isinstance(snap.energy, DynamicRates)
     # PDF: (0.103 x QUARTER_HOURLY_BELPEX_eur_per_mwh + 3) x 1.06 c€/kWh
-    # -> factor = 0.103 * 10.6 = 1.0918, base = 3 * 1.06 / 100 = 0.0318
-    assert snap.energy.factor == pytest.approx(0.103 * 10.6, rel=1e-4)
+    # Literal pinning so a unit-conversion swap can't cancel the test.
+    assert snap.energy.factor == pytest.approx(1.0918, rel=1e-4)
     assert snap.energy.base == pytest.approx(0.0318, rel=1e-4)
     # At spot = 100 EUR/MWh = 0.10 EUR/kWh, all-in energy is ~0.14098 EUR/kWh.
     assert snap.energy.factor * 0.10 + snap.energy.base == pytest.approx(0.14098)

@@ -94,8 +94,12 @@ def test_dynamic_parses_smr3_formula() -> None:
         "octaplus_dynamic", _text("octaplus_dynamic_w.pdf"), "wallonia"
     )
     assert isinstance(snap.energy, DynamicRates)
-    assert snap.energy.factor == pytest.approx(1.083 * 1.06)
-    assert snap.energy.base == pytest.approx(4.17 / 1000.0 * 1.06)
+    # Literal pinning: a unit-conversion bug (e.g. dropping the *1000
+    # EUR/MWh→EUR/kWh divide and the 1.06 VAT) could still pass an
+    # `approx(1.083 * 1.06)` style assertion. Keep the derivation in
+    # the comment, the expected number in the assertion.
+    assert snap.energy.factor == pytest.approx(1.14798)
+    assert snap.energy.base == pytest.approx(0.0044202)
 
 
 def test_dynamic_extracts_injection_formula() -> None:
@@ -107,7 +111,7 @@ def test_dynamic_extracts_injection_formula() -> None:
     )
     assert snap.injection is not None
     assert snap.injection.factor == pytest.approx(1.0)
-    assert snap.injection.base == pytest.approx(-13.89 / 1000.0)
+    assert snap.injection.base == pytest.approx(-0.01389)
 
 
 def test_federal_taxes_use_first_tier() -> None:
