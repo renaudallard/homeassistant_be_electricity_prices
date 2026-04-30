@@ -53,13 +53,22 @@ ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "custom_components" / "be_electricity_prices"
 
 
-def _load_providers() -> tuple[types.ModuleType, types.ModuleType]:
+def _load_providers() -> tuple[
+    types.ModuleType,
+    types.ModuleType,
+    types.ModuleType,
+    types.ModuleType,
+    types.ModuleType,
+    types.ModuleType,
+    types.ModuleType,
+    types.ModuleType,
+]:
     """Load the providers package without dragging Home Assistant into scope."""
     parent = types.ModuleType("be_pkg")
-    parent.__path__ = [str(PKG)]  # type: ignore[attr-defined]
+    parent.__path__ = [str(PKG)]
     sys.modules["be_pkg"] = parent
     prov = types.ModuleType("be_pkg.providers")
-    prov.__path__ = [str(PKG / "providers")]  # type: ignore[attr-defined]
+    prov.__path__ = [str(PKG / "providers")]
     sys.modules["be_pkg.providers"] = prov
 
     def _load(name: str, path: Path) -> types.ModuleType:
