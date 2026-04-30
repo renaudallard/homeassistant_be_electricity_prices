@@ -302,6 +302,21 @@ def _set_meters(
             hass.states.async_set(entity_id, str(value))
 
 
+def _zero_baselines() -> dict[str, float]:
+    """Year-start baselines treating Jan 1 as the install moment.
+
+    Setting every register baseline to 0 makes ``current - baseline ==
+    current``, so existing tests that check ``cumulative * rate`` math
+    keep passing without per-test baseline values.
+    """
+    return {
+        "sensor.day_cons": 0.0,
+        "sensor.night_cons": 0.0,
+        "sensor.day_inj": 0.0,
+        "sensor.night_inj": 0.0,
+    }
+
+
 async def test_yearly_cost_returns_none_when_any_meter_missing(
     hass: HomeAssistant,
 ) -> None:
@@ -316,6 +331,7 @@ async def test_yearly_cost_returns_none_when_any_meter_missing(
             prosumer_cost_eur_per_month=0.0,
             injection_price_eur_per_kwh=None,
             kwh_buckets={},
+            register_baselines=_zero_baselines(),
         )
         is None
     )
@@ -334,6 +350,7 @@ async def test_yearly_cost_no_solar_mono_uses_total_cons_x_single_rate(
         prosumer_cost_eur_per_month=0.0,
         injection_price_eur_per_kwh=None,
         kwh_buckets={},
+        register_baselines=_zero_baselines(),
     )
     # all_in single = 0.18 + 0.10 + 0.0145 + 0.05 + 0.002 + 0.03 = 0.3765
     assert cost == pytest.approx(1500 * 0.3765)
@@ -350,6 +367,7 @@ async def test_yearly_cost_no_solar_bi_uses_band_rates(hass: HomeAssistant) -> N
         prosumer_cost_eur_per_month=0.0,
         injection_price_eur_per_kwh=None,
         kwh_buckets={},
+        register_baselines=_zero_baselines(),
     )
     # peak = 0.20 + 0.11 + 0.0145 + 0.082 = 0.4065
     # offpeak = 0.16 + 0.09 + 0.0145 + 0.082 = 0.3465
@@ -372,6 +390,7 @@ async def test_yearly_cost_compensation_mono_nets_injection(
         prosumer_cost_eur_per_month=0.0,
         injection_price_eur_per_kwh=None,
         kwh_buckets={},
+        register_baselines=_zero_baselines(),
     )
     assert cost == pytest.approx(500 * 0.3765)
 
@@ -393,6 +412,7 @@ async def test_yearly_cost_compensation_mono_can_go_negative(
         prosumer_cost_eur_per_month=0.0,
         injection_price_eur_per_kwh=None,
         kwh_buckets={},
+        register_baselines=_zero_baselines(),
     )
     assert cost == pytest.approx(-600 * 0.3765)
 
@@ -412,6 +432,7 @@ async def test_yearly_cost_compensation_bi_nets_per_band(hass: HomeAssistant) ->
         prosumer_cost_eur_per_month=0.0,
         injection_price_eur_per_kwh=None,
         kwh_buckets={},
+        register_baselines=_zero_baselines(),
     )
     assert cost == pytest.approx(700 * peak + (-100) * offpeak)
 
@@ -430,6 +451,7 @@ async def test_yearly_cost_injection_regime_uses_supplier_injection_rate(
         prosumer_cost_eur_per_month=0.0,
         injection_price_eur_per_kwh=0.05,
         kwh_buckets={},
+        register_baselines=_zero_baselines(),
     )
     assert cost == pytest.approx(1000 * 0.3765 - 500 * 0.05)
 
@@ -458,6 +480,7 @@ async def test_yearly_cost_dynamic_contract_returns_none(hass: HomeAssistant) ->
         prosumer_cost_eur_per_month=0.0,
         injection_price_eur_per_kwh=0.05,
         kwh_buckets={},
+        register_baselines=_zero_baselines(),
     )
     assert cost is None
 
@@ -488,6 +511,7 @@ async def test_yearly_cost_includes_fees_and_prosumer(hass: HomeAssistant) -> No
         prosumer_cost_eur_per_month=4.5,
         injection_price_eur_per_kwh=None,
         kwh_buckets={},
+        register_baselines=_zero_baselines(),
     )
     # 1000 * 0.3765 + yearly_fee 120 + 12 * 2.5 (energy_fund) + 12 * 4.5 (prosumer)
     assert cost == pytest.approx(1000 * 0.3765 + 120 + 30 + 54)
@@ -532,6 +556,7 @@ async def test_yearly_cost_bucket_fallback_when_only_totals_configured(
         prosumer_cost_eur_per_month=0.0,
         injection_price_eur_per_kwh=None,
         kwh_buckets=buckets,
+        register_baselines={},
     )
     # bi compensation: (700 - 200) * peak + (300 - 100) * offpeak
     assert cost == pytest.approx(500 * peak + 200 * offpeak)
@@ -560,6 +585,7 @@ async def test_yearly_cost_returns_none_when_neither_path_configured(
         prosumer_cost_eur_per_month=0.0,
         injection_price_eur_per_kwh=None,
         kwh_buckets={},
+        register_baselines=_zero_baselines(),
     )
     assert cost is None
 
@@ -604,5 +630,55 @@ async def test_yearly_cost_day_night_registers_win_over_buckets(
         prosumer_cost_eur_per_month=0.0,
         injection_price_eur_per_kwh=None,
         kwh_buckets=buckets,
+        register_baselines=_zero_baselines(),
     )
     assert cost == pytest.approx(1500 * 0.3765)
+
+
+async def test_yearly_cost_subtracts_year_start_baseline(
+    hass: HomeAssistant,
+) -> None:
+    """yearly_cost reflects ``current - baseline``, not the lifetime
+    counter. After a Jan 1 baseline of 30 000 kWh, hitting 30 200 must
+    give the same number as 200 from a fresh meter."""
+    snap = _yearly_snapshot()
+    entry = _yearly_entry(meter="mono", solar_regime="none")
+    _set_meters(hass, day_cons=30100, night_cons=30100, day_inj=10000, night_inj=10000)
+    cost = _compute_yearly_cost(
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets={},
+        register_baselines={
+            "sensor.day_cons": 30000.0,
+            "sensor.night_cons": 30000.0,
+            "sensor.day_inj": 10000.0,
+            "sensor.night_inj": 10000.0,
+        },
+    )
+    # this-year cons = (30100 - 30000) + (30100 - 30000) = 200 kWh
+    assert cost == pytest.approx(200 * 0.3765)
+
+
+async def test_yearly_cost_register_returns_none_when_baseline_missing(
+    hass: HomeAssistant,
+) -> None:
+    """If the rollover handler hasn't captured a baseline yet (e.g. the
+    register sensor was unavailable at first refresh), the helper
+    declines to compute -- it would otherwise mis-report the lifetime
+    bill until the next rollover."""
+    snap = _yearly_snapshot()
+    entry = _yearly_entry(meter="mono", solar_regime="none")
+    _set_meters(hass, day_cons=30100, night_cons=30100, day_inj=0, night_inj=0)
+    cost = _compute_yearly_cost(
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets={},
+        register_baselines={},  # no baseline captured yet
+    )
+    assert cost is None

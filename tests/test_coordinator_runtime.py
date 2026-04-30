@@ -336,3 +336,112 @@ async def test_kwh_listener_teardown_unsubscribes(hass: HomeAssistant) -> None:
     hass.states.async_set("sensor.total_cons", "100")
     await hass.async_block_till_done()
     assert "sensor.total_cons" not in coord._kwh_baselines
+
+
+# ---- yearly_cost rollover (Jan 1 reset) ------------------------------------
+
+
+def _entry_with_registers() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "bi",
+            "day_consumption_kwh": "sensor.day_cons",
+            "night_consumption_kwh": "sensor.night_cons",
+            "day_injection_kwh": "sensor.day_inj",
+            "night_injection_kwh": "sensor.night_inj",
+        },
+        title="Eneco - Eneco Zon & Wind Vast (Wallonia)",
+    )
+
+
+async def test_rollover_captures_register_baselines_on_first_refresh(
+    hass: HomeAssistant,
+) -> None:
+    """First call to the rollover handler captures the current value of
+    each register sensor as the year-start baseline."""
+    entry = _entry_with_registers()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hass.states.async_set("sensor.day_cons", "30000")
+    hass.states.async_set("sensor.night_cons", "20000")
+    hass.states.async_set("sensor.day_inj", "5000")
+    hass.states.async_set("sensor.night_inj", "5000")
+
+    coord._roll_over_yearly_cost_if_needed()
+
+    assert coord._year_start == dt_util.now().year
+    assert coord._year_start_register_baselines == {
+        "sensor.day_cons": 30000.0,
+        "sensor.night_cons": 20000.0,
+        "sensor.day_inj": 5000.0,
+        "sensor.night_inj": 5000.0,
+    }
+
+
+async def test_rollover_resets_buckets_on_year_change(hass: HomeAssistant) -> None:
+    """When the calendar year changes, the rollover handler zeroes the
+    kwh_buckets so the bucket-fallback path also restarts at 0."""
+    entry = _entry_with_totals()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._kwh_buckets = {
+        "consumption_day": 1234.0,
+        "consumption_night": 567.0,
+        "injection_day": 89.0,
+        "injection_night": 12.0,
+    }
+    coord._year_start = dt_util.now().year - 1  # last year
+
+    coord._roll_over_yearly_cost_if_needed()
+
+    assert coord._kwh_buckets == {
+        "consumption_day": 0.0,
+        "consumption_night": 0.0,
+        "injection_day": 0.0,
+        "injection_night": 0.0,
+    }
+    assert coord._year_start == dt_util.now().year
+
+
+async def test_rollover_is_idempotent_within_same_year(
+    hass: HomeAssistant,
+) -> None:
+    """Calling the rollover handler again in the same year is a no-op
+    -- it must not re-capture baselines (which would clobber
+    in-progress accumulation)."""
+    entry = _entry_with_registers()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._year_start = dt_util.now().year
+    coord._year_start_register_baselines = {"sensor.day_cons": 1000.0}
+    coord._kwh_buckets["consumption_day"] = 50.0
+
+    hass.states.async_set("sensor.day_cons", "9999")
+    coord._roll_over_yearly_cost_if_needed()
+
+    # Baseline unchanged; bucket unchanged.
+    assert coord._year_start_register_baselines == {"sensor.day_cons": 1000.0}
+    assert coord._kwh_buckets["consumption_day"] == 50.0
+
+
+async def test_rollover_skips_unavailable_registers(hass: HomeAssistant) -> None:
+    """A register that's unavailable at rollover time is left out of the
+    baseline; ``_compute_yearly_cost`` then returns None for that path
+    until the next rollover catches a valid value."""
+    entry = _entry_with_registers()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hass.states.async_set("sensor.day_cons", "30000")
+    hass.states.async_set("sensor.night_cons", "unavailable")
+    hass.states.async_set("sensor.day_inj", "5000")
+    hass.states.async_set("sensor.night_inj", "5000")
+
+    coord._roll_over_yearly_cost_if_needed()
+
+    assert "sensor.day_cons" in coord._year_start_register_baselines
+    assert "sensor.night_cons" not in coord._year_start_register_baselines
