@@ -54,7 +54,7 @@ from datetime import UTC, datetime, timedelta
 import aiohttp
 
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import fetch_pdf_text_layout, to_float
+from ._pdf import USER_AGENT, fetch_pdf_text_layout, to_float
 from .base import (
     Contract,
     DsoOverlay,
@@ -70,6 +70,7 @@ from .base import (
 )
 
 _BASE_URL = "https://files.boltenergie.be/pricelists"
+_LISTING_URL = "https://www.boltenergie.be/fr/listes-des-prix"
 _VARIABLE_SUFFIX = "11"  # current variable-card version
 
 
@@ -109,6 +110,33 @@ def _document_url(contract: _ContractDef, suffix: str | None = None) -> str:
     else:
         suffix = suffix or _VARIABLE_SUFFIX
     return f"{_BASE_URL}/{contract.folder}/{contract.slug}_res_el_fr_{suffix}.pdf"
+
+
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """Return ``{folder}/{slug}`` for every residential electricity card.
+
+    Bolt's prices listing page links every PDF directly. Filter to
+    residential electricity (``_res_el_fr_``) and extract the
+    ``<folder>/<slug>`` prefix; live_check diffs against the registry's
+    ``{c.folder + '/' + c.slug for c in _CONTRACTS}`` set.
+    """
+    try:
+        async with session.get(
+            _LISTING_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status >= 400:
+                return set()
+            html = await resp.text()
+    except aiohttp.ClientError:
+        return set()
+    return {
+        f"{folder}/{slug}"
+        for folder, slug in re.findall(
+            r"pricelists/(fix|var)/([a-z_]+)_res_el_fr_", html
+        )
+    }
 
 
 # ---- top-level fetch + parser -------------------------------------------------
