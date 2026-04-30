@@ -8,5 +8,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/renaudallard/homeassistant_be_electricity_prices/issues",
   "requirements": ["pypdf>=4.0", "pdfplumber>=0.11"],
-  "version": "0.2.2"
+  "version": "0.2.3"
 }
