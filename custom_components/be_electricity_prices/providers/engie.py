@@ -203,6 +203,20 @@ def _document_url(c: _ContractDef, region_code: str) -> str:
     )
 
 
+async def discover(
+    session: aiohttp.ClientSession,  # noqa: ARG001 - no public catalog endpoint
+) -> set[str]:
+    """Return an empty set: Engie has no public product catalog.
+
+    Engie's tariff API takes a contract slug as input but offers no
+    list endpoint, and engie.be is heavily client-rendered with
+    product names scattered across marketing pages without a single
+    canonical inventory. New products have to be added manually based
+    on press releases or user reports.
+    """
+    return set()
+
+
 # ---- top-level fetch + parser -------------------------------------------------
 
 
