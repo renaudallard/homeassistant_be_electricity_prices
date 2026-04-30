@@ -235,6 +235,7 @@ def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:
 
 # ---- _compute_yearly_cost ---------------------------------------------------
 
+
 # Snapshot used by the yearly_cost tests: 0.18 single energy, 0.10 dist,
 # 0.0145 transport, Wallonia taxes (federal_excise + energy_contribution +
 # wallonia_renewables) so the all-in single rate works out cleanly.
@@ -314,6 +315,7 @@ async def test_yearly_cost_returns_none_when_any_meter_missing(
             entry,
             prosumer_cost_eur_per_month=0.0,
             injection_price_eur_per_kwh=None,
+            kwh_buckets={},
         )
         is None
     )
@@ -326,7 +328,12 @@ async def test_yearly_cost_no_solar_mono_uses_total_cons_x_single_rate(
     entry = _yearly_entry(meter="mono", solar_regime="none")
     _set_meters(hass, day_cons=1000, night_cons=500, day_inj=0, night_inj=0)
     cost = _compute_yearly_cost(
-        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=None
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets={},
     )
     # all_in single = 0.18 + 0.10 + 0.0145 + 0.05 + 0.002 + 0.03 = 0.3765
     assert cost == pytest.approx(1500 * 0.3765)
@@ -337,7 +344,12 @@ async def test_yearly_cost_no_solar_bi_uses_band_rates(hass: HomeAssistant) -> N
     entry = _yearly_entry(meter="bi", solar_regime="none")
     _set_meters(hass, day_cons=1000, night_cons=500, day_inj=0, night_inj=0)
     cost = _compute_yearly_cost(
-        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=None
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets={},
     )
     # peak = 0.20 + 0.11 + 0.0145 + 0.082 = 0.4065
     # offpeak = 0.16 + 0.09 + 0.0145 + 0.082 = 0.3465
@@ -354,7 +366,12 @@ async def test_yearly_cost_compensation_mono_nets_injection(
     _set_meters(hass, day_cons=1000, night_cons=500, day_inj=600, night_inj=400)
     # net = 1500 - 1000 = 500. Bill = 500 * single_all_in
     cost = _compute_yearly_cost(
-        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=None
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets={},
     )
     assert cost == pytest.approx(500 * 0.3765)
 
@@ -370,7 +387,12 @@ async def test_yearly_cost_compensation_mono_can_go_negative(
     # actual bill is usually floored at zero, but we report the
     # uncapped value so users see the over-production margin.
     cost = _compute_yearly_cost(
-        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=None
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets={},
     )
     assert cost == pytest.approx(-600 * 0.3765)
 
@@ -384,7 +406,12 @@ async def test_yearly_cost_compensation_bi_nets_per_band(hass: HomeAssistant) ->
     peak = 0.20 + 0.11 + 0.0145 + 0.05 + 0.002 + 0.03
     offpeak = 0.16 + 0.09 + 0.0145 + 0.05 + 0.002 + 0.03
     cost = _compute_yearly_cost(
-        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=None
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets={},
     )
     assert cost == pytest.approx(700 * peak + (-100) * offpeak)
 
@@ -402,6 +429,7 @@ async def test_yearly_cost_injection_regime_uses_supplier_injection_rate(
         entry,
         prosumer_cost_eur_per_month=0.0,
         injection_price_eur_per_kwh=0.05,
+        kwh_buckets={},
     )
     assert cost == pytest.approx(1000 * 0.3765 - 500 * 0.05)
 
@@ -424,7 +452,12 @@ async def test_yearly_cost_dynamic_contract_returns_none(hass: HomeAssistant) ->
     entry = _yearly_entry(solar_regime="injection")
     _set_meters(hass, day_cons=100, night_cons=100, day_inj=0, night_inj=0)
     cost = _compute_yearly_cost(
-        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=0.05
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=0.05,
+        kwh_buckets={},
     )
     assert cost is None
 
@@ -449,7 +482,127 @@ async def test_yearly_cost_includes_fees_and_prosumer(hass: HomeAssistant) -> No
     entry = _yearly_entry(meter="mono", solar_regime="none")
     _set_meters(hass, day_cons=500, night_cons=500, day_inj=0, night_inj=0)
     cost = _compute_yearly_cost(
-        hass, snap, entry, prosumer_cost_eur_per_month=4.5, injection_price_eur_per_kwh=None
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=4.5,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets={},
     )
     # 1000 * 0.3765 + yearly_fee 120 + 12 * 2.5 (energy_fund) + 12 * 4.5 (prosumer)
     assert cost == pytest.approx(1000 * 0.3765 + 120 + 30 + 54)
+
+
+# ---- bucket fallback (totals -> internal day/night split) ------------------
+
+
+async def test_yearly_cost_bucket_fallback_when_only_totals_configured(
+    hass: HomeAssistant,
+) -> None:
+    """When the user only configured the cumulative totals (CONF_*_KWH),
+    the helper falls back to the coordinator's day/night kwh_buckets
+    (filled by the state listener over time)."""
+    snap = _yearly_snapshot()
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "bi",
+            "solar_regime": "compensation",
+            # Only the totals are set, no day/night registers.
+            "consumption_kwh": "sensor.total_cons",
+            "injection_kwh": "sensor.total_inj",
+        },
+    )
+    buckets = {
+        "consumption_day": 700.0,
+        "consumption_night": 300.0,
+        "injection_day": 200.0,
+        "injection_night": 100.0,
+    }
+    peak = 0.20 + 0.11 + 0.0145 + 0.05 + 0.002 + 0.03
+    offpeak = 0.16 + 0.09 + 0.0145 + 0.05 + 0.002 + 0.03
+    cost = _compute_yearly_cost(
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets=buckets,
+    )
+    # bi compensation: (700 - 200) * peak + (300 - 100) * offpeak
+    assert cost == pytest.approx(500 * peak + 200 * offpeak)
+
+
+async def test_yearly_cost_returns_none_when_neither_path_configured(
+    hass: HomeAssistant,
+) -> None:
+    """No day/night registers, no totals -> nothing to compute."""
+    snap = _yearly_snapshot()
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "none",
+        },
+    )
+    cost = _compute_yearly_cost(
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets={},
+    )
+    assert cost is None
+
+
+async def test_yearly_cost_day_night_registers_win_over_buckets(
+    hass: HomeAssistant,
+) -> None:
+    """Day/night register sensors override the bucket fallback even when
+    both are configured (registers are exact; buckets only cover the
+    period since integration setup)."""
+    snap = _yearly_snapshot()
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "none",
+            "day_consumption_kwh": "sensor.day_cons",
+            "night_consumption_kwh": "sensor.night_cons",
+            "day_injection_kwh": "sensor.day_inj",
+            "night_injection_kwh": "sensor.night_inj",
+            "consumption_kwh": "sensor.total_cons",
+            "injection_kwh": "sensor.total_inj",
+        },
+    )
+    # Direct registers say 1500 total; buckets say 9999 (deliberately
+    # different) -- registers must win.
+    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=0, night_inj=0)
+    buckets = {
+        "consumption_day": 9999.0,
+        "consumption_night": 9999.0,
+        "injection_day": 0.0,
+        "injection_night": 0.0,
+    }
+    cost = _compute_yearly_cost(
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets=buckets,
+    )
+    assert cost == pytest.approx(1500 * 0.3765)

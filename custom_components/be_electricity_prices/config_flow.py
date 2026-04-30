@@ -80,11 +80,13 @@ from .const import (
     CONF_CAPACITY_FIXED_KW,
     CONF_CAPACITY_MODE,
     CONF_CAPACITY_PEAK_SENSOR,
+    CONF_CONSUMPTION_KWH,
     CONF_CONTRACT,
     CONF_DAY_CONSUMPTION_KWH,
     CONF_DAY_INJECTION_KWH,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
+    CONF_INJECTION_KWH,
     CONF_METER,
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
@@ -313,19 +315,27 @@ def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
 def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Cumulative-kWh sensors for the yearly_cost computation.
 
-    All four are asked unconditionally because every smart meter (P1,
-    digital, etc.) exposes day/night counters for both consumption and
-    injection regardless of how the supplier bills (mono vs bi). All
-    four are optional; ``yearly_cost`` stays ``None`` until each one is
-    populated and produces a numeric reading.
+    Two ways to feed the sensor, both optional:
+
+      * Direct day/night registers off the meter (4 fields). Used as-is
+        when populated.
+      * Single cumulative totals (2 fields). The coordinator splits
+        deltas into day/night buckets via is_offpeak(now) and persists
+        them, so the running yearly_cost survives restarts.
+
+    When both are filled, the day/night registers win (more accurate;
+    no warm-up period).
     """
     fields = {}
-    for conf, default in (
-        (CONF_DAY_CONSUMPTION_KWH, defaults.get(CONF_DAY_CONSUMPTION_KWH)),
-        (CONF_NIGHT_CONSUMPTION_KWH, defaults.get(CONF_NIGHT_CONSUMPTION_KWH)),
-        (CONF_DAY_INJECTION_KWH, defaults.get(CONF_DAY_INJECTION_KWH)),
-        (CONF_NIGHT_INJECTION_KWH, defaults.get(CONF_NIGHT_INJECTION_KWH)),
+    for conf in (
+        CONF_DAY_CONSUMPTION_KWH,
+        CONF_NIGHT_CONSUMPTION_KWH,
+        CONF_DAY_INJECTION_KWH,
+        CONF_NIGHT_INJECTION_KWH,
+        CONF_CONSUMPTION_KWH,
+        CONF_INJECTION_KWH,
     ):
+        default = defaults.get(conf)
         if default is not None:
             fields[vol.Optional(conf, default=default)] = EntitySelector(
                 EntitySelectorConfig(domain="sensor")

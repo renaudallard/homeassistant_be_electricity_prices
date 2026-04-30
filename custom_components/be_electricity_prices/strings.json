@@ -62,12 +62,14 @@
       },
       "meters": {
         "title": "Energy meters (yearly cost)",
-        "description": "Optional. Pick the cumulative kWh sensors for day/night consumption and day/night injection. The yearly_cost sensor stays unavailable until all four are set. Most P1 / digital meter integrations expose all four registers regardless of mono vs bi billing.",
+        "description": "Optional. Either point at the four day/night registers from your meter (preferred - exact from the start), or just at a single cumulative consumption / injection sensor (the integration will then split deltas into day/night buckets via the bi-hourly schedule, persisted across restarts; the running cost is accurate from the moment you set it up). When both are filled, the day/night registers win.",
         "data": {
           "day_consumption_kwh": "Day consumption (kWh)",
           "night_consumption_kwh": "Night consumption (kWh)",
           "day_injection_kwh": "Day injection (kWh)",
-          "night_injection_kwh": "Night injection (kWh)"
+          "night_injection_kwh": "Night injection (kWh)",
+          "consumption_kwh": "Total consumption (kWh)",
+          "injection_kwh": "Total injection (kWh)"
         }
       }
     },
@@ -147,7 +149,9 @@
           "day_consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::day_consumption_kwh%]",
           "night_consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::night_consumption_kwh%]",
           "day_injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::day_injection_kwh%]",
-          "night_injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::night_injection_kwh%]"
+          "night_injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::night_injection_kwh%]",
+          "consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::consumption_kwh%]",
+          "injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::injection_kwh%]"
         }
       }
     }

@@ -30,6 +30,7 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
@@ -200,3 +201,138 @@ async def test_sync_stale_issue_creates_and_clears(hass: HomeAssistant) -> None:
 
     coord._sync_stale_issue(False)
     assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+# ---- kWh state listener / bucket splitting ---------------------------------
+
+
+def _entry_with_totals() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "bi",
+            "consumption_kwh": "sensor.total_cons",
+            "injection_kwh": "sensor.total_inj",
+        },
+        title="Eneco - Eneco Zon & Wind Vast (Wallonia)",
+    )
+
+
+async def test_kwh_listener_first_state_only_records_baseline(
+    hass: HomeAssistant,
+) -> None:
+    """The first state event after setup is just a baseline -- no delta
+    is bucketed because we have no previous value to subtract from."""
+    entry = _entry_with_totals()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    coord.async_setup_kwh_listeners()
+
+    hass.states.async_set("sensor.total_cons", "1000.0")
+    await hass.async_block_till_done()
+
+    assert coord._kwh_baselines["sensor.total_cons"] == 1000.0
+    assert coord._kwh_buckets["consumption_day"] == 0.0
+    assert coord._kwh_buckets["consumption_night"] == 0.0
+
+
+async def test_kwh_listener_routes_delta_to_correct_band(
+    hass: HomeAssistant,
+) -> None:
+    """A delta during a bi-hourly peak hour goes to the day bucket; a
+    delta during off-peak goes to the night bucket."""
+    entry = _entry_with_totals()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    coord.async_setup_kwh_listeners()
+
+    # Seed baselines.
+    hass.states.async_set("sensor.total_cons", "1000.0")
+    hass.states.async_set("sensor.total_inj", "200.0")
+    await hass.async_block_till_done()
+
+    # Patch is_offpeak so the test is independent of wall-clock time.
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.is_offpeak",
+        return_value=False,
+    ):
+        hass.states.async_set("sensor.total_cons", "1010.0")
+        hass.states.async_set("sensor.total_inj", "205.0")
+        await hass.async_block_till_done()
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.is_offpeak",
+        return_value=True,
+    ):
+        hass.states.async_set("sensor.total_cons", "1014.0")
+        hass.states.async_set("sensor.total_inj", "210.0")
+        await hass.async_block_till_done()
+
+    assert coord._kwh_buckets["consumption_day"] == pytest.approx(10.0)
+    assert coord._kwh_buckets["consumption_night"] == pytest.approx(4.0)
+    assert coord._kwh_buckets["injection_day"] == pytest.approx(5.0)
+    assert coord._kwh_buckets["injection_night"] == pytest.approx(5.0)
+
+
+async def test_kwh_listener_handles_counter_reset(hass: HomeAssistant) -> None:
+    """A counter going backwards (utility_meter reset, sensor swap) must
+    re-baseline silently -- no negative bucket entry."""
+    entry = _entry_with_totals()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    coord.async_setup_kwh_listeners()
+
+    hass.states.async_set("sensor.total_cons", "1000.0")
+    await hass.async_block_till_done()
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.is_offpeak",
+        return_value=False,
+    ):
+        hass.states.async_set("sensor.total_cons", "1050.0")
+        await hass.async_block_till_done()
+        hass.states.async_set("sensor.total_cons", "5.0")  # reset
+        await hass.async_block_till_done()
+        hass.states.async_set("sensor.total_cons", "12.0")  # post-reset delta
+        await hass.async_block_till_done()
+
+    # 50 from before the reset, 7 after -> 57 total in the day bucket.
+    assert coord._kwh_buckets["consumption_day"] == pytest.approx(57.0)
+
+
+async def test_kwh_listener_ignores_unavailable_states(hass: HomeAssistant) -> None:
+    entry = _entry_with_totals()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    coord.async_setup_kwh_listeners()
+
+    hass.states.async_set("sensor.total_cons", "unavailable")
+    hass.states.async_set("sensor.total_cons", "unknown")
+    hass.states.async_set("sensor.total_cons", "")
+    await hass.async_block_till_done()
+
+    assert "sensor.total_cons" not in coord._kwh_baselines
+    assert coord._kwh_buckets["consumption_day"] == 0.0
+
+
+async def test_kwh_listener_teardown_unsubscribes(hass: HomeAssistant) -> None:
+    entry = _entry_with_totals()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    coord.async_setup_kwh_listeners()
+    assert coord._kwh_unsub  # subscribed
+
+    coord.async_teardown_kwh_listeners()
+    assert not coord._kwh_unsub
+
+    # Subsequent state changes do not feed the bucket.
+    hass.states.async_set("sensor.total_cons", "100")
+    await hass.async_block_till_done()
+    assert "sensor.total_cons" not in coord._kwh_baselines

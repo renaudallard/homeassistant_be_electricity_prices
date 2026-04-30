@@ -62,12 +62,14 @@
       },
       "meters": {
         "title": "Compteurs (cout annuel)",
-        "description": "Facultatif. Selectionnez les capteurs cumulatifs en kWh pour la consommation jour/nuit et l'injection jour/nuit. Le capteur yearly_cost reste indisponible tant que les quatre ne sont pas renseignes. La plupart des integrations P1 / compteur intelligent exposent les quatre registres, que la facturation soit mono ou bi.",
+        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit un seul capteur cumulatif de consommation / injection (l'integration repartit les deltas en jour/nuit via l'horaire bi-horaire, persiste entre redemarrages; le cout courant est exact a partir du moment de la configuration). Quand les deux sont remplis, les registres jour/nuit l'emportent.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
           "night_consumption_kwh": "Consommation nuit (kWh)",
           "day_injection_kwh": "Injection jour (kWh)",
-          "night_injection_kwh": "Injection nuit (kWh)"
+          "night_injection_kwh": "Injection nuit (kWh)",
+          "consumption_kwh": "Consommation totale (kWh)",
+          "injection_kwh": "Injection totale (kWh)"
         }
       }
     },
@@ -142,12 +144,14 @@
       },
       "meters": {
         "title": "Compteurs (cout annuel)",
-        "description": "Facultatif. Selectionnez les capteurs cumulatifs en kWh pour la consommation jour/nuit et l'injection jour/nuit. Le capteur yearly_cost reste indisponible tant que les quatre ne sont pas renseignes. La plupart des integrations P1 / compteur intelligent exposent les quatre registres, que la facturation soit mono ou bi.",
+        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit un seul capteur cumulatif de consommation / injection (l'integration repartit les deltas en jour/nuit via l'horaire bi-horaire, persiste entre redemarrages; le cout courant est exact a partir du moment de la configuration). Quand les deux sont remplis, les registres jour/nuit l'emportent.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
           "night_consumption_kwh": "Consommation nuit (kWh)",
           "day_injection_kwh": "Injection jour (kWh)",
-          "night_injection_kwh": "Injection nuit (kWh)"
+          "night_injection_kwh": "Injection nuit (kWh)",
+          "consumption_kwh": "Consommation totale (kWh)",
+          "injection_kwh": "Injection totale (kWh)"
         }
       }
     }

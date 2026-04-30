@@ -35,15 +35,23 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, State
+from homeassistant.core import (
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    State,
+    callback,
+)
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -56,11 +64,13 @@ from .const import (
     CONF_CAPACITY_FIXED_KW,
     CONF_CAPACITY_MODE,
     CONF_CAPACITY_PEAK_SENSOR,
+    CONF_CONSUMPTION_KWH,
     CONF_CONTRACT,
     CONF_DAY_CONSUMPTION_KWH,
     CONF_DAY_INJECTION_KWH,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
+    CONF_INJECTION_KWH,
     CONF_METER,
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
@@ -78,7 +88,7 @@ from .const import (
     STORAGE_VERSION,
     UPDATE_INTERVAL_MINUTES,
 )
-from .pricing import PriceBreakdown, compute_breakdown, static_breakdown
+from .pricing import PriceBreakdown, compute_breakdown, is_offpeak, static_breakdown
 from .providers import (
     DynamicRates,
     ExtractorError,
@@ -191,6 +201,20 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._peak_kw: float = 0.0
         self._peak_month: date | None = None
         self._last_error: str = ""
+        # Day/night kWh buckets fed by deltas of CONF_CONSUMPTION_KWH /
+        # CONF_INJECTION_KWH state changes. Persisted across restarts so
+        # the running yearly_cost survives HA restarts.
+        self._kwh_buckets: dict[str, float] = {
+            "consumption_day": 0.0,
+            "consumption_night": 0.0,
+            "injection_day": 0.0,
+            "injection_night": 0.0,
+        }
+        # Last-seen value for each tracked total sensor; deltas are
+        # computed against this. None means we haven't seen a value yet
+        # (first state event after setup just records baseline).
+        self._kwh_baselines: dict[str, float] = {}
+        self._kwh_unsub: list[Callable[[], None]] = []
 
     async def async_load_persistent(self) -> None:
         """Restore the latest snapshot + monthly peak from HA Store."""
@@ -220,6 +244,80 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     self._peak_month = date.fromisoformat(month)
                 except ValueError:
                     self._peak_month = None
+        kwh = stored.get("kwh_buckets")
+        if isinstance(kwh, dict):
+            for key in self._kwh_buckets:
+                value = kwh.get(key)
+                if isinstance(value, (int, float)):
+                    self._kwh_buckets[key] = float(value)
+        baselines = stored.get("kwh_baselines")
+        if isinstance(baselines, dict):
+            for entity_id, value in baselines.items():
+                if isinstance(entity_id, str) and isinstance(value, (int, float)):
+                    self._kwh_baselines[entity_id] = float(value)
+
+    @callback
+    def async_setup_kwh_listeners(self) -> None:
+        """Subscribe to state changes on the configured total kWh sensors.
+
+        Idempotent: tearing down previous subscriptions before re-arming
+        lets the options-flow reload swap in different sensor entity_ids
+        without leaking listeners.
+        """
+        self.async_teardown_kwh_listeners()
+        entities = [
+            eid
+            for eid in (
+                self.entry.data.get(CONF_CONSUMPTION_KWH),
+                self.entry.data.get(CONF_INJECTION_KWH),
+            )
+            if eid
+        ]
+        if not entities:
+            return
+        unsub = async_track_state_change_event(
+            self.hass, entities, self._handle_kwh_state_change
+        )
+        self._kwh_unsub.append(unsub)
+
+    @callback
+    def async_teardown_kwh_listeners(self) -> None:
+        for unsub in self._kwh_unsub:
+            unsub()
+        self._kwh_unsub.clear()
+
+    @callback
+    def _handle_kwh_state_change(self, event: Event[EventStateChangedData]) -> None:
+        new_state = event.data.get("new_state")
+        if new_state is None or new_state.state in ("", "unknown", "unavailable"):
+            return
+        try:
+            value = float(new_state.state)
+        except (TypeError, ValueError):
+            return
+        entity_id = event.data["entity_id"]
+        prev = self._kwh_baselines.get(entity_id)
+        if prev is None or value < prev:
+            # First reading after setup, or counter rolled back (utility
+            # meter reset, sensor replaced). Reset baseline silently --
+            # no delta to bucket.
+            self._kwh_baselines[entity_id] = value
+            return
+        if value == prev:
+            return
+        delta = value - prev
+        self._kwh_baselines[entity_id] = value
+        kind = (
+            "consumption"
+            if entity_id == self.entry.data.get(CONF_CONSUMPTION_KWH)
+            else "injection"
+        )
+        band = "night" if is_offpeak(dt_util.now()) else "day"
+        self._kwh_buckets[f"{kind}_{band}"] += delta
+        # Trigger a coordinator refresh so yearly_cost re-renders. The
+        # price snapshot itself is cached for 24h; refresh is essentially
+        # free here (no network).
+        self.hass.async_create_task(self.async_request_refresh())
 
     async def _async_update_data(self) -> CoordinatorData:
         await self._maybe_refresh_snapshot()
@@ -263,6 +361,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self.entry,
             prosumer_cost_eur_per_month=prosumer_cost,
             injection_price_eur_per_kwh=injection_price,
+            kwh_buckets=self._kwh_buckets,
         )
 
         await self._save_persistent()
@@ -497,7 +596,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             "peak": {
                 "kw": self._peak_kw,
                 "month": self._peak_month.isoformat() if self._peak_month else "",
-            }
+            },
+            "kwh_buckets": dict(self._kwh_buckets),
+            "kwh_baselines": dict(self._kwh_baselines),
         }
         if self._snapshot is not None and self._snapshot_fetched_at is not None:
             payload["snapshot"] = _snapshot_to_dict(
@@ -597,6 +698,7 @@ def _compute_yearly_cost(
     *,
     prosumer_cost_eur_per_month: float,
     injection_price_eur_per_kwh: float | None,
+    kwh_buckets: dict[str, float],
 ) -> float | None:
     """Running annual bill from cumulative meter readings + snapshot rates.
 
@@ -622,14 +724,32 @@ def _compute_yearly_cost(
     surplus floor is applied (negative values surface naturally if
     injection > consumption); see the project memo for why.
 
+    Two ways to feed the consumption (and likewise injection) side:
+      * Direct day/night register sensors (CONF_DAY_*_KWH /
+        CONF_NIGHT_*_KWH). Used when present.
+      * Single cumulative-totals sensor (CONF_CONSUMPTION_KWH /
+        CONF_INJECTION_KWH). The coordinator's state listener splits
+        deltas into ``kwh_buckets`` based on is_offpeak(now); we use
+        those buckets here as the fallback when the direct registers
+        aren't configured.
+
     Returns ``None`` when the contract has no stable rate (dynamic / TOU)
-    or any of the four meter sensors is missing / unavailable / not a
-    number.
+    or both feeds are absent / unusable for either consumption or
+    injection.
     """
     day_cons = _read_kwh(hass, entry.data.get(CONF_DAY_CONSUMPTION_KWH))
     night_cons = _read_kwh(hass, entry.data.get(CONF_NIGHT_CONSUMPTION_KWH))
     day_inj = _read_kwh(hass, entry.data.get(CONF_DAY_INJECTION_KWH))
     night_inj = _read_kwh(hass, entry.data.get(CONF_NIGHT_INJECTION_KWH))
+    # Bucket fallback: only kick in when the user didn't supply the
+    # direct day/night registers AND the corresponding total sensor is
+    # configured (so the listener has had a chance to fill the bucket).
+    if day_cons is None and night_cons is None and entry.data.get(CONF_CONSUMPTION_KWH):
+        day_cons = kwh_buckets.get("consumption_day", 0.0)
+        night_cons = kwh_buckets.get("consumption_night", 0.0)
+    if day_inj is None and night_inj is None and entry.data.get(CONF_INJECTION_KWH):
+        day_inj = kwh_buckets.get("injection_day", 0.0)
+        night_inj = kwh_buckets.get("injection_night", 0.0)
     if day_cons is None or night_cons is None or day_inj is None or night_inj is None:
         return None
 
