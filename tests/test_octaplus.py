@@ -48,7 +48,7 @@ FIX = Path(__file__).parent / "fixtures"
 
 
 def _text(name: str) -> str:
-    return extract_pdf_text_aligned((FIX / name).read_bytes())
+    return extract_pdf_text_aligned((FIX / name).read_bytes(), x_join_threshold=1.0)
 
 
 def test_octaplus_is_registered() -> None:

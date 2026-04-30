@@ -103,7 +103,7 @@ def extract_pdf_text_layout(payload: bytes) -> str:
 def extract_pdf_text_aligned(
     payload: bytes,
     y_tolerance: int = 3,
-    x_join_threshold: float = 1.0,
+    x_join_threshold: float = 0.0,
 ) -> str:
     """Extract PDF text by re-grouping words by their visual row.
 
@@ -114,14 +114,14 @@ def extract_pdf_text_aligned(
     left-to-right order. Pages are joined with form-feeds so callers
     can split per page if they need to.
 
-    ``x_join_threshold`` controls how to render adjacent words on the
-    same row. OCTA+'s tax block uses heavy character spacing where each
-    glyph is its own pdfplumber word with sub-point gaps between them
-    ("5 ,0 3 2 9" should be "5,0329"). Words whose horizontal gap to the
-    previous word is below ``x_join_threshold`` are concatenated with no
-    separator; everything else is joined by a single space. The default
-    of 1.0pt is below typical inter-word spacing (~1.4pt at 8pt font)
-    and well above intra-cluster gaps (<0.5pt).
+    ``x_join_threshold`` is opt-in: leave at 0.0 to keep every word
+    separate (the safe default for tightly-columned tables). Pass a
+    positive value (~1.0pt) to merge adjacent words whose horizontal
+    gap to the previous word is below it. OCTA+'s tax block needs this
+    because each glyph is its own pdfplumber word with sub-point gaps
+    between them ("5 ,0 3 2 9" should be "5,0329"); a non-OCTA+ caller
+    with tight numeric columns would silently glue values together if
+    this defaulted to non-zero.
     """
     try:
         import pdfplumber
@@ -157,7 +157,11 @@ def extract_pdf_text_aligned(
         raise ExtractorError(f"PDF aligned parse error: {err}") from err
 
 
-async def fetch_pdf_text_aligned(session: aiohttp.ClientSession, url: str) -> str:
+async def fetch_pdf_text_aligned(
+    session: aiohttp.ClientSession,
+    url: str,
+    x_join_threshold: float = 0.0,
+) -> str:
     """Word-coordinate aligned variant of :func:`fetch_pdf_text`."""
     try:
         async with session.get(
@@ -173,7 +177,9 @@ async def fetch_pdf_text_aligned(session: aiohttp.ClientSession, url: str) -> st
             payload = await resp.read()
     except aiohttp.ClientError as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
-    return await asyncio.to_thread(extract_pdf_text_aligned, payload)
+    return await asyncio.to_thread(
+        extract_pdf_text_aligned, payload, 3, x_join_threshold
+    )
 
 
 async def fetch_pdf_text_layout(session: aiohttp.ClientSession, url: str) -> str:

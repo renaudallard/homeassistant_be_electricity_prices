@@ -117,7 +117,10 @@ async def fetch(
     if region not in _REGION_TO_CODE:
         raise ExtractorError(f"OCTA+ {contract_id}: not available in region {region!r}")
     url = _document_url(contract, region)
-    text = await fetch_pdf_text_aligned(session, url)
+    # 1.0pt threshold collapses OCTA+'s heavy character spacing in the
+    # tax block ("5 ,0 3 2 9 0 ,2 0 4 2" -> "5,0329 0,2042") while
+    # still keeping real word spacing intact.
+    text = await fetch_pdf_text_aligned(session, url, x_join_threshold=1.0)
     return parse_snapshot(contract_id, text, region, url)
 
 
