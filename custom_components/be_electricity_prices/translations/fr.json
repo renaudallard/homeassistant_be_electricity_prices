@@ -213,6 +213,12 @@
       },
       "injection_price": {
         "name": "Prix d'injection"
+      },
+      "fixed_fee_eur_per_year": {
+        "name": "Redevance fixe par an"
+      },
+      "energy_fund_eur_per_month": {
+        "name": "Fonds energie par mois"
       }
     }
   }

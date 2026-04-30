@@ -250,6 +250,31 @@ INJECTION_SENSORS: tuple[BePriceSensorDescription, ...] = (
     ),
 )
 
+FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
+    BePriceSensorDescription(
+        key="fixed_fee_eur_per_year",
+        translation_key="fixed_fee_eur_per_year",
+        # The supplier's flat annual subscription fee. Plain MEASUREMENT
+        # since the user pays it once per year, not metered.
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR",
+        suggested_display_precision=2,
+        value_fn=lambda d: d.yearly_fixed_fee_eur,
+    ),
+    BePriceSensorDescription(
+        key="energy_fund_eur_per_month",
+        translation_key="energy_fund_eur_per_month",
+        # Flemish Energiefonds — supplier-collected residential charge
+        # billed per month. Free for domiciliated customers (0,00) and
+        # ~10 EUR/month otherwise depending on the supplier's card.
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR",
+        suggested_display_precision=2,
+        value_fn=lambda d: d.energy_fund_eur_per_month,
+    ),
+)
+
+
 CAPACITY_SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="capacity_cost",
@@ -284,6 +309,7 @@ async def async_setup_entry(
     coordinator: BePricesCoordinator = entry.runtime_data
 
     descriptions: list[BePriceSensorDescription] = list(SENSORS)
+    descriptions.extend(FEE_SENSORS)
     if entry.data.get(CONF_REGION) == REGION_FLANDERS:
         descriptions.extend(CAPACITY_SENSORS)
     try:

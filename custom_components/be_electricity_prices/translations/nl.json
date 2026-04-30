@@ -213,6 +213,12 @@
       },
       "injection_price": {
         "name": "Injectieprijs"
+      },
+      "fixed_fee_eur_per_year": {
+        "name": "Vaste vergoeding per jaar"
+      },
+      "energy_fund_eur_per_month": {
+        "name": "Energiefonds per maand"
       }
     }
   }

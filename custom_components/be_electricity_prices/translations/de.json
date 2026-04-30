@@ -213,6 +213,12 @@
       },
       "injection_price": {
         "name": "Einspeisepreis"
+      },
+      "fixed_fee_eur_per_year": {
+        "name": "Feste Vergutung pro Jahr"
+      },
+      "energy_fund_eur_per_month": {
+        "name": "Energiefonds pro Monat"
       }
     }
   }

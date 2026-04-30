@@ -114,6 +114,12 @@ class CoordinatorData:
     #   - the snapshot's injection block has no usable data (formula needs
     #     spot but contract is variable so we don't fetch ENTSO-E).
     injection_price_eur_per_kwh: float | None = None
+    # Supplier yearly fixed fee (EUR/year) and Flemish energy-fund
+    # monthly charge (EUR/month). Both are parsed from the tariff card
+    # but don't enter the per-kWh all-in number; surfacing them as
+    # separate sensors lets users compute total monthly cost.
+    yearly_fixed_fee_eur: float = 0.0
+    energy_fund_eur_per_month: float = 0.0
 
 
 class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -222,6 +228,10 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             capacity_cost_eur=capacity_cost,
             prosumer_cost_eur=prosumer_cost,
             injection_price_eur_per_kwh=injection_price,
+            yearly_fixed_fee_eur=getattr(
+                self._snapshot.energy, "yearly_fixed_fee", 0.0
+            ),
+            energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
         )
 
     def _sync_stale_issue(self, stale: bool) -> None:
