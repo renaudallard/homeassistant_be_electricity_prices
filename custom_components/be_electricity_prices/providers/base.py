@@ -47,7 +47,11 @@ from typing import Literal, Protocol
 
 import aiohttp
 
+from ..const import REGIONS
+
 TariffKind = Literal["fixed", "variable", "dynamic"]
+
+_ALL_REGIONS: frozenset[str] = frozenset(REGIONS)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -57,6 +61,10 @@ class Contract:
     id: str
     label: str
     kind: TariffKind
+    # Regions the product is actually published in. Defaults to all three;
+    # extractors override per-contract for products that 404 outside their
+    # home region (e.g. TotalEnergies Impact is Wallonia-only).
+    regions: frozenset[str] = field(default_factory=lambda: _ALL_REGIONS)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -197,6 +205,13 @@ class SupplierExtractor:
     contracts: tuple[Contract, ...]
     fetch: SnapshotFetcher
     dso_keys: tuple[str, ...] = field(default_factory=tuple)
+
+    def regions(self) -> frozenset[str]:
+        """Union of regions across this supplier's contracts."""
+        out: set[str] = set()
+        for c in self.contracts:
+            out |= c.regions
+        return frozenset(out)
 
 
 class SupplierProtocol(Protocol):

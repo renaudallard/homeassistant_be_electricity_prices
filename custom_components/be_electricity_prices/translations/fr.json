@@ -53,6 +53,9 @@
           "solar_regime": "Regime"
         }
       }
+    },
+    "abort": {
+      "supplier_region_unavailable": "Ce fournisseur ne vend pas d'electricite residentielle dans la region selectionnee. Revenez en arriere et choisissez une autre combinaison."
     }
   },
   "options": {

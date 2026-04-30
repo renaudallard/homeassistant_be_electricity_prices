@@ -53,6 +53,9 @@
           "solar_regime": "Regime"
         }
       }
+    },
+    "abort": {
+      "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Ga terug en kies een andere combinatie."
     }
   },
   "options": {

@@ -581,7 +581,13 @@ EXTRACTOR = SupplierExtractor(
     id="totalenergies",
     label="TotalEnergies",
     contracts=tuple(
-        Contract(id=c.contract_id, label=c.label, kind=c.kind) for c in _CONTRACTS
+        Contract(
+            id=c.contract_id,
+            label=c.label,
+            kind=c.kind,
+            regions=c.regions,
+        )
+        for c in _CONTRACTS
     ),
     fetch=fetch,
     dso_keys=(

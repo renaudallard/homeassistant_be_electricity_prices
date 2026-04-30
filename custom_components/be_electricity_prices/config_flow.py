@@ -100,12 +100,18 @@ from .providers.base import Contract
 # ---- shared schema builders ---------------------------------------------------
 
 
-def _supplier_options() -> list[SelectOptionDict]:
-    return [SelectOptionDict(value=e.id, label=e.label) for e in all_extractors()]
+def _supplier_options(region: str | None = None) -> list[SelectOptionDict]:
+    extractors = all_extractors()
+    if region is not None:
+        extractors = tuple(e for e in extractors if region in e.regions())
+    return [SelectOptionDict(value=e.id, label=e.label) for e in extractors]
 
 
-def _contracts_for(supplier_id: str) -> tuple[Contract, ...]:
-    return get_extractor(supplier_id).contracts
+def _contracts_for(supplier_id: str, region: str | None = None) -> tuple[Contract, ...]:
+    contracts = get_extractor(supplier_id).contracts
+    if region is None:
+        return contracts
+    return tuple(c for c in contracts if region in c.regions)
 
 
 def _region_dso_options(region: str) -> list[SelectOptionDict]:
@@ -159,8 +165,10 @@ def _user_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(fields)
 
 
-def _contract_schema(supplier_id: str, defaults: dict[str, Any]) -> vol.Schema:
-    contracts = _contracts_for(supplier_id)
+def _contract_schema(
+    supplier_id: str, region: str, defaults: dict[str, Any]
+) -> vol.Schema:
+    contracts = _contracts_for(supplier_id, region)
     options = [SelectOptionDict(value=c.id, label=c.label) for c in contracts]
     valid_ids = {c.id for c in contracts}
     current = defaults.get(CONF_CONTRACT)
@@ -302,12 +310,16 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_contract(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        supplier = self._data[CONF_SUPPLIER]
+        region = self._data[CONF_REGION]
+        if not _contracts_for(supplier, region):
+            return self.async_abort(reason="supplier_region_unavailable")
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_dso()
         return self.async_show_form(
             step_id="contract",
-            data_schema=_contract_schema(self._data[CONF_SUPPLIER], self._data),
+            data_schema=_contract_schema(supplier, region, self._data),
         )
 
     async def async_step_dso(
@@ -411,12 +423,16 @@ class BePricesOptionsFlow(OptionsFlow):
     async def async_step_contract(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        supplier = self._data[CONF_SUPPLIER]
+        region = self._data[CONF_REGION]
+        if not _contracts_for(supplier, region):
+            return self.async_abort(reason="supplier_region_unavailable")
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_dso()
         return self.async_show_form(
             step_id="contract",
-            data_schema=_contract_schema(self._data[CONF_SUPPLIER], self._data),
+            data_schema=_contract_schema(supplier, region, self._data),
         )
 
     async def async_step_dso(

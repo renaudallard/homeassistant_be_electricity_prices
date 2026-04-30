@@ -45,6 +45,7 @@ from datetime import UTC, datetime
 
 import aiohttp
 
+from ..const import REGION_WALLONIA
 from ._pdf import USER_AGENT, fetch_pdf_text, to_float
 from .base import (
     Contract,
@@ -301,14 +302,24 @@ def _yymm_to_label(yymm: str) -> str:
     return yymm
 
 
+_COCITER_REGIONS = frozenset({REGION_WALLONIA})
+
 EXTRACTOR = SupplierExtractor(
     id="cociter",
     label="Cociter",
     contracts=(
         Contract(
-            id="cociter_variable", label="Cociter Tarif Variable", kind="variable"
+            id="cociter_variable",
+            label="Cociter Tarif Variable",
+            kind="variable",
+            regions=_COCITER_REGIONS,
         ),
-        Contract(id="cociter_dynamic", label="Cociter Tarif Dynamique", kind="dynamic"),
+        Contract(
+            id="cociter_dynamic",
+            label="Cociter Tarif Dynamique",
+            kind="dynamic",
+            regions=_COCITER_REGIONS,
+        ),
     ),
     fetch=fetch,
 )

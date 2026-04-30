@@ -573,11 +573,24 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     }
 
 
+_LETTER_TO_REGION = {_V: REGION_FLANDERS, _W: REGION_WALLONIA, _B: REGION_BRUSSELS}
+
+
+def _contract_regions(c: _ContractDef) -> frozenset[str]:
+    return frozenset(_LETTER_TO_REGION[k] for k in c.months_per_region)
+
+
 EXTRACTOR = SupplierExtractor(
     id="engie",
     label="Engie",
     contracts=tuple(
-        Contract(id=c.contract_id, label=c.label, kind=c.kind) for c in _CONTRACTS
+        Contract(
+            id=c.contract_id,
+            label=c.label,
+            kind=c.kind,
+            regions=_contract_regions(c),
+        )
+        for c in _CONTRACTS
     ),
     fetch=fetch,
     dso_keys=(

@@ -53,6 +53,9 @@
           "solar_regime": "Regime"
         }
       }
+    },
+    "abort": {
+      "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewaehlten Region keinen Privathaushaltsstrom. Bitte zurueck und eine andere Kombination waehlen."
     }
   },
   "options": {

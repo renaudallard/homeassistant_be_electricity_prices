@@ -492,11 +492,19 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     return out
 
 
+_LUMINUS_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
+
 EXTRACTOR = SupplierExtractor(
     id="luminus",
     label="Luminus",
     contracts=tuple(
-        Contract(id=c.contract_id, label=c.label, kind=c.kind) for c in _CONTRACTS
+        Contract(
+            id=c.contract_id,
+            label=c.label,
+            kind=c.kind,
+            regions=_LUMINUS_REGIONS,
+        )
+        for c in _CONTRACTS
     ),
     fetch=fetch,
     dso_keys=tuple(_FLANDERS_LABELS.values()) + tuple(_WALLONIA_LABELS.values()),
