@@ -77,11 +77,14 @@ from .const import (
     CONF_CAPACITY_PEAK_SENSOR,
     CONF_CONTRACT,
     CONF_DSO,
+    CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
+    DSO_MODE_BI_HORAIRE,
+    DSO_TARIFF_MODES,
     SOLAR_REGIME_NONE,
     SOLAR_REGIMES,
     VREG_CAPACITY_FLOOR_KW,
@@ -91,6 +94,7 @@ from .const import (
     METER_MONO,
     METER_TYPES,
     REGION_FLANDERS,
+    REGION_WALLONIA,
     REGIONS,
 )
 from .providers import all_extractors, get as get_extractor
@@ -197,6 +201,22 @@ def _dso_schema(region: str, defaults: dict[str, Any]) -> vol.Schema:
     if current in valid:
         return vol.Schema({vol.Required(CONF_DSO, default=current): selector})
     return vol.Schema({vol.Required(CONF_DSO): selector})
+
+
+def _dso_tariff_mode_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Wallonia-only step: which DSO-side billing mode applies?"""
+    current = defaults.get(CONF_DSO_TARIFF_MODE) or DSO_MODE_BI_HORAIRE
+    return vol.Schema(
+        {
+            vol.Required(CONF_DSO_TARIFF_MODE, default=current): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(DSO_TARIFF_MODES),
+                    mode=SelectSelectorMode.LIST,
+                    translation_key="dso_tariff_mode",
+                )
+            ),
+        }
+    )
 
 
 def _meter_schema(
@@ -386,6 +406,17 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="solar", data_schema=_solar_schema(self._data)
         )
 
+    async def async_step_dso_tariff_mode(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self._after_dso_tariff_mode()
+        return self.async_show_form(
+            step_id="dso_tariff_mode",
+            data_schema=_dso_tariff_mode_schema(self._data),
+        )
+
     async def _after_meter(self) -> ConfigFlowResult:
         # Reject duplicate entries: the same (supplier, contract,
         # region, dso) tuple already running its own coordinator would
@@ -396,6 +427,14 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         await self.async_set_unique_id(unique)
         self._abort_if_unique_id_configured()
+        # Tarif Impact is Wallonia-only; outside Wallonia the
+        # distribution mode question doesn't apply (Brussels has only
+        # Sibelga, Flanders bills via the capacity tariff).
+        if self._data[CONF_REGION] == REGION_WALLONIA:
+            return await self.async_step_dso_tariff_mode()
+        return await self._after_dso_tariff_mode()
+
+    async def _after_dso_tariff_mode(self) -> ConfigFlowResult:
         if (
             _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
             == "dynamic"
@@ -508,7 +547,23 @@ class BePricesOptionsFlow(OptionsFlow):
             step_id="solar", data_schema=_solar_schema(self._data)
         )
 
+    async def async_step_dso_tariff_mode(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self._after_dso_tariff_mode()
+        return self.async_show_form(
+            step_id="dso_tariff_mode",
+            data_schema=_dso_tariff_mode_schema(self._data),
+        )
+
     async def _after_meter(self) -> ConfigFlowResult:
+        if self._data[CONF_REGION] == REGION_WALLONIA:
+            return await self.async_step_dso_tariff_mode()
+        return await self._after_dso_tariff_mode()
+
+    async def _after_dso_tariff_mode(self) -> ConfigFlowResult:
         if (
             _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
             == "dynamic"

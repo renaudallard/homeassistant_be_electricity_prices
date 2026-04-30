@@ -29,6 +29,13 @@
           "meter": "Zaehler"
         }
       },
+      "dso_tariff_mode": {
+        "title": "Verteilungstarif (Wallonien)",
+        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zaehler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Zeitfenster pro Stunde (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zaehler.",
+        "data": {
+          "dso_tariff_mode": "Verteilungs-Modus"
+        }
+      },
       "api_key": {
         "title": "ENTSO-E API-Schluessel",
         "description": "Erforderlich fuer dynamische Vertraege. Kostenlos bei transparency.entsoe.eu anfordern.",
@@ -88,6 +95,13 @@
           "meter": "[%key:component::be_electricity_prices::config::step::meter::data::meter%]"
         }
       },
+      "dso_tariff_mode": {
+        "title": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::description%]",
+        "data": {
+          "dso_tariff_mode": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::data::dso_tariff_mode%]"
+        }
+      },
       "api_key": {
         "title": "[%key:component::be_electricity_prices::config::step::api_key::title%]",
         "description": "[%key:component::be_electricity_prices::config::step::api_key::description%]",
@@ -133,6 +147,13 @@
         "mono": "Mono (Eintarif)",
         "bi": "Doppeltarif (Tag / Nacht)",
         "dynamic": "Dynamisch (intelligenter Zaehler)"
+      }
+    },
+    "dso_tariff_mode": {
+      "options": {
+        "simple": "Eintarif (eine Rate, alle Stunden)",
+        "bi_horaire": "Doppeltarif (Tag / Nacht)",
+        "impact": "Tarif Impact (3 Bereiche pro Stunde)"
       }
     },
     "solar_regime": {

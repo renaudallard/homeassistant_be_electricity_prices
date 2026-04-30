@@ -29,6 +29,13 @@
           "meter": "Meter"
         }
       },
+      "dso_tariff_mode": {
+        "title": "Distribution tariff (Wallonia)",
+        "description": "How your DSO bills you for the network. 'Simple' / 'Bi-horaire' match the existing meter convention. 'Tarif Impact' uses the CWaPE 3-band hour-of-day rates (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) and requires a smart meter.",
+        "data": {
+          "dso_tariff_mode": "DSO billing mode"
+        }
+      },
       "api_key": {
         "title": "ENTSO-E API key",
         "description": "Required for dynamic contracts. Request one for free at transparency.entsoe.eu.",
@@ -88,6 +95,13 @@
           "meter": "[%key:component::be_electricity_prices::config::step::meter::data::meter%]"
         }
       },
+      "dso_tariff_mode": {
+        "title": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::description%]",
+        "data": {
+          "dso_tariff_mode": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::data::dso_tariff_mode%]"
+        }
+      },
       "api_key": {
         "title": "[%key:component::be_electricity_prices::config::step::api_key::title%]",
         "description": "[%key:component::be_electricity_prices::config::step::api_key::description%]",
@@ -133,6 +147,13 @@
         "mono": "Mono (single rate)",
         "bi": "Bi-hourly (peak / off-peak)",
         "dynamic": "Dynamic (smart meter)"
+      }
+    },
+    "dso_tariff_mode": {
+      "options": {
+        "simple": "Simple (one rate, all hours)",
+        "bi_horaire": "Bi-hourly (peak/off-peak)",
+        "impact": "Tarif Impact (3 bands by hour of day)"
       }
     },
     "solar_regime": {

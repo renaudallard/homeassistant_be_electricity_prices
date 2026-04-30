@@ -29,6 +29,13 @@
           "meter": "Compteur"
         }
       },
+      "dso_tariff_mode": {
+        "title": "Tarif de distribution (Wallonie)",
+        "description": "Mode de facturation du reseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention historique. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et necessite un compteur intelligent.",
+        "data": {
+          "dso_tariff_mode": "Mode de facturation GRD"
+        }
+      },
       "api_key": {
         "title": "Cle API ENTSO-E",
         "description": "Necessaire pour les contrats dynamiques. Cle gratuite sur transparency.entsoe.eu.",
@@ -88,6 +95,13 @@
           "meter": "[%key:component::be_electricity_prices::config::step::meter::data::meter%]"
         }
       },
+      "dso_tariff_mode": {
+        "title": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::description%]",
+        "data": {
+          "dso_tariff_mode": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::data::dso_tariff_mode%]"
+        }
+      },
       "api_key": {
         "title": "[%key:component::be_electricity_prices::config::step::api_key::title%]",
         "description": "[%key:component::be_electricity_prices::config::step::api_key::description%]",
@@ -133,6 +147,13 @@
         "mono": "Mono (tarif unique)",
         "bi": "Bi-horaire (jour / nuit)",
         "dynamic": "Dynamique (compteur intelligent)"
+      }
+    },
+    "dso_tariff_mode": {
+      "options": {
+        "simple": "Simple (un tarif, toutes les heures)",
+        "bi_horaire": "Bi-horaire (jour / nuit)",
+        "impact": "Tarif Impact (3 plages par heure)"
       }
     },
     "solar_regime": {

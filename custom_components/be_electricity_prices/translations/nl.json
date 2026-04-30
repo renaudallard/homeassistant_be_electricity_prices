@@ -29,6 +29,13 @@
           "meter": "Meter"
         }
       },
+      "dso_tariff_mode": {
+        "title": "Distributietarief (Wallonie)",
+        "description": "Hoe je netbeheerder factureert. 'Simple' / 'Bi-horaire' volgen de bestaande conventie. 'Tarif Impact' gebruikt de 3 CWaPE-plages per uur (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) en vereist een digitale meter.",
+        "data": {
+          "dso_tariff_mode": "Distributiemodus"
+        }
+      },
       "api_key": {
         "title": "ENTSO-E API-sleutel",
         "description": "Vereist voor dynamische contracten. Gratis aan te vragen op transparency.entsoe.eu.",
@@ -88,6 +95,13 @@
           "meter": "[%key:component::be_electricity_prices::config::step::meter::data::meter%]"
         }
       },
+      "dso_tariff_mode": {
+        "title": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::description%]",
+        "data": {
+          "dso_tariff_mode": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::data::dso_tariff_mode%]"
+        }
+      },
       "api_key": {
         "title": "[%key:component::be_electricity_prices::config::step::api_key::title%]",
         "description": "[%key:component::be_electricity_prices::config::step::api_key::description%]",
@@ -126,6 +140,13 @@
       "options": {
         "sensor": "Vanuit een vermogenssensor",
         "fixed": "Vaste kW-waarde"
+      }
+    },
+    "dso_tariff_mode": {
+      "options": {
+        "simple": "Enkel (een tarief, alle uren)",
+        "bi_horaire": "Bi-uurlijks (dag / nacht)",
+        "impact": "Tarif Impact (3 plages per uur)"
       }
     },
     "meter": {

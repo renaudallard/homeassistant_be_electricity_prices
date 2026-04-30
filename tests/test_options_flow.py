@@ -92,6 +92,11 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"meter": "bi"}
     )
+    # Wallonia entries get a DSO tariff mode question after meter.
+    assert result["step_id"] == "dso_tariff_mode"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
+    )
     # Solar step is the new last step; submit 0 kVA (no panels).
     assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
@@ -126,7 +131,12 @@ async def test_options_flow_dynamic_branch_asks_api_key(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"meter": "dynamic"}
     )
-    # Dynamic contract -> api_key step appears.
+    # Wallonia: DSO tariff mode question first.
+    assert result["step_id"] == "dso_tariff_mode"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "impact"}
+    )
+    # Then dynamic contract -> api_key step.
     assert result["step_id"] == "api_key"
 
     result = await hass.config_entries.options.async_configure(
@@ -138,6 +148,9 @@ async def test_options_flow_dynamic_branch_asks_api_key(
     )
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert entry.data["api_key"] == "new-key-456"
+    # The Wallonia DSO tariff mode chosen mid-flow is persisted on the
+    # entry, ready for the coordinator to pass into compute_breakdown.
+    assert entry.data["dso_tariff_mode"] == "impact"
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

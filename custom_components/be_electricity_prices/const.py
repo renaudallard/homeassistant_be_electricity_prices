@@ -83,6 +83,17 @@ METER_DYNAMIC: Final = "dynamic"
 
 METER_TYPES: Final = (METER_MONO, METER_BI, METER_DYNAMIC)
 
+# DSO-side billing mode, orthogonal to the supplier meter. Wallonia
+# users with a smart meter can opt into "impact" (Tarif Impact, set by
+# CWaPE; 3 distribution rates by hour-of-day band). Outside Wallonia
+# only "simple" and "bi_horaire" are meaningful; the coordinator falls
+# back automatically when the DSO doesn't publish Impact rates.
+CONF_DSO_TARIFF_MODE: Final = "dso_tariff_mode"
+DSO_MODE_SIMPLE: Final = "simple"
+DSO_MODE_BI_HORAIRE: Final = "bi_horaire"
+DSO_MODE_IMPACT: Final = "impact"
+DSO_TARIFF_MODES: Final = (DSO_MODE_SIMPLE, DSO_MODE_BI_HORAIRE, DSO_MODE_IMPACT)
+
 CONF_CAPACITY_MODE: Final = "capacity_mode"
 CONF_CAPACITY_PEAK_SENSOR: Final = "capacity_peak_sensor"
 CONF_CAPACITY_FIXED_KW: Final = "capacity_fixed_kw"
