@@ -61,7 +61,7 @@
         }
       },
       "meters": {
-        "title": "Energiezaehler (Jahreskosten)",
+        "title": "Energiezaehler (Kosten dieses Jahr)",
         "description": "Optional. Entweder auf die vier Tag-/Nachtregister des Zaehlers zeigen (bevorzugt - exakt von Anfang an), oder auf einen einzelnen kumulativen Verbrauchs- / Einspeisesensor (die Integration verteilt die Deltas auf Tag-/Nacht-Eimer via Bi-Uhren-Plan und persistiert dies ueber Neustarts; die laufenden Kosten sind ab dem Konfigurationszeitpunkt exakt). Wenn beide ausgefuellt sind, gewinnen die Tag-/Nachtregister.",
         "data": {
           "day_consumption_kwh": "Verbrauch Tag (kWh)",
@@ -143,7 +143,7 @@
         }
       },
       "meters": {
-        "title": "Energiezaehler (Jahreskosten)",
+        "title": "Energiezaehler (Kosten dieses Jahr)",
         "description": "Optional. Entweder auf die vier Tag-/Nachtregister des Zaehlers zeigen (bevorzugt - exakt von Anfang an), oder auf einen einzelnen kumulativen Verbrauchs- / Einspeisesensor (die Integration verteilt die Deltas auf Tag-/Nacht-Eimer via Bi-Uhren-Plan und persistiert dies ueber Neustarts; die laufenden Kosten sind ab dem Konfigurationszeitpunkt exakt). Wenn beide ausgefuellt sind, gewinnen die Tag-/Nachtregister.",
         "data": {
           "day_consumption_kwh": "Verbrauch Tag (kWh)",
@@ -301,8 +301,8 @@
       "energy_fund_eur_per_month": {
         "name": "Energiefonds pro Monat"
       },
-      "yearly_cost": {
-        "name": "Jahreskosten"
+      "current_year_cost": {
+        "name": "Kosten dieses Jahr"
       }
     },
     "binary_sensor": {

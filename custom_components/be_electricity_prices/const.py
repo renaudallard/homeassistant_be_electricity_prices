@@ -98,7 +98,7 @@ CONF_CAPACITY_MODE: Final = "capacity_mode"
 CONF_CAPACITY_PEAK_SENSOR: Final = "capacity_peak_sensor"
 CONF_CAPACITY_FIXED_KW: Final = "capacity_fixed_kw"
 
-# Cumulative kWh meter sensors (HA entity_ids) for the yearly_cost sensor.
+# Cumulative kWh meter sensors (HA entity_ids) for the current_year_cost sensor.
 # Two ways to feed the sensor:
 #   1) Direct day/night registers off the meter (4 entity_ids below).
 #      Preferred when available: the bill is computed exactly from the

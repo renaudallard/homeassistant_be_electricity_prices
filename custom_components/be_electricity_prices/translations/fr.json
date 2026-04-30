@@ -61,7 +61,7 @@
         }
       },
       "meters": {
-        "title": "Compteurs (cout annuel)",
+        "title": "Compteurs (cout de l annee)",
         "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit un seul capteur cumulatif de consommation / injection (l'integration repartit les deltas en jour/nuit via l'horaire bi-horaire, persiste entre redemarrages; le cout courant est exact a partir du moment de la configuration). Quand les deux sont remplis, les registres jour/nuit l'emportent.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
@@ -143,7 +143,7 @@
         }
       },
       "meters": {
-        "title": "Compteurs (cout annuel)",
+        "title": "Compteurs (cout de l annee)",
         "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit un seul capteur cumulatif de consommation / injection (l'integration repartit les deltas en jour/nuit via l'horaire bi-horaire, persiste entre redemarrages; le cout courant est exact a partir du moment de la configuration). Quand les deux sont remplis, les registres jour/nuit l'emportent.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
@@ -301,8 +301,8 @@
       "energy_fund_eur_per_month": {
         "name": "Fonds energie par mois"
       },
-      "yearly_cost": {
-        "name": "Cout annuel"
+      "current_year_cost": {
+        "name": "Cout de l annee"
       }
     },
     "binary_sensor": {

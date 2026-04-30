@@ -37,7 +37,7 @@ from custom_components.be_electricity_prices.coordinator import (
     _compute_capacity,
     _compute_injection_price,
     _compute_prosumer,
-    _compute_yearly_cost,
+    _compute_current_year_cost,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
@@ -233,10 +233,10 @@ def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:
     assert _compute_injection_price(snap, brussels_entry, {}) == pytest.approx(0.0476)
 
 
-# ---- _compute_yearly_cost ---------------------------------------------------
+# ---- _compute_current_year_cost ---------------------------------------------------
 
 
-# Snapshot used by the yearly_cost tests: 0.18 single energy, 0.10 dist,
+# Snapshot used by the current_year_cost tests: 0.18 single energy, 0.10 dist,
 # 0.0145 transport, Wallonia taxes (federal_excise + energy_contribution +
 # wallonia_renewables) so the all-in single rate works out cleanly.
 def _yearly_snapshot() -> SupplierSnapshot:
@@ -288,7 +288,7 @@ def _set_meters(
     day_inj: float | None,
     night_inj: float | None,
 ) -> None:
-    """Push the four sensor states the yearly_cost helper reads."""
+    """Push the four sensor states the current_year_cost helper reads."""
     pairs = (
         ("sensor.day_cons", day_cons),
         ("sensor.night_cons", night_cons),
@@ -317,33 +317,35 @@ def _zero_baselines() -> dict[str, float]:
     }
 
 
-async def test_yearly_cost_returns_none_when_any_meter_missing(
+async def test_current_year_cost_treats_missing_meter_as_zero_kwh(
     hass: HomeAssistant,
 ) -> None:
+    """The sensor must never report ``unknown``: an unavailable register
+    is treated as 0 kWh on that side, so the value still reflects the
+    other readings + the fees floor."""
     snap = _yearly_snapshot()
-    entry = _yearly_entry()
+    entry = _yearly_entry(meter="mono", solar_regime="none")
     _set_meters(hass, day_cons=1000, night_cons=500, day_inj=None, night_inj=200)
-    assert (
-        _compute_yearly_cost(
-            hass,
-            snap,
-            entry,
-            prosumer_cost_eur_per_month=0.0,
-            injection_price_eur_per_kwh=None,
-            kwh_buckets={},
-            register_baselines=_zero_baselines(),
-        )
-        is None
+    cost = _compute_current_year_cost(
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets={},
+        register_baselines=_zero_baselines(),
     )
+    # regime=none mono: only consumption matters; day_inj=None -> 0.
+    assert cost == pytest.approx(1500 * 0.3765)
 
 
-async def test_yearly_cost_no_solar_mono_uses_total_cons_x_single_rate(
+async def test_current_year_cost_no_solar_mono_uses_total_cons_x_single_rate(
     hass: HomeAssistant,
 ) -> None:
     snap = _yearly_snapshot()
     entry = _yearly_entry(meter="mono", solar_regime="none")
     _set_meters(hass, day_cons=1000, night_cons=500, day_inj=0, night_inj=0)
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -356,11 +358,13 @@ async def test_yearly_cost_no_solar_mono_uses_total_cons_x_single_rate(
     assert cost == pytest.approx(1500 * 0.3765)
 
 
-async def test_yearly_cost_no_solar_bi_uses_band_rates(hass: HomeAssistant) -> None:
+async def test_current_year_cost_no_solar_bi_uses_band_rates(
+    hass: HomeAssistant,
+) -> None:
     snap = _yearly_snapshot()
     entry = _yearly_entry(meter="bi", solar_regime="none")
     _set_meters(hass, day_cons=1000, night_cons=500, day_inj=0, night_inj=0)
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -376,14 +380,14 @@ async def test_yearly_cost_no_solar_bi_uses_band_rates(hass: HomeAssistant) -> N
     assert cost == pytest.approx(1000 * peak + 500 * offpeak)
 
 
-async def test_yearly_cost_compensation_mono_nets_injection(
+async def test_current_year_cost_compensation_mono_nets_injection(
     hass: HomeAssistant,
 ) -> None:
     snap = _yearly_snapshot()
     entry = _yearly_entry(meter="mono", solar_regime="compensation")
     _set_meters(hass, day_cons=1000, night_cons=500, day_inj=600, night_inj=400)
     # net = 1500 - 1000 = 500. Bill = 500 * single_all_in
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -395,7 +399,7 @@ async def test_yearly_cost_compensation_mono_nets_injection(
     assert cost == pytest.approx(500 * 0.3765)
 
 
-async def test_yearly_cost_compensation_mono_can_go_negative(
+async def test_current_year_cost_compensation_mono_can_go_negative(
     hass: HomeAssistant,
 ) -> None:
     snap = _yearly_snapshot()
@@ -405,7 +409,7 @@ async def test_yearly_cost_compensation_mono_can_go_negative(
     # Surplus is theoretically credited at the consumption rate; the
     # actual bill is usually floored at zero, but we report the
     # uncapped value so users see the over-production margin.
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -417,7 +421,9 @@ async def test_yearly_cost_compensation_mono_can_go_negative(
     assert cost == pytest.approx(-600 * 0.3765)
 
 
-async def test_yearly_cost_compensation_bi_nets_per_band(hass: HomeAssistant) -> None:
+async def test_current_year_cost_compensation_bi_nets_per_band(
+    hass: HomeAssistant,
+) -> None:
     snap = _yearly_snapshot()
     entry = _yearly_entry(meter="bi", solar_regime="compensation")
     _set_meters(hass, day_cons=1000, night_cons=500, day_inj=300, night_inj=600)
@@ -425,7 +431,7 @@ async def test_yearly_cost_compensation_bi_nets_per_band(hass: HomeAssistant) ->
     # weighted: 700 * peak + (-100) * offpeak.
     peak = 0.20 + 0.11 + 0.0145 + 0.05 + 0.002 + 0.03
     offpeak = 0.16 + 0.09 + 0.0145 + 0.05 + 0.002 + 0.03
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -437,14 +443,14 @@ async def test_yearly_cost_compensation_bi_nets_per_band(hass: HomeAssistant) ->
     assert cost == pytest.approx(700 * peak + (-100) * offpeak)
 
 
-async def test_yearly_cost_injection_regime_uses_supplier_injection_rate(
+async def test_current_year_cost_injection_regime_uses_supplier_injection_rate(
     hass: HomeAssistant,
 ) -> None:
     snap = _yearly_snapshot()
     entry = _yearly_entry(meter="mono", solar_regime="injection")
     _set_meters(hass, day_cons=800, night_cons=200, day_inj=300, night_inj=200)
     # cost = 1000 * single_all_in - 500 * inj_rate
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -456,24 +462,33 @@ async def test_yearly_cost_injection_regime_uses_supplier_injection_rate(
     assert cost == pytest.approx(1000 * 0.3765 - 500 * 0.05)
 
 
-async def test_yearly_cost_dynamic_contract_returns_none(hass: HomeAssistant) -> None:
+async def test_current_year_cost_dynamic_contract_falls_back_to_fees_only(
+    hass: HomeAssistant,
+) -> None:
+    """Dynamic contracts have no stable rate to apply to a daily total,
+    so the energy term is dropped -- the sensor still returns the
+    fees-only floor instead of going unknown."""
     snap = SupplierSnapshot(
         supplier="test",
         contract="test",
-        energy=DynamicRates(factor=1.0, base=0.02),
+        energy=DynamicRates(factor=1.0, base=0.02, yearly_fixed_fee=80.0),
         dsos={
             "ores": DsoOverlay(
                 distribution_single=0.10,
                 transport=0.0145,
             )
         },
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        taxes=TaxOverlay(
+            federal_excise=0.05,
+            energy_contribution=0.002,
+            energy_fund_eur_per_month=2.0,
+        ),
         source_url="test://",
         fetched_at_iso="2026-04-29T12:00:00+00:00",
     )
     entry = _yearly_entry(solar_regime="injection")
     _set_meters(hass, day_cons=100, night_cons=100, day_inj=0, night_inj=0)
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -482,10 +497,13 @@ async def test_yearly_cost_dynamic_contract_returns_none(hass: HomeAssistant) ->
         kwh_buckets={},
         register_baselines=_zero_baselines(),
     )
-    assert cost is None
+    # Fees-only: yearly_fixed_fee 80 + 12 * energy_fund 2 = 80 + 24 = 104.
+    assert cost == pytest.approx(104.0)
 
 
-async def test_yearly_cost_includes_fees_and_prosumer(hass: HomeAssistant) -> None:
+async def test_current_year_cost_includes_fees_and_prosumer(
+    hass: HomeAssistant,
+) -> None:
     snap = SupplierSnapshot(
         supplier="test",
         contract="test",
@@ -504,7 +522,7 @@ async def test_yearly_cost_includes_fees_and_prosumer(hass: HomeAssistant) -> No
     )
     entry = _yearly_entry(meter="mono", solar_regime="none")
     _set_meters(hass, day_cons=500, night_cons=500, day_inj=0, night_inj=0)
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -520,7 +538,7 @@ async def test_yearly_cost_includes_fees_and_prosumer(hass: HomeAssistant) -> No
 # ---- bucket fallback (totals -> internal day/night split) ------------------
 
 
-async def test_yearly_cost_bucket_fallback_when_only_totals_configured(
+async def test_current_year_cost_bucket_fallback_when_only_totals_configured(
     hass: HomeAssistant,
 ) -> None:
     """When the user only configured the cumulative totals (CONF_*_KWH),
@@ -549,7 +567,7 @@ async def test_yearly_cost_bucket_fallback_when_only_totals_configured(
     }
     peak = 0.20 + 0.11 + 0.0145 + 0.05 + 0.002 + 0.03
     offpeak = 0.16 + 0.09 + 0.0145 + 0.05 + 0.002 + 0.03
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -562,10 +580,13 @@ async def test_yearly_cost_bucket_fallback_when_only_totals_configured(
     assert cost == pytest.approx(500 * peak + 200 * offpeak)
 
 
-async def test_yearly_cost_returns_none_when_neither_path_configured(
+async def test_current_year_cost_falls_back_to_fees_when_no_meters_configured(
     hass: HomeAssistant,
 ) -> None:
-    """No day/night registers, no totals -> nothing to compute."""
+    """Even without any meter sensors configured, the sensor stays
+    numeric and reports the fees-only floor. Better to display a stable
+    minimum than to go ``unknown``; the user can wire meters anytime to
+    grow the value."""
     snap = _yearly_snapshot()
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -578,7 +599,7 @@ async def test_yearly_cost_returns_none_when_neither_path_configured(
             "solar_regime": "none",
         },
     )
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -587,10 +608,11 @@ async def test_yearly_cost_returns_none_when_neither_path_configured(
         kwh_buckets={},
         register_baselines=_zero_baselines(),
     )
-    assert cost is None
+    # _yearly_snapshot has no fees configured -> cost is 0.0, not unknown.
+    assert cost == 0.0
 
 
-async def test_yearly_cost_day_night_registers_win_over_buckets(
+async def test_current_year_cost_day_night_registers_win_over_buckets(
     hass: HomeAssistant,
 ) -> None:
     """Day/night register sensors override the bucket fallback even when
@@ -623,7 +645,7 @@ async def test_yearly_cost_day_night_registers_win_over_buckets(
         "injection_day": 0.0,
         "injection_night": 0.0,
     }
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -635,16 +657,16 @@ async def test_yearly_cost_day_night_registers_win_over_buckets(
     assert cost == pytest.approx(1500 * 0.3765)
 
 
-async def test_yearly_cost_subtracts_year_start_baseline(
+async def test_current_year_cost_subtracts_year_start_baseline(
     hass: HomeAssistant,
 ) -> None:
-    """yearly_cost reflects ``current - baseline``, not the lifetime
+    """current_year_cost reflects ``current - baseline``, not the lifetime
     counter. After a Jan 1 baseline of 30 000 kWh, hitting 30 200 must
     give the same number as 200 from a fresh meter."""
     snap = _yearly_snapshot()
     entry = _yearly_entry(meter="mono", solar_regime="none")
     _set_meters(hass, day_cons=30100, night_cons=30100, day_inj=10000, night_inj=10000)
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -662,17 +684,18 @@ async def test_yearly_cost_subtracts_year_start_baseline(
     assert cost == pytest.approx(200 * 0.3765)
 
 
-async def test_yearly_cost_register_returns_none_when_baseline_missing(
+async def test_current_year_cost_register_falls_back_to_fees_when_baseline_missing(
     hass: HomeAssistant,
 ) -> None:
     """If the rollover handler hasn't captured a baseline yet (e.g. the
-    register sensor was unavailable at first refresh), the helper
-    declines to compute -- it would otherwise mis-report the lifetime
-    bill until the next rollover."""
+    register sensor was unavailable at first refresh), we treat the
+    register as 0 kWh and surface the fees-only floor. Far better than
+    going ``unknown`` -- the rollover top-up loop catches the baseline
+    on the next refresh and the value snaps back to reality."""
     snap = _yearly_snapshot()
     entry = _yearly_entry(meter="mono", solar_regime="none")
     _set_meters(hass, day_cons=30100, night_cons=30100, day_inj=0, night_inj=0)
-    cost = _compute_yearly_cost(
+    cost = _compute_current_year_cost(
         hass,
         snap,
         entry,
@@ -681,4 +704,5 @@ async def test_yearly_cost_register_returns_none_when_baseline_missing(
         kwh_buckets={},
         register_baselines={},  # no baseline captured yet
     )
-    assert cost is None
+    # _yearly_snapshot has zero fees -> cost is 0.0 (not unknown).
+    assert cost == 0.0

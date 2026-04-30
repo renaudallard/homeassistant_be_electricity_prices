@@ -66,7 +66,7 @@ async def async_get_config_entry_diagnostics(
             "capacity_cost_eur": data.capacity_cost_eur,
             "prosumer_cost_eur": data.prosumer_cost_eur,
             "injection_price_eur_per_kwh": data.injection_price_eur_per_kwh,
-            "yearly_cost_eur": data.yearly_cost_eur,
+            "current_year_cost_eur": data.current_year_cost_eur,
             "hourly": [
                 {
                     "start": dt_util.as_local(h).isoformat(),

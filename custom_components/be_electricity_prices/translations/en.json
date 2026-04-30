@@ -61,7 +61,7 @@
         }
       },
       "meters": {
-        "title": "Energy meters (yearly cost)",
+        "title": "Energy meters (current year cost)",
         "description": "Optional. Either point at the four day/night registers from your meter (preferred - exact from the start), or just at a single cumulative consumption / injection sensor (the integration will then split deltas into day/night buckets via the bi-hourly schedule, persisted across restarts; the running cost is accurate from the moment you set it up). When both are filled, the day/night registers win.",
         "data": {
           "day_consumption_kwh": "Day consumption (kWh)",
@@ -143,7 +143,7 @@
         }
       },
       "meters": {
-        "title": "Energy meters (yearly cost)",
+        "title": "Energy meters (current year cost)",
         "description": "Optional. Either point at the four day/night registers from your meter (preferred - exact from the start), or just at a single cumulative consumption / injection sensor (the integration will then split deltas into day/night buckets via the bi-hourly schedule, persisted across restarts; the running cost is accurate from the moment you set it up). When both are filled, the day/night registers win.",
         "data": {
           "day_consumption_kwh": "Day consumption (kWh)",
@@ -301,8 +301,8 @@
       "energy_fund_eur_per_month": {
         "name": "Energy fund per month"
       },
-      "yearly_cost": {
-        "name": "Yearly cost"
+      "current_year_cost": {
+        "name": "Current year cost"
       }
     },
     "binary_sensor": {

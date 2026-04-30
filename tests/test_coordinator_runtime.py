@@ -338,7 +338,7 @@ async def test_kwh_listener_teardown_unsubscribes(hass: HomeAssistant) -> None:
     assert "sensor.total_cons" not in coord._kwh_baselines
 
 
-# ---- yearly_cost rollover (Jan 1 reset) ------------------------------------
+# ---- current_year_cost rollover (Jan 1 reset) ------------------------------------
 
 
 def _entry_with_registers() -> MockConfigEntry:
@@ -372,7 +372,7 @@ async def test_rollover_captures_register_baselines_on_first_refresh(
     hass.states.async_set("sensor.day_inj", "5000")
     hass.states.async_set("sensor.night_inj", "5000")
 
-    coord._roll_over_yearly_cost_if_needed()
+    coord._roll_over_current_year_cost_if_needed()
 
     assert coord._year_start == dt_util.now().year
     assert coord._year_start_register_baselines == {
@@ -397,7 +397,7 @@ async def test_rollover_resets_buckets_on_year_change(hass: HomeAssistant) -> No
     }
     coord._year_start = dt_util.now().year - 1  # last year
 
-    coord._roll_over_yearly_cost_if_needed()
+    coord._roll_over_current_year_cost_if_needed()
 
     assert coord._kwh_buckets == {
         "consumption_day": 0.0,
@@ -422,7 +422,7 @@ async def test_rollover_is_idempotent_within_same_year(
     coord._kwh_buckets["consumption_day"] = 50.0
 
     hass.states.async_set("sensor.day_cons", "9999")
-    coord._roll_over_yearly_cost_if_needed()
+    coord._roll_over_current_year_cost_if_needed()
 
     # Baseline unchanged; bucket unchanged.
     assert coord._year_start_register_baselines == {"sensor.day_cons": 1000.0}
@@ -431,8 +431,10 @@ async def test_rollover_is_idempotent_within_same_year(
 
 async def test_rollover_skips_unavailable_registers(hass: HomeAssistant) -> None:
     """A register that's unavailable at rollover time is left out of the
-    baseline; ``_compute_yearly_cost`` then returns None for that path
-    until the next rollover catches a valid value."""
+    baseline. The next rollover call (within the same year) tops it up
+    once the sensor becomes readable -- without this, the baseline would
+    stay missing until next Jan 1 and ``current_year_cost`` would never reach
+    its true value."""
     entry = _entry_with_registers()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
@@ -441,7 +443,41 @@ async def test_rollover_skips_unavailable_registers(hass: HomeAssistant) -> None
     hass.states.async_set("sensor.day_inj", "5000")
     hass.states.async_set("sensor.night_inj", "5000")
 
-    coord._roll_over_yearly_cost_if_needed()
+    coord._roll_over_current_year_cost_if_needed()
 
     assert "sensor.day_cons" in coord._year_start_register_baselines
     assert "sensor.night_cons" not in coord._year_start_register_baselines
+
+
+async def test_rollover_tops_up_missing_baselines_within_same_year(
+    hass: HomeAssistant,
+) -> None:
+    """A user adding the 4 register sensors via OptionsFlow after install
+    triggers a coordinator reload mid-year; the rollover must top up
+    the new baselines on next refresh instead of waiting for Jan 1.
+    Same path catches a sensor that was temporarily unavailable during
+    a previous refresh."""
+    entry = _entry_with_registers()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    # Simulate the scenario: year already advanced past install (so
+    # year-change branch is skipped on subsequent refreshes), no
+    # baselines captured yet, and only some of the registers were
+    # readable on the first attempt.
+    coord._year_start = dt_util.now().year
+    coord._year_start_register_baselines = {"sensor.day_cons": 30000.0}
+    hass.states.async_set("sensor.day_cons", "30100")
+    hass.states.async_set("sensor.night_cons", "20000")
+    hass.states.async_set("sensor.day_inj", "5000")
+    hass.states.async_set("sensor.night_inj", "5000")
+
+    coord._roll_over_current_year_cost_if_needed()
+
+    # Existing baseline preserved (must not be overwritten mid-year),
+    # missing ones backfilled from current state.
+    assert coord._year_start_register_baselines == {
+        "sensor.day_cons": 30000.0,
+        "sensor.night_cons": 20000.0,
+        "sensor.day_inj": 5000.0,
+        "sensor.night_inj": 5000.0,
+    }

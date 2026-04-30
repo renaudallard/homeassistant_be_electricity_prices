@@ -313,7 +313,7 @@ def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
 
 
 def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
-    """Cumulative-kWh sensors for the yearly_cost computation.
+    """Cumulative-kWh sensors for the current_year_cost computation.
 
     Two ways to feed the sensor, both optional:
 
@@ -321,7 +321,7 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
         when populated.
       * Single cumulative totals (2 fields). The coordinator splits
         deltas into day/night buckets via is_offpeak(now) and persists
-        them, so the running yearly_cost survives restarts.
+        them, so the running current_year_cost survives restarts.
 
     When both are filled, the day/night registers win (more accurate;
     no warm-up period).

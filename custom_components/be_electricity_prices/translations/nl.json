@@ -61,7 +61,7 @@
         }
       },
       "meters": {
-        "title": "Energiemeters (jaarlijkse kost)",
+        "title": "Energiemeters (kost dit jaar)",
         "description": "Optioneel. Wijs ofwel de vier dag/nacht registers van de meter aan (voorkeur - exact vanaf het begin), of een enkele cumulatieve verbruik- / injectiesensor (de integratie splitst delta's in dag/nacht via het bi-uurlijks schema, wordt bewaard over herstarts; de lopende kost is exact vanaf het moment van configuratie). Wanneer beide zijn ingevuld winnen de dag/nacht registers.",
         "data": {
           "day_consumption_kwh": "Verbruik dag (kWh)",
@@ -143,7 +143,7 @@
         }
       },
       "meters": {
-        "title": "Energiemeters (jaarlijkse kost)",
+        "title": "Energiemeters (kost dit jaar)",
         "description": "Optioneel. Wijs ofwel de vier dag/nacht registers van de meter aan (voorkeur - exact vanaf het begin), of een enkele cumulatieve verbruik- / injectiesensor (de integratie splitst delta's in dag/nacht via het bi-uurlijks schema, wordt bewaard over herstarts; de lopende kost is exact vanaf het moment van configuratie). Wanneer beide zijn ingevuld winnen de dag/nacht registers.",
         "data": {
           "day_consumption_kwh": "Verbruik dag (kWh)",
@@ -301,8 +301,8 @@
       "energy_fund_eur_per_month": {
         "name": "Energiefonds per maand"
       },
-      "yearly_cost": {
-        "name": "Jaarkost"
+      "current_year_cost": {
+        "name": "Kost dit jaar"
       }
     },
     "binary_sensor": {

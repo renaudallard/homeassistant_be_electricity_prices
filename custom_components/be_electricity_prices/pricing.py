@@ -193,7 +193,7 @@ def static_energy_eur_per_kwh(energy: EnergyRates, band: StaticBand) -> float | 
     """Stable (no time-of-day) energy rate for a given band.
 
     Used by ``static_breakdown`` to compute the all-in rate plugged into
-    the yearly_cost sensor. Returns ``None`` for DynamicRates (no
+    the current_year_cost sensor. Returns ``None`` for DynamicRates (no
     constant rate exists) and TimeOfUseRates (3-band schema doesn't map
     onto the bi-hourly meter convention). Falls back to the single rate
     when the requested peak/offpeak band has no published value

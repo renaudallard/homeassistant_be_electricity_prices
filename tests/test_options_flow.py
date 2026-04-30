@@ -114,7 +114,7 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
     )
-    # Then the meters step (yearly_cost inputs); skipped here.
+    # Then the meters step (current_year_cost inputs); skipped here.
     assert result["step_id"] == "meters"
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY

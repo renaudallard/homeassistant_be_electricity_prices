@@ -355,16 +355,16 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         value_fn=lambda d: d.energy_fund_eur_per_month,
     ),
     BePriceSensorDescription(
-        key="yearly_cost",
-        translation_key="yearly_cost",
-        # Running annual bill: cumulative_kWh x rates + fees, with
-        # injection netted per regime. Stays None until the user has
-        # populated all four meter sensors and the contract has a stable
-        # rate (so dynamic / TOU contracts always show unavailable).
+        key="current_year_cost",
+        translation_key="current_year_cost",
+        # Running bill since Jan 1: this-year cons / inj kWh x rates +
+        # annual fees, with injection netted per regime. Always numeric;
+        # missing meter inputs collapse to the fees-only floor so the
+        # sensor never goes ``unknown``.
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="EUR",
         suggested_display_precision=2,
-        value_fn=lambda d: d.yearly_cost_eur,
+        value_fn=lambda d: d.current_year_cost_eur,
     ),
 )
 
