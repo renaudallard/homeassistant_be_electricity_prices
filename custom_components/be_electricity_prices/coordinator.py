@@ -95,6 +95,36 @@ _LOGGER = logging.getLogger(__name__)
 SNAPSHOT_REFRESH_HOURS = 24
 SNAPSHOT_STALE_DAYS = 7
 
+# Process-wide snapshot sharing across config entries. Two entries that
+# point at the same (supplier, contract, region) share their freshly
+# fetched SupplierSnapshot, so we never poll the same PDF twice. Each
+# key also has an asyncio.Lock so concurrent first-fetches deduplicate.
+_SHARED_SNAPSHOTS_KEY = "snapshot_cache"
+_SHARED_LOCKS_KEY = "snapshot_locks"
+
+
+@dataclass
+class _SharedSnapshot:
+    snapshot: "SupplierSnapshot"
+    fetched_at: datetime
+
+
+def _shared_snapshots(
+    hass: HomeAssistant,
+) -> dict[tuple[str, str, str], _SharedSnapshot]:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_SHARED_SNAPSHOTS_KEY, {})  # type: ignore[no-any-return]
+
+
+def _shared_lock(hass: HomeAssistant, key: tuple[str, str, str]) -> asyncio.Lock:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    locks: dict[tuple[str, str, str], asyncio.Lock] = bucket.setdefault(
+        _SHARED_LOCKS_KEY, {}
+    )
+    if key not in locks:
+        locks[key] = asyncio.Lock()
+    return locks[key]
+
 
 @dataclass
 class CoordinatorData:
@@ -260,38 +290,70 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         Invoked by the be_electricity_prices.refresh service when the user
         wants the integration to pick up a new tariff card or correct an
-        error without waiting for the 24h refresh tick.
+        error without waiting for the 24h refresh tick. Evicts the shared
+        (supplier, contract, region) entry too so other coordinators with
+        the same key also see a fresh fetch on their next refresh.
         """
         self._snapshot_fetched_at = None
         self._spot_cache = {}
         self._spot_cache_day = None
         self._spot_cache_includes_tomorrow = False
+        _shared_snapshots(self.hass).pop(self._shared_key(), None)
         await self.async_request_refresh()
 
+    def _shared_key(self) -> tuple[str, str, str]:
+        return (
+            self.entry.data[CONF_SUPPLIER],
+            self.entry.data[CONF_CONTRACT],
+            self.entry.data[CONF_REGION],
+        )
+
+    def _adopt_shared(self, shared: _SharedSnapshot) -> None:
+        """Take a fresh shared snapshot as our own."""
+        self._snapshot = shared.snapshot
+        self._snapshot_fetched_at = shared.fetched_at
+        self._last_error = ""
+
     async def _maybe_refresh_snapshot(self) -> None:
-        if self._snapshot_fetched_at and (
-            dt_util.utcnow() - self._snapshot_fetched_at
-            < timedelta(hours=SNAPSHOT_REFRESH_HOURS)
-        ):
+        ttl = timedelta(hours=SNAPSHOT_REFRESH_HOURS)
+        now = dt_util.utcnow()
+        if self._snapshot_fetched_at and (now - self._snapshot_fetched_at < ttl):
             return
-        try:
-            extractor = get_extractor(self.entry.data[CONF_SUPPLIER])
-            snap = await extractor.fetch(
-                self._session,
-                self.entry.data[CONF_CONTRACT],
-                self.entry.data[CONF_REGION],
-            )
-            self._snapshot = snap
-            self._snapshot_fetched_at = dt_util.utcnow()
-            self._last_error = ""
-        except (ExtractorError, asyncio.TimeoutError) as err:
-            self._last_error = str(err)
-            _LOGGER.warning(
-                "snapshot refresh failed for %s/%s: %s; keeping cached",
-                self.entry.data.get(CONF_SUPPLIER),
-                self.entry.data.get(CONF_CONTRACT),
-                err,
-            )
+
+        key = self._shared_key()
+        cache = _shared_snapshots(self.hass)
+        # Free, non-blocking shortcut when another coordinator has already
+        # done the work.
+        shared = cache.get(key)
+        if shared and (now - shared.fetched_at < ttl):
+            self._adopt_shared(shared)
+            return
+
+        async with _shared_lock(self.hass, key):
+            shared = cache.get(key)
+            if shared and (dt_util.utcnow() - shared.fetched_at < ttl):
+                self._adopt_shared(shared)
+                return
+            try:
+                extractor = get_extractor(self.entry.data[CONF_SUPPLIER])
+                snap = await extractor.fetch(
+                    self._session,
+                    self.entry.data[CONF_CONTRACT],
+                    self.entry.data[CONF_REGION],
+                )
+                fetched_at = dt_util.utcnow()
+                cache[key] = _SharedSnapshot(snapshot=snap, fetched_at=fetched_at)
+                self._snapshot = snap
+                self._snapshot_fetched_at = fetched_at
+                self._last_error = ""
+            except (ExtractorError, asyncio.TimeoutError) as err:
+                self._last_error = str(err)
+                _LOGGER.warning(
+                    "snapshot refresh failed for %s/%s: %s; keeping cached",
+                    self.entry.data.get(CONF_SUPPLIER),
+                    self.entry.data.get(CONF_CONTRACT),
+                    err,
+                )
 
     async def _fetch_spot_prices(self) -> dict[datetime, float]:
         api_key = self.entry.data.get(CONF_API_KEY)

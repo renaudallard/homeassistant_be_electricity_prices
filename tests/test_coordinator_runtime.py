@@ -28,14 +28,24 @@
 from __future__ import annotations
 
 from datetime import date
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.const import DOMAIN
-from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+from custom_components.be_electricity_prices.coordinator import (
+    BePricesCoordinator,
+    _shared_snapshots,
+)
+from custom_components.be_electricity_prices.providers.base import (
+    DsoOverlay,
+    FixedRates,
+    SupplierSnapshot,
+    TaxOverlay,
+)
 
 
 def _entry() -> MockConfigEntry:
@@ -71,6 +81,111 @@ async def test_force_refresh_drops_caches_and_requests_update(
     assert coord._spot_cache_day is None
     assert coord._spot_cache_includes_tomorrow is False
     coord.async_request_refresh.assert_awaited_once()
+
+
+def _fake_snapshot(supplier: str = "eneco") -> SupplierSnapshot:
+    return SupplierSnapshot(
+        supplier=supplier,
+        contract="power_fix",
+        energy=FixedRates(single=0.18),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://",
+        fetched_at_iso="2026-04-30T12:00:00+00:00",
+    )
+
+
+async def test_two_coordinators_share_snapshot_and_only_fetch_once(
+    hass: HomeAssistant,
+) -> None:
+    """Two entries pointing at the same (supplier, contract, region) must
+    share the snapshot — extractor.fetch may run for the first one only."""
+    entry_a = _entry()
+    entry_b = _entry()
+    entry_a.add_to_hass(hass)
+    entry_b.add_to_hass(hass)
+    coord_a = BePricesCoordinator(hass, entry_a)
+    coord_b = BePricesCoordinator(hass, entry_b)
+
+    fetched = _fake_snapshot()
+    fetch_calls = 0
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return fetched
+
+    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord_a._maybe_refresh_snapshot()
+        await coord_b._maybe_refresh_snapshot()
+
+    assert fetch_calls == 1
+    assert coord_a._snapshot is fetched
+    assert coord_b._snapshot is fetched
+
+
+async def test_force_refresh_evicts_shared_cache_for_other_coordinator(
+    hass: HomeAssistant,
+) -> None:
+    """async_force_refresh on entry A must evict the shared (supplier,
+    contract, region) entry, so entry B's next refresh re-fetches."""
+    entry_a = _entry()
+    entry_b = _entry()
+    entry_a.add_to_hass(hass)
+    entry_b.add_to_hass(hass)
+    coord_a = BePricesCoordinator(hass, entry_a)
+    coord_b = BePricesCoordinator(hass, entry_b)
+    coord_a.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+
+    fetch_calls = 0
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return _fake_snapshot()
+
+    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord_a._maybe_refresh_snapshot()  # populates the shared cache
+        assert fetch_calls == 1
+        await coord_a.async_force_refresh()  # evicts; calls async_request_refresh
+        await coord_b._maybe_refresh_snapshot()  # must re-fetch
+        assert fetch_calls == 2
+
+
+async def test_shared_cache_expires_after_ttl(hass: HomeAssistant) -> None:
+    """Snapshots older than SNAPSHOT_REFRESH_HOURS (24h) must be re-fetched."""
+    entry_a = _entry()
+    entry_a.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry_a)
+
+    fetch_calls = 0
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return _fake_snapshot()
+
+    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+        # Hand-age the shared entry past the TTL.
+        cache = _shared_snapshots(hass)
+        key = coord._shared_key()
+        cache[key].fetched_at = dt_util.utcnow().replace(year=2020)
+        coord._snapshot_fetched_at = cache[key].fetched_at
+        await coord._maybe_refresh_snapshot()
+        assert fetch_calls == 2
 
 
 async def test_sync_stale_issue_creates_and_clears(hass: HomeAssistant) -> None:
