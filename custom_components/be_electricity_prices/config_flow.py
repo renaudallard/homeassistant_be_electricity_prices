@@ -202,9 +202,12 @@ def _dso_schema(region: str, defaults: dict[str, Any]) -> vol.Schema:
 def _meter_schema(
     supplier_id: str, contract_id: str, defaults: dict[str, Any]
 ) -> vol.Schema:
+    # Dynamic and TOU contracts both require a smart (SMR3) meter to
+    # bill by quarter-hour or by hour-of-day; default the meter step
+    # accordingly. Other kinds (fixed, variable) default to mono.
     fallback = (
         METER_DYNAMIC
-        if _contract_kind(supplier_id, contract_id) == "dynamic"
+        if _contract_kind(supplier_id, contract_id) in ("dynamic", "tou")
         else METER_MONO
     )
     current = defaults.get(CONF_METER) or fallback
