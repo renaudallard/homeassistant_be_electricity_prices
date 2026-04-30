@@ -105,14 +105,27 @@ class DynamicRates:
     yearly_fixed_fee: float = 0.0
 
 
+WeekendRule = Literal["weekend_offpeak", "weekend_no_peak"]
+
+
 @dataclass(frozen=True, kw_only=True)
 class TimeOfUseRates:
     """Time-of-use energy contract: 3 slots by hour-of-day.
 
-    Belgian TOU convention (Luminus SmartFlex):
-      peak       : Mon-Fri 07:00-11:00 + 17:00-22:00 (high-cost)
-      transition : Mon-Fri 11:00-17:00              (mid-cost)
-      offpeak    : Mon-Fri 22:00-07:00 + weekends   (low-cost)
+    Weekday rule is shared across products:
+      peak       : 07:00-11:00 + 17:00-22:00
+      transition : 11:00-17:00 + 22:00-01:00
+      offpeak    : 01:00-07:00
+
+    Weekend rule is product-dependent (``weekend_rule``):
+
+      weekend_offpeak (Luminus SmartFlex):
+        Saturday and Sunday are entirely off-peak.
+
+      weekend_no_peak (Engie Empower Flextime):
+        peak       : never
+        transition : 07:00-11:00 + 17:00-01:00
+        offpeak    : 01:00-07:00 + 11:00-17:00
 
     Requires a smart meter (SMR3). Like ``VariableRates``, the rates
     can be re-published monthly; the formula field carries the
@@ -124,6 +137,7 @@ class TimeOfUseRates:
     offpeak: float
     yearly_fixed_fee: float = 0.0
     formula: str | None = None
+    weekend_rule: WeekendRule = "weekend_offpeak"
 
 
 EnergyRates = FixedRates | VariableRates | DynamicRates | TimeOfUseRates

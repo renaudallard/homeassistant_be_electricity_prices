@@ -104,26 +104,66 @@ def test_tou_slot_weekday_evening_peak() -> None:
     assert tou_slot(datetime(2026, 4, 29, 21, 59)) == "peak"
 
 
-def test_tou_slot_weekday_night_offpeak() -> None:
-    assert tou_slot(datetime(2026, 4, 29, 22, 0)) == "offpeak"
+def test_tou_slot_weekday_late_night_transition() -> None:
+    # 22h-1h is transition (Heures creuses), not offpeak — both
+    # SmartFlex and Empower Flextime documents state this.
+    assert tou_slot(datetime(2026, 4, 29, 22, 0)) == "transition"
+    assert tou_slot(datetime(2026, 4, 29, 23, 59)) == "transition"
+    assert tou_slot(datetime(2026, 4, 29, 0, 0)) == "transition"
+    assert tou_slot(datetime(2026, 4, 29, 0, 59)) == "transition"
+
+
+def test_tou_slot_weekday_morning_offpeak() -> None:
+    # 1h-7h is offpeak (Heures super-creuses).
+    assert tou_slot(datetime(2026, 4, 29, 1, 0)) == "offpeak"
     assert tou_slot(datetime(2026, 4, 29, 6, 59)) == "offpeak"
-    assert tou_slot(datetime(2026, 4, 29, 0, 0)) == "offpeak"
 
 
-def test_tou_slot_weekend_always_offpeak() -> None:
-    # Saturday lunchtime: would be peak on a weekday, off-peak here.
+def test_tou_slot_weekend_offpeak_default() -> None:
+    # Default weekend_offpeak: Sat/Sun is entirely off-peak.
     assert tou_slot(datetime(2026, 5, 2, 9, 0)) == "offpeak"
     assert tou_slot(datetime(2026, 5, 2, 19, 0)) == "offpeak"
-    # Sunday morning, same.
     assert tou_slot(datetime(2026, 5, 3, 8, 0)) == "offpeak"
+
+
+def test_tou_slot_weekend_no_peak_rule() -> None:
+    # Engie Empower Flextime weekend rule:
+    #   transition: 7-11 + 17-1 (so 17-22, 22-23, 0-1)
+    #   offpeak:    1-7 + 11-17
+    rule = "weekend_no_peak"
+    # Saturday morning at 09:00: transition (would be peak on weekday).
+    assert tou_slot(datetime(2026, 5, 2, 9, 0), rule) == "transition"
+    # Saturday at 13:00: offpeak (weekend midday is offpeak under this rule).
+    assert tou_slot(datetime(2026, 5, 2, 13, 0), rule) == "offpeak"
+    # Saturday at 19:00: transition.
+    assert tou_slot(datetime(2026, 5, 2, 19, 0), rule) == "transition"
+    # Saturday at 23:30: transition (17-1 spans midnight).
+    assert tou_slot(datetime(2026, 5, 2, 23, 30), rule) == "transition"
+    # Saturday at 00:30: still transition (17-1 wraps).
+    assert tou_slot(datetime(2026, 5, 2, 0, 30), rule) == "transition"
+    # Saturday at 03:00: offpeak.
+    assert tou_slot(datetime(2026, 5, 2, 3, 0), rule) == "offpeak"
 
 
 def test_energy_tou_dispatches_by_slot() -> None:
     e = TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10)
     assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 9), None) == 0.30
     assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 13), None) == 0.20
-    assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 23), None) == 0.10
+    assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 5), None) == 0.10
     assert energy_eur_per_kwh(e, datetime(2026, 5, 2, 9), None) == 0.10  # weekend
+
+
+def test_energy_tou_respects_weekend_no_peak() -> None:
+    # Same rates, but the weekend_rule changes the slot picked at 09:00.
+    e_off = TimeOfUseRates(
+        peak=0.30, transition=0.20, offpeak=0.10, weekend_rule="weekend_offpeak"
+    )
+    e_no = TimeOfUseRates(
+        peak=0.30, transition=0.20, offpeak=0.10, weekend_rule="weekend_no_peak"
+    )
+    sat_morning = datetime(2026, 5, 2, 9, 0)
+    assert energy_eur_per_kwh(e_off, sat_morning, None) == 0.10  # offpeak
+    assert energy_eur_per_kwh(e_no, sat_morning, None) == 0.20  # transition
 
 
 def test_energy_fixed_single() -> None:

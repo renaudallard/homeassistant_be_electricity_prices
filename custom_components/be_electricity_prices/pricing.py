@@ -83,21 +83,33 @@ def is_offpeak(when: datetime) -> bool:
 TouSlot = Literal["peak", "transition", "offpeak"]
 
 
-def tou_slot(when: datetime) -> TouSlot:
+def tou_slot(when: datetime, weekend_rule: str = "weekend_offpeak") -> TouSlot:
     """Map a local datetime to its Belgian TOU slot.
 
-    Slot definition is Luminus SmartFlex's; the same windows are used
-    by Engie Empower Flextime if/when that gets supported. Weekends
-    are entirely off-peak, matching the bi-hourly convention.
+    Weekday rule (shared across products):
+      peak       : 07:00-11:00 + 17:00-22:00
+      transition : 11:00-17:00 + 22:00-01:00
+      offpeak    : 01:00-07:00
+
+    Weekend rule depends on the contract:
+      weekend_offpeak  Luminus SmartFlex — Sat/Sun all off-peak.
+      weekend_no_peak  Engie Empower Flextime — never peak;
+        transition 07:00-11:00 + 17:00-01:00,
+        offpeak    01:00-07:00 + 11:00-17:00.
     """
-    if when.weekday() >= 5:
-        return "offpeak"
     h = when.hour
-    if h < 7 or h >= 22:
+    if when.weekday() >= 5:
+        if weekend_rule == "weekend_no_peak":
+            if 7 <= h < 11 or h >= 17 or h < 1:
+                return "transition"
+            return "offpeak"  # 1-7 + 11-17
+        return "offpeak"  # weekend_offpeak: whole weekend is off-peak
+    # Weekday
+    if 1 <= h < 7:
         return "offpeak"
-    if 11 <= h < 17:
-        return "transition"
-    return "peak"  # 07-11 + 17-22
+    if 7 <= h < 11 or 17 <= h < 22:
+        return "peak"
+    return "transition"  # 11-17 + 22-1
 
 
 def energy_eur_per_kwh(
@@ -120,7 +132,7 @@ def energy_eur_per_kwh(
             raise ValueError("dynamic tariff needs a spot price")
         return energy.factor * spot_eur_per_kwh + energy.base
     if isinstance(energy, TimeOfUseRates):
-        slot = tou_slot(when)
+        slot = tou_slot(when, energy.weekend_rule)
         if slot == "peak":
             return energy.peak
         if slot == "transition":
