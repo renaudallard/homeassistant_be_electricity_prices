@@ -81,7 +81,8 @@ def _load_providers() -> tuple[types.ModuleType, types.ModuleType]:
         "be_pkg.providers.totalenergies", PKG / "providers" / "totalenergies.py"
     )
     bolt = _load("be_pkg.providers.bolt", PKG / "providers" / "bolt.py")
-    return eneco, cociter, engie, luminus, mega, totalenergies, bolt
+    octaplus = _load("be_pkg.providers.octaplus", PKG / "providers" / "octaplus.py")
+    return eneco, cociter, engie, luminus, mega, totalenergies, bolt, octaplus
 
 
 @dataclass
@@ -401,6 +402,62 @@ async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) ->
             _validate_energy(prefix, cid, snap.energy)
 
 
+async def _check_octaplus(
+    session: aiohttp.ClientSession, octaplus: types.ModuleType
+) -> None:
+    # OCTA+ only sells residential electricity in Flanders and Wallonia
+    # (Brussels offerings are professional-only). One PDF per (contract,
+    # region) at https://files.octaplus.be/tariffs/E_OCTA_<SLUG>_RE_<VL|WL>_FR.pdf
+    expected_dsos = {
+        "flanders": {
+            "fluvius_antwerpen",
+            "fluvius_halle_vilvoorde",
+            "fluvius_imewo",
+            "fluvius_intergem",
+            "fluvius_iveka",
+            "fluvius_limburg",
+            "fluvius_west",
+            "fluvius_zenne_dijle",
+        },
+        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
+    }
+    renewables_field = {
+        "flanders": "flanders_renewables",
+        "wallonia": "wallonia_renewables",
+    }
+    for contract in octaplus._CONTRACTS:
+        cid = contract.contract_id
+        for region_key in ("flanders", "wallonia"):
+            prefix = f"octaplus/{cid}/{region_key}"
+            try:
+                snap = await octaplus.fetch(session, cid, region_key)
+            except Exception as err:
+                _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+                continue
+            _expect(f"{prefix}: publication label", bool(snap.publication_label))
+            _expect(
+                f"{prefix}: expected DSOs present",
+                expected_dsos[region_key] <= set(snap.dsos),
+                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
+            )
+            _expect(
+                f"{prefix}: regional renewables > 0",
+                getattr(snap.taxes, renewables_field[region_key]) > 0,
+                detail=str(snap.taxes),
+            )
+            _expect(
+                f"{prefix}: federal excise > 0",
+                snap.taxes.federal_excise > 0,
+                detail=str(snap.taxes),
+            )
+            _expect(
+                f"{prefix}: energy contribution > 0",
+                snap.taxes.energy_contribution > 0,
+                detail=str(snap.taxes),
+            )
+            _validate_energy(prefix, cid, snap.energy)
+
+
 async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) -> None:
     # Engie now fetches one PDF per (contract, region) on demand, so the
     # check walks every supported region per contract instead of asking
@@ -519,7 +576,9 @@ def _render_report(checks: Iterable[Check]) -> str:
 
 
 async def _run() -> int:
-    eneco, cociter, engie, luminus, mega, totalenergies, bolt = _load_providers()
+    eneco, cociter, engie, luminus, mega, totalenergies, bolt, octaplus = (
+        _load_providers()
+    )
     timeout = aiohttp.ClientTimeout(total=60)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         await _check_eneco(session, eneco)
@@ -529,6 +588,7 @@ async def _run() -> int:
         await _check_mega(session, mega)
         await _check_totalenergies(session, totalenergies)
         await _check_bolt(session, bolt)
+        await _check_octaplus(session, octaplus)
     print(_render_report(CHECKS))
     return 1 if any(not c.ok for c in CHECKS) else 0
 

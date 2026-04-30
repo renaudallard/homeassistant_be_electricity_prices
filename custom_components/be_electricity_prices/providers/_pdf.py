@@ -94,6 +94,82 @@ def extract_pdf_text_layout(payload: bytes) -> str:
         raise ExtractorError(f"PDF layout parse error: {err}") from err
 
 
+def extract_pdf_text_aligned(
+    payload: bytes,
+    y_tolerance: int = 3,
+    x_join_threshold: float = 1.0,
+) -> str:
+    """Extract PDF text by re-grouping words by their visual row.
+
+    OCTA+'s tariff cards interleave column data such that the standard
+    text and table extractors return one number per line in column-major
+    order. ``extract_words()`` returns each word with x/y coordinates;
+    bucketing by y reassembles each visual row into a single line, in
+    left-to-right order. Pages are joined with form-feeds so callers
+    can split per page if they need to.
+
+    ``x_join_threshold`` controls how to render adjacent words on the
+    same row. OCTA+'s tax block uses heavy character spacing where each
+    glyph is its own pdfplumber word with sub-point gaps between them
+    ("5 ,0 3 2 9" should be "5,0329"). Words whose horizontal gap to the
+    previous word is below ``x_join_threshold`` are concatenated with no
+    separator; everything else is joined by a single space. The default
+    of 1.0pt is below typical inter-word spacing (~1.4pt at 8pt font)
+    and well above intra-cluster gaps (<0.5pt).
+    """
+    try:
+        import pdfplumber
+
+        from collections import defaultdict
+
+        out: list[str] = []
+        with pdfplumber.open(BytesIO(payload)) as pdf:
+            for page in pdf.pages:
+                rows: defaultdict[int, list[tuple[float, float, str]]] = defaultdict(
+                    list
+                )
+                for word in page.extract_words():
+                    bucket = round(float(word["top"]) / y_tolerance) * y_tolerance
+                    rows[bucket].append(
+                        (float(word["x0"]), float(word["x1"]), word["text"])
+                    )
+                lines: list[str] = []
+                for y in sorted(rows.keys()):
+                    cells = sorted(rows[y])
+                    parts: list[str] = []
+                    prev_x1: float | None = None
+                    for x0, x1, text in cells:
+                        if prev_x1 is not None and x0 - prev_x1 < x_join_threshold:
+                            parts[-1] += text
+                        else:
+                            parts.append(text)
+                        prev_x1 = x1
+                    lines.append(" ".join(parts))
+                out.append("\n".join(lines))
+        return "\f".join(out)
+    except Exception as err:
+        raise ExtractorError(f"PDF aligned parse error: {err}") from err
+
+
+async def fetch_pdf_text_aligned(session: aiohttp.ClientSession, url: str) -> str:
+    """Word-coordinate aligned variant of :func:`fetch_pdf_text`."""
+    try:
+        async with session.get(
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=30),
+        ) as resp:
+            if resp.status >= 400:
+                raise ExtractorError(f"HTTP {resp.status} fetching {url}")
+            content_type = resp.headers.get("content-type", "")
+            if "pdf" not in content_type.lower():
+                raise ExtractorError(f"expected a PDF at {url}, got {content_type!r}")
+            payload = await resp.read()
+    except aiohttp.ClientError as err:
+        raise ExtractorError(f"network error fetching {url}: {err}") from err
+    return await asyncio.to_thread(extract_pdf_text_aligned, payload)
+
+
 async def fetch_pdf_text_layout(session: aiohttp.ClientSession, url: str) -> str:
     """Layout-preserving variant of :func:`fetch_pdf_text`.
 

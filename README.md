@@ -61,6 +61,7 @@ publication and how to parse it.
 | **Mega** | Smart Fixed/Flex · Zen Fixed · Online Fixed/Flex · Cosy Fixed/Flex · Prepaid Fixed/Flex · Off-peak Fixed/Flex · Dynamic · Cap | [`providers/mega.py`](./custom_components/be_electricity_prices/providers/mega.py) — scrapes the public listing at `mega.be/fr/cartes-tarifaires` to resolve each `(product, region)` to its current PDF on `my.mega.be` |
 | **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty · Bolt Online · Bolt Plenty Online | [`providers/bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) — stable URLs at `files.boltenergie.be/pricelists/<fix\|var>/`, parsed via `pdfplumber` (rotated columns + Unicode line-separators) |
 | **Cociter** | Tarif Variable (BELIX) · Tarif Dynamique (quarter-hourly BELPEX) | [`providers/cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) — monthly cards `RCVar_YMR_Coop-YYMM-fr.pdf` / `RCDyn_SM3_Coop-YYMM-fr.pdf` |
+| **OCTA+** | Fixed · Eco Fixed · Smart Variable · Flux · Eco Flux · Dynamic · Eco Dynamic | [`providers/octaplus.py`](./custom_components/be_electricity_prices/providers/octaplus.py) — stable URLs at `files.octaplus.be/tariffs/E_OCTA_<PRODUCT>_RE_<VL\|WL>_FR.pdf`, parsed via word-coordinate alignment (heavy character spacing in the tax block) — Flanders + Wallonia only |
 
 Adding another supplier is a self-contained PR: drop a new module under
 [`custom_components/be_electricity_prices/providers/`](./custom_components/be_electricity_prices/providers/),
