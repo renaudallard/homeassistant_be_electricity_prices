@@ -59,6 +59,12 @@ async def fetch_pdf_text(session: aiohttp.ClientSession, url: str) -> str:
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
+            content_type = resp.headers.get("content-type", "")
+            if "pdf" not in content_type.lower():
+                # Some CDNs return 200 + text/html for missing PDFs (a
+                # 404 page disguised as success). Reject up-front so the
+                # parser never sees HTML pretending to be a PDF.
+                raise ExtractorError(f"expected a PDF at {url}, got {content_type!r}")
             payload = await resp.read()
     except aiohttp.ClientError as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
