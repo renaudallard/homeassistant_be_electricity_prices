@@ -48,7 +48,7 @@ from datetime import UTC, datetime
 import aiohttp
 
 from ..const import REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import fetch_pdf_text_aligned, to_float
+from ._pdf import USER_AGENT, fetch_pdf_text_aligned, to_float
 from .base import (
     Contract,
     DsoOverlay,
@@ -98,8 +98,32 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
 
+_LISTING_URL = "https://www.octaplus.be/fr/electricite-gaz-naturel/tarifs"
+
+
 def _document_url(contract: _ContractDef, region: str) -> str:
     return f"{_BASE_URL}/E_OCTA_{contract.slug}_RE_{_REGION_TO_CODE[region]}_FR.pdf"
+
+
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """Return every residential electricity slug from OCTA+'s tarifs page.
+
+    The listing links each card directly with the URL pattern
+    ``E_OCTA_<SLUG>_RE_(VL|WL)_FR.pdf``. live_check diffs against
+    ``{c.slug for c in _CONTRACTS}``.
+    """
+    try:
+        async with session.get(
+            _LISTING_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status >= 400:
+                return set()
+            html = await resp.text()
+    except aiohttp.ClientError:
+        return set()
+    return set(re.findall(r"E_OCTA_([A-Z]+)_RE_(?:VL|WL)_FR\.pdf", html))
 
 
 # ---- top-level fetch + parser -------------------------------------------------
