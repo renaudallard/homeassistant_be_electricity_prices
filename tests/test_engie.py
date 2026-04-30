@@ -43,6 +43,7 @@ from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
     FixedRates,
+    TimeOfUseRates,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.engie import parse_snapshot
@@ -67,8 +68,37 @@ def test_engie_is_registered() -> None:
     assert EXTRACTORS["engie"].label == "Engie"
     contract_ids = {c.id for c in EXTRACTORS["engie"].contracts}
     assert "engie_dynamic" in contract_ids
+    assert "engie_empower_variable" in contract_ids
+    assert "engie_empower_flextime" in contract_ids
     assert "engie_easy_fixed" in contract_ids
     assert "engie_easy_variable" in contract_ids
+
+
+def test_empower_flextime_extracts_tou_triplet() -> None:
+    # Empower Flextime shares the Empower Variable PDF; the Consommation
+    # row carries the bi-horaire pair AND the Flextime triplet at indices
+    # 4/5/6 (peak / transition / offpeak in c€/kWh).
+    snap = parse_snapshot(
+        "engie_empower_flextime",
+        {REGION_WALLONIA: _text("engie_empower_flextime_w.pdf")},
+    )
+    assert isinstance(snap.energy, TimeOfUseRates)
+    # Pinned literals from April 2026 card; they re-index monthly so
+    # this fixture is a frozen snapshot, not a forever-fact.
+    assert snap.energy.peak == pytest.approx(0.16738)
+    assert snap.energy.transition == pytest.approx(0.13072)
+    assert snap.energy.offpeak == pytest.approx(0.09796)
+    # Engie weekend rule differs from SmartFlex's: weekend keeps the
+    # transition/offpeak split rather than collapsing to all-offpeak.
+    assert snap.energy.weekend_rule == "weekend_no_peak"
+
+
+def test_empower_flextime_dsos_match_wallonia_set() -> None:
+    snap = parse_snapshot(
+        "engie_empower_flextime",
+        {REGION_WALLONIA: _text("engie_empower_flextime_w.pdf")},
+    )
+    assert {"aieg", "aiesh", "ores", "resa", "rew"} <= set(snap.dsos)
 
 
 def test_dynamic_extracts_consumption_formula() -> None:

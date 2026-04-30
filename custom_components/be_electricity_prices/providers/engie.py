@@ -65,6 +65,7 @@ from .base import (
     SupplierSnapshot,
     TariffKind,
     TaxOverlay,
+    TimeOfUseRates,
     VariableRates,
 )
 
@@ -158,6 +159,20 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         contract_id="engie_empower_variable",
         label="Engie Empower Variable",
         kind="variable",
+        family="EMPOWER",
+        color="GREEN",
+        rate="I",
+        months_per_region={_V: "00", _W: "00", _B: "00"},
+    ),
+    _ContractDef(
+        # Empower Flextime is the SMR3-only TOU billing mode of the
+        # Empower Variable product. Uses the same PDF; the parser
+        # extracts the Flextime triplet (Heures pleines/creuses/super-
+        # creuses) instead of the bi-horaire rates. Weekend rule is
+        # weekend_no_peak per CWaPE Engie publication.
+        contract_id="engie_empower_flextime",
+        label="Engie Empower Flextime",
+        kind="tou",
         family="EMPOWER",
         color="GREEN",
         rate="I",
@@ -418,8 +433,16 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     elif len(prices) == 7:
         # Empower Variable with Flextime: Normal | Bi-pleines | Bi-creuses
         # | Flextime pleines | Flextime creuses | Flextime super-creuses |
-        # Exclusif nuit. We expose mono / peak / offpeak / excl_night and
-        # skip the Flextime tiers, which require a separate meter setup.
+        # Exclusif nuit. The variable contract uses the bi-horaire pair;
+        # the Flextime contract returns the TOU triplet directly.
+        if kind == "tou":
+            return TimeOfUseRates(
+                peak=prices[3] / 100.0,
+                transition=prices[4] / 100.0,
+                offpeak=prices[5] / 100.0,
+                yearly_fixed_fee=yearly_fee,
+                weekend_rule="weekend_no_peak",
+            )
         mono = prices[0] / 100.0
         peak = prices[1] / 100.0
         offpeak = prices[2] / 100.0
@@ -431,6 +454,15 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     else:
         raise ExtractorError(
             f"unexpected price column count for Engie {kind}: {len(prices)}"
+        )
+
+    if kind == "tou":
+        # 7-price Empower Variable layout was the only path here; if we
+        # arrive with kind="tou" but a 4-price row, the user picked
+        # Flextime on a card that doesn't carry it.
+        raise ExtractorError(
+            "Engie Empower Flextime requires the 7-price Empower row "
+            "(Flextime triplet); not present in this card."
         )
 
     if kind == "fixed":
