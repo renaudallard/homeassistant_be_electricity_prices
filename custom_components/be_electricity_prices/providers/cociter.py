@@ -118,7 +118,9 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     except aiohttp.ClientError:
         return set()
     out: set[str] = set()
-    for family in re.findall(r"(RC[A-Za-z]+_[A-Za-z0-9]+)_Coop-\d+-(?:fr|nl)\.pdf", html):
+    for family in re.findall(
+        r"(RC[A-Za-z]+_[A-Za-z0-9]+)_Coop-\d+-(?:fr|nl)\.pdf", html
+    ):
         out.add(_DISCOVER_FAMILIES.get(family, family))
     return out
 
