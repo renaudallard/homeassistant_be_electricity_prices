@@ -98,6 +98,8 @@ All sensors share one device per config entry.
 | `next_hour_price` | All-in EUR/kWh for the next hour. |
 | `today_average` | Daily average all-in EUR/kWh. |
 | `today_min` / `today_max` | Daily extremes. |
+| `tomorrow_average` | Average all-in EUR/kWh for tomorrow. Empty until ENTSO-E publishes the next-day curve (~13:00 CET) for dynamic contracts; available all day for fixed/variable contracts. |
+| `tomorrow_min` / `tomorrow_max` | Tomorrow's extremes. Same availability as `tomorrow_average`. |
 | `energy_component` | Energy-only EUR/kWh now (VAT-inclusive). |
 | `network_component` | Distribution + transport EUR/kWh now (VAT-inclusive). |
 | `taxes_component` | Levies EUR/kWh now (VAT-inclusive). |
@@ -198,6 +200,58 @@ Drops the cached supplier snapshot **and** the ENTSO-E spot cache for every
 loaded entry, then re-fetches both immediately. Handy after a tariff card
 update or to clear a transient fetch error without waiting for the next 24 h
 tick. No fields.
+
+### `be_electricity_prices.cheapest_window` / `most_expensive_window` services
+
+Return the cheapest (or most expensive) contiguous N-hour window in the
+upcoming price table. Both services share the same fields:
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `duration_hours` | _required_ | Window length (0.5-48 h, rounded up to whole hours). |
+| `entry_id` | first loaded | Optional config entry to target. |
+| `earliest_start` | now | Don't consider windows starting before this time. |
+| `latest_end` | end of the cached table | Don't consider windows ending after this time. |
+
+Response shape:
+
+```yaml
+start: "2026-04-30T03:00:00+02:00"
+end:   "2026-04-30T06:00:00+02:00"
+duration_hours: 3
+average_eur_per_kwh: 0.184372
+hours:
+  - hour: "2026-04-30T03:00:00+02:00"
+    all_in: 0.18012
+  - hour: "2026-04-30T04:00:00+02:00"
+    all_in: 0.18391
+  - hour: "2026-04-30T05:00:00+02:00"
+    all_in: 0.18908
+```
+
+Example automation that starts EV charging at the cheapest 4 h block of the
+night:
+
+```yaml
+trigger:
+  - platform: time
+    at: "13:30:00"  # ENTSO-E next-day curve is published around 13:00 CET
+condition:
+  - condition: state
+    entity_id: binary_sensor.eneco_zon_wind_dynamisch_wallonia_tomorrow_prices_available
+    state: "on"
+action:
+  - service: be_electricity_prices.cheapest_window
+    data:
+      duration_hours: 4
+      earliest_start: "{{ today_at('22:00') }}"
+      latest_end: "{{ (today_at('06:00') + timedelta(days=1)) }}"
+    response_variable: window
+  - service: switch.turn_on
+    target:
+      entity_id: switch.ev_charger
+    # Schedule the rest of the automation at window.start.
+```
 
 ### Diagnostics
 
