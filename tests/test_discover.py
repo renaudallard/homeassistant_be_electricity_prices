@@ -168,15 +168,23 @@ def test_luminus_discover_drops_excluded_social_tariff() -> None:
     assert "sociaal-tarief" not in discovered
 
 
-def test_luminus_discover_finds_unregistered_products() -> None:
-    # The frozen sitemap snapshot carries products absent from the
-    # registry (comfyflex-plus, maxxflex, smartflex). The diff is what
-    # the workflow surfaces in the new-products GitHub issue.
+def test_luminus_discover_matches_registry() -> None:
+    # All Luminus residential market products on the sitemap are now
+    # registered. Discovery must return the registry's slug set
+    # exactly (minus the excluded social-tariff slug, which is not a
+    # market product).
     session = _FakeSession(_read("luminus.html"))
     discovered = _run(luminus_mod.discover(session))
     known = {c.slug for c in luminus_mod._CONTRACTS}
-    new = discovered - known
-    assert {"comfyflex-plus", "maxxflex", "smartflex"} <= new
+    assert discovered == known
+
+
+def test_luminus_discover_surfaces_new_slug() -> None:
+    body = _read("luminus.html") + "\n/fr/particuliers/tarifs-energie/newproduct/\n"
+    session = _FakeSession(body)
+    discovered = _run(luminus_mod.discover(session))
+    known = {c.slug for c in luminus_mod._CONTRACTS}
+    assert "newproduct" in discovered - known
 
 
 # ---- behaviour: surfacing new products ---------------------------------------

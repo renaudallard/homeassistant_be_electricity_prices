@@ -66,6 +66,7 @@ from .base import (
     SupplierSnapshot,
     TariffKind,
     TaxOverlay,
+    TimeOfUseRates,
     VariableRates,
 )
 
@@ -89,9 +90,14 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef("luminus_comfy", "Luminus Comfy", "fixed", "comfy"),
     _ContractDef("luminus_comfy_plus", "Luminus Comfy+", "fixed", "comfy-plus"),
     _ContractDef("luminus_comfyflex", "Luminus ComfyFlex", "variable", "comfyflex"),
+    _ContractDef(
+        "luminus_comfyflex_plus", "Luminus ComfyFlex+", "variable", "comfyflex-plus"
+    ),
     _ContractDef("luminus_maxxfix", "Luminus MaxxFix", "fixed", "maxxfix"),
+    _ContractDef("luminus_maxxflex", "Luminus MaxxFlex", "variable", "maxxflex"),
     _ContractDef("luminus_basicfix", "Luminus BasicFix", "fixed", "basicfix"),
     _ContractDef("luminus_basicflex", "Luminus BasicFlex", "variable", "basicflex"),
+    _ContractDef("luminus_smartflex", "Luminus SmartFlex", "tou", "smartflex"),
     _ContractDef("luminus_dynamic", "Luminus Dynamic", "dynamic", "dynamic"),
     # Luminus Sociaal/Social (regulated CREG tariff) is omitted on purpose:
     # it is auto-assigned to protected customers (not user-selectable) and
@@ -239,6 +245,27 @@ def _extract_yearly_fee(text: str) -> float:
 
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     fee = _extract_yearly_fee(text)
+    if kind == "tou":
+        # SmartFlex's TOU table prints exactly three rates on the first
+        # "Énergie fournie" row, e.g. "(c€/kWh) 15,54 13,29 6,72". The
+        # second occurrence later in the PDF is the bi-horaire fallback
+        # for non-SMR3 customers; we anchor on the first match.
+        tou_match = re.search(
+            r"Énergie fournie\s*\(c€/kWh\)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)(?!\s+[\d,])",
+            text,
+        )
+        if not tou_match:
+            raise ExtractorError("could not parse Luminus TOU energy block")
+        peak = to_float(tou_match.group(1)) / 100.0
+        transition = to_float(tou_match.group(2)) / 100.0
+        offpeak = to_float(tou_match.group(3)) / 100.0
+        return TimeOfUseRates(
+            peak=peak,
+            transition=transition,
+            offpeak=offpeak,
+            yearly_fixed_fee=fee,
+        )
+
     if kind == "dynamic":
         match = _DYNAMIC_FORMULA_RE.search(text)
         if not match:

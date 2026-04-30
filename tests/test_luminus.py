@@ -38,6 +38,7 @@ from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
     FixedRates,
+    TimeOfUseRates,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.luminus import parse_snapshot
@@ -73,7 +74,10 @@ def test_luminus_is_registered() -> None:
     contract_ids = {c.id for c in EXTRACTORS["luminus"].contracts}
     assert "luminus_comfy" in contract_ids
     assert "luminus_comfyflex" in contract_ids
+    assert "luminus_comfyflex_plus" in contract_ids
     assert "luminus_maxxfix" in contract_ids
+    assert "luminus_maxxflex" in contract_ids
+    assert "luminus_smartflex" in contract_ids
     assert "luminus_dynamic" in contract_ids
 
 
@@ -181,6 +185,49 @@ def test_taxes_split_correctly_per_region() -> None:
     # in both regions today.
     assert w.taxes.energy_fund_eur_per_month == 0.0
     assert v.taxes.energy_fund_eur_per_month == 0.0
+
+
+def test_comfyflex_plus_parses_as_variable() -> None:
+    snap = parse_snapshot(
+        "luminus_comfyflex_plus",
+        _text("luminus_comfyflex_plus_w.pdf"),
+        "wallonia",
+    )
+    assert isinstance(snap.energy, VariableRates)
+    # Drop-in addition: same parser path as the existing ComfyFlex.
+    # The energy row must produce four populated rates.
+    assert snap.energy.current is not None
+    assert snap.energy.peak is not None
+    assert snap.energy.offpeak is not None
+    assert snap.energy.exclusive_night is not None
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+
+
+def test_maxxflex_parses_as_variable() -> None:
+    snap = parse_snapshot(
+        "luminus_maxxflex", _text("luminus_maxxflex_w.pdf"), "wallonia"
+    )
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current is not None
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+
+
+def test_smartflex_parses_as_time_of_use() -> None:
+    snap = parse_snapshot(
+        "luminus_smartflex", _text("luminus_smartflex_w.pdf"), "wallonia"
+    )
+    # SmartFlex's only sensible energy schema is TOU. The PDF prints
+    #   "Énergie fournie  (c€/kWh) 15,54 13,29 6,72"
+    # mapped to peak / transition / offpeak.
+    assert isinstance(snap.energy, TimeOfUseRates)
+    assert snap.energy.peak == pytest.approx(0.1554)
+    assert snap.energy.transition == pytest.approx(0.1329)
+    assert snap.energy.offpeak == pytest.approx(0.0672)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+    # peak > transition > offpeak — correct slot ordering in EUR/kWh.
+    assert snap.energy.peak > snap.energy.transition > snap.energy.offpeak
+    # All five Wallonia DSOs present (no schema change for the network side).
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
 
 
 def test_brussels_is_unsupported() -> None:
