@@ -126,10 +126,17 @@ def _region_dso_slugs(region: str) -> tuple[str, ...]:
 
 
 def _contract_kind(supplier_id: str, contract_id: str) -> str:
+    """Return the TariffKind for a contract, or '' if it can't be resolved.
+
+    OptionsFlow can re-open a stale entry whose stored ``contract`` is
+    no longer in the supplier's catalogue (supplier dropped a product,
+    or the catalogue moved). Returning empty instead of raising lets
+    the meter step still render with a sensible default.
+    """
     for c in _contracts_for(supplier_id):
         if c.id == contract_id:
             return c.kind
-    raise ValueError(f"unknown contract {contract_id!r} for supplier {supplier_id!r}")
+    return ""
 
 
 def _user_schema(defaults: dict[str, Any]) -> vol.Schema:
