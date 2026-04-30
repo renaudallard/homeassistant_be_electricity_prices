@@ -59,6 +59,16 @@
           "solar_kva": "Puissance onduleur (kVA)",
           "solar_regime": "Regime"
         }
+      },
+      "meters": {
+        "title": "Compteurs (cout annuel)",
+        "description": "Facultatif. Selectionnez les capteurs cumulatifs en kWh pour la consommation jour/nuit et l'injection jour/nuit. Le capteur yearly_cost reste indisponible tant que les quatre ne sont pas renseignes. La plupart des integrations P1 / compteur intelligent exposent les quatre registres, que la facturation soit mono ou bi.",
+        "data": {
+          "day_consumption_kwh": "Consommation jour (kWh)",
+          "night_consumption_kwh": "Consommation nuit (kWh)",
+          "day_injection_kwh": "Injection jour (kWh)",
+          "night_injection_kwh": "Injection nuit (kWh)"
+        }
       }
     },
     "abort": {
@@ -128,6 +138,16 @@
         "data": {
           "solar_kva": "Puissance onduleur (kVA)",
           "solar_regime": "Regime"
+        }
+      },
+      "meters": {
+        "title": "Compteurs (cout annuel)",
+        "description": "Facultatif. Selectionnez les capteurs cumulatifs en kWh pour la consommation jour/nuit et l'injection jour/nuit. Le capteur yearly_cost reste indisponible tant que les quatre ne sont pas renseignes. La plupart des integrations P1 / compteur intelligent exposent les quatre registres, que la facturation soit mono ou bi.",
+        "data": {
+          "day_consumption_kwh": "Consommation jour (kWh)",
+          "night_consumption_kwh": "Consommation nuit (kWh)",
+          "day_injection_kwh": "Injection jour (kWh)",
+          "night_injection_kwh": "Injection nuit (kWh)"
         }
       }
     }
@@ -276,6 +296,9 @@
       },
       "energy_fund_eur_per_month": {
         "name": "Fonds energie par mois"
+      },
+      "yearly_cost": {
+        "name": "Cout annuel"
       }
     },
     "binary_sensor": {

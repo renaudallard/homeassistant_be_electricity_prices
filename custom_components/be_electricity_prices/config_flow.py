@@ -81,9 +81,13 @@ from .const import (
     CONF_CAPACITY_MODE,
     CONF_CAPACITY_PEAK_SENSOR,
     CONF_CONTRACT,
+    CONF_DAY_CONSUMPTION_KWH,
+    CONF_DAY_INJECTION_KWH,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
+    CONF_NIGHT_CONSUMPTION_KWH,
+    CONF_NIGHT_INJECTION_KWH,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
@@ -306,6 +310,33 @@ def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(fields)
 
 
+def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Cumulative-kWh sensors for the yearly_cost computation.
+
+    All four are asked unconditionally because every smart meter (P1,
+    digital, etc.) exposes day/night counters for both consumption and
+    injection regardless of how the supplier bills (mono vs bi). All
+    four are optional; ``yearly_cost`` stays ``None`` until each one is
+    populated and produces a numeric reading.
+    """
+    fields = {}
+    for conf, default in (
+        (CONF_DAY_CONSUMPTION_KWH, defaults.get(CONF_DAY_CONSUMPTION_KWH)),
+        (CONF_NIGHT_CONSUMPTION_KWH, defaults.get(CONF_NIGHT_CONSUMPTION_KWH)),
+        (CONF_DAY_INJECTION_KWH, defaults.get(CONF_DAY_INJECTION_KWH)),
+        (CONF_NIGHT_INJECTION_KWH, defaults.get(CONF_NIGHT_INJECTION_KWH)),
+    ):
+        if default is not None:
+            fields[vol.Optional(conf, default=default)] = EntitySelector(
+                EntitySelectorConfig(domain="sensor")
+            )
+        else:
+            fields[vol.Optional(conf)] = EntitySelector(
+                EntitySelectorConfig(domain="sensor")
+            )
+    return vol.Schema(fields)
+
+
 def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
@@ -432,9 +463,19 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            return self._finalize()
+            return await self.async_step_meters()
         return self.async_show_form(
             step_id="solar", data_schema=_solar_schema(self._data)
+        )
+
+    async def async_step_meters(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return self._finalize()
+        return self.async_show_form(
+            step_id="meters", data_schema=_meters_schema(self._data)
         )
 
     async def async_step_dso_tariff_mode(
@@ -579,9 +620,19 @@ class BePricesOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            return self._finalize()
+            return await self.async_step_meters()
         return self.async_show_form(
             step_id="solar", data_schema=_solar_schema(self._data)
+        )
+
+    async def async_step_meters(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return self._finalize()
+        return self.async_show_form(
+            step_id="meters", data_schema=_meters_schema(self._data)
         )
 
     async def async_step_dso_tariff_mode(

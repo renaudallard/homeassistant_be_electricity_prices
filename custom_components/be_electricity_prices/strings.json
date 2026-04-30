@@ -59,6 +59,16 @@
           "solar_kva": "Inverter capacity (kVA)",
           "solar_regime": "Regime"
         }
+      },
+      "meters": {
+        "title": "Energy meters (yearly cost)",
+        "description": "Optional. Pick the cumulative kWh sensors for day/night consumption and day/night injection. The yearly_cost sensor stays unavailable until all four are set. Most P1 / digital meter integrations expose all four registers regardless of mono vs bi billing.",
+        "data": {
+          "day_consumption_kwh": "Day consumption (kWh)",
+          "night_consumption_kwh": "Night consumption (kWh)",
+          "day_injection_kwh": "Day injection (kWh)",
+          "night_injection_kwh": "Night injection (kWh)"
+        }
       }
     },
     "abort": {
@@ -128,6 +138,16 @@
         "data": {
           "solar_kva": "[%key:component::be_electricity_prices::config::step::solar::data::solar_kva%]",
           "solar_regime": "[%key:component::be_electricity_prices::config::step::solar::data::solar_regime%]"
+        }
+      },
+      "meters": {
+        "title": "[%key:component::be_electricity_prices::config::step::meters::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::meters::description%]",
+        "data": {
+          "day_consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::day_consumption_kwh%]",
+          "night_consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::night_consumption_kwh%]",
+          "day_injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::day_injection_kwh%]",
+          "night_injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::night_injection_kwh%]"
         }
       }
     }
@@ -276,6 +296,9 @@
       },
       "energy_fund_eur_per_month": {
         "name": "Energy fund per month"
+      },
+      "yearly_cost": {
+        "name": "Yearly cost"
       }
     },
     "binary_sensor": {

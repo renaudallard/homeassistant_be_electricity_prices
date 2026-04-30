@@ -57,9 +57,13 @@ from .const import (
     CONF_CAPACITY_MODE,
     CONF_CAPACITY_PEAK_SENSOR,
     CONF_CONTRACT,
+    CONF_DAY_CONSUMPTION_KWH,
+    CONF_DAY_INJECTION_KWH,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
+    CONF_NIGHT_CONSUMPTION_KWH,
+    CONF_NIGHT_INJECTION_KWH,
     DSO_MODE_BI_HORAIRE,
     CONF_REGION,
     CONF_SOLAR_KVA,
@@ -74,7 +78,7 @@ from .const import (
     STORAGE_VERSION,
     UPDATE_INTERVAL_MINUTES,
 )
-from .pricing import PriceBreakdown, compute_breakdown
+from .pricing import PriceBreakdown, compute_breakdown, static_breakdown
 from .providers import (
     DynamicRates,
     ExtractorError,
@@ -150,6 +154,18 @@ class CoordinatorData:
     # separate sensors lets users compute total monthly cost.
     yearly_fixed_fee_eur: float = 0.0
     energy_fund_eur_per_month: float = 0.0
+    # Running annual bill in EUR. None until the user has populated all
+    # four meter sensors (day_cons, night_cons, day_inj, night_inj). For
+    # compensation regime the math nets injection 1:1 against
+    # consumption (per-band when bi); for injection regime each is
+    # multiplied by its own rate; for "none" only consumption counts.
+    # Goes negative when injection income exceeds consumption + fees,
+    # which only happens under classical compensation regime if you
+    # over-produce (most suppliers forfeit the surplus -- the negative
+    # value is the *theoretical* net the bill would settle at). Always
+    # ``None`` for dynamic / TOU contracts because hourly rates can't
+    # be applied to a daily total.
+    yearly_cost_eur: float | None = None
 
 
 class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
@@ -241,6 +257,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         injection_price = _compute_injection_price(
             self._snapshot, self.entry, spot_prices
         )
+        yearly_cost = _compute_yearly_cost(
+            self.hass,
+            self._snapshot,
+            self.entry,
+            prosumer_cost_eur_per_month=prosumer_cost,
+            injection_price_eur_per_kwh=injection_price,
+        )
 
         await self._save_persistent()
 
@@ -262,6 +285,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._snapshot.energy, "yearly_fixed_fee", 0.0
             ),
             energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
+            yearly_cost_eur=yearly_cost,
         )
 
     def _sync_stale_issue(self, stale: bool) -> None:
@@ -549,6 +573,104 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
     if overlay is None or overlay.prosumer_eur_per_kva_year is None:
         return 0.0
     return kva * overlay.prosumer_eur_per_kva_year / 12.0
+
+
+def _read_kwh(hass: HomeAssistant, entity_id: str | None) -> float | None:
+    """Read a cumulative kWh sensor's state. Returns None if unset, missing,
+    unavailable, or non-numeric -- the caller treats any None as "no
+    yearly_cost computable yet" (signals the sensor to expose ``None``)."""
+    if not entity_id:
+        return None
+    state = hass.states.get(entity_id)
+    if state is None or state.state in ("", "unknown", "unavailable"):
+        return None
+    try:
+        return float(state.state)
+    except (TypeError, ValueError):
+        return None
+
+
+def _compute_yearly_cost(
+    hass: HomeAssistant,
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    *,
+    prosumer_cost_eur_per_month: float,
+    injection_price_eur_per_kwh: float | None,
+) -> float | None:
+    """Running annual bill from cumulative meter readings + snapshot rates.
+
+    Math depends on the user's regime + meter type:
+
+      regime=none, mono : day_cons * single + night_cons * single
+      regime=none, bi   : day_cons * peak + night_cons * offpeak
+      regime=injection,
+        mono : (day_cons + night_cons) * single - (day_inj + night_inj) * inj
+      regime=injection,
+        bi   : day_cons * peak + night_cons * offpeak
+               - (day_inj + night_inj) * inj
+      regime=compensation, mono :
+               (day_cons + night_cons - day_inj - night_inj) * single
+      regime=compensation, bi :
+               (day_cons - day_inj) * peak + (night_cons - night_inj) * offpeak
+
+    Plus, in every case:
+      yearly_fixed_fee + 12 * energy_fund + 12 * prosumer_cost.
+
+    Compensation uses the consumption rate for both sides because that's
+    how net metering settles ("compteur qui tourne a l'envers"). No
+    surplus floor is applied (negative values surface naturally if
+    injection > consumption); see the project memo for why.
+
+    Returns ``None`` when the contract has no stable rate (dynamic / TOU)
+    or any of the four meter sensors is missing / unavailable / not a
+    number.
+    """
+    day_cons = _read_kwh(hass, entry.data.get(CONF_DAY_CONSUMPTION_KWH))
+    night_cons = _read_kwh(hass, entry.data.get(CONF_NIGHT_CONSUMPTION_KWH))
+    day_inj = _read_kwh(hass, entry.data.get(CONF_DAY_INJECTION_KWH))
+    night_inj = _read_kwh(hass, entry.data.get(CONF_NIGHT_INJECTION_KWH))
+    if day_cons is None or night_cons is None or day_inj is None or night_inj is None:
+        return None
+
+    dso = entry.data.get(CONF_DSO, "")
+    region = entry.data.get(CONF_REGION, "")
+    meter = entry.data.get(CONF_METER, METER_MONO)
+    regime = entry.data.get(CONF_SOLAR_REGIME, "none")
+
+    single_bd = static_breakdown(snapshot, dso, region, "single")
+    peak_bd = static_breakdown(snapshot, dso, region, "peak")
+    offpeak_bd = static_breakdown(snapshot, dso, region, "offpeak")
+    if single_bd is None or peak_bd is None or offpeak_bd is None:
+        return None  # dynamic / TOU contract
+
+    total_cons = day_cons + night_cons
+    total_inj = day_inj + night_inj
+
+    if regime == SOLAR_REGIME_COMPENSATION:
+        if meter == "bi":
+            energy_cost = (day_cons - day_inj) * peak_bd.all_in + (
+                night_cons - night_inj
+            ) * offpeak_bd.all_in
+        else:
+            energy_cost = (total_cons - total_inj) * single_bd.all_in
+    elif regime == SOLAR_REGIME_INJECTION:
+        if meter == "bi":
+            energy_cost = day_cons * peak_bd.all_in + night_cons * offpeak_bd.all_in
+        else:
+            energy_cost = total_cons * single_bd.all_in
+        if injection_price_eur_per_kwh is not None:
+            energy_cost -= total_inj * injection_price_eur_per_kwh
+    else:  # none
+        if meter == "bi":
+            energy_cost = day_cons * peak_bd.all_in + night_cons * offpeak_bd.all_in
+        else:
+            energy_cost = total_cons * single_bd.all_in
+
+    fixed = getattr(snapshot.energy, "yearly_fixed_fee", 0.0)
+    fund_yearly = snapshot.taxes.energy_fund_eur_per_month * 12.0
+    prosumer_yearly = prosumer_cost_eur_per_month * 12.0
+    return energy_cost + fixed + fund_yearly + prosumer_yearly
 
 
 # ---- snapshot serialization for the HA Store ----------------------------------

@@ -186,6 +186,74 @@ def energy_eur_per_kwh(
     raise TypeError(f"unknown energy rates type: {type(energy).__name__}")
 
 
+StaticBand = Literal["single", "peak", "offpeak"]
+
+
+def static_energy_eur_per_kwh(energy: EnergyRates, band: StaticBand) -> float | None:
+    """Stable (no time-of-day) energy rate for a given band.
+
+    Used by ``static_breakdown`` to compute the all-in rate plugged into
+    the yearly_cost sensor. Returns ``None`` for DynamicRates (no
+    constant rate exists) and TimeOfUseRates (3-band schema doesn't map
+    onto the bi-hourly meter convention). Falls back to the single rate
+    when the requested peak/offpeak band has no published value
+    (mono-only rate sheet).
+    """
+    if isinstance(energy, FixedRates):
+        if band == "single":
+            return energy.single
+        if band == "peak":
+            return energy.peak if energy.peak is not None else energy.single
+        return energy.offpeak if energy.offpeak is not None else energy.single
+    if isinstance(energy, VariableRates):
+        if band == "single":
+            return energy.current
+        if band == "peak":
+            return energy.peak if energy.peak is not None else energy.current
+        return energy.offpeak if energy.offpeak is not None else energy.current
+    return None
+
+
+def static_breakdown(
+    snapshot: SupplierSnapshot,
+    dso_key: str,
+    region: str,
+    band: StaticBand,
+) -> PriceBreakdown | None:
+    """All-in EUR/kWh for the static rate sheet of one band.
+
+    Returns ``None`` when the contract has no stable rate (dynamic, TOU).
+    Falls back to the single-rate distribution when the DSO didn't
+    publish a peak/offpeak split. VAT applies uniformly to each
+    component, mirroring :func:`compute_breakdown`.
+    """
+    energy = static_energy_eur_per_kwh(snapshot.energy, band)
+    if energy is None:
+        return None
+    overlay = snapshot.dsos.get(dso_key)
+    if overlay is None:
+        raise KeyError(
+            f"DSO {dso_key!r} not in snapshot for "
+            f"{snapshot.supplier}/{snapshot.contract}; "
+            f"available: {sorted(snapshot.dsos)}"
+        )
+    if band == "peak" and overlay.distribution_peak is not None:
+        dist = overlay.distribution_peak
+    elif band == "offpeak" and overlay.distribution_offpeak is not None:
+        dist = overlay.distribution_offpeak
+    else:
+        dist = overlay.distribution_single
+    network = dist + overlay.transport
+    taxes = taxes_eur_per_kwh(snapshot.taxes, region)
+    vat_factor = 1.0 + snapshot.taxes.vat_rate
+    return PriceBreakdown(
+        energy=energy * vat_factor,
+        network=network * vat_factor,
+        taxes=taxes * vat_factor,
+        all_in=(energy + network + taxes) * vat_factor,
+    )
+
+
 DsoTariffMode = Literal["simple", "bi_horaire", "impact"]
 ImpactBand = Literal["pic", "medium", "eco"]
 

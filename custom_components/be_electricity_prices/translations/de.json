@@ -59,6 +59,16 @@
           "solar_kva": "Wechselrichter (kVA)",
           "solar_regime": "Regime"
         }
+      },
+      "meters": {
+        "title": "Energiezaehler (Jahreskosten)",
+        "description": "Optional. Waehlen Sie die kumulativen kWh-Sensoren fuer Tag-/Nachtverbrauch und Tag-/Nachteinspeisung. Der yearly_cost-Sensor bleibt nicht verfuegbar, bis alle vier gesetzt sind. Die meisten P1- / Smart-Meter-Integrationen liefern alle vier Register, unabhaengig von der Mono-/Bi-Abrechnung.",
+        "data": {
+          "day_consumption_kwh": "Verbrauch Tag (kWh)",
+          "night_consumption_kwh": "Verbrauch Nacht (kWh)",
+          "day_injection_kwh": "Einspeisung Tag (kWh)",
+          "night_injection_kwh": "Einspeisung Nacht (kWh)"
+        }
       }
     },
     "abort": {
@@ -128,6 +138,16 @@
         "data": {
           "solar_kva": "Wechselrichter (kVA)",
           "solar_regime": "Regime"
+        }
+      },
+      "meters": {
+        "title": "Energiezaehler (Jahreskosten)",
+        "description": "Optional. Waehlen Sie die kumulativen kWh-Sensoren fuer Tag-/Nachtverbrauch und Tag-/Nachteinspeisung. Der yearly_cost-Sensor bleibt nicht verfuegbar, bis alle vier gesetzt sind. Die meisten P1- / Smart-Meter-Integrationen liefern alle vier Register, unabhaengig von der Mono-/Bi-Abrechnung.",
+        "data": {
+          "day_consumption_kwh": "Verbrauch Tag (kWh)",
+          "night_consumption_kwh": "Verbrauch Nacht (kWh)",
+          "day_injection_kwh": "Einspeisung Tag (kWh)",
+          "night_injection_kwh": "Einspeisung Nacht (kWh)"
         }
       }
     }
@@ -276,6 +296,9 @@
       },
       "energy_fund_eur_per_month": {
         "name": "Energiefonds pro Monat"
+      },
+      "yearly_cost": {
+        "name": "Jahreskosten"
       }
     },
     "binary_sensor": {

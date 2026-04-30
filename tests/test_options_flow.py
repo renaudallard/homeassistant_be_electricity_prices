@@ -109,11 +109,14 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
     )
-    # Solar step is the new last step; submit 0 kVA (no panels).
+    # Solar step.
     assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
     )
+    # Then the meters step (yearly_cost inputs); skipped here.
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
 
     # Verify the entry was rewritten end-to-end.
@@ -194,6 +197,8 @@ async def test_options_flow_dynamic_branch_asks_api_key(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
     )
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert entry.data["api_key"] == "new-key-456"
     # The Wallonia DSO tariff mode chosen mid-flow is persisted on the
@@ -248,6 +253,8 @@ async def test_options_flow_flanders_branch_asks_capacity(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"solar_kva": 5.0, "solar_regime": "injection"}
     )
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert entry.data["capacity_fixed_kw"] == 4.0
     assert entry.data["solar_kva"] == 5.0

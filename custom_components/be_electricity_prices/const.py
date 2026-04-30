@@ -98,6 +98,17 @@ CONF_CAPACITY_MODE: Final = "capacity_mode"
 CONF_CAPACITY_PEAK_SENSOR: Final = "capacity_peak_sensor"
 CONF_CAPACITY_FIXED_KW: Final = "capacity_fixed_kw"
 
+# Cumulative kWh meter sensors (HA entity_ids) for the yearly_cost sensor.
+# All four are asked unconditionally — a P1 / digital meter exposes all
+# four registers regardless of whether the user is billed mono or bi.
+# Mono billing collapses peak+offpeak via static_breakdown(..., "single"),
+# bi billing applies peak/offpeak rates separately, and compensation
+# regime nets per band before applying the rate.
+CONF_DAY_CONSUMPTION_KWH: Final = "day_consumption_kwh"
+CONF_NIGHT_CONSUMPTION_KWH: Final = "night_consumption_kwh"
+CONF_DAY_INJECTION_KWH: Final = "day_injection_kwh"
+CONF_NIGHT_INJECTION_KWH: Final = "night_injection_kwh"
+
 # Solar inverter capacity in kVA. 0 means no panels (no prosumer cost).
 CONF_SOLAR_KVA: Final = "solar_kva"
 CONF_SOLAR_REGIME: Final = "solar_regime"

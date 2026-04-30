@@ -59,6 +59,16 @@
           "solar_kva": "Vermogen omvormer (kVA)",
           "solar_regime": "Regime"
         }
+      },
+      "meters": {
+        "title": "Energiemeters (jaarlijkse kost)",
+        "description": "Optioneel. Kies de cumulatieve kWh-sensoren voor dag/nacht verbruik en dag/nacht injectie. De yearly_cost-sensor blijft onbeschikbaar zolang niet alle vier zijn ingesteld. De meeste P1- / digitale-meterintegraties tonen alle vier de registers, ongeacht of er mono of bi wordt gefactureerd.",
+        "data": {
+          "day_consumption_kwh": "Verbruik dag (kWh)",
+          "night_consumption_kwh": "Verbruik nacht (kWh)",
+          "day_injection_kwh": "Injectie dag (kWh)",
+          "night_injection_kwh": "Injectie nacht (kWh)"
+        }
       }
     },
     "abort": {
@@ -128,6 +138,16 @@
         "data": {
           "solar_kva": "Vermogen omvormer (kVA)",
           "solar_regime": "Regime"
+        }
+      },
+      "meters": {
+        "title": "Energiemeters (jaarlijkse kost)",
+        "description": "Optioneel. Kies de cumulatieve kWh-sensoren voor dag/nacht verbruik en dag/nacht injectie. De yearly_cost-sensor blijft onbeschikbaar zolang niet alle vier zijn ingesteld. De meeste P1- / digitale-meterintegraties tonen alle vier de registers, ongeacht of er mono of bi wordt gefactureerd.",
+        "data": {
+          "day_consumption_kwh": "Verbruik dag (kWh)",
+          "night_consumption_kwh": "Verbruik nacht (kWh)",
+          "day_injection_kwh": "Injectie dag (kWh)",
+          "night_injection_kwh": "Injectie nacht (kWh)"
         }
       }
     }
@@ -276,6 +296,9 @@
       },
       "energy_fund_eur_per_month": {
         "name": "Energiefonds per maand"
+      },
+      "yearly_cost": {
+        "name": "Jaarkost"
       }
     },
     "binary_sensor": {

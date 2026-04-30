@@ -30,14 +30,18 @@ from __future__ import annotations
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from homeassistant.core import HomeAssistant
+
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import (
     _compute_capacity,
     _compute_injection_price,
     _compute_prosumer,
+    _compute_yearly_cost,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
+    DynamicRates,
     FixedRates,
     InjectionRates,
     SupplierSnapshot,
@@ -227,3 +231,225 @@ def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:
     assert _compute_capacity(snap, brussels_entry, 4.0) == 0.0
     # Supplier-side injection tariff applies uniformly across regions.
     assert _compute_injection_price(snap, brussels_entry, {}) == pytest.approx(0.0476)
+
+
+# ---- _compute_yearly_cost ---------------------------------------------------
+
+# Snapshot used by the yearly_cost tests: 0.18 single energy, 0.10 dist,
+# 0.0145 transport, Wallonia taxes (federal_excise + energy_contribution +
+# wallonia_renewables) so the all-in single rate works out cleanly.
+def _yearly_snapshot() -> SupplierSnapshot:
+    return SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.18, peak=0.20, offpeak=0.16),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.11,
+                distribution_offpeak=0.09,
+                transport=0.0145,
+            )
+        },
+        taxes=TaxOverlay(
+            federal_excise=0.05,
+            energy_contribution=0.002,
+            wallonia_renewables=0.03,
+            energy_fund_eur_per_month=0.0,
+        ),
+        source_url="test://",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+    )
+
+
+def _yearly_entry(**overrides: object) -> MockConfigEntry:
+    base: dict[str, object] = {
+        "supplier": "test",
+        "contract": "test",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "mono",
+        "solar_regime": "none",
+        "day_consumption_kwh": "sensor.day_cons",
+        "night_consumption_kwh": "sensor.night_cons",
+        "day_injection_kwh": "sensor.day_inj",
+        "night_injection_kwh": "sensor.night_inj",
+    }
+    base.update(overrides)
+    return MockConfigEntry(domain=DOMAIN, data=base)
+
+
+def _set_meters(
+    hass: HomeAssistant,
+    *,
+    day_cons: float | None,
+    night_cons: float | None,
+    day_inj: float | None,
+    night_inj: float | None,
+) -> None:
+    """Push the four sensor states the yearly_cost helper reads."""
+    pairs = (
+        ("sensor.day_cons", day_cons),
+        ("sensor.night_cons", night_cons),
+        ("sensor.day_inj", day_inj),
+        ("sensor.night_inj", night_inj),
+    )
+    for entity_id, value in pairs:
+        if value is None:
+            hass.states.async_set(entity_id, "unavailable")
+        else:
+            hass.states.async_set(entity_id, str(value))
+
+
+async def test_yearly_cost_returns_none_when_any_meter_missing(
+    hass: HomeAssistant,
+) -> None:
+    snap = _yearly_snapshot()
+    entry = _yearly_entry()
+    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=None, night_inj=200)
+    assert (
+        _compute_yearly_cost(
+            hass,
+            snap,
+            entry,
+            prosumer_cost_eur_per_month=0.0,
+            injection_price_eur_per_kwh=None,
+        )
+        is None
+    )
+
+
+async def test_yearly_cost_no_solar_mono_uses_total_cons_x_single_rate(
+    hass: HomeAssistant,
+) -> None:
+    snap = _yearly_snapshot()
+    entry = _yearly_entry(meter="mono", solar_regime="none")
+    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=0, night_inj=0)
+    cost = _compute_yearly_cost(
+        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=None
+    )
+    # all_in single = 0.18 + 0.10 + 0.0145 + 0.05 + 0.002 + 0.03 = 0.3765
+    assert cost == pytest.approx(1500 * 0.3765)
+
+
+async def test_yearly_cost_no_solar_bi_uses_band_rates(hass: HomeAssistant) -> None:
+    snap = _yearly_snapshot()
+    entry = _yearly_entry(meter="bi", solar_regime="none")
+    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=0, night_inj=0)
+    cost = _compute_yearly_cost(
+        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=None
+    )
+    # peak = 0.20 + 0.11 + 0.0145 + 0.082 = 0.4065
+    # offpeak = 0.16 + 0.09 + 0.0145 + 0.082 = 0.3465
+    peak = 0.20 + 0.11 + 0.0145 + 0.05 + 0.002 + 0.03
+    offpeak = 0.16 + 0.09 + 0.0145 + 0.05 + 0.002 + 0.03
+    assert cost == pytest.approx(1000 * peak + 500 * offpeak)
+
+
+async def test_yearly_cost_compensation_mono_nets_injection(
+    hass: HomeAssistant,
+) -> None:
+    snap = _yearly_snapshot()
+    entry = _yearly_entry(meter="mono", solar_regime="compensation")
+    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=600, night_inj=400)
+    # net = 1500 - 1000 = 500. Bill = 500 * single_all_in
+    cost = _compute_yearly_cost(
+        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=None
+    )
+    assert cost == pytest.approx(500 * 0.3765)
+
+
+async def test_yearly_cost_compensation_mono_can_go_negative(
+    hass: HomeAssistant,
+) -> None:
+    snap = _yearly_snapshot()
+    entry = _yearly_entry(meter="mono", solar_regime="compensation")
+    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=1200, night_inj=900)
+    # net = 1500 - 2100 = -600 -> cost = -600 * 0.3765 = -225.90.
+    # Surplus is theoretically credited at the consumption rate; the
+    # actual bill is usually floored at zero, but we report the
+    # uncapped value so users see the over-production margin.
+    cost = _compute_yearly_cost(
+        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=None
+    )
+    assert cost == pytest.approx(-600 * 0.3765)
+
+
+async def test_yearly_cost_compensation_bi_nets_per_band(hass: HomeAssistant) -> None:
+    snap = _yearly_snapshot()
+    entry = _yearly_entry(meter="bi", solar_regime="compensation")
+    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=300, night_inj=600)
+    # day net = 700 (positive), night net = -100 (negative). Per-band
+    # weighted: 700 * peak + (-100) * offpeak.
+    peak = 0.20 + 0.11 + 0.0145 + 0.05 + 0.002 + 0.03
+    offpeak = 0.16 + 0.09 + 0.0145 + 0.05 + 0.002 + 0.03
+    cost = _compute_yearly_cost(
+        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=None
+    )
+    assert cost == pytest.approx(700 * peak + (-100) * offpeak)
+
+
+async def test_yearly_cost_injection_regime_uses_supplier_injection_rate(
+    hass: HomeAssistant,
+) -> None:
+    snap = _yearly_snapshot()
+    entry = _yearly_entry(meter="mono", solar_regime="injection")
+    _set_meters(hass, day_cons=800, night_cons=200, day_inj=300, night_inj=200)
+    # cost = 1000 * single_all_in - 500 * inj_rate
+    cost = _compute_yearly_cost(
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+        injection_price_eur_per_kwh=0.05,
+    )
+    assert cost == pytest.approx(1000 * 0.3765 - 500 * 0.05)
+
+
+async def test_yearly_cost_dynamic_contract_returns_none(hass: HomeAssistant) -> None:
+    snap = SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=DynamicRates(factor=1.0, base=0.02),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+            )
+        },
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+    )
+    entry = _yearly_entry(solar_regime="injection")
+    _set_meters(hass, day_cons=100, night_cons=100, day_inj=0, night_inj=0)
+    cost = _compute_yearly_cost(
+        hass, snap, entry, prosumer_cost_eur_per_month=0.0, injection_price_eur_per_kwh=0.05
+    )
+    assert cost is None
+
+
+async def test_yearly_cost_includes_fees_and_prosumer(hass: HomeAssistant) -> None:
+    snap = SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.18, yearly_fixed_fee=120.0),
+        dsos={
+            "ores": DsoOverlay(distribution_single=0.10, transport=0.0145),
+        },
+        taxes=TaxOverlay(
+            federal_excise=0.05,
+            energy_contribution=0.002,
+            wallonia_renewables=0.03,
+            energy_fund_eur_per_month=2.5,
+        ),
+        source_url="test://",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+    )
+    entry = _yearly_entry(meter="mono", solar_regime="none")
+    _set_meters(hass, day_cons=500, night_cons=500, day_inj=0, night_inj=0)
+    cost = _compute_yearly_cost(
+        hass, snap, entry, prosumer_cost_eur_per_month=4.5, injection_price_eur_per_kwh=None
+    )
+    # 1000 * 0.3765 + yearly_fee 120 + 12 * 2.5 (energy_fund) + 12 * 4.5 (prosumer)
+    assert cost == pytest.approx(1000 * 0.3765 + 120 + 30 + 54)
