@@ -63,6 +63,10 @@
     },
     "abort": {
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Please go back and pick a different combination."
+    },
+    "error": {
+      "invalid_api_key": "ENTSO-E rejected this token. Double-check the value at transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "cannot_connect": "Could not reach ENTSO-E to verify the token. Check your network and try again."
     }
   },
   "options": {

@@ -45,6 +45,7 @@ the coordinator from each supplier's own publication.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -54,7 +55,11 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
+
+from .api import EntsoeAuthError, EntsoeClient, EntsoeError
 from homeassistant.helpers.selector import (
     EntitySelector,
     EntitySelectorConfig,
@@ -249,6 +254,26 @@ def _api_key_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema({vol.Required(CONF_API_KEY, default=current): TextSelector()})
 
 
+async def _validate_entsoe_key(hass: HomeAssistant, api_key: str) -> str | None:
+    """Test the ENTSO-E key with a tiny day-ahead query.
+
+    Returns ``None`` on success, ``"invalid_api_key"`` when ENTSO-E
+    rejects the token, or ``"cannot_connect"`` for transport / parse
+    errors. The query is intentionally narrow (one hour) to keep the
+    config-flow latency low.
+    """
+    session = async_get_clientsession(hass)
+    client = EntsoeClient(api_key, session)
+    now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    try:
+        await client.fetch_day_ahead(now, now + timedelta(hours=1))
+    except EntsoeAuthError:
+        return "invalid_api_key"
+    except EntsoeError:
+        return "cannot_connect"
+    return None
+
+
 def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
     fields: dict[Any, Any] = {
         vol.Required(
@@ -379,11 +404,17 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_api_key(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._data.update(user_input)
-            return await self._after_api_key()
+            err = await _validate_entsoe_key(self.hass, user_input[CONF_API_KEY])
+            if err is None:
+                self._data.update(user_input)
+                return await self._after_api_key()
+            errors[CONF_API_KEY] = err
         return self.async_show_form(
-            step_id="api_key", data_schema=_api_key_schema(self._data)
+            step_id="api_key",
+            data_schema=_api_key_schema(self._data),
+            errors=errors,
         )
 
     async def async_step_capacity(
@@ -520,11 +551,17 @@ class BePricesOptionsFlow(OptionsFlow):
     async def async_step_api_key(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._data.update(user_input)
-            return await self._after_api_key()
+            err = await _validate_entsoe_key(self.hass, user_input[CONF_API_KEY])
+            if err is None:
+                self._data.update(user_input)
+                return await self._after_api_key()
+            errors[CONF_API_KEY] = err
         return self.async_show_form(
-            step_id="api_key", data_schema=_api_key_schema(self._data)
+            step_id="api_key",
+            data_schema=_api_key_schema(self._data),
+            errors=errors,
         )
 
     async def async_step_capacity(

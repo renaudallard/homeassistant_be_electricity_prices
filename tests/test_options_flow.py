@@ -46,6 +46,18 @@ def _bypass_setup() -> "patch":
         yield mock
 
 
+@pytest.fixture(autouse=True)
+def _bypass_entsoe_validation() -> "patch":
+    """Default to a passing ENTSO-E key check so the dynamic flow doesn't
+    actually hit transparency.entsoe.eu in tests. Individual tests can
+    re-patch this to assert the error paths."""
+    with patch(
+        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+        return_value=None,
+    ) as mock:
+        yield mock
+
+
 def _make_entry() -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
@@ -109,6 +121,42 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
     assert entry.data["contract"] == "cociter_variable"
     assert entry.data["meter"] == "bi"
     assert "Cociter" in entry.title
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_invalid_api_key_keeps_user_on_form(
+    hass: HomeAssistant,
+    _bypass_entsoe_validation: "patch",
+) -> None:
+    """A bad token from ENTSO-E shows an error and reopens the same step."""
+    _bypass_entsoe_validation.return_value = "invalid_api_key"
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "power_dynamic"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "dynamic"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
+    )
+    assert result["step_id"] == "api_key"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_key": "wrong"}
+    )
+    assert result["type"] == data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "api_key"
+    assert result["errors"] == {"api_key": "invalid_api_key"}
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

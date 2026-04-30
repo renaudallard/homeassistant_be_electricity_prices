@@ -63,6 +63,10 @@
     },
     "abort": {
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d'electricite residentielle dans la region selectionnee. Revenez en arriere et choisissez une autre combinaison."
+    },
+    "error": {
+      "invalid_api_key": "ENTSO-E a rejete ce jeton. Verifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "cannot_connect": "Impossible de joindre ENTSO-E pour verifier le jeton. Verifiez votre reseau et reessayez."
     }
   },
   "options": {
