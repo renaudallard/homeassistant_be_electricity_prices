@@ -215,6 +215,15 @@
       "today_max": {
         "name": "Today maximum"
       },
+      "tomorrow_average": {
+        "name": "Tomorrow average"
+      },
+      "tomorrow_min": {
+        "name": "Tomorrow minimum"
+      },
+      "tomorrow_max": {
+        "name": "Tomorrow maximum"
+      },
       "energy_component": {
         "name": "Energy component"
       },

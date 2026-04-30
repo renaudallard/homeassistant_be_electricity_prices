@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
 from homeassistant.util import dt as dt_util
 
 from custom_components.be_electricity_prices.binary_sensor import _has_tomorrow
@@ -37,6 +38,9 @@ from custom_components.be_electricity_prices.pricing import PriceBreakdown
 from custom_components.be_electricity_prices.sensor import (
     _split_today_tomorrow,
     _today_ranked,
+    _tomorrow_avg,
+    _tomorrow_max,
+    _tomorrow_min,
 )
 
 
@@ -156,3 +160,22 @@ def test_has_tomorrow_false_when_only_today_loaded() -> None:
 
 def test_has_tomorrow_false_when_data_empty() -> None:
     assert not _has_tomorrow(CoordinatorData())
+
+
+def test_tomorrow_aggregations_pick_only_tomorrow_hours() -> None:
+    # Today carries values in [0.10, 0.50]; tomorrow in [1.00, 1.30].
+    # The tomorrow_* helpers must ignore today entirely.
+    data = _today_and_tomorrow_data(
+        [0.10, 0.20, 0.30, 0.40, 0.50],
+        [1.00, 1.10, 1.20, 1.30],
+    )
+    assert _tomorrow_avg(data) == pytest.approx((1.00 + 1.10 + 1.20 + 1.30) / 4)
+    assert _tomorrow_min(data) == pytest.approx(1.00)
+    assert _tomorrow_max(data) == pytest.approx(1.30)
+
+
+def test_tomorrow_aggregations_return_none_before_publication() -> None:
+    data = _today_and_tomorrow_data([0.10] * 24, [])
+    assert _tomorrow_avg(data) is None
+    assert _tomorrow_min(data) is None
+    assert _tomorrow_max(data) is None

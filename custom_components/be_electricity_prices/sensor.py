@@ -118,6 +118,36 @@ def _today_max(data: CoordinatorData) -> float | None:
     return max(h.all_in for h in hours)
 
 
+def _tomorrow_hours(data: CoordinatorData) -> list[PriceBreakdown]:
+    tomorrow = dt_util.now().date() + timedelta(days=1)
+    return [
+        bd
+        for hour, bd in data.hourly.items()
+        if dt_util.as_local(hour).date() == tomorrow
+    ]
+
+
+def _tomorrow_avg(data: CoordinatorData) -> float | None:
+    hours = _tomorrow_hours(data)
+    if not hours:
+        return None
+    return sum(h.all_in for h in hours) / len(hours)
+
+
+def _tomorrow_min(data: CoordinatorData) -> float | None:
+    hours = _tomorrow_hours(data)
+    if not hours:
+        return None
+    return min(h.all_in for h in hours)
+
+
+def _tomorrow_max(data: CoordinatorData) -> float | None:
+    hours = _tomorrow_hours(data)
+    if not hours:
+        return None
+    return max(h.all_in for h in hours)
+
+
 def _today_ranked(
     data: CoordinatorData, count: int
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -229,6 +259,30 @@ SENSORS: tuple[BePriceSensorDescription, ...] = (
         native_unit_of_measurement="EUR/kWh",
         suggested_display_precision=4,
         value_fn=_today_max,
+    ),
+    BePriceSensorDescription(
+        key="tomorrow_average",
+        translation_key="tomorrow_average",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=_tomorrow_avg,
+    ),
+    BePriceSensorDescription(
+        key="tomorrow_min",
+        translation_key="tomorrow_min",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=_tomorrow_min,
+    ),
+    BePriceSensorDescription(
+        key="tomorrow_max",
+        translation_key="tomorrow_max",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=_tomorrow_max,
     ),
     BePriceSensorDescription(
         key="energy_component",
