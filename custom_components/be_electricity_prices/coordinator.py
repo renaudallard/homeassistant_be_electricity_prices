@@ -353,7 +353,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # gap correctly. Naively walking local-time + timedelta would either
         # collide two hours into one UTC slot (spring) or duplicate a UTC slot
         # (fall) and silently drop one breakdown.
-        start_utc = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+        # Anchor at local midnight (converted to UTC) so today_min / today_max
+        # / today_average cover the full local day, not just "now → midnight".
+        local_midnight = dt_util.start_of_local_day()
+        start_utc = local_midnight.astimezone(UTC).replace(
+            minute=0, second=0, microsecond=0
+        )
         for offset in range(48):
             utc = start_utc + timedelta(hours=offset)
             local = dt_util.as_local(utc)
