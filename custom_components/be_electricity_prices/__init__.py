@@ -27,7 +27,8 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
@@ -42,6 +43,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, PLATFORMS
 from .coordinator import BePricesCoordinator
+from .pricing import PriceBreakdown
 
 type BePricesConfigEntry = ConfigEntry[BePricesCoordinator]
 
@@ -106,56 +108,28 @@ async def _async_refresh_service(call: ServiceCall) -> None:
         await coordinator.async_force_refresh()
 
 
-async def _async_cheapest_window_service(call: ServiceCall) -> ServiceResponse:
-    """Find the cheapest contiguous N-hour window in the upcoming price table.
+def _find_window(
+    hourly: dict[datetime, PriceBreakdown],
+    duration_slots: int,
+    earliest_utc: datetime,
+    latest_utc: datetime | None,
+    *,
+    minimize: bool,
+) -> dict[str, Any]:
+    """Pure helper: locate the cheapest (minimize=True) or most-expensive
+    contiguous ``duration_slots``-long window in the supplied hourly table.
 
-    Inputs (all optional except duration_hours):
-      duration_hours    length of the window (0.5..48). Hours are rounded
-                        up to the next whole hour because the price table
-                        is hourly.
-      entry_id          target a specific config entry; omitted means the
-                        first loaded entry.
-      earliest_start    only consider windows starting at/after this time
-                        (default: now).
-      latest_end        only consider windows ending at/before this time
-                        (default: end of cached table, typically +48h).
+    Bounds:
+      earliest_utc   only hours on/after this UTC time are considered
+                     (the hour bucket is found by truncating to :00).
+      latest_utc     if set, only hours whose end (h + 1h) is on/before
+                     this UTC time are considered.
 
-    Returns:
-      start, end (ISO local), average_eur_per_kwh, hours.
+    Raises ``ValueError`` when fewer than ``duration_slots`` hours match.
     """
-    duration_hours = float(call.data["duration_hours"])
-    duration_slots = max(1, -(-int(duration_hours * 2 + 0.0001) // 2))  # ceil to 1h
-
-    entries = call.hass.config_entries.async_loaded_entries(DOMAIN)
-    target_id = call.data.get("entry_id")
-    if target_id is not None:
-        entries = [e for e in entries if e.entry_id == target_id]
-    if not entries:
-        raise ValueError(
-            f"no loaded {DOMAIN} entry" + (f" with id {target_id}" if target_id else "")
-        )
-    coordinator: BePricesCoordinator = entries[0].runtime_data
-    data = coordinator.data
-    if data is None or not data.hourly:
-        raise ValueError("price table is empty; refresh the entry first")
-
-    # Sorted hourly UTC pairs. Filter to the requested window.
-    hours = sorted(data.hourly.items())
-    earliest = call.data.get("earliest_start") or dt_util.utcnow()
-    latest = call.data.get("latest_end")
-    earliest_utc = (earliest if earliest.tzinfo else earliest.astimezone()).astimezone(
-        dt_util.UTC
-    )
-    latest_utc = (
-        (latest if latest.tzinfo else latest.astimezone()).astimezone(dt_util.UTC)
-        if latest is not None
-        else None
-    )
-    candidates = [
-        (h, bd)
-        for h, bd in hours
-        if h >= earliest_utc.replace(minute=0, second=0, microsecond=0)
-    ]
+    hours = sorted(hourly.items())
+    earliest_anchor = earliest_utc.replace(minute=0, second=0, microsecond=0)
+    candidates = [(h, bd) for h, bd in hours if h >= earliest_anchor]
     if latest_utc is not None:
         candidates = [
             (h, bd) for h, bd in candidates if h + timedelta(hours=1) <= latest_utc
@@ -167,13 +141,13 @@ async def _async_cheapest_window_service(call: ServiceCall) -> ServiceResponse:
         )
 
     best_idx = 0
-    best_avg = float("inf")
+    best_avg = float("inf") if minimize else float("-inf")
     for i in range(len(candidates) - duration_slots + 1):
         avg = (
             sum(bd.all_in for _, bd in candidates[i : i + duration_slots])
             / duration_slots
         )
-        if avg < best_avg:
+        if (minimize and avg < best_avg) or (not minimize and avg > best_avg):
             best_avg = avg
             best_idx = i
 
@@ -192,3 +166,42 @@ async def _async_cheapest_window_service(call: ServiceCall) -> ServiceResponse:
             for h, bd in candidates[best_idx : best_idx + duration_slots]
         ],
     }
+
+
+def _resolve_window_inputs(
+    call: ServiceCall,
+) -> tuple[dict[datetime, PriceBreakdown], int, datetime, datetime | None]:
+    """Parse a window-finding ServiceCall into pure-helper arguments."""
+    duration_hours = float(call.data["duration_hours"])
+    duration_slots = max(1, -(-int(duration_hours * 2 + 0.0001) // 2))  # ceil to 1h
+
+    entries = call.hass.config_entries.async_loaded_entries(DOMAIN)
+    target_id = call.data.get("entry_id")
+    if target_id is not None:
+        entries = [e for e in entries if e.entry_id == target_id]
+    if not entries:
+        raise ValueError(
+            f"no loaded {DOMAIN} entry" + (f" with id {target_id}" if target_id else "")
+        )
+    coordinator: BePricesCoordinator = entries[0].runtime_data
+    data = coordinator.data
+    if data is None or not data.hourly:
+        raise ValueError("price table is empty; refresh the entry first")
+
+    earliest = call.data.get("earliest_start") or dt_util.utcnow()
+    latest = call.data.get("latest_end")
+    earliest_utc = (earliest if earliest.tzinfo else earliest.astimezone()).astimezone(
+        dt_util.UTC
+    )
+    latest_utc = (
+        (latest if latest.tzinfo else latest.astimezone()).astimezone(dt_util.UTC)
+        if latest is not None
+        else None
+    )
+    return data.hourly, duration_slots, earliest_utc, latest_utc
+
+
+async def _async_cheapest_window_service(call: ServiceCall) -> ServiceResponse:
+    """Find the cheapest contiguous N-hour window in the upcoming price table."""
+    hourly, slots, earliest, latest = _resolve_window_inputs(call)
+    return _find_window(hourly, slots, earliest, latest, minimize=True)
