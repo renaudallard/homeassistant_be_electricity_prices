@@ -127,7 +127,7 @@ def test_fix_extracts_taxes() -> None:
     assert snap.taxes.vat_rate == 0.0
     assert snap.publication_label.lower().startswith(
         (
-            "january",
+            "januari",
             "februari",
             "maart",
             "april",
