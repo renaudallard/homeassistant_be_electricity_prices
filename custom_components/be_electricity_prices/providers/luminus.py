@@ -179,11 +179,11 @@ def parse_snapshot(
 
 
 _DYNAMIC_FORMULA_RE = re.compile(
-    r"Prélèvement\s*\([^)]+\)\s*=\s*([\d,]+)\s*x\s*Belpex\s*H\s*([+-])\s*([\d,]+)",
+    r"Prélèvement\s*\([^)]+\)\s*=\s*([\d,]+)\s*x\s*Belpex\s*H\s*([+\-–—])\s*([\d,]+)",
     re.S,
 )
 _INJECTION_FORMULA_RE = re.compile(
-    r"Injection\s*\([^)]+\)\s*=\s*([\d,]+)\s*x\s*Belpex\s*H\s*([+-])\s*([\d,]+)",
+    r"Injection\s*\([^)]+\)\s*=\s*([\d,]+)\s*x\s*Belpex\s*H\s*([+\-–—])\s*([\d,]+)",
     re.S,
 )
 
@@ -207,7 +207,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         if not match:
             raise ExtractorError("could not parse Luminus dynamic formula")
         factor_pdf = to_float(match.group(1))
-        sign = -1.0 if match.group(2) == "-" else 1.0
+        sign = -1.0 if match.group(2) in ("-", "–", "—") else 1.0
         base_pre_vat_cents = sign * to_float(match.group(3))
         vat = _vat_multiplier(text)
         # PDF formula: c€/kWh hors TVA = factor_pdf * Belpex_eur_mwh + base_cents.
@@ -272,7 +272,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         match = _INJECTION_FORMULA_RE.search(text)
         if match:
             factor_pdf = to_float(match.group(1))
-            sign = -1.0 if match.group(2) == "-" else 1.0
+            sign = -1.0 if match.group(2) in ("-", "–", "—") else 1.0
             base_pdf_cents = sign * to_float(match.group(3))
             # Residential injection is VAT-exempt in Belgium.
             factor = factor_pdf * 10.0
