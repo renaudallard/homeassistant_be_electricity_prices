@@ -45,19 +45,22 @@ publication and how to parse it.
 - **Live tariff cards** — prices come straight from the supplier's published PDF; no EUR values live in this repo.
 - **Whole-bill view** — energy, transport, distribution, regional levies and VAT all add up to a single EUR/kWh sensor.
 - **Dynamic contracts** — `factor × spot + base` per hour, where `spot` is the Belgian day-ahead price from ENTSO-E.
+- **Time-of-Use contracts** — Luminus SmartFlex and Engie Empower Flextime: 3 hour-of-day bands (peak / transition / offpeak) with the supplier's published rates per slot.
+- **Tarif Impact (Wallonia)** — opt-in CWaPE 3-band distribution pricing (PIC 17–22, MEDIUM 7–11 + 22–1, ECO 1–7 + 11–17), orthogonal to the supplier tariff.
 - **Flanders capacity tariff** — monthly peak tracked from any kW sensor or a fixed value; billed against the configured Fluvius sub-area.
 - **Solar** — prosumer fee for the Walloon compensation regime (until 2030-12-31), and a per-kWh injection price entity that plugs straight into HA Energy.
 - **Translated UI** — English, French, Dutch and German.
 - **Self-healing** — last-known prices keep serving on outage; a repair issue surfaces if the snapshot goes stale.
+- **Catalog drift detection** — the daily live-check diffs each supplier's public catalog against the registry and opens a GitHub issue when a new product appears.
 
 ## Supported providers
 
 | Supplier | Contracts | Source |
 | --- | --- | --- |
 | **Eneco** | Power Fix · Power Flex · Power Dynamic | [`providers/eneco.py`](./custom_components/be_electricity_prices/providers/eneco.py) — stable URLs at `cdn.eneco.be/downloads/nl/general/tk/BC_032_012604_NL_ENECO_POWER_<FIX\|FLEX\|DYNAMIC>.pdf`, V/W only (no Brussels) |
-| **Engie** | Easy Fixed · Easy Variable · Direct Online · Basic Online · Dynamic · Empower Fixed · Empower Variable · Flow · Empty House | [`providers/engie.py`](./custom_components/be_electricity_prices/providers/engie.py) — Engie's public REST endpoint at `engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF`, one PDF per (contract, region) |
+| **Engie** | Easy Fixed · Easy Variable · Direct Online · Basic Online · Dynamic · Empower Fixed · Empower Variable · Empower Flextime *(TOU)* · Flow · Empty House | [`providers/engie.py`](./custom_components/be_electricity_prices/providers/engie.py) — Engie's public REST endpoint at `engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF`, one PDF per (contract, region) |
 | **TotalEnergies** | Electricité Fixe/Variable · Impact · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe | [`providers/totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) — stable URLs at `totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/`, parsed via `pdfplumber` (rotated columns) |
-| **Luminus** | Comfy · Comfy+ · ComfyFlex · MaxxFix · BasicFix · BasicFlex · Dynamic | [`providers/luminus.py`](./custom_components/be_electricity_prices/providers/luminus.py) — Luminus's public REST endpoint at `luminus.be/api-next/get-pricelist/`, V/W only (no Brussels for market products) |
+| **Luminus** | Comfy · Comfy+ · ComfyFlex · ComfyFlex+ · MaxxFix · MaxxFlex · BasicFix · BasicFlex · SmartFlex *(TOU)* · Dynamic | [`providers/luminus.py`](./custom_components/be_electricity_prices/providers/luminus.py) — Luminus's public REST endpoint at `luminus.be/api-next/get-pricelist/`, V/W only (no Brussels for market products) |
 | **Mega** | Smart Fixed/Flex · Zen Fixed · Online Fixed/Flex · Cosy Fixed/Flex · Prepaid Fixed/Flex · Off-peak Fixed/Flex · Dynamic · Cap | [`providers/mega.py`](./custom_components/be_electricity_prices/providers/mega.py) — scrapes the public listing at `mega.be/fr/cartes-tarifaires` to resolve each `(product, region)` to its current PDF on `my.mega.be` |
 | **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty · Bolt Online · Bolt Plenty Online | [`providers/bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) — stable URLs at `files.boltenergie.be/pricelists/<fix\|var>/`, parsed via `pdfplumber` (rotated columns + Unicode line-separators) |
 | **Cociter** | Tarif Variable (BELIX) · Tarif Dynamique (quarter-hourly BELPEX) | [`providers/cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) — monthly cards `RCVar_YMR_Coop-YYMM-fr.pdf` / `RCDyn_SM3_Coop-YYMM-fr.pdf` |
@@ -123,26 +126,32 @@ Download the latest [release zip](https://github.com/renaudallard/homeassistant_
 extract it under `<config>/custom_components/be_electricity_prices/`, and
 restart Home Assistant.
 
-`pypdf` is the only extra runtime dependency; Home Assistant installs it
-automatically from the manifest.
+`pypdf` and `pdfplumber` are the only extra runtime dependencies; Home
+Assistant installs them automatically from the manifest.
 
 ## Configuration
 
-The UI walks **up to seven steps**, depending on contract type and region.
+The UI walks **up to eight steps**, depending on contract type and region.
 No EUR values are asked — energy, DSO and tax rates all come from the
 supplier's tariff card.
 
-1. **Supplier + Region** — Flanders / Wallonia / Brussels.
-2. **Contract** — filtered by supplier (populated from the live registry).
+1. **Supplier + Region** — Flanders / Wallonia / Brussels. Suppliers that
+   don't sell in your region are filtered out.
+2. **Contract** — filtered by supplier *and* region (e.g., TotalEnergies
+   Impact only appears in Wallonia).
 3. **DSO** — filtered by region.
-4. **Meter type** — *mono* (single rate), *bi* (peak / off-peak), or *dynamic*
-   (smart meter). Drives whether energy and distribution are billed at single
-   or time-of-use rates.
-5. **ENTSO-E API key** — only when the chosen contract is dynamic.
-6. **Capacity tariff peak source** *(Flanders only)* — either a power sensor
+4. **Meter type** — *mono* (single rate), *bi* (peak / off-peak), or
+   *dynamic* (smart meter). TOU contracts (Luminus SmartFlex, Engie
+   Empower Flextime) default to *dynamic*.
+5. **DSO billing mode** *(Wallonia only)* — *Simple* / *Bi-horaire* / *Tarif
+   Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
+   requires a smart meter; Simple and Bi-horaire follow the existing
+   meter convention.
+6. **ENTSO-E API key** — only when the chosen contract is dynamic.
+7. **Capacity tariff peak source** *(Flanders only)* — either a power sensor
    reporting your live kW draw, or a fixed kW value (default 2.5 kW, the VREG
    regulated minimum).
-7. **Solar panels** — inverter capacity in kVA + the regime that applies:
+8. **Solar panels** — inverter capacity in kVA + the regime that applies:
    - **No solar panels** *(default)* — no extra sensors.
    - **Compensation regime** — Wallonia only, installations **certified before
      2024-01-01**, valid until 2030-12-31. Creates `prosumer_cost`.
@@ -159,11 +168,11 @@ Required only for dynamic contracts. Register on the
 ### Reconfiguring later
 
 **Settings → Devices & services → Belgian Electricity Prices → Configure**
-walks the same seven steps, pre-filled with the current values. Change
-supplier, contract, region, DSO, meter, ENTSO-E API key, capacity peak
-source, or solar parameters — anything. The integration reloads
-automatically when you finish, picking the new tariff card on the next
-refresh.
+walks the same chain of steps, pre-filled with the current values. Change
+supplier, contract, region, DSO, meter, DSO billing mode, ENTSO-E API
+key, capacity peak source, or solar parameters — anything. The integration
+reloads automatically when you finish, picking the new tariff card on the
+next refresh.
 
 ## Daily operation
 
@@ -206,17 +215,25 @@ pytest tests/
 python scripts/live_check.py    # hits real supplier endpoints
 ```
 
-Tests run against fixture PDFs in [`tests/fixtures/`](./tests/fixtures/) (real
-Eneco + Cociter cards from April 2026). Refresh the fixtures with the
-supplier's current PDF to re-run against new data.
+Tests run against fixture PDFs and HTML snippets in
+[`tests/fixtures/`](./tests/fixtures/) (real April 2026 cards from every
+registered supplier, plus tiny HTML snippets under
+`tests/fixtures/discover/` for catalog-discovery tests). Refresh a
+fixture with the supplier's current PDF to re-run against new data.
 
 A daily GitHub Actions workflow
 ([`.github/workflows/live_check.yml`](./.github/workflows/live_check.yml))
-exercises every extractor against its real publication, retries up to five
-times with growing backoff, and opens or updates a GitHub issue titled
-`[live-check] supplier extractor broken …` on persistent failure. This
-catches supplier URL changes and PDF layout shifts that would silently
-break parsing.
+runs two phases against the live supplier endpoints:
+
+- **Extractor phase** — every (contract, region) tuple is fetched and
+  parsed; retries up to five times with exponential backoff. Persistent
+  failures open or update a GitHub issue titled
+  `[live-check] supplier extractor broken …`.
+- **Catalog phase** — each supplier's `discover()` is run against its
+  public listing page; any product visible at the supplier but missing
+  from the registry opens a separate issue
+  `[live-check] new supplier products detected …` so a parser regression
+  and a catalogue addition stay in distinct threads.
 
 ## License
 
