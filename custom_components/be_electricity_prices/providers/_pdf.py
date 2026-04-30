@@ -194,9 +194,24 @@ async def fetch_pdf_text_layout(session: aiohttp.ClientSession, url: str) -> str
     return await asyncio.to_thread(extract_pdf_text_layout, payload)
 
 
+_NUMERIC_SEPARATORS = (
+    " ",  # ASCII space
+    " ",  # NBSP (U+00A0)
+    " ",  # THIN SPACE (U+2009)
+    " ",  # NARROW NO-BREAK SPACE (U+202F, CLDR French thousands)
+    " ",  # LINE SEPARATOR (U+2028)
+)
+
+
 def to_float(text: str) -> float:
-    """Parse a Belgian / French decimal number ('15,93' or '0.102')."""
-    # First strips a non-breaking space (U+00A0) which Belgian PDFs use
-    # around units; visually identical to a regular space, do not collapse.
-    cleaned = text.strip().replace(" ", "").replace(" ", "").replace(",", ".")
-    return float(cleaned)
+    """Parse a Belgian / French decimal number ('15,93' or '0.102').
+
+    Strips every Unicode space variant Belgian PDFs use as a
+    thousands separator or unit padder before swapping the comma
+    for a decimal point. Without this, NNBSP-separated values like
+    '5 029' raise ValueError mid-page.
+    """
+    cleaned = text.strip()
+    for sep in _NUMERIC_SEPARATORS:
+        cleaned = cleaned.replace(sep, "")
+    return float(cleaned.replace(",", "."))
