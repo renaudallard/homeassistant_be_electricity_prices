@@ -153,7 +153,7 @@
       "options": {
         "simple": "Eintarif (eine Rate, alle Stunden)",
         "bi_horaire": "Doppeltarif (Tag / Nacht)",
-        "impact": "Tarif Impact (3 Bereiche pro Stunde)"
+        "impact": "Tarif Impact (3 Tageszeit-Bereiche)"
       }
     },
     "solar_regime": {

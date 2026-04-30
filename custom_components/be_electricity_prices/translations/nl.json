@@ -31,7 +31,7 @@
       },
       "dso_tariff_mode": {
         "title": "Distributietarief (Wallonie)",
-        "description": "Hoe je netbeheerder factureert. 'Simple' / 'Bi-horaire' volgen de bestaande conventie. 'Tarif Impact' gebruikt de 3 CWaPE-plages per uur (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) en vereist een digitale meter.",
+        "description": "Hoe je netbeheerder factureert. 'Simple' / 'Bi-horaire' volgen de bestaande conventie. 'Tarif Impact' gebruikt de 3 CWaPE-tijdvakken (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) en vereist een digitale meter.",
         "data": {
           "dso_tariff_mode": "Distributiemodus"
         }
@@ -97,7 +97,7 @@
       },
       "dso_tariff_mode": {
         "title": "Distributietarief (Wallonie)",
-        "description": "Hoe je netbeheerder factureert. 'Simple' / 'Bi-horaire' volgen de bestaande conventie. 'Tarif Impact' gebruikt de 3 CWaPE-plages per uur (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) en vereist een digitale meter.",
+        "description": "Hoe je netbeheerder factureert. 'Simple' / 'Bi-horaire' volgen de bestaande conventie. 'Tarif Impact' gebruikt de 3 CWaPE-tijdvakken (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) en vereist een digitale meter.",
         "data": {
           "dso_tariff_mode": "Distributiemodus"
         }
@@ -146,7 +146,7 @@
       "options": {
         "simple": "Enkel (een tarief, alle uren)",
         "bi_horaire": "Bi-uurlijks (dag / nacht)",
-        "impact": "Tarif Impact (3 plages per uur)"
+        "impact": "Tarif Impact (3 tijdvakken)"
       }
     },
     "meter": {

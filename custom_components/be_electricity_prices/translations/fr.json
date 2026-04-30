@@ -153,7 +153,7 @@
       "options": {
         "simple": "Simple (un tarif, toutes les heures)",
         "bi_horaire": "Bi-horaire (jour / nuit)",
-        "impact": "Tarif Impact (3 plages par heure)"
+        "impact": "Tarif Impact (3 plages horaires)"
       }
     },
     "solar_regime": {
