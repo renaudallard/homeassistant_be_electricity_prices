@@ -24,7 +24,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install pypdf pdfplumber aiohttp
 
-      - name: Run live check (up to 5 attempts)
+      - name: Run live check (up to 5 attempts on extractor failure)
         id: check
         run: |
           set +e
@@ -37,7 +37,10 @@ jobs:
             rc=$?
             cat report.md
             echo "::endgroup::"
-            if [ "$rc" -eq 0 ]; then
+            # rc bit 0 (1 / 3) = extractor failure — worth retrying.
+            # rc bit 1 only (2) = catalog signal, stable — don't retry.
+            # rc 0 = all green.
+            if [ $((rc & 1)) -eq 0 ]; then
               break
             fi
             if [ "$i" -lt "$attempts" ]; then
@@ -48,14 +51,16 @@ jobs:
             fi
           done
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
-          exit "$rc"
+          # Exit 0 here so subsequent issue-creation steps run regardless
+          # of which kind of failure was detected; they branch on rc.
+          exit 0
 
-      - name: Open or update issue on persistent failure
-        if: failure() && steps.check.outputs.rc != '0'
+      - name: Open or update extractor-broken issue
+        # rc bit 0 set: extractor failure.
+        if: steps.check.outputs.rc == '1' || steps.check.outputs.rc == '3'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # De-dup on a stable title prefix; cheaper than relying on a label.
           title_prefix='[live-check] supplier extractor broken'
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           {
@@ -81,4 +86,39 @@ jobs:
             gh issue create \
               --title "$title_prefix ($(date -u +%Y-%m-%d))" \
               --body-file issue_body.md
+          fi
+
+      - name: Open or update new-products issue
+        # rc bit 1 set: a new product was detected at a supplier we
+        # know how to discover. Independent issue from the extractor
+        # one so the two failure modes don't conflate in one thread.
+        if: always() && (steps.check.outputs.rc == '2' || steps.check.outputs.rc == '3')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title_prefix='[live-check] new supplier products detected'
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          {
+            echo "## Run"
+            echo
+            echo "$run_url"
+            echo
+            echo "## Catalog diff"
+            echo
+            cat catalog_report.md
+          } > catalog_issue_body.md
+
+          existing=$(gh issue list \
+            --state open \
+            --search "\"$title_prefix\" in:title" \
+            --json number,title \
+            --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            echo "appending comment to issue #$existing"
+            gh issue comment "$existing" --body-file catalog_issue_body.md
+          else
+            gh issue create \
+              --title "$title_prefix ($(date -u +%Y-%m-%d))" \
+              --body-file catalog_issue_body.md
           fi

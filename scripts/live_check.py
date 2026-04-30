@@ -90,13 +90,18 @@ class Check:
     label: str
     ok: bool
     detail: str = ""
+    # "extractor" -> a fetch / parse regression; opens the existing issue
+    # "catalog"   -> a new product detected at the supplier; opens a
+    #                separate issue so the two failure modes don't get
+    #                conflated in one thread.
+    kind: str = "extractor"
 
 
 CHECKS: list[Check] = []
 
 
-def _record(label: str, ok: bool, detail: str = "") -> None:
-    CHECKS.append(Check(label=label, ok=ok, detail=detail))
+def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
+    CHECKS.append(Check(label=label, ok=ok, detail=detail, kind=kind))
 
 
 def _expect(label: str, condition: bool, detail: str = "") -> bool:
@@ -513,6 +518,51 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
             _validate_energy(prefix, cid, snap.energy)
 
 
+async def _check_catalogs(
+    session: aiohttp.ClientSession, modules: dict[str, types.ModuleType]
+) -> None:
+    """Run each supplier's ``discover()`` and surface any new product ids.
+
+    ``known_ids_for(module)`` extracts the registry's identifier set in
+    the same shape ``discover()`` returns. discover() that returns an
+    empty set is treated as "discovery not implemented" and skipped
+    (Engie, Luminus today).
+    """
+    known: dict[str, set[str]] = {
+        "mega": {c.product_name for c in modules["mega"]._CONTRACTS},
+        "bolt": {f"{c.folder}/{c.slug}" for c in modules["bolt"]._CONTRACTS},
+        "eneco": set(modules["eneco"]._CONTRACT_URLS),
+        "totalenergies": {c.slug for c in modules["totalenergies"]._CONTRACTS},
+        "octaplus": {c.slug for c in modules["octaplus"]._CONTRACTS},
+        "cociter": {"cociter_variable", "cociter_dynamic"},
+    }
+    for name, mod in modules.items():
+        discover = getattr(mod, "discover", None)
+        if discover is None:
+            continue
+        try:
+            discovered = await discover(session)
+        except Exception as err:
+            _record(
+                f"{name}/catalog: discovery raised",
+                False,
+                f"{type(err).__name__}: {err}",
+                kind="catalog",
+            )
+            continue
+        if not discovered:
+            # No discovery surface (Engie / Luminus) or transient
+            # failure — no signal either way.
+            continue
+        new_ids = sorted(discovered - known.get(name, set()))
+        _record(
+            f"{name}/catalog: no new products at supplier",
+            not new_ids,
+            detail=", ".join(new_ids) if new_ids else "",
+            kind="catalog",
+        )
+
+
 def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
     kind = type(energy).__name__
     if kind == "FixedRates":
@@ -579,6 +629,16 @@ async def _run() -> int:
     eneco, cociter, engie, luminus, mega, totalenergies, bolt, octaplus = (
         _load_providers()
     )
+    modules = {
+        "eneco": eneco,
+        "cociter": cociter,
+        "engie": engie,
+        "luminus": luminus,
+        "mega": mega,
+        "totalenergies": totalenergies,
+        "bolt": bolt,
+        "octaplus": octaplus,
+    }
     timeout = aiohttp.ClientTimeout(total=60)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         await _check_eneco(session, eneco)
@@ -589,8 +649,24 @@ async def _run() -> int:
         await _check_totalenergies(session, totalenergies)
         await _check_bolt(session, bolt)
         await _check_octaplus(session, octaplus)
-    print(_render_report(CHECKS))
-    return 1 if any(not c.ok for c in CHECKS) else 0
+        await _check_catalogs(session, modules)
+
+    extractor_checks = [c for c in CHECKS if c.kind == "extractor"]
+    catalog_checks = [c for c in CHECKS if c.kind == "catalog"]
+    # Stdout = extractor report (existing workflow consumes this).
+    print(_render_report(extractor_checks))
+    # Side-channel: catalog report goes to a known file the workflow
+    # picks up to open / update its own issue, separate from the
+    # extractor-broken issue so the two failure modes don't conflate.
+    Path("catalog_report.md").write_text(_render_report(catalog_checks))
+    extractor_failed = any(not c.ok for c in extractor_checks)
+    catalog_failed = any(not c.ok for c in catalog_checks)
+    # Distinct exit codes so the workflow knows which issue to open:
+    #   0 = all green
+    #   1 = extractor failure (existing behaviour)
+    #   2 = catalog-only (extractor green, but new products at suppliers)
+    #   3 = both
+    return (1 if extractor_failed else 0) | (2 if catalog_failed else 0)
 
 
 def main() -> int:
