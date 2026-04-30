@@ -129,14 +129,58 @@ def energy_eur_per_kwh(
     raise TypeError(f"unknown energy rates type: {type(energy).__name__}")
 
 
+DsoTariffMode = Literal["simple", "bi_horaire", "impact"]
+ImpactBand = Literal["pic", "medium", "eco"]
+
+
+def dso_impact_band(when: datetime) -> ImpactBand:
+    """Return the Wallonia Tarif Impact band for the given local hour.
+
+    CWaPE-defined bands (every day of the week, no weekend exception):
+      pic    17:00-22:00
+      medium 07:00-11:00 + 22:00-01:00
+      eco    01:00-07:00 + 11:00-17:00
+
+    Source: TotalEnergies Impact tariff card footnote 7 / ORES
+    'Comprendre ma facture / Impact'.
+    """
+    h = when.hour
+    if 17 <= h < 22:
+        return "pic"
+    if 7 <= h < 11 or h >= 22 or h < 1:
+        return "medium"
+    return "eco"  # 01-07 + 11-17
+
+
 def network_eur_per_kwh(
     dso: DsoOverlay,
     when: datetime,
     meter: MeterType = "mono",
+    dso_tariff_mode: DsoTariffMode = "bi_horaire",
 ) -> float:
-    """Distribution + transport (EUR/kWh) for the given hour."""
+    """Distribution + transport (EUR/kWh) for the given hour.
+
+    ``dso_tariff_mode`` selects the distribution-side billing mode set
+    on the user's connection, separately from the supplier's energy
+    tariff. ``impact`` falls back to bi-horaire if the DSO doesn't
+    publish Impact rates (Brussels Sibelga, Flanders Fluvius), and
+    ``bi_horaire`` falls back to the single rate when the DSO doesn't
+    publish a peak/offpeak split.
+    """
+    if dso_tariff_mode == "impact" and dso.distribution_pic is not None:
+        band = dso_impact_band(when)
+        if band == "pic":
+            dist = dso.distribution_pic
+        elif band == "medium":
+            assert dso.distribution_medium is not None  # paired with pic
+            dist = dso.distribution_medium
+        else:
+            assert dso.distribution_eco is not None
+            dist = dso.distribution_eco
+        return dist + dso.transport
     if (
-        meter == "bi"
+        dso_tariff_mode != "simple"
+        and meter == "bi"
         and dso.distribution_peak is not None
         and dso.distribution_offpeak is not None
     ):
@@ -165,6 +209,7 @@ def compute_breakdown(
     when: datetime,
     spot_eur_per_kwh: float | None = None,
     meter: MeterType = "mono",
+    dso_tariff_mode: DsoTariffMode = "bi_horaire",
 ) -> PriceBreakdown:
     """Return the all-in EUR/kWh breakdown for one hour.
 
@@ -184,7 +229,7 @@ def compute_breakdown(
             f"available: {sorted(snapshot.dsos)}"
         )
     energy = energy_eur_per_kwh(snapshot.energy, when, spot_eur_per_kwh, meter)
-    network = network_eur_per_kwh(overlay, when, meter)
+    network = network_eur_per_kwh(overlay, when, meter, dso_tariff_mode)
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
     vat_factor = 1.0 + snapshot.taxes.vat_rate
     return PriceBreakdown(

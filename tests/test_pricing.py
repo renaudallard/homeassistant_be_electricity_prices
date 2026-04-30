@@ -33,6 +33,7 @@ import pytest
 
 from custom_components.be_electricity_prices.pricing import (
     compute_breakdown,
+    dso_impact_band,
     energy_eur_per_kwh,
     is_offpeak,
     network_eur_per_kwh,
@@ -152,6 +153,79 @@ def test_energy_dynamic_requires_spot() -> None:
     e = DynamicRates(factor=0.10, base=0.025)
     with pytest.raises(ValueError):
         energy_eur_per_kwh(e, datetime(2026, 4, 29, 12), None)
+
+
+def test_dso_impact_band_pic_evening() -> None:
+    assert dso_impact_band(datetime(2026, 4, 29, 17, 0)) == "pic"
+    assert dso_impact_band(datetime(2026, 4, 29, 21, 59)) == "pic"
+
+
+def test_dso_impact_band_medium_morning_and_late_night() -> None:
+    assert dso_impact_band(datetime(2026, 4, 29, 7, 0)) == "medium"
+    assert dso_impact_band(datetime(2026, 4, 29, 10, 59)) == "medium"
+    assert dso_impact_band(datetime(2026, 4, 29, 22, 0)) == "medium"
+    assert dso_impact_band(datetime(2026, 4, 29, 23, 59)) == "medium"
+    assert dso_impact_band(datetime(2026, 4, 29, 0, 30)) == "medium"
+
+
+def test_dso_impact_band_eco_night_and_midday() -> None:
+    assert dso_impact_band(datetime(2026, 4, 29, 1, 0)) == "eco"
+    assert dso_impact_band(datetime(2026, 4, 29, 6, 59)) == "eco"
+    assert dso_impact_band(datetime(2026, 4, 29, 11, 0)) == "eco"
+    assert dso_impact_band(datetime(2026, 4, 29, 16, 59)) == "eco"
+
+
+def test_dso_impact_band_no_weekend_exception() -> None:
+    # Tarif Impact applies 7 days a week (unlike bi-horaire). A Saturday
+    # 17h-22h block is still PIC.
+    assert dso_impact_band(datetime(2026, 5, 2, 18, 0)) == "pic"
+
+
+def test_network_impact_dispatches_by_band() -> None:
+    overlay = DsoOverlay(
+        distribution_single=0.05,
+        distribution_peak=0.06,
+        distribution_offpeak=0.04,
+        transport=0.015,
+        distribution_pic=0.10,
+        distribution_medium=0.07,
+        distribution_eco=0.03,
+    )
+    pic = network_eur_per_kwh(overlay, datetime(2026, 4, 29, 18), "dynamic", "impact")
+    medium = network_eur_per_kwh(overlay, datetime(2026, 4, 29, 8), "dynamic", "impact")
+    eco = network_eur_per_kwh(overlay, datetime(2026, 4, 29, 13), "dynamic", "impact")
+    assert pic == pytest.approx(0.115)  # 0.10 + 0.015 transport
+    assert medium == pytest.approx(0.085)
+    assert eco == pytest.approx(0.045)
+
+
+def test_network_impact_falls_back_when_dso_lacks_impact_rates() -> None:
+    # Brussels Sibelga / Flanders Fluvius don't publish Impact rates.
+    # Asking for "impact" mode there must degrade gracefully — fall back
+    # to bi-horaire if peak/offpeak exist, else single. No KeyError.
+    overlay = DsoOverlay(
+        distribution_single=0.05,
+        distribution_peak=0.06,
+        distribution_offpeak=0.04,
+        transport=0.015,
+    )
+    # Mid-day on a weekday with bi meter: same as bi_horaire peak path.
+    assert network_eur_per_kwh(
+        overlay, datetime(2026, 4, 29, 12), "bi", "impact"
+    ) == pytest.approx(0.075)
+
+
+def test_network_simple_mode_ignores_meter() -> None:
+    overlay = DsoOverlay(
+        distribution_single=0.05,
+        distribution_peak=0.06,
+        distribution_offpeak=0.04,
+        transport=0.015,
+    )
+    # Even with bi meter at night, "simple" mode forces the single rate.
+    assert network_eur_per_kwh(
+        overlay, datetime(2026, 4, 29, 23), "bi", "simple"
+    ) == pytest.approx(0.065)
 
 
 def test_network_single_meter() -> None:
