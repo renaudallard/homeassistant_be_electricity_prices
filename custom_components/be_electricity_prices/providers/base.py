@@ -167,6 +167,17 @@ class DsoOverlay:
     # don't (post-2024 SMR3 connections), so it stays None there. Valid in
     # Wallonia until 2030 per CWaPE.
     prosumer_eur_per_kva_year: float | None = None
+    # Tarif Impact (Wallonia-only, opt-in for SMR3 customers). Three
+    # distribution rates indexed by CWaPE-defined hour-of-day bands:
+    #   pic    : 17:00-22:00            (highest, every day)
+    #   medium : 07:00-11:00 + 22:00-01:00
+    #   eco    : 01:00-07:00 + 11:00-17:00 (lowest, every day)
+    # Wallonia DSOs publish all three on every supplier tariff card;
+    # Brussels (Sibelga) and Flanders (Fluvius) do not, so they stay
+    # None there.
+    distribution_pic: float | None = None
+    distribution_medium: float | None = None
+    distribution_eco: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
