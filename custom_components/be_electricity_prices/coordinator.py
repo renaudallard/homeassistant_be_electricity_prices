@@ -286,22 +286,28 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if not api_key:
             raise EntsoeError("missing ENTSO-E API key")
 
-        now = dt_util.utcnow()
-        today = now.date()
-        want_tomorrow = now.hour >= 11
+        # Window the request on the *local* day (Europe/Brussels) so a
+        # 00:00-02:00 local query doesn't drop yesterday's UTC tail or
+        # miss tomorrow because UTC is still on the previous date.
+        local_today = dt_util.now().date()
+        now_local = dt_util.now()
+        want_tomorrow = now_local.hour >= 11
         if (
-            self._spot_cache_day == today
+            self._spot_cache_day == local_today
             and (not want_tomorrow or self._spot_cache_includes_tomorrow)
             and self._spot_cache
         ):
             return self._spot_cache
 
         client = EntsoeClient(api_key, self._session)
-        start = datetime.combine(today, datetime.min.time(), tzinfo=UTC)
+        start_local = datetime.combine(
+            local_today, datetime.min.time(), tzinfo=now_local.tzinfo
+        )
+        start = start_local.astimezone(UTC)
         end = start + timedelta(days=2 if want_tomorrow else 1)
         prices = await client.fetch_day_ahead(start, end)
         self._spot_cache = prices
-        self._spot_cache_day = today
+        self._spot_cache_day = local_today
         self._spot_cache_includes_tomorrow = want_tomorrow
         return prices
 

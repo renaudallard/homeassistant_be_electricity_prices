@@ -107,10 +107,18 @@ def parse_day_ahead_xml(xml: str) -> dict[datetime, float]:
         if interval is None or not resolution.startswith("PT"):
             continue
         start_text = interval.findtext("ns:start", default="", namespaces=_NS)
+        end_text = interval.findtext("ns:end", default="", namespaces=_NS)
         if not start_text:
             continue
         start = _parse_iso_utc(start_text)
         step = _resolution_to_timedelta(resolution)
+        # IEC 62325-451-3 / A44 lets a publication document omit any
+        # Point whose price is unchanged from the previous position
+        # ("carry forward" semantics). Collect only the explicit points
+        # first, then forward-fill across the whole interval so the
+        # caller never sees a gap that they'd interpolate as a stale
+        # neighbour hour.
+        explicit: dict[int, float] = {}
         for point in period.findall("ns:Point", _NS):
             position_text = point.findtext("ns:position", default="0", namespaces=_NS)
             price_text = point.findtext("ns:price.amount", default="", namespaces=_NS)
@@ -121,8 +129,21 @@ def parse_day_ahead_xml(xml: str) -> dict[datetime, float]:
                 price = float(price_text)
             except ValueError as err:
                 raise EntsoeError(f"malformed point in document: {err}") from err
-            ts_start = start + step * (position - 1)
-            out[ts_start] = price / 1000.0
+            explicit[position] = price / 1000.0
+        if not explicit:
+            continue
+        if end_text:
+            end = _parse_iso_utc(end_text)
+            total = max(int((end - start) / step), max(explicit))
+        else:
+            total = max(explicit)
+        last: float | None = None
+        for position in range(1, total + 1):
+            if position in explicit:
+                last = explicit[position]
+            if last is None:
+                continue
+            out[start + step * (position - 1)] = last
     return out
 
 
