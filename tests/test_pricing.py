@@ -159,6 +159,30 @@ def test_tou_slot_weekend_offpeak_default() -> None:
     assert tou_slot(datetime(2026, 5, 3, 8, 0)) == "offpeak"
 
 
+def test_tou_slot_holiday_treated_as_weekend_default_rule() -> None:
+    # May 1, 2026 is a Friday (weekday 4) but is Labour Day. Under
+    # weekend_offpeak rule (SmartFlex), holiday afternoon collapses to
+    # offpeak just like a weekend.
+    assert tou_slot(datetime(2026, 5, 1, 9, 0)) == "offpeak"
+    assert tou_slot(datetime(2026, 5, 1, 19, 0)) == "offpeak"
+
+
+def test_tou_slot_holiday_treated_as_weekend_no_peak_rule() -> None:
+    # Same day under Engie's weekend_no_peak rule: 09:00 is transition
+    # (would be peak on a non-holiday weekday), 13:00 is offpeak.
+    rule = "weekend_no_peak"
+    assert tou_slot(datetime(2026, 5, 1, 9, 0), rule) == "transition"
+    assert tou_slot(datetime(2026, 5, 1, 13, 0), rule) == "offpeak"
+
+
+def test_dso_impact_band_does_not_observe_holidays() -> None:
+    # Tarif Impact applies 7 days a week per CWaPE and is explicitly
+    # NOT sensitive to weekends or holidays. May 1, 2026 17h is still
+    # PIC.
+    assert dso_impact_band(datetime(2026, 5, 1, 18, 0)) == "pic"
+    assert dso_impact_band(datetime(2026, 12, 25, 18, 0)) == "pic"
+
+
 def test_tou_slot_weekend_no_peak_rule() -> None:
     # Engie Empower Flextime weekend rule:
     #   transition: 7-11 + 17-1 (so 17-22, 22-23, 0-1)

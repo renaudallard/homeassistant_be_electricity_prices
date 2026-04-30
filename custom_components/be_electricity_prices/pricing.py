@@ -131,14 +131,19 @@ def tou_slot(when: datetime, weekend_rule: str = "weekend_offpeak") -> TouSlot:
       transition : 11:00-17:00 + 22:00-01:00
       offpeak    : 01:00-07:00
 
-    Weekend rule depends on the contract:
-      weekend_offpeak  Luminus SmartFlex — Sat/Sun all off-peak.
+    Federal Belgian holidays follow the same rule as a weekend day —
+    the supplier's published TOU bands explicitly call out weekends
+    plus public holidays (TGEPRESC for Engie, equivalent CWaPE
+    document for Luminus). Weekend rule depends on the contract:
+
+      weekend_offpeak  Luminus SmartFlex — Sat/Sun + holidays all
+        off-peak.
       weekend_no_peak  Engie Empower Flextime — never peak;
         transition 07:00-11:00 + 17:00-01:00,
         offpeak    01:00-07:00 + 11:00-17:00.
     """
     h = when.hour
-    if when.weekday() >= 5:
+    if when.weekday() >= 5 or is_belgian_holiday(when.date()):
         if weekend_rule == "weekend_no_peak":
             if 7 <= h < 11 or h >= 17 or h < 1:
                 return "transition"
