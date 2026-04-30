@@ -83,6 +83,7 @@ def _load_providers() -> tuple[
     _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
     eneco = _load("be_pkg.providers.eneco", PKG / "providers" / "eneco.py")
     cociter = _load("be_pkg.providers.cociter", PKG / "providers" / "cociter.py")
+    dats24 = _load("be_pkg.providers.dats24", PKG / "providers" / "dats24.py")
     ecopower = _load("be_pkg.providers.ecopower", PKG / "providers" / "ecopower.py")
     engie = _load("be_pkg.providers.engie", PKG / "providers" / "engie.py")
     luminus = _load("be_pkg.providers.luminus", PKG / "providers" / "luminus.py")
@@ -95,6 +96,7 @@ def _load_providers() -> tuple[
     return (
         eneco,
         cociter,
+        dats24,
         ecopower,
         engie,
         luminus,
@@ -215,6 +217,56 @@ async def _check_cociter(
             snap.taxes.wallonia_renewables > 0,
             detail=str(snap.taxes),
         )
+        _validate_energy(prefix, cid, snap.energy)
+
+
+async def _check_dats24(
+    session: aiohttp.ClientSession, dats24: types.ModuleType
+) -> None:
+    expected = {
+        "flanders": {
+            "fluvius_antwerpen",
+            "fluvius_halle_vilvoorde",
+            "fluvius_imewo",
+            "fluvius_intergem",
+            "fluvius_iveka",
+            "fluvius_limburg",
+            "fluvius_west",
+            "fluvius_zenne_dijle",
+        },
+        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
+    }
+    cid = "dats24_groen_variabel"
+    for region in ("flanders", "wallonia"):
+        prefix = f"dats24/{cid}/{region}"
+        try:
+            snap = await dats24.fetch(session, cid, region)
+        except Exception as err:
+            _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+            continue
+        _expect(f"{prefix}: publication label", bool(snap.publication_label))
+        _expect(
+            f"{prefix}: expected DSOs present",
+            expected[region] <= set(snap.dsos),
+            detail=f"missing: {sorted(expected[region] - set(snap.dsos))}",
+        )
+        _expect(
+            f"{prefix}: federal excise > 0",
+            snap.taxes.federal_excise > 0,
+            detail=str(snap.taxes),
+        )
+        if region == "flanders":
+            _expect(
+                f"{prefix}: flanders renewables > 0",
+                snap.taxes.flanders_renewables > 0,
+                detail=str(snap.taxes),
+            )
+        else:
+            _expect(
+                f"{prefix}: wallonia renewables > 0",
+                snap.taxes.wallonia_renewables > 0,
+                detail=str(snap.taxes),
+            )
         _validate_energy(prefix, cid, snap.energy)
 
 
@@ -611,6 +663,7 @@ async def _check_catalogs(
         "octaplus": {c.slug for c in modules["octaplus"]._CONTRACTS},
         "cociter": {"cociter_variable", "cociter_dynamic"},
         "ecopower": {"ecopower_burgerstroom"},
+        "dats24": {"dats24_groen_variabel"},
     }
     for name, mod in modules.items():
         discover = getattr(mod, "discover", None)
@@ -726,6 +779,7 @@ async def _run() -> int:
     (
         eneco,
         cociter,
+        dats24,
         ecopower,
         engie,
         luminus,
@@ -737,6 +791,7 @@ async def _run() -> int:
     modules = {
         "eneco": eneco,
         "cociter": cociter,
+        "dats24": dats24,
         "ecopower": ecopower,
         "engie": engie,
         "luminus": luminus,
@@ -749,6 +804,7 @@ async def _run() -> int:
     async with aiohttp.ClientSession(timeout=timeout) as session:
         await _check_eneco(session, eneco)
         await _check_cociter(session, cociter)
+        await _check_dats24(session, dats24)
         await _check_ecopower(session, ecopower)
         await _check_engie(session, engie)
         await _check_luminus(session, luminus)
