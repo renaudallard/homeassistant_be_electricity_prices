@@ -49,6 +49,20 @@ def _read_version() -> str:
 USER_AGENT = f"Home Assistant be_electricity_prices/{_read_version()}"
 
 
+def _is_pdf_payload(payload: bytes) -> bool:
+    """Return True if the bytes look like a PDF.
+
+    PDFs start with the magic bytes ``%PDF``. Some publishers prepend
+    a UTF-8 BOM (\\ufeff = 3 bytes EF BB BF) — OCTA+'s tariff PDFs do
+    this. Allow the BOM as a one-time prefix.
+    """
+    if payload.startswith(b"%PDF"):
+        return True
+    if payload.startswith(b"\xef\xbb\xbf%PDF"):
+        return True
+    return False
+
+
 async def fetch_pdf_text(session: aiohttp.ClientSession, url: str) -> str:
     """Download ``url`` and return the concatenated extracted text."""
     try:
@@ -59,16 +73,19 @@ async def fetch_pdf_text(session: aiohttp.ClientSession, url: str) -> str:
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
-            content_type = resp.headers.get("content-type", "")
-            if "pdf" not in content_type.lower():
-                # Some CDNs return 200 + text/html for missing PDFs (a
-                # 404 page disguised as success). Reject up-front so the
-                # parser never sees HTML pretending to be a PDF.
-                raise ExtractorError(f"expected a PDF at {url}, got {content_type!r}")
             payload = await resp.read()
     except aiohttp.ClientError as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
 
+    if not _is_pdf_payload(payload):
+        # Some CDNs return 200 + text/html for missing PDFs (a 404
+        # disguised as success). Engie's API returns octet-stream
+        # for valid PDFs, so checking the magic bytes is more
+        # reliable than the Content-Type header.
+        snippet = payload[:80]
+        raise ExtractorError(
+            f"expected a PDF at {url}, payload starts with {snippet!r}"
+        )
     # pypdf does pure-Python parsing; offload to a worker thread so a
     # multi-page tariff card never stalls Home Assistant's event loop.
     return await asyncio.to_thread(extract_pdf_text, payload)
@@ -171,12 +188,13 @@ async def fetch_pdf_text_aligned(
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
-            content_type = resp.headers.get("content-type", "")
-            if "pdf" not in content_type.lower():
-                raise ExtractorError(f"expected a PDF at {url}, got {content_type!r}")
             payload = await resp.read()
     except aiohttp.ClientError as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
+    if not _is_pdf_payload(payload):
+        raise ExtractorError(
+            f"expected a PDF at {url}, payload starts with {payload[:80]!r}"
+        )
     return await asyncio.to_thread(
         extract_pdf_text_aligned, payload, 3, x_join_threshold
     )
@@ -197,12 +215,13 @@ async def fetch_pdf_text_layout(session: aiohttp.ClientSession, url: str) -> str
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
-            content_type = resp.headers.get("content-type", "")
-            if "pdf" not in content_type.lower():
-                raise ExtractorError(f"expected a PDF at {url}, got {content_type!r}")
             payload = await resp.read()
     except aiohttp.ClientError as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
+    if not _is_pdf_payload(payload):
+        raise ExtractorError(
+            f"expected a PDF at {url}, payload starts with {payload[:80]!r}"
+        )
     return await asyncio.to_thread(extract_pdf_text_layout, payload)
 
 
