@@ -377,6 +377,15 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def _after_meter(self) -> ConfigFlowResult:
+        # Reject duplicate entries: the same (supplier, contract,
+        # region, dso) tuple already running its own coordinator would
+        # double-poll the supplier.
+        unique = (
+            f"{self._data[CONF_SUPPLIER]}:{self._data[CONF_CONTRACT]}"
+            f":{self._data[CONF_REGION]}:{self._data[CONF_DSO]}"
+        )
+        await self.async_set_unique_id(unique)
+        self._abort_if_unique_id_configured()
         if (
             _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
             == "dynamic"
