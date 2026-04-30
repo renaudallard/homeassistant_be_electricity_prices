@@ -183,7 +183,15 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             except EntsoeAuthError as err:
                 raise UpdateFailed(f"ENTSO-E auth: {err}") from err
             except EntsoeError as err:
-                raise UpdateFailed(f"ENTSO-E: {err}") from err
+                # A transient ENTSO-E outage must not blank the entry: the
+                # last good day-ahead curve in _spot_cache is still usable
+                # for breakdown computation. Only fail if we have nothing
+                # cached either.
+                self._last_error = f"ENTSO-E: {err}"
+                _LOGGER.warning("ENTSO-E refresh failed; serving cached spots: %s", err)
+                if not self._spot_cache:
+                    raise UpdateFailed(f"ENTSO-E: {err}") from err
+                spot_prices = dict(self._spot_cache)
 
         hourly = self._build_hourly(spot_prices)
 
