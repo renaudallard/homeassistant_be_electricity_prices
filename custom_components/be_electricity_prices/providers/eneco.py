@@ -44,7 +44,7 @@ from datetime import UTC, datetime
 
 import aiohttp
 
-from ._pdf import fetch_pdf_text, to_float
+from ._pdf import USER_AGENT, fetch_pdf_text, to_float
 from .base import (
     Contract,
     DsoOverlay,
@@ -60,6 +60,7 @@ from .base import (
 )
 
 _BASE_URL = "https://cdn.eneco.be/downloads/nl/general/tk"
+_LISTING_URL = "https://eneco.be/nl/elektriciteit-gas/tariefkaarten"
 
 _CONTRACT_URLS = {
     "power_fix": f"{_BASE_URL}/BC_032_012604_NL_ENECO_POWER_FIX.pdf",
@@ -109,6 +110,30 @@ async def fetch(
     url = _CONTRACT_URLS[contract_id]
     text = await fetch_pdf_text(session, url)
     return parse_snapshot(text, contract_id, url)
+
+
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """Return the set of POWER_* product slugs from Eneco's listing page.
+
+    Eneco's tariefkaarten page links every product as a direct PDF.
+    Extract every ``BC_..._NL_ENECO_POWER_<NAME>.pdf`` and lower-case
+    to match the registry's contract id (``power_fix``, etc.).
+    """
+    try:
+        async with session.get(
+            _LISTING_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status >= 400:
+                return set()
+            html = await resp.text()
+    except aiohttp.ClientError:
+        return set()
+    return {
+        f"power_{name.lower()}"
+        for name in re.findall(r"BC_[\d_]+_NL_ENECO_POWER_([A-Z]+)\.pdf", html)
+    }
 
 
 def parse_snapshot(text: str, contract_id: str, source_url: str) -> SupplierSnapshot:
