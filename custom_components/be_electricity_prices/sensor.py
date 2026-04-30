@@ -153,6 +153,34 @@ def _today_ranked(
     )
 
 
+def _split_today_tomorrow(
+    data: CoordinatorData,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Group the cached hourly breakdowns into today and tomorrow buckets.
+
+    Both lists are returned in chronological order. Hours outside the
+    today/tomorrow window (typically there are none) are dropped.
+    """
+    today = dt_util.now().date()
+    tomorrow = today + timedelta(days=1)
+    today_rows: list[dict[str, Any]] = []
+    tomorrow_rows: list[dict[str, Any]] = []
+    for h, bd in sorted(data.hourly.items()):
+        local = dt_util.as_local(h)
+        row = {
+            "start": local.isoformat(),
+            "energy": round(bd.energy, 6),
+            "network": round(bd.network, 6),
+            "taxes": round(bd.taxes, 6),
+            "all_in": round(bd.all_in, 6),
+        }
+        if local.date() == today:
+            today_rows.append(row)
+        elif local.date() == tomorrow:
+            tomorrow_rows.append(row)
+    return today_rows, tomorrow_rows
+
+
 def _current_field(field: str) -> Callable[[CoordinatorData], float | None]:
     def _inner(data: CoordinatorData) -> float | None:
         bd = _current(data)
@@ -360,8 +388,8 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
         if self.entity_description.key != "current_price":
             return {}
         data = self.coordinator.data
-        hourly = sorted(data.hourly.items())
         cheapest, most_expensive = _today_ranked(data, 4)
+        today, tomorrow = _split_today_tomorrow(data)
         return {
             "snapshot_publication": data.snapshot_publication,
             "snapshot_age_hours": round(data.snapshot_age_hours, 2),
@@ -369,14 +397,6 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "last_error": data.last_error,
             "cheapest_4h_today": cheapest,
             "most_expensive_4h_today": most_expensive,
-            "hours": [
-                {
-                    "start": dt_util.as_local(h).isoformat(),
-                    "energy": round(bd.energy, 6),
-                    "network": round(bd.network, 6),
-                    "taxes": round(bd.taxes, 6),
-                    "all_in": round(bd.all_in, 6),
-                }
-                for h, bd in hourly
-            ],
+            "today": today,
+            "tomorrow": tomorrow,
         }

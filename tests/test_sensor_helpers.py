@@ -33,7 +33,10 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.be_electricity_prices.coordinator import CoordinatorData
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
-from custom_components.be_electricity_prices.sensor import _today_ranked
+from custom_components.be_electricity_prices.sensor import (
+    _split_today_tomorrow,
+    _today_ranked,
+)
 
 
 def _today_data(prices: list[float]) -> CoordinatorData:
@@ -94,3 +97,49 @@ def test_today_ranked_partitions_when_count_falls_in_middle() -> None:
     assert {c["price"] for c in most_expensive} == {0.18, 0.20}
     starts = {c["start"] for c in cheapest} | {c["start"] for c in most_expensive}
     assert len(starts) == 6
+
+
+def _today_and_tomorrow_data(
+    today_prices: list[float], tomorrow_prices: list[float]
+) -> CoordinatorData:
+    """Build a CoordinatorData spanning both today and tomorrow."""
+    midnight_today = dt_util.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    hourly: dict[datetime, PriceBreakdown] = {}
+    for hour, price in enumerate(today_prices):
+        local = midnight_today + timedelta(hours=hour)
+        hourly[dt_util.as_utc(local)] = PriceBreakdown(
+            energy=price, network=0.0, taxes=0.0, all_in=price
+        )
+    for hour, price in enumerate(tomorrow_prices):
+        local = midnight_today + timedelta(days=1, hours=hour)
+        hourly[dt_util.as_utc(local)] = PriceBreakdown(
+            energy=price, network=0.0, taxes=0.0, all_in=price
+        )
+    return CoordinatorData(hourly=hourly)
+
+
+def test_split_today_tomorrow_buckets_hours_by_local_date() -> None:
+    data = _today_and_tomorrow_data([0.10] * 24, [0.20] * 24)
+    today, tomorrow = _split_today_tomorrow(data)
+    assert len(today) == 24
+    assert len(tomorrow) == 24
+    assert {row["all_in"] for row in today} == {0.10}
+    assert {row["all_in"] for row in tomorrow} == {0.20}
+    # Both lists are chronological.
+    assert all(today[i]["start"] < today[i + 1]["start"] for i in range(23))
+    assert all(tomorrow[i]["start"] < tomorrow[i + 1]["start"] for i in range(23))
+
+
+def test_split_today_tomorrow_returns_empty_tomorrow_before_publication() -> None:
+    # Static contracts only have today's hours until ENTSO-E publishes
+    # tomorrow at ~13:00 CET; tomorrow stays empty until then.
+    data = _today_and_tomorrow_data([0.10] * 24, [])
+    today, tomorrow = _split_today_tomorrow(data)
+    assert len(today) == 24
+    assert tomorrow == []
+
+
+def test_split_today_tomorrow_handles_empty_data() -> None:
+    today, tomorrow = _split_today_tomorrow(CoordinatorData())
+    assert today == []
+    assert tomorrow == []
