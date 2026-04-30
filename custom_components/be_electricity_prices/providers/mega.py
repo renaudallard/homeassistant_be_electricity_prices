@@ -153,6 +153,20 @@ async def _fetch_listing_html(session: aiohttp.ClientSession) -> str:
         raise ExtractorError(f"network error fetching {_LISTING_URL}: {err}") from err
 
 
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """Return every ``data-product-element`` value from Mega's listing.
+
+    Best-effort catalog discovery for the daily live-check: the diff
+    against ``{c.product_name for c in _CONTRACTS}`` flags any new Mega
+    product that should be added to the registry.
+    """
+    try:
+        listing = await _fetch_listing_html(session)
+    except ExtractorError:
+        return set()
+    return set(re.findall(r'data-product-element="([^"]+)"', listing))
+
+
 # ---- top-level fetch + parser -------------------------------------------------
 
 
