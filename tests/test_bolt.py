@@ -124,6 +124,18 @@ def test_wallonia_dso_handles_vertical_layout() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.03)
 
 
+def test_resa_is_cheaper_than_rew_after_label_swap() -> None:
+    # Bolt's PDF renders the Liege (RESA / TECTEO) and Wavre (REW /
+    # Régie de Wavre) rows under swapped labels in pdfplumber's text
+    # extraction; bolt.py compensates with an inverted dict. Across
+    # every other supplier in the registry, RESA's distribution_single
+    # is consistently lower than REW's. If a future Bolt PDF or
+    # pdfplumber release fixes the upstream layout silently, the swap
+    # would invert correct pricing — this assertion catches that.
+    snap = parse_snapshot("bolt_fix", _text("bolt_fix.pdf"), "wallonia")
+    assert snap.dsos["resa"].distribution_single < snap.dsos["rew"].distribution_single
+
+
 def test_flanders_dso_includes_transport_in_distribution() -> None:
     snap = parse_snapshot("bolt_fix", _text("bolt_fix.pdf"), "flanders")
     antwerpen = snap.dsos["fluvius_antwerpen"]
