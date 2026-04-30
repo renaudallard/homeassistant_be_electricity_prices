@@ -55,7 +55,7 @@ from datetime import UTC, datetime
 import aiohttp
 
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import fetch_pdf_text_layout, to_float
+from ._pdf import USER_AGENT, fetch_pdf_text_layout, to_float
 from .base import (
     Contract,
     DsoOverlay,
@@ -158,9 +158,44 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
 
+_LISTING_URL = (
+    "https://totalenergies.be/fr/particuliers/electricite-et-gaz/cartes-tarifaires"
+)
+
+
 def _document_url(slug: str, region: str) -> str:
     region_code = _REGION_TO_CODE[region]
     return f"{_BASE_URL}/{slug}_ELECTRICITY_{region_code}_FR.pdf"
+
+
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """Return every electricity-product slug from the cartes-tarifaires page.
+
+    The listing page links each card as
+    ``tariff-card/latest/<SLUG>_ELECTRICITY_<REGION>_FR.pdf``. Strip
+    the regulated TARIFF_SOCIAL entry (not a residential-market product
+    and excluded from the registry). live_check diffs the result
+    against ``{c.slug for c in _CONTRACTS}``.
+    """
+    try:
+        async with session.get(
+            _LISTING_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status >= 400:
+                return set()
+            html = await resp.text()
+    except aiohttp.ClientError:
+        return set()
+    return {
+        slug
+        for slug in re.findall(
+            r"tariff-card/latest/([A-Z0-9\-]+)_ELECTRICITY_(?:VL|WAL|BXL)_FR",
+            html,
+        )
+        if slug != "TARIFF_SOCIAL"
+    }
 
 
 # ---- top-level fetch + parser -------------------------------------------------
