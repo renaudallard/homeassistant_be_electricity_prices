@@ -68,62 +68,62 @@
   "options": {
     "step": {
       "init": {
-        "title": "[%key:component::be_electricity_prices::config::step::user::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::user::description%]",
+        "title": "Belgische Strompreise",
+        "description": "Lieferant und Region waehlen. Energie- und Netztarife werden live aus der Veroeffentlichung des Lieferanten geholt.",
         "data": {
-          "supplier": "[%key:component::be_electricity_prices::config::step::user::data::supplier%]",
-          "region": "[%key:component::be_electricity_prices::config::step::user::data::region%]"
+          "supplier": "Lieferant",
+          "region": "Region"
         }
       },
       "contract": {
-        "title": "[%key:component::be_electricity_prices::config::step::contract::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::contract::description%]",
+        "title": "Vertrag",
+        "description": "Vertrag waehlen. Die Integration holt bei jeder Aktualisierung die aktuelle Tarifkarte.",
         "data": {
-          "contract": "[%key:component::be_electricity_prices::config::step::contract::data::contract%]"
+          "contract": "Vertrag"
         }
       },
       "dso": {
-        "title": "[%key:component::be_electricity_prices::config::step::dso::title%]",
+        "title": "Verteilnetzbetreiber",
         "data": {
-          "dso": "[%key:component::be_electricity_prices::config::step::dso::data::dso%]"
+          "dso": "VNB"
         }
       },
       "meter": {
-        "title": "[%key:component::be_electricity_prices::config::step::meter::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::meter::description%]",
+        "title": "Zaehlertyp",
+        "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege.",
         "data": {
-          "meter": "[%key:component::be_electricity_prices::config::step::meter::data::meter%]"
+          "meter": "Zaehler"
         }
       },
       "dso_tariff_mode": {
-        "title": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::description%]",
+        "title": "Verteilungstarif (Wallonien)",
+        "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zaehler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Zeitfenster pro Stunde (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zaehler.",
         "data": {
-          "dso_tariff_mode": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::data::dso_tariff_mode%]"
+          "dso_tariff_mode": "Verteilungs-Modus"
         }
       },
       "api_key": {
-        "title": "[%key:component::be_electricity_prices::config::step::api_key::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::api_key::description%]",
+        "title": "ENTSO-E API-Schluessel",
+        "description": "Erforderlich fuer dynamische Vertraege. Kostenlos bei transparency.entsoe.eu anfordern.",
         "data": {
-          "api_key": "[%key:component::be_electricity_prices::config::step::api_key::data::api_key%]"
+          "api_key": "ENTSO-E API-Schluessel"
         }
       },
       "capacity": {
-        "title": "[%key:component::be_electricity_prices::config::step::capacity::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::capacity::description%]",
+        "title": "Kapazitaetstarif (Flandern)",
+        "description": "Sensor mit der monatlichen Spitzenleistung in kW oder festen Wert waehlen.",
         "data": {
-          "capacity_mode": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_mode%]",
-          "capacity_peak_sensor": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_peak_sensor%]",
-          "capacity_fixed_kw": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_fixed_kw%]"
+          "capacity_mode": "Quelle der Spitze",
+          "capacity_peak_sensor": "Leistungssensor",
+          "capacity_fixed_kw": "Feste Spitze (kW)"
         }
       },
       "solar": {
-        "title": "[%key:component::be_electricity_prices::config::step::solar::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::solar::description%]",
+        "title": "Solaranlage",
+        "description": "Wechselrichterleistung in kVA und das fuer Ihre Anlage geltende Regime. Die Wallonische Kompensationsregelung gilt nur fuer vor 2024-01-01 zertifizierte Anlagen und bleibt bis 2030-12-31 in Kraft; neue Anlagen und flaemische intelligente Zaehler sind im Einspeisetarif.",
         "data": {
-          "solar_kva": "[%key:component::be_electricity_prices::config::step::solar::data::solar_kva%]",
-          "solar_regime": "[%key:component::be_electricity_prices::config::step::solar::data::solar_regime%]"
+          "solar_kva": "Wechselrichter (kVA)",
+          "solar_regime": "Regime"
         }
       }
     }

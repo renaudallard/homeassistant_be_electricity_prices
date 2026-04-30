@@ -68,62 +68,62 @@
   "options": {
     "step": {
       "init": {
-        "title": "[%key:component::be_electricity_prices::config::step::user::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::user::description%]",
+        "title": "Prix de l'electricite en Belgique",
+        "description": "Choisissez votre fournisseur et votre region. L'energie et les tarifs reseau sont recuperes en direct depuis la publication du fournisseur.",
         "data": {
-          "supplier": "[%key:component::be_electricity_prices::config::step::user::data::supplier%]",
-          "region": "[%key:component::be_electricity_prices::config::step::user::data::region%]"
+          "supplier": "Fournisseur",
+          "region": "Region"
         }
       },
       "contract": {
-        "title": "[%key:component::be_electricity_prices::config::step::contract::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::contract::description%]",
+        "title": "Contrat",
+        "description": "Choisissez votre contrat. L'integration recupere la carte tarifaire courante a chaque rafraichissement.",
         "data": {
-          "contract": "[%key:component::be_electricity_prices::config::step::contract::data::contract%]"
+          "contract": "Contrat"
         }
       },
       "dso": {
-        "title": "[%key:component::be_electricity_prices::config::step::dso::title%]",
+        "title": "Gestionnaire de reseau",
         "data": {
-          "dso": "[%key:component::be_electricity_prices::config::step::dso::data::dso%]"
+          "dso": "GRD"
         }
       },
       "meter": {
-        "title": "[%key:component::be_electricity_prices::config::step::meter::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::meter::description%]",
+        "title": "Type de compteur",
+        "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique.",
         "data": {
-          "meter": "[%key:component::be_electricity_prices::config::step::meter::data::meter%]"
+          "meter": "Compteur"
         }
       },
       "dso_tariff_mode": {
-        "title": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::description%]",
+        "title": "Tarif de distribution (Wallonie)",
+        "description": "Mode de facturation du reseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention historique. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et necessite un compteur intelligent.",
         "data": {
-          "dso_tariff_mode": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::data::dso_tariff_mode%]"
+          "dso_tariff_mode": "Mode de facturation GRD"
         }
       },
       "api_key": {
-        "title": "[%key:component::be_electricity_prices::config::step::api_key::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::api_key::description%]",
+        "title": "Cle API ENTSO-E",
+        "description": "Necessaire pour les contrats dynamiques. Cle gratuite sur transparency.entsoe.eu.",
         "data": {
-          "api_key": "[%key:component::be_electricity_prices::config::step::api_key::data::api_key%]"
+          "api_key": "Cle API ENTSO-E"
         }
       },
       "capacity": {
-        "title": "[%key:component::be_electricity_prices::config::step::capacity::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::capacity::description%]",
+        "title": "Tarif capacitaire (Flandre)",
+        "description": "Choisissez un capteur exposant le pic mensuel en kW ou une valeur fixe.",
         "data": {
-          "capacity_mode": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_mode%]",
-          "capacity_peak_sensor": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_peak_sensor%]",
-          "capacity_fixed_kw": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_fixed_kw%]"
+          "capacity_mode": "Source du pic",
+          "capacity_peak_sensor": "Capteur de puissance",
+          "capacity_fixed_kw": "Pic fixe (kW)"
         }
       },
       "solar": {
-        "title": "[%key:component::be_electricity_prices::config::step::solar::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::solar::description%]",
+        "title": "Panneaux solaires",
+        "description": "Puissance de l'onduleur en kVA et regime applicable a votre installation. Le regime de compensation wallon n'est valable que pour les installations certifiees avant le 2024-01-01 et reste applicable jusqu'au 2030-12-31; les nouvelles installations et les compteurs intelligents flamands sont au tarif d'injection.",
         "data": {
-          "solar_kva": "[%key:component::be_electricity_prices::config::step::solar::data::solar_kva%]",
-          "solar_regime": "[%key:component::be_electricity_prices::config::step::solar::data::solar_regime%]"
+          "solar_kva": "Puissance onduleur (kVA)",
+          "solar_regime": "Regime"
         }
       }
     }

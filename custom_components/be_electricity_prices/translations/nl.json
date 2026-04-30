@@ -68,62 +68,62 @@
   "options": {
     "step": {
       "init": {
-        "title": "[%key:component::be_electricity_prices::config::step::user::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::user::description%]",
+        "title": "Belgische elektriciteitsprijzen",
+        "description": "Kies je leverancier en regio. Energie- en nettarieven worden live opgehaald uit de eigen publicatie van de leverancier.",
         "data": {
-          "supplier": "[%key:component::be_electricity_prices::config::step::user::data::supplier%]",
-          "region": "[%key:component::be_electricity_prices::config::step::user::data::region%]"
+          "supplier": "Leverancier",
+          "region": "Regio"
         }
       },
       "contract": {
-        "title": "[%key:component::be_electricity_prices::config::step::contract::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::contract::description%]",
+        "title": "Contract",
+        "description": "Kies je contract. De integratie haalt bij elke verversing de actuele tariefkaart op.",
         "data": {
-          "contract": "[%key:component::be_electricity_prices::config::step::contract::data::contract%]"
+          "contract": "Contract"
         }
       },
       "dso": {
-        "title": "[%key:component::be_electricity_prices::config::step::dso::title%]",
+        "title": "Distributienetbeheerder",
         "data": {
-          "dso": "[%key:component::be_electricity_prices::config::step::dso::data::dso%]"
+          "dso": "DNB"
         }
       },
       "meter": {
-        "title": "[%key:component::be_electricity_prices::config::step::meter::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::meter::description%]",
+        "title": "Metertype",
+        "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten.",
         "data": {
-          "meter": "[%key:component::be_electricity_prices::config::step::meter::data::meter%]"
+          "meter": "Meter"
         }
       },
       "dso_tariff_mode": {
-        "title": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::description%]",
+        "title": "Distributietarief (Wallonie)",
+        "description": "Hoe je netbeheerder factureert. 'Simple' / 'Bi-horaire' volgen de bestaande conventie. 'Tarif Impact' gebruikt de 3 CWaPE-plages per uur (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) en vereist een digitale meter.",
         "data": {
-          "dso_tariff_mode": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::data::dso_tariff_mode%]"
+          "dso_tariff_mode": "Distributiemodus"
         }
       },
       "api_key": {
-        "title": "[%key:component::be_electricity_prices::config::step::api_key::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::api_key::description%]",
+        "title": "ENTSO-E API-sleutel",
+        "description": "Vereist voor dynamische contracten. Gratis aan te vragen op transparency.entsoe.eu.",
         "data": {
-          "api_key": "[%key:component::be_electricity_prices::config::step::api_key::data::api_key%]"
+          "api_key": "ENTSO-E API-sleutel"
         }
       },
       "capacity": {
-        "title": "[%key:component::be_electricity_prices::config::step::capacity::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::capacity::description%]",
+        "title": "Capaciteitstarief (Vlaanderen)",
+        "description": "Kies een sensor met je maandpiek in kW of een vaste waarde.",
         "data": {
-          "capacity_mode": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_mode%]",
-          "capacity_peak_sensor": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_peak_sensor%]",
-          "capacity_fixed_kw": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_fixed_kw%]"
+          "capacity_mode": "Bron van de piek",
+          "capacity_peak_sensor": "Vermogenssensor",
+          "capacity_fixed_kw": "Vaste piek (kW)"
         }
       },
       "solar": {
-        "title": "[%key:component::be_electricity_prices::config::step::solar::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::solar::description%]",
+        "title": "Zonnepanelen",
+        "description": "Vermogen van de omvormer in kVA en het regime dat van toepassing is op je installatie. De Waalse compensatieregeling geldt enkel voor installaties gecertificeerd voor 2024-01-01 en blijft geldig tot 2030-12-31; nieuwe installaties en Vlaamse digitale meters vallen onder het injectietarief.",
         "data": {
-          "solar_kva": "[%key:component::be_electricity_prices::config::step::solar::data::solar_kva%]",
-          "solar_regime": "[%key:component::be_electricity_prices::config::step::solar::data::solar_regime%]"
+          "solar_kva": "Vermogen omvormer (kVA)",
+          "solar_regime": "Regime"
         }
       }
     }

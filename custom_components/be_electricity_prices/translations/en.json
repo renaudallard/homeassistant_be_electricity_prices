@@ -68,62 +68,62 @@
   "options": {
     "step": {
       "init": {
-        "title": "[%key:component::be_electricity_prices::config::step::user::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::user::description%]",
+        "title": "Belgian Electricity Prices",
+        "description": "Pick your supplier and region. Energy and grid rates are fetched live from the supplier's own publication.",
         "data": {
-          "supplier": "[%key:component::be_electricity_prices::config::step::user::data::supplier%]",
-          "region": "[%key:component::be_electricity_prices::config::step::user::data::region%]"
+          "supplier": "Supplier",
+          "region": "Region"
         }
       },
       "contract": {
-        "title": "[%key:component::be_electricity_prices::config::step::contract::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::contract::description%]",
+        "title": "Contract",
+        "description": "Pick your contract. The integration fetches its current rate sheet on every refresh.",
         "data": {
-          "contract": "[%key:component::be_electricity_prices::config::step::contract::data::contract%]"
+          "contract": "Contract"
         }
       },
       "dso": {
-        "title": "[%key:component::be_electricity_prices::config::step::dso::title%]",
+        "title": "Distribution operator",
         "data": {
-          "dso": "[%key:component::be_electricity_prices::config::step::dso::data::dso%]"
+          "dso": "DSO"
         }
       },
       "meter": {
-        "title": "[%key:component::be_electricity_prices::config::step::meter::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::meter::description%]",
+        "title": "Meter type",
+        "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts.",
         "data": {
-          "meter": "[%key:component::be_electricity_prices::config::step::meter::data::meter%]"
+          "meter": "Meter"
         }
       },
       "dso_tariff_mode": {
-        "title": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::description%]",
+        "title": "Distribution tariff (Wallonia)",
+        "description": "How your DSO bills you for the network. 'Simple' / 'Bi-horaire' match the existing meter convention. 'Tarif Impact' uses the CWaPE 3-band hour-of-day rates (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) and requires a smart meter.",
         "data": {
-          "dso_tariff_mode": "[%key:component::be_electricity_prices::config::step::dso_tariff_mode::data::dso_tariff_mode%]"
+          "dso_tariff_mode": "DSO billing mode"
         }
       },
       "api_key": {
-        "title": "[%key:component::be_electricity_prices::config::step::api_key::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::api_key::description%]",
+        "title": "ENTSO-E API key",
+        "description": "Required for dynamic contracts. Request one for free at transparency.entsoe.eu.",
         "data": {
-          "api_key": "[%key:component::be_electricity_prices::config::step::api_key::data::api_key%]"
+          "api_key": "ENTSO-E API key"
         }
       },
       "capacity": {
-        "title": "[%key:component::be_electricity_prices::config::step::capacity::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::capacity::description%]",
+        "title": "Capacity tariff (Flanders)",
+        "description": "Pick a sensor that exposes your monthly peak in kW or use a fixed value.",
         "data": {
-          "capacity_mode": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_mode%]",
-          "capacity_peak_sensor": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_peak_sensor%]",
-          "capacity_fixed_kw": "[%key:component::be_electricity_prices::config::step::capacity::data::capacity_fixed_kw%]"
+          "capacity_mode": "Peak source",
+          "capacity_peak_sensor": "Peak power sensor",
+          "capacity_fixed_kw": "Fixed peak (kW)"
         }
       },
       "solar": {
-        "title": "[%key:component::be_electricity_prices::config::step::solar::title%]",
-        "description": "[%key:component::be_electricity_prices::config::step::solar::description%]",
+        "title": "Solar panels",
+        "description": "Inverter capacity in kVA and the regime that applies to your installation. The Walloon compensation regime is reserved for installations certified before 2024-01-01 and stays valid until 2030-12-31; new installations and Flemish smart meters are on the injection tariff.",
         "data": {
-          "solar_kva": "[%key:component::be_electricity_prices::config::step::solar::data::solar_kva%]",
-          "solar_regime": "[%key:component::be_electricity_prices::config::step::solar::data::solar_regime%]"
+          "solar_kva": "Inverter capacity (kVA)",
+          "solar_regime": "Regime"
         }
       }
     }
