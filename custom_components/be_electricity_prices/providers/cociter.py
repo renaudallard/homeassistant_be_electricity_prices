@@ -92,6 +92,37 @@ async def fetch(
     return parse_snapshot(text, contract_id, pdf_url, label)
 
 
+# Family prefix on Cociter's listing -> our registry contract id.
+_DISCOVER_FAMILIES = {
+    "RCVar_YMR": "cociter_variable",
+    "RCDyn_SM3": "cociter_dynamic",
+}
+
+
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """Return contract ids visible in Cociter's monthly card index.
+
+    Cociter's listing publishes one PDF per (family, month). Map the
+    family prefix (RCVar_YMR / RCDyn_SM3) back to our contract id and
+    surface anything else verbatim — that's the new-product signal.
+    """
+    try:
+        async with session.get(
+            _INDEX_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status >= 400:
+                return set()
+            html = await resp.text()
+    except aiohttp.ClientError:
+        return set()
+    out: set[str] = set()
+    for family in re.findall(r"(RC[A-Za-z]+_[A-Za-z0-9]+)_Coop-\d+-(?:fr|nl)\.pdf", html):
+        out.add(_DISCOVER_FAMILIES.get(family, family))
+    return out
+
+
 def parse_snapshot(
     text: str, contract_id: str, source_url: str, publication_label: str
 ) -> SupplierSnapshot:
