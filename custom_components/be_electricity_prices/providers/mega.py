@@ -493,10 +493,6 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     Layout (9 numbers per row):
       mono | jour | nuit | excl_nuit | terme_fixe (€/an) |
       PIC | MEDIUM | ECO | transport (c€/kWh)
-
-    The IMPACT triplet (PIC/MEDIUM/ECO) is published on every contract,
-    not just dynamic - it doesn't change our per-kWh billing because we
-    only track distribution_single / peak / offpeak.
     """
     # Mega lists prosumer rates in a separate small table further down.
     prosumer_by_key: dict[str, float] = {}
@@ -524,11 +520,17 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         peak = to_float(match.group(2))
         offpeak = to_float(match.group(3))
         terme_fixe = to_float(match.group(5))
+        pic = to_float(match.group(6))
+        medium = to_float(match.group(7))
+        eco = to_float(match.group(8))
         transport = to_float(match.group(9))
         out[key] = DsoOverlay(
             distribution_single=mono / 100.0,
             distribution_peak=peak / 100.0,
             distribution_offpeak=offpeak / 100.0,
+            distribution_pic=pic / 100.0,
+            distribution_medium=medium / 100.0,
+            distribution_eco=eco / 100.0,
             transport=transport / 100.0,
             data_management_per_year=terme_fixe,
             prosumer_eur_per_kva_year=prosumer_by_key.get(key),

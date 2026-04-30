@@ -240,19 +240,29 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     has_prosumer_column = "Tarif prosumer" in text
     out: dict[str, DsoOverlay] = {}
     for label in _DSO_LABELS:
+        # Variable card: 6 numbers (last column = prosumer).
+        # Dynamic card: 8 numbers (last 3 columns = PIC | MEDIUM | ECO).
         row = re.search(
             rf"^{label}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)"
-            rf"\s+([\d,]+)",
+            rf"\s+([\d,]+)(?:\s+([\d,]+)\s+([\d,]+))?",
             text,
             re.MULTILINE,
         )
         if not row:
             continue
         prosumer_rate = to_float(row.group(6)) if has_prosumer_column else None
+        pic = medium = eco = None
+        if not has_prosumer_column and row.group(7) and row.group(8):
+            pic = to_float(row.group(6)) / 100.0
+            medium = to_float(row.group(7)) / 100.0
+            eco = to_float(row.group(8)) / 100.0
         out[_DSO_KEY[label]] = DsoOverlay(
             distribution_single=to_float(row.group(2)) / 100.0,
             distribution_peak=to_float(row.group(3)) / 100.0,
             distribution_offpeak=to_float(row.group(4)) / 100.0,
+            distribution_pic=pic,
+            distribution_medium=medium,
+            distribution_eco=eco,
             transport=transport,
             data_management_per_year=to_float(row.group(1)),
             prosumer_eur_per_kva_year=prosumer_rate,

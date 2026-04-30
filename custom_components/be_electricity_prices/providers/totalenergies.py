@@ -569,6 +569,9 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         mono = to_float(match.group(1))
         peak = to_float(match.group(2))
         offpeak = to_float(match.group(3))
+        pic = to_float(match.group(5))
+        medium = to_float(match.group(6))
+        eco = to_float(match.group(7))
         terme_fixe = to_float(match.group(8))
         transport = to_float(match.group(9))
         prosumer = to_float(match.group(10))
@@ -576,6 +579,9 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=mono / 100.0,
             distribution_peak=peak / 100.0,
             distribution_offpeak=offpeak / 100.0,
+            distribution_pic=pic / 100.0,
+            distribution_medium=medium / 100.0,
+            distribution_eco=eco / 100.0,
             transport=transport / 100.0,
             data_management_per_year=terme_fixe,
             prosumer_eur_per_kva_year=prosumer,

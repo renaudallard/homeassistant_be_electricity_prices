@@ -533,8 +533,13 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         if not row:
             continue
         nums = [to_float(n) for n in row.group(1).split()]
+        eco = medium = pic = None
         if len(nums) >= 9:
             mono, pleines, creuses = nums[0], nums[1], nums[2]
+            # Luminus prints ECO | MEDIUM | PIC in ascending order
+            # (different from OCTA+/Bolt where the columns are PIC
+            # first, descending). Map to the schema's distribution_*.
+            eco, medium, pic = nums[3], nums[4], nums[5]
             transport = nums[7]
             data_mgmt = nums[8]
             prosumer: float | None = None
@@ -549,6 +554,9 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=mono / 100.0,
             distribution_peak=pleines / 100.0,
             distribution_offpeak=creuses / 100.0,
+            distribution_pic=pic / 100.0 if pic is not None else None,
+            distribution_medium=medium / 100.0 if medium is not None else None,
+            distribution_eco=eco / 100.0 if eco is not None else None,
             transport=transport / 100.0,
             data_management_per_year=data_mgmt,
             prosumer_eur_per_kva_year=prosumer,

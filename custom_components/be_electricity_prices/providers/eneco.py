@@ -273,10 +273,22 @@ def _find_wallonia_row(text: str, label: str) -> DsoOverlay | None:
     if not match:
         return None
     groups = [g for g in match.groups() if g is not None]
+    # When Eneco prints the Tarif Impact triplet (Power Fix layout) the
+    # row carries 10 columns; Power Dynamic only has 7. Eneco's column
+    # order is MEDIUM | PIC | ECO (different from OCTA+/Bolt where it's
+    # PIC | MEDIUM | ECO).
+    medium = pic = eco = None
+    if len(groups) == 10:
+        medium = to_float(groups[4]) / 100.0
+        pic = to_float(groups[5]) / 100.0
+        eco = to_float(groups[6]) / 100.0
     return DsoOverlay(
         distribution_single=to_float(groups[0]) / 100.0,
         distribution_peak=to_float(groups[1]) / 100.0,
         distribution_offpeak=to_float(groups[2]) / 100.0,
+        distribution_pic=pic,
+        distribution_medium=medium,
+        distribution_eco=eco,
         transport=to_float(groups[-3]) / 100.0,
         data_management_per_year=to_float(groups[-2]),
         prosumer_eur_per_kva_year=to_float(groups[-1]),
