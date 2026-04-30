@@ -53,7 +53,7 @@ from datetime import UTC, datetime
 import aiohttp
 
 from ..const import REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import fetch_pdf_text, to_float
+from ._pdf import USER_AGENT, fetch_pdf_text, to_float
 from .base import (
     Contract,
     DsoOverlay,
@@ -110,18 +110,41 @@ def _document_url(slug: str, region: str) -> str:
     )
 
 
-async def discover(
-    session: aiohttp.ClientSession,  # noqa: ARG001 - no public catalog endpoint
-) -> set[str]:
-    """Return an empty set: Luminus has no public product catalog.
+_SITEMAP_URL = "https://www.luminus.be/sitemap.xml"
 
-    The pricelist API takes a slug as input but offers no list
-    endpoint. luminus.be doesn't have a single canonical inventory
-    page either — product pages are scattered across the site with
-    FAQ entries dominating the sitemap. New products have to be added
-    manually based on press releases or user reports.
+# Luminus's sitemap exposes one product page per slug under the
+# tariffs root, e.g. /fr/particuliers/tarifs-energie/comfyflex/.
+_PRODUCT_PAGE_RE = re.compile(
+    r"/(?:fr|nl)/particuliers/(?:tarifs-energie|onze-tarieven)/([a-z0-9\-]+)/"
+)
+
+# Excluded slugs: regulated tariffs not offered on the residential
+# market, plus the parent index pages.
+_EXCLUDED_SLUGS = frozenset({"tarif-social", "sociaal-tarief"})
+
+
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """Discover Luminus products from the public sitemap.
+
+    The /fr/particuliers/tarifs-energie/<slug>/ structure is the
+    canonical product directory. Every slug there is a product
+    (residential + market only). Excludes the regulated social
+    tariff which is not user-selectable.
     """
-    return set()
+    try:
+        async with session.get(
+            _SITEMAP_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status >= 400:
+                return set()
+            xml = await resp.text()
+    except aiohttp.ClientError:
+        return set()
+    return {
+        slug for slug in _PRODUCT_PAGE_RE.findall(xml) if slug not in _EXCLUDED_SLUGS
+    }
 
 
 # ---- top-level fetch + parser -------------------------------------------------

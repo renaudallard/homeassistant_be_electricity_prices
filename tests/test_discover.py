@@ -42,6 +42,7 @@ from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.providers import cociter as cociter_mod
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
 from custom_components.be_electricity_prices.providers import engie as engie_mod
+from custom_components.be_electricity_prices.providers import luminus as luminus_mod
 from custom_components.be_electricity_prices.providers import mega as mega_mod
 from custom_components.be_electricity_prices.providers import octaplus as octaplus_mod
 from custom_components.be_electricity_prices.providers import (
@@ -157,6 +158,27 @@ def test_engie_discover_surfaces_unknown_family() -> None:
     assert "newproduct" in discovered - known
 
 
+def test_luminus_discover_drops_excluded_social_tariff() -> None:
+    # The /tarifs-energie/ sitemap directory carries tarif-social/ for
+    # the regulated CREG-set protected-customer rate, which is not user-
+    # selectable and excluded from the registry. Discovery must skip it.
+    session = _FakeSession(_read("luminus.html"))
+    discovered = _run(luminus_mod.discover(session))
+    assert "tarif-social" not in discovered
+    assert "sociaal-tarief" not in discovered
+
+
+def test_luminus_discover_finds_unregistered_products() -> None:
+    # The frozen sitemap snapshot carries products absent from the
+    # registry (comfyflex-plus, maxxflex, smartflex). The diff is what
+    # the workflow surfaces in the new-products GitHub issue.
+    session = _FakeSession(_read("luminus.html"))
+    discovered = _run(luminus_mod.discover(session))
+    known = {c.slug for c in luminus_mod._CONTRACTS}
+    new = discovered - known
+    assert {"comfyflex-plus", "maxxflex", "smartflex"} <= new
+
+
 # ---- behaviour: surfacing new products ---------------------------------------
 
 
@@ -188,3 +210,5 @@ def test_discover_returns_empty_on_http_error() -> None:
     assert _run(totalenergies_mod.discover(session)) == set()
     assert _run(octaplus_mod.discover(session)) == set()
     assert _run(cociter_mod.discover(session)) == set()
+    assert _run(engie_mod.discover(session)) == set()
+    assert _run(luminus_mod.discover(session)) == set()
