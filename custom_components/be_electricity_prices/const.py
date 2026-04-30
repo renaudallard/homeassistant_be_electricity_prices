@@ -34,7 +34,7 @@ from typing import Final
 
 DOMAIN: Final = "be_electricity_prices"
 
-PLATFORMS: Final = ("sensor",)
+PLATFORMS: Final = ("sensor", "binary_sensor")
 
 REGION_FLANDERS: Final = "flanders"
 REGION_WALLONIA: Final = "wallonia"

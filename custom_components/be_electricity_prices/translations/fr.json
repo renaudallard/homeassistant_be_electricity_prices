@@ -242,6 +242,11 @@
       "energy_fund_eur_per_month": {
         "name": "Fonds energie par mois"
       }
+    },
+    "binary_sensor": {
+      "tomorrow_prices_available": {
+        "name": "Prix de demain disponibles"
+      }
     }
   }
 }

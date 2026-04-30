@@ -31,6 +31,7 @@ from datetime import datetime, timedelta
 
 from homeassistant.util import dt as dt_util
 
+from custom_components.be_electricity_prices.binary_sensor import _has_tomorrow
 from custom_components.be_electricity_prices.coordinator import CoordinatorData
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
 from custom_components.be_electricity_prices.sensor import (
@@ -143,3 +144,15 @@ def test_split_today_tomorrow_handles_empty_data() -> None:
     today, tomorrow = _split_today_tomorrow(CoordinatorData())
     assert today == []
     assert tomorrow == []
+
+
+def test_has_tomorrow_true_when_tomorrow_hours_present() -> None:
+    assert _has_tomorrow(_today_and_tomorrow_data([0.10] * 24, [0.20] * 24))
+
+
+def test_has_tomorrow_false_when_only_today_loaded() -> None:
+    assert not _has_tomorrow(_today_and_tomorrow_data([0.10] * 24, []))
+
+
+def test_has_tomorrow_false_when_data_empty() -> None:
+    assert not _has_tomorrow(CoordinatorData())

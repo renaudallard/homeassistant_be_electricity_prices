@@ -101,6 +101,7 @@ All sensors share one device per config entry.
 | `energy_component` | Energy-only EUR/kWh now (VAT-inclusive). |
 | `network_component` | Distribution + transport EUR/kWh now (VAT-inclusive). |
 | `taxes_component` | Levies EUR/kWh now (VAT-inclusive). |
+| `tomorrow_prices_available` | Binary sensor. ON once the price table covers at least one hour with tomorrow's local date. Useful as a trigger for dynamic-tariff automations that should only fire after ENTSO-E publishes the next-day curve (~13:00 CET); always ON for fixed/variable contracts. |
 
 ### Conditional
 
