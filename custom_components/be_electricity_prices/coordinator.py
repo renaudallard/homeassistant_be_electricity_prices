@@ -313,6 +313,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     async def _track_monthly_peak(self) -> None:
         if self.entry.data.get(CONF_REGION) != REGION_FLANDERS:
+            # Outside Flanders the capacity tariff doesn't apply. Reset
+            # any peak left over from a previous Flanders config so it
+            # doesn't linger in diagnostics or the persistent store.
+            self._peak_kw = 0.0
+            self._peak_month = None
             return
         # Roll over on the local 1st-of-month; using UTC would lag CET/CEST
         # users by 1-2 hours on the boundary and miss late-Dec-31 / early-Jan-1.
@@ -324,10 +329,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         mode = self.entry.data.get(CONF_CAPACITY_MODE)
         if mode == CAPACITY_MODE_FIXED:
-            fixed = float(
+            # Use the configured value directly; rolling-max would
+            # ignore a mid-month decrease the user just made via
+            # OptionsFlow until next month rollover.
+            self._peak_kw = float(
                 self.entry.data.get(CONF_CAPACITY_FIXED_KW, VREG_CAPACITY_FLOOR_KW)
             )
-            self._peak_kw = max(self._peak_kw, fixed)
         elif mode == CAPACITY_MODE_SENSOR:
             entity_id = self.entry.data.get(CONF_CAPACITY_PEAK_SENSOR)
             state: State | None = self.hass.states.get(entity_id) if entity_id else None
