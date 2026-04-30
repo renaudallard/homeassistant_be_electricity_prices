@@ -52,7 +52,7 @@ from datetime import UTC, datetime
 import aiohttp
 
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import fetch_pdf_text, to_float
+from ._pdf import USER_AGENT, fetch_pdf_text, to_float
 from .base import (
     Contract,
     DsoOverlay,
@@ -203,18 +203,84 @@ def _document_url(c: _ContractDef, region_code: str) -> str:
     )
 
 
-async def discover(
-    session: aiohttp.ClientSession,  # noqa: ARG001 - no public catalog endpoint
-) -> set[str]:
-    """Return an empty set: Engie has no public product catalog.
+_SITEMAP_URL = "https://www.engie.be/sitemap.xml"
 
-    Engie's tariff API takes a contract slug as input but offers no
-    list endpoint, and engie.be is heavily client-rendered with
-    product names scattered across marketing pages without a single
-    canonical inventory. New products have to be added manually based
-    on press releases or user reports.
+# URL-token -> registry family. The sitemap exposes product pages as
+# /(fr|nl)/<token>(?:-tarief|-faq|-contract|-vast|-variable|-fixed|...);
+# extract <token>, look it up here. Anything not in this map is a new
+# product family and gets surfaced verbatim.
+_URL_TOKEN_TO_FAMILY = {
+    "easy": "EASY",
+    "direct": "DIRECT_ONLINE",
+    "basic": "BASIC_ONLINE",
+    "dynamic": "DYNAMIC",
+    "empower": "EMPOWER",
+    "flow": "FLOW",
+    "empty": "EMPTYHOUSE",
+}
+
+# Suffixes Engie uses on product page slugs. The token is the part
+# before any of these.
+_PRODUCT_SUFFIXES = (
+    "tarief",
+    "tariff",
+    "faq",
+    "contract",
+    "vast",
+    "variable",
+    "fixed",
+    "flex",
+    "flextime",
+    "online",
+    "house",
+)
+_PRODUCT_PAGE_RE = re.compile(
+    r"/(?:fr|nl)/([a-z]+)-(?:" + "|".join(_PRODUCT_SUFFIXES) + r")\b"
+)
+
+# Tokens that match _PRODUCT_PAGE_RE in non-product marketing pages
+# (e.g. "uw-contract" = "your contract", "vragen-faq" = "questions").
+# These are NL/FR common words the heuristic can't distinguish from a
+# real product family without more signal. Filtered out before diff.
+_NOISE_TOKENS = frozenset(
+    {
+        "uw",  # NL "your"
+        "je",  # NL "your" (informal)
+        "ton",  # FR "your"
+        "vragen",  # NL "questions"
+        "voordelig",  # NL "advantageous"
+        "flextime",  # sub-variant of EMPOWER
+    }
+)
+
+
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """Best-effort family-level discovery via the public sitemap.
+
+    Engie has no list endpoint on its tariff API, so this scrapes
+    sitemap.xml for /<lang>/<token>-(tarief|faq|contract|...) URLs,
+    maps each token to its registry family identifier, and surfaces
+    anything unmapped. False positives are possible (marketing pages
+    using a product token in a non-product context); the catalog
+    issue is informational so a small amount of noise is fine.
     """
-    return set()
+    try:
+        async with session.get(
+            _SITEMAP_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status >= 400:
+                return set()
+            xml = await resp.text()
+    except aiohttp.ClientError:
+        return set()
+    out: set[str] = set()
+    for token in _PRODUCT_PAGE_RE.findall(xml):
+        if token in _NOISE_TOKENS:
+            continue
+        out.add(_URL_TOKEN_TO_FAMILY.get(token, token))
+    return out
 
 
 # ---- top-level fetch + parser -------------------------------------------------

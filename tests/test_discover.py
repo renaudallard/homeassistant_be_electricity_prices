@@ -41,6 +41,7 @@ from typing import Any
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.providers import cociter as cociter_mod
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
+from custom_components.be_electricity_prices.providers import engie as engie_mod
 from custom_components.be_electricity_prices.providers import mega as mega_mod
 from custom_components.be_electricity_prices.providers import octaplus as octaplus_mod
 from custom_components.be_electricity_prices.providers import (
@@ -130,6 +131,30 @@ def test_cociter_discover_returns_known_family_ids() -> None:
     discovered = _run(cociter_mod.discover(session))
     # Cociter maps known family prefixes back to registry contract ids.
     assert discovered == {"cociter_variable", "cociter_dynamic"}
+
+
+def test_engie_discover_returns_only_known_families_no_noise() -> None:
+    # The fixture mixes legitimate product URLs (dynamic-tarief,
+    # empower-vast, flow-contract, ...) with marketing slugs that share
+    # the suffix pattern (uw-contract, vragen-faq, ...). Discovery
+    # should map known URL tokens to family ids and drop the noise via
+    # _NOISE_TOKENS — never surface "uw" or "vragen" as new products.
+    session = _FakeSession(_read("engie.html"))
+    discovered = _run(engie_mod.discover(session))
+    known = {c.family for c in engie_mod._CONTRACTS}
+    # Every discovered token must be a known family — no false positives.
+    assert discovered <= known
+    # And the fixture must surface the families whose product pages
+    # actually appear under the discoverable URL patterns.
+    assert {"DYNAMIC", "EASY", "EMPOWER", "FLOW"} <= discovered
+
+
+def test_engie_discover_surfaces_unknown_family() -> None:
+    body = _read("engie.html") + "\n/nl/newproduct-tarief\n"
+    session = _FakeSession(body)
+    discovered = _run(engie_mod.discover(session))
+    known = {c.family for c in engie_mod._CONTRACTS}
+    assert "newproduct" in discovered - known
 
 
 # ---- behaviour: surfacing new products ---------------------------------------

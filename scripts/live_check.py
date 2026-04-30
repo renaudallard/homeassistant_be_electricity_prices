@@ -531,6 +531,7 @@ async def _check_catalogs(
     known: dict[str, set[str]] = {
         "mega": {c.product_name for c in modules["mega"]._CONTRACTS},
         "bolt": {f"{c.folder}/{c.slug}" for c in modules["bolt"]._CONTRACTS},
+        "engie": {c.family for c in modules["engie"]._CONTRACTS},
         "eneco": set(modules["eneco"]._CONTRACT_URLS),
         "totalenergies": {c.slug for c in modules["totalenergies"]._CONTRACTS},
         "octaplus": {c.slug for c in modules["octaplus"]._CONTRACTS},
