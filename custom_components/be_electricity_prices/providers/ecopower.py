@@ -113,6 +113,34 @@ async def fetch(
     return parse_snapshot(text, pdf_url, label)
 
 
+async def probe(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # noqa: ARG001 - Ecopower is Flanders-only, but signature is shared.
+) -> str | None:
+    """Cheap freshness probe: HEAD the price page, return its Last-Modified.
+
+    The page returns a stable Last-Modified header (server-side cache key),
+    so a HEAD round-trip is enough to detect a publication. Falls back to
+    None on transport / missing-header so the coordinator's TTL takes over.
+    """
+    if contract_id != _CONTRACT_ID:
+        return None
+    try:
+        async with session.head(
+            _PRICE_PAGE,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=10),
+            allow_redirects=True,
+        ) as resp:
+            if resp.status >= 400:
+                return None
+            value = resp.headers.get("Last-Modified") or resp.headers.get("ETag")
+            return value
+    except aiohttp.ClientError:
+        return None
+
+
 async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Return the set of contract ids visible at the public price page.
 
@@ -383,4 +411,5 @@ EXTRACTOR = SupplierExtractor(
         ),
     ),
     fetch=fetch,
+    probe=probe,
 )

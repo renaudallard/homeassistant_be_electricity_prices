@@ -73,6 +73,11 @@ _DYN_RE = re.compile(
 _DSO_LABELS = ("AIEG", "AIESH", "ORES", "RESA", "REW")
 _DSO_KEY = {label: label.lower() for label in _DSO_LABELS}
 
+_CONTRACT_PATTERNS: dict[str, re.Pattern[str]] = {
+    "cociter_variable": _VAR_RE,
+    "cociter_dynamic": _DYN_RE,
+}
+
 
 async def fetch(
     session: aiohttp.ClientSession,
@@ -80,16 +85,34 @@ async def fetch(
     region: str,  # noqa: ARG001 - Cociter only sells in Wallonia.
 ) -> SupplierSnapshot:
     """Fetch + parse Cociter's latest published card for ``contract_id``."""
-    if contract_id == "cociter_variable":
-        pattern = _VAR_RE
-    elif contract_id == "cociter_dynamic":
-        pattern = _DYN_RE
-    else:
+    pattern = _CONTRACT_PATTERNS.get(contract_id)
+    if pattern is None:
         raise ExtractorError(f"unknown Cociter contract {contract_id!r}")
 
     pdf_url, label = await _find_latest(session, pattern)
     text = await fetch_pdf_text(session, pdf_url)
     return parse_snapshot(text, contract_id, pdf_url, label)
+
+
+async def probe(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # noqa: ARG001 - Cociter only sells in Wallonia.
+) -> str | None:
+    """Cheap freshness probe: latest URL for ``contract_id`` from the index.
+
+    Cociter's listing returns no Last-Modified or ETag, so we GET it and
+    return the latest matching PDF URL. The URL embeds YYMM so any
+    monthly rotation flips the probe key.
+    """
+    pattern = _CONTRACT_PATTERNS.get(contract_id)
+    if pattern is None:
+        return None
+    try:
+        pdf_url, _ = await _find_latest(session, pattern)
+    except ExtractorError:
+        return None
+    return pdf_url
 
 
 # Family prefix on Cociter's listing -> our registry contract id.
@@ -371,4 +394,5 @@ EXTRACTOR = SupplierExtractor(
         ),
     ),
     fetch=fetch,
+    probe=probe,
 )

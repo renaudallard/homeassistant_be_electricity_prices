@@ -168,6 +168,28 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 # ---- top-level fetch + parser -------------------------------------------------
 
 
+async def probe(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+) -> str | None:
+    """Cheap freshness probe: the resolved PDF URL for (contract, region).
+
+    Mega's listing has neither Last-Modified nor ETag, so the cheapest
+    reliable probe is a listing GET + filename match. The URL contains
+    the publication month (MMYYYY) so it changes whenever Mega rotates.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    region_code = _REGION_TO_CODE.get(region)
+    if contract is None or region_code is None:
+        return None
+    try:
+        listing = await _fetch_listing_html(session)
+    except ExtractorError:
+        return None
+    return _find_pdf_url(listing, contract.product_name, region_code)
+
+
 async def fetch(
     session: aiohttp.ClientSession,
     contract_id: str,
@@ -575,6 +597,7 @@ EXTRACTOR = SupplierExtractor(
         Contract(id=c.contract_id, label=c.label, kind=c.kind) for c in _CONTRACTS
     ),
     fetch=fetch,
+    probe=probe,
     dso_keys=(
         tuple(_FLANDERS_LABELS.values())
         + tuple(_WALLONIA_LABELS.values())

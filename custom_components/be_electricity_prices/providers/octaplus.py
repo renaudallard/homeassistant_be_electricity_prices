@@ -105,6 +105,34 @@ def _document_url(contract: _ContractDef, region: str) -> str:
     return f"{_BASE_URL}/E_OCTA_{contract.slug}_RE_{_REGION_TO_CODE[region]}_FR.pdf"
 
 
+async def probe(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+) -> str | None:
+    """Cheap freshness probe: HEAD the per-(contract, region) PDF.
+
+    OCTA+ overwrites its tariff cards in place under stable filenames,
+    so the file's Last-Modified header is the right freshness signal.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None or region not in _REGION_TO_CODE:
+        return None
+    url = _document_url(contract, region)
+    try:
+        async with session.head(
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=10),
+            allow_redirects=True,
+        ) as resp:
+            if resp.status >= 400:
+                return None
+            return resp.headers.get("Last-Modified") or resp.headers.get("ETag")
+    except aiohttp.ClientError:
+        return None
+
+
 async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Return every residential electricity slug from OCTA+'s tarifs page.
 
@@ -511,5 +539,6 @@ EXTRACTOR = SupplierExtractor(
         for c in _CONTRACTS
     ),
     fetch=fetch,
+    probe=probe,
     dso_keys=tuple(_FLANDERS_LABELS.values()) + tuple(k for _, k in _WALLONIA_LABELS),
 )

@@ -106,6 +106,9 @@ from .providers.base import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Coordinator probes the supplier on every update tick (UPDATE_INTERVAL_MINUTES);
+# SNAPSHOT_REFRESH_HOURS is the fallback TTL for suppliers that have no probe
+# path. With a probe, the snapshot stays cached until the probe key changes.
 SNAPSHOT_REFRESH_HOURS = 24
 SNAPSHOT_STALE_DAYS = 7
 
@@ -121,6 +124,10 @@ _SHARED_LOCKS_KEY = "snapshot_locks"
 class _SharedSnapshot:
     snapshot: "SupplierSnapshot"
     fetched_at: datetime
+    # Last probe key seen when this snapshot was fetched. ``None`` for
+    # suppliers without a probe path - those fall back to the time-based
+    # TTL alone.
+    probe_key: str | None = None
 
 
 def _shared_snapshots(
@@ -199,6 +206,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         )
         self._snapshot: SupplierSnapshot | None = None
         self._snapshot_fetched_at: datetime | None = None
+        self._snapshot_probe_key: str | None = None
         self._spot_cache: dict[datetime, float] = {}
         self._spot_cache_day: date | None = None
         self._spot_cache_includes_tomorrow = False
@@ -244,6 +252,10 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             try:
                 self._snapshot = _snapshot_from_dict(snap)
                 self._snapshot_fetched_at = datetime.fromisoformat(snap["_cached_at"])
+                cached_probe = snap.get("_probe_key")
+                self._snapshot_probe_key = (
+                    cached_probe if isinstance(cached_probe, str) else None
+                )
             except (KeyError, ValueError, TypeError) as err:
                 _LOGGER.warning(
                     "discarding cached snapshot for %s: %s",
@@ -252,6 +264,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 )
                 self._snapshot = None
                 self._snapshot_fetched_at = None
+                self._snapshot_probe_key = None
         peak = stored.get("peak")
         if isinstance(peak, dict):
             value = peak.get("kw")
@@ -464,6 +477,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         the same key also see a fresh fetch on their next refresh.
         """
         self._snapshot_fetched_at = None
+        self._snapshot_probe_key = None
         self._spot_cache = {}
         self._spot_cache_day = None
         self._spot_cache_includes_tomorrow = False
@@ -481,39 +495,80 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """Take a fresh shared snapshot as our own."""
         self._snapshot = shared.snapshot
         self._snapshot_fetched_at = shared.fetched_at
+        self._snapshot_probe_key = shared.probe_key
         self._last_error = ""
 
     async def _maybe_refresh_snapshot(self) -> None:
+        """Run a cheap probe; only refetch the full PDF when it says so.
+
+        Two paths depending on what the supplier exposes:
+
+          * **Probe available** — call ``extractor.probe`` (HEAD or small
+            listing GET). If the returned key matches what we last saved,
+            the snapshot is still valid; just stamp ``_snapshot_fetched_at``
+            and return. If the key changed, fall through to a real fetch.
+
+          * **No probe** — fall back to the time-based TTL: only refetch
+            when the snapshot is older than ``SNAPSHOT_REFRESH_HOURS`` (24h).
+            DATS 24, Engie and Luminus take this path.
+
+        The shared (supplier, contract, region) cache short-circuits the
+        same way: a probe-key match against a sibling coordinator's
+        snapshot adopts it without doing any work.
+        """
         ttl = timedelta(hours=SNAPSHOT_REFRESH_HOURS)
         now = dt_util.utcnow()
-        if self._snapshot_fetched_at and (now - self._snapshot_fetched_at < ttl):
-            return
 
+        extractor = get_extractor(self.entry.data[CONF_SUPPLIER])
+        contract = self.entry.data[CONF_CONTRACT]
+        region = self.entry.data[CONF_REGION]
         key = self._shared_key()
         cache = _shared_snapshots(self.hass)
-        # Free, non-blocking shortcut when another coordinator has already
-        # done the work.
+
+        # Try a cheap probe first. None means the supplier has no probe
+        # path or the probe failed; we fall through to the TTL-only flow.
+        probe_key: str | None = None
+        probe_fn = getattr(extractor, "probe", None)
+        if probe_fn is not None:
+            try:
+                probe_key = await probe_fn(self._session, contract, region)
+            except (ExtractorError, asyncio.TimeoutError) as err:
+                _LOGGER.debug(
+                    "probe failed for %s/%s: %s",
+                    self.entry.data.get(CONF_SUPPLIER),
+                    contract,
+                    err,
+                )
+                probe_key = None
+
+        # Free, non-blocking shortcut: a sibling coordinator may have a
+        # fresh snapshot we can adopt directly.
         shared = cache.get(key)
-        if shared and (now - shared.fetched_at < ttl):
+        if shared is not None and self._shared_is_fresh(shared, probe_key, now, ttl):
             self._adopt_shared(shared)
+            return
+
+        # Our own snapshot may already be valid against this probe.
+        if self._snapshot is not None and self._self_is_fresh(probe_key, now, ttl):
+            self._snapshot_fetched_at = now
             return
 
         async with _shared_lock(self.hass, key):
             shared = cache.get(key)
-            if shared and (dt_util.utcnow() - shared.fetched_at < ttl):
+            if shared is not None and self._shared_is_fresh(
+                shared, probe_key, dt_util.utcnow(), ttl
+            ):
                 self._adopt_shared(shared)
                 return
             try:
-                extractor = get_extractor(self.entry.data[CONF_SUPPLIER])
-                snap = await extractor.fetch(
-                    self._session,
-                    self.entry.data[CONF_CONTRACT],
-                    self.entry.data[CONF_REGION],
-                )
+                snap = await extractor.fetch(self._session, contract, region)
                 fetched_at = dt_util.utcnow()
-                cache[key] = _SharedSnapshot(snapshot=snap, fetched_at=fetched_at)
+                cache[key] = _SharedSnapshot(
+                    snapshot=snap, fetched_at=fetched_at, probe_key=probe_key
+                )
                 self._snapshot = snap
                 self._snapshot_fetched_at = fetched_at
+                self._snapshot_probe_key = probe_key
                 self._last_error = ""
             except (ExtractorError, asyncio.TimeoutError) as err:
                 self._last_error = str(err)
@@ -523,6 +578,28 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     self.entry.data.get(CONF_CONTRACT),
                     err,
                 )
+
+    def _self_is_fresh(
+        self, probe_key: str | None, now: datetime, ttl: timedelta
+    ) -> bool:
+        """Whether our own snapshot can be reused without a refetch."""
+        if probe_key is not None:
+            return self._snapshot_probe_key == probe_key
+        if self._snapshot_fetched_at is None:
+            return False
+        return now - self._snapshot_fetched_at < ttl
+
+    @staticmethod
+    def _shared_is_fresh(
+        shared: _SharedSnapshot,
+        probe_key: str | None,
+        now: datetime,
+        ttl: timedelta,
+    ) -> bool:
+        """Whether a sibling's shared snapshot can be adopted as-is."""
+        if probe_key is not None:
+            return shared.probe_key == probe_key
+        return now - shared.fetched_at < ttl
 
     async def _fetch_spot_prices(self) -> dict[datetime, float]:
         api_key = self.entry.data.get(CONF_API_KEY)
@@ -690,7 +767,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         }
         if self._snapshot is not None and self._snapshot_fetched_at is not None:
             payload["snapshot"] = _snapshot_to_dict(
-                self._snapshot, self._snapshot_fetched_at
+                self._snapshot,
+                self._snapshot_fetched_at,
+                self._snapshot_probe_key,
             )
         await self._store.async_save(payload)
 
@@ -949,9 +1028,12 @@ def _compute_current_year_cost(
 _SNAPSHOT_SCHEMA_VERSION = 5
 
 
-def _snapshot_to_dict(snap: SupplierSnapshot, fetched_at: datetime) -> dict[str, Any]:
+def _snapshot_to_dict(
+    snap: SupplierSnapshot, fetched_at: datetime, probe_key: str | None = None
+) -> dict[str, Any]:
     return {
         "_cached_at": fetched_at.isoformat(),
+        "_probe_key": probe_key,
         "_schema_version": _SNAPSHOT_SCHEMA_VERSION,
         "supplier": snap.supplier,
         "contract": snap.contract,

@@ -189,6 +189,149 @@ async def test_shared_cache_expires_after_ttl(hass: HomeAssistant) -> None:
         assert fetch_calls == 2
 
 
+async def test_probe_match_skips_fetch(hass: HomeAssistant) -> None:
+    """When extractor.probe returns the same key on a subsequent refresh,
+    the coordinator must NOT call extractor.fetch again."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    fetch_calls = 0
+    probe_calls = 0
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return _fake_snapshot()
+
+    async def _fake_probe(*_args: object, **_kwargs: object) -> str | None:
+        nonlocal probe_calls
+        probe_calls += 1
+        return "key-stable"
+
+    extractor = type(
+        "E",
+        (),
+        {"fetch": staticmethod(_fake_fetch), "probe": staticmethod(_fake_probe)},
+    )
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()  # first call - fetch
+        await coord._maybe_refresh_snapshot()  # probe says unchanged - no fetch
+        await coord._maybe_refresh_snapshot()  # idem
+    assert fetch_calls == 1
+    assert probe_calls == 3
+    assert coord._snapshot_probe_key == "key-stable"
+
+
+async def test_probe_mismatch_triggers_fetch(hass: HomeAssistant) -> None:
+    """When extractor.probe returns a different key, the coordinator
+    must refetch even if the snapshot is still within TTL."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    fetch_calls = 0
+    keys = iter(["key-A", "key-B"])
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return _fake_snapshot()
+
+    async def _fake_probe(*_args: object, **_kwargs: object) -> str | None:
+        return next(keys)
+
+    extractor = type(
+        "E",
+        (),
+        {"fetch": staticmethod(_fake_fetch), "probe": staticmethod(_fake_probe)},
+    )
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()  # key-A, fetch
+        await coord._maybe_refresh_snapshot()  # key-B, refetch
+    assert fetch_calls == 2
+    assert coord._snapshot_probe_key == "key-B"
+
+
+async def test_probe_none_falls_back_to_ttl(hass: HomeAssistant) -> None:
+    """A None probe (extractor doesn't expose one, or probe failed) keeps
+    the existing 24h-TTL behaviour: don't refetch within the window."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    fetch_calls = 0
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return _fake_snapshot()
+
+    async def _fake_probe(*_args: object, **_kwargs: object) -> str | None:
+        return None  # no probe available
+
+    extractor = type(
+        "E",
+        (),
+        {"fetch": staticmethod(_fake_fetch), "probe": staticmethod(_fake_probe)},
+    )
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()  # fetch, fresh
+        await coord._maybe_refresh_snapshot()  # within TTL, no fetch
+        # Hand-age past TTL: must refetch even though probe returned None.
+        coord._snapshot_fetched_at = dt_util.utcnow().replace(year=2020)
+        _shared_snapshots(hass)[
+            coord._shared_key()
+        ].fetched_at = coord._snapshot_fetched_at
+        await coord._maybe_refresh_snapshot()
+    assert fetch_calls == 2
+
+
+async def test_probe_match_on_shared_cache_avoids_fetch(hass: HomeAssistant) -> None:
+    """A second coordinator with the same shared key must adopt the
+    sibling's snapshot when its probe returns the matching key, even
+    if its own snapshot is None."""
+    entry_a = _entry()
+    entry_b = _entry()
+    entry_a.add_to_hass(hass)
+    entry_b.add_to_hass(hass)
+    coord_a = BePricesCoordinator(hass, entry_a)
+    coord_b = BePricesCoordinator(hass, entry_b)
+
+    fetch_calls = 0
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return _fake_snapshot()
+
+    async def _fake_probe(*_args: object, **_kwargs: object) -> str | None:
+        return "shared-key"
+
+    extractor = type(
+        "E",
+        (),
+        {"fetch": staticmethod(_fake_fetch), "probe": staticmethod(_fake_probe)},
+    )
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord_a._maybe_refresh_snapshot()  # populates cache + probe key
+        await coord_b._maybe_refresh_snapshot()  # adopts via probe-key match
+    assert fetch_calls == 1
+    assert coord_b._snapshot_probe_key == "shared-key"
+
+
 async def test_sync_stale_issue_creates_and_clears(hass: HomeAssistant) -> None:
     entry = _entry()
     entry.add_to_hass(hass)

@@ -121,6 +121,26 @@ async def fetch(
     return parse_snapshot(text, contract_id, url)
 
 
+async def probe(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # noqa: ARG001 - Eneco's listing is region-agnostic.
+) -> str | None:
+    """Cheap freshness probe: the current PDF URL for ``contract_id``.
+
+    Eneco's listing returns a per-request ETag (``Cache-Control: no-store``)
+    so a header-only probe is unusable. The cheapest reliable probe is
+    therefore "scrape the listing and return the resolved URL" - the
+    issue number rotates monthly so the URL is the freshness signal.
+    """
+    if contract_id not in _CONTRACT_SLUGS:
+        return None
+    listing = await _fetch_listing(session)
+    if listing is None:
+        return None
+    return _resolve_url(listing, contract_id)
+
+
 async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Return the set of POWER_* product slugs from Eneco's listing page.
 
@@ -514,5 +534,6 @@ EXTRACTOR = SupplierExtractor(
         ),
     ),
     fetch=fetch,
+    probe=probe,
     dso_keys=tuple(_WALLONIA_LABELS.values()) + tuple(_FLUVIUS_LABELS.values()),
 )

@@ -168,6 +168,39 @@ def _document_url(slug: str, region: str) -> str:
     return f"{_BASE_URL}/{slug}_ELECTRICITY_{region_code}_FR.pdf"
 
 
+async def probe(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+) -> str | None:
+    """Cheap freshness probe: HEAD the per-(contract, region) PDF.
+
+    TotalEnergies serves every card under ``/tariff-card/latest/<SLUG>_...``
+    and overwrites in place, so the file's Last-Modified header is the
+    right freshness signal.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if (
+        contract is None
+        or region not in _REGION_TO_CODE
+        or region not in contract.regions
+    ):
+        return None
+    url = _document_url(contract.slug, region)
+    try:
+        async with session.head(
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=10),
+            allow_redirects=True,
+        ) as resp:
+            if resp.status >= 400:
+                return None
+            return resp.headers.get("Last-Modified") or resp.headers.get("ETag")
+    except aiohttp.ClientError:
+        return None
+
+
 async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Return every electricity-product slug from the cartes-tarifaires page.
 
@@ -632,6 +665,7 @@ EXTRACTOR = SupplierExtractor(
         for c in _CONTRACTS
     ),
     fetch=fetch,
+    probe=probe,
     dso_keys=(
         tuple(_FLANDERS_LABELS.values())
         + tuple(_WALLONIA_LABELS.values())

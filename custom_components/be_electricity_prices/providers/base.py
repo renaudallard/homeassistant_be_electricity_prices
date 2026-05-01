@@ -250,6 +250,12 @@ SnapshotFetcher = Callable[
     [aiohttp.ClientSession, str, str], Awaitable[SupplierSnapshot]
 ]
 
+# Cheap-probe contract: same return value across calls means the snapshot
+# is still valid; a different value means refetch. ``None`` signals the
+# supplier has no probe path the coordinator can rely on (Engie/Luminus
+# API endpoints, DATS 24 single-PDF) and the time-based TTL takes over.
+SnapshotProbe = Callable[[aiohttp.ClientSession, str, str], Awaitable[str | None]]
+
 
 @dataclass(frozen=True, kw_only=True)
 class SupplierExtractor:
@@ -259,6 +265,10 @@ class SupplierExtractor:
     label: str
     contracts: tuple[Contract, ...]
     fetch: SnapshotFetcher
+    # Optional cheap probe (HEAD or listing GET) that returns a freshness
+    # key. The coordinator calls it hourly and only re-runs ``fetch`` when
+    # the key changes. ``None`` means no probe is available.
+    probe: SnapshotProbe | None = None
     dso_keys: tuple[str, ...] = field(default_factory=tuple)
 
     def regions(self) -> frozenset[str]:

@@ -112,6 +112,34 @@ def _document_url(contract: _ContractDef, suffix: str | None = None) -> str:
     return f"{_BASE_URL}/{contract.folder}/{contract.slug}_res_el_fr_{suffix}.pdf"
 
 
+async def probe(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # noqa: ARG001 - Bolt's PDFs cover every region.
+) -> str | None:
+    """Cheap freshness probe: HEAD the listing page, return its ETag.
+
+    Bolt's listing returns a stable ETag and the server honours
+    ``If-None-Match`` with a 304 response. We just want a key that flips
+    on supplier changes, so reading the ETag header on a HEAD round-trip
+    is enough.
+    """
+    if contract_id not in _CONTRACTS_BY_ID:
+        return None
+    try:
+        async with session.head(
+            _LISTING_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=10),
+            allow_redirects=True,
+        ) as resp:
+            if resp.status >= 400:
+                return None
+            return resp.headers.get("ETag") or resp.headers.get("Last-Modified")
+    except aiohttp.ClientError:
+        return None
+
+
 async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Return ``{folder}/{slug}`` for every residential electricity card.
 
@@ -516,6 +544,7 @@ EXTRACTOR = SupplierExtractor(
         Contract(id=c.contract_id, label=c.label, kind=c.kind) for c in _CONTRACTS
     ),
     fetch=fetch,
+    probe=probe,
     dso_keys=(
         tuple(_FLANDERS_LABELS.values())
         + tuple(_WALLONIA_LABELS.values())

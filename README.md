@@ -77,6 +77,17 @@ Adding another supplier is a self-contained PR: drop a new module under
 register it in [`providers/__init__.py`](./custom_components/be_electricity_prices/providers/__init__.py),
 and ship a fixture-based unit test. The Eneco module is the reference.
 
+### How often the integration polls
+
+The coordinator ticks once an hour. On each tick it runs the supplier's
+**`probe()`** — a cheap freshness check that returns a key (`Last-Modified`,
+`ETag`, or the resolved PDF URL) — and only re-runs the full PDF fetch when
+that key changes from what we last fetched. This catches a supplier
+publication within an hour at near-zero ongoing bandwidth instead of a
+fixed 24-hour schedule. Suppliers that have no usable probe (Engie,
+Luminus and DATS 24, where the only cheap response is the PDF itself)
+keep the time-based 24-hour TTL.
+
 ## What the integration computes
 
 For every hour, an all-in EUR/kWh built up as
