@@ -333,6 +333,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return
         delta = value - prev
         self._kwh_baselines[entity_id] = value
+        # Roll the year over before bucketing the delta. Without this, a
+        # state event arriving on Jan 1 after midnight but before the
+        # next coordinator tick deposits its delta into a bucket the
+        # later rollover then zeroes -- the first new-year deltas get
+        # silently dropped from current_year_cost.
+        self._roll_over_current_year_cost_if_needed()
         kind = (
             "consumption"
             if entity_id == self.entry.data.get(CONF_CONSUMPTION_KWH)
@@ -346,9 +352,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self.hass.async_create_task(self.async_request_refresh())
 
     async def _async_update_data(self) -> CoordinatorData:
+        # Roll over before any awaits: a state event firing during the
+        # awaits below would otherwise add a fresh delta to a bucket
+        # the rollover is about to zero.
+        self._roll_over_current_year_cost_if_needed()
         await self._maybe_refresh_snapshot()
         await self._track_monthly_peak()
-        self._roll_over_current_year_cost_if_needed()
 
         if self._snapshot is None:
             raise UpdateFailed(

@@ -449,6 +449,38 @@ async def test_rollover_skips_unavailable_registers(hass: HomeAssistant) -> None
     assert "sensor.night_cons" not in coord._year_start_register_baselines
 
 
+async def test_kwh_listener_preserves_delta_across_year_rollover(
+    hass: HomeAssistant,
+) -> None:
+    """A state event firing in a new calendar year must keep its delta
+    even though _year_start still records the previous year. Without
+    rolling the year over inside the handler the next coordinator-tick
+    rollover would zero the bucket the delta just landed in."""
+    entry = _entry_with_totals()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    coord.async_setup_kwh_listeners()
+
+    # Pretend the previous year already accumulated a baseline + bucket.
+    coord._year_start = dt_util.now().year - 1
+    coord._kwh_buckets["consumption_day"] = 9999.0
+    coord._kwh_baselines["sensor.total_cons"] = 1000.0
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.is_offpeak",
+        return_value=False,
+    ):
+        hass.states.async_set("sensor.total_cons", "1010.0")
+        await hass.async_block_till_done()
+
+    # Last-year accumulation is gone (rollover zeroed it) and the new
+    # delta survives in the now-current-year bucket.
+    assert coord._year_start == dt_util.now().year
+    assert coord._kwh_buckets["consumption_day"] == pytest.approx(10.0)
+    assert coord._kwh_buckets["consumption_night"] == 0.0
+
+
 async def test_rollover_tops_up_missing_baselines_within_same_year(
     hass: HomeAssistant,
 ) -> None:
