@@ -256,6 +256,16 @@ SnapshotFetcher = Callable[
 # API endpoints, DATS 24 single-PDF) and the time-based TTL takes over.
 SnapshotProbe = Callable[[aiohttp.ClientSession, str, str], Awaitable[str | None]]
 
+# Historical-fetch contract: fetch the published card for a specific
+# (year, month). Used by the time-correct yearly-cost flow to bill each
+# past month at its own rate. Returns ``None`` when the supplier has no
+# accessible archive for that month (overwrite-in-place suppliers like
+# OCTA+ / TotalEnergies, API-only suppliers like Engie / Luminus / DATS 24,
+# or a month before the supplier's archive horizon).
+ArchivedSnapshotFetcher = Callable[
+    [aiohttp.ClientSession, str, str, "date"], Awaitable["SupplierSnapshot | None"]
+]
+
 
 @dataclass(frozen=True, kw_only=True)
 class SupplierExtractor:
@@ -269,6 +279,12 @@ class SupplierExtractor:
     # key. The coordinator calls it hourly and only re-runs ``fetch`` when
     # the key changes. ``None`` means no probe is available.
     probe: SnapshotProbe | None = None
+    # Optional historical fetch: returns the published snapshot for a
+    # given (year, month) so past consumption can be billed at the
+    # correct historical rate. ``None`` (or a callable returning ``None``)
+    # means "no archive for this month" - the coordinator falls back to
+    # using the current snapshot as a proxy.
+    fetch_for_month: ArchivedSnapshotFetcher | None = None
     dso_keys: tuple[str, ...] = field(default_factory=tuple)
 
     def regions(self) -> frozenset[str]:
