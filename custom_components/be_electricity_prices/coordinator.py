@@ -356,6 +356,14 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # awaits below would otherwise add a fresh delta to a bucket
         # the rollover is about to zero.
         self._roll_over_current_year_cost_if_needed()
+        # Freeze the kWh accumulators at the start of the tick so the
+        # current_year_cost we return matches the bucket state we just
+        # rolled over. State events firing during the awaits below
+        # update self._kwh_buckets in place, but the entities will see
+        # those new deltas on the next tick instead of a value desynced
+        # from what was persisted at the end of this one.
+        kwh_buckets_snapshot = dict(self._kwh_buckets)
+        register_baselines_snapshot = dict(self._year_start_register_baselines)
         await self._maybe_refresh_snapshot()
         await self._track_monthly_peak()
 
@@ -397,8 +405,8 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self.entry,
             prosumer_cost_eur_per_month=prosumer_cost,
             injection_price_eur_per_kwh=injection_price,
-            kwh_buckets=self._kwh_buckets,
-            register_baselines=self._year_start_register_baselines,
+            kwh_buckets=kwh_buckets_snapshot,
+            register_baselines=register_baselines_snapshot,
         )
 
         await self._save_persistent()
