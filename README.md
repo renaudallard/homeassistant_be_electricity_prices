@@ -49,7 +49,7 @@ publication and how to parse it.
 - **Tarif Impact (Wallonia)** — opt-in CWaPE 3-band distribution pricing (PIC 17–22, MEDIUM 7–11 + 22–1, ECO 1–7 + 11–17), orthogonal to the supplier tariff.
 - **Flanders capacity tariff** — monthly peak tracked from any kW sensor or a fixed value; billed against the configured Fluvius sub-area.
 - **Solar** — prosumer fee for the Walloon compensation regime (until 2030-12-31), and a per-kWh injection price entity that plugs straight into HA Energy.
-- **Year-to-date cost** — `current_year_cost` sensor reports your running bill in EUR since Jan 1 (energy × rate, injection netted per regime, fees included). Two input modes: 4 day/night meter registers, or 2 cumulative totals (the integration splits deltas into day/night via the bi-hourly schedule and persists across restarts).
+- **Year-to-date cost** — `current_year_cost` sensor reports your running bill in EUR since Jan 1, computed month by month from HA's recorder (per-month consumption × **that month's** tariff card). Each past month is billed at its own published rate when the supplier archives historical cards (Eneco / Cociter / Ecopower); other suppliers fall back to the current rate as a proxy. Compensation regime is floored at fees only (most Walloon suppliers forfeit surplus injection past consumption, so the bill never settles negative).
 - **Cheapest / most-expensive window services** — find the optimal contiguous N-hour window in the upcoming price table for EV charging, heat-pump cycles, or peak avoidance.
 - **Tomorrow-available trigger** — `tomorrow_prices_available` binary sensor flips ON once ENTSO-E publishes the next-day curve, so dynamic automations don't fire too early.
 - **ENTSO-E key validated at setup** — the config flow hits the real endpoint with the entered token and rejects bad keys before the entry is saved.
@@ -122,7 +122,7 @@ All sensors share one device per config entry.
 | `taxes_component` | Levies EUR/kWh now (VAT-inclusive). |
 | `fixed_fee_eur_per_year` | Supplier's flat annual subscription fee (EUR/year), parsed from the tariff card. |
 | `energy_fund_eur_per_month` | Flemish Energiefonds in EUR/month (€0 outside Flanders, and €0 in Flanders for domiciled customers). |
-| `current_year_cost` | Running bill **since Jan 1 of the current year** (or since first refresh, whichever is later). Configure once in the **Energy meters** step, two ways: (a) point at the four day/night register sensors directly (preferred when available — anchored to a Jan-1 baseline so `current − baseline` resets every year); or (b) point at single cumulative consumption / injection sensors (the integration splits deltas into day/night buckets via the bi-hourly schedule, persists them across restarts, and zeroes them every Jan 1). On Jan 1 the sensor snaps to the **fees-only floor** = `yearly_fixed_fee + 12 × energy_fund_eur_per_month + 12 × prosumer_cost` (annual fees stay full-year). Goes negative under Walloon compensation when injection > consumption (uncapped — surplus is theoretically credited at the consumption rate, even though most suppliers floor the actual bill at zero). Always numeric: missing meter inputs and dynamic / TOU contracts collapse to the same fees-only floor instead of going unknown. |
+| `current_year_cost` | Running bill **since Jan 1 of the current year**, computed month by month against HA's recorder. Configure once in the **Energy meters** step, two ways: (a) point at the four day/night register sensors directly (preferred when available); or (b) point at single cumulative consumption / injection sensors (for bi-hourly meters the integration recovers the day/night split per past month from the recorder's hourly statistics binned by the bi-hourly schedule). For each month from January onwards the integration looks up **that month's tariff card** when the supplier archives historical cards (Eneco / Cociter / Ecopower) and multiplies that month's kWh by it; suppliers without an archive (Bolt / Mega / OCTA+ / TotalEnergies / Engie / Luminus / DATS 24) fall back to the current rate as a proxy. Annual fees (`yearly_fixed_fee + 12 × energy_fund_eur_per_month + 12 × prosumer_cost`) are added once. On Jan 1 the sensor snaps to the fees-only floor and grows from there. Floored at fees-only under Walloon compensation regime (most suppliers forfeit surplus injection past consumption, so the bill never actually settles negative). Always numeric: a fresh install in May still produces a meaningful figure for the year so far, as long as the recorder has been collecting hourly statistics for the configured kWh sensors. |
 | `tomorrow_prices_available` | Binary sensor. ON once the price table covers at least one hour with tomorrow's local date. Useful as a trigger for dynamic-tariff automations that should only fire after ENTSO-E publishes the next-day curve (~13:00 CET); always ON for fixed/variable contracts. |
 
 ### Conditional
@@ -221,11 +221,13 @@ next refresh.
   snapshot through an in-memory cache, so the same PDF is never polled twice.
 - **Spot prices** *(dynamic only)* — hourly via ENTSO-E; tomorrow's curve picked up after publication around midday CET.
 - **Monthly capacity peak** *(Flanders)* — tracked continuously, resets on the 1st of each local month.
-- **`current_year_cost`** — register baselines and bucket counters reset on
-  Jan 1 of the local calendar year, then `current_year_cost` snaps to ~fees-only.
-  Baselines top up automatically on the next refresh whenever a configured
-  meter sensor first becomes readable (no need to wait for Jan 1 if you
-  add the sensors mid-year).
+- **`current_year_cost`** — recomputed every coordinator tick from HA's
+  recorder. The recorder's monthly statistics are the source of truth for
+  per-band kWh (no in-process counters that could drift across restarts);
+  per-month tariff cards live in an in-memory cache keyed by
+  `(supplier, contract, region, YYYY-MM)`. On Jan 1 the sensor naturally
+  snaps to the fees-only floor — there's no past-month consumption yet —
+  and grows from there.
 
 ### Failure mode
 
