@@ -160,3 +160,24 @@ def test_april_card_resa_uses_distinct_distribution_rates() -> None:
     resa = snap.dsos["resa"]
     assert resa.distribution_single == pytest.approx(0.1106)
     assert resa.prosumer_eur_per_kva_year == pytest.approx(84.22)
+
+
+def test_may_card_uses_dot_decimal_separator() -> None:
+    """The May 2026 card switched its decimal separator from ',' to '.'
+    (Afname1 10.64 11.77 9.60 9.60 instead of 12,18 13,48 10,97 10,97).
+    Without dot-tolerant regexes the parser raised "could not parse
+    DATS 24 indicative afname row"."""
+    text = extract_pdf_text_layout(
+        (_FIX / "dats24_groen_variabel_may.pdf").read_bytes()
+    )
+    snap = parse_snapshot(text, "test://may", "flanders")
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.publication_label == "mei 2026"
+    assert snap.valid_until == date(2026, 5, 31)
+    assert snap.energy.current == pytest.approx(0.1064)
+    assert snap.energy.peak == pytest.approx(0.1177)
+    assert snap.energy.offpeak == pytest.approx(0.0960)
+    assert snap.energy.exclusive_night == pytest.approx(0.0960)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(38.50)
+    # DSOs and taxes also parse without comma-dependent regexes.
+    assert len(snap.dsos) == 8

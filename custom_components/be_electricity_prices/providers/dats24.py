@@ -183,7 +183,7 @@ def _extract_energy(text: str) -> EnergyRates:
     All values include 6% VAT.
     """
     match = re.search(
-        r"Afname1?\s*\(c€/kWh\)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)",
+        r"Afname1?\s*\(c€/kWh\)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)",
         text,
     )
     if not match:
@@ -192,7 +192,7 @@ def _extract_energy(text: str) -> EnergyRates:
     peak_c = to_float(match.group(2))
     offpeak_c = to_float(match.group(3))
     excl_c = to_float(match.group(4))
-    fee_match = re.search(r"VASTE VERGOEDING\s*\(€/jaar\)\s+([\d,]+)", text)
+    fee_match = re.search(r"VASTE VERGOEDING\s*\(€/jaar\)\s+([\d,.]+)", text)
     yearly_fee = to_float(fee_match.group(1)) if fee_match else 0.0
     return VariableRates(
         current=single_c / 100.0,
@@ -230,9 +230,9 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_DSOS.items():
         row = re.search(
-            rf"^{re.escape(label)}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+"
-            rf"([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+"
-            rf"([\d,]+)\s+([\d,]+)",
+            rf"^{re.escape(label)}\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+"
+            rf"([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+"
+            rf"([\d,.]+)\s+([\d,.]+)",
             text,
             re.MULTILINE,
         )
@@ -263,9 +263,9 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_DSOS:
         row = re.search(
-            rf"^{re.escape(label)}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+"
-            rf"([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+"
-            rf"([\d,]+)\s+([\d,]+)",
+            rf"^{re.escape(label)}\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+"
+            rf"([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+"
+            rf"([\d,.]+)\s+([\d,.]+)",
             text,
             re.MULTILINE,
         )
@@ -302,25 +302,25 @@ def _extract_taxes(text: str) -> TaxOverlay:
     renewables = CV (Waals Gewest). Each is a per-kWh certificate
     quota cost the supplier must doorstort.
     """
-    contrib_match = re.search(r"Energiebijdrage\s+([\d,]+)\s*c€/kWh", text)
+    contrib_match = re.search(r"Energiebijdrage\s+([\d,.]+)\s*c€/kWh", text)
     excise_match = re.search(
-        r"Verbruik tussen 0 kWh en 3\.000 kWh\s+([\d,]+)\s*c€/kWh", text
+        r"Verbruik tussen 0 kWh en 3\.000 kWh\s+([\d,.]+)\s*c€/kWh", text
     )
     if not contrib_match or not excise_match:
         raise ExtractorError("could not parse DATS 24 federal tax block")
 
-    gsc_match = re.search(r"Vlaams Gewest:\s*GSC\s*\(c€/kWh\)\s+([\d,]+)", text)
-    wkc_match = re.search(r"WKC\s*\(c€/kWh\)\s+([\d,]+)", text)
-    cv_match = re.search(r"Waals Gewest:\s*CV\s*\(c€/kWh\)\s+([\d,]+)", text)
+    gsc_match = re.search(r"Vlaams Gewest:\s*GSC\s*\(c€/kWh\)\s+([\d,.]+)", text)
+    wkc_match = re.search(r"WKC\s*\(c€/kWh\)\s+([\d,.]+)", text)
+    cv_match = re.search(r"Waals Gewest:\s*CV\s*\(c€/kWh\)\s+([\d,.]+)", text)
     flanders_renewables = (
         to_float(gsc_match.group(1)) / 100.0 if gsc_match else 0.0
     ) + (to_float(wkc_match.group(1)) / 100.0 if wkc_match else 0.0)
     wallonia_renewables = to_float(cv_match.group(1)) / 100.0 if cv_match else 0.0
 
-    fund_match = re.search(r"Hoofdverblijf\s*\(domicilie\)\s+([\d,]+)\s*€/maand", text)
+    fund_match = re.search(r"Hoofdverblijf\s*\(domicilie\)\s+([\d,.]+)\s*€/maand", text)
     energy_fund_per_month = to_float(fund_match.group(1)) if fund_match else 0.0
     connection_match = re.search(
-        r"Aansluitingsvergoeding Walloni[eë].*?([\d,]+)\s*c€/kWh", text
+        r"Aansluitingsvergoeding Walloni[eë].*?([\d,.]+)\s*c€/kWh", text
     )
     connection_fee = (
         to_float(connection_match.group(1)) / 100.0 if connection_match else 0.0
@@ -356,10 +356,10 @@ def _extract_injection(text: str) -> InjectionRates | None:
     types, so a single InjectionRates entry covers everyone.
     """
     formula = re.search(
-        r"\(BE_spotSPP\s*x\s*([\d,]+)\s*[-–]\s*([\d,]+)\)",
+        r"\(BE_spotSPP\s*x\s*([\d,.]+)\s*[-–]\s*([\d,.]+)\)",
         text,
     )
-    indicative = re.search(r"Teruglevering2?\s*\(c€/kWh\)\s+([\d,]+)", text)
+    indicative = re.search(r"Teruglevering2?\s*\(c€/kWh\)\s+([\d,.]+)", text)
     if not formula and not indicative:
         return None
     factor: float | None = None
