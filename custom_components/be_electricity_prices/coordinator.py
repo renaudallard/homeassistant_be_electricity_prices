@@ -35,7 +35,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -43,15 +42,11 @@ from typing import Any
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import (
-    Event,
-    EventStateChangedData,
     HomeAssistant,
     State,
-    callback,
 )
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -276,34 +271,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._peak_kw: float = 0.0
         self._peak_month: date | None = None
         self._last_error: str = ""
-        # Day/night kWh buckets fed by deltas of CONF_CONSUMPTION_KWH /
-        # CONF_INJECTION_KWH state changes. Persisted across restarts so
-        # the running current_year_cost survives HA restarts.
-        self._kwh_buckets: dict[str, float] = {
-            "consumption_day": 0.0,
-            "consumption_night": 0.0,
-            "injection_day": 0.0,
-            "injection_night": 0.0,
-        }
-        # Last-seen value for each tracked total sensor; deltas are
-        # computed against this. None means we haven't seen a value yet
-        # (first state event after setup just records baseline).
-        self._kwh_baselines: dict[str, float] = {}
-        self._kwh_unsub: list[Callable[[], None]] = []
-        # Calendar-year boundary tracking for current_year_cost: we want the
-        # sensor to read 0 (just fees) on Jan 1 and grow over the year.
-        # ``_year_start`` is the calendar year the register baselines and
-        # bucket counters apply to; on year rollover we capture new
-        # register baselines from current state and zero the buckets.
-        # ``None`` until the first refresh that successfully establishes
-        # a baseline.
-        self._year_start: int | None = None
-        # Snapshot of register-sensor states at the start of
-        # ``_year_start``. ``current_year_cost`` then reports
-        # ``current - baseline`` per register, so it goes back to 0 on
-        # Jan 1. Empty dict when only the bucket-path totals are
-        # configured.
-        self._year_start_register_baselines: dict[str, float] = {}
 
     async def async_load_persistent(self) -> None:
         """Restore the latest snapshot + monthly peak from HA Store."""
@@ -338,108 +305,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     self._peak_month = date.fromisoformat(month)
                 except ValueError:
                     self._peak_month = None
-        kwh = stored.get("kwh_buckets")
-        if isinstance(kwh, dict):
-            for key in self._kwh_buckets:
-                value = kwh.get(key)
-                if isinstance(value, (int, float)):
-                    self._kwh_buckets[key] = float(value)
-        baselines = stored.get("kwh_baselines")
-        if isinstance(baselines, dict):
-            for entity_id, value in baselines.items():
-                if isinstance(entity_id, str) and isinstance(value, (int, float)):
-                    self._kwh_baselines[entity_id] = float(value)
-        year_start = stored.get("year_start")
-        if isinstance(year_start, int):
-            self._year_start = year_start
-        register_baselines = stored.get("year_start_register_baselines")
-        if isinstance(register_baselines, dict):
-            for entity_id, value in register_baselines.items():
-                if isinstance(entity_id, str) and isinstance(value, (int, float)):
-                    self._year_start_register_baselines[entity_id] = float(value)
-
-    @callback
-    def async_setup_kwh_listeners(self) -> None:
-        """Subscribe to state changes on the configured total kWh sensors.
-
-        Idempotent: tearing down previous subscriptions before re-arming
-        lets the options-flow reload swap in different sensor entity_ids
-        without leaking listeners.
-        """
-        self.async_teardown_kwh_listeners()
-        entities = [
-            eid
-            for eid in (
-                self.entry.data.get(CONF_CONSUMPTION_KWH),
-                self.entry.data.get(CONF_INJECTION_KWH),
-            )
-            if eid
-        ]
-        if not entities:
-            return
-        unsub = async_track_state_change_event(
-            self.hass, entities, self._handle_kwh_state_change
-        )
-        self._kwh_unsub.append(unsub)
-
-    @callback
-    def async_teardown_kwh_listeners(self) -> None:
-        for unsub in self._kwh_unsub:
-            unsub()
-        self._kwh_unsub.clear()
-
-    @callback
-    def _handle_kwh_state_change(self, event: Event[EventStateChangedData]) -> None:
-        new_state = event.data.get("new_state")
-        if new_state is None or new_state.state in ("", "unknown", "unavailable"):
-            return
-        try:
-            value = float(new_state.state)
-        except (TypeError, ValueError):
-            return
-        entity_id = event.data["entity_id"]
-        prev = self._kwh_baselines.get(entity_id)
-        if prev is None or value < prev:
-            # First reading after setup, or counter rolled back (utility
-            # meter reset, sensor replaced). Reset baseline silently --
-            # no delta to bucket.
-            self._kwh_baselines[entity_id] = value
-            return
-        if value == prev:
-            return
-        delta = value - prev
-        self._kwh_baselines[entity_id] = value
-        # Roll the year over before bucketing the delta. Without this, a
-        # state event arriving on Jan 1 after midnight but before the
-        # next coordinator tick deposits its delta into a bucket the
-        # later rollover then zeroes -- the first new-year deltas get
-        # silently dropped from current_year_cost.
-        self._roll_over_current_year_cost_if_needed()
-        kind = (
-            "consumption"
-            if entity_id == self.entry.data.get(CONF_CONSUMPTION_KWH)
-            else "injection"
-        )
-        band = "night" if is_offpeak(dt_util.now()) else "day"
-        self._kwh_buckets[f"{kind}_{band}"] += delta
-        # Trigger a coordinator refresh so current_year_cost re-renders. The
-        # price snapshot itself is cached for 24h; refresh is essentially
-        # free here (no network).
-        self.hass.async_create_task(self.async_request_refresh())
+        # Older persisted blobs may carry kwh_buckets / kwh_baselines /
+        # year_start / year_start_register_baselines from a previous
+        # release that tracked monthly accumulation in-process. Those
+        # are unused now: the recorder is the source of truth. Drop
+        # them silently on next save.
 
     async def _async_update_data(self) -> CoordinatorData:
-        # Roll over before any awaits: a state event firing during the
-        # awaits below would otherwise add a fresh delta to a bucket
-        # the rollover is about to zero.
-        self._roll_over_current_year_cost_if_needed()
-        # Freeze the kWh accumulators at the start of the tick so the
-        # current_year_cost we return matches the bucket state we just
-        # rolled over. State events firing during the awaits below
-        # update self._kwh_buckets in place, but the entities will see
-        # those new deltas on the next tick instead of a value desynced
-        # from what was persisted at the end of this one.
-        kwh_buckets_snapshot = dict(self._kwh_buckets)
-        register_baselines_snapshot = dict(self._year_start_register_baselines)
         await self._maybe_refresh_snapshot()
         await self._track_monthly_peak()
 
@@ -475,14 +347,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         injection_price = _compute_injection_price(
             self._snapshot, self.entry, spot_prices
         )
-        current_year_cost = _compute_current_year_cost(
+        current_year_cost = await _compute_current_year_cost(
             self.hass,
+            self._session,
+            get_extractor(self.entry.data[CONF_SUPPLIER]),
             self._snapshot,
             self.entry,
             prosumer_cost_eur_per_month=prosumer_cost,
-            injection_price_eur_per_kwh=injection_price,
-            kwh_buckets=kwh_buckets_snapshot,
-            register_baselines=register_baselines_snapshot,
         )
 
         await self._save_persistent()
@@ -694,46 +565,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._spot_cache_includes_tomorrow = want_tomorrow
         return prices
 
-    @callback
-    def _roll_over_current_year_cost_if_needed(self) -> None:
-        """Capture register baselines + zero buckets at year boundaries,
-        and top up any baseline still missing within the current year.
-
-        ``current_year_cost`` reports the bill since Jan 1 of the current local
-        calendar year (or since first refresh, whichever is later). On
-        every Jan 1 boundary we:
-          - clear ``_year_start_register_baselines`` so the next pass
-            captures fresh values,
-          - zero the four ``_kwh_buckets``,
-          - update ``_year_start``.
-
-        Then, on every refresh (year-change or not), we top up any
-        configured register sensor that doesn't yet have a baseline.
-        Without this top-up, a sensor that was temporarily unavailable
-        during the first refresh after install would never get a
-        baseline (the year-only gate would skip it), and ``current_year_cost``
-        would stay unknown until next Jan 1.
-        """
-        this_year = dt_util.now().year
-        if self._year_start != this_year:
-            self._year_start_register_baselines = {}
-            for key in self._kwh_buckets:
-                self._kwh_buckets[key] = 0.0
-            self._year_start = this_year
-        register_confs = (
-            CONF_DAY_CONSUMPTION_KWH,
-            CONF_NIGHT_CONSUMPTION_KWH,
-            CONF_DAY_INJECTION_KWH,
-            CONF_NIGHT_INJECTION_KWH,
-        )
-        for conf in register_confs:
-            entity_id = self.entry.data.get(conf)
-            if not entity_id or entity_id in self._year_start_register_baselines:
-                continue
-            value = _read_kwh(self.hass, entity_id)
-            if value is not None:
-                self._year_start_register_baselines[entity_id] = value
-
     async def _track_monthly_peak(self) -> None:
         if self.entry.data.get(CONF_REGION) != REGION_FLANDERS:
             # Outside Flanders the capacity tariff doesn't apply. Reset
@@ -823,10 +654,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 "kw": self._peak_kw,
                 "month": self._peak_month.isoformat() if self._peak_month else "",
             },
-            "kwh_buckets": dict(self._kwh_buckets),
-            "kwh_baselines": dict(self._kwh_baselines),
-            "year_start": self._year_start,
-            "year_start_register_baselines": dict(self._year_start_register_baselines),
         }
         if self._snapshot is not None and self._snapshot_fetched_at is not None:
             payload["snapshot"] = _snapshot_to_dict(
@@ -972,125 +799,222 @@ async def _recorder_monthly_kwh(
     return out
 
 
-def _read_register(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    conf: str,
-    register_baselines: dict[str, float],
-) -> float | None:
-    """Read a register sensor as ``current - year_start_baseline``.
+async def _recorder_monthly_band_ratio(
+    hass: HomeAssistant, entity_id: str, start: date, end: date
+) -> dict[date, tuple[float, float]]:
+    """Per-month (day_ratio, night_ratio) for ``entity_id``.
 
-    The day/night register sensors on a digital meter are lifetime
-    accumulators (they only reset on physical meter replacement), so we
-    subtract a Jan-1 baseline captured by the year-rollover handler.
-    Returns ``None`` when the sensor isn't configured, the register
-    can't be read, or no baseline has been captured for it yet.
+    Used for the totals-only + bi-hourly path: we don't have separate
+    day / night registers, so we recover the band split from hourly
+    statistics by binning each hour on ``is_offpeak``. The two ratios
+    sum to 1.0 (or default to ``(1.0, 0.0)`` for months with no
+    accumulation, treating everything as day-band -- the user's bill
+    is approximate in that branch and we don't need to be precise).
     """
-    entity_id = entry.data.get(conf)
-    if not entity_id:
-        return None
-    current = _read_kwh(hass, entity_id)
-    if current is None:
-        return None
-    baseline = register_baselines.get(entity_id)
-    if baseline is None:
-        # No baseline yet (first refresh after install hasn't run, or
-        # the sensor was unavailable when rollover fired). Defer.
-        return None
-    return current - baseline
+    try:
+        from homeassistant.components.recorder import get_instance
+        from homeassistant.components.recorder.statistics import (
+            statistics_during_period,
+        )
+    except ImportError:
+        return {}
+    start_dt = dt_util.start_of_local_day(
+        datetime(start.year, start.month, 1)
+    ).astimezone(UTC)
+    end_dt = dt_util.start_of_local_day(datetime(end.year, end.month, 1)).astimezone(
+        UTC
+    ) + timedelta(days=32)
+    try:
+        stats = await get_instance(hass).async_add_executor_job(
+            statistics_during_period,
+            hass,
+            start_dt,
+            end_dt,
+            {entity_id},
+            "hour",
+            None,
+            {"sum"},
+        )
+    except Exception:  # noqa: BLE001
+        return {}
+    rows = stats.get(entity_id, [])
+    per_month_day: dict[date, float] = {}
+    per_month_night: dict[date, float] = {}
+    for row in rows:
+        ts = row.get("start")
+        delta = row.get("sum")
+        if ts is None or delta is None:
+            continue
+        local = dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC))
+        bucket = date(local.year, local.month, 1)
+        if is_offpeak(local):
+            per_month_night[bucket] = per_month_night.get(bucket, 0.0) + float(delta)
+        else:
+            per_month_day[bucket] = per_month_day.get(bucket, 0.0) + float(delta)
+    out: dict[date, tuple[float, float]] = {}
+    for month in set(per_month_day) | set(per_month_night):
+        d = per_month_day.get(month, 0.0)
+        n = per_month_night.get(month, 0.0)
+        total = d + n
+        out[month] = (d / total, n / total) if total > 0 else (1.0, 0.0)
+    return out
 
 
-def _compute_current_year_cost(
+def _months_through(start: date, end: date) -> list[date]:
+    """Inclusive list of first-of-month dates from ``start`` to ``end``."""
+    months: list[date] = []
+    cur = date(start.year, start.month, 1)
+    while cur <= end:
+        months.append(cur)
+        cur = (
+            date(cur.year + 1, 1, 1)
+            if cur.month == 12
+            else date(cur.year, cur.month + 1, 1)
+        )
+    return months
+
+
+async def _resolve_monthly_kwh(
+    hass: HomeAssistant, entry: ConfigEntry, today: date
+) -> dict[date, tuple[float, float, float, float]] | None:
+    """Per-month (day_cons, night_cons, day_inj, night_inj) from recorder.
+
+    Two paths depending on what the user wired up in OptionsFlow:
+
+      * **Day / night register sensors** configured (``CONF_DAY_*_KWH`` +
+        ``CONF_NIGHT_*_KWH``): the recorder gives one ``sum`` per month
+        per register, and we fan them out into the four-tuple directly.
+
+      * **Single totals sensor** configured (``CONF_CONSUMPTION_KWH`` /
+        ``CONF_INJECTION_KWH``): we get one monthly total per side. For
+        a mono meter that's enough (everything goes into the "day" slot
+        and the math sums it). For a bi-hourly meter we additionally
+        query hourly statistics and bin each hour by ``is_offpeak`` to
+        recover the per-month band ratio, then split the monthly total.
+
+    Returns ``None`` only when the user has not wired any meter inputs
+    at all - the caller surfaces the fees-only floor in that case.
+    """
+    day_cons_id = entry.data.get(CONF_DAY_CONSUMPTION_KWH)
+    night_cons_id = entry.data.get(CONF_NIGHT_CONSUMPTION_KWH)
+    day_inj_id = entry.data.get(CONF_DAY_INJECTION_KWH)
+    night_inj_id = entry.data.get(CONF_NIGHT_INJECTION_KWH)
+    total_cons_id = entry.data.get(CONF_CONSUMPTION_KWH)
+    total_inj_id = entry.data.get(CONF_INJECTION_KWH)
+    has_registers = bool(day_cons_id or night_cons_id or day_inj_id or night_inj_id)
+    has_totals = bool(total_cons_id or total_inj_id)
+    if not has_registers and not has_totals:
+        return None
+
+    jan1 = date(today.year, 1, 1)
+    out: dict[date, list[float]] = {}
+
+    def _add(idx: int, per_month: dict[date, float]) -> None:
+        for month, kwh in per_month.items():
+            row = out.setdefault(month, [0.0, 0.0, 0.0, 0.0])
+            row[idx] += kwh
+
+    if has_registers:
+        if day_cons_id:
+            _add(0, await _recorder_monthly_kwh(hass, day_cons_id, jan1, today))
+        if night_cons_id:
+            _add(1, await _recorder_monthly_kwh(hass, night_cons_id, jan1, today))
+        if day_inj_id:
+            _add(2, await _recorder_monthly_kwh(hass, day_inj_id, jan1, today))
+        if night_inj_id:
+            _add(3, await _recorder_monthly_kwh(hass, night_inj_id, jan1, today))
+    else:
+        meter = entry.data.get(CONF_METER, METER_MONO)
+        cons_per_month = (
+            await _recorder_monthly_kwh(hass, total_cons_id, jan1, today)
+            if total_cons_id
+            else {}
+        )
+        inj_per_month = (
+            await _recorder_monthly_kwh(hass, total_inj_id, jan1, today)
+            if total_inj_id
+            else {}
+        )
+        if meter == "bi":
+            cons_ratios = (
+                await _recorder_monthly_band_ratio(hass, total_cons_id, jan1, today)
+                if total_cons_id
+                else {}
+            )
+            inj_ratios = (
+                await _recorder_monthly_band_ratio(hass, total_inj_id, jan1, today)
+                if total_inj_id
+                else {}
+            )
+            for month, total in cons_per_month.items():
+                d_ratio, n_ratio = cons_ratios.get(month, (1.0, 0.0))
+                row = out.setdefault(month, [0.0, 0.0, 0.0, 0.0])
+                row[0] += total * d_ratio
+                row[1] += total * n_ratio
+            for month, total in inj_per_month.items():
+                d_ratio, n_ratio = inj_ratios.get(month, (1.0, 0.0))
+                row = out.setdefault(month, [0.0, 0.0, 0.0, 0.0])
+                row[2] += total * d_ratio
+                row[3] += total * n_ratio
+        else:  # mono: route everything into the "day" slot; math sums anyway
+            for month, total in cons_per_month.items():
+                row = out.setdefault(month, [0.0, 0.0, 0.0, 0.0])
+                row[0] += total
+            for month, total in inj_per_month.items():
+                row = out.setdefault(month, [0.0, 0.0, 0.0, 0.0])
+                row[2] += total
+
+    return {month: (r[0], r[1], r[2], r[3]) for month, r in out.items()}
+
+
+async def _compute_current_year_cost(
     hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: SupplierExtractor,
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
     *,
     prosumer_cost_eur_per_month: float,
-    injection_price_eur_per_kwh: float | None,
-    kwh_buckets: dict[str, float],
-    register_baselines: dict[str, float],
 ) -> float | None:
-    """Running annual bill from cumulative meter readings + snapshot rates.
+    """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
-    Reports the bill *since Jan 1 of the current local calendar year*
-    (or since first refresh, whichever is later). Both feed paths reset
-    on Jan 1 -- buckets via the rollover handler, registers via a
-    refreshed Jan-1 baseline that ``current - baseline`` then anchors
-    on. Annual fees stay at full year-due value.
+    For every month from Jan 1 of the current local year up to today,
+    pull the per-band kWh from the recorder and multiply by **that
+    month's** tariff (archived snapshot if the supplier exposes one,
+    else the current snapshot as a proxy). Annual fees are added once.
 
-    Math depends on the user's regime + meter type, all using
-    *this-year* cons / inj kWh (deltas from the year-start baseline):
+    Math per month, after looking up the month's snapshot:
 
-      regime=none, mono : day_cons * single + night_cons * single
-      regime=none, bi   : day_cons * peak + night_cons * offpeak
+      regime=none, mono : (d_cons + n_cons) * single
+      regime=none, bi   : d_cons * peak + n_cons * offpeak
       regime=injection,
-        mono : (day_cons + night_cons) * single - (day_inj + night_inj) * inj
+        mono : (d_cons + n_cons) * single - (d_inj + n_inj) * inj_m
       regime=injection,
-        bi   : day_cons * peak + night_cons * offpeak
-               - (day_inj + night_inj) * inj
+        bi   : d_cons * peak + n_cons * offpeak
+               - (d_inj + n_inj) * inj_m
       regime=compensation, mono :
-               (day_cons + night_cons - day_inj - night_inj) * single
+               max((d_cons + n_cons - d_inj - n_inj) * single, 0)
       regime=compensation, bi :
-               (day_cons - day_inj) * peak + (night_cons - night_inj) * offpeak
+               max((d_cons - d_inj) * peak + (n_cons - n_inj) * offpeak, 0)
 
-    Plus, in every case:
+    Plus, once for the year:
       yearly_fixed_fee + 12 * energy_fund + 12 * prosumer_cost.
 
-    Compensation uses the consumption rate for both sides because that's
-    how net metering settles ("compteur qui tourne a l'envers"). The
-    energy_cost is clamped at 0 so over-production doesn't drag the
-    sensor below the fees-only floor: most Walloon suppliers forfeit
-    any surplus past consumption, so the actual bill never settles
-    negative even when the meter has spun backwards past zero.
+    ``inj_m`` is each month's snapshot's ``injection.current`` (the
+    printed monthly indicative). v1 doesn't replay historical hourly
+    spot prices, so dynamic-contract users see the fees-only floor for
+    past months; current-month dynamic still works through the live
+    spot path elsewhere in the integration.
 
-    Two ways to feed the consumption (and likewise injection) side:
-      * Direct day/night register sensors (CONF_DAY_*_KWH /
-        CONF_NIGHT_*_KWH). Used when present, anchored to the year-start
-        baseline so the value resets to 0 each Jan 1.
-      * Single cumulative-totals sensor (CONF_CONSUMPTION_KWH /
-        CONF_INJECTION_KWH). The coordinator's state listener splits
-        deltas into ``kwh_buckets`` based on is_offpeak(now); the
-        rollover handler zeroes the buckets every Jan 1, so they too
-        reflect this-year usage.
-
-    Always returns a number -- never ``None``. Missing meter inputs are
-    treated as 0 kWh; dynamic / TOU contracts (no stable rate) and a
-    config with no meter sensors at all both fall back to a fees-only
-    floor (yearly_fixed_fee + 12 * energy_fund + 12 * prosumer_cost).
+    Returns ``None`` only when there is no meter input wired at all
+    AND no snapshot to show fees against. In every other case the
+    function returns a number, falling back to the fees-only floor
+    rather than exposing ``unknown`` to the user.
     """
-    day_cons = _read_register(hass, entry, CONF_DAY_CONSUMPTION_KWH, register_baselines)
-    night_cons = _read_register(
-        hass, entry, CONF_NIGHT_CONSUMPTION_KWH, register_baselines
-    )
-    day_inj = _read_register(hass, entry, CONF_DAY_INJECTION_KWH, register_baselines)
-    night_inj = _read_register(
-        hass, entry, CONF_NIGHT_INJECTION_KWH, register_baselines
-    )
-    # Bucket fallback: only kick in when the user didn't supply the
-    # direct day/night registers AND the corresponding total sensor is
-    # configured. Buckets are zeroed every Jan 1 so they already
-    # represent this-year usage.
-    if day_cons is None and night_cons is None and entry.data.get(CONF_CONSUMPTION_KWH):
-        day_cons = kwh_buckets.get("consumption_day", 0.0)
-        night_cons = kwh_buckets.get("consumption_night", 0.0)
-    if day_inj is None and night_inj is None and entry.data.get(CONF_INJECTION_KWH):
-        day_inj = kwh_buckets.get("injection_day", 0.0)
-        night_inj = kwh_buckets.get("injection_night", 0.0)
-    # Anything still ``None`` means the user hasn't wired that side
-    # (e.g. no injection sensors when they have no solar) or the input
-    # isn't readable yet. Treat as 0 so the sensor never goes
-    # ``unknown`` -- worst case we show the fees-only floor.
-    if day_cons is None:
-        day_cons = 0.0
-    if night_cons is None:
-        night_cons = 0.0
-    if day_inj is None:
-        day_inj = 0.0
-    if night_inj is None:
-        night_inj = 0.0
-
-    dso = entry.data.get(CONF_DSO, "")
+    today = dt_util.now().date()
+    contract = entry.data[CONF_CONTRACT]
     region = entry.data.get(CONF_REGION, "")
+    dso = entry.data.get(CONF_DSO, "")
     meter = entry.data.get(CONF_METER, METER_MONO)
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
 
@@ -1099,41 +1023,51 @@ def _compute_current_year_cost(
     prosumer_yearly = prosumer_cost_eur_per_month * 12.0
     fees = fixed + fund_yearly + prosumer_yearly
 
-    single_bd = static_breakdown(snapshot, dso, region, "single")
-    peak_bd = static_breakdown(snapshot, dso, region, "peak")
-    offpeak_bd = static_breakdown(snapshot, dso, region, "offpeak")
-    if single_bd is None or peak_bd is None or offpeak_bd is None:
-        # Dynamic / TOU contract: no stable rate to apply. Show the
-        # fees-only baseline so the sensor stays numeric.
+    monthly_kwh = await _resolve_monthly_kwh(hass, entry, today)
+    if monthly_kwh is None:
+        # No meter inputs at all - fees-only floor.
         return fees
 
-    total_cons = day_cons + night_cons
-    total_inj = day_inj + night_inj
+    energy_cost = 0.0
+    for month in _months_through(date(today.year, 1, 1), today):
+        snap_m = await _snapshot_for_month(
+            hass, session, extractor, contract, region, month, snapshot
+        )
+        single_bd = static_breakdown(snap_m, dso, region, "single")
+        peak_bd = static_breakdown(snap_m, dso, region, "peak")
+        offpeak_bd = static_breakdown(snap_m, dso, region, "offpeak")
+        if single_bd is None or peak_bd is None or offpeak_bd is None:
+            # Dynamic / TOU month: no stable rate to apply.
+            continue
 
-    if regime == SOLAR_REGIME_COMPENSATION:
-        if meter == "bi":
-            energy_cost = (day_cons - day_inj) * peak_bd.all_in + (
-                night_cons - night_inj
-            ) * offpeak_bd.all_in
-        else:
-            energy_cost = (total_cons - total_inj) * single_bd.all_in
-        # Most Walloon suppliers under the compensation regime forfeit any
-        # surplus injection past consumption: the meter spins backwards
-        # past zero but the bill never settles negative. Clamp at 0 so the
-        # sensor matches what the user actually pays (fees-only floor).
-        energy_cost = max(energy_cost, 0.0)
-    elif regime == SOLAR_REGIME_INJECTION:
-        if meter == "bi":
-            energy_cost = day_cons * peak_bd.all_in + night_cons * offpeak_bd.all_in
-        else:
-            energy_cost = total_cons * single_bd.all_in
-        if injection_price_eur_per_kwh is not None:
-            energy_cost -= total_inj * injection_price_eur_per_kwh
-    else:  # none
-        if meter == "bi":
-            energy_cost = day_cons * peak_bd.all_in + night_cons * offpeak_bd.all_in
-        else:
-            energy_cost = total_cons * single_bd.all_in
+        d_cons, n_cons, d_inj, n_inj = monthly_kwh.get(month, (0.0, 0.0, 0.0, 0.0))
+        total_cons = d_cons + n_cons
+        total_inj = d_inj + n_inj
+
+        if regime == SOLAR_REGIME_COMPENSATION:
+            if meter == "bi":
+                m_cost = (d_cons - d_inj) * peak_bd.all_in + (
+                    n_cons - n_inj
+                ) * offpeak_bd.all_in
+            else:
+                m_cost = (total_cons - total_inj) * single_bd.all_in
+            m_cost = max(m_cost, 0.0)
+        elif regime == SOLAR_REGIME_INJECTION:
+            if meter == "bi":
+                m_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
+            else:
+                m_cost = total_cons * single_bd.all_in
+            inj_block = snap_m.injection
+            inj_rate = inj_block.current if inj_block is not None else None
+            if inj_rate is not None:
+                m_cost -= total_inj * inj_rate
+        else:  # none
+            if meter == "bi":
+                m_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
+            else:
+                m_cost = total_cons * single_bd.all_in
+
+        energy_cost += m_cost
 
     return energy_cost + fees
 

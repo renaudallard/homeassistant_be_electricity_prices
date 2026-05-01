@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -41,13 +42,16 @@ from custom_components.be_electricity_prices.coordinator import (
     _compute_current_year_cost,
     _compute_injection_price,
     _compute_prosumer,
+    _monthly_snapshots,
+    _months_through,
     _recorder_monthly_kwh,
+    _snapshot_for_month,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
-    DynamicRates,
     FixedRates,
     InjectionRates,
+    SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
 )
@@ -237,515 +241,6 @@ def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:
     assert _compute_injection_price(snap, brussels_entry, {}) == pytest.approx(0.0476)
 
 
-# ---- _compute_current_year_cost ---------------------------------------------------
-
-
-# Snapshot used by the current_year_cost tests: 0.18 single energy, 0.10 dist,
-# 0.0145 transport, Wallonia taxes (federal_excise + energy_contribution +
-# wallonia_renewables) so the all-in single rate works out cleanly.
-def _yearly_snapshot() -> SupplierSnapshot:
-    return SupplierSnapshot(
-        supplier="test",
-        contract="test",
-        energy=FixedRates(single=0.18, peak=0.20, offpeak=0.16),
-        dsos={
-            "ores": DsoOverlay(
-                distribution_single=0.10,
-                distribution_peak=0.11,
-                distribution_offpeak=0.09,
-                transport=0.0145,
-            )
-        },
-        taxes=TaxOverlay(
-            federal_excise=0.05,
-            energy_contribution=0.002,
-            wallonia_renewables=0.03,
-            energy_fund_eur_per_month=0.0,
-        ),
-        source_url="test://",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
-    )
-
-
-def _yearly_entry(**overrides: object) -> MockConfigEntry:
-    base: dict[str, object] = {
-        "supplier": "test",
-        "contract": "test",
-        "region": "wallonia",
-        "dso": "ores",
-        "meter": "mono",
-        "solar_regime": "none",
-        "day_consumption_kwh": "sensor.day_cons",
-        "night_consumption_kwh": "sensor.night_cons",
-        "day_injection_kwh": "sensor.day_inj",
-        "night_injection_kwh": "sensor.night_inj",
-    }
-    base.update(overrides)
-    return MockConfigEntry(domain=DOMAIN, data=base)
-
-
-def _set_meters(
-    hass: HomeAssistant,
-    *,
-    day_cons: float | None,
-    night_cons: float | None,
-    day_inj: float | None,
-    night_inj: float | None,
-) -> None:
-    """Push the four sensor states the current_year_cost helper reads."""
-    pairs = (
-        ("sensor.day_cons", day_cons),
-        ("sensor.night_cons", night_cons),
-        ("sensor.day_inj", day_inj),
-        ("sensor.night_inj", night_inj),
-    )
-    for entity_id, value in pairs:
-        if value is None:
-            hass.states.async_set(entity_id, "unavailable")
-        else:
-            hass.states.async_set(entity_id, str(value))
-
-
-def _zero_baselines() -> dict[str, float]:
-    """Year-start baselines treating Jan 1 as the install moment.
-
-    Setting every register baseline to 0 makes ``current - baseline ==
-    current``, so existing tests that check ``cumulative * rate`` math
-    keep passing without per-test baseline values.
-    """
-    return {
-        "sensor.day_cons": 0.0,
-        "sensor.night_cons": 0.0,
-        "sensor.day_inj": 0.0,
-        "sensor.night_inj": 0.0,
-    }
-
-
-async def test_current_year_cost_treats_missing_meter_as_zero_kwh(
-    hass: HomeAssistant,
-) -> None:
-    """The sensor must never report ``unknown``: an unavailable register
-    is treated as 0 kWh on that side, so the value still reflects the
-    other readings + the fees floor."""
-    snap = _yearly_snapshot()
-    entry = _yearly_entry(meter="mono", solar_regime="none")
-    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=None, night_inj=200)
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets={},
-        register_baselines=_zero_baselines(),
-    )
-    # regime=none mono: only consumption matters; day_inj=None -> 0.
-    assert cost == pytest.approx(1500 * 0.3765)
-
-
-async def test_current_year_cost_no_solar_mono_uses_total_cons_x_single_rate(
-    hass: HomeAssistant,
-) -> None:
-    snap = _yearly_snapshot()
-    entry = _yearly_entry(meter="mono", solar_regime="none")
-    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=0, night_inj=0)
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets={},
-        register_baselines=_zero_baselines(),
-    )
-    # all_in single = 0.18 + 0.10 + 0.0145 + 0.05 + 0.002 + 0.03 = 0.3765
-    assert cost == pytest.approx(1500 * 0.3765)
-
-
-async def test_current_year_cost_no_solar_bi_uses_band_rates(
-    hass: HomeAssistant,
-) -> None:
-    snap = _yearly_snapshot()
-    entry = _yearly_entry(meter="bi", solar_regime="none")
-    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=0, night_inj=0)
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets={},
-        register_baselines=_zero_baselines(),
-    )
-    # peak = 0.20 + 0.11 + 0.0145 + 0.082 = 0.4065
-    # offpeak = 0.16 + 0.09 + 0.0145 + 0.082 = 0.3465
-    peak = 0.20 + 0.11 + 0.0145 + 0.05 + 0.002 + 0.03
-    offpeak = 0.16 + 0.09 + 0.0145 + 0.05 + 0.002 + 0.03
-    assert cost == pytest.approx(1000 * peak + 500 * offpeak)
-
-
-async def test_current_year_cost_compensation_mono_nets_injection(
-    hass: HomeAssistant,
-) -> None:
-    snap = _yearly_snapshot()
-    entry = _yearly_entry(meter="mono", solar_regime="compensation")
-    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=600, night_inj=400)
-    # net = 1500 - 1000 = 500. Bill = 500 * single_all_in
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets={},
-        register_baselines=_zero_baselines(),
-    )
-    assert cost == pytest.approx(500 * 0.3765)
-
-
-async def test_current_year_cost_compensation_mono_clamps_surplus_at_zero(
-    hass: HomeAssistant,
-) -> None:
-    """Over-production must not drag current_year_cost below the
-    fees-only floor: most Walloon suppliers forfeit any net injection
-    past consumption, so the actual bill never settles negative even
-    when the meter has spun backwards past zero. Clamp at 0."""
-    snap = _yearly_snapshot()
-    entry = _yearly_entry(meter="mono", solar_regime="compensation")
-    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=1200, night_inj=900)
-    # Raw net = -600 kWh @ 0.3765 = -225.90, but compensation must clamp
-    # the energy_cost contribution at 0 so the total = fees only (here 0).
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets={},
-        register_baselines=_zero_baselines(),
-    )
-    assert cost == pytest.approx(0.0)
-
-
-async def test_current_year_cost_compensation_clamp_floors_at_fees(
-    hass: HomeAssistant,
-) -> None:
-    """When the energy_cost is clamped, the sensor still surfaces the
-    annualised fees (yearly_fixed_fee + energy_fund + prosumer_cost)
-    as the floor, not bare zero."""
-    snap = SupplierSnapshot(
-        supplier="test",
-        contract="test",
-        energy=FixedRates(single=0.18, yearly_fixed_fee=65.0),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(
-            federal_excise=0.0, energy_contribution=0.0, energy_fund_eur_per_month=2.5
-        ),
-        source_url="test://",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
-    )
-    entry = _yearly_entry(meter="mono", solar_regime="compensation")
-    _set_meters(hass, day_cons=500, night_cons=200, day_inj=2000, night_inj=2000)
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=4.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets={},
-        register_baselines=_zero_baselines(),
-    )
-    # Energy_cost is clamped to 0; fees floor = 65 + 12*2.5 + 12*4.0 = 143.
-    assert cost == pytest.approx(143.0)
-
-
-async def test_current_year_cost_compensation_bi_nets_per_band(
-    hass: HomeAssistant,
-) -> None:
-    snap = _yearly_snapshot()
-    entry = _yearly_entry(meter="bi", solar_regime="compensation")
-    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=300, night_inj=600)
-    # day net = 700 (positive), night net = -100 (negative). Per-band
-    # weighted: 700 * peak + (-100) * offpeak.
-    peak = 0.20 + 0.11 + 0.0145 + 0.05 + 0.002 + 0.03
-    offpeak = 0.16 + 0.09 + 0.0145 + 0.05 + 0.002 + 0.03
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets={},
-        register_baselines=_zero_baselines(),
-    )
-    assert cost == pytest.approx(700 * peak + (-100) * offpeak)
-
-
-async def test_current_year_cost_injection_regime_uses_supplier_injection_rate(
-    hass: HomeAssistant,
-) -> None:
-    snap = _yearly_snapshot()
-    entry = _yearly_entry(meter="mono", solar_regime="injection")
-    _set_meters(hass, day_cons=800, night_cons=200, day_inj=300, night_inj=200)
-    # cost = 1000 * single_all_in - 500 * inj_rate
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=0.05,
-        kwh_buckets={},
-        register_baselines=_zero_baselines(),
-    )
-    assert cost == pytest.approx(1000 * 0.3765 - 500 * 0.05)
-
-
-async def test_current_year_cost_dynamic_contract_falls_back_to_fees_only(
-    hass: HomeAssistant,
-) -> None:
-    """Dynamic contracts have no stable rate to apply to a daily total,
-    so the energy term is dropped -- the sensor still returns the
-    fees-only floor instead of going unknown."""
-    snap = SupplierSnapshot(
-        supplier="test",
-        contract="test",
-        energy=DynamicRates(factor=1.0, base=0.02, yearly_fixed_fee=80.0),
-        dsos={
-            "ores": DsoOverlay(
-                distribution_single=0.10,
-                transport=0.0145,
-            )
-        },
-        taxes=TaxOverlay(
-            federal_excise=0.05,
-            energy_contribution=0.002,
-            energy_fund_eur_per_month=2.0,
-        ),
-        source_url="test://",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
-    )
-    entry = _yearly_entry(solar_regime="injection")
-    _set_meters(hass, day_cons=100, night_cons=100, day_inj=0, night_inj=0)
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=0.05,
-        kwh_buckets={},
-        register_baselines=_zero_baselines(),
-    )
-    # Fees-only: yearly_fixed_fee 80 + 12 * energy_fund 2 = 80 + 24 = 104.
-    assert cost == pytest.approx(104.0)
-
-
-async def test_current_year_cost_includes_fees_and_prosumer(
-    hass: HomeAssistant,
-) -> None:
-    snap = SupplierSnapshot(
-        supplier="test",
-        contract="test",
-        energy=FixedRates(single=0.18, yearly_fixed_fee=120.0),
-        dsos={
-            "ores": DsoOverlay(distribution_single=0.10, transport=0.0145),
-        },
-        taxes=TaxOverlay(
-            federal_excise=0.05,
-            energy_contribution=0.002,
-            wallonia_renewables=0.03,
-            energy_fund_eur_per_month=2.5,
-        ),
-        source_url="test://",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
-    )
-    entry = _yearly_entry(meter="mono", solar_regime="none")
-    _set_meters(hass, day_cons=500, night_cons=500, day_inj=0, night_inj=0)
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=4.5,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets={},
-        register_baselines=_zero_baselines(),
-    )
-    # 1000 * 0.3765 + yearly_fee 120 + 12 * 2.5 (energy_fund) + 12 * 4.5 (prosumer)
-    assert cost == pytest.approx(1000 * 0.3765 + 120 + 30 + 54)
-
-
-# ---- bucket fallback (totals -> internal day/night split) ------------------
-
-
-async def test_current_year_cost_bucket_fallback_when_only_totals_configured(
-    hass: HomeAssistant,
-) -> None:
-    """When the user only configured the cumulative totals (CONF_*_KWH),
-    the helper falls back to the coordinator's day/night kwh_buckets
-    (filled by the state listener over time)."""
-    snap = _yearly_snapshot()
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "supplier": "test",
-            "contract": "test",
-            "region": "wallonia",
-            "dso": "ores",
-            "meter": "bi",
-            "solar_regime": "compensation",
-            # Only the totals are set, no day/night registers.
-            "consumption_kwh": "sensor.total_cons",
-            "injection_kwh": "sensor.total_inj",
-        },
-    )
-    buckets = {
-        "consumption_day": 700.0,
-        "consumption_night": 300.0,
-        "injection_day": 200.0,
-        "injection_night": 100.0,
-    }
-    peak = 0.20 + 0.11 + 0.0145 + 0.05 + 0.002 + 0.03
-    offpeak = 0.16 + 0.09 + 0.0145 + 0.05 + 0.002 + 0.03
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets=buckets,
-        register_baselines={},
-    )
-    # bi compensation: (700 - 200) * peak + (300 - 100) * offpeak
-    assert cost == pytest.approx(500 * peak + 200 * offpeak)
-
-
-async def test_current_year_cost_falls_back_to_fees_when_no_meters_configured(
-    hass: HomeAssistant,
-) -> None:
-    """Even without any meter sensors configured, the sensor stays
-    numeric and reports the fees-only floor. Better to display a stable
-    minimum than to go ``unknown``; the user can wire meters anytime to
-    grow the value."""
-    snap = _yearly_snapshot()
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "supplier": "test",
-            "contract": "test",
-            "region": "wallonia",
-            "dso": "ores",
-            "meter": "mono",
-            "solar_regime": "none",
-        },
-    )
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets={},
-        register_baselines=_zero_baselines(),
-    )
-    # _yearly_snapshot has no fees configured -> cost is 0.0, not unknown.
-    assert cost == 0.0
-
-
-async def test_current_year_cost_day_night_registers_win_over_buckets(
-    hass: HomeAssistant,
-) -> None:
-    """Day/night register sensors override the bucket fallback even when
-    both are configured (registers are exact; buckets only cover the
-    period since integration setup)."""
-    snap = _yearly_snapshot()
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "supplier": "test",
-            "contract": "test",
-            "region": "wallonia",
-            "dso": "ores",
-            "meter": "mono",
-            "solar_regime": "none",
-            "day_consumption_kwh": "sensor.day_cons",
-            "night_consumption_kwh": "sensor.night_cons",
-            "day_injection_kwh": "sensor.day_inj",
-            "night_injection_kwh": "sensor.night_inj",
-            "consumption_kwh": "sensor.total_cons",
-            "injection_kwh": "sensor.total_inj",
-        },
-    )
-    # Direct registers say 1500 total; buckets say 9999 (deliberately
-    # different) -- registers must win.
-    _set_meters(hass, day_cons=1000, night_cons=500, day_inj=0, night_inj=0)
-    buckets = {
-        "consumption_day": 9999.0,
-        "consumption_night": 9999.0,
-        "injection_day": 0.0,
-        "injection_night": 0.0,
-    }
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets=buckets,
-        register_baselines=_zero_baselines(),
-    )
-    assert cost == pytest.approx(1500 * 0.3765)
-
-
-async def test_current_year_cost_subtracts_year_start_baseline(
-    hass: HomeAssistant,
-) -> None:
-    """current_year_cost reflects ``current - baseline``, not the lifetime
-    counter. After a Jan 1 baseline of 30 000 kWh, hitting 30 200 must
-    give the same number as 200 from a fresh meter."""
-    snap = _yearly_snapshot()
-    entry = _yearly_entry(meter="mono", solar_regime="none")
-    _set_meters(hass, day_cons=30100, night_cons=30100, day_inj=10000, night_inj=10000)
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets={},
-        register_baselines={
-            "sensor.day_cons": 30000.0,
-            "sensor.night_cons": 30000.0,
-            "sensor.day_inj": 10000.0,
-            "sensor.night_inj": 10000.0,
-        },
-    )
-    # this-year cons = (30100 - 30000) + (30100 - 30000) = 200 kWh
-    assert cost == pytest.approx(200 * 0.3765)
-
-
-async def test_current_year_cost_register_falls_back_to_fees_when_baseline_missing(
-    hass: HomeAssistant,
-) -> None:
-    """If the rollover handler hasn't captured a baseline yet (e.g. the
-    register sensor was unavailable at first refresh), we treat the
-    register as 0 kWh and surface the fees-only floor. Far better than
-    going ``unknown`` -- the rollover top-up loop catches the baseline
-    on the next refresh and the value snaps back to reality."""
-    snap = _yearly_snapshot()
-    entry = _yearly_entry(meter="mono", solar_regime="none")
-    _set_meters(hass, day_cons=30100, night_cons=30100, day_inj=0, night_inj=0)
-    cost = _compute_current_year_cost(
-        hass,
-        snap,
-        entry,
-        prosumer_cost_eur_per_month=0.0,
-        injection_price_eur_per_kwh=None,
-        kwh_buckets={},
-        register_baselines={},  # no baseline captured yet
-    )
-    # _yearly_snapshot has zero fees -> cost is 0.0 (not unknown).
-    assert cost == 0.0
-
-
 # ---- _recorder_monthly_kwh ----------------------------------------------------
 
 
@@ -848,13 +343,6 @@ async def test_snapshot_for_month_uses_archive_when_available(
     """When an extractor exposes fetch_for_month and it returns a real
     snapshot, _snapshot_for_month must surface that snapshot and cache
     it - subsequent calls for the same month do not refetch."""
-    from custom_components.be_electricity_prices.coordinator import (
-        _snapshot_for_month,
-        _monthly_snapshots,
-    )
-    from custom_components.be_electricity_prices.providers.base import (
-        SupplierExtractor,
-    )
 
     archived = _archive_snapshot("2026-01")
     current = _archive_snapshot("2026-04")
@@ -891,13 +379,6 @@ async def test_snapshot_for_month_falls_back_to_current_when_no_archive(
     """An extractor without fetch_for_month, or one whose fetch_for_month
     returns None for the requested month, must transparently fall back
     to the current snapshot as a proxy."""
-    from custom_components.be_electricity_prices.coordinator import (
-        _snapshot_for_month,
-        _monthly_snapshots,
-    )
-    from custom_components.be_electricity_prices.providers.base import (
-        SupplierExtractor,
-    )
 
     current = _archive_snapshot("2026-04")
     extractor = SupplierExtractor(
@@ -934,13 +415,6 @@ async def test_snapshot_for_month_caches_negative_results(
 ) -> None:
     """A None response from fetch_for_month must be cached so we don't
     refetch the same missing month every coordinator tick."""
-    from custom_components.be_electricity_prices.coordinator import (
-        _snapshot_for_month,
-        _monthly_snapshots,
-    )
-    from custom_components.be_electricity_prices.providers.base import (
-        SupplierExtractor,
-    )
 
     current = _archive_snapshot("2026-04")
     fetch_calls = 0
@@ -965,3 +439,244 @@ async def test_snapshot_for_month_caches_negative_results(
         hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
     )
     assert fetch_calls == 1
+
+
+# ---- _compute_current_year_cost (recorder-driven) -----------------------------
+
+
+def _yearly_snapshot() -> SupplierSnapshot:
+    """Snapshot with single=0.18 + dist=0.10 + transport=0.0145 + WAL taxes."""
+    return SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.18, peak=0.20, offpeak=0.16),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.11,
+                distribution_offpeak=0.09,
+                transport=0.0145,
+            )
+        },
+        taxes=TaxOverlay(
+            federal_excise=0.05,
+            energy_contribution=0.002,
+            wallonia_renewables=0.03,
+            energy_fund_eur_per_month=0.0,
+        ),
+        source_url="test://",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+    )
+
+
+def _yearly_entry(**overrides: object) -> MockConfigEntry:
+    base: dict[str, object] = {
+        "supplier": "test",
+        "contract": "test",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "mono",
+        "solar_regime": "none",
+        "day_consumption_kwh": "sensor.day_cons",
+        "night_consumption_kwh": "sensor.night_cons",
+        "day_injection_kwh": "sensor.day_inj",
+        "night_injection_kwh": "sensor.night_inj",
+    }
+    base.update(overrides)
+    return MockConfigEntry(domain=DOMAIN, data=base)
+
+
+def _stub_extractor() -> SupplierExtractor:
+    return SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+    )
+
+
+def _patch_recorder_per_entity(
+    per_entity_per_month: dict[str, dict[date, float]],
+) -> Any:
+    """Patch _recorder_monthly_kwh to return the configured per-month
+    sums per entity_id; raise via empty dict for unmapped entities."""
+    from custom_components.be_electricity_prices import coordinator
+
+    async def _fake(
+        hass: object, entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        return dict(per_entity_per_month.get(entity_id, {}))
+
+    return patch.object(coordinator, "_recorder_monthly_kwh", new=_fake)
+
+
+async def test_year_cost_recorder_driven_mono_no_solar(
+    hass: HomeAssistant,
+) -> None:
+    """Recorder returns 100 kWh / month for Jan-Apr; mono no-solar bills
+    it at the single all-in rate (today's snapshot proxy for archive-less
+    suppliers). With Jan->today 4 months, total = 400 * 0.3765 = 150.6."""
+
+    snap = _yearly_snapshot()
+    entry = _yearly_entry(meter="mono", solar_regime="none")
+    today = dt_util.now().date()
+    months = _months_through(date(today.year, 1, 1), today)
+    per_month = {m: 100.0 for m in months}
+    with _patch_recorder_per_entity(
+        {
+            "sensor.day_cons": per_month,
+            "sensor.night_cons": {},
+            "sensor.day_inj": {},
+            "sensor.night_inj": {},
+        }
+    ):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            prosumer_cost_eur_per_month=0.0,
+        )
+    expected = 100.0 * len(months) * 0.3765
+    assert cost == pytest.approx(expected)
+
+
+async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
+    hass: HomeAssistant,
+) -> None:
+    """Compensation regime with month-by-month over-injection: the
+    energy cost stays at the fees-only floor instead of going negative."""
+
+    snap = SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.18, yearly_fixed_fee=65.0),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(
+            federal_excise=0.0, energy_contribution=0.0, energy_fund_eur_per_month=2.5
+        ),
+        source_url="test://",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+    )
+    entry = _yearly_entry(meter="mono", solar_regime="compensation")
+    today = dt_util.now().date()
+    months = _months_through(date(today.year, 1, 1), today)
+    cons_per_month = {m: 100.0 for m in months}
+    inj_per_month = {m: 500.0 for m in months}  # over-produces every month
+    with _patch_recorder_per_entity(
+        {"sensor.day_cons": cons_per_month, "sensor.day_inj": inj_per_month}
+    ):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            prosumer_cost_eur_per_month=4.0,
+        )
+    # Energy cost per month = max((100 - 500) * X, 0) = 0. Fees floor only.
+    assert cost == pytest.approx(65.0 + 12 * 2.5 + 12 * 4.0)
+
+
+async def test_year_cost_uses_per_month_snapshot_when_archive_available(
+    hass: HomeAssistant,
+) -> None:
+    """When fetch_for_month returns a different snapshot for a past
+    month, the year-cost loop must apply that month's rate to that
+    month's kWh -- not today's snapshot rate to everything."""
+
+    today = dt_util.now().date()
+    months = _months_through(date(today.year, 1, 1), today)
+    if not months:
+        pytest.skip("test runs on Jan 1 before any past months")
+
+    cheap = SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.10),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://cheap",
+        fetched_at_iso="2026-01-29T12:00:00+00:00",
+    )
+    expensive = SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.30),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://expensive",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+    )
+
+    async def _fake_fetch_for_month(
+        _session: object, _contract: str, _region: str, year_month: date
+    ) -> SupplierSnapshot:
+        # First month gets the cheap card, everything else uses the proxy.
+        return cheap if year_month == months[0] else None  # type: ignore[return-value]
+
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_fake_fetch_for_month,
+    )
+    _monthly_snapshots(hass).clear()
+    entry = _yearly_entry(meter="mono", solar_regime="none")
+    cons_per_month = {m: 100.0 for m in months}
+    with _patch_recorder_per_entity({"sensor.day_cons": cons_per_month}):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            extractor,
+            expensive,
+            entry,
+            prosumer_cost_eur_per_month=0.0,
+        )
+    cheap_all_in = 0.10 + 0.10 + 0.0145 + 0.05 + 0.002
+    expensive_all_in = 0.30 + 0.10 + 0.0145 + 0.05 + 0.002
+    expected = 100.0 * cheap_all_in + 100.0 * expensive_all_in * (len(months) - 1)
+    assert cost == pytest.approx(expected)
+
+
+async def test_year_cost_falls_back_to_fees_when_no_meters_configured(
+    hass: HomeAssistant,
+) -> None:
+    """A config without any meter sensors surfaces the fees-only
+    floor instead of zero - the user has to wire up at least one
+    consumption sensor for the recorder path to produce a number."""
+
+    snap = SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.18, yearly_fixed_fee=65.0),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(
+            federal_excise=0.0, energy_contribution=0.0, energy_fund_eur_per_month=2.5
+        ),
+        source_url="test://",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "none",
+        },
+    )
+    cost = await _compute_current_year_cost(
+        hass,
+        None,  # type: ignore[arg-type]
+        _stub_extractor(),
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=0.0,
+    )
+    # Fees-only: 65 + 12*2.5 = 95.
+    assert cost == pytest.approx(95.0)
