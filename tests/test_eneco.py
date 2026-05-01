@@ -27,7 +27,10 @@
 
 from __future__ import annotations
 
+import asyncio
+from datetime import date
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -37,7 +40,10 @@ from custom_components.be_electricity_prices.providers.base import (
     FixedRates,
     VariableRates,
 )
-from custom_components.be_electricity_prices.providers.eneco import parse_snapshot
+from custom_components.be_electricity_prices.providers.eneco import (
+    fetch_for_month,
+    parse_snapshot,
+)
 
 FIX = Path(__file__).parent / "fixtures"
 
@@ -207,3 +213,62 @@ def test_dynamic_extracts_injection_rates() -> None:
     assert inj.factor == pytest.approx(1.0)
     assert inj.base == pytest.approx(-0.01188)
     assert inj.current == pytest.approx(0.0592)
+
+
+# ---- fetch_for_month (historical billing) ----------------------------------
+
+
+def _run(coro: object) -> object:
+    return asyncio.run(coro)
+
+
+def test_fetch_for_month_returns_snapshot_when_url_matches_month() -> None:
+    """The Dec-2025 fixture parses cleanly and validates against the
+    requested year-month: fetch_for_month must surface the snapshot."""
+    pdf_bytes = (FIX / "eneco_flex_dec25.pdf").read_bytes()
+    text = extract_pdf_text(pdf_bytes)
+    with patch(
+        "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+        new=AsyncMock(return_value=text),
+    ):
+        snap = _run(fetch_for_month(None, "power_flex", "wallonia", date(2025, 12, 1)))  # type: ignore[arg-type]
+    assert snap is not None
+    assert snap.publication_label == "december 2025"
+    assert snap.valid_until == date(2025, 12, 31)
+
+
+def test_fetch_for_month_rejects_when_validity_does_not_cover_month() -> None:
+    """If the supplier silently overwrote the historical URL with the
+    current card (the typical archive-miss failure mode), the parsed
+    valid_until won't intersect the requested month and we must
+    return None instead of trusting it."""
+    pdf_bytes = (FIX / "eneco_flex_dec25.pdf").read_bytes()
+    text = extract_pdf_text(pdf_bytes)
+    with patch(
+        "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+        new=AsyncMock(return_value=text),
+    ):
+        # The Dec-2025 fixture covers December, not March.
+        snap = _run(fetch_for_month(None, "power_flex", "wallonia", date(2025, 3, 1)))  # type: ignore[arg-type]
+    assert snap is None
+
+
+def test_fetch_for_month_returns_none_on_404() -> None:
+    """An archive miss (HTTP 4xx surfaces as ExtractorError) must
+    degrade gracefully so the coordinator can fall back to the proxy."""
+    from custom_components.be_electricity_prices.providers.base import ExtractorError
+
+    with patch(
+        "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+        new=AsyncMock(side_effect=ExtractorError("HTTP 404")),
+    ):
+        snap = _run(fetch_for_month(None, "power_flex", "wallonia", date(2024, 6, 1)))  # type: ignore[arg-type]
+    assert snap is None
+
+
+def test_fetch_for_month_unknown_contract_returns_none() -> None:
+    """A contract id that isn't in _CONTRACT_SLUGS must return None
+    rather than raise -- the coordinator's monthly cache treats None
+    as 'no archive' and falls back to the current snapshot."""
+    snap = _run(fetch_for_month(None, "gas_dynamic", "wallonia", date(2025, 12, 1)))  # type: ignore[arg-type]
+    assert snap is None

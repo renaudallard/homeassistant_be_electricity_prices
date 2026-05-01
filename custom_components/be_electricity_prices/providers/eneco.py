@@ -41,7 +41,7 @@ Eneco serves Flanders and Wallonia only (no Brussels).
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import aiohttp
 
@@ -119,6 +119,42 @@ async def fetch(
         )
     text = await fetch_pdf_text(session, url)
     return parse_snapshot(text, contract_id, url)
+
+
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # noqa: ARG001 - Eneco's PDF covers every region in one document.
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """Fetch the Eneco card for a specific (year, month).
+
+    The CDN keeps every monthly issue indefinitely under the URL pattern
+    ``BC_032_<01YYMM>_NL_ENECO_POWER_<NAME>.pdf`` (volume ``01`` + 2-digit
+    year + 2-digit month). Returns ``None`` when the URL 404s, the
+    extractor can't parse the PDF, or the parsed validity period doesn't
+    cover the requested month - the latter guards against Eneco silently
+    serving the current card on a missing-archive request.
+    """
+    slug = _CONTRACT_SLUGS.get(contract_id)
+    if slug is None:
+        return None
+    issue = f"01{year_month.year % 100:02d}{year_month.month:02d}"
+    url = f"{_BASE_URL}/BC_032_{issue}_NL_ENECO_POWER_{slug}.pdf"
+    try:
+        text = await fetch_pdf_text(session, url)
+    except ExtractorError:
+        return None
+    try:
+        snap = parse_snapshot(text, contract_id, url)
+    except ExtractorError:
+        return None
+    if snap.valid_until is None or (
+        snap.valid_until.year != year_month.year
+        or snap.valid_until.month != year_month.month
+    ):
+        return None
+    return snap
 
 
 async def probe(
@@ -535,5 +571,6 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     probe=probe,
+    fetch_for_month=fetch_for_month,
     dso_keys=tuple(_WALLONIA_LABELS.values()) + tuple(_FLUVIUS_LABELS.values()),
 )
