@@ -399,16 +399,18 @@ async def test_current_year_cost_compensation_mono_nets_injection(
     assert cost == pytest.approx(500 * 0.3765)
 
 
-async def test_current_year_cost_compensation_mono_can_go_negative(
+async def test_current_year_cost_compensation_mono_clamps_surplus_at_zero(
     hass: HomeAssistant,
 ) -> None:
+    """Over-production must not drag current_year_cost below the
+    fees-only floor: most Walloon suppliers forfeit any net injection
+    past consumption, so the actual bill never settles negative even
+    when the meter has spun backwards past zero. Clamp at 0."""
     snap = _yearly_snapshot()
     entry = _yearly_entry(meter="mono", solar_regime="compensation")
     _set_meters(hass, day_cons=1000, night_cons=500, day_inj=1200, night_inj=900)
-    # net = 1500 - 2100 = -600 -> cost = -600 * 0.3765 = -225.90.
-    # Surplus is theoretically credited at the consumption rate; the
-    # actual bill is usually floored at zero, but we report the
-    # uncapped value so users see the over-production margin.
+    # Raw net = -600 kWh @ 0.3765 = -225.90, but compensation must clamp
+    # the energy_cost contribution at 0 so the total = fees only (here 0).
     cost = _compute_current_year_cost(
         hass,
         snap,
@@ -418,7 +420,39 @@ async def test_current_year_cost_compensation_mono_can_go_negative(
         kwh_buckets={},
         register_baselines=_zero_baselines(),
     )
-    assert cost == pytest.approx(-600 * 0.3765)
+    assert cost == pytest.approx(0.0)
+
+
+async def test_current_year_cost_compensation_clamp_floors_at_fees(
+    hass: HomeAssistant,
+) -> None:
+    """When the energy_cost is clamped, the sensor still surfaces the
+    annualised fees (yearly_fixed_fee + energy_fund + prosumer_cost)
+    as the floor, not bare zero."""
+    snap = SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.18, yearly_fixed_fee=65.0),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(
+            federal_excise=0.0, energy_contribution=0.0, energy_fund_eur_per_month=2.5
+        ),
+        source_url="test://",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+    )
+    entry = _yearly_entry(meter="mono", solar_regime="compensation")
+    _set_meters(hass, day_cons=500, night_cons=200, day_inj=2000, night_inj=2000)
+    cost = _compute_current_year_cost(
+        hass,
+        snap,
+        entry,
+        prosumer_cost_eur_per_month=4.0,
+        injection_price_eur_per_kwh=None,
+        kwh_buckets={},
+        register_baselines=_zero_baselines(),
+    )
+    # Energy_cost is clamped to 0; fees floor = 65 + 12*2.5 + 12*4.0 = 143.
+    assert cost == pytest.approx(143.0)
 
 
 async def test_current_year_cost_compensation_bi_nets_per_band(

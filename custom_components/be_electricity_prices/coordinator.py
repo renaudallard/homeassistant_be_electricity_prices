@@ -923,9 +923,11 @@ def _compute_current_year_cost(
       yearly_fixed_fee + 12 * energy_fund + 12 * prosumer_cost.
 
     Compensation uses the consumption rate for both sides because that's
-    how net metering settles ("compteur qui tourne a l'envers"). No
-    surplus floor is applied (negative values surface naturally if
-    injection > consumption); see the project memo for why.
+    how net metering settles ("compteur qui tourne a l'envers"). The
+    energy_cost is clamped at 0 so over-production doesn't drag the
+    sensor below the fees-only floor: most Walloon suppliers forfeit
+    any surplus past consumption, so the actual bill never settles
+    negative even when the meter has spun backwards past zero.
 
     Two ways to feed the consumption (and likewise injection) side:
       * Direct day/night register sensors (CONF_DAY_*_KWH /
@@ -1001,6 +1003,11 @@ def _compute_current_year_cost(
             ) * offpeak_bd.all_in
         else:
             energy_cost = (total_cons - total_inj) * single_bd.all_in
+        # Most Walloon suppliers under the compensation regime forfeit any
+        # surplus injection past consumption: the meter spins backwards
+        # past zero but the bill never settles negative. Clamp at 0 so the
+        # sensor matches what the user actually pays (fees-only floor).
+        energy_cost = max(energy_cost, 0.0)
     elif regime == SOLAR_REGIME_INJECTION:
         if meter == "bi":
             energy_cost = day_cons * peak_bd.all_in + night_cons * offpeak_bd.all_in
