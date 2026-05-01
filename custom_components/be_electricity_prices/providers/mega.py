@@ -103,8 +103,6 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef("mega_online_flex", "Mega Online Flex", "variable", "Online Flex"),
     _ContractDef("mega_cosy_fixed", "Mega Cosy Fixed", "fixed", "Cosy Fixed"),
     _ContractDef("mega_cosy_flex", "Mega Cosy Flex", "variable", "Cosy Flex"),
-    _ContractDef("mega_prepaid_fixed", "Mega Prepaid Fixed", "fixed", "Prepaid Fixed"),
-    _ContractDef("mega_prepaid_flex", "Mega Prepaid Flex", "variable", "Prepaid Flex"),
     _ContractDef(
         "mega_offpeak_fixed", "Mega Off-peak Fixed", "fixed", "Off-peak Fixed"
     ),
