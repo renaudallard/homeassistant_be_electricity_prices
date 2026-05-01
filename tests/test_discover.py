@@ -40,6 +40,7 @@ from typing import Any
 
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.providers import cociter as cociter_mod
+from custom_components.be_electricity_prices.providers import ecopower as ecopower_mod
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
 from custom_components.be_electricity_prices.providers import engie as engie_mod
 from custom_components.be_electricity_prices.providers import luminus as luminus_mod
@@ -210,6 +211,26 @@ def test_cociter_discover_surfaces_new_family() -> None:
 # ---- error handling ---------------------------------------------------------
 
 
+def test_ecopower_discover_skips_inschatting_preview() -> None:
+    """The next-month *_gbs_inschatting_tariefkaart_ecopower.pdf preview
+    is not a separate product - the parser deliberately ignores it
+    and the discover handler must too. Otherwise live-check files a
+    spurious 'new product' issue every time the preview is published."""
+    session = _FakeSession(_read("ecopower.html"))
+    discovered = _run(ecopower_mod.discover(session))
+    assert discovered == {ecopower_mod._CONTRACT_ID}
+
+
+def test_ecopower_discover_surfaces_genuinely_new_family() -> None:
+    body = (
+        _read("ecopower.html")
+        + '\n<a href="https://example/202605_zakelijk_stroom_tariefkaart.pdf">x</a>\n'
+    )
+    session = _FakeSession(body)
+    discovered = _run(ecopower_mod.discover(session))
+    assert "ecopower_zakelijk_stroom" in discovered - {ecopower_mod._CONTRACT_ID}
+
+
 def test_discover_returns_empty_on_http_error() -> None:
     session = _FakeSession("", status=503)
     assert _run(mega_mod.discover(session)) == set()
@@ -220,3 +241,4 @@ def test_discover_returns_empty_on_http_error() -> None:
     assert _run(cociter_mod.discover(session)) == set()
     assert _run(engie_mod.discover(session)) == set()
     assert _run(luminus_mod.discover(session)) == set()
+    assert _run(ecopower_mod.discover(session)) == set()

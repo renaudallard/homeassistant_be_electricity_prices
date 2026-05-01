@@ -136,13 +136,16 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     if _CARD_RE.search(html):
         out.add(_CONTRACT_ID)
     # Surface any *other* tariefkaart-style filename so a future product
-    # (zakelijk, etc.) is caught by the catalog drift detector.
+    # (zakelijk, etc.) is caught by the catalog drift detector. Skip
+    # every variant in the `gbs` family - the bare definitive card is
+    # already registered and `gbs_inschatting` is the next-month preview
+    # the fetcher deliberately ignores.
     for other in re.findall(
         r'/(20\d{4}_(?:[a-z_]+_)?tariefkaart[^"]*)\.pdf', html, re.IGNORECASE
     ):
         family = re.sub(r"^20\d{4}_", "", other)
         family = re.sub(r"_tariefkaart.*$", "", family)
-        if family and family != "gbs":
+        if family and not family.startswith("gbs"):
             out.add(f"ecopower_{family}")
     return out
 
