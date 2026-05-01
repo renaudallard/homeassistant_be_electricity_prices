@@ -28,7 +28,10 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -39,7 +42,10 @@ from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
     VariableRates,
 )
-from custom_components.be_electricity_prices.providers.cociter import parse_snapshot
+from custom_components.be_electricity_prices.providers.cociter import (
+    fetch_for_month,
+    parse_snapshot,
+)
 
 FIX = Path(__file__).parent / "fixtures"
 
@@ -188,3 +194,86 @@ def test_unknown_contract_raises() -> None:
             await EXTRACTORS["cociter"].fetch(None, "bogus", "wallonia")  # type: ignore[arg-type]
 
     asyncio.run(_run())
+
+
+# ---- fetch_for_month -----------------------------------------------------------
+
+
+_LISTING_HTML = """
+<a href="https://www.cociter.be/wp-content/uploads/RCVar_YMR_Coop-2511-fr.pdf">November 2025</a>
+<a href="https://www.cociter.be/wp-content/uploads/RCVar_YMR_Coop-2512-fr.pdf">December 2025</a>
+<a href="https://www.cociter.be/wp-content/uploads/RCVar_YMR_Coop-2601-fr.pdf">January 2026</a>
+"""
+
+
+class _Resp:
+    status = 200
+
+    def __init__(self, body: str) -> None:
+        self._body = body
+
+    async def text(self) -> str:
+        return self._body
+
+    async def __aenter__(self) -> "_Resp":
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        return None
+
+
+class _Session:
+    def __init__(self, body: str) -> None:
+        self._body = body
+
+    def get(self, *_args: Any, **_kwargs: Any) -> _Resp:
+        return _Resp(self._body)
+
+
+def test_fetch_for_month_returns_snapshot_when_listing_has_url() -> None:
+    """The Dec-2025 fixture parses cleanly and the listing URL with
+    matching YYMM is what fetch_for_month must surface."""
+    text = _text("cociter_var_2512.pdf")
+    with patch(
+        "custom_components.be_electricity_prices.providers.cociter.fetch_pdf_text",
+        new=AsyncMock(return_value=text),
+    ):
+        snap = asyncio.run(
+            fetch_for_month(
+                _Session(_LISTING_HTML),  # type: ignore[arg-type]
+                "cociter_variable",
+                "wallonia",
+                date(2025, 12, 1),
+            )
+        )
+    assert snap is not None
+    assert snap.publication_label == "2025-12"
+    assert isinstance(snap.energy, VariableRates)
+
+
+def test_fetch_for_month_returns_none_when_listing_has_no_match() -> None:
+    """If Cociter never published (or has dropped) the requested month
+    from its listing, fetch_for_month must return None so the
+    coordinator falls back to the proxy."""
+    snap = asyncio.run(
+        fetch_for_month(
+            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            "cociter_variable",
+            "wallonia",
+            date(2024, 6, 1),
+        )
+    )
+    assert snap is None
+
+
+def test_fetch_for_month_unknown_contract_returns_none() -> None:
+    """A contract id without a registered pattern must return None."""
+    snap = asyncio.run(
+        fetch_for_month(
+            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            "unknown_family",
+            "wallonia",
+            date(2025, 12, 1),
+        )
+    )
+    assert snap is None

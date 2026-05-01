@@ -41,7 +41,7 @@ Cociter only sells in Wallonia.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import aiohttp
 
@@ -92,6 +92,49 @@ async def fetch(
     pdf_url, label = await _find_latest(session, pattern)
     text = await fetch_pdf_text(session, pdf_url)
     return parse_snapshot(text, contract_id, pdf_url, label)
+
+
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # noqa: ARG001 - Cociter only sells in Wallonia.
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """Fetch the Cociter card for a specific (year, month).
+
+    Cociter's listing keeps every monthly card linked under the same
+    page. We fetch it once, find the URL whose YYMM suffix matches the
+    requested year_month, and parse. Returns None when the listing
+    doesn't list the month, the URL 404s, or the PDF doesn't parse -
+    the coordinator falls back to the current snapshot as a proxy.
+    """
+    pattern = _CONTRACT_PATTERNS.get(contract_id)
+    if pattern is None:
+        return None
+    target_yymm = f"{year_month.year % 100:02d}{year_month.month:02d}"
+    try:
+        async with session.get(
+            _INDEX_URL,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status >= 400:
+                return None
+            html = await resp.text()
+    except aiohttp.ClientError:
+        return None
+    pdf_url: str | None = None
+    for url, yymm in pattern.findall(html):
+        if yymm == target_yymm:
+            pdf_url = url
+            break
+    if pdf_url is None:
+        return None
+    try:
+        text = await fetch_pdf_text(session, pdf_url)
+        return parse_snapshot(text, contract_id, pdf_url, _yymm_to_label(target_yymm))
+    except ExtractorError:
+        return None
 
 
 async def probe(
@@ -395,4 +438,5 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     probe=probe,
+    fetch_for_month=fetch_for_month,
 )
