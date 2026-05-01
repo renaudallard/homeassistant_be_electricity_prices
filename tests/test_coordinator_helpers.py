@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import calendar
 from datetime import UTC, date, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -526,6 +527,14 @@ def _yearly_entry(**overrides: object) -> MockConfigEntry:
     return MockConfigEntry(domain=DOMAIN, data=base)
 
 
+def _year_fraction(today: date) -> float:
+    """Mirror the production proration formula so tests don't have to
+    re-derive it."""
+    days_in_year = 366 if calendar.isleap(today.year) else 365
+    elapsed_days = (today - date(today.year, 1, 1)).days + 1
+    return elapsed_days / days_in_year
+
+
 def _stub_extractor() -> SupplierExtractor:
     return SupplierExtractor(
         id="test",
@@ -615,8 +624,10 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
             entry,
             prosumer_cost_eur_per_month=4.0,
         )
-    # Energy cost per month = max((100 - 500) * X, 0) = 0. Fees floor only.
-    assert cost == pytest.approx(65.0 + 12 * 2.5 + 12 * 4.0)
+    # Energy cost per month = max((100 - 500) * X, 0) = 0. Fees only,
+    # pro-rated to the fraction of the year elapsed.
+    fraction = _year_fraction(today)
+    assert cost == pytest.approx((65.0 + 12 * 2.5 + 12 * 4.0) * fraction)
 
 
 async def test_year_cost_uses_per_month_snapshot_when_archive_available(
@@ -718,5 +729,6 @@ async def test_year_cost_falls_back_to_fees_when_no_meters_configured(
         entry,
         prosumer_cost_eur_per_month=0.0,
     )
-    # Fees-only: 65 + 12*2.5 = 95.
-    assert cost == pytest.approx(95.0)
+    # Fees-only: (65 + 12*2.5) * elapsed-year-fraction.
+    fraction = _year_fraction(dt_util.now().date())
+    assert cost == pytest.approx(95.0 * fraction)

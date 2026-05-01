@@ -34,6 +34,7 @@ coordinator keeps serving the cached snapshot and surfaces a repair issue.
 from __future__ import annotations
 
 import asyncio
+import calendar
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -1008,8 +1009,13 @@ async def _compute_current_year_cost(
       regime=compensation, bi :
                max((d_cons - d_inj) * peak + (n_cons - n_inj) * offpeak, 0)
 
-    Plus, once for the year:
-      yearly_fixed_fee + 12 * energy_fund + 12 * prosumer_cost.
+    Plus, pro-rated to the elapsed fraction of the calendar year
+    (``elapsed_days / days_in_year``):
+      yearly_fixed_fee * fraction
+      + 12 * energy_fund * fraction
+      + 12 * prosumer_cost * fraction
+    so the running bill grows day by day instead of jumping to the full
+    annual on Jan 1.
 
     ``inj_m`` is each month's snapshot's ``injection.current`` (the
     printed monthly indicative). v1 doesn't replay historical hourly
@@ -1029,10 +1035,16 @@ async def _compute_current_year_cost(
     meter = entry.data.get(CONF_METER, METER_MONO)
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
 
+    jan1 = date(today.year, 1, 1)
+    days_in_year = 366 if calendar.isleap(today.year) else 365
+    # Inclusive: on Jan 1 one day has elapsed, on Dec 31 all of them.
+    elapsed_days = (today - jan1).days + 1
+    year_fraction = elapsed_days / days_in_year
+
     fixed = getattr(snapshot.energy, "yearly_fixed_fee", 0.0)
     fund_yearly = snapshot.taxes.energy_fund_eur_per_month * 12.0
     prosumer_yearly = prosumer_cost_eur_per_month * 12.0
-    fees = fixed + fund_yearly + prosumer_yearly
+    fees = (fixed + fund_yearly + prosumer_yearly) * year_fraction
 
     monthly_kwh = await _resolve_monthly_kwh(hass, entry, today)
     if monthly_kwh is None:

@@ -122,7 +122,7 @@ All sensors share one device per config entry.
 | `taxes_component` | Levies EUR/kWh now (VAT-inclusive). |
 | `fixed_fee_eur_per_year` | Supplier's flat annual subscription fee (EUR/year), parsed from the tariff card. |
 | `energy_fund_eur_per_month` | Flemish Energiefonds in EUR/month (€0 outside Flanders, and €0 in Flanders for domiciled customers). |
-| `current_year_cost` | Running bill **since Jan 1 of the current year**, computed month by month against HA's recorder. Configure once in the **Energy meters** step, two ways: (a) point at the four day/night register sensors directly (preferred when available); or (b) point at single cumulative consumption / injection sensors (for bi-hourly meters the integration recovers the day/night split per past month from the recorder's hourly statistics binned by the bi-hourly schedule). For each month from January onwards the integration looks up **that month's tariff card** when the supplier archives historical cards (Eneco / Cociter / Ecopower) and multiplies that month's kWh by it; suppliers without an archive (Bolt / Mega / OCTA+ / TotalEnergies / Engie / Luminus / DATS 24) fall back to the current rate as a proxy. Annual fees (`yearly_fixed_fee + 12 × energy_fund_eur_per_month + 12 × prosumer_cost`) are added once. On Jan 1 the sensor snaps to the fees-only floor and grows from there. Floored at fees-only under Walloon compensation regime (most suppliers forfeit surplus injection past consumption, so the bill never actually settles negative). Always numeric: a fresh install in May still produces a meaningful figure for the year so far, as long as the recorder has been collecting hourly statistics for the configured kWh sensors. |
+| `current_year_cost` | Running bill **since Jan 1 of the current year**, computed month by month against HA's recorder. Configure once in the **Energy meters** step, two ways: (a) point at the four day/night register sensors directly (preferred when available); or (b) point at single cumulative consumption / injection sensors (for bi-hourly meters the integration recovers the day/night split per past month from the recorder's hourly statistics binned by the bi-hourly schedule). For each month from January onwards the integration looks up **that month's tariff card** when the supplier archives historical cards (Eneco / Cociter / Ecopower) and multiplies that month's kWh by it; suppliers without an archive (Bolt / Mega / OCTA+ / TotalEnergies / Engie / Luminus / DATS 24) fall back to the current rate as a proxy. Annual fees (`yearly_fixed_fee + 12 × energy_fund_eur_per_month + 12 × prosumer_cost`) are pro-rated to the elapsed fraction of the year (`elapsed_days / days_in_year`) instead of being charged in full from day one — so on Jan 1 the sensor sits at ~0 and grows day by day, and on Dec 31 it carries the full annual amount. Floored at fees-only under Walloon compensation regime (most suppliers forfeit surplus injection past consumption, so the bill never actually settles negative). Always numeric: a fresh install in May still produces a meaningful figure for the year so far, as long as the recorder has been collecting hourly statistics for the configured kWh sensors. |
 | `tomorrow_prices_available` | Binary sensor. ON once the price table covers at least one hour with tomorrow's local date. Useful as a trigger for dynamic-tariff automations that should only fire after ENTSO-E publishes the next-day curve (~13:00 CET); always ON for fixed/variable contracts. |
 
 ### Conditional
@@ -225,9 +225,9 @@ next refresh.
   recorder. The recorder's monthly statistics are the source of truth for
   per-band kWh (no in-process counters that could drift across restarts);
   per-month tariff cards live in an in-memory cache keyed by
-  `(supplier, contract, region, YYYY-MM)`. On Jan 1 the sensor naturally
-  snaps to the fees-only floor — there's no past-month consumption yet —
-  and grows from there.
+  `(supplier, contract, region, YYYY-MM)`. Annual fees are pro-rated to
+  the elapsed fraction of the year, so on Jan 1 the sensor sits at ~0
+  and grows day by day instead of jumping to the full annual upfront.
 
 ### Failure mode
 
