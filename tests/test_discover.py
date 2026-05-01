@@ -109,7 +109,7 @@ def test_bolt_discover_matches_registry() -> None:
 def test_eneco_discover_matches_registry() -> None:
     session = _FakeSession(_read("eneco.html"))
     discovered = _run(eneco_mod.discover(session))
-    expected = set(eneco_mod._CONTRACT_URLS)
+    expected = set(eneco_mod._CONTRACT_SLUGS)
     assert discovered == expected
 
 

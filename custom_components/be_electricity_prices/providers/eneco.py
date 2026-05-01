@@ -25,14 +25,15 @@
 
 """Eneco Belgium tariff card extractor.
 
-Eneco publishes a stable PDF per contract at predictable URLs:
+Eneco publishes one PDF per contract under
 
-    https://cdn.eneco.be/downloads/nl/general/tk/BC_032_012604_NL_ENECO_POWER_FIX.pdf
-    https://cdn.eneco.be/downloads/nl/general/tk/BC_032_012604_NL_ENECO_POWER_FLEX.pdf
-    https://cdn.eneco.be/downloads/nl/general/tk/BC_032_012604_NL_ENECO_POWER_DYNAMIC.pdf
+    https://cdn.eneco.be/downloads/nl/general/tk/BC_032_<NNNNNN>_NL_ENECO_POWER_<NAME>.pdf
 
-The PDFs are auto-updated monthly and include the publication month
-("Tariefkaart april 2026"). All prices are VAT-inclusive (6 %).
+The 6-digit issue number rotates every month (e.g. ``012604`` for the
+April 2026 cards, ``012605`` for May 2026). Stale issues remain served
+on the CDN, so we always resolve the live URL from the public listing
+page instead of hardcoding it. The PDFs include the publication month
+("Tariefkaart mei 2026"); all prices are VAT-inclusive (6 %).
 
 Eneco serves Flanders and Wallonia only (no Brussels).
 """
@@ -62,10 +63,11 @@ from .base import (
 _BASE_URL = "https://cdn.eneco.be/downloads/nl/general/tk"
 _LISTING_URL = "https://eneco.be/nl/elektriciteit-gas/tariefkaarten"
 
-_CONTRACT_URLS = {
-    "power_fix": f"{_BASE_URL}/BC_032_012604_NL_ENECO_POWER_FIX.pdf",
-    "power_flex": f"{_BASE_URL}/BC_032_012604_NL_ENECO_POWER_FLEX.pdf",
-    "power_dynamic": f"{_BASE_URL}/BC_032_012604_NL_ENECO_POWER_DYNAMIC.pdf",
+# Contract id -> the POWER_<NAME> token Eneco uses in its filenames.
+_CONTRACT_SLUGS: dict[str, str] = {
+    "power_fix": "FIX",
+    "power_flex": "FLEX",
+    "power_dynamic": "DYNAMIC",
 }
 
 # Wallonia DSO labels (column layout: 4 distribution + optional [MEDIUM PIC ECO]
@@ -105,9 +107,16 @@ async def fetch(
     region: str,  # noqa: ARG001 - Eneco's PDF covers every region in one document.
 ) -> SupplierSnapshot:
     """Fetch and parse the Eneco tariff card for ``contract_id``."""
-    if contract_id not in _CONTRACT_URLS:
+    if contract_id not in _CONTRACT_SLUGS:
         raise ExtractorError(f"unknown Eneco contract {contract_id!r}")
-    url = _CONTRACT_URLS[contract_id]
+    listing = await _fetch_listing(session)
+    if listing is None:
+        raise ExtractorError("could not fetch Eneco listing page")
+    url = _resolve_url(listing, contract_id)
+    if url is None:
+        raise ExtractorError(
+            f"Eneco listing page did not advertise a PDF for {contract_id!r}"
+        )
     text = await fetch_pdf_text(session, url)
     return parse_snapshot(text, contract_id, url)
 
@@ -119,6 +128,16 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     Extract every ``BC_..._NL_ENECO_POWER_<NAME>.pdf`` and lower-case
     to match the registry's contract id (``power_fix``, etc.).
     """
+    listing = await _fetch_listing(session)
+    if listing is None:
+        return set()
+    return {
+        f"power_{name.lower()}"
+        for name in re.findall(r"BC_[\d_]+_NL_ENECO_POWER_([A-Z]+)\.pdf", listing)
+    }
+
+
+async def _fetch_listing(session: aiohttp.ClientSession) -> str | None:
     try:
         async with session.get(
             _LISTING_URL,
@@ -126,19 +145,40 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
             timeout=aiohttp.ClientTimeout(total=20),
         ) as resp:
             if resp.status >= 400:
-                return set()
-            html = await resp.text()
+                return None
+            return await resp.text()
     except aiohttp.ClientError:
-        return set()
-    return {
-        f"power_{name.lower()}"
-        for name in re.findall(r"BC_[\d_]+_NL_ENECO_POWER_([A-Z]+)\.pdf", html)
-    }
+        return None
+
+
+def _resolve_url(listing_html: str, contract_id: str) -> str | None:
+    """Pick the live PDF URL for ``contract_id`` out of the listing page.
+
+    The page may carry either bare filenames (``BC_..._POWER_FLEX.pdf``)
+    or full hrefs; we accept both and reconstruct the absolute URL when
+    only the filename is present. When several issues appear we keep the
+    first match: the listing page only ever advertises one issue at a
+    time, but a defensive single-shot keeps a future duplicate from
+    silently switching to a stale revision.
+    """
+    slug = _CONTRACT_SLUGS.get(contract_id)
+    if slug is None:
+        return None
+    full = re.search(
+        rf"https?://[^\s\"'<>]+?/BC_[\d_]+_NL_ENECO_POWER_{slug}\.pdf",
+        listing_html,
+    )
+    if full:
+        return full.group(0)
+    bare = re.search(rf"BC_[\d_]+_NL_ENECO_POWER_{slug}\.pdf", listing_html)
+    if bare:
+        return f"{_BASE_URL}/{bare.group(0)}"
+    return None
 
 
 def parse_snapshot(text: str, contract_id: str, source_url: str) -> SupplierSnapshot:
     """Parse already-extracted PDF text. Exposed for unit tests."""
-    if contract_id not in _CONTRACT_URLS:
+    if contract_id not in _CONTRACT_SLUGS:
         raise ExtractorError(f"unknown Eneco contract {contract_id!r}")
     return SupplierSnapshot(
         supplier="eneco",
