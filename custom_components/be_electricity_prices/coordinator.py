@@ -760,6 +760,13 @@ async def _recorder_monthly_kwh(
     surfaces every failure mode we know about (recorder not ready,
     entity has no statistics, transient DB error) so the caller can
     fall back to a fees-only floor without raising.
+
+    Reads the ``change`` field, which the recorder defines as the delta
+    of the cumulative ``sum`` between the period's first and last
+    sample. Reading ``sum`` directly would yield the all-time running
+    total at each bucket boundary -- summing those across months would
+    multiply the bill by however many years of statistics the meter
+    has accumulated.
     """
     try:
         from homeassistant.components.recorder import get_instance
@@ -783,7 +790,7 @@ async def _recorder_monthly_kwh(
             {entity_id},
             "month",
             None,
-            {"sum"},
+            {"change"},
         )
     except Exception:  # noqa: BLE001 - recorder may surface anything
         return {}
@@ -791,7 +798,7 @@ async def _recorder_monthly_kwh(
     out: dict[date, float] = {}
     for row in rows:
         ts = row.get("start")
-        delta = row.get("sum")
+        delta = row.get("change")
         if ts is None or delta is None:
             continue
         local = dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC)).date()
@@ -810,6 +817,10 @@ async def _recorder_monthly_band_ratio(
     sum to 1.0 (or default to ``(1.0, 0.0)`` for months with no
     accumulation, treating everything as day-band -- the user's bill
     is approximate in that branch and we don't need to be precise).
+
+    Reads the ``change`` field for the same reason as
+    ``_recorder_monthly_kwh``: ``sum`` is monotonic, ``change`` is the
+    actual hourly delta we want to bin.
     """
     try:
         from homeassistant.components.recorder import get_instance
@@ -833,7 +844,7 @@ async def _recorder_monthly_band_ratio(
             {entity_id},
             "hour",
             None,
-            {"sum"},
+            {"change"},
         )
     except Exception:  # noqa: BLE001
         return {}
@@ -842,7 +853,7 @@ async def _recorder_monthly_band_ratio(
     per_month_night: dict[date, float] = {}
     for row in rows:
         ts = row.get("start")
-        delta = row.get("sum")
+        delta = row.get("change")
         if ts is None or delta is None:
             continue
         local = dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC))

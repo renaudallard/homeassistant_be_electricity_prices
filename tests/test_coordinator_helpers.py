@@ -247,9 +247,10 @@ def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:
 def _stat_row(year: int, month: int, kwh: float) -> dict[str, float]:
     """Build a fake StatisticsRow whose ``start`` is the UTC equivalent of
     local midnight on the 1st of the month -- the way HA's recorder
-    actually surfaces monthly buckets after timezone conversion."""
+    actually surfaces monthly buckets after timezone conversion. The
+    helper reads ``change`` (per-period delta), not ``sum`` (cumulative)."""
     local_start = dt_util.start_of_local_day(datetime(year, month, 1))
-    return {"start": local_start.astimezone(UTC).timestamp(), "sum": kwh}
+    return {"start": local_start.astimezone(UTC).timestamp(), "change": kwh}
 
 
 async def test_recorder_monthly_kwh_returns_per_month_sums(
@@ -278,6 +279,45 @@ async def test_recorder_monthly_kwh_returns_per_month_sums(
         date(2026, 2, 1): 110.0,
         date(2026, 3, 1): 95.0,
     }
+
+
+async def test_recorder_monthly_kwh_uses_change_not_sum(
+    hass: HomeAssistant,
+) -> None:
+    """Regression: ``sum`` is the cumulative running total since the
+    recorder started; reading it as a per-month delta multiplies the
+    bill by however many years of meter history exist. The helper must
+    only read ``change`` (the within-period delta)."""
+    # Each row carries a huge cumulative ``sum`` and a small ``change``;
+    # if the helper reads ``sum`` the totals would explode.
+    fake_stats = {
+        "sensor.day_cons": [
+            {
+                "start": dt_util.start_of_local_day(datetime(2026, 1, 1))
+                .astimezone(UTC)
+                .timestamp(),
+                "sum": 50_000.0,
+                "change": 100.0,
+            },
+            {
+                "start": dt_util.start_of_local_day(datetime(2026, 2, 1))
+                .astimezone(UTC)
+                .timestamp(),
+                "sum": 50_100.0,
+                "change": 110.0,
+            },
+        ]
+    }
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value=fake_stats)
+    with patch(
+        "homeassistant.components.recorder.get_instance",
+        return_value=instance,
+    ):
+        out = await _recorder_monthly_kwh(
+            hass, "sensor.day_cons", date(2026, 1, 1), date(2026, 3, 1)
+        )
+    assert out == {date(2026, 1, 1): 100.0, date(2026, 2, 1): 110.0}
 
 
 async def test_recorder_monthly_kwh_unknown_entity_returns_empty(
