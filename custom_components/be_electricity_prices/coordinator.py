@@ -234,17 +234,15 @@ class CoordinatorData:
     # separate sensors lets users compute total monthly cost.
     yearly_fixed_fee_eur: float = 0.0
     energy_fund_eur_per_month: float = 0.0
-    # Running annual bill in EUR. None until the user has populated all
-    # four meter sensors (day_cons, night_cons, day_inj, night_inj). For
-    # compensation regime the math nets injection 1:1 against
-    # consumption (per-band when bi); for injection regime each is
-    # multiplied by its own rate; for "none" only consumption counts.
-    # Goes negative when injection income exceeds consumption + fees,
-    # which only happens under classical compensation regime if you
-    # over-produce (most suppliers forfeit the surplus -- the negative
-    # value is the *theoretical* net the bill would settle at). Always
-    # ``None`` for dynamic / TOU contracts because hourly rates can't
-    # be applied to a daily total.
+    # Running annual bill in EUR, accumulated day by day from Jan 1.
+    # Falls back to the (pro-rated) fees-only floor when no meter
+    # sensors are wired. For compensation regime the math nets
+    # injection 1:1 against consumption (per-band when bi) and clamps
+    # the YTD energy term at zero (Walloon suppliers forfeit surplus
+    # injection past consumption); for injection regime each side is
+    # multiplied by its own rate and the running total can dip
+    # negative when injection credit exceeds consumption + pro-rated
+    # fees; for "none" only consumption counts.
     current_year_cost_eur: float | None = None
 
 
@@ -749,15 +747,14 @@ def _read_kwh(hass: HomeAssistant, entity_id: str | None) -> float | None:
         return None
 
 
-async def _recorder_monthly_kwh(
+async def _recorder_daily_kwh(
     hass: HomeAssistant, entity_id: str, start: date, end: date
 ) -> dict[date, float]:
-    """Per-month kWh deltas for ``entity_id`` over ``[start, end]``.
+    """Per-day kWh deltas for ``entity_id`` over ``[start, end]``.
 
     Wraps ``statistics_during_period`` via the recorder's executor: the
     function is synchronous and hits the SQLite store, so it must not
-    run on the event loop. Returns ``{first_of_local_month: kWh}`` -
-    keys are local-date Mondays of each month-start. An empty dict
+    run on the event loop. Returns ``{local_day: kWh}``. An empty dict
     surfaces every failure mode we know about (recorder not ready,
     entity has no statistics, transient DB error) so the caller can
     fall back to a fees-only floor without raising.
@@ -765,9 +762,9 @@ async def _recorder_monthly_kwh(
     Reads the ``change`` field, which the recorder defines as the delta
     of the cumulative ``sum`` between the period's first and last
     sample. Reading ``sum`` directly would yield the all-time running
-    total at each bucket boundary -- summing those across months would
-    multiply the bill by however many years of statistics the meter
-    has accumulated.
+    total at each bucket boundary -- summing those would multiply the
+    bill by however many years of statistics the meter has
+    accumulated.
     """
     try:
         from homeassistant.components.recorder import get_instance
@@ -777,11 +774,12 @@ async def _recorder_monthly_kwh(
     except ImportError:
         return {}
     start_dt = dt_util.start_of_local_day(
-        datetime(start.year, start.month, 1)
+        datetime(start.year, start.month, start.day)
     ).astimezone(UTC)
-    end_dt = dt_util.start_of_local_day(datetime(end.year, end.month, 1)).astimezone(
-        UTC
-    ) + timedelta(days=32)
+    # +1 day so the bucket containing ``end`` is included.
+    end_dt = dt_util.start_of_local_day(
+        datetime(end.year, end.month, end.day)
+    ).astimezone(UTC) + timedelta(days=1)
     try:
         stats = await get_instance(hass).async_add_executor_job(
             statistics_during_period,
@@ -789,7 +787,7 @@ async def _recorder_monthly_kwh(
             start_dt,
             end_dt,
             {entity_id},
-            "month",
+            "day",
             None,
             {"change"},
         )
@@ -802,25 +800,25 @@ async def _recorder_monthly_kwh(
         delta = row.get("change")
         if ts is None or delta is None:
             continue
-        local = dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC)).date()
-        out[date(local.year, local.month, 1)] = float(delta)
+        local_day = dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC)).date()
+        out[local_day] = float(delta)
     return out
 
 
-async def _recorder_monthly_band_ratio(
+async def _recorder_daily_band_ratio(
     hass: HomeAssistant, entity_id: str, start: date, end: date
 ) -> dict[date, tuple[float, float]]:
-    """Per-month (day_ratio, night_ratio) for ``entity_id``.
+    """Per-day (day_ratio, night_ratio) for ``entity_id``.
 
     Used for the totals-only + bi-hourly path: we don't have separate
     day / night registers, so we recover the band split from hourly
     statistics by binning each hour on ``is_offpeak``. The two ratios
-    sum to 1.0 (or default to ``(1.0, 0.0)`` for months with no
+    sum to 1.0 (or default to ``(1.0, 0.0)`` for days with no
     accumulation, treating everything as day-band -- the user's bill
     is approximate in that branch and we don't need to be precise).
 
     Reads the ``change`` field for the same reason as
-    ``_recorder_monthly_kwh``: ``sum`` is monotonic, ``change`` is the
+    ``_recorder_daily_kwh``: ``sum`` is monotonic, ``change`` is the
     actual hourly delta we want to bin.
     """
     try:
@@ -831,11 +829,11 @@ async def _recorder_monthly_band_ratio(
     except ImportError:
         return {}
     start_dt = dt_util.start_of_local_day(
-        datetime(start.year, start.month, 1)
+        datetime(start.year, start.month, start.day)
     ).astimezone(UTC)
-    end_dt = dt_util.start_of_local_day(datetime(end.year, end.month, 1)).astimezone(
-        UTC
-    ) + timedelta(days=32)
+    end_dt = dt_util.start_of_local_day(
+        datetime(end.year, end.month, end.day)
+    ).astimezone(UTC) + timedelta(days=1)
     try:
         stats = await get_instance(hass).async_add_executor_job(
             statistics_during_period,
@@ -850,59 +848,45 @@ async def _recorder_monthly_band_ratio(
     except Exception:  # noqa: BLE001
         return {}
     rows = stats.get(entity_id, [])
-    per_month_day: dict[date, float] = {}
-    per_month_night: dict[date, float] = {}
+    per_day_day: dict[date, float] = {}
+    per_day_night: dict[date, float] = {}
     for row in rows:
         ts = row.get("start")
         delta = row.get("change")
         if ts is None or delta is None:
             continue
         local = dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC))
-        bucket = date(local.year, local.month, 1)
+        bucket = local.date()
         if is_offpeak(local):
-            per_month_night[bucket] = per_month_night.get(bucket, 0.0) + float(delta)
+            per_day_night[bucket] = per_day_night.get(bucket, 0.0) + float(delta)
         else:
-            per_month_day[bucket] = per_month_day.get(bucket, 0.0) + float(delta)
+            per_day_day[bucket] = per_day_day.get(bucket, 0.0) + float(delta)
     out: dict[date, tuple[float, float]] = {}
-    for month in set(per_month_day) | set(per_month_night):
-        d = per_month_day.get(month, 0.0)
-        n = per_month_night.get(month, 0.0)
+    for day in set(per_day_day) | set(per_day_night):
+        d = per_day_day.get(day, 0.0)
+        n = per_day_night.get(day, 0.0)
         total = d + n
-        out[month] = (d / total, n / total) if total > 0 else (1.0, 0.0)
+        out[day] = (d / total, n / total) if total > 0 else (1.0, 0.0)
     return out
 
 
-def _months_through(start: date, end: date) -> list[date]:
-    """Inclusive list of first-of-month dates from ``start`` to ``end``."""
-    months: list[date] = []
-    cur = date(start.year, start.month, 1)
-    while cur <= end:
-        months.append(cur)
-        cur = (
-            date(cur.year + 1, 1, 1)
-            if cur.month == 12
-            else date(cur.year, cur.month + 1, 1)
-        )
-    return months
-
-
-async def _resolve_monthly_kwh(
+async def _resolve_daily_kwh(
     hass: HomeAssistant, entry: ConfigEntry, today: date
 ) -> dict[date, tuple[float, float, float, float]] | None:
-    """Per-month (day_cons, night_cons, day_inj, night_inj) from recorder.
+    """Per-day (day_cons, night_cons, day_inj, night_inj) from recorder.
 
     Two paths depending on what the user wired up in OptionsFlow:
 
       * **Day / night register sensors** configured (``CONF_DAY_*_KWH`` +
-        ``CONF_NIGHT_*_KWH``): the recorder gives one ``sum`` per month
-        per register, and we fan them out into the four-tuple directly.
+        ``CONF_NIGHT_*_KWH``): the recorder gives one delta per day per
+        register, and we fan them out into the four-tuple directly.
 
       * **Single totals sensor** configured (``CONF_CONSUMPTION_KWH`` /
-        ``CONF_INJECTION_KWH``): we get one monthly total per side. For
+        ``CONF_INJECTION_KWH``): we get one daily total per side. For
         a mono meter that's enough (everything goes into the "day" slot
         and the math sums it). For a bi-hourly meter we additionally
         query hourly statistics and bin each hour by ``is_offpeak`` to
-        recover the per-month band ratio, then split the monthly total.
+        recover the per-day band ratio, then split the daily total.
 
     Returns ``None`` only when the user has not wired any meter inputs
     at all - the caller surfaces the fees-only floor in that case.
@@ -921,62 +905,72 @@ async def _resolve_monthly_kwh(
     jan1 = date(today.year, 1, 1)
     out: dict[date, list[float]] = {}
 
-    def _add(idx: int, per_month: dict[date, float]) -> None:
-        for month, kwh in per_month.items():
-            row = out.setdefault(month, [0.0, 0.0, 0.0, 0.0])
+    def _add(idx: int, per_day: dict[date, float]) -> None:
+        for day, kwh in per_day.items():
+            row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
             row[idx] += kwh
 
     if has_registers:
         if day_cons_id:
-            _add(0, await _recorder_monthly_kwh(hass, day_cons_id, jan1, today))
+            _add(0, await _recorder_daily_kwh(hass, day_cons_id, jan1, today))
         if night_cons_id:
-            _add(1, await _recorder_monthly_kwh(hass, night_cons_id, jan1, today))
+            _add(1, await _recorder_daily_kwh(hass, night_cons_id, jan1, today))
         if day_inj_id:
-            _add(2, await _recorder_monthly_kwh(hass, day_inj_id, jan1, today))
+            _add(2, await _recorder_daily_kwh(hass, day_inj_id, jan1, today))
         if night_inj_id:
-            _add(3, await _recorder_monthly_kwh(hass, night_inj_id, jan1, today))
+            _add(3, await _recorder_daily_kwh(hass, night_inj_id, jan1, today))
     else:
         meter = entry.data.get(CONF_METER, METER_MONO)
-        cons_per_month = (
-            await _recorder_monthly_kwh(hass, total_cons_id, jan1, today)
+        cons_per_day = (
+            await _recorder_daily_kwh(hass, total_cons_id, jan1, today)
             if total_cons_id
             else {}
         )
-        inj_per_month = (
-            await _recorder_monthly_kwh(hass, total_inj_id, jan1, today)
+        inj_per_day = (
+            await _recorder_daily_kwh(hass, total_inj_id, jan1, today)
             if total_inj_id
             else {}
         )
         if meter == "bi":
             cons_ratios = (
-                await _recorder_monthly_band_ratio(hass, total_cons_id, jan1, today)
+                await _recorder_daily_band_ratio(hass, total_cons_id, jan1, today)
                 if total_cons_id
                 else {}
             )
             inj_ratios = (
-                await _recorder_monthly_band_ratio(hass, total_inj_id, jan1, today)
+                await _recorder_daily_band_ratio(hass, total_inj_id, jan1, today)
                 if total_inj_id
                 else {}
             )
-            for month, total in cons_per_month.items():
-                d_ratio, n_ratio = cons_ratios.get(month, (1.0, 0.0))
-                row = out.setdefault(month, [0.0, 0.0, 0.0, 0.0])
+            for day, total in cons_per_day.items():
+                d_ratio, n_ratio = cons_ratios.get(day, (1.0, 0.0))
+                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[0] += total * d_ratio
                 row[1] += total * n_ratio
-            for month, total in inj_per_month.items():
-                d_ratio, n_ratio = inj_ratios.get(month, (1.0, 0.0))
-                row = out.setdefault(month, [0.0, 0.0, 0.0, 0.0])
+            for day, total in inj_per_day.items():
+                d_ratio, n_ratio = inj_ratios.get(day, (1.0, 0.0))
+                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[2] += total * d_ratio
                 row[3] += total * n_ratio
         else:  # mono: route everything into the "day" slot; math sums anyway
-            for month, total in cons_per_month.items():
-                row = out.setdefault(month, [0.0, 0.0, 0.0, 0.0])
+            for day, total in cons_per_day.items():
+                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[0] += total
-            for month, total in inj_per_month.items():
-                row = out.setdefault(month, [0.0, 0.0, 0.0, 0.0])
+            for day, total in inj_per_day.items():
+                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[2] += total
 
-    return {month: (r[0], r[1], r[2], r[3]) for month, r in out.items()}
+    return {day: (r[0], r[1], r[2], r[3]) for day, r in out.items()}
+
+
+def _days_through(start: date, end: date) -> list[date]:
+    """Inclusive list of dates from ``start`` to ``end`` (local calendar)."""
+    days: list[date] = []
+    cur = start
+    while cur <= end:
+        days.append(cur)
+        cur += timedelta(days=1)
+    return days
 
 
 async def _compute_current_year_cost(
@@ -990,12 +984,16 @@ async def _compute_current_year_cost(
 ) -> float | None:
     """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
-    For every month from Jan 1 of the current local year up to today,
-    pull the per-band kWh from the recorder and multiply by **that
-    month's** tariff (archived snapshot if the supplier exposes one,
-    else the current snapshot as a proxy). Annual fees are added once.
+    For every day from Jan 1 of the current local year up to today,
+    pull that day's kWh from the recorder and multiply by the tariff
+    of the month the day belongs to (archived snapshot when the
+    supplier exposes one, else the current snapshot as a proxy).
+    Per-day kWh × per-day tariff handles tariff transitions inside a
+    month (e.g. the supplier rotates a monthly card mid-month) without
+    re-querying the recorder, and matches what the user reads on a
+    smart meter day by day.
 
-    Math per month, after looking up the month's snapshot:
+    Math per day, after looking up the snapshot for that day's month:
 
       regime=none, mono : (d_cons + n_cons) * single
       regime=none, bi   : d_cons * peak + n_cons * offpeak
@@ -1005,9 +1003,14 @@ async def _compute_current_year_cost(
         bi   : d_cons * peak + n_cons * offpeak
                - (d_inj + n_inj) * inj_m
       regime=compensation, mono :
-               max((d_cons + n_cons - d_inj - n_inj) * single, 0)
+               (d_cons + n_cons - d_inj - n_inj) * single
       regime=compensation, bi :
-               max((d_cons - d_inj) * peak + (n_cons - n_inj) * offpeak, 0)
+               (d_cons - d_inj) * peak + (n_cons - n_inj) * offpeak
+
+    Compensation netting happens once over the YTD total at the end
+    (clamped at zero), matching how the Walloon annual meter readout
+    actually settles -- a day of over-injection can offset a later day
+    of higher consumption.
 
     Plus, pro-rated to the elapsed fraction of the calendar year
     (``elapsed_days / days_in_year``):
@@ -1046,51 +1049,76 @@ async def _compute_current_year_cost(
     prosumer_yearly = prosumer_cost_eur_per_month * 12.0
     fees = (fixed + fund_yearly + prosumer_yearly) * year_fraction
 
-    monthly_kwh = await _resolve_monthly_kwh(hass, entry, today)
-    if monthly_kwh is None:
+    daily_kwh = await _resolve_daily_kwh(hass, entry, today)
+    if daily_kwh is None:
         # No meter inputs at all - fees-only floor.
         return fees
 
-    energy_cost = 0.0
-    for month in _months_through(date(today.year, 1, 1), today):
+    # Precompute the snapshot + breakdowns for each month touched, so
+    # the per-day loop stays O(days) without repeating the breakdown
+    # math for every day in a month.
+    month_breakdowns: dict[date, tuple[Any, Any, Any, "SupplierSnapshot"] | None] = {}
+
+    async def _resolve_month(
+        month_first: date,
+    ) -> tuple[Any, Any, Any, "SupplierSnapshot"] | None:
+        if month_first in month_breakdowns:
+            return month_breakdowns[month_first]
         snap_m = await _snapshot_for_month(
-            hass, session, extractor, contract, region, month, snapshot
+            hass, session, extractor, contract, region, month_first, snapshot
         )
         single_bd = static_breakdown(snap_m, dso, region, "single")
         peak_bd = static_breakdown(snap_m, dso, region, "peak")
         offpeak_bd = static_breakdown(snap_m, dso, region, "offpeak")
         if single_bd is None or peak_bd is None or offpeak_bd is None:
-            # Dynamic / TOU month: no stable rate to apply.
-            continue
+            month_breakdowns[month_first] = None
+            return None
+        bundle = (single_bd, peak_bd, offpeak_bd, snap_m)
+        month_breakdowns[month_first] = bundle
+        return bundle
 
-        d_cons, n_cons, d_inj, n_inj = monthly_kwh.get(month, (0.0, 0.0, 0.0, 0.0))
+    energy_cost = 0.0
+    for day in _days_through(jan1, today):
+        bundle = await _resolve_month(date(day.year, day.month, 1))
+        if bundle is None:
+            # Dynamic / TOU month: no stable rate to apply for any of
+            # its days.
+            continue
+        single_bd, peak_bd, offpeak_bd, snap_d = bundle
+
+        d_cons, n_cons, d_inj, n_inj = daily_kwh.get(day, (0.0, 0.0, 0.0, 0.0))
         total_cons = d_cons + n_cons
         total_inj = d_inj + n_inj
 
         if regime == SOLAR_REGIME_COMPENSATION:
             if meter == "bi":
-                m_cost = (d_cons - d_inj) * peak_bd.all_in + (
+                d_cost = (d_cons - d_inj) * peak_bd.all_in + (
                     n_cons - n_inj
                 ) * offpeak_bd.all_in
             else:
-                m_cost = (total_cons - total_inj) * single_bd.all_in
-            m_cost = max(m_cost, 0.0)
+                d_cost = (total_cons - total_inj) * single_bd.all_in
         elif regime == SOLAR_REGIME_INJECTION:
             if meter == "bi":
-                m_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
+                d_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
             else:
-                m_cost = total_cons * single_bd.all_in
-            inj_block = snap_m.injection
+                d_cost = total_cons * single_bd.all_in
+            inj_block = snap_d.injection
             inj_rate = inj_block.current if inj_block is not None else None
             if inj_rate is not None:
-                m_cost -= total_inj * inj_rate
+                d_cost -= total_inj * inj_rate
         else:  # none
             if meter == "bi":
-                m_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
+                d_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
             else:
-                m_cost = total_cons * single_bd.all_in
+                d_cost = total_cons * single_bd.all_in
 
-        energy_cost += m_cost
+        energy_cost += d_cost
+
+    if regime == SOLAR_REGIME_COMPENSATION:
+        # YTD clamp at zero: the bill never goes negative, surplus
+        # injection past consumption is forfeited (by most Walloon
+        # suppliers).
+        energy_cost = max(energy_cost, 0.0)
 
     return energy_cost + fees
 

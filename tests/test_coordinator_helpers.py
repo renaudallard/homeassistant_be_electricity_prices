@@ -43,9 +43,9 @@ from custom_components.be_electricity_prices.coordinator import (
     _compute_current_year_cost,
     _compute_injection_price,
     _compute_prosumer,
+    _days_through,
     _monthly_snapshots,
-    _months_through,
-    _recorder_monthly_kwh,
+    _recorder_daily_kwh,
     _snapshot_for_month,
 )
 from custom_components.be_electricity_prices.providers.base import (
@@ -242,28 +242,28 @@ def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:
     assert _compute_injection_price(snap, brussels_entry, {}) == pytest.approx(0.0476)
 
 
-# ---- _recorder_monthly_kwh ----------------------------------------------------
+# ---- _recorder_daily_kwh ------------------------------------------------------
 
 
-def _stat_row(year: int, month: int, kwh: float) -> dict[str, float]:
-    """Build a fake StatisticsRow whose ``start`` is the UTC equivalent of
-    local midnight on the 1st of the month -- the way HA's recorder
-    actually surfaces monthly buckets after timezone conversion. The
+def _stat_row(year: int, month: int, day: int, kwh: float) -> dict[str, float]:
+    """Build a fake StatisticsRow whose ``start`` is the UTC equivalent
+    of local midnight on the given date -- the way HA's recorder
+    actually surfaces daily buckets after timezone conversion. The
     helper reads ``change`` (per-period delta), not ``sum`` (cumulative)."""
-    local_start = dt_util.start_of_local_day(datetime(year, month, 1))
+    local_start = dt_util.start_of_local_day(datetime(year, month, day))
     return {"start": local_start.astimezone(UTC).timestamp(), "change": kwh}
 
 
-async def test_recorder_monthly_kwh_returns_per_month_sums(
+async def test_recorder_daily_kwh_returns_per_day_sums(
     hass: HomeAssistant,
 ) -> None:
     """The helper unwraps the recorder's StatisticsRow list into a
-    {first_of_local_month: kWh} dict the year-cost loop can iterate."""
+    {local_day: kWh} dict the year-cost loop can iterate."""
     fake_stats = {
         "sensor.day_cons": [
-            _stat_row(2026, 1, 100.0),
-            _stat_row(2026, 2, 110.0),
-            _stat_row(2026, 3, 95.0),
+            _stat_row(2026, 1, 1, 12.0),
+            _stat_row(2026, 1, 2, 11.0),
+            _stat_row(2026, 1, 3, 9.5),
         ]
     }
     instance = MagicMock()
@@ -272,25 +272,23 @@ async def test_recorder_monthly_kwh_returns_per_month_sums(
         "homeassistant.components.recorder.get_instance",
         return_value=instance,
     ):
-        out = await _recorder_monthly_kwh(
-            hass, "sensor.day_cons", date(2026, 1, 1), date(2026, 4, 1)
+        out = await _recorder_daily_kwh(
+            hass, "sensor.day_cons", date(2026, 1, 1), date(2026, 1, 3)
         )
     assert out == {
-        date(2026, 1, 1): 100.0,
-        date(2026, 2, 1): 110.0,
-        date(2026, 3, 1): 95.0,
+        date(2026, 1, 1): 12.0,
+        date(2026, 1, 2): 11.0,
+        date(2026, 1, 3): 9.5,
     }
 
 
-async def test_recorder_monthly_kwh_uses_change_not_sum(
+async def test_recorder_daily_kwh_uses_change_not_sum(
     hass: HomeAssistant,
 ) -> None:
     """Regression: ``sum`` is the cumulative running total since the
-    recorder started; reading it as a per-month delta multiplies the
+    recorder started; reading it as a per-day delta multiplies the
     bill by however many years of meter history exist. The helper must
     only read ``change`` (the within-period delta)."""
-    # Each row carries a huge cumulative ``sum`` and a small ``change``;
-    # if the helper reads ``sum`` the totals would explode.
     fake_stats = {
         "sensor.day_cons": [
             {
@@ -298,14 +296,14 @@ async def test_recorder_monthly_kwh_uses_change_not_sum(
                 .astimezone(UTC)
                 .timestamp(),
                 "sum": 50_000.0,
-                "change": 100.0,
+                "change": 12.0,
             },
             {
-                "start": dt_util.start_of_local_day(datetime(2026, 2, 1))
+                "start": dt_util.start_of_local_day(datetime(2026, 1, 2))
                 .astimezone(UTC)
                 .timestamp(),
-                "sum": 50_100.0,
-                "change": 110.0,
+                "sum": 50_012.0,
+                "change": 11.0,
             },
         ]
     }
@@ -315,13 +313,13 @@ async def test_recorder_monthly_kwh_uses_change_not_sum(
         "homeassistant.components.recorder.get_instance",
         return_value=instance,
     ):
-        out = await _recorder_monthly_kwh(
-            hass, "sensor.day_cons", date(2026, 1, 1), date(2026, 3, 1)
+        out = await _recorder_daily_kwh(
+            hass, "sensor.day_cons", date(2026, 1, 1), date(2026, 1, 2)
         )
-    assert out == {date(2026, 1, 1): 100.0, date(2026, 2, 1): 110.0}
+    assert out == {date(2026, 1, 1): 12.0, date(2026, 1, 2): 11.0}
 
 
-async def test_recorder_monthly_kwh_unknown_entity_returns_empty(
+async def test_recorder_daily_kwh_unknown_entity_returns_empty(
     hass: HomeAssistant,
 ) -> None:
     """An entity that the recorder doesn't track surfaces as an empty
@@ -333,13 +331,13 @@ async def test_recorder_monthly_kwh_unknown_entity_returns_empty(
         "homeassistant.components.recorder.get_instance",
         return_value=instance,
     ):
-        out = await _recorder_monthly_kwh(
+        out = await _recorder_daily_kwh(
             hass, "sensor.does_not_exist", date(2026, 1, 1), date(2026, 5, 1)
         )
     assert out == {}
 
 
-async def test_recorder_monthly_kwh_swallows_recorder_errors(
+async def test_recorder_daily_kwh_swallows_recorder_errors(
     hass: HomeAssistant,
 ) -> None:
     """If the recorder isn't ready or the DB query raises, the helper
@@ -351,7 +349,7 @@ async def test_recorder_monthly_kwh_swallows_recorder_errors(
         "homeassistant.components.recorder.get_instance",
         return_value=instance,
     ):
-        out = await _recorder_monthly_kwh(
+        out = await _recorder_daily_kwh(
             hass, "sensor.day_cons", date(2026, 1, 1), date(2026, 5, 1)
         )
     assert out == {}
@@ -545,35 +543,34 @@ def _stub_extractor() -> SupplierExtractor:
 
 
 def _patch_recorder_per_entity(
-    per_entity_per_month: dict[str, dict[date, float]],
+    per_entity_per_day: dict[str, dict[date, float]],
 ) -> Any:
-    """Patch _recorder_monthly_kwh to return the configured per-month
+    """Patch _recorder_daily_kwh to return the configured per-day
     sums per entity_id; raise via empty dict for unmapped entities."""
     from custom_components.be_electricity_prices import coordinator
 
     async def _fake(
         hass: object, entity_id: str, start: date, end: date
     ) -> dict[date, float]:
-        return dict(per_entity_per_month.get(entity_id, {}))
+        return dict(per_entity_per_day.get(entity_id, {}))
 
-    return patch.object(coordinator, "_recorder_monthly_kwh", new=_fake)
+    return patch.object(coordinator, "_recorder_daily_kwh", new=_fake)
 
 
 async def test_year_cost_recorder_driven_mono_no_solar(
     hass: HomeAssistant,
 ) -> None:
-    """Recorder returns 100 kWh / month for Jan-Apr; mono no-solar bills
-    it at the single all-in rate (today's snapshot proxy for archive-less
-    suppliers). With Jan->today 4 months, total = 400 * 0.3765 = 150.6."""
+    """Recorder returns 5 kWh / day from Jan 1 to today; mono no-solar
+    bills it at the single all-in rate. Total = 5 * elapsed_days * 0.3765."""
 
     snap = _yearly_snapshot()
     entry = _yearly_entry(meter="mono", solar_regime="none")
     today = dt_util.now().date()
-    months = _months_through(date(today.year, 1, 1), today)
-    per_month = {m: 100.0 for m in months}
+    days = _days_through(date(today.year, 1, 1), today)
+    per_day = {d: 5.0 for d in days}
     with _patch_recorder_per_entity(
         {
-            "sensor.day_cons": per_month,
+            "sensor.day_cons": per_day,
             "sensor.night_cons": {},
             "sensor.day_inj": {},
             "sensor.night_inj": {},
@@ -587,15 +584,16 @@ async def test_year_cost_recorder_driven_mono_no_solar(
             entry,
             prosumer_cost_eur_per_month=0.0,
         )
-    expected = 100.0 * len(months) * 0.3765
+    expected = 5.0 * len(days) * 0.3765
     assert cost == pytest.approx(expected)
 
 
 async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
     hass: HomeAssistant,
 ) -> None:
-    """Compensation regime with month-by-month over-injection: the
-    energy cost stays at the fees-only floor instead of going negative."""
+    """Compensation regime with day-by-day over-injection: YTD energy
+    cost clamps at zero (no negative bill), so only the pro-rated fees
+    remain."""
 
     snap = SupplierSnapshot(
         supplier="test",
@@ -610,11 +608,11 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
     )
     entry = _yearly_entry(meter="mono", solar_regime="compensation")
     today = dt_util.now().date()
-    months = _months_through(date(today.year, 1, 1), today)
-    cons_per_month = {m: 100.0 for m in months}
-    inj_per_month = {m: 500.0 for m in months}  # over-produces every month
+    days = _days_through(date(today.year, 1, 1), today)
+    cons_per_day = {d: 5.0 for d in days}
+    inj_per_day = {d: 25.0 for d in days}  # over-produces every day
     with _patch_recorder_per_entity(
-        {"sensor.day_cons": cons_per_month, "sensor.day_inj": inj_per_month}
+        {"sensor.day_cons": cons_per_day, "sensor.day_inj": inj_per_day}
     ):
         cost = await _compute_current_year_cost(
             hass,
@@ -624,7 +622,7 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
             entry,
             prosumer_cost_eur_per_month=4.0,
         )
-    # Energy cost per month = max((100 - 500) * X, 0) = 0. Fees only,
+    # YTD energy cost = max(Σ(5 - 25) * X, 0) = 0. Fees only,
     # pro-rated to the fraction of the year elapsed.
     fraction = _year_fraction(today)
     assert cost == pytest.approx((65.0 + 12 * 2.5 + 12 * 4.0) * fraction)
@@ -634,13 +632,12 @@ async def test_year_cost_uses_per_month_snapshot_when_archive_available(
     hass: HomeAssistant,
 ) -> None:
     """When fetch_for_month returns a different snapshot for a past
-    month, the year-cost loop must apply that month's rate to that
-    month's kWh -- not today's snapshot rate to everything."""
+    month, the year-cost loop must apply that month's rate to **its**
+    days -- not today's snapshot rate to everything."""
 
     today = dt_util.now().date()
-    months = _months_through(date(today.year, 1, 1), today)
-    if not months:
-        pytest.skip("test runs on Jan 1 before any past months")
+    if today.month == 1:
+        pytest.skip("test needs at least one past month")
 
     cheap = SupplierSnapshot(
         supplier="test",
@@ -660,12 +657,14 @@ async def test_year_cost_uses_per_month_snapshot_when_archive_available(
         source_url="test://expensive",
         fetched_at_iso="2026-04-29T12:00:00+00:00",
     )
+    jan_first = date(today.year, 1, 1)
 
     async def _fake_fetch_for_month(
         _session: object, _contract: str, _region: str, year_month: date
     ) -> SupplierSnapshot:
-        # First month gets the cheap card, everything else uses the proxy.
-        return cheap if year_month == months[0] else None  # type: ignore[return-value]
+        # January gets the cheap card, every later month falls back to
+        # the proxy snapshot (the "expensive" one passed to the helper).
+        return cheap if year_month == jan_first else None  # type: ignore[return-value]
 
     extractor = SupplierExtractor(
         id="test",
@@ -676,8 +675,9 @@ async def test_year_cost_uses_per_month_snapshot_when_archive_available(
     )
     _monthly_snapshots(hass).clear()
     entry = _yearly_entry(meter="mono", solar_regime="none")
-    cons_per_month = {m: 100.0 for m in months}
-    with _patch_recorder_per_entity({"sensor.day_cons": cons_per_month}):
+    days = _days_through(jan_first, today)
+    cons_per_day = {d: 5.0 for d in days}
+    with _patch_recorder_per_entity({"sensor.day_cons": cons_per_day}):
         cost = await _compute_current_year_cost(
             hass,
             None,  # type: ignore[arg-type]
@@ -688,7 +688,9 @@ async def test_year_cost_uses_per_month_snapshot_when_archive_available(
         )
     cheap_all_in = 0.10 + 0.10 + 0.0145 + 0.05 + 0.002
     expensive_all_in = 0.30 + 0.10 + 0.0145 + 0.05 + 0.002
-    expected = 100.0 * cheap_all_in + 100.0 * expensive_all_in * (len(months) - 1)
+    jan_days = sum(1 for d in days if d.month == 1)
+    other_days = len(days) - jan_days
+    expected = 5.0 * cheap_all_in * jan_days + 5.0 * expensive_all_in * other_days
     assert cost == pytest.approx(expected)
 
 
