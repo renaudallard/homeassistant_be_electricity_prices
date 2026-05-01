@@ -27,13 +27,18 @@
 
 from __future__ import annotations
 
+import asyncio
+from datetime import date
 from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from custom_components.be_electricity_prices.providers.base import VariableRates
 from custom_components.be_electricity_prices.providers.ecopower import (
     extract_pdf_text_layout,
+    fetch_for_month,
     parse_snapshot,
 )
 
@@ -129,3 +134,102 @@ def test_april_card_publication_and_supplier_metadata() -> None:
     assert snap.supplier == "ecopower"
     assert snap.contract == "ecopower_burgerstroom"
     assert snap.publication_label == "april 2026"
+
+
+# ---- fetch_for_month -----------------------------------------------------------
+
+
+_LISTING_HTML = """
+<a href="https://cdn.example/202601_gbs_tariefkaart.pdf">January</a>
+<a href="https://cdn.example/202602_gbs_tariefkaart.pdf">February</a>
+<a href="https://cdn.example/202603_gbs_tariefkaart.pdf">March</a>
+<a href="https://cdn.example/202604_gbs_tariefkaart.pdf">April</a>
+<a href="https://cdn.example/202605_gbs_inschatting_tariefkaart_ecopower.pdf">May preview</a>
+"""
+
+
+class _Resp:
+    status = 200
+
+    def __init__(self, body: str) -> None:
+        self._body = body
+
+    async def text(self) -> str:
+        return self._body
+
+    async def __aenter__(self) -> "_Resp":
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        return None
+
+
+class _Session:
+    def __init__(self, body: str) -> None:
+        self._body = body
+
+    def get(self, *_args: Any, **_kwargs: Any) -> _Resp:
+        return _Resp(self._body)
+
+
+def test_fetch_for_month_returns_snapshot_when_listing_has_url() -> None:
+    """The Feb-2026 fixture parses cleanly and the listing URL with
+    matching YYYYMM prefix is what fetch_for_month must surface."""
+    text = _text("ecopower_burgerstroom_feb.pdf")
+    with patch(
+        "custom_components.be_electricity_prices.providers.ecopower.fetch_pdf_text_layout",
+        new=AsyncMock(return_value=text),
+    ):
+        snap = asyncio.run(
+            fetch_for_month(
+                _Session(_LISTING_HTML),  # type: ignore[arg-type]
+                "ecopower_burgerstroom",
+                "flanders",
+                date(2026, 2, 1),
+            )
+        )
+    assert snap is not None
+    assert snap.publication_label == "2026-02"
+    assert isinstance(snap.energy, VariableRates)
+
+
+def test_fetch_for_month_skips_inschatting_preview() -> None:
+    """The next-month preview (gbs_inschatting) is on the listing but
+    is not a billable card. fetch_for_month must not return it as the
+    historical snapshot for any month."""
+    snap = asyncio.run(
+        fetch_for_month(
+            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            "ecopower_burgerstroom",
+            "flanders",
+            date(2026, 5, 1),
+        )
+    )
+    assert snap is None
+
+
+def test_fetch_for_month_returns_none_when_listing_has_no_match() -> None:
+    """Months Ecopower doesn't carry on the listing return None so the
+    coordinator falls back to the proxy. Ecopower keeps only the last
+    few months around."""
+    snap = asyncio.run(
+        fetch_for_month(
+            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            "ecopower_burgerstroom",
+            "flanders",
+            date(2024, 6, 1),
+        )
+    )
+    assert snap is None
+
+
+def test_fetch_for_month_unknown_contract_returns_none() -> None:
+    snap = asyncio.run(
+        fetch_for_month(
+            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            "ecopower_zakelijk",
+            "flanders",
+            date(2026, 2, 1),
+        )
+    )
+    assert snap is None

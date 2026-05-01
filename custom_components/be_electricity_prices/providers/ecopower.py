@@ -47,7 +47,7 @@ to scale up to TVAC, matching every other supplier's all-in number.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import aiohttp
 
@@ -111,6 +111,52 @@ async def fetch(
     pdf_url, label = await _resolve_latest_pdf(session)
     text = await fetch_pdf_text_layout(session, pdf_url)
     return parse_snapshot(text, pdf_url, label)
+
+
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # noqa: ARG001 - Ecopower is Flanders-only.
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """Fetch the Ecopower card for a specific (year, month).
+
+    The price page lists the last few months' definitive cards. Find
+    the one whose YYYYMM filename prefix matches the requested month
+    and parse it. Returns None when the listing doesn't carry the
+    month (Ecopower only retains ~4 months back), the URL 404s, or the
+    PDF doesn't parse.
+    """
+    if contract_id != _CONTRACT_ID:
+        return None
+    target = f"{year_month.year:04d}{year_month.month:02d}"
+    try:
+        async with session.get(
+            _PRICE_PAGE,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status >= 400:
+                return None
+            html = await resp.text()
+    except aiohttp.ClientError:
+        return None
+    pdf_url: str | None = None
+    for match in _CARD_RE.finditer(html):
+        if (
+            match.group("yyyymm") == target
+            and "inschatting" not in match.group(1).lower()
+        ):
+            pdf_url = match.group(1)
+            break
+    if pdf_url is None:
+        return None
+    try:
+        text = await fetch_pdf_text_layout(session, pdf_url)
+        label = f"{target[:4]}-{target[4:]}"
+        return parse_snapshot(text, pdf_url, label)
+    except ExtractorError:
+        return None
 
 
 async def probe(
@@ -412,4 +458,5 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     probe=probe,
+    fetch_for_month=fetch_for_month,
 )
