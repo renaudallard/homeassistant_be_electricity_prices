@@ -100,6 +100,7 @@ from .providers.base import (
     EnergyRates,
     FixedRates,
     InjectionRates,
+    SupplierExtractor,
     TaxOverlay,
     VariableRates,
 )
@@ -118,6 +119,13 @@ SNAPSHOT_STALE_DAYS = 7
 # key also has an asyncio.Lock so concurrent first-fetches deduplicate.
 _SHARED_SNAPSHOTS_KEY = "snapshot_cache"
 _SHARED_LOCKS_KEY = "snapshot_locks"
+
+# Per-(supplier, contract, region, YYYY-MM) cache of historical snapshots
+# the time-correct yearly-cost flow uses to bill each past month at its
+# own rate. ``None`` is a negative cache so a probe-less supplier or a
+# month outside the supplier's archive horizon doesn't refetch every
+# refresh. Lives in-memory only; rebuilt fresh on HA restart.
+_MONTHLY_SNAPSHOTS_KEY = "monthly_snapshot_cache"
 
 
 @dataclass
@@ -145,6 +153,61 @@ def _shared_lock(hass: HomeAssistant, key: tuple[str, str, str]) -> asyncio.Lock
     if key not in locks:
         locks[key] = asyncio.Lock()
     return locks[key]
+
+
+def _monthly_snapshots(
+    hass: HomeAssistant,
+) -> dict[tuple[str, str, str, str], "SupplierSnapshot | None"]:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_MONTHLY_SNAPSHOTS_KEY, {})  # type: ignore[no-any-return]
+
+
+async def _snapshot_for_month(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: "SupplierExtractor",
+    contract: str,
+    region: str,
+    year_month: date,
+    current_snapshot: "SupplierSnapshot",
+) -> "SupplierSnapshot":
+    """Resolve the historical snapshot for ``year_month`` or fall back.
+
+    Caches the result per (supplier, contract, region, YYYY-MM): a hit
+    skips the network round-trip on subsequent refreshes. ``None`` is
+    cached too -- "supplier doesn't archive this month" is a stable
+    signal we shouldn't keep re-asking. The fallback is the current
+    snapshot, used as a proxy for non-archive suppliers (OCTA+,
+    TotalEnergies, Engie, Luminus, DATS 24, Mega, Bolt).
+    """
+    cache = _monthly_snapshots(hass)
+    cache_key = (
+        extractor.id,
+        contract,
+        region,
+        f"{year_month.year:04d}-{year_month.month:02d}",
+    )
+    if cache_key in cache:
+        cached = cache[cache_key]
+        return cached if cached is not None else current_snapshot
+    fetch_archived = extractor.fetch_for_month
+    if fetch_archived is None:
+        cache[cache_key] = None
+        return current_snapshot
+    try:
+        snap = await fetch_archived(session, contract, region, year_month)
+    except Exception as err:  # noqa: BLE001 - per-month fetch must never break the year loop
+        _LOGGER.debug(
+            "fetch_for_month failed for %s/%s/%s/%s: %s",
+            extractor.id,
+            contract,
+            region,
+            cache_key[3],
+            err,
+        )
+        snap = None
+    cache[cache_key] = snap
+    return snap if snap is not None else current_snapshot
 
 
 @dataclass

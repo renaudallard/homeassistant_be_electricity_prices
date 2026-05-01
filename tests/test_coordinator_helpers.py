@@ -819,3 +819,149 @@ async def test_recorder_monthly_kwh_swallows_recorder_errors(
             hass, "sensor.day_cons", date(2026, 1, 1), date(2026, 5, 1)
         )
     assert out == {}
+
+
+# ---- _snapshot_for_month -----------------------------------------------------
+
+
+def _archive_snapshot(label: str) -> SupplierSnapshot:
+    return SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.20),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+            )
+        },
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url=f"test://{label}",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+        publication_label=label,
+    )
+
+
+async def test_snapshot_for_month_uses_archive_when_available(
+    hass: HomeAssistant,
+) -> None:
+    """When an extractor exposes fetch_for_month and it returns a real
+    snapshot, _snapshot_for_month must surface that snapshot and cache
+    it - subsequent calls for the same month do not refetch."""
+    from custom_components.be_electricity_prices.coordinator import (
+        _snapshot_for_month,
+        _monthly_snapshots,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        SupplierExtractor,
+    )
+
+    archived = _archive_snapshot("2026-01")
+    current = _archive_snapshot("2026-04")
+    fetch_calls = 0
+
+    async def _fake_fetch_for_month(*_args: object, **_kw: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return archived
+
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),  # unused
+        fetch_for_month=_fake_fetch_for_month,
+    )
+    _monthly_snapshots(hass).clear()
+    snap = await _snapshot_for_month(
+        hass, None, extractor, "test", "wallonia", date(2026, 1, 1), current
+    )
+    assert snap is archived
+    # Second call: cache hit, no extra fetch.
+    snap = await _snapshot_for_month(
+        hass, None, extractor, "test", "wallonia", date(2026, 1, 1), current
+    )
+    assert snap is archived
+    assert fetch_calls == 1
+
+
+async def test_snapshot_for_month_falls_back_to_current_when_no_archive(
+    hass: HomeAssistant,
+) -> None:
+    """An extractor without fetch_for_month, or one whose fetch_for_month
+    returns None for the requested month, must transparently fall back
+    to the current snapshot as a proxy."""
+    from custom_components.be_electricity_prices.coordinator import (
+        _snapshot_for_month,
+        _monthly_snapshots,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        SupplierExtractor,
+    )
+
+    current = _archive_snapshot("2026-04")
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=None,  # non-archive supplier
+    )
+    _monthly_snapshots(hass).clear()
+    snap = await _snapshot_for_month(
+        hass, None, extractor, "test", "wallonia", date(2026, 1, 1), current
+    )
+    assert snap is current
+
+    async def _none_fetch(*_args: object, **_kw: object) -> SupplierSnapshot | None:
+        return None
+
+    extractor2 = SupplierExtractor(
+        id="test2",
+        label="Test2",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_none_fetch,
+    )
+    snap = await _snapshot_for_month(
+        hass, None, extractor2, "test", "wallonia", date(2025, 6, 1), current
+    )
+    assert snap is current
+
+
+async def test_snapshot_for_month_caches_negative_results(
+    hass: HomeAssistant,
+) -> None:
+    """A None response from fetch_for_month must be cached so we don't
+    refetch the same missing month every coordinator tick."""
+    from custom_components.be_electricity_prices.coordinator import (
+        _snapshot_for_month,
+        _monthly_snapshots,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        SupplierExtractor,
+    )
+
+    current = _archive_snapshot("2026-04")
+    fetch_calls = 0
+
+    async def _none_fetch(*_args: object, **_kw: object) -> SupplierSnapshot | None:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return None
+
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_none_fetch,
+    )
+    _monthly_snapshots(hass).clear()
+    await _snapshot_for_month(
+        hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
+    )
+    await _snapshot_for_month(
+        hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
+    )
+    assert fetch_calls == 1
