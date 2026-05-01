@@ -858,6 +858,57 @@ def _read_kwh(hass: HomeAssistant, entity_id: str | None) -> float | None:
         return None
 
 
+async def _recorder_monthly_kwh(
+    hass: HomeAssistant, entity_id: str, start: date, end: date
+) -> dict[date, float]:
+    """Per-month kWh deltas for ``entity_id`` over ``[start, end]``.
+
+    Wraps ``statistics_during_period`` via the recorder's executor: the
+    function is synchronous and hits the SQLite store, so it must not
+    run on the event loop. Returns ``{first_of_local_month: kWh}`` -
+    keys are local-date Mondays of each month-start. An empty dict
+    surfaces every failure mode we know about (recorder not ready,
+    entity has no statistics, transient DB error) so the caller can
+    fall back to a fees-only floor without raising.
+    """
+    try:
+        from homeassistant.components.recorder import get_instance
+        from homeassistant.components.recorder.statistics import (
+            statistics_during_period,
+        )
+    except ImportError:
+        return {}
+    start_dt = dt_util.start_of_local_day(
+        datetime(start.year, start.month, 1)
+    ).astimezone(UTC)
+    end_dt = dt_util.start_of_local_day(datetime(end.year, end.month, 1)).astimezone(
+        UTC
+    ) + timedelta(days=32)
+    try:
+        stats = await get_instance(hass).async_add_executor_job(
+            statistics_during_period,
+            hass,
+            start_dt,
+            end_dt,
+            {entity_id},
+            "month",
+            None,
+            {"sum"},
+        )
+    except Exception:  # noqa: BLE001 - recorder may surface anything
+        return {}
+    rows = stats.get(entity_id, [])
+    out: dict[date, float] = {}
+    for row in rows:
+        ts = row.get("start")
+        delta = row.get("sum")
+        if ts is None or delta is None:
+            continue
+        local = dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC)).date()
+        out[date(local.year, local.month, 1)] = float(delta)
+    return out
+
+
 def _read_register(
     hass: HomeAssistant,
     entry: ConfigEntry,

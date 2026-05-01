@@ -27,17 +27,21 @@
 
 from __future__ import annotations
 
-import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from datetime import UTC, date, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import (
     _compute_capacity,
+    _compute_current_year_cost,
     _compute_injection_price,
     _compute_prosumer,
-    _compute_current_year_cost,
+    _recorder_monthly_kwh,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
@@ -740,3 +744,78 @@ async def test_current_year_cost_register_falls_back_to_fees_when_baseline_missi
     )
     # _yearly_snapshot has zero fees -> cost is 0.0 (not unknown).
     assert cost == 0.0
+
+
+# ---- _recorder_monthly_kwh ----------------------------------------------------
+
+
+def _stat_row(year: int, month: int, kwh: float) -> dict[str, float]:
+    """Build a fake StatisticsRow whose ``start`` is the UTC equivalent of
+    local midnight on the 1st of the month -- the way HA's recorder
+    actually surfaces monthly buckets after timezone conversion."""
+    local_start = dt_util.start_of_local_day(datetime(year, month, 1))
+    return {"start": local_start.astimezone(UTC).timestamp(), "sum": kwh}
+
+
+async def test_recorder_monthly_kwh_returns_per_month_sums(
+    hass: HomeAssistant,
+) -> None:
+    """The helper unwraps the recorder's StatisticsRow list into a
+    {first_of_local_month: kWh} dict the year-cost loop can iterate."""
+    fake_stats = {
+        "sensor.day_cons": [
+            _stat_row(2026, 1, 100.0),
+            _stat_row(2026, 2, 110.0),
+            _stat_row(2026, 3, 95.0),
+        ]
+    }
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value=fake_stats)
+    with patch(
+        "homeassistant.components.recorder.get_instance",
+        return_value=instance,
+    ):
+        out = await _recorder_monthly_kwh(
+            hass, "sensor.day_cons", date(2026, 1, 1), date(2026, 4, 1)
+        )
+    assert out == {
+        date(2026, 1, 1): 100.0,
+        date(2026, 2, 1): 110.0,
+        date(2026, 3, 1): 95.0,
+    }
+
+
+async def test_recorder_monthly_kwh_unknown_entity_returns_empty(
+    hass: HomeAssistant,
+) -> None:
+    """An entity that the recorder doesn't track surfaces as an empty
+    dict; the caller falls back to a fees-only floor instead of
+    raising."""
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with patch(
+        "homeassistant.components.recorder.get_instance",
+        return_value=instance,
+    ):
+        out = await _recorder_monthly_kwh(
+            hass, "sensor.does_not_exist", date(2026, 1, 1), date(2026, 5, 1)
+        )
+    assert out == {}
+
+
+async def test_recorder_monthly_kwh_swallows_recorder_errors(
+    hass: HomeAssistant,
+) -> None:
+    """If the recorder isn't ready or the DB query raises, the helper
+    returns an empty dict rather than propagating the exception. The
+    coordinator's update can still complete from cached snapshots."""
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(side_effect=RuntimeError("db down"))
+    with patch(
+        "homeassistant.components.recorder.get_instance",
+        return_value=instance,
+    ):
+        out = await _recorder_monthly_kwh(
+            hass, "sensor.day_cons", date(2026, 1, 1), date(2026, 5, 1)
+        )
+    assert out == {}
