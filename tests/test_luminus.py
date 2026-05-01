@@ -238,6 +238,16 @@ def test_brussels_is_unsupported() -> None:
     asyncio.run(_run())
 
 
+def test_publication_label_tolerates_padded_parens() -> None:
+    """The April-2026 cards print "(avril 2026)" but May-2026 cards print
+    "(mai 2026 )" with a trailing space inside the parens. Both must
+    surface a non-empty publication_label."""
+    apr = _comfy_w()
+    assert apr.publication_label == "avril 2026"
+    may = parse_snapshot("luminus_comfy", _text("luminus_comfy_w_may.pdf"), "wallonia")
+    assert may.publication_label == "mai 2026"
+
+
 def test_unknown_contract_raises() -> None:
     async def _run() -> None:
         with pytest.raises(ExtractorError, match="unknown Luminus contract"):

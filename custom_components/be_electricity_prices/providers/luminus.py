@@ -315,8 +315,11 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
 
 def _extract_publication_month(text: str) -> str:
     # The first page usually says e.g. "Luminus Comfy Electricité (avril 2026)".
+    # The May 2026 cards started padding the inside of the parens with a
+    # trailing space ("(mai 2026 )"), so tolerate optional whitespace
+    # against future-similar formatting drift.
     match = re.search(
-        r"\(([a-zA-Zéèû]+\s+\d{4})\)",
+        r"\(\s*([a-zA-Zéèû]+\s+\d{4})\s*\)",
         text,
     )
     return match.group(1) if match else ""
