@@ -45,6 +45,7 @@ from datetime import date
 
 import aiohttp
 
+from ..const import REGION_FLANDERS, REGION_WALLONIA
 from ._pdf import (
     USER_AGENT,
     fetch_pdf_text,
@@ -601,14 +602,29 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
     )
 
 
+_ENECO_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
+
 EXTRACTOR = SupplierExtractor(
     id="eneco",
     label="Eneco",
     contracts=(
-        Contract(id="power_fix", label="Eneco Zon & Wind Vast", kind="fixed"),
-        Contract(id="power_flex", label="Eneco Zon & Wind Flex", kind="variable"),
         Contract(
-            id="power_dynamic", label="Eneco Zon & Wind Dynamisch", kind="dynamic"
+            id="power_fix",
+            label="Eneco Zon & Wind Vast",
+            kind="fixed",
+            regions=_ENECO_REGIONS,
+        ),
+        Contract(
+            id="power_flex",
+            label="Eneco Zon & Wind Flex",
+            kind="variable",
+            regions=_ENECO_REGIONS,
+        ),
+        Contract(
+            id="power_dynamic",
+            label="Eneco Zon & Wind Dynamisch",
+            kind="dynamic",
+            regions=_ENECO_REGIONS,
         ),
     ),
     fetch=fetch,
