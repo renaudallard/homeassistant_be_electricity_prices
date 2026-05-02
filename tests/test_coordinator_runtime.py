@@ -556,3 +556,61 @@ async def test_evict_bumps_tuple_generation_blocks_inflight_write(
     # Sanity: the failed-fetch bucket can be empty without this
     # affecting the generation.
     assert _shared_failed_fetches(hass).get(key) is None
+
+
+async def test_first_refresh_end_to_end_does_not_crash(hass: HomeAssistant) -> None:
+    """Regression for the v0.5.14 production crash: drive the actual
+    coordinator tick (refresh → update → save → load) with a mocked
+    extractor while ``entry.runtime_data`` is unset. The chain must
+    complete without raising AttributeError or comparing against an
+    UNDEFINED sentinel.
+
+    The previous regression test only called _save_persistent directly,
+    which masked the production failure mode -- runtime_data being
+    unset *because* we are inside the very first refresh entry-point."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    snap = SupplierSnapshot(
+        supplier="eneco",
+        contract="power_fix",
+        energy=FixedRates(single=0.18),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://",
+    )
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        return snap
+
+    extractor = type(
+        "E",
+        (),
+        {
+            "id": "eneco",
+            "fetch": staticmethod(_fake_fetch),
+            "probe": None,
+            "fetch_for_month": None,
+        },
+    )
+    # entry.runtime_data is intentionally NOT assigned -- this is the
+    # state HA core is in before async_setup_entry's coordinator =
+    # ... line completes.
+    assert getattr(entry, "runtime_data", None) is None
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        # async_refresh runs the same _async_update_data path as
+        # async_config_entry_first_refresh; either would have crashed
+        # under v0.5.14's bare runtime_data read at line 887. Use
+        # async_refresh because the first-refresh helper requires
+        # config_entry to be wired into DataUpdateCoordinator from
+        # 2024.10+ -- and the bug manifests on the inner tick path
+        # regardless of which entry-point invokes it.
+        await coord.async_refresh()
+
+    assert coord.last_update_success
+    assert coord._snapshot is snap
