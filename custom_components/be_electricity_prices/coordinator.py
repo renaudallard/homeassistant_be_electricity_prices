@@ -98,6 +98,7 @@ from .providers.base import (
     InjectionRates,
     SupplierExtractor,
     TaxOverlay,
+    TimeOfUseRates,
     VariableRates,
 )
 
@@ -820,6 +821,58 @@ async def _recorder_daily_kwh(
     return out
 
 
+async def _recorder_hourly_kwh(
+    hass: HomeAssistant, entity_id: str, start: date, end: date
+) -> dict[datetime, float]:
+    """Per-hour kWh deltas for ``entity_id`` keyed by UTC hour.
+
+    Used by the TOU year-cost path: TOU contracts have a different
+    energy rate per hour-of-day, so day-level granularity is too coarse.
+    Mirrors ``_recorder_daily_kwh`` but at ``period="hour"``. Reads
+    ``change`` for the same reason (``sum`` is monotonic).
+    """
+    try:
+        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+            get_instance,
+        )
+        from homeassistant.components.recorder.statistics import (
+            statistics_during_period,
+        )
+    except ImportError:
+        return {}
+    start_dt = dt_util.start_of_local_day(
+        datetime(start.year, start.month, start.day)
+    ).astimezone(UTC)
+    end_dt = dt_util.start_of_local_day(
+        datetime(end.year, end.month, end.day)
+    ).astimezone(UTC) + timedelta(days=1)
+    try:
+        stats = await get_instance(hass).async_add_executor_job(
+            statistics_during_period,
+            hass,
+            start_dt,
+            end_dt,
+            {entity_id},
+            "hour",
+            None,
+            {"change"},
+        )
+    except Exception:  # noqa: BLE001
+        return {}
+    rows = stats.get(entity_id, [])
+    out: dict[datetime, float] = {}
+    for row in rows:
+        ts = row.get("start")
+        delta = row.get("change")
+        if ts is None or delta is None:
+            continue
+        utc_hour = datetime.fromtimestamp(ts, tz=UTC).replace(
+            minute=0, second=0, microsecond=0
+        )
+        out[utc_hour] = float(delta)
+    return out
+
+
 async def _recorder_daily_band_ratio(
     hass: HomeAssistant, entity_id: str, start: date, end: date
 ) -> dict[date, tuple[float, float]]:
@@ -994,6 +1047,79 @@ def _days_through(start: date, end: date) -> list[date]:
     return days
 
 
+async def _ytd_tou_energy(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: SupplierExtractor,
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    today: date,
+) -> float | None:
+    """YTD energy cost for a Time-of-Use contract, billed per hour.
+
+    TOU energy rates change with the hour of day, so the per-day path
+    used for fixed/variable contracts is too coarse. This helper bins
+    the recorder's hourly kWh deltas through ``compute_breakdown`` at
+    each local hour, picking up the TOU slot rate from the supplier and
+    the bi-hourly distribution band from the user's DSO mode in one
+    call. Returns ``None`` when no totals consumption sensor is wired
+    (the day/night register paths can't be sliced by TOU slot, so the
+    caller falls back to the fees-only floor).
+    """
+    region = entry.data.get(CONF_REGION, "")
+    dso = entry.data.get(CONF_DSO, "")
+    contract = entry.data[CONF_CONTRACT]
+    meter = entry.data.get(CONF_METER, METER_MONO)
+    dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
+    regime = entry.data.get(CONF_SOLAR_REGIME, "none")
+
+    cons_id = entry.data.get(CONF_CONSUMPTION_KWH)
+    if not cons_id:
+        return None
+    inj_id = entry.data.get(CONF_INJECTION_KWH)
+
+    jan1 = date(today.year, 1, 1)
+    cons_per_hour = await _recorder_hourly_kwh(hass, cons_id, jan1, today)
+    inj_per_hour = (
+        await _recorder_hourly_kwh(hass, inj_id, jan1, today) if inj_id else {}
+    )
+
+    month_snap_cache: dict[date, SupplierSnapshot] = {}
+
+    async def _snap_for(month_first: date) -> SupplierSnapshot:
+        if month_first not in month_snap_cache:
+            month_snap_cache[month_first] = await _snapshot_for_month(
+                hass, session, extractor, contract, region, month_first, snapshot
+            )
+        return month_snap_cache[month_first]
+
+    energy_cost = 0.0
+    for utc_hour, kwh_cons in cons_per_hour.items():
+        local = dt_util.as_local(utc_hour)
+        snap_h = await _snap_for(date(local.year, local.month, 1))
+        try:
+            bd = compute_breakdown(snap_h, dso, region, local, None, meter, dso_mode)
+        except (KeyError, ValueError):
+            # Missing DSO row or non-static rate kind: skip this hour.
+            continue
+        kwh_inj = inj_per_hour.get(utc_hour, 0.0)
+        if regime == SOLAR_REGIME_COMPENSATION:
+            d_cost = (kwh_cons - kwh_inj) * bd.all_in
+        elif regime == SOLAR_REGIME_INJECTION:
+            d_cost = kwh_cons * bd.all_in
+            inj_block = snap_h.injection
+            inj_rate = inj_block.current if inj_block is not None else None
+            if inj_rate is not None:
+                d_cost -= kwh_inj * inj_rate
+        else:
+            d_cost = kwh_cons * bd.all_in
+        energy_cost += d_cost
+
+    if regime == SOLAR_REGIME_COMPENSATION:
+        energy_cost = max(energy_cost, 0.0)
+    return energy_cost
+
+
 async def _compute_current_year_cost(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -1042,10 +1168,22 @@ async def _compute_current_year_cost(
     annual on Jan 1.
 
     ``inj_m`` is each month's snapshot's ``injection.current`` (the
-    printed monthly indicative). v1 doesn't replay historical hourly
-    spot prices, so dynamic-contract users see the fees-only floor for
-    past months; current-month dynamic still works through the live
-    spot path elsewhere in the integration.
+    printed monthly indicative).
+
+    **Time-of-Use contracts** (Engie Empower Flextime, Luminus
+    SmartFlex) take a per-hour path: the recorder's hourly kWh deltas
+    are billed against ``compute_breakdown`` at each local hour, so
+    the energy component picks the supplier's TOU slot rate while the
+    network component still follows the user's DSO mode. Requires the
+    user to have wired ``CONF_CONSUMPTION_KWH`` (single totals); the
+    bi-hourly day/night registers don't carry the slot semantics TOU
+    needs.
+
+    **Dynamic contracts** (Cociter Dynamique, Eneco Power Dynamic,
+    OCTA+ Dynamic, etc.) need historical hourly ENTSO-E spots to bill
+    correctly. v1 does not replay historical spots, so the energy
+    component is reported as 0 and the sensor surfaces the pro-rated
+    fees-only floor. The live ``current_price`` sensor is unaffected.
 
     Returns ``None`` only when there is no meter input wired at all
     AND no snapshot to show fees against. In every other case the
@@ -1069,6 +1207,14 @@ async def _compute_current_year_cost(
     fund_yearly = snapshot.taxes.energy_fund_eur_per_month * 12.0
     prosumer_yearly = prosumer_cost_eur_per_month * 12.0
     fees = (fixed + fund_yearly + prosumer_yearly) * year_fraction
+
+    if isinstance(snapshot.energy, TimeOfUseRates):
+        tou_energy = await _ytd_tou_energy(
+            hass, session, extractor, snapshot, entry, today
+        )
+        if tou_energy is None:
+            return fees
+        return tou_energy + fees
 
     daily_kwh = await _resolve_daily_kwh(hass, entry, today)
     if daily_kwh is None:

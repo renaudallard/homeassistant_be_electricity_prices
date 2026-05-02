@@ -28,7 +28,7 @@
 from __future__ import annotations
 
 import calendar
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -55,6 +55,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
+    TimeOfUseRates,
 )
 
 
@@ -800,3 +801,60 @@ async def test_year_cost_skips_month_when_archived_snapshot_lacks_dso(
     other_days = sum(1 for d in days if d.month != 1)
     expected = 5.0 * current_all_in * other_days
     assert cost == pytest.approx(expected)
+
+
+async def test_year_cost_tou_bills_per_hourly_slot(hass: HomeAssistant) -> None:
+    """Time-of-Use contracts must read hourly recorder data and apply
+    the supplier's slot rate per hour, not the fees-only floor (which
+    is what the per-day path returned before)."""
+    from custom_components.be_electricity_prices import coordinator
+
+    today = dt_util.now().date()
+
+    snap = SupplierSnapshot(
+        supplier="test",
+        contract="test_tou",
+        energy=TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://tou",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test_tou",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "none",
+            "consumption_kwh": "sensor.cons_total",
+            "dso_tariff_mode": "bi_horaire",
+        },
+    )
+
+    # One hour at 09:00 local Tuesday (Jan 6 2026 is a Tuesday) -- TOU peak.
+    peak_hour = dt_util.start_of_local_day(datetime(2026, 1, 6)) + timedelta(hours=9)
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.cons_total":
+            return {peak_hour.astimezone(UTC): 1.0}
+        return {}
+
+    expected_all_in = (0.30 + 0.10 + 0.0145 + 0.05 + 0.002) * 1.0  # vat_factor 1.0
+
+    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            prosumer_cost_eur_per_month=0.0,
+        )
+    fraction = _year_fraction(today)
+    # Energy = 1 kWh × all-in (peak slot); fees pro-rated (zero here).
+    assert cost == pytest.approx(expected_all_in + 0.0 * fraction)
