@@ -132,9 +132,19 @@ async def fetch_for_month(
         return None
     try:
         text = await fetch_pdf_text(session, pdf_url)
-        return parse_snapshot(text, contract_id, pdf_url, _yymm_to_label(target_yymm))
+        snap = parse_snapshot(text, contract_id, pdf_url, _yymm_to_label(target_yymm))
     except ExtractorError:
         return None
+    # Reject when the parsed validity contradicts the requested month
+    # (CDN cache pollution, replaced filename serving the wrong month).
+    # Missing valid_until is tolerated -- the URL encodes the month, so
+    # an unparseable validity line is treated as corroboration only.
+    if snap.valid_until is not None and (
+        snap.valid_until.year != year_month.year
+        or snap.valid_until.month != year_month.month
+    ):
+        return None
+    return snap
 
 
 async def probe(
