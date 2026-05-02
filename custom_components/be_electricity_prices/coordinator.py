@@ -159,6 +159,34 @@ def _shared_failed_fetches(
     return bucket.setdefault(_SHARED_FAILED_FETCHES_KEY, {})  # type: ignore[no-any-return]
 
 
+def evict_shared_caches(
+    hass: HomeAssistant, key: tuple[str, str, str], extractor_id: str
+) -> None:
+    """Drop every shared-cache entry pinned to the given supplier tuple.
+
+    Called from ``async_unload_entry`` once the unloaded entry's
+    (supplier, contract, region) is no longer referenced by any other
+    loaded entry. Without this, removing the last entry on a given
+    tuple leaks the snapshot, the per-month archive cache, the
+    failed-fetch marker, and the asyncio.Lock into ``hass.data`` for
+    the lifetime of the HA process.
+    """
+    _shared_snapshots(hass).pop(key, None)
+    _shared_failed_fetches(hass).pop(key, None)
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    locks: dict[tuple[str, str, str], Any] = bucket.setdefault(_SHARED_LOCKS_KEY, {})
+    locks.pop(key, None)
+    monthly = _monthly_snapshots(hass)
+    _, contract, region = key
+    stale = [
+        k
+        for k in monthly
+        if k[0] == extractor_id and k[1] == contract and k[2] == region
+    ]
+    for k in stale:
+        monthly.pop(k, None)
+
+
 def _shared_lock(hass: HomeAssistant, key: tuple[str, str, str]) -> asyncio.Lock:
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     locks: dict[tuple[str, str, str], asyncio.Lock] = bucket.setdefault(

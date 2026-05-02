@@ -93,6 +93,7 @@ def _text_mentions_month(text: str, year_month: date) -> bool:
     haystack = text.lower()
     return any(n.lower() in haystack for n in needles)
 
+
 # Cociter's current monthly publication patterns. The 4-digit group is YYMM.
 _VAR_RE = re.compile(
     r'href="(https?://[^"]*RCVar_YMR_Coop-(\d{4})-fr\.pdf)"', re.IGNORECASE

@@ -901,8 +901,7 @@ def test_energy_kind_handles_tou() -> None:
     """Regression for Round-2 Bug 1: TimeOfUseRates was missing from the
     energy-kind classifier so persistence raised TypeError on TOU."""
     assert (
-        _energy_kind(TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10))
-        == "tou"
+        _energy_kind(TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10)) == "tou"
     )
 
 

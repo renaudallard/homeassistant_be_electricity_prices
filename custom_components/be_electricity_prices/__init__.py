@@ -41,8 +41,8 @@ from homeassistant.core import (
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, PLATFORMS
-from .coordinator import BePricesCoordinator
+from .const import CONF_CONTRACT, CONF_REGION, CONF_SUPPLIER, DOMAIN, PLATFORMS
+from .coordinator import BePricesCoordinator, evict_shared_caches
 from .pricing import PriceBreakdown
 
 type BePricesConfigEntry = ConfigEntry[BePricesCoordinator]
@@ -102,6 +102,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
 async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> bool:
     """Unload one config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        # Drop any shared-cache rows pinned to this entry's (supplier,
+        # contract, region) tuple, but only when no other loaded entry
+        # still references the same tuple. Without this the snapshot,
+        # per-month archive, failed-fetch marker, and asyncio.Lock leak
+        # into hass.data for the rest of the HA process lifetime.
+        key = (
+            entry.data[CONF_SUPPLIER],
+            entry.data[CONF_CONTRACT],
+            entry.data[CONF_REGION],
+        )
+        siblings = [
+            other
+            for other in hass.config_entries.async_loaded_entries(DOMAIN)
+            if other.entry_id != entry.entry_id
+            and (
+                other.data[CONF_SUPPLIER],
+                other.data[CONF_CONTRACT],
+                other.data[CONF_REGION],
+            )
+            == key
+        ]
+        if not siblings:
+            evict_shared_caches(hass, key, entry.data[CONF_SUPPLIER])
     if unloaded and not hass.config_entries.async_loaded_entries(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE_REFRESH)
         hass.services.async_remove(DOMAIN, SERVICE_CHEAPEST_WINDOW)

@@ -98,6 +98,7 @@ def _text_mentions_month(text: str, year_month: date) -> bool:
     haystack = text.lower()
     return any(n.lower() in haystack for n in needles)
 
+
 # Contract id -> the POWER_<NAME> token Eneco uses in its filenames.
 _CONTRACT_SLUGS: dict[str, str] = {
     "power_fix": "FIX",
