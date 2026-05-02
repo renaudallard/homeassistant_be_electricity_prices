@@ -349,17 +349,19 @@ def text_mentions_month(
     month_names: tuple[str, ...],
 ) -> bool:
     """Heuristic check that ``text`` references the requested year+month
-    inside a validity-anchored window.
+    inside an anchored window.
 
     Looks for the printed month name + year, the numeric MM/YYYY form,
     and the ISO YYYY-MM form. Accent-folds both haystack and needles
-    so an extraction that lost diacritics still matches. Searches only
-    inside ~200-char windows after each validity keyword (``geldig``,
-    ``valable``, ``validit``, ``valid``) so a current-month card's
-    retrospective reference (``compared to October 2024``) doesn't
-    masquerade as the requested validity. Falls back to scanning the
-    first 1000 characters when no validity keyword exists, to keep
-    older / non-standard layouts working without locking out.
+    so an extraction that lost diacritics still matches. The search
+    is scoped to two anchors: the first 1000 characters (where Belgian
+    tariff cards print ``Carte tarifaire <month> <year>`` /
+    ``Tariefkaart <month> <year>``) plus 200-char windows after each
+    validity keyword (``geldig``, ``valable``, ``validit``, ``valid``).
+    Both anchors run on every call -- either alone is enough to
+    accept; together they catch the legitimate mention while excluding
+    retrospective references buried in footers and comparison tables
+    further down.
     """
     haystack = fold_accents(text)
     needles = tuple(
