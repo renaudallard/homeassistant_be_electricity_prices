@@ -527,11 +527,13 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         # the swap, since the surviving row may now be carrying the
         # other DSO's values without anything else to compare it
         # against. Surface it so the maintainer can investigate.
+        parsed = "resa" if resa is not None else "rew"
+        missing = "rew" if resa is not None else "resa"
         _LOGGER.warning(
             "Bolt RESA/REW row drift: only %s parsed; the label swap "
             "in _WALLONIA_LABELS may now be inverting %s's values",
-            "resa" if resa is not None else "rew",
-            "resa" if resa is not None else "rew",
+            parsed,
+            missing,
         )
         return out
     if resa.distribution_single >= rew.distribution_single:
