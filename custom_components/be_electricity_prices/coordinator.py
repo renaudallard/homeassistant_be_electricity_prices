@@ -1582,7 +1582,7 @@ async def _compute_current_year_cost(
 # the new field. Loading a snapshot whose schema_version is below this
 # raises in _snapshot_from_dict; async_load_persistent then discards the
 # cache and the coordinator's first refresh repopulates from the supplier.
-_SNAPSHOT_SCHEMA_VERSION = 6
+_SNAPSHOT_SCHEMA_VERSION = 7
 
 
 def _snapshot_to_dict(
@@ -1599,7 +1599,6 @@ def _snapshot_to_dict(
         "dsos": {k: v.__dict__ for k, v in snap.dsos.items()},
         "taxes": snap.taxes.__dict__,
         "source_url": snap.source_url,
-        "fetched_at_iso": snap.fetched_at_iso,
         "publication_label": snap.publication_label,
         "valid_until": snap.valid_until.isoformat() if snap.valid_until else None,
         "injection": snap.injection.__dict__ if snap.injection else None,
@@ -1640,7 +1639,6 @@ def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
         dsos={k: DsoOverlay(**v) for k, v in data["dsos"].items()},
         taxes=TaxOverlay(**data["taxes"]),
         source_url=data["source_url"],
-        fetched_at_iso=data["fetched_at_iso"],
         publication_label=data.get("publication_label", ""),
         valid_until=valid_until,
         injection=InjectionRates(**injection_data) if injection_data else None,

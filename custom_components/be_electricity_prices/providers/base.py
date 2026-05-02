@@ -233,7 +233,6 @@ class SupplierSnapshot:
     dsos: dict[str, DsoOverlay]
     taxes: TaxOverlay
     source_url: str
-    fetched_at_iso: str
     publication_label: str = ""
     injection: InjectionRates | None = None
     # Last calendar day the published rates apply to (typically the last

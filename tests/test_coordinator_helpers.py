@@ -81,7 +81,6 @@ def _snapshot(
         },
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002, vat_rate=0.0),
         source_url="test://",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
         injection=injection,
     )
 
@@ -243,7 +242,6 @@ def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:
             federal_excise=0.05, energy_contribution=0.002, brussels_renewables=0.0265
         ),
         source_url="test://",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
         injection=InjectionRates(current=0.0476),
     )
     brussels_entry = MockConfigEntry(
@@ -389,7 +387,6 @@ def _archive_snapshot(label: str) -> SupplierSnapshot:
         },
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url=f"test://{label}",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
         publication_label=label,
     )
 
@@ -522,7 +519,6 @@ def _yearly_snapshot() -> SupplierSnapshot:
             energy_fund_eur_per_month=0.0,
         ),
         source_url="test://",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
     )
 
 
@@ -646,7 +642,6 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
             federal_excise=0.0, energy_contribution=0.0, energy_fund_eur_per_month=2.5
         ),
         source_url="test://",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
     )
     entry = _yearly_entry(meter="mono", solar_regime="compensation", solar_kva=2.0)
     today = dt_util.now().date()
@@ -688,7 +683,6 @@ async def test_year_cost_uses_per_month_snapshot_when_archive_available(
         dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://cheap",
-        fetched_at_iso="2026-01-29T12:00:00+00:00",
     )
     expensive = SupplierSnapshot(
         supplier="test",
@@ -697,7 +691,6 @@ async def test_year_cost_uses_per_month_snapshot_when_archive_available(
         dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://expensive",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
     )
     jan_first = date(today.year, 1, 1)
 
@@ -751,7 +744,6 @@ async def test_year_cost_falls_back_to_fees_when_no_meters_configured(
             federal_excise=0.0, energy_contribution=0.0, energy_fund_eur_per_month=2.5
         ),
         source_url="test://",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
     )
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -797,7 +789,6 @@ async def test_year_cost_skips_month_when_archived_snapshot_lacks_dso(
         dsos={},  # no DSO at all
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://bad",
-        fetched_at_iso="2026-01-29T12:00:00+00:00",
     )
     current = SupplierSnapshot(
         supplier="test",
@@ -806,7 +797,6 @@ async def test_year_cost_skips_month_when_archived_snapshot_lacks_dso(
         dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://current",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
     )
 
     async def _fake_fetch_for_month(
@@ -856,7 +846,6 @@ async def test_year_cost_tou_bills_per_hourly_slot(hass: HomeAssistant) -> None:
         dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://tou",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
     )
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -916,7 +905,6 @@ def test_snapshot_round_trip_for_tou_contract() -> None:
         dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://tou",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
     )
     fetched_at = datetime(2026, 4, 29, 12, 0, tzinfo=UTC)
     payload = _snapshot_to_dict(snap, fetched_at, probe_key="abc")

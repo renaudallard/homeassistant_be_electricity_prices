@@ -75,7 +75,6 @@ def _snapshot(energy: EnergyRates, vat: float = 0.0) -> SupplierSnapshot:
             vat_rate=vat,
         ),
         source_url="test://",
-        fetched_at_iso="2026-04-29T12:00:00+00:00",
     )
 
 

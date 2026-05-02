@@ -91,7 +91,6 @@ def _fake_snapshot(supplier: str = "eneco") -> SupplierSnapshot:
         dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://",
-        fetched_at_iso="2026-04-30T12:00:00+00:00",
     )
 
 

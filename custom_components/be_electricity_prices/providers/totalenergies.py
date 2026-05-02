@@ -50,7 +50,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import aiohttp
 
@@ -301,7 +300,6 @@ def parse_snapshot(
             vat_rate=0.0,
         ),
         source_url=source_url,
-        fetched_at_iso=datetime.now(UTC).isoformat(timespec="seconds"),
         publication_label=publication_label,
         valid_until=parse_valid_until(text),
         injection=injection,

@@ -41,7 +41,7 @@ Cociter only sells in Wallonia.
 from __future__ import annotations
 
 import re
-from datetime import UTC, date, datetime
+from datetime import date
 
 import aiohttp
 
@@ -250,7 +250,6 @@ def parse_snapshot(
         dsos=_extract_dsos(text),
         taxes=_extract_taxes(text),
         source_url=source_url,
-        fetched_at_iso=datetime.now(UTC).isoformat(timespec="seconds"),
         publication_label=publication_label,
         valid_until=parse_valid_until(text),
         injection=_extract_injection(text),

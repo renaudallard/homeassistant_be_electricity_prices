@@ -49,7 +49,6 @@ amounts are TVAC except where the card explicitly notes otherwise --
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
 
 import aiohttp
 
@@ -154,7 +153,6 @@ def parse_snapshot(text: str, source_url: str, region: str) -> SupplierSnapshot:
         dsos=_extract_dsos(text, region),
         taxes=_extract_taxes(text),
         source_url=source_url,
-        fetched_at_iso=datetime.now(UTC).isoformat(timespec="seconds"),
         publication_label=_extract_publication(text),
         valid_until=parse_valid_until(text),
         injection=_extract_injection(text),
