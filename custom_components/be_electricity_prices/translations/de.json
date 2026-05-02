@@ -195,7 +195,7 @@
   "services": {
     "refresh": {
       "name": "Aktualisieren",
-      "description": "Erzwingt fuer jeden Belgian Electricity Prices Eintrag das sofortige erneute Abrufen des Lieferanten-Snapshots und der ENTSO-E Spotpreise, ohne auf den naechsten 24h-Zyklus zu warten."
+      "description": "Erzwingt fuer jeden Belgian Electricity Prices Eintrag das sofortige erneute Abrufen des Lieferanten-Snapshots und der ENTSO-E Spotpreise, ohne auf den naechsten Aktualisierungszyklus zu warten."
     },
     "cheapest_window": {
       "name": "Guenstigstes Zeitfenster",

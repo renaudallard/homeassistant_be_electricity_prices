@@ -195,7 +195,7 @@
   "services": {
     "refresh": {
       "name": "Refresh",
-      "description": "Force every Belgian Electricity Prices entry to re-fetch its supplier snapshot and ENTSO-E spot prices immediately, instead of waiting for the next 24h tick."
+      "description": "Force every Belgian Electricity Prices entry to re-fetch its supplier snapshot and ENTSO-E spot prices immediately, instead of waiting for the next refresh tick."
     },
     "cheapest_window": {
       "name": "Cheapest window",

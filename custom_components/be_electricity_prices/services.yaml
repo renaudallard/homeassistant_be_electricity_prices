@@ -4,7 +4,7 @@ refresh:
     Force-refresh every Belgian Electricity Prices entry: drops the cached
     supplier snapshot and the ENTSO-E spot cache, then re-fetches both
     immediately. Useful after a tariff card update or to clear a temporary
-    fetch error without waiting for the next 24h tick.
+    fetch error without waiting for the next refresh tick.
 
 cheapest_window:
   name: Cheapest window
