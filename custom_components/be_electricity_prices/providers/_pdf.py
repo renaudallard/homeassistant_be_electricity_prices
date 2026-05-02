@@ -31,6 +31,7 @@ import asyncio
 import calendar
 import json
 import re
+import unicodedata
 from datetime import date
 from io import BytesIO
 from pathlib import Path
@@ -243,6 +244,22 @@ _NUMERIC_SEPARATORS = (
     " ",  # NARROW NO-BREAK SPACE (U+202F, CLDR French thousands)
     " ",  # LINE SEPARATOR (U+2028)
 )
+
+
+def fold_accents(text: str) -> str:
+    """Lowercase and strip Latin diacritics.
+
+    Belgian / French / Dutch tariff PDFs sometimes lose their accents
+    when extracted (font / CMap quirks in pypdf), so a literal substring
+    test for ``"août"`` misses an extracted ``"aout"``. Provider-side
+    cross-checks should fold both haystack and needle through this
+    helper to compare apples-to-apples.
+    """
+    return "".join(
+        c
+        for c in unicodedata.normalize("NFKD", text.lower())
+        if not unicodedata.combining(c)
+    )
 
 
 def to_float(text: str) -> float:

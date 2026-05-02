@@ -46,7 +46,7 @@ from datetime import UTC, date, datetime
 import aiohttp
 
 from ..const import REGION_WALLONIA
-from ._pdf import USER_AGENT, fetch_pdf_text, parse_valid_until, to_float
+from ._pdf import USER_AGENT, fetch_pdf_text, fold_accents, parse_valid_until, to_float
 from .base import (
     Contract,
     DsoOverlay,
@@ -84,14 +84,15 @@ _FR_MONTHS = (
 def _text_mentions_month(text: str, year_month: date) -> bool:
     """Heuristic check that ``text`` references the requested year+month
     in any of the forms Cociter prints (French month name + year, or
-    MM/YYYY, or YYYY-MM)."""
+    MM/YYYY, or YYYY-MM). Accent-folds both sides so an extraction
+    that lost diacritics (``aout`` for ``août``) still matches."""
     needles = (
         f"{_FR_MONTHS[year_month.month - 1]} {year_month.year}",
         f"{year_month.month:02d}/{year_month.year}",
         f"{year_month.year}-{year_month.month:02d}",
     )
-    haystack = text.lower()
-    return any(n.lower() in haystack for n in needles)
+    haystack = fold_accents(text)
+    return any(fold_accents(n) in haystack for n in needles)
 
 
 # Cociter's current monthly publication patterns. The 4-digit group is YYMM.
