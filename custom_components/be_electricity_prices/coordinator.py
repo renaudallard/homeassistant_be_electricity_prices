@@ -1065,7 +1065,17 @@ async def _resolve_daily_kwh(
     night_inj_id = entry.data.get(CONF_NIGHT_INJECTION_KWH)
     total_cons_id = entry.data.get(CONF_CONSUMPTION_KWH)
     total_inj_id = entry.data.get(CONF_INJECTION_KWH)
-    has_registers = bool(day_cons_id or night_cons_id or day_inj_id or night_inj_id)
+    # Reject partial register pairs the same way the TOU helpers do:
+    # half a pair would silently undercount the missing band (~30-40%
+    # for a typical bi-hourly household). The user has to wire both
+    # halves or use the totals path.
+    cons_pair_partial = bool(day_cons_id) ^ bool(night_cons_id)
+    inj_pair_partial = bool(day_inj_id) ^ bool(night_inj_id)
+    if cons_pair_partial or inj_pair_partial:
+        return None
+    has_registers = bool(day_cons_id and night_cons_id) or bool(
+        day_inj_id and night_inj_id
+    )
     has_totals = bool(total_cons_id or total_inj_id)
     if not has_registers and not has_totals:
         return None
@@ -1079,13 +1089,11 @@ async def _resolve_daily_kwh(
             row[idx] += kwh
 
     if has_registers:
-        if day_cons_id:
+        if day_cons_id and night_cons_id:
             _add(0, await _recorder_daily_kwh(hass, day_cons_id, jan1, today))
-        if night_cons_id:
             _add(1, await _recorder_daily_kwh(hass, night_cons_id, jan1, today))
-        if day_inj_id:
+        if day_inj_id and night_inj_id:
             _add(2, await _recorder_daily_kwh(hass, day_inj_id, jan1, today))
-        if night_inj_id:
             _add(3, await _recorder_daily_kwh(hass, night_inj_id, jan1, today))
     else:
         meter = entry.data.get(CONF_METER, METER_MONO)
