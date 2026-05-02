@@ -331,6 +331,15 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.entry = entry
+        # Snapshot the (supplier, contract, region) tuple at construction
+        # so async_unload_entry can target the *original* tuple even if
+        # the user just changed it via OptionsFlow (HA mutates
+        # entry.data before triggering the reload).
+        self._supplier_tuple: tuple[str, str, str] = (
+            entry.data.get(CONF_SUPPLIER, ""),
+            entry.data.get(CONF_CONTRACT, ""),
+            entry.data.get(CONF_REGION, ""),
+        )
         super().__init__(
             hass,
             _LOGGER,

@@ -102,22 +102,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
 
 async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> bool:
     """Unload one config entry."""
+    # Snapshot the supplier tuple from the coordinator BEFORE
+    # async_unload_platforms tears it down. The coordinator stores
+    # the tuple it was constructed with so an OptionsFlow edit that
+    # mutated entry.data prior to reload can still evict the
+    # *previous* tuple's cache rows.
+    coordinator: BePricesCoordinator | None = entry.runtime_data
+    cached_key = coordinator._supplier_tuple if coordinator is not None else None
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        # Drop any shared-cache rows pinned to this entry's (supplier,
-        # contract, region) tuple, but only when no other loaded entry
-        # still references the same tuple. Without this the snapshot,
-        # per-month archive, failed-fetch marker, and asyncio.Lock leak
-        # into hass.data for the rest of the HA process lifetime.
-        # Use .get to tolerate older sibling entries that might be
-        # missing one of the keys (e.g. an entry from a release before
-        # CONF_REGION existed); a single bad sibling shouldn't crash
-        # the unload of a valid one.
-        supplier = entry.data.get(CONF_SUPPLIER)
-        contract = entry.data.get(CONF_CONTRACT)
-        region = entry.data.get(CONF_REGION)
-        if supplier and contract and region is not None:
-            key = (supplier, contract, region)
+        # Drop any shared-cache rows pinned to this entry's previous
+        # (supplier, contract, region) tuple, but only when no other
+        # loaded entry still references the same tuple. Without this
+        # the snapshot, per-month archive, failed-fetch marker, and
+        # asyncio.Lock leak into hass.data for the rest of the HA
+        # process lifetime.
+        if cached_key and all(cached_key):
             siblings = [
                 other
                 for other in hass.config_entries.async_loaded_entries(DOMAIN)
@@ -127,10 +127,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
                     other.data.get(CONF_CONTRACT),
                     other.data.get(CONF_REGION),
                 )
-                == key
+                == cached_key
             ]
             if not siblings:
-                evict_shared_caches(hass, key, supplier)
+                evict_shared_caches(hass, cached_key, cached_key[0])
     if unloaded and not hass.config_entries.async_loaded_entries(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE_REFRESH)
         hass.services.async_remove(DOMAIN, SERVICE_CHEAPEST_WINDOW)
