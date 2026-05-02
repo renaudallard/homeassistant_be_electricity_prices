@@ -442,13 +442,13 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{description.key}"
         supplier_id = coordinator.entry.data.get(CONF_SUPPLIER, "")
         try:
-            device_name = get_extractor(str(supplier_id)).label
+            supplier_label = get_extractor(str(supplier_id)).label
         except ExtractorError:
-            device_name = str(supplier_id) or "Belgian Electricity"
+            supplier_label = str(supplier_id) or "Belgian Electricity"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name=device_name,
-            manufacturer="be_electricity_prices",
+            name=coordinator.entry.title,
+            manufacturer=supplier_label,
             entry_type=None,
         )
 
