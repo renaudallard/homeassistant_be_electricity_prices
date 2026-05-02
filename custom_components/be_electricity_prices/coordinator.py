@@ -444,6 +444,16 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # them silently on next save.
 
     async def _async_update_data(self) -> CoordinatorData:
+        # Lifecycle note: a slow tick that started before an OptionsFlow
+        # change of supplier / contract / region / meter sensors can
+        # finish *after* HA's reload swapped self.entry.runtime_data to
+        # a fresh coordinator. Any inconsistent intermediate state this
+        # tick computes from the now-mutated self.entry.data is
+        # contained: _save_persistent skips when runtime_data is no
+        # longer this coord, the platforms have been torn down so no
+        # entity reads our self.data after the swap, and the
+        # async_load_persistent guard discards a blob whose stamped
+        # tuple disagrees with the current entry.
         await self._maybe_refresh_snapshot()
         await self._track_monthly_peak()
 
