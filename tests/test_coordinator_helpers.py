@@ -207,6 +207,20 @@ def test_injection_price_returns_none_when_no_data() -> None:
     assert _compute_injection_price(snap, entry, {}) is None
 
 
+def test_injection_price_dynamic_returns_none_without_spot() -> None:
+    """Dynamic-style injection (factor + base set) must surface None
+    when no spot is available -- falling back to the snapshot's static
+    `current` would be the wrong rate for a dynamic contract."""
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        injection=InjectionRates(factor=0.97, base=-0.021, current=0.05),
+    )
+    entry = _entry(solar_regime="injection")
+    # Spot cache empty -> sensor goes unknown rather than show 0.05.
+    assert _compute_injection_price(snap, entry, {}) is None
+
+
 def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:
     # Sibelga has no per-kVA prosumer fee and no per-kW capacity fee.
     # A Brussels prosumer (smart meter on injection regime) must therefore

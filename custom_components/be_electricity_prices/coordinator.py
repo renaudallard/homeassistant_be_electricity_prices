@@ -698,17 +698,18 @@ def _compute_injection_price(
     inj = snapshot.injection
     if inj is None:
         return None
-    # Hourly path: pick the spot for the current hour if we have one.
-    if inj.factor is not None and inj.base is not None and spot_prices:
+    # Formula-based injection (factor x spot + base): contract is
+    # dynamic, so the static "current" indicator is the wrong answer
+    # when ENTSO-E hasn't given us a spot yet. Return None so the
+    # injection_price sensor goes unknown until the next refresh
+    # picks up real spots, instead of fabricating a value from the
+    # supplier's monthly indicative.
+    if inj.factor is not None and inj.base is not None:
+        if not spot_prices:
+            return None
         now_hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
         spot = spot_prices.get(now_hour)
         if spot is None:
-            # ENTSO-E publishes hour-aligned values; if today's curve doesn't
-            # have our hour (rare DST / publication-lag edge), fall back to
-            # the temporally nearest hour -- but only within an hour. A
-            # bigger gap means the spot cache is stale relative to wall
-            # clock and we shouldn't fabricate an injection price from
-            # yesterday's last hour.
             nearest = min(
                 spot_prices.keys(),
                 key=lambda h: abs((h - now_hour).total_seconds()),
@@ -717,7 +718,7 @@ def _compute_injection_price(
                 return None
             spot = spot_prices[nearest]
         return inj.factor * spot + inj.base
-    # Static fallback: the supplier's printed monthly indicative.
+    # Static contracts: the supplier's printed monthly indicative.
     return inj.current
 
 
