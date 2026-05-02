@@ -45,7 +45,13 @@ from datetime import UTC, date, datetime
 
 import aiohttp
 
-from ._pdf import USER_AGENT, fetch_pdf_text, fold_accents, parse_valid_until, to_float
+from ._pdf import (
+    USER_AGENT,
+    fetch_pdf_text,
+    parse_valid_until,
+    text_mentions_month,
+    to_float,
+)
 from .base import (
     Contract,
     DsoOverlay,
@@ -83,21 +89,11 @@ _NL_MONTHS = (
 
 
 def _text_mentions_month(text: str, year_month: date) -> bool:
-    """Heuristic check that ``text`` references the requested year+month.
-
-    Looks for the printed Dutch month name + year, the numeric MM/YYYY
-    form, and the ISO YYYY-MM form. Accent-folds both sides so an
-    extraction that lost diacritics still matches. Returns False only
-    when none of them matches; the caller treats that as 'CDN
-    substituted a current card on a missing-archive request'.
-    """
-    needles = (
-        f"{_NL_MONTHS[year_month.month - 1]} {year_month.year}",
-        f"{year_month.month:02d}/{year_month.year}",
-        f"{year_month.year}-{year_month.month:02d}",
-    )
-    haystack = fold_accents(text)
-    return any(fold_accents(n) in haystack for n in needles)
+    """Validity-anchored cross-check that ``text`` references the
+    requested year+month -- delegates to the shared helper so a
+    retrospective mention elsewhere in the PDF doesn't masquerade as
+    the validity statement."""
+    return text_mentions_month(text, year_month, _NL_MONTHS)
 
 
 # Contract id -> the POWER_<NAME> token Eneco uses in its filenames.

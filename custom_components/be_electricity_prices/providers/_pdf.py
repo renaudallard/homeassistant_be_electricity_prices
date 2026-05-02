@@ -324,6 +324,62 @@ _MONTH_NAMES: dict[str, int] = {
 _VALID_KEYWORDS = ("geldig", "valable", "validit", "valid ")
 
 
+def _validity_windows(lower: str, span: int = 200) -> list[str]:
+    """Return up to ``span`` chars of context after each validity-keyword
+    occurrence in ``lower`` (which is expected to be already accent-folded
+    or lowercased). Used to anchor heuristic month-name searches so a
+    retrospective mention elsewhere in the PDF doesn't masquerade as a
+    validity statement.
+    """
+    windows: list[str] = []
+    for keyword in _VALID_KEYWORDS:
+        start = 0
+        while True:
+            idx = lower.find(keyword, start)
+            if idx < 0:
+                break
+            windows.append(lower[idx : idx + span])
+            start = idx + len(keyword)
+    return windows
+
+
+def text_mentions_month(
+    text: str,
+    year_month: date,
+    month_names: tuple[str, ...],
+) -> bool:
+    """Heuristic check that ``text`` references the requested year+month
+    inside a validity-anchored window.
+
+    Looks for the printed month name + year, the numeric MM/YYYY form,
+    and the ISO YYYY-MM form. Accent-folds both haystack and needles
+    so an extraction that lost diacritics still matches. Searches only
+    inside ~200-char windows after each validity keyword (``geldig``,
+    ``valable``, ``validit``, ``valid``) so a current-month card's
+    retrospective reference (``compared to October 2024``) doesn't
+    masquerade as the requested validity. Falls back to scanning the
+    first 1000 characters when no validity keyword exists, to keep
+    older / non-standard layouts working without locking out.
+    """
+    haystack = fold_accents(text)
+    needles = tuple(
+        fold_accents(n)
+        for n in (
+            f"{month_names[year_month.month - 1]} {year_month.year}",
+            f"{year_month.month:02d}/{year_month.year}",
+            f"{year_month.year}-{year_month.month:02d}",
+        )
+    )
+    # Search both the PDF header (first 1000 chars: that's where most
+    # tariff cards print "Carte tarifaire <month> <year>" / "Tariefkaart
+    # <month> <year>") and the windows after each validity keyword.
+    # Either anchor is enough; together they catch the legitimate
+    # mentions while excluding retrospective references buried in
+    # footers and comparison tables further down.
+    windows = [haystack[:1000], *_validity_windows(haystack)]
+    return any(n in w for n in needles for w in windows)
+
+
 def parse_valid_until(text: str) -> date | None:
     """Best-effort parse of a "valid until" date from a tariff card.
 
