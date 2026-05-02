@@ -1358,10 +1358,10 @@ async def _compute_current_year_cost(
     SmartFlex) take a per-hour path: the recorder's hourly kWh deltas
     are billed against ``compute_breakdown`` at each local hour, so
     the energy component picks the supplier's TOU slot rate while the
-    network component still follows the user's DSO mode. Requires the
-    user to have wired ``CONF_CONSUMPTION_KWH`` (single totals); the
-    bi-hourly day/night registers don't carry the slot semantics TOU
-    needs.
+    network component still follows the user's DSO mode. Reads either
+    ``CONF_CONSUMPTION_KWH`` (single totals) or the day+night register
+    pair via the recorder's hourly statistics; partial register
+    wiring is rejected so a missing band can't silently undercount.
 
     **Dynamic contracts** (Cociter Dynamique, Eneco Power Dynamic,
     OCTA+ Dynamic, etc.) need historical hourly ENTSO-E spots to bill
