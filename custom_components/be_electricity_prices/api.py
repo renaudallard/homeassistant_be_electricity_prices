@@ -91,13 +91,25 @@ class EntsoeClient:
 
 
 def parse_day_ahead_xml(xml: str) -> dict[datetime, float]:
-    """Parse an A44 publication document into hour-start -> EUR/kWh."""
+    """Parse an A44 publication document into hour-start -> EUR/kWh.
+
+    Sub-hourly publications (PT15M, PT30M) are aggregated to hour-start
+    by averaging every sub-hour point that falls inside the same UTC
+    hour. Downstream (price table, sensors, cheapest_window service,
+    YTD billing) assumes hourly keys; flattening sub-hour slots here
+    keeps that contract intact when ENTSO-E moves a bidding zone to
+    15-minute publication.
+    """
     try:
         root = ET.fromstring(xml)
     except ET.ParseError as err:
         raise EntsoeError(f"invalid XML: {err}") from err
 
-    out: dict[datetime, float] = {}
+    # Per-hour accumulators: (sum, count) so we can take the mean at
+    # the end without holding every sub-hour point in memory.
+    hourly_sum: dict[datetime, float] = {}
+    hourly_count: dict[datetime, int] = {}
+
     for ts in root.findall("ns:TimeSeries", _NS):
         period = ts.find("ns:Period", _NS)
         if period is None:
@@ -143,8 +155,12 @@ def parse_day_ahead_xml(xml: str) -> dict[datetime, float]:
                 last = explicit[position]
             if last is None:
                 continue
-            out[start + step * (position - 1)] = last
-    return out
+            slot_start = start + step * (position - 1)
+            hour_start = slot_start.replace(minute=0, second=0, microsecond=0)
+            hourly_sum[hour_start] = hourly_sum.get(hour_start, 0.0) + last
+            hourly_count[hour_start] = hourly_count.get(hour_start, 0) + 1
+
+    return {hour: hourly_sum[hour] / hourly_count[hour] for hour in hourly_sum}
 
 
 def _fmt(when: datetime) -> str:

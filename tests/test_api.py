@@ -72,6 +72,31 @@ def test_supports_quarter_hour_resolution() -> None:
     assert parsed[datetime(2026, 4, 29, 22, 0, tzinfo=UTC)] == pytest.approx(0.040)
 
 
+def test_quarter_hour_points_aggregate_to_hour_mean() -> None:
+    """When ENTSO-E publishes PT15M points with varying prices, the
+    parser must collapse them to one hour-start key carrying the
+    arithmetic mean. Downstream sensors and the price table assume
+    hourly granularity, so a per-15-min keyspace would silently break
+    cheapest_window slot semantics and current_year_cost binning."""
+    # First hour: 4 distinct prices (10, 20, 30, 40 EUR/MWh) -> mean
+    # = 25 EUR/MWh = 0.025 EUR/kWh.
+    # Second hour: a single point at position 5, the carry-forward
+    # rule replays 40 EUR/MWh across all 4 slots.
+    points = (
+        "<Point><position>1</position><price.amount>10</price.amount></Point>"
+        "<Point><position>2</position><price.amount>20</price.amount></Point>"
+        "<Point><position>3</position><price.amount>30</price.amount></Point>"
+        "<Point><position>4</position><price.amount>40</price.amount></Point>"
+    )
+    parsed = parse_day_ahead_xml(_doc(points, resolution="PT15M"))
+    h0 = datetime(2026, 4, 29, 22, 0, tzinfo=UTC)
+    h1 = h0 + timedelta(hours=1)
+    assert parsed[h0] == pytest.approx(0.025)
+    # Every hour after the last explicit point inherits the last
+    # value via carry-forward, then averages to that value.
+    assert parsed[h1] == pytest.approx(0.040)
+
+
 def test_invalid_xml_raises_entsoe_error() -> None:
     with pytest.raises(EntsoeError):
         parse_day_ahead_xml("<<<not xml")
