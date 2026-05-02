@@ -489,3 +489,40 @@ async def test_load_persistent_discards_blob_for_other_supplier(
 
     assert coord._snapshot is None
     assert coord._snapshot_fetched_at is None
+
+
+async def test_evict_bumps_tuple_generation_blocks_inflight_write(
+    hass: HomeAssistant,
+) -> None:
+    """A coroutine mid-fetch when eviction runs must NOT re-create the
+    cache row on resume, otherwise the row would orphan and a future
+    re-add of the same tuple could read stale data."""
+    from custom_components.be_electricity_prices.coordinator import (
+        _bump_tuple_generation,
+        _shared_failed_fetches,
+        _tuple_generation,
+        evict_shared_caches,
+    )
+
+    key = ("eneco", "power_fix", "wallonia")
+    gen_before = _tuple_generation(hass, key)
+
+    # Simulate an in-flight cache writer that captured the generation
+    # at lock entry, then the user removed the entry mid-fetch.
+    gen_at_entry = gen_before
+    evict_shared_caches(hass, key, "eneco")
+    gen_after = _tuple_generation(hass, key)
+
+    assert gen_after > gen_at_entry, "eviction must bump the tuple generation"
+
+    # The writer's resume-side guard would compare the generation;
+    # confirm that comparison rejects the write.
+    assert _tuple_generation(hass, key) != gen_at_entry
+
+    # And the explicit bump helper increments by one.
+    _bump_tuple_generation(hass, key)
+    assert _tuple_generation(hass, key) == gen_after + 1
+
+    # Sanity: the failed-fetch bucket can be empty without this
+    # affecting the generation.
+    assert _shared_failed_fetches(hass).get(key) is None

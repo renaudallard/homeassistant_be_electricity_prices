@@ -179,6 +179,14 @@ def evict_shared_caches(
     failed-fetch marker, and the asyncio.Lock into ``hass.data`` for
     the lifetime of the HA process.
     """
+    # Bump the generation counter first so any in-flight cache
+    # writer that resumes after this eviction can detect the change
+    # and skip its write (the bucket row is gone, so a write would
+    # re-create an orphaned row pointing at evicted-tuple data).
+    _bump_tuple_generation(hass, key)
+    for month_key in list(_monthly_snapshots(hass)):
+        if month_key[0] == extractor_id and month_key[1:3] == key[1:3]:
+            _bump_tuple_generation(hass, month_key)
     _shared_snapshots(hass).pop(key, None)
     _shared_failed_fetches(hass).pop(key, None)
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
@@ -232,6 +240,26 @@ def _monthly_snapshots(
 
 _MONTHLY_LOCKS_KEY = "monthly_snapshot_locks"
 
+# Generation counter bumped by evict_shared_caches when a tuple's
+# rows are dropped. Cache writers that may have been awaiting at the
+# moment of eviction (held lock, mid-fetch) check the counter on
+# resume and skip the write if it has advanced. Without this guard a
+# slow fetcher would re-create an orphaned cache row that future
+# entries on the same tuple could read as stale data.
+_TUPLE_GENERATIONS_KEY = "tuple_generations"
+
+
+def _tuple_generation(hass: HomeAssistant, key: tuple[str, ...]) -> int:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    gens: dict[tuple[str, ...], int] = bucket.setdefault(_TUPLE_GENERATIONS_KEY, {})
+    return gens.get(key, 0)
+
+
+def _bump_tuple_generation(hass: HomeAssistant, key: tuple[str, ...]) -> None:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    gens: dict[tuple[str, ...], int] = bucket.setdefault(_TUPLE_GENERATIONS_KEY, {})
+    gens[key] = gens.get(key, 0) + 1
+
 
 def _monthly_lock(hass: HomeAssistant, key: tuple[str, str, str, str]) -> asyncio.Lock:
     """Per-(supplier, contract, region, YYYY-MM) lock used to dedupe
@@ -279,6 +307,7 @@ async def _snapshot_for_month(
     if fetch_archived is None:
         cache[cache_key] = None
         return current_snapshot
+    gen_at_entry = _tuple_generation(hass, cache_key)
     async with _monthly_lock(hass, cache_key):
         # Re-check under the lock so the second waiter doesn't repeat
         # what the first just did.
@@ -297,7 +326,11 @@ async def _snapshot_for_month(
                 err,
             )
             snap = None
-        cache[cache_key] = snap
+        # Skip the cache write if eviction ran during the await: the
+        # tuple is no longer this entry's, and re-creating the row
+        # would orphan it for any future re-add of the same tuple.
+        if _tuple_generation(hass, cache_key) == gen_at_entry:
+            cache[cache_key] = snap
     return snap if snap is not None else current_snapshot
 
 
@@ -660,6 +693,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self._last_error = last_fail[1]
             return
 
+        gen_at_entry = _tuple_generation(self.hass, key)
         async with _shared_lock(self.hass, key):
             shared = cache.get(key)
             if shared is not None and self._shared_is_fresh(
@@ -679,16 +713,23 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             try:
                 snap = await extractor.fetch(self._session, contract, region)
                 fetched_at = dt_util.utcnow()
-                cache[key] = _SharedSnapshot(
-                    snapshot=snap, fetched_at=fetched_at, probe_key=probe_key
-                )
-                failed.pop(key, None)
+                # Don't write the shared cache if the tuple was evicted
+                # mid-fetch (entry removed or supplier swapped). Our
+                # local self._snapshot is still useful for this tick;
+                # if runtime_data was swapped, _save_persistent will
+                # skip the write.
+                if _tuple_generation(self.hass, key) == gen_at_entry:
+                    cache[key] = _SharedSnapshot(
+                        snapshot=snap, fetched_at=fetched_at, probe_key=probe_key
+                    )
+                    failed.pop(key, None)
                 self._snapshot = snap
                 self._snapshot_fetched_at = fetched_at
                 self._snapshot_probe_key = probe_key
                 self._last_error = ""
             except (ExtractorError, asyncio.TimeoutError) as err:
-                failed[key] = (dt_util.utcnow(), str(err))
+                if _tuple_generation(self.hass, key) == gen_at_entry:
+                    failed[key] = (dt_util.utcnow(), str(err))
                 self._last_error = str(err)
                 _LOGGER.warning(
                     "snapshot refresh failed for %s/%s: %s; keeping cached",
