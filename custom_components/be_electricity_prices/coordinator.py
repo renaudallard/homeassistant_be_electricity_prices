@@ -1070,98 +1070,96 @@ async def _resolve_daily_kwh(
 ) -> dict[date, tuple[float, float, float, float]] | None:
     """Per-day (day_cons, night_cons, day_inj, night_inj) from recorder.
 
-    Two paths depending on what the user wired up in OptionsFlow:
+    Each side (consumption, injection) is resolved independently from
+    one of three configurations:
 
-      * **Day / night register sensors** configured (``CONF_DAY_*_KWH`` +
+      * **Day + night register pair** (``CONF_DAY_*_KWH`` +
         ``CONF_NIGHT_*_KWH``): the recorder gives one delta per day per
-        register, and we fan them out into the four-tuple directly.
+        register, fanned out into the corresponding band slots.
 
-      * **Single totals sensor** configured (``CONF_CONSUMPTION_KWH`` /
-        ``CONF_INJECTION_KWH``): we get one daily total per side. For
-        a mono meter that's enough (everything goes into the "day" slot
-        and the math sums it). For a bi-hourly meter we additionally
-        query hourly statistics and bin each hour by ``is_offpeak`` to
-        recover the per-day band ratio, then split the daily total.
+      * **Single totals sensor** (``CONF_CONSUMPTION_KWH`` /
+        ``CONF_INJECTION_KWH``): one daily total per side, split by
+        the ``meter`` setting (mono keeps everything in the "day" slot
+        and lets the math sum it; bi/dynamic recovers the per-day
+        band ratio from hourly statistics binned on ``is_offpeak``).
 
-    Returns ``None`` only when the user has not wired any meter inputs
-    at all - the caller surfaces the fees-only floor in that case.
+      * **Nothing**: that side contributes zero.
+
+    A side that has only one half of its register pair (e.g.
+    ``CONF_DAY_CONSUMPTION_KWH`` set, ``CONF_NIGHT_CONSUMPTION_KWH``
+    missing) returns ``None`` so the caller falls back to the
+    fees-only floor instead of silently undercounting the missing
+    band.
+
+    Returns ``None`` when neither side has any meter inputs at all
+    or when either side has a partial register wiring.
     """
-    day_cons_id = entry.data.get(CONF_DAY_CONSUMPTION_KWH)
-    night_cons_id = entry.data.get(CONF_NIGHT_CONSUMPTION_KWH)
-    day_inj_id = entry.data.get(CONF_DAY_INJECTION_KWH)
-    night_inj_id = entry.data.get(CONF_NIGHT_INJECTION_KWH)
-    total_cons_id = entry.data.get(CONF_CONSUMPTION_KWH)
-    total_inj_id = entry.data.get(CONF_INJECTION_KWH)
-    # Reject partial register pairs the same way the TOU helpers do:
-    # half a pair would silently undercount the missing band (~30-40%
-    # for a typical bi-hourly household). The user has to wire both
-    # halves or use the totals path.
-    cons_pair_partial = bool(day_cons_id) ^ bool(night_cons_id)
-    inj_pair_partial = bool(day_inj_id) ^ bool(night_inj_id)
-    if cons_pair_partial or inj_pair_partial:
-        return None
-    has_registers = bool(day_cons_id and night_cons_id) or bool(
-        day_inj_id and night_inj_id
-    )
-    has_totals = bool(total_cons_id or total_inj_id)
-    if not has_registers and not has_totals:
-        return None
-
+    meter = entry.data.get(CONF_METER, METER_MONO)
     jan1 = date(today.year, 1, 1)
     out: dict[date, list[float]] = {}
 
-    def _add(idx: int, per_day: dict[date, float]) -> None:
-        for day, kwh in per_day.items():
-            row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
-            row[idx] += kwh
+    async def _side(
+        day_id: str | None,
+        night_id: str | None,
+        total_id: str | None,
+        slot_day: int,
+        slot_night: int,
+    ) -> bool:
+        """Resolve one side (consumption or injection) into ``out``.
 
-    if has_registers:
-        if day_cons_id and night_cons_id:
-            _add(0, await _recorder_daily_kwh(hass, day_cons_id, jan1, today))
-            _add(1, await _recorder_daily_kwh(hass, night_cons_id, jan1, today))
-        if day_inj_id and night_inj_id:
-            _add(2, await _recorder_daily_kwh(hass, day_inj_id, jan1, today))
-            _add(3, await _recorder_daily_kwh(hass, night_inj_id, jan1, today))
-    else:
-        meter = entry.data.get(CONF_METER, METER_MONO)
-        cons_per_day = (
-            await _recorder_daily_kwh(hass, total_cons_id, jan1, today)
-            if total_cons_id
-            else {}
-        )
-        inj_per_day = (
-            await _recorder_daily_kwh(hass, total_inj_id, jan1, today)
-            if total_inj_id
-            else {}
-        )
+        Returns False when this side has a partial register wiring
+        (caller surfaces the fees-only floor); True otherwise.
+        """
+        if bool(day_id) ^ bool(night_id):
+            return False
+        if day_id and night_id:
+            for day, kwh in (
+                await _recorder_daily_kwh(hass, day_id, jan1, today)
+            ).items():
+                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
+                row[slot_day] += kwh
+            for day, kwh in (
+                await _recorder_daily_kwh(hass, night_id, jan1, today)
+            ).items():
+                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
+                row[slot_night] += kwh
+            return True
+        if not total_id:
+            return True  # nothing wired on this side; contributes zero
+        per_day = await _recorder_daily_kwh(hass, total_id, jan1, today)
         if meter in ("bi", "dynamic"):
-            cons_ratios = (
-                await _recorder_daily_band_ratio(hass, total_cons_id, jan1, today)
-                if total_cons_id
-                else {}
+            ratios = await _recorder_daily_band_ratio(
+                hass, total_id, jan1, today
             )
-            inj_ratios = (
-                await _recorder_daily_band_ratio(hass, total_inj_id, jan1, today)
-                if total_inj_id
-                else {}
-            )
-            for day, total in cons_per_day.items():
-                d_ratio, n_ratio = cons_ratios.get(day, _default_band_ratio_for(day))
+            for day, total in per_day.items():
+                d_ratio, n_ratio = ratios.get(day, _default_band_ratio_for(day))
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
-                row[0] += total * d_ratio
-                row[1] += total * n_ratio
-            for day, total in inj_per_day.items():
-                d_ratio, n_ratio = inj_ratios.get(day, _default_band_ratio_for(day))
+                row[slot_day] += total * d_ratio
+                row[slot_night] += total * n_ratio
+        else:  # mono: route everything into the "day" slot
+            for day, total in per_day.items():
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
-                row[2] += total * d_ratio
-                row[3] += total * n_ratio
-        else:  # mono: route everything into the "day" slot; math sums anyway
-            for day, total in cons_per_day.items():
-                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
-                row[0] += total
-            for day, total in inj_per_day.items():
-                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
-                row[2] += total
+                row[slot_day] += total
+        return True
+
+    cons_ok = await _side(
+        entry.data.get(CONF_DAY_CONSUMPTION_KWH),
+        entry.data.get(CONF_NIGHT_CONSUMPTION_KWH),
+        entry.data.get(CONF_CONSUMPTION_KWH),
+        slot_day=0,
+        slot_night=1,
+    )
+    inj_ok = await _side(
+        entry.data.get(CONF_DAY_INJECTION_KWH),
+        entry.data.get(CONF_NIGHT_INJECTION_KWH),
+        entry.data.get(CONF_INJECTION_KWH),
+        slot_day=2,
+        slot_night=3,
+    )
+    if not (cons_ok and inj_ok):
+        return None
+    if not out:
+        return None
 
     return {day: (r[0], r[1], r[2], r[3]) for day, r in out.items()}
 
