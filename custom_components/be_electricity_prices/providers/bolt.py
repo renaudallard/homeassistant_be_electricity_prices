@@ -47,6 +47,7 @@ separate lines (``Certificats verts`` + ``WKK``).
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -68,6 +69,8 @@ from .base import (
     TaxOverlay,
     VariableRates,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 _BASE_URL = "https://files.boltenergie.be/pricelists"
 _LISTING_URL = "https://www.boltenergie.be/fr/listes-des-prix"
@@ -454,9 +457,11 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
 # "TECTEO RESA" and "WAVRE" in the extracted text actually carry each
 # other's values. Verified against the regulator's published rates and
 # every other supplier's PDF. We swap the labels here so DSO lookups
-# return the correct numbers; if Bolt's PDF layout ever stops triggering
-# the pdfplumber misalignment, the live-check report will flag the
-# discrepancy.
+# return the correct numbers. ``_extract_wallonia_dsos`` runs an
+# additional runtime sanity check after parsing (RESA must remain
+# cheaper than REW under the current Walloon tariff structure); if
+# Bolt's PDF ever stops triggering the misalignment the check logs a
+# WARNING so the swap can be removed.
 _WALLONIA_LABELS: dict[str, str] = {
     "AIEG": "aieg",
     "AIESH": "aiesh",
@@ -502,6 +507,28 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             transport=transport / 100.0,
             data_management_per_year=terme_fixe,
             prosumer_eur_per_kva_year=prosumer,
+        )
+    # Sanity check: under the swap, RESA's distribution_single must
+    # remain strictly cheaper than REW's (regulator pattern that holds
+    # for every Walloon tariff card we've parsed). If the inequality
+    # ever flips, Bolt almost certainly fixed the upstream layout and
+    # our compensating swap now inverts correct values -- log a
+    # warning so the maintainer can drop the swap from
+    # _WALLONIA_LABELS instead of silently mis-billing.
+    resa = out.get("resa")
+    rew = out.get("rew")
+    if (
+        resa is not None
+        and rew is not None
+        and resa.distribution_single >= rew.distribution_single
+    ):
+        _LOGGER.warning(
+            "Bolt RESA/REW post-swap invariant tripped "
+            "(resa=%.4f rew=%.4f); the upstream PDF may have been "
+            "fixed and the label swap in _WALLONIA_LABELS likely "
+            "needs to be removed",
+            resa.distribution_single,
+            rew.distribution_single,
         )
     return out
 
