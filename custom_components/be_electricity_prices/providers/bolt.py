@@ -517,11 +517,24 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     # _WALLONIA_LABELS instead of silently mis-billing.
     resa = out.get("resa")
     rew = out.get("rew")
-    if (
-        resa is not None
-        and rew is not None
-        and resa.distribution_single >= rew.distribution_single
-    ):
+    if resa is None and rew is None:
+        # Both rows missing: regex drift covers the whole table; the
+        # rest of the parser will already have raised. Stay quiet
+        # here.
+        return out
+    if resa is None or rew is None:
+        # Only one of the two parsed -- the more dangerous case for
+        # the swap, since the surviving row may now be carrying the
+        # other DSO's values without anything else to compare it
+        # against. Surface it so the maintainer can investigate.
+        _LOGGER.warning(
+            "Bolt RESA/REW row drift: only %s parsed; the label swap "
+            "in _WALLONIA_LABELS may now be inverting %s's values",
+            "resa" if resa is not None else "rew",
+            "resa" if resa is not None else "rew",
+        )
+        return out
+    if resa.distribution_single >= rew.distribution_single:
         _LOGGER.warning(
             "Bolt RESA/REW post-swap invariant tripped "
             "(resa=%.4f rew=%.4f); the upstream PDF may have been "
