@@ -261,7 +261,7 @@ upcoming price table. Both services share the same fields:
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `duration_hours` | _required_ | Window length (0.5-48 h, rounded up to whole hours). |
+| `duration_hours` | _required_ | Window length in whole hours (1-48; the price table is hourly). |
 | `entry_id` | first loaded | Optional config entry to target. |
 | `earliest_start` | now | Don't consider windows starting before this time. |
 | `latest_end` | end of the cached table | Don't consider windows ending after this time. |
