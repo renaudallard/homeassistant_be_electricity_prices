@@ -267,21 +267,35 @@ def _api_key_schema(defaults: dict[str, Any]) -> vol.Schema:
 
 
 async def _validate_entsoe_key(hass: HomeAssistant, api_key: str) -> str | None:
-    """Test the ENTSO-E key with a tiny day-ahead query.
+    """Test the ENTSO-E key with a small day-ahead query.
 
     Returns ``None`` on success, ``"invalid_api_key"`` when ENTSO-E
     rejects the token, or ``"cannot_connect"`` for transport / parse
-    errors. The query is intentionally narrow (one hour) to keep the
-    config-flow latency low.
+    errors *or* an empty publication-document response (rate-limit
+    /no-data path: ENTSO-E returns HTTP 200 with an
+    Acknowledgement_MarketDocument that ``parse_day_ahead_xml`` flattens
+    to an empty dict). Querying yesterday's window guarantees the
+    bidding zone has actually published prices for that span, so an
+    empty response really does mean the key/connection is bad rather
+    than 'too early in the day'.
     """
     session = async_get_clientsession(hass)
     client = EntsoeClient(api_key, session)
-    now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    yesterday_noon = dt_util.utcnow().replace(
+        hour=10, minute=0, second=0, microsecond=0
+    ) - timedelta(days=1)
     try:
-        await client.fetch_day_ahead(now, now + timedelta(hours=1))
+        prices = await client.fetch_day_ahead(
+            yesterday_noon, yesterday_noon + timedelta(hours=2)
+        )
     except EntsoeAuthError:
         return "invalid_api_key"
     except EntsoeError:
+        return "cannot_connect"
+    if not prices:
+        # 200 OK but no TimeSeries -> Acknowledgement document, treat
+        # as connection failure so the wizard doesn't finalise an
+        # entry that will fail on first refresh.
         return "cannot_connect"
     return None
 
