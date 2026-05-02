@@ -883,8 +883,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # coordinator instance. If we wrote the file unconditionally,
         # the obsolete coord would clobber the new coord's saved state
         # and the next HA restart would serve the wrong supplier's
-        # rates against the new entry.
-        if self.entry.runtime_data is not self:
+        # rates against the new entry. ``runtime_data`` is unset (or
+        # UNDEFINED on recent HA cores) during the very first refresh
+        # that runs from ``async_config_entry_first_refresh`` -- only
+        # skip the save when it has been explicitly assigned to a
+        # *different* coordinator.
+        runtime = getattr(self.entry, "runtime_data", None)
+        if isinstance(runtime, BePricesCoordinator) and runtime is not self:
             _LOGGER.debug(
                 "skipping _save_persistent for %s: coordinator was replaced",
                 self.entry.entry_id,

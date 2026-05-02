@@ -439,6 +439,36 @@ async def test_save_persistent_skipped_after_runtime_data_swapped(
     assert saved is False, "obsolete coordinator must not overwrite the cache file"
 
 
+async def test_save_persistent_runs_during_first_refresh(
+    hass: HomeAssistant,
+) -> None:
+    """Regression: BePricesCoordinator.async_config_entry_first_refresh
+    triggers _save_persistent before HA's setup hook assigns
+    entry.runtime_data. The identity guard must not raise (older
+    runtime_data was unset; recent HA cores expose UNDEFINED) and
+    must allow the save to proceed."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    # Do not assign entry.runtime_data — that's the pre-first-refresh
+    # state. The coordinator's _snapshot is None too, so the file
+    # carries only the peak/identity payload, but the call must not
+    # raise.
+    saved_payload: dict[str, object] | None = None
+
+    async def _fake_save(payload: dict[str, object]) -> None:
+        nonlocal saved_payload
+        saved_payload = payload
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+
+    assert saved_payload is not None, (
+        "first-refresh save must succeed (runtime_data not yet assigned)"
+    )
+    assert saved_payload["entry_supplier"] == entry.data["supplier"]
+
+
 async def test_load_persistent_discards_blob_for_other_supplier(
     hass: HomeAssistant,
 ) -> None:
