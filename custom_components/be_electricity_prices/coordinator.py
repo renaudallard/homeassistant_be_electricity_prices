@@ -218,9 +218,7 @@ def _monthly_snapshots(
 _MONTHLY_LOCKS_KEY = "monthly_snapshot_locks"
 
 
-def _monthly_lock(
-    hass: HomeAssistant, key: tuple[str, str, str, str]
-) -> asyncio.Lock:
+def _monthly_lock(hass: HomeAssistant, key: tuple[str, str, str, str]) -> asyncio.Lock:
     """Per-(supplier, contract, region, YYYY-MM) lock used to dedupe
     concurrent fetch_for_month calls. Without it, two coordinators on
     the same supplier tuple racing on first YTD evaluation each fan

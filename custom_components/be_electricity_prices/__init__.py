@@ -39,6 +39,7 @@ from homeassistant.core import (
     SupportsResponse,
 )
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import issue_registry
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_CONTRACT, CONF_REGION, CONF_SUPPLIER, DOMAIN, PLATFORMS
@@ -135,6 +136,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         hass.services.async_remove(DOMAIN, SERVICE_CHEAPEST_WINDOW)
         hass.services.async_remove(DOMAIN, SERVICE_MOST_EXPENSIVE_WINDOW)
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> None:
+    """Drop the per-entry repair issue when the user removes the entry.
+
+    The 'snapshot stale' issue id embeds the entry id; once the entry
+    is gone the coordinator can't auto-resolve it, so it would linger
+    in the Repairs panel forever. HA calls this hook after
+    ``async_unload_entry`` for a removal (not for a reload).
+    """
+    issue_registry.async_delete_issue(hass, DOMAIN, f"snapshot_stale_{entry.entry_id}")
 
 
 async def _async_options_updated(
