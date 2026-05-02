@@ -734,3 +734,69 @@ async def test_year_cost_falls_back_to_fees_when_no_meters_configured(
     # Fees-only: (65 + 12*2.5) * elapsed-year-fraction.
     fraction = _year_fraction(dt_util.now().date())
     assert cost == pytest.approx(95.0 * fraction)
+
+
+async def test_year_cost_skips_month_when_archived_snapshot_lacks_dso(
+    hass: HomeAssistant,
+) -> None:
+    """An archived month-snapshot whose DSO row regex missed for the
+    user's DSO must not crash the YTD tick. The month falls back to
+    "no rate to apply" (like dynamic/TOU) and the loop keeps going."""
+
+    today = dt_util.now().date()
+    if today.month == 1:
+        pytest.skip("test needs at least one past month")
+    jan_first = date(today.year, 1, 1)
+
+    # Archived snapshot for January is missing the user's DSO key
+    # entirely, simulating a regex drift on the historical card.
+    bad_archive = SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.10),
+        dsos={},  # no DSO at all
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://bad",
+        fetched_at_iso="2026-01-29T12:00:00+00:00",
+    )
+    current = SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.30),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://current",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+    )
+
+    async def _fake_fetch_for_month(
+        _session: object, _contract: str, _region: str, year_month: date
+    ) -> SupplierSnapshot:
+        return bad_archive if year_month == jan_first else None  # type: ignore[return-value]
+
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_fake_fetch_for_month,
+    )
+    _monthly_snapshots(hass).clear()
+    entry = _yearly_entry(meter="mono", solar_regime="none")
+    days = _days_through(jan_first, today)
+    cons_per_day = {d: 5.0 for d in days}
+    with _patch_recorder_per_entity({"sensor.day_cons": cons_per_day}):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            extractor,
+            current,
+            entry,
+            prosumer_cost_eur_per_month=0.0,
+        )
+    # January's days are skipped (no DSO in bad archive), the rest
+    # bills at the current snapshot's rate.
+    current_all_in = 0.30 + 0.10 + 0.0145 + 0.05 + 0.002
+    other_days = sum(1 for d in days if d.month != 1)
+    expected = 5.0 * current_all_in * other_days
+    assert cost == pytest.approx(expected)

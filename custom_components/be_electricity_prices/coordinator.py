@@ -1079,9 +1079,25 @@ async def _compute_current_year_cost(
         snap_m = await _snapshot_for_month(
             hass, session, extractor, contract, region, month_first, snapshot
         )
-        single_bd = static_breakdown(snap_m, dso, region, "single")
-        peak_bd = static_breakdown(snap_m, dso, region, "peak")
-        offpeak_bd = static_breakdown(snap_m, dso, region, "offpeak")
+        try:
+            single_bd = static_breakdown(snap_m, dso, region, "single")
+            peak_bd = static_breakdown(snap_m, dso, region, "peak")
+            offpeak_bd = static_breakdown(snap_m, dso, region, "offpeak")
+        except KeyError:
+            # An archived snapshot can lose the user's DSO key when the
+            # supplier renames a row or a regex misses for that month.
+            # Treating the month as "no rate to apply" matches dynamic
+            # / TOU behaviour and keeps the YTD loop running instead of
+            # tearing the whole tick down with UpdateFailed.
+            _LOGGER.debug(
+                "static_breakdown missing DSO %s for %s/%s/%s; falling back",
+                dso,
+                snap_m.supplier,
+                snap_m.contract,
+                month_first,
+            )
+            month_breakdowns[month_first] = None
+            return None
         if single_bd is None or peak_bd is None or offpeak_bd is None:
             month_breakdowns[month_first] = None
             return None
