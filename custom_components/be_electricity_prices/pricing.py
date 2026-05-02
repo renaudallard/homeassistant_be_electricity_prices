@@ -225,13 +225,18 @@ def static_breakdown(
     dso_key: str,
     region: str,
     band: StaticBand,
+    dso_tariff_mode: DsoTariffMode = "bi_horaire",
 ) -> PriceBreakdown | None:
     """All-in EUR/kWh for the static rate sheet of one band.
 
-    Returns ``None`` when the contract has no stable rate (dynamic, TOU).
-    Falls back to the single-rate distribution when the DSO didn't
-    publish a peak/offpeak split. VAT applies uniformly to each
-    component, mirroring :func:`compute_breakdown`.
+    Returns ``None`` when the contract has no stable rate (dynamic,
+    TOU) or when the user is on the Wallonia ``impact`` DSO tariff
+    (distribution varies by hour-of-day, so the YTD path must read
+    hourly statistics rather than per-day totals). Falls back to the
+    single-rate distribution when the DSO didn't publish a
+    peak/offpeak split or when the user picked ``simple`` DSO billing.
+    VAT applies uniformly to each component, mirroring
+    :func:`compute_breakdown`.
     """
     energy = static_energy_eur_per_kwh(snapshot.energy, band)
     if energy is None:
@@ -243,7 +248,14 @@ def static_breakdown(
             f"{snapshot.supplier}/{snapshot.contract}; "
             f"available: {sorted(snapshot.dsos)}"
         )
-    if band == "peak" and overlay.distribution_peak is not None:
+    if dso_tariff_mode == "impact" and overlay.distribution_pic is not None:
+        # Impact distribution differs per CWaPE band (PIC / MEDIUM /
+        # ECO) and can't collapse to single/peak/offpeak; the caller
+        # must route through the per-hour path.
+        return None
+    if dso_tariff_mode == "simple":
+        dist = overlay.distribution_single
+    elif band == "peak" and overlay.distribution_peak is not None:
         dist = overlay.distribution_peak
     elif band == "offpeak" and overlay.distribution_offpeak is not None:
         dist = overlay.distribution_offpeak

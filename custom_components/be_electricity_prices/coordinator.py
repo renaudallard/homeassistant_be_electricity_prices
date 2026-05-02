@@ -1406,6 +1406,7 @@ async def _compute_current_year_cost(
     region = entry.data.get(CONF_REGION, "")
     dso = entry.data.get(CONF_DSO, "")
     meter = entry.data.get(CONF_METER, METER_MONO)
+    dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
 
     jan1 = date(today.year, 1, 1)
@@ -1419,13 +1420,19 @@ async def _compute_current_year_cost(
     prosumer_ytd = await _ytd_prosumer(hass, session, extractor, snapshot, entry, today)
     fees = (fixed + fund_yearly) * year_fraction + prosumer_ytd
 
-    if isinstance(snapshot.energy, TimeOfUseRates):
-        tou_energy = await _ytd_tou_energy(
+    # Per-hour billing is required when the supplier's energy rates
+    # vary by hour (TOU contracts) AND when the DSO bills per Impact
+    # band (PIC / MEDIUM / ECO change with hour-of-day). Both go
+    # through the same hourly path; the static per-day branch can't
+    # represent either.
+    needs_hourly = isinstance(snapshot.energy, TimeOfUseRates) or dso_mode == "impact"
+    if needs_hourly:
+        hourly_energy = await _ytd_tou_energy(
             hass, session, extractor, snapshot, entry, today
         )
-        if tou_energy is None:
+        if hourly_energy is None:
             return fees
-        return tou_energy + fees
+        return hourly_energy + fees
 
     daily_kwh = await _resolve_daily_kwh(hass, entry, today)
     if daily_kwh is None:
@@ -1446,9 +1453,9 @@ async def _compute_current_year_cost(
             hass, session, extractor, contract, region, month_first, snapshot
         )
         try:
-            single_bd = static_breakdown(snap_m, dso, region, "single")
-            peak_bd = static_breakdown(snap_m, dso, region, "peak")
-            offpeak_bd = static_breakdown(snap_m, dso, region, "offpeak")
+            single_bd = static_breakdown(snap_m, dso, region, "single", dso_mode)
+            peak_bd = static_breakdown(snap_m, dso, region, "peak", dso_mode)
+            offpeak_bd = static_breakdown(snap_m, dso, region, "offpeak", dso_mode)
         except KeyError:
             # An archived snapshot can lose the user's DSO key when the
             # supplier renames a row or a regex misses for that month.
