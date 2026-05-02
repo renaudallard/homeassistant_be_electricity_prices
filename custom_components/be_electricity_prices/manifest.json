@@ -1,6 +1,7 @@
 {
   "domain": "be_electricity_prices",
   "name": "Belgian Electricity Prices",
+  "after_dependencies": ["recorder"],
   "codeowners": ["@renaudallard"],
   "config_flow": true,
   "documentation": "https://github.com/renaudallard/homeassistant_be_electricity_prices",
