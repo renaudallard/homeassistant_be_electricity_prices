@@ -380,8 +380,28 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         stored = await self._store.async_load()
         if not stored:
             return
+        # If the persisted blob was written under a different supplier
+        # tuple (typical case: OptionsFlow swap landed while a tick was
+        # still in flight, and the slow tick saved over the file after
+        # the reload), discard the snapshot so the next refresh
+        # repopulates from the correct supplier. The peak/month is
+        # supplier-agnostic and stays.
+        persisted_tuple = (
+            stored.get("entry_supplier"),
+            stored.get("entry_contract"),
+            stored.get("entry_region"),
+        )
+        current_tuple = (
+            self.entry.data.get(CONF_SUPPLIER),
+            self.entry.data.get(CONF_CONTRACT),
+            self.entry.data.get(CONF_REGION),
+        )
+        tuple_mismatch = (
+            any(persisted_tuple)  # keys exist (post-fix file)
+            and persisted_tuple != current_tuple
+        )
         snap = stored.get("snapshot")
-        if isinstance(snap, dict):
+        if isinstance(snap, dict) and not tuple_mismatch:
             try:
                 self._snapshot = _snapshot_from_dict(snap)
                 self._snapshot_fetched_at = datetime.fromisoformat(snap["_cached_at"])
@@ -398,6 +418,15 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._snapshot = None
                 self._snapshot_fetched_at = None
                 self._snapshot_probe_key = None
+        elif tuple_mismatch:
+            _LOGGER.info(
+                "discarding cached snapshot for %s: stored %s differs from "
+                "current %s (entry was reconfigured); next refresh will "
+                "repopulate",
+                self.entry.entry_id,
+                persisted_tuple,
+                current_tuple,
+            )
         peak = stored.get("peak")
         if isinstance(peak, dict):
             value = peak.get("kw")
@@ -797,7 +826,27 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         return (dt_util.utcnow() - self._snapshot_fetched_at).total_seconds() / 3600.0
 
     async def _save_persistent(self) -> None:
+        # Identity guard: a slow tick that started before the user
+        # changed supplier/contract/region via OptionsFlow can finish
+        # after the reload has already swapped runtime_data to a fresh
+        # coordinator instance. If we wrote the file unconditionally,
+        # the obsolete coord would clobber the new coord's saved state
+        # and the next HA restart would serve the wrong supplier's
+        # rates against the new entry.
+        if self.entry.runtime_data is not self:
+            _LOGGER.debug(
+                "skipping _save_persistent for %s: coordinator was replaced",
+                self.entry.entry_id,
+            )
+            return
         payload: dict[str, Any] = {
+            # Stamp the entry's identity into the file so the load path
+            # can refuse a blob written under a different supplier
+            # tuple (defence in depth in case the identity guard above
+            # is ever weakened).
+            "entry_supplier": self.entry.data.get(CONF_SUPPLIER),
+            "entry_contract": self.entry.data.get(CONF_CONTRACT),
+            "entry_region": self.entry.data.get(CONF_REGION),
             "peak": {
                 "kw": self._peak_kw,
                 "month": self._peak_month.isoformat() if self._peak_month else "",

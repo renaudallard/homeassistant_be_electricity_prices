@@ -413,3 +413,79 @@ async def test_async_remove_entry_clears_stale_issue(hass: HomeAssistant) -> Non
     await async_remove_entry(hass, entry)
 
     assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_save_persistent_skipped_after_runtime_data_swapped(
+    hass: HomeAssistant,
+) -> None:
+    """A slow tick that finishes after the entry has been reloaded
+    (runtime_data points at a fresh coordinator) must not overwrite
+    the new coord's saved file."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    old_coord = BePricesCoordinator(hass, entry)
+    new_coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = new_coord  # simulate post-reload state
+
+    saved = False
+
+    async def _fake_save(_payload: object) -> None:
+        nonlocal saved
+        saved = True
+
+    with patch.object(old_coord._store, "async_save", new=_fake_save):
+        await old_coord._save_persistent()
+
+    assert saved is False, "obsolete coordinator must not overwrite the cache file"
+
+
+async def test_load_persistent_discards_blob_for_other_supplier(
+    hass: HomeAssistant,
+) -> None:
+    """async_load_persistent must reject a cached snapshot whose
+    persisted (supplier, contract, region) tuple differs from the
+    entry's current data, so an OptionsFlow change followed by a
+    restart does not serve the previous supplier's rates."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",  # entry currently configured for eneco
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "none",
+            "api_key": "k",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    stale_payload = {
+        "entry_supplier": "bolt",  # blob written under a different supplier
+        "entry_contract": "bolt_fix",
+        "entry_region": "wallonia",
+        "snapshot": {
+            "_cached_at": "2026-04-30T12:00:00+00:00",
+            "_probe_key": "stale",
+            "_schema_version": 7,
+            "supplier": "bolt",
+            "contract": "bolt_fix",
+            "energy_kind": "fixed",
+            "energy": {"single": 0.18},
+            "dsos": {"ores": {"distribution_single": 0.10, "transport": 0.0145}},
+            "taxes": {},
+            "source_url": "test://",
+            "publication_label": "april 2026",
+            "valid_until": None,
+            "injection": None,
+        },
+    }
+
+    async def _fake_load() -> dict[str, object]:
+        return stale_payload
+
+    with patch.object(coord._store, "async_load", new=_fake_load):
+        await coord.async_load_persistent()
+
+    assert coord._snapshot is None
+    assert coord._snapshot_fetched_at is None
