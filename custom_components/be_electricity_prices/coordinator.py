@@ -455,13 +455,18 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     async def async_force_refresh(self) -> None:
-        """Drop cached snapshot + spot prices and re-fetch immediately.
+        """Force the next coordinator tick to re-fetch the supplier.
 
         Invoked by the be_electricity_prices.refresh service when the user
         wants the integration to pick up a new tariff card or correct an
-        error without waiting for the 24h refresh tick. Evicts the shared
-        (supplier, contract, region) entry too so other coordinators with
-        the same key also see a fresh fetch on their next refresh.
+        error without waiting for the 24h refresh tick. Resets the
+        freshness markers (fetched_at, probe_key) and clears the spot
+        cache, the shared snapshot row, and the negative-fetch marker
+        so a sibling coordinator on the same (supplier, contract,
+        region) tuple also re-fetches on its next refresh. The current
+        ``self._snapshot`` is intentionally kept so a transient fetch
+        failure during the forced refresh doesn't blank the entry --
+        the next successful tick overwrites it.
         """
         self._snapshot_fetched_at = None
         self._snapshot_probe_key = None
