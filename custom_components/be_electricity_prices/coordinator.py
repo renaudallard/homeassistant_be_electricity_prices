@@ -1022,12 +1022,16 @@ async def _resolve_daily_kwh(
                 else {}
             )
             for day, total in cons_per_day.items():
-                d_ratio, n_ratio = cons_ratios.get(day, (1.0, 0.0))
+                d_ratio, n_ratio = cons_ratios.get(
+                    day, _default_band_ratio_for(day)
+                )
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[0] += total * d_ratio
                 row[1] += total * n_ratio
             for day, total in inj_per_day.items():
-                d_ratio, n_ratio = inj_ratios.get(day, (1.0, 0.0))
+                d_ratio, n_ratio = inj_ratios.get(
+                    day, _default_band_ratio_for(day)
+                )
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[2] += total * d_ratio
                 row[3] += total * n_ratio
@@ -1050,6 +1054,26 @@ def _days_through(start: date, end: date) -> list[date]:
         days.append(cur)
         cur += timedelta(days=1)
     return days
+
+
+def _default_band_ratio_for(day: date) -> tuple[float, float]:
+    """Time-weighted (day_ratio, night_ratio) fallback for a day with no
+    hourly recorder stats yet.
+
+    Assumes uniform consumption across the day's 24 hours (the most
+    neutral guess without a usage profile). Weekends and federal
+    holidays are entirely offpeak under the Belgian bi-hourly schedule;
+    weekdays split 15h peak / 9h offpeak. Replaces a previous hardcoded
+    (1.0, 0.0) default that systematically pushed totals into the peak
+    band when hourly stats lagged daily stats."""
+    peak_hours = 0
+    for hour in range(24):
+        when = datetime(day.year, day.month, day.day, hour)
+        if not is_offpeak(when):
+            peak_hours += 1
+    if peak_hours == 0:
+        return (0.0, 1.0)
+    return (peak_hours / 24.0, (24 - peak_hours) / 24.0)
 
 
 async def _ytd_prosumer(
