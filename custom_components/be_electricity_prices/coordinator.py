@@ -154,7 +154,14 @@ def _shared_snapshots(
 
 def _shared_failed_fetches(
     hass: HomeAssistant,
-) -> dict[tuple[str, str, str], datetime]:
+) -> dict[tuple[str, str, str], tuple[datetime, str]]:
+    """Per-key (timestamp, last-error-message) of recent fetch failures.
+
+    Storing the error message alongside the timestamp lets a sibling
+    coordinator that hits the negative-cache short-circuit surface the
+    real failure reason in its UpdateFailed instead of an opaque
+    'cold start'.
+    """
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     return bucket.setdefault(_SHARED_FAILED_FETCHES_KEY, {})  # type: ignore[no-any-return]
 
@@ -551,10 +558,16 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return
 
         # Negative cache: if a sibling just failed on this same key,
-        # don't retry until _SHARED_FAILURE_TTL has elapsed.
+        # don't retry until _SHARED_FAILURE_TTL has elapsed. Propagate
+        # the sibling's error to ours so a cold-start coordinator sees
+        # the real failure reason instead of "cold start".
         failed = _shared_failed_fetches(self.hass)
         last_fail = failed.get(key)
-        if last_fail is not None and dt_util.utcnow() - last_fail < _SHARED_FAILURE_TTL:
+        if (
+            last_fail is not None
+            and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
+        ):
+            self._last_error = last_fail[1]
             return
 
         async with _shared_lock(self.hass, key):
@@ -569,8 +582,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             last_fail = failed.get(key)
             if (
                 last_fail is not None
-                and dt_util.utcnow() - last_fail < _SHARED_FAILURE_TTL
+                and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
             ):
+                self._last_error = last_fail[1]
                 return
             try:
                 snap = await extractor.fetch(self._session, contract, region)
@@ -584,7 +598,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._snapshot_probe_key = probe_key
                 self._last_error = ""
             except (ExtractorError, asyncio.TimeoutError) as err:
-                failed[key] = dt_util.utcnow()
+                failed[key] = (dt_util.utcnow(), str(err))
                 self._last_error = str(err)
                 _LOGGER.warning(
                     "snapshot refresh failed for %s/%s: %s; keeping cached",
