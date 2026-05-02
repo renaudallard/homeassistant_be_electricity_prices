@@ -1423,7 +1423,7 @@ async def _compute_current_year_cost(
 # the new field. Loading a snapshot whose schema_version is below this
 # raises in _snapshot_from_dict; async_load_persistent then discards the
 # cache and the coordinator's first refresh repopulates from the supplier.
-_SNAPSHOT_SCHEMA_VERSION = 5
+_SNAPSHOT_SCHEMA_VERSION = 6
 
 
 def _snapshot_to_dict(
@@ -1462,6 +1462,8 @@ def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
         energy = VariableRates(**energy_args)
     elif energy_kind == "dynamic":
         energy = DynamicRates(**energy_args)
+    elif energy_kind == "tou":
+        energy = TimeOfUseRates(**energy_args)
     else:
         raise ValueError(f"unknown energy kind {energy_kind!r}")
     injection_data = data.get("injection")
@@ -1493,4 +1495,6 @@ def _energy_kind(energy: EnergyRates) -> str:
         return "variable"
     if isinstance(energy, DynamicRates):
         return "dynamic"
+    if isinstance(energy, TimeOfUseRates):
+        return "tou"
     raise TypeError(f"unknown energy rates type {type(energy).__name__}")

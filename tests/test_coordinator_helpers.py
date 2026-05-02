@@ -44,9 +44,12 @@ from custom_components.be_electricity_prices.coordinator import (
     _compute_injection_price,
     _compute_prosumer,
     _days_through,
+    _energy_kind,
     _monthly_snapshots,
     _recorder_daily_kwh,
     _snapshot_for_month,
+    _snapshot_from_dict,
+    _snapshot_to_dict,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
@@ -892,3 +895,34 @@ async def test_year_cost_tou_bills_per_hourly_slot(hass: HomeAssistant) -> None:
     fraction = _year_fraction(today)
     # Energy = 1 kWh × all-in (peak slot); fees pro-rated (zero here).
     assert cost == pytest.approx(expected_all_in + 0.0 * fraction)
+
+
+def test_energy_kind_handles_tou() -> None:
+    """Regression for Round-2 Bug 1: TimeOfUseRates was missing from the
+    energy-kind classifier so persistence raised TypeError on TOU."""
+    assert (
+        _energy_kind(TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10))
+        == "tou"
+    )
+
+
+def test_snapshot_round_trip_for_tou_contract() -> None:
+    """A TOU snapshot must serialize and deserialize without raising,
+    so HA's Store can persist last-known prices for SmartFlex /
+    Empower Flextime users."""
+    snap = SupplierSnapshot(
+        supplier="luminus",
+        contract="smartflex",
+        energy=TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://tou",
+        fetched_at_iso="2026-04-29T12:00:00+00:00",
+    )
+    fetched_at = datetime(2026, 4, 29, 12, 0, tzinfo=UTC)
+    payload = _snapshot_to_dict(snap, fetched_at, probe_key="abc")
+    restored = _snapshot_from_dict(payload)
+    assert isinstance(restored.energy, TimeOfUseRates)
+    assert restored.energy.peak == pytest.approx(0.30)
+    assert restored.energy.transition == pytest.approx(0.20)
+    assert restored.energy.offpeak == pytest.approx(0.10)
