@@ -584,9 +584,4 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     probe=probe,
-    dso_keys=(
-        tuple(_FLANDERS_LABELS.values())
-        + tuple(_WALLONIA_LABELS.values())
-        + ("sibelga",)
-    ),
 )

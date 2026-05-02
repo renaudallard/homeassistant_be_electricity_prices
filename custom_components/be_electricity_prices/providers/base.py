@@ -285,7 +285,6 @@ class SupplierExtractor:
     # means "no archive for this month" - the coordinator falls back to
     # using the current snapshot as a proxy.
     fetch_for_month: ArchivedSnapshotFetcher | None = None
-    dso_keys: tuple[str, ...] = field(default_factory=tuple)
 
     def regions(self) -> frozenset[str]:
         """Union of regions across this supplier's contracts."""

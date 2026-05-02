@@ -583,5 +583,4 @@ EXTRACTOR = SupplierExtractor(
         for c in _CONTRACTS
     ),
     fetch=fetch,
-    dso_keys=tuple(_FLANDERS_LABELS.values()) + tuple(_WALLONIA_LABELS.values()),
 )

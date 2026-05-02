@@ -615,5 +615,4 @@ EXTRACTOR = SupplierExtractor(
     fetch=fetch,
     probe=probe,
     fetch_for_month=fetch_for_month,
-    dso_keys=tuple(_WALLONIA_LABELS.values()) + tuple(_FLUVIUS_LABELS.values()),
 )

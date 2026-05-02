@@ -540,5 +540,4 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     probe=probe,
-    dso_keys=tuple(_FLANDERS_LABELS.values()) + tuple(k for _, k in _WALLONIA_LABELS),
 )
