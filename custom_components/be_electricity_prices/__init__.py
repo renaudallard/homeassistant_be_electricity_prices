@@ -183,7 +183,14 @@ def _resolve_window_inputs(
 ) -> tuple[dict[datetime, PriceBreakdown], int, datetime, datetime | None]:
     """Parse a window-finding ServiceCall into pure-helper arguments."""
     duration_hours = float(call.data["duration_hours"])
-    duration_slots = max(1, -(-int(duration_hours * 2 + 0.0001) // 2))  # ceil to 1h
+    if duration_hours < 1:
+        raise ValueError("duration_hours must be at least 1 (price table is hourly)")
+    # The price table is hourly; round half-up so 1.5h becomes 2h windows
+    # rather than silently widening to 1h. The service schema now exposes
+    # whole-hour steps so callers shouldn't trip this branch from the UI.
+    duration_slots = int(duration_hours + 0.5)
+    if duration_slots < 1:
+        duration_slots = 1
 
     entries = call.hass.config_entries.async_loaded_entries(DOMAIN)
     target_id = call.data.get("entry_id")
