@@ -224,9 +224,13 @@ next refresh.
 
 ### Refresh cadence
 
-- **Supplier snapshot** — refreshed every 24 h. Multiple entries pointing
-  at the same `(supplier, contract, region)` tuple share their fetched
-  snapshot through an in-memory cache, so the same PDF is never polled twice.
+- **Supplier snapshot** — the coordinator runs a cheap `probe()` every
+  hour and only re-fetches the full PDF when the probe key changes
+  (see *How often the integration polls* above). Suppliers without a
+  probe (Engie, Luminus, DATS 24) fall back to a 24 h time-based TTL.
+  Multiple entries pointing at the same
+  `(supplier, contract, region)` tuple share their fetched snapshot
+  through an in-memory cache, so the same PDF is never polled twice.
 - **Spot prices** *(dynamic only)* — hourly via ENTSO-E; tomorrow's curve picked up after publication around midday CET.
 - **Monthly capacity peak** *(Flanders)* — tracked continuously, resets on the 1st of each local month.
 - **`current_year_cost`** — recomputed every coordinator tick from HA's
