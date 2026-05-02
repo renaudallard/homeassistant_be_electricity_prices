@@ -1423,8 +1423,12 @@ async def _ytd_tou_energy(
     the bi-hourly distribution band from the user's DSO mode in one
     call. Reads from ``CONF_CONSUMPTION_KWH`` (single totals) when
     available, else sums the four day/night register sensors at hourly
-    granularity. Returns ``None`` when no consumption sensor is wired
-    (the caller falls back to the fees-only floor).
+    granularity. Each side -- consumption, injection -- is resolved
+    independently, mirroring the static-path behaviour: a user with
+    only injection wired (e.g. an inverter exposing solar export but
+    no smart-meter consumption sensor) still gets the injection
+    credit recognised. Returns ``None`` only when neither side has
+    any meters wired (the caller surfaces the fees-only floor).
     """
     region = entry.data.get(CONF_REGION, "")
     dso = entry.data.get(CONF_DSO, "")
@@ -1435,7 +1439,7 @@ async def _ytd_tou_energy(
 
     cons_ids = _hourly_consumption_sensors(entry)
     inj_ids = _hourly_injection_sensors(entry)
-    if not cons_ids:
+    if not cons_ids and not inj_ids:
         return None
 
     jan1 = date(today.year, 1, 1)
@@ -1458,7 +1462,9 @@ async def _ytd_tou_energy(
         return month_snap_cache[month_first]
 
     energy_cost = 0.0
-    for utc_hour, kwh_cons in cons_per_hour.items():
+    # Iterate the union of both sides so an injection-only wiring
+    # still contributes its credit (mirroring _resolve_daily_kwh).
+    for utc_hour in cons_per_hour.keys() | inj_per_hour.keys():
         local = dt_util.as_local(utc_hour)
         snap_h = await _snap_for(date(local.year, local.month, 1))
         try:
@@ -1466,6 +1472,7 @@ async def _ytd_tou_energy(
         except (KeyError, ValueError):
             # Missing DSO row or non-static rate kind: skip this hour.
             continue
+        kwh_cons = cons_per_hour.get(utc_hour, 0.0)
         kwh_inj = inj_per_hour.get(utc_hour, 0.0)
         if regime == SOLAR_REGIME_COMPENSATION:
             d_cost = (kwh_cons - kwh_inj) * bd.all_in

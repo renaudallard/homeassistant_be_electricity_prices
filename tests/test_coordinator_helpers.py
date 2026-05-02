@@ -886,6 +886,63 @@ async def test_year_cost_tou_bills_per_hourly_slot(hass: HomeAssistant) -> None:
     assert cost == pytest.approx(expected_all_in + 0.0 * fraction)
 
 
+async def test_year_cost_tou_recognises_injection_only_wiring(
+    hass: HomeAssistant,
+) -> None:
+    """Injection-regime user on a TOU contract who only wired the
+    injection sensor (e.g. inverter exposing solar export but no smart-
+    meter consumption sensor) must still see their solar credit
+    accrue, mirroring the static-path behaviour."""
+    from custom_components.be_electricity_prices import coordinator
+
+    snap = SupplierSnapshot(
+        supplier="test",
+        contract="test_tou",
+        energy=TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://tou",
+        injection=InjectionRates(current=0.05),
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test_tou",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "injection_kwh": "sensor.inj_total",
+            # No consumption sensor wired -- only injection.
+            "dso_tariff_mode": "bi_horaire",
+        },
+    )
+
+    # 1 kWh injected at 13:00 local Tuesday Jan 6 2026 (TOU transition).
+    inj_hour = dt_util.start_of_local_day(datetime(2026, 1, 6)) + timedelta(hours=13)
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.inj_total":
+            return {inj_hour.astimezone(UTC): 1.0}
+        return {}
+
+    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+        )
+    # Energy = 0 (no consumption) - 1 kWh × 0.05 (injection rate).
+    # Fees pro-rated to zero (no yearly_fixed_fee, no energy_fund,
+    # not on compensation regime so no prosumer).
+    assert cost == pytest.approx(-0.05)
+
+
 def test_energy_kind_handles_tou() -> None:
     """Regression for Round-2 Bug 1: TimeOfUseRates was missing from the
     energy-kind classifier so persistence raised TypeError on TOU."""
