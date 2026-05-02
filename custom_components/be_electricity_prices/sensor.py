@@ -78,6 +78,13 @@ def _current(data: CoordinatorData) -> PriceBreakdown | None:
         data.hourly.keys(),
         key=lambda h: abs((h - now).total_seconds()),
     )
+    # Bound the nearest-hour fallback so a stale spot cache doesn't
+    # silently surface yesterday's last hour as "now". An hour off is
+    # tolerated for DST seams; anything beyond that means the price
+    # table is stale relative to wall-clock and the sensor should go
+    # unknown rather than mislead.
+    if abs((nearest_hour - now).total_seconds()) > 3600:
+        return None
     return data.hourly[nearest_hour]
 
 

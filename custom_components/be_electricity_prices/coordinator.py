@@ -705,11 +705,16 @@ def _compute_injection_price(
         if spot is None:
             # ENTSO-E publishes hour-aligned values; if today's curve doesn't
             # have our hour (rare DST / publication-lag edge), fall back to
-            # the temporally nearest hour we have.
+            # the temporally nearest hour -- but only within an hour. A
+            # bigger gap means the spot cache is stale relative to wall
+            # clock and we shouldn't fabricate an injection price from
+            # yesterday's last hour.
             nearest = min(
                 spot_prices.keys(),
                 key=lambda h: abs((h - now_hour).total_seconds()),
             )
+            if abs((nearest - now_hour).total_seconds()) > 3600:
+                return None
             spot = spot_prices[nearest]
         return inj.factor * spot + inj.base
     # Static fallback: the supplier's printed monthly indicative.
