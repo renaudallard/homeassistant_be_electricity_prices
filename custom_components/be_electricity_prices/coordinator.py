@@ -181,10 +181,22 @@ def evict_shared_caches(
     _shared_snapshots(hass).pop(key, None)
     _shared_failed_fetches(hass).pop(key, None)
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
-    locks: dict[tuple[str, str, str], Any] = bucket.setdefault(_SHARED_LOCKS_KEY, {})
-    locks.pop(key, None)
+    locks: dict[tuple[str, str, str], asyncio.Lock] = bucket.setdefault(
+        _SHARED_LOCKS_KEY, {}
+    )
+    # Only drop the lock when it isn't currently held. If a coroutine
+    # is mid-fetch (held lock) and a future entry on the same tuple
+    # acquired a fresh lock through ``_shared_lock``, the dedup
+    # property would silently break and both coroutines would fan out
+    # the same network call. Leaving a locked lock in place defers
+    # cleanup to the next eviction; the alternative (cancelling the
+    # in-flight fetch) is more invasive than the leak it would
+    # prevent.
+    held = locks.get(key)
+    if held is not None and not held.locked():
+        locks.pop(key, None)
     monthly = _monthly_snapshots(hass)
-    monthly_locks: dict[tuple[str, str, str, str], Any] = bucket.setdefault(
+    monthly_locks: dict[tuple[str, str, str, str], asyncio.Lock] = bucket.setdefault(
         _MONTHLY_LOCKS_KEY, {}
     )
     _, contract, region = key
@@ -195,7 +207,9 @@ def evict_shared_caches(
     ]
     for k in stale:
         monthly.pop(k, None)
-        monthly_locks.pop(k, None)
+        held_m = monthly_locks.get(k)
+        if held_m is not None and not held_m.locked():
+            monthly_locks.pop(k, None)
 
 
 def _shared_lock(hass: HomeAssistant, key: tuple[str, str, str]) -> asyncio.Lock:
@@ -1137,9 +1151,7 @@ async def _resolve_daily_kwh(
             return True  # nothing wired on this side; contributes zero
         per_day = await _recorder_daily_kwh(hass, total_id, jan1, today)
         if meter in ("bi", "dynamic"):
-            ratios = await _recorder_daily_band_ratio(
-                hass, total_id, jan1, today
-            )
+            ratios = await _recorder_daily_band_ratio(hass, total_id, jan1, today)
             for day, total in per_day.items():
                 d_ratio, n_ratio = ratios.get(day, _default_band_ratio_for(day))
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
