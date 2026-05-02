@@ -1105,8 +1105,9 @@ def _default_band_ratio_for(day: date) -> tuple[float, float]:
     (1.0, 0.0) default that systematically pushed totals into the peak
     band when hourly stats lagged daily stats."""
     peak_hours = 0
+    base = dt_util.start_of_local_day(datetime(day.year, day.month, day.day))
     for hour in range(24):
-        when = datetime(day.year, day.month, day.day, hour)
+        when = base + timedelta(hours=hour)
         if not is_offpeak(when):
             peak_hours += 1
     if peak_hours == 0:
