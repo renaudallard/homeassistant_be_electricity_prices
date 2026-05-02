@@ -117,6 +117,16 @@ SNAPSHOT_STALE_DAYS = 7
 _SHARED_SNAPSHOTS_KEY = "snapshot_cache"
 _SHARED_LOCKS_KEY = "snapshot_locks"
 
+# Negative cache for fetch failures: when extractor.fetch raises, a
+# sibling coordinator on the same (supplier, contract, region) shouldn't
+# repeat the same failing network round-trip on the very next tick.
+# The stored timestamp is the last failure; siblings skip retrying for
+# _SHARED_FAILURE_TTL after that. Long enough to dedupe a tight burst of
+# update ticks, short enough that a real recovery is picked up the next
+# minute.
+_SHARED_FAILED_FETCHES_KEY = "snapshot_failed_fetches"
+_SHARED_FAILURE_TTL = timedelta(minutes=5)
+
 # Per-(supplier, contract, region, YYYY-MM) cache of historical snapshots
 # the time-correct yearly-cost flow uses to bill each past month at its
 # own rate. ``None`` is a negative cache so a probe-less supplier or a
@@ -140,6 +150,13 @@ def _shared_snapshots(
 ) -> dict[tuple[str, str, str], _SharedSnapshot]:
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     return bucket.setdefault(_SHARED_SNAPSHOTS_KEY, {})  # type: ignore[no-any-return]
+
+
+def _shared_failed_fetches(
+    hass: HomeAssistant,
+) -> dict[tuple[str, str, str], datetime]:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_SHARED_FAILED_FETCHES_KEY, {})  # type: ignore[no-any-return]
 
 
 def _shared_lock(hass: HomeAssistant, key: tuple[str, str, str]) -> asyncio.Lock:
@@ -495,6 +512,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self._snapshot_fetched_at = now
             return
 
+        # Negative cache: if a sibling just failed on this same key,
+        # don't retry until _SHARED_FAILURE_TTL has elapsed.
+        failed = _shared_failed_fetches(self.hass)
+        last_fail = failed.get(key)
+        if last_fail is not None and dt_util.utcnow() - last_fail < _SHARED_FAILURE_TTL:
+            return
+
         async with _shared_lock(self.hass, key):
             shared = cache.get(key)
             if shared is not None and self._shared_is_fresh(
@@ -502,17 +526,27 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             ):
                 self._adopt_shared(shared)
                 return
+            # Re-check the negative cache under the lock so the second
+            # waiter doesn't repeat what the first just failed.
+            last_fail = failed.get(key)
+            if (
+                last_fail is not None
+                and dt_util.utcnow() - last_fail < _SHARED_FAILURE_TTL
+            ):
+                return
             try:
                 snap = await extractor.fetch(self._session, contract, region)
                 fetched_at = dt_util.utcnow()
                 cache[key] = _SharedSnapshot(
                     snapshot=snap, fetched_at=fetched_at, probe_key=probe_key
                 )
+                failed.pop(key, None)
                 self._snapshot = snap
                 self._snapshot_fetched_at = fetched_at
                 self._snapshot_probe_key = probe_key
                 self._last_error = ""
             except (ExtractorError, asyncio.TimeoutError) as err:
+                failed[key] = dt_util.utcnow()
                 self._last_error = str(err)
                 _LOGGER.warning(
                     "snapshot refresh failed for %s/%s: %s; keeping cached",
@@ -1025,16 +1059,12 @@ async def _resolve_daily_kwh(
                 else {}
             )
             for day, total in cons_per_day.items():
-                d_ratio, n_ratio = cons_ratios.get(
-                    day, _default_band_ratio_for(day)
-                )
+                d_ratio, n_ratio = cons_ratios.get(day, _default_band_ratio_for(day))
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[0] += total * d_ratio
                 row[1] += total * n_ratio
             for day, total in inj_per_day.items():
-                d_ratio, n_ratio = inj_ratios.get(
-                    day, _default_band_ratio_for(day)
-                )
+                d_ratio, n_ratio = inj_ratios.get(day, _default_band_ratio_for(day))
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[2] += total * d_ratio
                 row[3] += total * n_ratio
