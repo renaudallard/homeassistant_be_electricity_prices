@@ -62,7 +62,7 @@
       },
       "meters": {
         "title": "Energy meters (current year cost)",
-        "description": "Optional. Either point at the four day/night registers from your meter (preferred - exact from the start), or just at a single cumulative consumption / injection sensor (the integration will then split deltas into day/night buckets via the bi-hourly schedule, persisted across restarts; the running cost is accurate from the moment you set it up). When both are filled, the day/night registers win.",
+        "description": "Optional. Either point at the four day/night registers from your meter (preferred - exact from the start), or at single cumulative consumption / injection sensors (the integration reads kWh from HA's recorder and splits each past day's total into day/night via the bi-hourly schedule when needed). Each side - consumption, injection - is resolved independently; you can mix one side as registers and the other as a single total. When both wirings are filled for the same side, the day/night registers win.",
         "data": {
           "day_consumption_kwh": "Day consumption (kWh)",
           "night_consumption_kwh": "Night consumption (kWh)",

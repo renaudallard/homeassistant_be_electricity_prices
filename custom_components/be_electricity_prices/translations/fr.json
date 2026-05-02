@@ -62,7 +62,7 @@
       },
       "meters": {
         "title": "Compteurs (cout de l annee)",
-        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit un seul capteur cumulatif de consommation / injection (l'integration repartit les deltas en jour/nuit via l'horaire bi-horaire, persiste entre redemarrages; le cout courant est exact a partir du moment de la configuration). Quand les deux sont remplis, les registres jour/nuit l'emportent.",
+        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit des capteurs cumulatifs uniques de consommation / injection (l'integration lit les kWh depuis le recorder de HA et repartit chaque journee passee en jour/nuit via l'horaire bi-horaire au besoin). Chaque cote - consommation, injection - est resolu independamment; vous pouvez melanger un cote en registres et l'autre en capteur unique. Quand les deux cablages sont remplis pour le meme cote, les registres jour/nuit l'emportent.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
           "night_consumption_kwh": "Consommation nuit (kWh)",
@@ -144,7 +144,7 @@
       },
       "meters": {
         "title": "Compteurs (cout de l annee)",
-        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit un seul capteur cumulatif de consommation / injection (l'integration repartit les deltas en jour/nuit via l'horaire bi-horaire, persiste entre redemarrages; le cout courant est exact a partir du moment de la configuration). Quand les deux sont remplis, les registres jour/nuit l'emportent.",
+        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit des capteurs cumulatifs uniques de consommation / injection (l'integration lit les kWh depuis le recorder de HA et repartit chaque journee passee en jour/nuit via l'horaire bi-horaire au besoin). Chaque cote - consommation, injection - est resolu independamment; vous pouvez melanger un cote en registres et l'autre en capteur unique. Quand les deux cablages sont remplis pour le meme cote, les registres jour/nuit l'emportent.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
           "night_consumption_kwh": "Consommation nuit (kWh)",

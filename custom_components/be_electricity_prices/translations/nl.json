@@ -62,7 +62,7 @@
       },
       "meters": {
         "title": "Energiemeters (kost dit jaar)",
-        "description": "Optioneel. Wijs ofwel de vier dag/nacht registers van de meter aan (voorkeur - exact vanaf het begin), of een enkele cumulatieve verbruik- / injectiesensor (de integratie splitst delta's in dag/nacht via het bi-uurlijks schema, wordt bewaard over herstarts; de lopende kost is exact vanaf het moment van configuratie). Wanneer beide zijn ingevuld winnen de dag/nacht registers.",
+        "description": "Optioneel. Wijs ofwel de vier dag/nacht registers van de meter aan (voorkeur - exact vanaf het begin), of enkele cumulatieve verbruik- / injectiesensoren (de integratie leest kWh uit de HA recorder en splitst elke dag in dag/nacht via het bi-uurlijks schema waar nodig). Elke kant - verbruik, injectie - wordt onafhankelijk bepaald; je kan een kant als registers en de andere als enkele totaalsensor invullen. Wanneer beide bedradingen zijn ingevuld voor dezelfde kant, winnen de dag/nacht registers.",
         "data": {
           "day_consumption_kwh": "Verbruik dag (kWh)",
           "night_consumption_kwh": "Verbruik nacht (kWh)",
@@ -144,7 +144,7 @@
       },
       "meters": {
         "title": "Energiemeters (kost dit jaar)",
-        "description": "Optioneel. Wijs ofwel de vier dag/nacht registers van de meter aan (voorkeur - exact vanaf het begin), of een enkele cumulatieve verbruik- / injectiesensor (de integratie splitst delta's in dag/nacht via het bi-uurlijks schema, wordt bewaard over herstarts; de lopende kost is exact vanaf het moment van configuratie). Wanneer beide zijn ingevuld winnen de dag/nacht registers.",
+        "description": "Optioneel. Wijs ofwel de vier dag/nacht registers van de meter aan (voorkeur - exact vanaf het begin), of enkele cumulatieve verbruik- / injectiesensoren (de integratie leest kWh uit de HA recorder en splitst elke dag in dag/nacht via het bi-uurlijks schema waar nodig). Elke kant - verbruik, injectie - wordt onafhankelijk bepaald; je kan een kant als registers en de andere als enkele totaalsensor invullen. Wanneer beide bedradingen zijn ingevuld voor dezelfde kant, winnen de dag/nacht registers.",
         "data": {
           "day_consumption_kwh": "Verbruik dag (kWh)",
           "night_consumption_kwh": "Verbruik nacht (kWh)",

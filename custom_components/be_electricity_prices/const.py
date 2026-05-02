@@ -104,10 +104,13 @@ CONF_CAPACITY_FIXED_KW: Final = "capacity_fixed_kw"
 #      Preferred when available: the bill is computed exactly from the
 #      printed meter reading.
 #   2) Single cumulative totals (2 entity_ids below). The coordinator
-#      subscribes to state changes, takes the delta, and routes it to a
-#      day or night bucket via is_offpeak(now). Buckets persist in HA
-#      Store across restarts. Useful when the user only has clamp
-#      meters / inverter readings without the per-band split.
+#      reads daily kWh from HA's recorder long-term statistics and, for
+#      bi-hourly / SMR3 meters, recovers the day/night split per past
+#      day from the recorder's hourly statistics binned via
+#      is_offpeak. Useful when the user only has clamp meters /
+#      inverter readings without the per-band split. Each side
+#      (consumption, injection) is resolved independently; partial
+#      register-pair wiring on either side is rejected.
 # When both are configured, the day/night registers win.
 CONF_DAY_CONSUMPTION_KWH: Final = "day_consumption_kwh"
 CONF_NIGHT_CONSUMPTION_KWH: Final = "night_consumption_kwh"

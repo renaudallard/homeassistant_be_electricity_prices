@@ -185,16 +185,24 @@ supplier's tariff card.
 9. **Energy meters** *(optional, all four / two fields are skippable)* —
    feeds the `current_year_cost` sensor. Two ways to wire it:
    - **Day/night register sensors** (4 fields): point at the cumulative
-     kWh registers from your meter. Anchored to a Jan-1 baseline so the
-     sensor reads 0 + fees right after each year rollover.
-   - **Cumulative total sensors** (2 fields): point at a single running
-     consumption sensor and a single running injection sensor. The
-     integration subscribes to state changes, splits each delta into a
-     day or night bucket via the bi-hourly schedule, and zeroes the
-     buckets every Jan 1. Useful when your P1 / digital-meter
-     integration only exposes totals (the standard HA case).
-   - When both are filled the day/night registers win. Missing inputs
-     collapse to the fees-only floor — the sensor never goes unknown.
+     kWh registers from your meter. The integration reads each day's
+     delta from HA's long-term statistics, so the sensor reflects
+     metered totals exactly and resets cleanly on Jan 1.
+   - **Cumulative total sensors** (2 fields): point at a single
+     running consumption sensor and a single running injection sensor.
+     The integration reads daily kWh from the recorder and recovers
+     the day/night split per past day from the recorder's hourly
+     statistics binned via the bi-hourly schedule (no in-process
+     buckets). Useful when your P1 / digital-meter integration only
+     exposes totals (the standard HA case).
+   - **Mix and match**: each side (consumption, injection) is
+     resolved independently. You can wire registers for consumption
+     and a single total for injection, or vice-versa. Partial
+     register-pair wiring on either side is rejected so a missing
+     band can't silently undercount.
+   - When both wirings are filled for the same side the day/night
+     registers win. Missing inputs collapse to the fees-only floor —
+     the sensor never goes unknown.
 
 ### Getting an ENTSO-E API key
 
