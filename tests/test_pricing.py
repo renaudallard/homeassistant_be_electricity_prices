@@ -349,7 +349,25 @@ def test_network_bihourly_at_night() -> None:
     ) == pytest.approx(0.055)
 
 
-def test_network_dynamic_meter_uses_single_rate() -> None:
+def test_network_dynamic_meter_with_bi_horaire_dso_uses_band_rate() -> None:
+    """Walloon SMR3 customers can pick bi-horaire DSO billing alongside
+    a dynamic energy contract; the distribution side must pick up the
+    peak / offpeak split rather than collapsing to the single rate."""
+    overlay = DsoOverlay(
+        distribution_single=0.05,
+        distribution_peak=0.06,
+        distribution_offpeak=0.04,
+        transport=0.015,
+    )
+    # 23:00 weekday is offpeak under bi-horaire.
+    assert network_eur_per_kwh(
+        overlay, datetime(2026, 4, 29, 23), "dynamic"
+    ) == pytest.approx(0.055)
+
+
+def test_network_dynamic_meter_with_simple_dso_uses_single_rate() -> None:
+    """A dynamic meter on a 'simple' DSO contract collapses to single
+    distribution -- that is the supplier's intent."""
     overlay = DsoOverlay(
         distribution_single=0.05,
         distribution_peak=0.06,
@@ -357,7 +375,7 @@ def test_network_dynamic_meter_uses_single_rate() -> None:
         transport=0.015,
     )
     assert network_eur_per_kwh(
-        overlay, datetime(2026, 4, 29, 23), "dynamic"
+        overlay, datetime(2026, 4, 29, 23), "dynamic", "simple"
     ) == pytest.approx(0.065)
 
 

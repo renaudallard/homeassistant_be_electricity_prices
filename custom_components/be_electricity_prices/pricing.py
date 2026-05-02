@@ -290,7 +290,9 @@ def network_eur_per_kwh(
     tariff. ``impact`` falls back to bi-horaire if the DSO doesn't
     publish Impact rates (Brussels Sibelga, Flanders Fluvius), and
     ``bi_horaire`` falls back to the single rate when the DSO doesn't
-    publish a peak/offpeak split.
+    publish a peak/offpeak split. ``meter`` decides whether the meter
+    can register a peak/offpeak split: bi-hourly meters and digital
+    (SMR3) meters can; mono meters cannot.
     """
     if dso_tariff_mode == "impact" and dso.distribution_pic is not None:
         band = dso_impact_band(when)
@@ -305,7 +307,7 @@ def network_eur_per_kwh(
         return dist + dso.transport
     if (
         dso_tariff_mode != "simple"
-        and meter == "bi"
+        and meter in ("bi", "dynamic")
         and dso.distribution_peak is not None
         and dso.distribution_offpeak is not None
     ):
