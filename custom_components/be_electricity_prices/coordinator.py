@@ -632,13 +632,16 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 )
             return hourly
 
-        # Iterate in UTC so a DST spring-forward day still yields 48 distinct
-        # entries; deriving local from a fixed-step UTC anchor preserves the
-        # gap correctly. Naively walking local-time + timedelta would either
-        # collide two hours into one UTC slot (spring) or duplicate a UTC slot
-        # (fall) and silently drop one breakdown.
-        # Anchor at local midnight (converted to UTC) so today_min / today_max
-        # / today_average cover the full local day, not just "now → midnight".
+        # Iterate in UTC for 48 contiguous slots so a DST seam preserves
+        # the wall-clock gap correctly. Spring-forward shifts one of the
+        # day's local hours into the next UTC slot (so today carries 23
+        # local hours, tomorrow 25); fall-back is the mirror. Naively
+        # walking local-time + timedelta would either collide two hours
+        # into one UTC slot (spring) or duplicate a UTC slot (fall) and
+        # silently drop one breakdown.
+        # Anchor at local midnight (converted to UTC) so today_min /
+        # today_max / today_average cover the full local day rather
+        # than "now → midnight".
         local_midnight = dt_util.start_of_local_day()
         start_utc = local_midnight.astimezone(UTC).replace(
             minute=0, second=0, microsecond=0
