@@ -66,12 +66,16 @@ def _coordinator_data() -> CoordinatorData:
         snapshot_publication="april 2026",
         snapshot_age_hours=1.5,
         snapshot_stale=False,
+        snapshot_valid_until=date(2026, 4, 30),
         last_error="",
         monthly_peak_kw=3.2,
         monthly_peak_month=date(2026, 4, 1),
         capacity_cost_eur=12.34,
         prosumer_cost_eur=0.0,
+        yearly_fixed_fee_eur=72.0,
+        energy_fund_eur_per_month=0.0,
         injection_price_eur_per_kwh=0.045,
+        current_year_cost_eur=345.67,
     )
 
 
@@ -95,9 +99,13 @@ async def test_diagnostics_includes_snapshot_and_hourly(hass: HomeAssistant) -> 
     coord = dump["coordinator"]
     assert coord["snapshot_publication"] == "april 2026"
     assert coord["snapshot_age_hours"] == 1.5
+    assert coord["snapshot_valid_until"] == "2026-04-30"
     assert coord["monthly_peak_kw"] == 3.2
     assert coord["monthly_peak_month"] == "2026-04-01"
     assert coord["capacity_cost_eur"] == 12.34
+    assert coord["yearly_fixed_fee_eur"] == 72.0
+    assert coord["energy_fund_eur_per_month"] == 0.0
     assert coord["injection_price_eur_per_kwh"] == 0.045
+    assert coord["current_year_cost_eur"] == 345.67
     assert len(coord["hourly"]) == 1
     assert coord["hourly"][0]["all_in"] == 0.312

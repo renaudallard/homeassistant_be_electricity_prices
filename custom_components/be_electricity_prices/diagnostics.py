@@ -58,6 +58,11 @@ async def async_get_config_entry_diagnostics(
             "snapshot_publication": data.snapshot_publication,
             "snapshot_age_hours": round(data.snapshot_age_hours, 2),
             "snapshot_stale": data.snapshot_stale,
+            "snapshot_valid_until": (
+                data.snapshot_valid_until.isoformat()
+                if data.snapshot_valid_until
+                else None
+            ),
             "last_error": data.last_error,
             "monthly_peak_kw": data.monthly_peak_kw,
             "monthly_peak_month": (
@@ -65,6 +70,8 @@ async def async_get_config_entry_diagnostics(
             ),
             "capacity_cost_eur": data.capacity_cost_eur,
             "prosumer_cost_eur": data.prosumer_cost_eur,
+            "yearly_fixed_fee_eur": data.yearly_fixed_fee_eur,
+            "energy_fund_eur_per_month": data.energy_fund_eur_per_month,
             "injection_price_eur_per_kwh": data.injection_price_eur_per_kwh,
             "current_year_cost_eur": data.current_year_cost_eur,
             "hourly": [
