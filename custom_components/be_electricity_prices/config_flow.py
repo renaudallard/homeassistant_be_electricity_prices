@@ -235,18 +235,24 @@ def _meter_schema(
 ) -> vol.Schema:
     # Dynamic and TOU contracts both require a smart (SMR3) meter to
     # bill by quarter-hour or by hour-of-day; default the meter step
-    # accordingly. Other kinds (fixed, variable) default to mono.
-    fallback = (
-        METER_DYNAMIC
-        if _contract_kind(supplier_id, contract_id) in ("dynamic", "tou")
-        else METER_MONO
-    )
-    current = defaults.get(CONF_METER) or fallback
+    # accordingly and restrict the choice list. Picking 'bi' on a TOU
+    # contract would make compute_breakdown route distribution through
+    # the bi-horaire DSO peak/offpeak split while the supplier still
+    # billed energy by TOU slot -- two billing modes that don't mix.
+    kind = _contract_kind(supplier_id, contract_id)
+    if kind in ("dynamic", "tou"):
+        options = [METER_DYNAMIC]
+        fallback = METER_DYNAMIC
+    else:
+        options = list(METER_TYPES)
+        fallback = METER_MONO
+    current = defaults.get(CONF_METER) if defaults.get(CONF_METER) in options else None
+    current = current or fallback
     return vol.Schema(
         {
             vol.Required(CONF_METER, default=current): SelectSelector(
                 SelectSelectorConfig(
-                    options=list(METER_TYPES),
+                    options=options,
                     mode=SelectSelectorMode.LIST,
                     translation_key="meter",
                 )
