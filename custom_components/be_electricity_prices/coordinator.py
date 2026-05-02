@@ -440,7 +440,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._spot_cache = {}
         self._spot_cache_day = None
         self._spot_cache_includes_tomorrow = False
-        _shared_snapshots(self.hass).pop(self._shared_key(), None)
+        key = self._shared_key()
+        _shared_snapshots(self.hass).pop(key, None)
+        # Clear the negative-fetch marker too, otherwise the next
+        # coordinator tick short-circuits inside _SHARED_FAILURE_TTL
+        # and the service appears to do nothing.
+        _shared_failed_fetches(self.hass).pop(key, None)
         await self.async_request_refresh()
 
     def _shared_key(self) -> tuple[str, str, str]:
