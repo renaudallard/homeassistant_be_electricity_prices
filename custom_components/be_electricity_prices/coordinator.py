@@ -184,6 +184,9 @@ def evict_shared_caches(
     locks: dict[tuple[str, str, str], Any] = bucket.setdefault(_SHARED_LOCKS_KEY, {})
     locks.pop(key, None)
     monthly = _monthly_snapshots(hass)
+    monthly_locks: dict[tuple[str, str, str, str], Any] = bucket.setdefault(
+        _MONTHLY_LOCKS_KEY, {}
+    )
     _, contract, region = key
     stale = [
         k
@@ -192,6 +195,7 @@ def evict_shared_caches(
     ]
     for k in stale:
         monthly.pop(k, None)
+        monthly_locks.pop(k, None)
 
 
 def _shared_lock(hass: HomeAssistant, key: tuple[str, str, str]) -> asyncio.Lock:
@@ -209,6 +213,25 @@ def _monthly_snapshots(
 ) -> dict[tuple[str, str, str, str], "SupplierSnapshot | None"]:
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     return bucket.setdefault(_MONTHLY_SNAPSHOTS_KEY, {})  # type: ignore[no-any-return]
+
+
+_MONTHLY_LOCKS_KEY = "monthly_snapshot_locks"
+
+
+def _monthly_lock(
+    hass: HomeAssistant, key: tuple[str, str, str, str]
+) -> asyncio.Lock:
+    """Per-(supplier, contract, region, YYYY-MM) lock used to dedupe
+    concurrent fetch_for_month calls. Without it, two coordinators on
+    the same supplier tuple racing on first YTD evaluation each fan
+    out 12 monthly fetches before either populates _monthly_snapshots."""
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    locks: dict[tuple[str, str, str, str], asyncio.Lock] = bucket.setdefault(
+        _MONTHLY_LOCKS_KEY, {}
+    )
+    if key not in locks:
+        locks[key] = asyncio.Lock()
+    return locks[key]
 
 
 async def _snapshot_for_month(
@@ -243,19 +266,25 @@ async def _snapshot_for_month(
     if fetch_archived is None:
         cache[cache_key] = None
         return current_snapshot
-    try:
-        snap = await fetch_archived(session, contract, region, year_month)
-    except Exception as err:  # noqa: BLE001 - per-month fetch must never break the year loop
-        _LOGGER.debug(
-            "fetch_for_month failed for %s/%s/%s/%s: %s",
-            extractor.id,
-            contract,
-            region,
-            cache_key[3],
-            err,
-        )
-        snap = None
-    cache[cache_key] = snap
+    async with _monthly_lock(hass, cache_key):
+        # Re-check under the lock so the second waiter doesn't repeat
+        # what the first just did.
+        if cache_key in cache:
+            cached = cache[cache_key]
+            return cached if cached is not None else current_snapshot
+        try:
+            snap = await fetch_archived(session, contract, region, year_month)
+        except Exception as err:  # noqa: BLE001 - per-month fetch must never break the year loop
+            _LOGGER.debug(
+                "fetch_for_month failed for %s/%s/%s/%s: %s",
+                extractor.id,
+                contract,
+                region,
+                cache_key[3],
+                err,
+            )
+            snap = None
+        cache[cache_key] = snap
     return snap if snap is not None else current_snapshot
 
 
