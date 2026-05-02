@@ -149,7 +149,13 @@ async def fetch_for_month(
         snap = parse_snapshot(text, contract_id, url)
     except ExtractorError:
         return None
-    if snap.valid_until is None or (
+    # The URL itself encodes the requested year+month, so a parsed PDF
+    # served at the requested slug is trusted even if parse_valid_until
+    # missed (older layouts, regex drift). Only reject when the parsed
+    # validity is present *and* contradicts the requested month -- that
+    # signals Eneco's CDN served a substitute card on a missing-archive
+    # request.
+    if snap.valid_until is not None and (
         snap.valid_until.year != year_month.year
         or snap.valid_until.month != year_month.month
     ):
