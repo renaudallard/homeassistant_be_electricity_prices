@@ -53,8 +53,12 @@ SERVICE_MOST_EXPENSIVE_WINDOW = "most_expensive_window"
 
 WINDOW_SCHEMA = vol.Schema(
     {
+        # Whole hours only -- the price table is hourly. services.yaml
+        # advertises step=1, min=1, and _resolve_window_inputs rejects
+        # anything < 1 at runtime; keep the voluptuous bounds in sync
+        # so a YAML-only call hits the same rule.
         vol.Required("duration_hours"): vol.All(
-            vol.Coerce(float), vol.Range(min=0.5, max=48.0)
+            vol.Coerce(float), vol.Range(min=1.0, max=48.0)
         ),
         vol.Optional("entry_id"): cv.string,
         vol.Optional("earliest_start"): cv.datetime,
