@@ -71,6 +71,7 @@ from .const import (
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
     DSO_MODE_BI_HORAIRE,
+    DSO_MODE_IMPACT,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
@@ -1471,7 +1472,9 @@ async def _compute_current_year_cost(
     # band (PIC / MEDIUM / ECO change with hour-of-day). Both go
     # through the same hourly path; the static per-day branch can't
     # represent either.
-    needs_hourly = isinstance(snapshot.energy, TimeOfUseRates) or dso_mode == "impact"
+    needs_hourly = (
+        isinstance(snapshot.energy, TimeOfUseRates) or dso_mode == DSO_MODE_IMPACT
+    )
     if needs_hourly:
         hourly_energy = await _ytd_tou_energy(
             hass, session, extractor, snapshot, entry, today
