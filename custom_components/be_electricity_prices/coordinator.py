@@ -336,7 +336,16 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     raise UpdateFailed(f"ENTSO-E: {err}") from err
                 spot_prices = dict(self._spot_cache)
 
-        hourly = self._build_hourly(spot_prices)
+        try:
+            hourly = self._build_hourly(spot_prices)
+        except KeyError as err:
+            # The fresh snapshot does not contain the user's configured
+            # DSO -- typically a regex drift on a new card. Surface a
+            # clean UpdateFailed instead of bubbling KeyError through HA
+            # core; the coordinator keeps serving the last good data.
+            raise UpdateFailed(
+                f"snapshot missing DSO {self.entry.data[CONF_DSO]!r}: {err}"
+            ) from err
 
         capacity_cost = 0.0
         if self.entry.data.get(CONF_REGION) == REGION_FLANDERS:
