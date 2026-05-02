@@ -767,7 +767,13 @@ async def _recorder_daily_kwh(
     accumulated.
     """
     try:
-        from homeassistant.components.recorder import get_instance
+        # mypy --strict flags both names because the recorder module
+        # does not re-export them via __all__; they're public per HA's
+        # docs and import-time errors degrade gracefully via the
+        # ImportError handler below.
+        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+            get_instance,
+        )
         from homeassistant.components.recorder.statistics import (
             statistics_during_period,
         )
@@ -822,7 +828,13 @@ async def _recorder_daily_band_ratio(
     actual hourly delta we want to bin.
     """
     try:
-        from homeassistant.components.recorder import get_instance
+        # mypy --strict flags both names because the recorder module
+        # does not re-export them via __all__; they're public per HA's
+        # docs and import-time errors degrade gracefully via the
+        # ImportError handler below.
+        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+            get_instance,
+        )
         from homeassistant.components.recorder.statistics import (
             statistics_during_period,
         )
