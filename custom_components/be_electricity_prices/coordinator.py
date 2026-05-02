@@ -1195,32 +1195,36 @@ def _hourly_consumption_sensors(entry: ConfigEntry) -> list[str]:
     """Recorder entity ids whose hourly kWh sums add up to total
     consumption.
 
-    Prefer the single totals sensor when wired; otherwise fall back to
-    the day/night register pair. Returns an empty list when nothing is
-    wired (caller surfaces the fees-only floor).
+    Prefer the single totals sensor when wired; otherwise require the
+    full day + night register pair (both halves) so a partial wiring
+    can't silently undercount the night band. Returns an empty list
+    when nothing is wired or only one register half is wired (caller
+    surfaces the fees-only floor in that case).
     """
     total = entry.data.get(CONF_CONSUMPTION_KWH)
     if total:
         return [total]
-    out: list[str] = []
-    for key in (CONF_DAY_CONSUMPTION_KWH, CONF_NIGHT_CONSUMPTION_KWH):
-        val = entry.data.get(key)
-        if val:
-            out.append(val)
-    return out
+    day = entry.data.get(CONF_DAY_CONSUMPTION_KWH)
+    night = entry.data.get(CONF_NIGHT_CONSUMPTION_KWH)
+    if day and night:
+        return [day, night]
+    return []
 
 
 def _hourly_injection_sensors(entry: ConfigEntry) -> list[str]:
-    """Mirror of ``_hourly_consumption_sensors`` for the injection side."""
+    """Mirror of ``_hourly_consumption_sensors`` for the injection side.
+
+    Returns an empty list when neither a totals sensor nor the full
+    day+night pair is wired, so a partial register wiring doesn't get
+    counted as injection coverage."""
     total = entry.data.get(CONF_INJECTION_KWH)
     if total:
         return [total]
-    out: list[str] = []
-    for key in (CONF_DAY_INJECTION_KWH, CONF_NIGHT_INJECTION_KWH):
-        val = entry.data.get(key)
-        if val:
-            out.append(val)
-    return out
+    day = entry.data.get(CONF_DAY_INJECTION_KWH)
+    night = entry.data.get(CONF_NIGHT_INJECTION_KWH)
+    if day and night:
+        return [day, night]
+    return []
 
 
 async def _ytd_tou_energy(
