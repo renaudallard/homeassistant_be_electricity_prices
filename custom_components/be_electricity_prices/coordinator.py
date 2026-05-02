@@ -1163,6 +1163,38 @@ async def _ytd_prosumer(
     return total
 
 
+def _hourly_consumption_sensors(entry: ConfigEntry) -> list[str]:
+    """Recorder entity ids whose hourly kWh sums add up to total
+    consumption.
+
+    Prefer the single totals sensor when wired; otherwise fall back to
+    the day/night register pair. Returns an empty list when nothing is
+    wired (caller surfaces the fees-only floor).
+    """
+    total = entry.data.get(CONF_CONSUMPTION_KWH)
+    if total:
+        return [total]
+    out: list[str] = []
+    for key in (CONF_DAY_CONSUMPTION_KWH, CONF_NIGHT_CONSUMPTION_KWH):
+        val = entry.data.get(key)
+        if val:
+            out.append(val)
+    return out
+
+
+def _hourly_injection_sensors(entry: ConfigEntry) -> list[str]:
+    """Mirror of ``_hourly_consumption_sensors`` for the injection side."""
+    total = entry.data.get(CONF_INJECTION_KWH)
+    if total:
+        return [total]
+    out: list[str] = []
+    for key in (CONF_DAY_INJECTION_KWH, CONF_NIGHT_INJECTION_KWH):
+        val = entry.data.get(key)
+        if val:
+            out.append(val)
+    return out
+
+
 async def _ytd_tou_energy(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -1178,9 +1210,10 @@ async def _ytd_tou_energy(
     the recorder's hourly kWh deltas through ``compute_breakdown`` at
     each local hour, picking up the TOU slot rate from the supplier and
     the bi-hourly distribution band from the user's DSO mode in one
-    call. Returns ``None`` when no totals consumption sensor is wired
-    (the day/night register paths can't be sliced by TOU slot, so the
-    caller falls back to the fees-only floor).
+    call. Reads from ``CONF_CONSUMPTION_KWH`` (single totals) when
+    available, else sums the four day/night register sensors at hourly
+    granularity. Returns ``None`` when no consumption sensor is wired
+    (the caller falls back to the fees-only floor).
     """
     region = entry.data.get(CONF_REGION, "")
     dso = entry.data.get(CONF_DSO, "")
@@ -1189,16 +1222,20 @@ async def _ytd_tou_energy(
     dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
 
-    cons_id = entry.data.get(CONF_CONSUMPTION_KWH)
-    if not cons_id:
+    cons_ids = _hourly_consumption_sensors(entry)
+    inj_ids = _hourly_injection_sensors(entry)
+    if not cons_ids:
         return None
-    inj_id = entry.data.get(CONF_INJECTION_KWH)
 
     jan1 = date(today.year, 1, 1)
-    cons_per_hour = await _recorder_hourly_kwh(hass, cons_id, jan1, today)
-    inj_per_hour = (
-        await _recorder_hourly_kwh(hass, inj_id, jan1, today) if inj_id else {}
-    )
+    cons_per_hour: dict[datetime, float] = {}
+    for cid in cons_ids:
+        for k, v in (await _recorder_hourly_kwh(hass, cid, jan1, today)).items():
+            cons_per_hour[k] = cons_per_hour.get(k, 0.0) + v
+    inj_per_hour: dict[datetime, float] = {}
+    for iid in inj_ids:
+        for k, v in (await _recorder_hourly_kwh(hass, iid, jan1, today)).items():
+            inj_per_hour[k] = inj_per_hour.get(k, 0.0) + v
 
     month_snap_cache: dict[date, SupplierSnapshot] = {}
 
