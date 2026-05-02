@@ -330,13 +330,10 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
     """Return (federal_excise, energy_contribution, region_connection_fee).
 
     Bolt prints taxes as 3-column rows (Flandres / Wallonie / Bruxelles).
-    The PDF uses `` `` (Unicode line-separator) in places where one
-    would expect a regular newline, so we normalize first.
+    Caller (parse_snapshot) already normalised any Unicode line
+    separators (U+2028) to regular newlines, so the regexes below
+    see a uniform layout.
     """
-    # Normalize Unicode line separators to regular newlines so a single
-    # set of regexes covers both layouts.
-    text = text.replace(" ", "\n")
-
     excise_match = re.search(
         r"Droit d['’]accise spécial[^\n]*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)",
         text,
