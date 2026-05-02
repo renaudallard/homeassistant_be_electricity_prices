@@ -108,24 +108,28 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         # still references the same tuple. Without this the snapshot,
         # per-month archive, failed-fetch marker, and asyncio.Lock leak
         # into hass.data for the rest of the HA process lifetime.
-        key = (
-            entry.data[CONF_SUPPLIER],
-            entry.data[CONF_CONTRACT],
-            entry.data[CONF_REGION],
-        )
-        siblings = [
-            other
-            for other in hass.config_entries.async_loaded_entries(DOMAIN)
-            if other.entry_id != entry.entry_id
-            and (
-                other.data[CONF_SUPPLIER],
-                other.data[CONF_CONTRACT],
-                other.data[CONF_REGION],
-            )
-            == key
-        ]
-        if not siblings:
-            evict_shared_caches(hass, key, entry.data[CONF_SUPPLIER])
+        # Use .get to tolerate older sibling entries that might be
+        # missing one of the keys (e.g. an entry from a release before
+        # CONF_REGION existed); a single bad sibling shouldn't crash
+        # the unload of a valid one.
+        supplier = entry.data.get(CONF_SUPPLIER)
+        contract = entry.data.get(CONF_CONTRACT)
+        region = entry.data.get(CONF_REGION)
+        if supplier and contract and region is not None:
+            key = (supplier, contract, region)
+            siblings = [
+                other
+                for other in hass.config_entries.async_loaded_entries(DOMAIN)
+                if other.entry_id != entry.entry_id
+                and (
+                    other.data.get(CONF_SUPPLIER),
+                    other.data.get(CONF_CONTRACT),
+                    other.data.get(CONF_REGION),
+                )
+                == key
+            ]
+            if not siblings:
+                evict_shared_caches(hass, key, supplier)
     if unloaded and not hass.config_entries.async_loaded_entries(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE_REFRESH)
         hass.services.async_remove(DOMAIN, SERVICE_CHEAPEST_WINDOW)
