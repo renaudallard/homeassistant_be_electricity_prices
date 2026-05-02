@@ -362,7 +362,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             get_extractor(self.entry.data[CONF_SUPPLIER]),
             self._snapshot,
             self.entry,
-            prosumer_cost_eur_per_month=prosumer_cost,
         )
 
         await self._save_persistent()
@@ -1047,6 +1046,54 @@ def _days_through(start: date, end: date) -> list[date]:
     return days
 
 
+async def _ytd_prosumer(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: SupplierExtractor,
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    today: date,
+) -> float:
+    """Sum the monthly prosumer fee across YTD using each month's archived
+    snapshot's DSO overlay, so a CWaPE indexation that lands mid-year is
+    honoured for the months it applies to."""
+    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_COMPENSATION:
+        return 0.0
+    try:
+        kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+    if kva <= 0.0:
+        return 0.0
+    region = entry.data.get(CONF_REGION, "")
+    dso = entry.data.get(CONF_DSO, "")
+    contract = entry.data[CONF_CONTRACT]
+
+    total = 0.0
+    cur = date(today.year, 1, 1)
+    while cur <= today:
+        month_first = date(cur.year, cur.month, 1)
+        snap_m = await _snapshot_for_month(
+            hass, session, extractor, contract, region, month_first, snapshot
+        )
+        overlay = snap_m.dsos.get(dso)
+        if overlay is not None and overlay.prosumer_eur_per_kva_year is not None:
+            monthly_fee = kva * overlay.prosumer_eur_per_kva_year / 12.0
+            if cur.month == 12:
+                next_first = date(cur.year + 1, 1, 1)
+            else:
+                next_first = date(cur.year, cur.month + 1, 1)
+            days_in_full_month = (next_first - month_first).days
+            month_end_in_ytd = min(next_first - timedelta(days=1), today)
+            days_in_ytd = (month_end_in_ytd - cur).days + 1
+            total += monthly_fee * (days_in_ytd / days_in_full_month)
+        if cur.month == 12:
+            cur = date(cur.year + 1, 1, 1)
+        else:
+            cur = date(cur.year, cur.month + 1, 1)
+    return total
+
+
 async def _ytd_tou_energy(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -1126,8 +1173,6 @@ async def _compute_current_year_cost(
     extractor: SupplierExtractor,
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
-    *,
-    prosumer_cost_eur_per_month: float,
 ) -> float | None:
     """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
@@ -1159,13 +1204,14 @@ async def _compute_current_year_cost(
     actually settles -- a day of over-injection can offset a later day
     of higher consumption.
 
-    Plus, pro-rated to the elapsed fraction of the calendar year
-    (``elapsed_days / days_in_year``):
-      yearly_fixed_fee * fraction
-      + 12 * energy_fund * fraction
-      + 12 * prosumer_cost * fraction
-    so the running bill grows day by day instead of jumping to the full
-    annual on Jan 1.
+    Plus fees: the supplier yearly fixed fee and the Flemish energy
+    fund are pro-rated to the elapsed fraction of the calendar year
+    (``elapsed_days / days_in_year``). The Walloon prosumer fee is
+    summed per archived month using each month's DSO overlay (so a
+    CWaPE indexation that lands mid-year is honoured for the months
+    it applies to), pro-rated within the current month by elapsed
+    days. The running bill grows day by day instead of jumping to the
+    full annual on Jan 1.
 
     ``inj_m`` is each month's snapshot's ``injection.current`` (the
     printed monthly indicative).
@@ -1205,8 +1251,8 @@ async def _compute_current_year_cost(
 
     fixed = getattr(snapshot.energy, "yearly_fixed_fee", 0.0)
     fund_yearly = snapshot.taxes.energy_fund_eur_per_month * 12.0
-    prosumer_yearly = prosumer_cost_eur_per_month * 12.0
-    fees = (fixed + fund_yearly + prosumer_yearly) * year_fraction
+    prosumer_ytd = await _ytd_prosumer(hass, session, extractor, snapshot, entry, today)
+    fees = (fixed + fund_yearly) * year_fraction + prosumer_ytd
 
     if isinstance(snapshot.energy, TimeOfUseRates):
         tou_energy = await _ytd_tou_energy(

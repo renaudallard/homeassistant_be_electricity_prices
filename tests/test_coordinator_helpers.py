@@ -534,6 +534,23 @@ def _year_fraction(today: date) -> float:
     return elapsed_days / days_in_year
 
 
+def _expected_prosumer_ytd(monthly_fee: float, today: date) -> float:
+    """Mirror _ytd_prosumer's per-month sum so tests can assert it."""
+    total = 0.0
+    cur = date(today.year, 1, 1)
+    while cur <= today:
+        if cur.month == 12:
+            next_first = date(cur.year + 1, 1, 1)
+        else:
+            next_first = date(cur.year, cur.month + 1, 1)
+        days_in_full_month = (next_first - date(cur.year, cur.month, 1)).days
+        month_end_in_ytd = min(next_first - timedelta(days=1), today)
+        days_in_ytd = (month_end_in_ytd - cur).days + 1
+        total += monthly_fee * (days_in_ytd / days_in_full_month)
+        cur = next_first
+    return total
+
+
 def _stub_extractor() -> SupplierExtractor:
     return SupplierExtractor(
         id="test",
@@ -583,7 +600,6 @@ async def test_year_cost_recorder_driven_mono_no_solar(
             _stub_extractor(),
             snap,
             entry,
-            prosumer_cost_eur_per_month=0.0,
         )
     expected = 5.0 * len(days) * 0.3765
     assert cost == pytest.approx(expected)
@@ -593,21 +609,29 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
     hass: HomeAssistant,
 ) -> None:
     """Compensation regime with day-by-day over-injection: YTD energy
-    cost clamps at zero (no negative bill), so only the pro-rated fees
-    remain."""
+    cost clamps at zero (no negative bill), so only the fees remain.
+    The fixed yearly + energy-fund pieces pro-rate to the elapsed
+    fraction of the year; the prosumer fee is summed per archived
+    month."""
 
     snap = SupplierSnapshot(
         supplier="test",
         contract="test",
         energy=FixedRates(single=0.18, yearly_fixed_fee=65.0),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                prosumer_eur_per_kva_year=24.0,
+            )
+        },
         taxes=TaxOverlay(
             federal_excise=0.0, energy_contribution=0.0, energy_fund_eur_per_month=2.5
         ),
         source_url="test://",
         fetched_at_iso="2026-04-29T12:00:00+00:00",
     )
-    entry = _yearly_entry(meter="mono", solar_regime="compensation")
+    entry = _yearly_entry(meter="mono", solar_regime="compensation", solar_kva=2.0)
     today = dt_util.now().date()
     days = _days_through(date(today.year, 1, 1), today)
     cons_per_day = {d: 5.0 for d in days}
@@ -621,12 +645,12 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
             _stub_extractor(),
             snap,
             entry,
-            prosumer_cost_eur_per_month=4.0,
         )
-    # YTD energy cost = max(Σ(5 - 25) * X, 0) = 0. Fees only,
-    # pro-rated to the fraction of the year elapsed.
+    # YTD energy cost = max(Σ(5 - 25) * X, 0) = 0. Fees only.
     fraction = _year_fraction(today)
-    assert cost == pytest.approx((65.0 + 12 * 2.5 + 12 * 4.0) * fraction)
+    monthly_prosumer = 2.0 * 24.0 / 12.0  # = 4 EUR/month
+    expected_prosumer = _expected_prosumer_ytd(monthly_prosumer, today)
+    assert cost == pytest.approx((65.0 + 12 * 2.5) * fraction + expected_prosumer)
 
 
 async def test_year_cost_uses_per_month_snapshot_when_archive_available(
@@ -685,7 +709,6 @@ async def test_year_cost_uses_per_month_snapshot_when_archive_available(
             extractor,
             expensive,
             entry,
-            prosumer_cost_eur_per_month=0.0,
         )
     cheap_all_in = 0.10 + 0.10 + 0.0145 + 0.05 + 0.002
     expensive_all_in = 0.30 + 0.10 + 0.0145 + 0.05 + 0.002
@@ -730,7 +753,6 @@ async def test_year_cost_falls_back_to_fees_when_no_meters_configured(
         _stub_extractor(),
         snap,
         entry,
-        prosumer_cost_eur_per_month=0.0,
     )
     # Fees-only: (65 + 12*2.5) * elapsed-year-fraction.
     fraction = _year_fraction(dt_util.now().date())
@@ -793,7 +815,6 @@ async def test_year_cost_skips_month_when_archived_snapshot_lacks_dso(
             extractor,
             current,
             entry,
-            prosumer_cost_eur_per_month=0.0,
         )
     # January's days are skipped (no DSO in bad archive), the rest
     # bills at the current snapshot's rate.
@@ -853,7 +874,6 @@ async def test_year_cost_tou_bills_per_hourly_slot(hass: HomeAssistant) -> None:
             _stub_extractor(),
             snap,
             entry,
-            prosumer_cost_eur_per_month=0.0,
         )
     fraction = _year_fraction(today)
     # Energy = 1 kWh × all-in (peak slot); fees pro-rated (zero here).
