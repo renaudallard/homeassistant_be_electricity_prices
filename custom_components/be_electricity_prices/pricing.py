@@ -163,13 +163,19 @@ def energy_eur_per_kwh(
     spot_eur_per_kwh: float | None,
     meter: MeterType = "mono",
 ) -> float:
-    """Return the energy component in EUR/kWh for the given hour."""
+    """Return the energy component in EUR/kWh for the given hour.
+
+    bi-hourly and SMR3 (digital) meters both register peak/offpeak,
+    so they share the bi-horaire branch when the supplier publishes
+    the split.
+    """
+    bi_capable = meter in ("bi", "dynamic")
     if isinstance(energy, FixedRates):
-        if meter == "bi" and energy.peak is not None and energy.offpeak is not None:
+        if bi_capable and energy.peak is not None and energy.offpeak is not None:
             return energy.offpeak if is_offpeak(when) else energy.peak
         return energy.single
     if isinstance(energy, VariableRates):
-        if meter == "bi" and energy.peak is not None and energy.offpeak is not None:
+        if bi_capable and energy.peak is not None and energy.offpeak is not None:
             return energy.offpeak if is_offpeak(when) else energy.peak
         return energy.current
     if isinstance(energy, DynamicRates):

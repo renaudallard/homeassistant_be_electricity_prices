@@ -1080,7 +1080,7 @@ async def _resolve_daily_kwh(
             if total_inj_id
             else {}
         )
-        if meter == "bi":
+        if meter in ("bi", "dynamic"):
             cons_ratios = (
                 await _recorder_daily_band_ratio(hass, total_cons_id, jan1, today)
                 if total_cons_id
@@ -1457,15 +1457,16 @@ async def _compute_current_year_cost(
         total_cons = d_cons + n_cons
         total_inj = d_inj + n_inj
 
+        bi_capable = meter in ("bi", "dynamic")
         if regime == SOLAR_REGIME_COMPENSATION:
-            if meter == "bi":
+            if bi_capable:
                 d_cost = (d_cons - d_inj) * peak_bd.all_in + (
                     n_cons - n_inj
                 ) * offpeak_bd.all_in
             else:
                 d_cost = (total_cons - total_inj) * single_bd.all_in
         elif regime == SOLAR_REGIME_INJECTION:
-            if meter == "bi":
+            if bi_capable:
                 d_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
             else:
                 d_cost = total_cons * single_bd.all_in
@@ -1474,7 +1475,7 @@ async def _compute_current_year_cost(
             if inj_rate is not None:
                 d_cost -= total_inj * inj_rate
         else:  # none
-            if meter == "bi":
+            if bi_capable:
                 d_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
             else:
                 d_cost = total_cons * single_bd.all_in
