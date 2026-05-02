@@ -63,6 +63,41 @@ from .base import (
 _BASE_URL = "https://cdn.eneco.be/downloads/nl/general/tk"
 _LISTING_URL = "https://eneco.be/nl/elektriciteit-gas/tariefkaarten"
 
+# Dutch month names Eneco prints in the validity header. Used by
+# fetch_for_month to confirm a CDN-served PDF actually mentions the
+# requested month when parse_valid_until missed.
+_NL_MONTHS = (
+    "januari",
+    "februari",
+    "maart",
+    "april",
+    "mei",
+    "juni",
+    "juli",
+    "augustus",
+    "september",
+    "oktober",
+    "november",
+    "december",
+)
+
+
+def _text_mentions_month(text: str, year_month: date) -> bool:
+    """Heuristic check that ``text`` references the requested year+month.
+
+    Looks for the printed Dutch month name + year, the numeric MM/YYYY
+    form, and the ISO YYYY-MM form. Returns False only when none of
+    them matches; the caller treats that as 'CDN substituted a current
+    card on a missing-archive request'.
+    """
+    needles = (
+        f"{_NL_MONTHS[year_month.month - 1]} {year_month.year}",
+        f"{year_month.month:02d}/{year_month.year}",
+        f"{year_month.year}-{year_month.month:02d}",
+    )
+    haystack = text.lower()
+    return any(n.lower() in haystack for n in needles)
+
 # Contract id -> the POWER_<NAME> token Eneco uses in its filenames.
 _CONTRACT_SLUGS: dict[str, str] = {
     "power_fix": "FIX",
@@ -149,16 +184,20 @@ async def fetch_for_month(
         snap = parse_snapshot(text, contract_id, url)
     except ExtractorError:
         return None
-    # The URL itself encodes the requested year+month, so a parsed PDF
-    # served at the requested slug is trusted even if parse_valid_until
-    # missed (older layouts, regex drift). Only reject when the parsed
-    # validity is present *and* contradicts the requested month -- that
-    # signals Eneco's CDN served a substitute card on a missing-archive
-    # request.
-    if snap.valid_until is not None and (
-        snap.valid_until.year != year_month.year
-        or snap.valid_until.month != year_month.month
-    ):
+    if snap.valid_until is not None:
+        # Parsed validity beats every heuristic: reject when it
+        # contradicts the requested year+month.
+        if (
+            snap.valid_until.year != year_month.year
+            or snap.valid_until.month != year_month.month
+        ):
+            return None
+    elif not _text_mentions_month(text, year_month):
+        # No parsed validity *and* no textual mention of the requested
+        # month: this is what a CDN-substituted current card looks
+        # like, since the URL slug we asked for never matches the
+        # served card's printed dates. Reject so the caller falls back
+        # to the proxy snapshot rather than mis-billing past months.
         return None
     return snap
 

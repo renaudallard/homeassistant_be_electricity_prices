@@ -62,6 +62,37 @@ from .base import (
 
 _INDEX_URL = "https://www.cociter.be/electricite/cartes-tarifaires/"
 
+# French month names Cociter prints in the validity header. Used by
+# fetch_for_month to confirm a CDN-served PDF actually mentions the
+# requested month when parse_valid_until missed.
+_FR_MONTHS = (
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+)
+
+
+def _text_mentions_month(text: str, year_month: date) -> bool:
+    """Heuristic check that ``text`` references the requested year+month
+    in any of the forms Cociter prints (French month name + year, or
+    MM/YYYY, or YYYY-MM)."""
+    needles = (
+        f"{_FR_MONTHS[year_month.month - 1]} {year_month.year}",
+        f"{year_month.month:02d}/{year_month.year}",
+        f"{year_month.year}-{year_month.month:02d}",
+    )
+    haystack = text.lower()
+    return any(n.lower() in haystack for n in needles)
+
 # Cociter's current monthly publication patterns. The 4-digit group is YYMM.
 _VAR_RE = re.compile(
     r'href="(https?://[^"]*RCVar_YMR_Coop-(\d{4})-fr\.pdf)"', re.IGNORECASE
@@ -135,14 +166,18 @@ async def fetch_for_month(
         snap = parse_snapshot(text, contract_id, pdf_url, _yymm_to_label(target_yymm))
     except ExtractorError:
         return None
-    # Reject when the parsed validity contradicts the requested month
-    # (CDN cache pollution, replaced filename serving the wrong month).
-    # Missing valid_until is tolerated -- the URL encodes the month, so
-    # an unparseable validity line is treated as corroboration only.
-    if snap.valid_until is not None and (
-        snap.valid_until.year != year_month.year
-        or snap.valid_until.month != year_month.month
-    ):
+    if snap.valid_until is not None:
+        if (
+            snap.valid_until.year != year_month.year
+            or snap.valid_until.month != year_month.month
+        ):
+            return None
+    elif not _text_mentions_month(text, year_month):
+        # No parsed validity *and* no textual mention of the requested
+        # month -- this is what a CDN-substituted current card looks
+        # like. Reject so the caller falls back to the proxy snapshot
+        # rather than mis-billing past months at the served PDF's
+        # rates.
         return None
     return snap
 
