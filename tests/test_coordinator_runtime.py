@@ -38,7 +38,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
+    _monthly_snapshots,
+    _shared_failed_fetches,
+    _shared_lock,
     _shared_snapshots,
+    evict_shared_caches,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
@@ -341,4 +345,71 @@ async def test_sync_stale_issue_creates_and_clears(hass: HomeAssistant) -> None:
     assert registry.async_get_issue(DOMAIN, issue_id) is not None
 
     coord._sync_stale_issue(False)
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_evict_shared_caches_drops_rows_for_tuple(hass: HomeAssistant) -> None:
+    """evict_shared_caches must remove every cache row pinned to the
+    given (supplier, contract, region) tuple, leaving rows for other
+    tuples untouched."""
+    from custom_components.be_electricity_prices.coordinator import _SharedSnapshot
+
+    key_us = ("eneco", "power_fix", "wallonia")
+    key_other = ("bolt", "bolt_fix", "wallonia")
+
+    snap = _fake_snapshot()
+    fetched_at = dt_util.utcnow()
+    _shared_snapshots(hass)[key_us] = _SharedSnapshot(
+        snapshot=snap, fetched_at=fetched_at, probe_key="ours"
+    )
+    _shared_snapshots(hass)[key_other] = _SharedSnapshot(
+        snapshot=snap, fetched_at=fetched_at, probe_key="theirs"
+    )
+    _shared_failed_fetches(hass)[key_us] = (fetched_at, "ours-error")
+    _shared_failed_fetches(hass)[key_other] = (fetched_at, "theirs-error")
+    monthly = _monthly_snapshots(hass)
+    monthly[("eneco", "power_fix", "wallonia", "2026-01")] = snap
+    monthly[("bolt", "bolt_fix", "wallonia", "2026-01")] = snap
+
+    evict_shared_caches(hass, key_us, "eneco")
+
+    assert key_us not in _shared_snapshots(hass)
+    assert key_other in _shared_snapshots(hass)  # other tuple preserved
+    assert key_us not in _shared_failed_fetches(hass)
+    assert key_other in _shared_failed_fetches(hass)
+    assert ("eneco", "power_fix", "wallonia", "2026-01") not in _monthly_snapshots(hass)
+    assert ("bolt", "bolt_fix", "wallonia", "2026-01") in _monthly_snapshots(hass)
+
+
+async def test_evict_shared_caches_keeps_held_lock(hass: HomeAssistant) -> None:
+    """A held lock must NOT be popped during eviction; otherwise a
+    re-created entry on the same tuple would get a fresh lock and the
+    dedup property would silently break."""
+    key = ("eneco", "power_fix", "wallonia")
+    lock = _shared_lock(hass, key)
+    await lock.acquire()
+    try:
+        evict_shared_caches(hass, key, "eneco")
+        # Held lock stays in the bucket: future _shared_lock(hass, key)
+        # must return the same Lock object.
+        assert _shared_lock(hass, key) is lock
+    finally:
+        lock.release()
+
+
+async def test_async_remove_entry_clears_stale_issue(hass: HomeAssistant) -> None:
+    """async_remove_entry must drop the per-entry repair issue so it
+    doesn't linger after the entry that owns it is gone."""
+    from custom_components.be_electricity_prices import async_remove_entry
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._sync_stale_issue(True)
+    registry = ir.async_get(hass)
+    issue_id = f"snapshot_stale_{entry.entry_id}"
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    await async_remove_entry(hass, entry)
+
     assert registry.async_get_issue(DOMAIN, issue_id) is None
