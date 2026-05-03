@@ -151,7 +151,7 @@ def parse_snapshot(text: str, source_url: str, region: str) -> SupplierSnapshot:
         contract=_CONTRACT_ID,
         energy=_extract_energy(text),
         dsos=_extract_dsos(text, region),
-        taxes=_extract_taxes(text),
+        taxes=_extract_taxes(text, region),
         source_url=source_url,
         publication_label=_extract_publication(text),
         valid_until=parse_valid_until(text),
@@ -286,7 +286,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
 # ---- taxes -------------------------------------------------------------------
 
 
-def _extract_taxes(text: str) -> TaxOverlay:
+def _extract_taxes(text: str, region: str) -> TaxOverlay:
     """Parse the federal + regional tax block.
 
     The card prints all tax values TVAC (footer: "Alle prijzen ...
@@ -298,7 +298,10 @@ def _extract_taxes(text: str) -> TaxOverlay:
 
     Flemish renewables = GSC + WKC (Vlaams Gewest); Walloon
     renewables = CV (Waals Gewest). Each is a per-kWh certificate
-    quota cost the supplier must doorstort.
+    quota cost the supplier must doorstort. Per-region overlays are
+    gated by ``region`` so a Wallonia customer never sees the Flemish
+    Energiefonds added to their YTD even if the value rises above 0
+    (matching what Bolt and Engie do).
     """
     contrib_match = re.search(r"Energiebijdrage\s+([\d,.]+)\s*c€/kWh", text)
     excise_match = re.search(
@@ -307,29 +310,35 @@ def _extract_taxes(text: str) -> TaxOverlay:
     if not contrib_match or not excise_match:
         raise ExtractorError("could not parse DATS 24 federal tax block")
 
-    gsc_match = re.search(r"Vlaams Gewest:\s*GSC\s*\(c€/kWh\)\s+([\d,.]+)", text)
-    wkc_match = re.search(r"WKC\s*\(c€/kWh\)\s+([\d,.]+)", text)
-    cv_match = re.search(r"Waals Gewest:\s*CV\s*\(c€/kWh\)\s+([\d,.]+)", text)
-    flanders_renewables = (
-        to_float(gsc_match.group(1)) / 100.0 if gsc_match else 0.0
-    ) + (to_float(wkc_match.group(1)) / 100.0 if wkc_match else 0.0)
-    wallonia_renewables = to_float(cv_match.group(1)) / 100.0 if cv_match else 0.0
+    flanders_renewables = 0.0
+    wallonia_renewables = 0.0
+    energy_fund_per_month = 0.0
+    connection_fee = 0.0
 
-    fund_match = re.search(r"Hoofdverblijf\s*\(domicilie\)\s+([\d,.]+)\s*€/maand", text)
-    energy_fund_per_month = to_float(fund_match.group(1)) if fund_match else 0.0
-    # The layout-aware PDF text emits the row as
-    # "Aansluitingsvergoeding Wallonië<footnote-digit> 0,07500 c€/kWh"
-    # on one line. Tolerate the footnote digit and require the value on
-    # the same line so a stray `.*?` skip can't jump to the next
-    # unrelated c€/kWh value (e.g. the 0,20417 energy contribution
-    # further down the document).
-    connection_match = re.search(
-        r"Aansluitingsvergoeding\s+Walloni[eë]\d*\s+([\d,.]+)\s*c€/kWh",
-        text,
-    )
-    connection_fee = (
-        to_float(connection_match.group(1)) / 100.0 if connection_match else 0.0
-    )
+    if region == REGION_FLANDERS:
+        gsc_match = re.search(r"Vlaams Gewest:\s*GSC\s*\(c€/kWh\)\s+([\d,.]+)", text)
+        wkc_match = re.search(r"WKC\s*\(c€/kWh\)\s+([\d,.]+)", text)
+        flanders_renewables = (
+            to_float(gsc_match.group(1)) / 100.0 if gsc_match else 0.0
+        ) + (to_float(wkc_match.group(1)) / 100.0 if wkc_match else 0.0)
+        fund_match = re.search(
+            r"Hoofdverblijf\s*\(domicilie\)\s+([\d,.]+)\s*€/maand", text
+        )
+        energy_fund_per_month = to_float(fund_match.group(1)) if fund_match else 0.0
+    elif region == REGION_WALLONIA:
+        cv_match = re.search(r"Waals Gewest:\s*CV\s*\(c€/kWh\)\s+([\d,.]+)", text)
+        wallonia_renewables = to_float(cv_match.group(1)) / 100.0 if cv_match else 0.0
+        # The layout-aware PDF text emits the row as
+        # "Aansluitingsvergoeding Wallonië<footnote-digit> 0,07500 c€/kWh"
+        # on one line; tolerate the footnote digit.
+        connection_match = re.search(
+            r"Aansluitingsvergoeding\s+Walloni[eë]\d*\s+([\d,.]+)\s*c€/kWh",
+            text,
+        )
+        connection_fee = (
+            to_float(connection_match.group(1)) / 100.0 if connection_match else 0.0
+        )
+
     return TaxOverlay(
         federal_excise=to_float(excise_match.group(1)) / 100.0,
         energy_contribution=to_float(contrib_match.group(1)) / 100.0,

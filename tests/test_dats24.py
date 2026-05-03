@@ -79,21 +79,32 @@ def test_april_card_energy_uses_indicative_tvac_values() -> None:
 def test_april_card_taxes_are_tvac() -> None:
     """All printed amounts (except where the card says otherwise)
     include 6% VAT, matching the project convention -- no extra
-    scaling needed in compute_breakdown."""
-    snap = _snap("flanders")
-    t = snap.taxes
-    assert t.vat_rate == 0.0
-    assert t.federal_excise == pytest.approx(0.0503288)
-    assert t.energy_contribution == pytest.approx(0.0020417)
+    scaling needed in compute_breakdown. Region-specific overlays are
+    gated by the snapshot's region: a Flanders user does not see the
+    Walloon connection fee or CV renewables, and a Wallonia user does
+    not see the Flemish Energiefonds or GSC/WKC."""
+    fl = _snap("flanders").taxes
+    assert fl.vat_rate == 0.0
+    assert fl.federal_excise == pytest.approx(0.0503288)
+    assert fl.energy_contribution == pytest.approx(0.0020417)
     # Vlaams Gewest GSC + WKC = 1,183 + 0,378 = 1,561 c€/kWh.
-    assert t.flanders_renewables == pytest.approx(0.01561)
-    # Waals Gewest CV = 3,032 c€/kWh.
-    assert t.wallonia_renewables == pytest.approx(0.03032)
-    # Aansluitingsvergoeding Wallonia 0,07500 c€/kWh.
-    assert t.region_connection_fee == pytest.approx(0.00075)
+    assert fl.flanders_renewables == pytest.approx(0.01561)
+    assert fl.wallonia_renewables == 0.0
+    assert fl.region_connection_fee == 0.0
     # "Hoofdverblijf (domicilie) 0,00 €/maand" -- residential default
     # is zero. Second-home users should override in OptionsFlow.
-    assert t.energy_fund_eur_per_month == 0.0
+    assert fl.energy_fund_eur_per_month == 0.0
+
+    wa = _snap("wallonia").taxes
+    # Federal levies are region-agnostic.
+    assert wa.federal_excise == pytest.approx(0.0503288)
+    assert wa.energy_contribution == pytest.approx(0.0020417)
+    # Walloon side fills CV renewables + connection fee, leaves Flemish
+    # overlay at 0.
+    assert wa.flanders_renewables == 0.0
+    assert wa.wallonia_renewables == pytest.approx(0.03032)
+    assert wa.region_connection_fee == pytest.approx(0.00075)
+    assert wa.energy_fund_eur_per_month == 0.0
 
 
 def test_april_card_injection_carries_formula_and_indicative() -> None:
