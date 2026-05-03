@@ -454,7 +454,18 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self.entity_description.value_fn(self.coordinator.data)
+        # Float arithmetic in compute_breakdown / cost helpers leaks
+        # binary-representation noise (e.g. 0.353221 ends up stored as
+        # 0.35322099999999995). suggested_display_precision only affects
+        # the displayed string; the recorder writes native_value as-is,
+        # so the long-tail value shows up on the history chart and in
+        # the statistics. Round here to two decimals beyond what the
+        # UI displays so we kill the noise without losing precision.
+        value = self.entity_description.value_fn(self.coordinator.data)
+        if value is None:
+            return None
+        precision = self.entity_description.suggested_display_precision
+        return round(value, (precision + 2) if precision is not None else 6)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
