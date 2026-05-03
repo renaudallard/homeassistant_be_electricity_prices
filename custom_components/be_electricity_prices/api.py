@@ -161,6 +161,15 @@ def parse_day_ahead_xml(xml: str) -> dict[datetime, float]:
             total = max(inferred, max(explicit))
         else:
             total = max(explicit)
+        # Carry-forward only: ENTSO-E documents fill *forward* from the
+        # previous explicit point, never backward. If position 1 itself
+        # is missing, every position before the first explicit one
+        # contributes nothing to the hourly buckets and the affected
+        # hours simply don't appear in the output dict. Downstream
+        # callers treat a missing key as "no data for that hour"
+        # (current_price falls back to the nearest hour, sensors go
+        # unknown), which is the correct degradation when the upstream
+        # document is genuinely unspecified for the slot.
         last: float | None = None
         for position in range(1, total + 1):
             if position in explicit:
