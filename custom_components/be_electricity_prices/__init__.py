@@ -158,7 +158,13 @@ async def _async_options_updated(
 async def _async_refresh_service(call: ServiceCall) -> None:
     """Force every loaded entry to re-fetch its supplier snapshot now."""
     for entry in call.hass.config_entries.async_loaded_entries(DOMAIN):
-        coordinator: BePricesCoordinator = entry.runtime_data
+        # async_loaded_entries returns entries that have begun setup, but
+        # a reload race can leave runtime_data as the UNDEFINED sentinel
+        # between platform unload and the new coordinator assignment.
+        # Skip those rather than raising AttributeError mid-iteration.
+        coordinator = getattr(entry, "runtime_data", None)
+        if not isinstance(coordinator, BePricesCoordinator):
+            continue
         await coordinator.async_force_refresh()
 
 
@@ -244,7 +250,9 @@ def _resolve_window_inputs(
         raise ValueError(
             f"no loaded {DOMAIN} entry" + (f" with id {target_id}" if target_id else "")
         )
-    coordinator: BePricesCoordinator = entries[0].runtime_data
+    coordinator = getattr(entries[0], "runtime_data", None)
+    if not isinstance(coordinator, BePricesCoordinator):
+        raise ValueError("entry is reloading; try again in a moment")
     data = coordinator.data
     if data is None or not data.hourly:
         raise ValueError("price table is empty; refresh the entry first")
