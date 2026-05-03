@@ -36,6 +36,7 @@ from __future__ import annotations
 import asyncio
 import calendar
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -1317,6 +1318,41 @@ def _default_band_ratio_for(day: date) -> tuple[float, float]:
     return (peak_hours / 24.0, (24 - peak_hours) / 24.0)
 
 
+async def _walk_ytd_months(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: SupplierExtractor,
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    today: date,
+) -> AsyncIterator[tuple[SupplierSnapshot, date, int, int]]:
+    """Yield ``(snap_m, month_first, days_in_full_month, days_in_ytd)``
+    for each month from Jan 1 of today's year up through today.
+
+    Centralises the per-month walk shared by every YTD accumulator so
+    the proration formula and the per-month archive lookup stay in one
+    place. ``snap_m`` falls back to the current snapshot for months
+    with no archive (see :func:`_snapshot_for_month`).
+    """
+    region = entry.data.get(CONF_REGION, "")
+    contract = entry.data[CONF_CONTRACT]
+    cur = date(today.year, 1, 1)
+    while cur <= today:
+        month_first = date(cur.year, cur.month, 1)
+        snap_m = await _snapshot_for_month(
+            hass, session, extractor, contract, region, month_first, snapshot
+        )
+        if cur.month == 12:
+            next_first = date(cur.year + 1, 1, 1)
+        else:
+            next_first = date(cur.year, cur.month + 1, 1)
+        days_in_full_month = (next_first - month_first).days
+        month_end_in_ytd = min(next_first - timedelta(days=1), today)
+        days_in_ytd = (month_end_in_ytd - cur).days + 1
+        yield snap_m, month_first, days_in_full_month, days_in_ytd
+        cur = next_first
+
+
 async def _ytd_static_fees(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -1328,37 +1364,21 @@ async def _ytd_static_fees(
     """Pro-rated YTD total of yearly_fixed_fee + 12*energy_fund using each
     month's archived snapshot.
 
-    Uses the same uniform days_in_year proration as before but reads the
-    rate from the archived snapshot for each past month, so a supplier
-    indexation that lands mid-year is honoured for the months it applies
-    to (the per-month energy and prosumer paths already do this; this
-    helper closes the asymmetry on the fees side). Falls back to the
-    current snapshot for months with no archive, matching the rest of
-    the YTD machinery.
+    Uses the uniform days_in_year proration but reads the rate from the
+    archived snapshot for each past month, so a supplier indexation
+    that lands mid-year is honoured for the months it applies to.
+    Falls back to the current snapshot for months with no archive.
     """
-    region = entry.data.get(CONF_REGION, "")
-    contract = entry.data[CONF_CONTRACT]
     days_in_year = 366 if calendar.isleap(today.year) else 365
-
     total = 0.0
-    cur = date(today.year, 1, 1)
-    while cur <= today:
-        month_first = date(cur.year, cur.month, 1)
-        snap_m = await _snapshot_for_month(
-            hass, session, extractor, contract, region, month_first, snapshot
-        )
+    async for snap_m, _, _, days_in_ytd in _walk_ytd_months(
+        hass, session, extractor, snapshot, entry, today
+    ):
         annual = (
             getattr(snap_m.energy, "yearly_fixed_fee", 0.0)
             + snap_m.taxes.energy_fund_eur_per_month * 12.0
         )
-        if cur.month == 12:
-            next_first = date(cur.year + 1, 1, 1)
-        else:
-            next_first = date(cur.year, cur.month + 1, 1)
-        month_end_in_ytd = min(next_first - timedelta(days=1), today)
-        days_in_ytd = (month_end_in_ytd - cur).days + 1
         total += annual * (days_in_ytd / days_in_year)
-        cur = next_first
     return total
 
 
@@ -1381,32 +1401,17 @@ async def _ytd_prosumer(
         return 0.0
     if kva <= 0.0:
         return 0.0
-    region = entry.data.get(CONF_REGION, "")
     dso = entry.data.get(CONF_DSO, "")
-    contract = entry.data[CONF_CONTRACT]
 
     total = 0.0
-    cur = date(today.year, 1, 1)
-    while cur <= today:
-        month_first = date(cur.year, cur.month, 1)
-        snap_m = await _snapshot_for_month(
-            hass, session, extractor, contract, region, month_first, snapshot
-        )
+    async for snap_m, _, days_in_full_month, days_in_ytd in _walk_ytd_months(
+        hass, session, extractor, snapshot, entry, today
+    ):
         overlay = snap_m.dsos.get(dso)
-        if overlay is not None and overlay.prosumer_eur_per_kva_year is not None:
-            monthly_fee = kva * overlay.prosumer_eur_per_kva_year / 12.0
-            if cur.month == 12:
-                next_first = date(cur.year + 1, 1, 1)
-            else:
-                next_first = date(cur.year, cur.month + 1, 1)
-            days_in_full_month = (next_first - month_first).days
-            month_end_in_ytd = min(next_first - timedelta(days=1), today)
-            days_in_ytd = (month_end_in_ytd - cur).days + 1
-            total += monthly_fee * (days_in_ytd / days_in_full_month)
-        if cur.month == 12:
-            cur = date(cur.year + 1, 1, 1)
-        else:
-            cur = date(cur.year, cur.month + 1, 1)
+        if overlay is None or overlay.prosumer_eur_per_kva_year is None:
+            continue
+        monthly_fee = kva * overlay.prosumer_eur_per_kva_year / 12.0
+        total += monthly_fee * (days_in_ytd / days_in_full_month)
     return total
 
 
