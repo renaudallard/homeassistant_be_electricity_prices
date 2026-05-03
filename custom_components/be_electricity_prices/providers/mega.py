@@ -345,9 +345,12 @@ def _extract_meter_value(text: str, label: str) -> float | None:
     """
     scope = text
     if label in ("Tarif jour", "Tarif nuit", "Exclusif nuit"):
-        anchor = text.find("Compteur bi-horaire")
-        if anchor >= 0:
-            scope = text[anchor:]
+        # pypdf splits "Compteur bi-horaire" across a newline on every
+        # current Mega card, so a literal ``find("Compteur bi-horaire")``
+        # never matched. Match either the joined or the split spelling.
+        anchor_match = re.search(r"Compteur\s+bi-horaire", text)
+        if anchor_match is not None:
+            scope = text[anchor_match.start() :]
     match = re.search(
         rf"{re.escape(label)}\s*\n\s*([\d.,]+)",
         scope,
