@@ -55,7 +55,13 @@ from datetime import UTC, datetime, timedelta
 import aiohttp
 
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import USER_AGENT, fetch_pdf_text_layout, parse_valid_until, to_float
+from ._pdf import (
+    USER_AGENT,
+    fetch_pdf_text_layout,
+    fetch_text,
+    parse_valid_until,
+    to_float,
+)
 from .base import (
     Contract,
     DsoOverlay,
@@ -152,15 +158,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     ``{c.folder + '/' + c.slug for c in _CONTRACTS}`` set.
     """
     try:
-        async with session.get(
-            _LISTING_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                return set()
-            html = await resp.text()
-    except aiohttp.ClientError:
+        html = await fetch_text(session, _LISTING_URL)
+    except ExtractorError:
         return set()
     return {
         f"{folder}/{slug}"

@@ -260,6 +260,34 @@ async def fetch_pdf_text_layout(session: aiohttp.ClientSession, url: str) -> str
     return await asyncio.to_thread(extract_pdf_text_layout, payload)
 
 
+async def fetch_text(
+    session: aiohttp.ClientSession, url: str, *, timeout: int = 20
+) -> str:
+    """GET ``url`` and return the response body as text.
+
+    Raises :class:`ExtractorError` on any HTTP non-2xx, network error,
+    or aiohttp client failure. Use for HTML listing / index pages and
+    other plain-text sources; reach for :func:`fetch_pdf_text` (or its
+    layout / aligned variants) when the body is expected to be a PDF.
+
+    Callers that prefer a soft None-on-failure can wrap this in a
+    ``try / except ExtractorError`` block; concentrating the network /
+    HTTP error handling here keeps the ~6 lines of boilerplate out of
+    every provider.
+    """
+    try:
+        async with session.get(
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=timeout),
+        ) as resp:
+            if resp.status >= 400:
+                raise ExtractorError(f"HTTP {resp.status} fetching {url}")
+            return await resp.text()
+    except aiohttp.ClientError as err:
+        raise ExtractorError(f"network error fetching {url}: {err}") from err
+
+
 _NUMERIC_SEPARATORS = (
     " ",  # ASCII space
     " ",  # NBSP (U+00A0)

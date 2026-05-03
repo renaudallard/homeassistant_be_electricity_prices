@@ -58,6 +58,7 @@ from ._pdf import (
     SIGN_CHARS,
     USER_AGENT,
     fetch_pdf_text_layout,
+    fetch_text,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -217,15 +218,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     against ``{c.slug for c in _CONTRACTS}``.
     """
     try:
-        async with session.get(
-            _LISTING_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                return set()
-            html = await resp.text()
-    except aiohttp.ClientError:
+        html = await fetch_text(session, _LISTING_URL)
+    except ExtractorError:
         return set()
     return {
         slug

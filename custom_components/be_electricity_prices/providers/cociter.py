@@ -48,8 +48,8 @@ import aiohttp
 from ..const import REGION_WALLONIA
 from ._pdf import (
     SIGN_CHARS,
-    USER_AGENT,
     fetch_pdf_text,
+    fetch_text,
     parse_sign,
     parse_valid_until,
     text_mentions_month,
@@ -148,15 +148,8 @@ async def fetch_for_month(
         return None
     target_yymm = f"{year_month.year % 100:02d}{year_month.month:02d}"
     try:
-        async with session.get(
-            _INDEX_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                return None
-            html = await resp.text()
-    except aiohttp.ClientError:
+        html = await fetch_text(session, _INDEX_URL)
+    except ExtractorError:
         return None
     pdf_url: str | None = None
     for url, yymm in pattern.findall(html):
@@ -222,15 +215,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     surface anything else verbatim — that's the new-product signal.
     """
     try:
-        async with session.get(
-            _INDEX_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                return set()
-            html = await resp.text()
-    except aiohttp.ClientError:
+        html = await fetch_text(session, _INDEX_URL)
+    except ExtractorError:
         return set()
     out: set[str] = set()
     for family in re.findall(
@@ -466,18 +452,7 @@ def _extract_taxes(text: str) -> TaxOverlay:
 async def _find_latest(
     session: aiohttp.ClientSession, pattern: re.Pattern[str]
 ) -> tuple[str, str]:
-    try:
-        async with session.get(
-            _INDEX_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                raise ExtractorError(f"HTTP {resp.status} fetching {_INDEX_URL}")
-            html = await resp.text()
-    except aiohttp.ClientError as err:
-        raise ExtractorError(f"network error fetching {_INDEX_URL}: {err}") from err
-
+    html = await fetch_text(session, _INDEX_URL)
     matches = pattern.findall(html)
     if not matches:
         raise ExtractorError(f"no matching tariff card linked at {_INDEX_URL}")

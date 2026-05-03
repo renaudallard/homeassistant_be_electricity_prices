@@ -56,6 +56,7 @@ from ._pdf import (
     USER_AGENT,
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
+    fetch_text,
     parse_valid_until,
     to_float,
 )
@@ -131,15 +132,8 @@ async def fetch_for_month(
         return None
     target = f"{year_month.year:04d}{year_month.month:02d}"
     try:
-        async with session.get(
-            _PRICE_PAGE,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                return None
-            html = await resp.text()
-    except aiohttp.ClientError:
+        html = await fetch_text(session, _PRICE_PAGE)
+    except ExtractorError:
         return None
     pdf_url: str | None = None
     for match in _CARD_RE.finditer(html):
@@ -196,15 +190,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     it via the unrecognised filename returned verbatim.
     """
     try:
-        async with session.get(
-            _PRICE_PAGE,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                return set()
-            html = await resp.text()
-    except aiohttp.ClientError:
+        html = await fetch_text(session, _PRICE_PAGE)
+    except ExtractorError:
         return set()
     out: set[str] = set()
     if _CARD_RE.search(html):
@@ -418,17 +405,7 @@ async def _resolve_latest_pdf(
     highest YYYYMM among the definitive cards; that's the card whose
     rates are actually being billed today.
     """
-    try:
-        async with session.get(
-            _PRICE_PAGE,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                raise ExtractorError(f"HTTP {resp.status} fetching {_PRICE_PAGE}")
-            html = await resp.text()
-    except aiohttp.ClientError as err:
-        raise ExtractorError(f"network error fetching {_PRICE_PAGE}: {err}") from err
+    html = await fetch_text(session, _PRICE_PAGE)
 
     matches = [
         (yyyymm, url)

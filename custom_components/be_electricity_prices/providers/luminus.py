@@ -54,8 +54,8 @@ import aiohttp
 from ..const import REGION_FLANDERS, REGION_WALLONIA
 from ._pdf import (
     SIGN_CHARS,
-    USER_AGENT,
     fetch_pdf_text,
+    fetch_text,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -144,15 +144,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     tariff which is not user-selectable.
     """
     try:
-        async with session.get(
-            _SITEMAP_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                return set()
-            xml = await resp.text()
-    except aiohttp.ClientError:
+        xml = await fetch_text(session, _SITEMAP_URL)
+    except ExtractorError:
         return set()
     return {
         slug for slug in _PRODUCT_PAGE_RE.findall(xml) if slug not in _EXCLUDED_SLUGS

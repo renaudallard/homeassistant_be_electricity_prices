@@ -51,7 +51,7 @@ from dataclasses import dataclass
 import aiohttp
 
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import USER_AGENT, fetch_pdf_text, parse_valid_until, to_float
+from ._pdf import fetch_pdf_text, fetch_text, parse_valid_until, to_float
 from .base import (
     Contract,
     DsoOverlay,
@@ -279,15 +279,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     issue is informational so a small amount of noise is fine.
     """
     try:
-        async with session.get(
-            _SITEMAP_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                return set()
-            xml = await resp.text()
-    except aiohttp.ClientError:
+        xml = await fetch_text(session, _SITEMAP_URL)
+    except ExtractorError:
         return set()
     out: set[str] = set()
     for token in _PRODUCT_PAGE_RE.findall(xml):

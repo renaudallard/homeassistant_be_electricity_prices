@@ -48,8 +48,8 @@ import aiohttp
 from ..const import REGION_FLANDERS, REGION_WALLONIA
 from ._pdf import (
     SIGN_CHARS,
-    USER_AGENT,
     fetch_pdf_text,
+    fetch_text,
     parse_sign,
     parse_valid_until,
     text_mentions_month,
@@ -241,15 +241,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 
 async def _fetch_listing(session: aiohttp.ClientSession) -> str | None:
     try:
-        async with session.get(
-            _LISTING_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                return None
-            return await resp.text()
-    except aiohttp.ClientError:
+        return await fetch_text(session, _LISTING_URL)
+    except ExtractorError:
         return None
 
 

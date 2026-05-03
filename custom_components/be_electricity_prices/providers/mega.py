@@ -61,8 +61,8 @@ import aiohttp
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
 from ._pdf import (
     SIGN_CHARS,
-    USER_AGENT,
     fetch_pdf_text,
+    fetch_text,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -146,17 +146,7 @@ def _find_pdf_url(listing_html: str, product_name: str, region_code: str) -> str
 
 
 async def _fetch_listing_html(session: aiohttp.ClientSession) -> str:
-    try:
-        async with session.get(
-            _LISTING_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-        ) as resp:
-            if resp.status >= 400:
-                raise ExtractorError(f"HTTP {resp.status} fetching {_LISTING_URL}")
-            return await resp.text()
-    except aiohttp.ClientError as err:
-        raise ExtractorError(f"network error fetching {_LISTING_URL}: {err}") from err
+    return await fetch_text(session, _LISTING_URL)
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
