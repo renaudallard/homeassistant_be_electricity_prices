@@ -976,7 +976,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
 def _compute_capacity(
     snapshot: SupplierSnapshot, entry: ConfigEntry, peak_kw: float
 ) -> float:
-    overlay = snapshot.dsos.get(entry.data[CONF_DSO])
+    # Read CONF_DSO defensively: a corrupt entry that lost the key
+    # would otherwise KeyError here and tear the whole tick down via
+    # UpdateFailed. _compute_prosumer already takes the same shape.
+    dso = entry.data.get(CONF_DSO)
+    if dso is None:
+        return 0.0
+    overlay = snapshot.dsos.get(dso)
     if overlay is None or overlay.capacity_eur_per_kw_year is None:
         return 0.0
     return peak_kw * overlay.capacity_eur_per_kw_year / 12.0
