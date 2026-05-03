@@ -408,7 +408,9 @@ def parse_valid_until(text: str) -> date | None:
     lower = text.lower()
     name_alt = "|".join(re.escape(m) for m in _MONTH_NAMES)
     spelled_re = re.compile(rf"\b(\d{{1,2}})\s+({name_alt})\s+(20\d{{2}})\b")
-    numeric_re = re.compile(r"(\d{1,2})/(\d{1,2})/(20\d{2})")
+    # Accept either DD/MM/YYYY or DD/MM/YY (Cociter prints 2-digit years
+    # like "30/04/26"). 2-digit years are normalized to 20YY downstream.
+    numeric_re = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{2}(?:\d{2})?)")
     bare_month_re = re.compile(rf"\b({name_alt})\s+(20\d{{2}})\b")
 
     # Build the set of windows to scan: every occurrence of a validity
@@ -438,7 +440,10 @@ def parse_valid_until(text: str) -> date | None:
         for match in numeric_re.finditer(window):
             day, month, year = match.group(1), match.group(2), match.group(3)
             try:
-                candidates.append(date(int(year), int(month), int(day)))
+                year_i = int(year)
+                if year_i < 100:
+                    year_i += 2000
+                candidates.append(date(year_i, int(month), int(day)))
             except ValueError:
                 continue
 
