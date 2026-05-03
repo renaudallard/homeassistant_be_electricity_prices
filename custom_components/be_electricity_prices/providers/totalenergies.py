@@ -309,14 +309,10 @@ def parse_snapshot(
 # ---- energy block -------------------------------------------------------------
 
 
-_DYNAMIC_FORMULA_RE = re.compile(
-    # Standalone factor*BELPEXH+base, base must NOT be followed by another
-    # `* BELPEXH` (that'd be the next column's formula). Wallonia and
-    # Flanders match this directly.
-    r"([\d.,]+)\s*\*\s*BELPEXH\s*([+\-–—])\s*([\d.,]+)(?!\s*\*\s*BELPEXH)"
-)
 # Brussels Dynamic prints "<factor> * BELPEXH +" on one line and the bases
 # on the next: "0.1034 * BELPEXH + ... + Formule tarifaire\n3.85 3.85 ...".
+# _resolve_consumption_formula handles both the same-line and split-line
+# layouts via these two patterns.
 _FACTOR_ONLY_RE = re.compile(r"([\d.,]+)\s*\*\s*BELPEXH\s*([+\-–—])")
 _BASE_AFTER_FORMULE_RE = re.compile(r"Formule tarifaire\s*\n\s*([\d.,]+)")
 
