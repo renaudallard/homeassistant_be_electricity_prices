@@ -51,8 +51,10 @@ straight to EUR/kWh without a VAT multiplier.
 
 from __future__ import annotations
 
+import calendar
 import re
 from dataclasses import dataclass
+from datetime import date
 
 import aiohttp
 
@@ -259,7 +261,7 @@ def parse_snapshot(
         ),
         source_url=source_url,
         publication_label=publication_label,
-        valid_until=parse_valid_until(text),
+        valid_until=parse_valid_until(text) or _extract_valid_until(text),
         injection=injection,
     )
 
@@ -366,9 +368,51 @@ def _extract_yearly_fee(text: str) -> float:
     return to_float(match.group(1)) if match else 0.0
 
 
+_FR_MONTH_NAMES = (
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+)
+
+
 def _extract_publication_month(text: str) -> str:
+    # Smart Fixed cards prefix the version + month ("V2 avril 2026").
     match = re.search(r"V(\d+\s+[a-zé]+\s+\d{4})", text)
-    return match.group(1) if match else ""
+    if match:
+        return match.group(1)
+    # Smart Flex and Dynamic cards drop the version prefix and only print
+    # "Prix du mois MM/YYYY". Surface MM/YYYY as "<month-name> YYYY" so
+    # the publication_label sensor still tells the user which month the
+    # snapshot covers.
+    fallback = re.search(r"mois\s+(\d{2})/(\d{4})", text)
+    if fallback:
+        month = int(fallback.group(1))
+        year = fallback.group(2)
+        if 1 <= month <= 12:
+            return f"{_FR_MONTH_NAMES[month - 1]} {year}"
+    return ""
+
+
+def _extract_valid_until(text: str) -> date | None:
+    """Mega cards are valid for the printed month; use end-of-month."""
+    fallback = re.search(r"mois\s+(\d{2})/(\d{4})", text)
+    if not fallback:
+        return None
+    month = int(fallback.group(1))
+    year = int(fallback.group(2))
+    if not 1 <= month <= 12:
+        return None
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, last_day)
 
 
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
