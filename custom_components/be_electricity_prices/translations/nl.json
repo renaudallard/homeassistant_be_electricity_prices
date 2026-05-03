@@ -74,7 +74,8 @@
       }
     },
     "abort": {
-      "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Ga terug en kies een andere combinatie."
+      "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Ga terug en kies een andere combinatie.",
+      "already_configured": "Een andere ingang bevraagt al dezelfde combinatie (leverancier, contract, regio, DNB). Bewerk die ingang of kies een andere combinatie."
     },
     "error": {
       "invalid_api_key": "ENTSO-E heeft deze token geweigerd. Controleer de waarde op transparency.entsoe.eu (My Account Settings -> Web API Security Token).",

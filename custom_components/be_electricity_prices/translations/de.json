@@ -74,7 +74,8 @@
       }
     },
     "abort": {
-      "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewaehlten Region keinen Privathaushaltsstrom. Bitte zurueck und eine andere Kombination waehlen."
+      "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewaehlten Region keinen Privathaushaltsstrom. Bitte zurueck und eine andere Kombination waehlen.",
+      "already_configured": "Ein anderer Eintrag ruft bereits dasselbe Tupel (Anbieter, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder waehlen Sie eine andere Kombination."
     },
     "error": {
       "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Pruefen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",

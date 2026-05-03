@@ -697,6 +697,20 @@ class BePricesOptionsFlow(OptionsFlow):
         return await self.async_step_solar()
 
     def _finalize(self) -> ConfigFlowResult:
+        # Reject edits that collide with another existing entry. Two
+        # coordinators on the same (supplier, contract, region, dso) tuple
+        # would double-poll the supplier and break shared-snapshot dedup.
+        new_unique = (
+            f"{self._data[CONF_SUPPLIER]}:{self._data[CONF_CONTRACT]}"
+            f":{self._data[CONF_REGION]}:{self._data[CONF_DSO]}"
+        )
+        if new_unique != self.config_entry.unique_id:
+            for other in self.hass.config_entries.async_entries(DOMAIN):
+                if (
+                    other.entry_id != self.config_entry.entry_id
+                    and other.unique_id == new_unique
+                ):
+                    return self.async_abort(reason="already_configured")
         # Persist back to entry.data so the new values are the baseline,
         # discard any stale options, and update the title to reflect the
         # current supplier / contract / region.
@@ -705,5 +719,6 @@ class BePricesOptionsFlow(OptionsFlow):
             data=self._data,
             options={},
             title=_entry_title(self._data),
+            unique_id=new_unique,
         )
         return self.async_create_entry(title="", data={})

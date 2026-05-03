@@ -74,7 +74,8 @@
       }
     },
     "abort": {
-      "supplier_region_unavailable": "Ce fournisseur ne vend pas d'electricite residentielle dans la region selectionnee. Revenez en arriere et choisissez une autre combinaison."
+      "supplier_region_unavailable": "Ce fournisseur ne vend pas d'electricite residentielle dans la region selectionnee. Revenez en arriere et choisissez une autre combinaison.",
+      "already_configured": "Une autre entree interroge deja le meme tuple (fournisseur, contrat, region, GRD). Modifiez cette entree ou choisissez une autre combinaison."
     },
     "error": {
       "invalid_api_key": "ENTSO-E a rejete ce jeton. Verifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
