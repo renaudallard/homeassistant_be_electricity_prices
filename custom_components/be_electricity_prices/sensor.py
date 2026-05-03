@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -66,6 +66,7 @@ class BePriceSensorDescription(SensorEntityDescription):
     """Sensor description with a pure value extractor."""
 
     value_fn: Callable[[CoordinatorData], float | None]
+    last_reset_fn: Callable[[], datetime] | None = None
 
 
 def _current(data: CoordinatorData) -> PriceBreakdown | None:
@@ -367,11 +368,18 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         # Running bill since Jan 1: this-year cons / inj kWh x rates +
         # annual fees, with injection netted per regime. Always numeric;
         # missing meter inputs collapse to the fees-only floor so the
-        # sensor never goes ``unknown``.
-        state_class=SensorStateClass.MEASUREMENT,
+        # sensor never goes ``unknown``. ``TOTAL`` with ``last_reset``
+        # pinned to Jan 1 local lets the long-term-statistics engine
+        # bucket each calendar year as its own period; the value can
+        # dip day-over-day on heavy-injection days under the
+        # compensation regime, which rules out ``TOTAL_INCREASING``.
+        state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement="EUR",
         suggested_display_precision=2,
         value_fn=lambda d: d.current_year_cost_eur,
+        last_reset_fn=lambda: dt_util.now().replace(
+            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        ),
     ),
 )
 
@@ -451,6 +459,11 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             manufacturer=supplier_label,
             entry_type=None,
         )
+
+    @property
+    def last_reset(self) -> datetime | None:
+        fn = self.entity_description.last_reset_fn
+        return fn() if fn is not None else None
 
     @property
     def native_value(self) -> float | None:
