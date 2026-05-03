@@ -713,12 +713,23 @@ class BePricesOptionsFlow(OptionsFlow):
                     return self.async_abort(reason="already_configured")
         # Persist back to entry.data so the new values are the baseline,
         # discard any stale options, and update the title to reflect the
-        # current supplier / contract / region.
-        self.hass.config_entries.async_update_entry(
-            self.config_entry,
-            data=self._data,
-            options={},
-            title=_entry_title(self._data),
-            unique_id=new_unique,
+        # current supplier / contract / region. Skip the write entirely
+        # when nothing changed: HA's update listener would otherwise fire
+        # a reload, tearing down all entities and the warmed snapshot for
+        # no benefit.
+        new_title = _entry_title(self._data)
+        unchanged = (
+            dict(self.config_entry.data) == self._data
+            and not self.config_entry.options
+            and self.config_entry.title == new_title
+            and self.config_entry.unique_id == new_unique
         )
+        if not unchanged:
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data=self._data,
+                options={},
+                title=new_title,
+                unique_id=new_unique,
+            )
         return self.async_create_entry(title="", data={})
