@@ -433,7 +433,9 @@ def parse_valid_until(text: str) -> date | None:
     spelled_re = re.compile(rf"\b(\d{{1,2}})\s+({name_alt})\s+(20\d{{2}})\b")
     # Accept either DD/MM/YYYY or DD/MM/YY (Cociter prints 2-digit years
     # like "30/04/26"). 2-digit years are normalized to 20YY downstream.
-    numeric_re = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{2}(?:\d{2})?)")
+    # Word-boundary on both ends so an embedded run like "02/123/4567"
+    # in a phone number can't fragment into a fake "02/12/34" match.
+    numeric_re = re.compile(r"(?<!\d)(\d{1,2})/(\d{1,2})/(\d{2}(?:\d{2})?)(?!\d)")
     bare_month_re = re.compile(rf"\b({name_alt})\s+(20\d{{2}})\b")
 
     # Build the set of windows to scan: every occurrence of a validity
