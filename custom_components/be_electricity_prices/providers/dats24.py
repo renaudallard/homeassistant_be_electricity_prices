@@ -317,8 +317,15 @@ def _extract_taxes(text: str) -> TaxOverlay:
 
     fund_match = re.search(r"Hoofdverblijf\s*\(domicilie\)\s+([\d,.]+)\s*€/maand", text)
     energy_fund_per_month = to_float(fund_match.group(1)) if fund_match else 0.0
+    # The layout-aware PDF text emits the row as
+    # "Aansluitingsvergoeding Wallonië<footnote-digit> 0,07500 c€/kWh"
+    # on one line. Tolerate the footnote digit and require the value on
+    # the same line so a stray `.*?` skip can't jump to the next
+    # unrelated c€/kWh value (e.g. the 0,20417 energy contribution
+    # further down the document).
     connection_match = re.search(
-        r"Aansluitingsvergoeding Walloni[eë].*?([\d,.]+)\s*c€/kWh", text
+        r"Aansluitingsvergoeding\s+Walloni[eë]\d*\s+([\d,.]+)\s*c€/kWh",
+        text,
     )
     connection_fee = (
         to_float(connection_match.group(1)) / 100.0 if connection_match else 0.0
