@@ -727,7 +727,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._snapshot_fetched_at = fetched_at
                 self._snapshot_probe_key = probe_key
                 self._last_error = ""
-            except (ExtractorError, asyncio.TimeoutError) as err:
+            except Exception as err:
+                # Any extractor failure (including unexpected aiohttp /
+                # parser exceptions) must populate the negative cache so
+                # sibling coordinators back off instead of refiring the
+                # same broken request on the next tick.
                 if _tuple_generation(self.hass, key) == gen_at_entry:
                     failed[key] = (dt_util.utcnow(), str(err))
                 self._last_error = str(err)
@@ -737,6 +741,8 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     self.entry.data.get(CONF_CONTRACT),
                     err,
                 )
+                if not isinstance(err, (ExtractorError, asyncio.TimeoutError)):
+                    raise
 
     def _self_is_fresh(
         self, probe_key: str | None, now: datetime, ttl: timedelta
