@@ -1606,6 +1606,16 @@ async def _compute_current_year_cost(
     prosumer_ytd = await _ytd_prosumer(hass, session, extractor, snapshot, entry, today)
     fees = (fixed + fund_yearly) * year_fraction + prosumer_ytd
 
+    # Dynamic contracts need historical hourly ENTSO-E spots that v1 does
+    # not replay; bail with the fees-only floor *before* iterating hours.
+    # Otherwise the TOU loop would silently swallow ValueError on every
+    # hour (compute_breakdown rejects DynamicRates without a spot) and
+    # the static loop would discard every month (static_breakdown returns
+    # None for DynamicRates) — same result, but a wasted recorder pass
+    # and an inconsistency for users who picked dso_mode=impact.
+    if isinstance(snapshot.energy, DynamicRates):
+        return fees
+
     # Per-hour billing is required when the supplier's energy rates
     # vary by hour (TOU contracts) AND when the DSO bills per Impact
     # band (PIC / MEDIUM / ECO change with hour-of-day). Both go
