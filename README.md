@@ -317,6 +317,16 @@ menu **→ Download diagnostics** dumps the active config (with the ENTSO-E
 API key redacted), the snapshot metadata, and the full hourly breakdown
 for today + tomorrow. Attach it when reporting an issue.
 
+## Known limitations
+
+- **Exclusive-night DSO distribution rate.** Belgian DSOs publish a separate
+  distribution rate for exclusive-night meters (electric water heaters and
+  similar circuits wired only at night). The integration currently bills
+  those hours at the standard day rate (`distribution_single`); on most
+  cards the exclusive-night distribution rate is close to the day rate, so
+  the resulting error stays under ~0.01 EUR/kWh on the affected hours,
+  but exclusive-night users should treat the bill estimate as approximate.
+
 ## Development
 
 ```bash
