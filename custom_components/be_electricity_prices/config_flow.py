@@ -155,36 +155,24 @@ def _contract_kind(supplier_id: str, contract_id: str) -> str:
 
 
 def _user_schema(defaults: dict[str, Any]) -> vol.Schema:
-    fields: dict[Any, Any] = {}
-    if (current := defaults.get(CONF_SUPPLIER)) is not None:
-        fields[vol.Required(CONF_SUPPLIER, default=current)] = SelectSelector(
-            SelectSelectorConfig(
-                options=_supplier_options(), mode=SelectSelectorMode.DROPDOWN
-            )
-        )
-    else:
-        fields[vol.Required(CONF_SUPPLIER)] = SelectSelector(
-            SelectSelectorConfig(
-                options=_supplier_options(), mode=SelectSelectorMode.DROPDOWN
-            )
-        )
-    if (region := defaults.get(CONF_REGION)) is not None:
-        fields[vol.Required(CONF_REGION, default=region)] = SelectSelector(
-            SelectSelectorConfig(
-                options=list(REGIONS),
-                mode=SelectSelectorMode.DROPDOWN,
-                translation_key="region",
-            )
-        )
-    else:
-        fields[vol.Required(CONF_REGION)] = SelectSelector(
-            SelectSelectorConfig(
-                options=list(REGIONS),
-                mode=SelectSelectorMode.DROPDOWN,
-                translation_key="region",
-            )
-        )
-    return vol.Schema(fields)
+    supplier_default = defaults.get(CONF_SUPPLIER, vol.UNDEFINED)
+    region_default = defaults.get(CONF_REGION, vol.UNDEFINED)
+    return vol.Schema(
+        {
+            vol.Required(CONF_SUPPLIER, default=supplier_default): SelectSelector(
+                SelectSelectorConfig(
+                    options=_supplier_options(), mode=SelectSelectorMode.DROPDOWN
+                )
+            ),
+            vol.Required(CONF_REGION, default=region_default): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(REGIONS),
+                    mode=SelectSelectorMode.DROPDOWN,
+                    translation_key="region",
+                )
+            ),
+        }
+    )
 
 
 def _contract_schema(
