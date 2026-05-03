@@ -324,8 +324,14 @@ def _extract_publication_month(text: str) -> str:
 
 
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
+    # Some Luminus cards print a single-digit footnote ref right after
+    # the unit ("(c€/kWh)2 9,37"). The previous `[^0-9-]*` skip stopped
+    # at the footnote and captured it as the value, undercounting the
+    # injection rate ~5x on dynamic_w/v fixtures. Skip an optional
+    # digit-then-whitespace before the value capture.
     indicative = re.search(
-        r"Estimation annuelle du tarif\s+de l[\"'’©]énergie injectée[^0-9-]*([\d,]+)",
+        r"Estimation annuelle du tarif\s+de l[\"'’©]énergie injectée"
+        r"[^0-9-]*(?:\d+\s+)?([\d,]+)",
         text,
         re.S,
     )
