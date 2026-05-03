@@ -49,6 +49,7 @@ from homeassistant.core import (
 )
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -105,6 +106,31 @@ from .providers.base import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def supplier_device_info(coordinator: "BePricesCoordinator") -> DeviceInfo:
+    """Build the HA DeviceInfo block shared by every entity on this entry.
+
+    Both platforms (sensor + binary_sensor) anchor every entity onto the
+    same per-entry device, identified by (DOMAIN, entry.entry_id), with
+    the supplier label as ``manufacturer``. Centralising it here keeps
+    the device-info shape consistent and saves the ~10 lines that used
+    to live in each platform's ``__init__``. Falls back to the raw
+    supplier id (or a generic label) when the registry lookup fails so
+    the entity still surfaces in HA's UI.
+    """
+    supplier_id = coordinator.entry.data.get(CONF_SUPPLIER, "")
+    try:
+        supplier_label = get_extractor(str(supplier_id)).label
+    except ExtractorError:
+        supplier_label = str(supplier_id) or "Belgian Electricity"
+    return DeviceInfo(
+        identifiers={(DOMAIN, coordinator.entry.entry_id)},
+        name=coordinator.entry.title,
+        manufacturer=supplier_label,
+        entry_type=None,
+    )
+
 
 # Coordinator probes the supplier on every update tick (UPDATE_INTERVAL_MINUTES);
 # SNAPSHOT_REFRESH_HOURS is the fallback TTL for suppliers that have no probe

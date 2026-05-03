@@ -40,7 +40,6 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
@@ -49,16 +48,12 @@ from .const import (
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
-    CONF_SUPPLIER,
-    DOMAIN,
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
-from .coordinator import BePricesCoordinator, CoordinatorData
+from .coordinator import BePricesCoordinator, CoordinatorData, supplier_device_info
 from .pricing import PriceBreakdown
-from .providers import get as get_extractor
-from .providers.base import ExtractorError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -448,17 +443,7 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{description.key}"
-        supplier_id = coordinator.entry.data.get(CONF_SUPPLIER, "")
-        try:
-            supplier_label = get_extractor(str(supplier_id)).label
-        except ExtractorError:
-            supplier_label = str(supplier_id) or "Belgian Electricity"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name=coordinator.entry.title,
-            manufacturer=supplier_label,
-            entry_type=None,
-        )
+        self._attr_device_info = supplier_device_info(coordinator)
 
     @property
     def last_reset(self) -> datetime | None:
