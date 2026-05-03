@@ -1219,7 +1219,14 @@ async def _recorder_daily_band_ratio(
         d = per_day_day.get(day, 0.0)
         n = per_day_night.get(day, 0.0)
         total = d + n
-        out[day] = (d / total, n / total) if total > 0 else (1.0, 0.0)
+        if total > 0:
+            out[day] = (d / total, n / total)
+        else:
+            # Recorder logged a row but the deltas summed to zero (e.g.
+            # the meter didn't move). Fall back to the day-of-week split
+            # used when no row exists at all so a Sunday isn't billed at
+            # peak rate just because the hourly stats are flat.
+            out[day] = _default_band_ratio_for(day)
     return out
 
 
