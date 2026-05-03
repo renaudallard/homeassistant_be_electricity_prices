@@ -107,7 +107,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
     # the tuple it was constructed with so an OptionsFlow edit that
     # mutated entry.data prior to reload can still evict the
     # *previous* tuple's cache rows.
-    coordinator: BePricesCoordinator | None = entry.runtime_data
+    # entry.runtime_data may be HA's UNDEFINED sentinel rather than None
+    # if async_setup_entry raised before the explicit assignment (e.g.
+    # async_config_entry_first_refresh raised ConfigEntryNotReady). The
+    # `is not None` test would still pass, then access to ._supplier_tuple
+    # raises AttributeError and masks the real setup failure.
+    coordinator = getattr(entry, "runtime_data", None)
+    if not isinstance(coordinator, BePricesCoordinator):
+        coordinator = None
     cached_key = coordinator._supplier_tuple if coordinator is not None else None
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
