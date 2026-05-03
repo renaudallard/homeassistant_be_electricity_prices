@@ -35,7 +35,10 @@ cheapest_window:
           integration: be_electricity_prices
     earliest_start:
       name: Earliest start
-      description: Don't consider windows starting before this time. Default = now.
+      description: >-
+        Don't consider windows starting before this time. The price table is
+        hourly, so the value is truncated down to the hour (14:30 still
+        considers the 14:00 slot as a candidate start). Default = now.
       example: "2026-04-30T20:00:00+02:00"
       selector:
         datetime:
@@ -76,7 +79,10 @@ most_expensive_window:
           integration: be_electricity_prices
     earliest_start:
       name: Earliest start
-      description: Don't consider windows starting before this time. Default = now.
+      description: >-
+        Don't consider windows starting before this time. The price table is
+        hourly, so the value is truncated down to the hour (14:30 still
+        considers the 14:00 slot as a candidate start). Default = now.
       example: "2026-04-30T20:00:00+02:00"
       selector:
         datetime:

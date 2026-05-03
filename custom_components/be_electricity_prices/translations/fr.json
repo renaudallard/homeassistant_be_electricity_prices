@@ -212,7 +212,7 @@
         },
         "earliest_start": {
           "name": "Debut au plus tot",
-          "description": "Optionnel. Par defaut: maintenant."
+          "description": "Optionnel. Tronque au debut de l'heure (14:30 considere encore le creneau de 14:00). Par defaut: maintenant."
         },
         "latest_end": {
           "name": "Fin au plus tard",
@@ -234,7 +234,7 @@
         },
         "earliest_start": {
           "name": "Debut au plus tot",
-          "description": "Optionnel. Par defaut: maintenant."
+          "description": "Optionnel. Tronque au debut de l'heure (14:30 considere encore le creneau de 14:00). Par defaut: maintenant."
         },
         "latest_end": {
           "name": "Fin au plus tard",

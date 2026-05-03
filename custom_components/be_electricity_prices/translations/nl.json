@@ -212,7 +212,7 @@
         },
         "earliest_start": {
           "name": "Vroegste start",
-          "description": "Optioneel. Standaard: nu."
+          "description": "Optioneel. Afgerond naar het begin van het uur (14:30 beschouwt nog steeds het 14:00-slot). Standaard: nu."
         },
         "latest_end": {
           "name": "Laatste einde",
@@ -234,7 +234,7 @@
         },
         "earliest_start": {
           "name": "Vroegste start",
-          "description": "Optioneel. Standaard: nu."
+          "description": "Optioneel. Afgerond naar het begin van het uur (14:30 beschouwt nog steeds het 14:00-slot). Standaard: nu."
         },
         "latest_end": {
           "name": "Laatste einde",

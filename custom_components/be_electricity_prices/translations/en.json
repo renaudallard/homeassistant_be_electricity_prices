@@ -212,7 +212,7 @@
         },
         "earliest_start": {
           "name": "Earliest start",
-          "description": "Optional. Defaults to now."
+          "description": "Optional. Truncated down to the start of the hour (14:30 still considers the 14:00 slot). Defaults to now."
         },
         "latest_end": {
           "name": "Latest end",
@@ -234,7 +234,7 @@
         },
         "earliest_start": {
           "name": "Earliest start",
-          "description": "Optional. Defaults to now."
+          "description": "Optional. Truncated down to the start of the hour (14:30 still considers the 14:00 slot). Defaults to now."
         },
         "latest_end": {
           "name": "Latest end",

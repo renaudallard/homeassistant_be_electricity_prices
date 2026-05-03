@@ -212,7 +212,7 @@
         },
         "earliest_start": {
           "name": "Frueher Beginn",
-          "description": "Optional. Standard: jetzt."
+          "description": "Optional. Wird auf den Stundenbeginn abgerundet (14:30 beruecksichtigt weiterhin den 14:00-Slot). Standard: jetzt."
         },
         "latest_end": {
           "name": "Spaetestes Ende",
@@ -234,7 +234,7 @@
         },
         "earliest_start": {
           "name": "Frueher Beginn",
-          "description": "Optional. Standard: jetzt."
+          "description": "Optional. Wird auf den Stundenbeginn abgerundet (14:30 beruecksichtigt weiterhin den 14:00-Slot). Standard: jetzt."
         },
         "latest_end": {
           "name": "Spaetestes Ende",
