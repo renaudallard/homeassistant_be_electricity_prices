@@ -295,7 +295,8 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
                 "could not parse Cociter variable monohoraire indicative rate"
             )
         formula = re.search(
-            r"Compteur monohoraire\s*\(([\d,]+)\s*x\s*BELIX\s*\+\s*([\d,]+)\)",
+            r"Compteur monohoraire\s*\(([\d,]+)\s*x\s*BELIX\s*\+\s*([\d,]+)\)"
+            r"\s*\+\s*(\d+)\s*%\s*TVA",
             text,
         )
         return VariableRates(
@@ -305,7 +306,8 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
             exclusive_night=to_float(excl.group(1)) / 100.0 if excl else None,
             yearly_fixed_fee=yearly_fee,
             formula=(
-                f"({formula.group(1)} x BELIX + {formula.group(2)}) c€/kWh + 6% VAT"
+                f"({formula.group(1)} x BELIX + {formula.group(2)}) c€/kWh "
+                f"+ {formula.group(3)}% VAT"
                 if formula
                 else None
             ),
