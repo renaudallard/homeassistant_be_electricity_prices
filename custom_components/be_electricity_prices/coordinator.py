@@ -1347,10 +1347,20 @@ def _default_band_ratio_for(day: date) -> tuple[float, float]:
     weekdays split 15h peak / 9h offpeak. Replaces a previous hardcoded
     (1.0, 0.0) default that systematically pushed totals into the peak
     band when hourly stats lagged daily stats."""
+    # Construct each local clock hour directly instead of advancing an
+    # aware datetime by a fixed UTC timedelta: the latter shifts by one
+    # hour on each DST transition, mislabelling one hour twice a year.
+    # is_offpeak only reads the local hour + weekday, both of which are
+    # well-defined per local clock hour even on DST days.
     peak_hours = 0
-    base = dt_util.start_of_local_day(datetime(day.year, day.month, day.day))
     for hour in range(24):
-        when = base + timedelta(hours=hour)
+        when = datetime(
+            day.year,
+            day.month,
+            day.day,
+            hour,
+            tzinfo=dt_util.DEFAULT_TIME_ZONE,
+        )
         if not is_offpeak(when):
             peak_hours += 1
     if peak_hours == 0:
