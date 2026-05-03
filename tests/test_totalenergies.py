@@ -28,14 +28,11 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers._pdf import (
-    extract_pdf_text_layout,
-)
+from tests import fixture_text
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
@@ -45,12 +42,6 @@ from custom_components.be_electricity_prices.providers.base import (
 from custom_components.be_electricity_prices.providers.totalenergies import (
     parse_snapshot,
 )
-
-FIX = Path(__file__).parent / "fixtures"
-
-
-def _text(name: str) -> str:
-    return extract_pdf_text_layout((FIX / name).read_bytes())
 
 
 def test_totalenergies_is_registered() -> None:
@@ -65,7 +56,9 @@ def test_totalenergies_is_registered() -> None:
 
 def test_dynamic_wallonia_extracts_consumption_formula() -> None:
     snap = parse_snapshot(
-        "totalenergies_mydynamic", _text("totalenergies_dynamic_w.pdf"), "wallonia"
+        "totalenergies_mydynamic",
+        fixture_text("totalenergies_dynamic_w.pdf", layout=True),
+        "wallonia",
     )
     assert isinstance(snap.energy, DynamicRates)
     # PDF prints "0.1034 * BELPEXH + 1.75" (HTVA, 6% VAT).
@@ -83,7 +76,9 @@ def test_dynamic_brussels_pulls_base_from_split_layout() -> None:
     # NOT match here. The parser must fall back to picking the base from
     # the line right after "Formule tarifaire".
     snap = parse_snapshot(
-        "totalenergies_mydynamic", _text("totalenergies_dynamic_b.pdf"), "brussels"
+        "totalenergies_mydynamic",
+        fixture_text("totalenergies_dynamic_b.pdf", layout=True),
+        "brussels",
     )
     assert isinstance(snap.energy, DynamicRates)
     assert snap.energy.factor == pytest.approx(1.09604)
@@ -96,7 +91,9 @@ def test_dynamic_injection_formula_uses_distinct_anchor() -> None:
     # block so the consumption formula above is never picked up by
     # mistake.
     snap = parse_snapshot(
-        "totalenergies_mydynamic", _text("totalenergies_dynamic_w.pdf"), "wallonia"
+        "totalenergies_mydynamic",
+        fixture_text("totalenergies_dynamic_w.pdf", layout=True),
+        "wallonia",
     )
     inj = snap.injection
     assert inj is not None
@@ -108,7 +105,7 @@ def test_dynamic_injection_formula_uses_distinct_anchor() -> None:
 def test_mycomfort_fixed_wallonia_extracts_bihourly_rates() -> None:
     snap = parse_snapshot(
         "totalenergies_mycomfort_fixed",
-        _text("totalenergies_mycomfort_fixed_w.pdf"),
+        fixture_text("totalenergies_mycomfort_fixed_w.pdf", layout=True),
         "wallonia",
     )
     assert isinstance(snap.energy, FixedRates)
@@ -125,7 +122,9 @@ def test_mycomfort_variable_flanders_handles_tarif_mensuel_label() -> None:
     # label and the actual values; static cards put it AFTER the values.
     # The parser must accept both layouts.
     snap = parse_snapshot(
-        "totalenergies_mycomfort", _text("totalenergies_mycomfort_v.pdf"), "flanders"
+        "totalenergies_mycomfort",
+        fixture_text("totalenergies_mycomfort_v.pdf", layout=True),
+        "flanders",
     )
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.current == pytest.approx(0.1562)
@@ -135,7 +134,9 @@ def test_mycomfort_variable_flanders_handles_tarif_mensuel_label() -> None:
 
 def test_brussels_extracts_sibelga_row() -> None:
     snap = parse_snapshot(
-        "totalenergies_mydynamic", _text("totalenergies_dynamic_b.pdf"), "brussels"
+        "totalenergies_mydynamic",
+        fixture_text("totalenergies_dynamic_b.pdf", layout=True),
+        "brussels",
     )
     sibelga = snap.dsos["sibelga"]
     assert sibelga.distribution_single == pytest.approx(0.0996)
@@ -150,7 +151,9 @@ def test_wallonia_dso_carries_full_row() -> None:
     # and prosumer (col 9) - the IMPACT triplet (cols 4-6) and capacity
     # cols 10-11 aren't surfaced.
     snap = parse_snapshot(
-        "totalenergies_mydynamic", _text("totalenergies_dynamic_w.pdf"), "wallonia"
+        "totalenergies_mydynamic",
+        fixture_text("totalenergies_dynamic_w.pdf", layout=True),
+        "wallonia",
     )
     aieg = snap.dsos["aieg"]
     assert aieg.distribution_single == pytest.approx(0.1087)
@@ -166,7 +169,9 @@ def test_flanders_dso_includes_transport_in_distribution() -> None:
     # (same convention as Engie/Luminus/Mega Flanders), so transport=0
     # and the c€/kWh value lands in distribution_single.
     snap = parse_snapshot(
-        "totalenergies_mydynamic", _text("totalenergies_dynamic_v.pdf"), "flanders"
+        "totalenergies_mydynamic",
+        fixture_text("totalenergies_dynamic_v.pdf", layout=True),
+        "flanders",
     )
     antwerpen = snap.dsos["fluvius_antwerpen"]
     assert antwerpen.transport == 0.0
@@ -177,13 +182,19 @@ def test_flanders_dso_includes_transport_in_distribution() -> None:
 
 def test_taxes_split_correctly_per_region() -> None:
     w = parse_snapshot(
-        "totalenergies_mydynamic", _text("totalenergies_dynamic_w.pdf"), "wallonia"
+        "totalenergies_mydynamic",
+        fixture_text("totalenergies_dynamic_w.pdf", layout=True),
+        "wallonia",
     )
     v = parse_snapshot(
-        "totalenergies_mydynamic", _text("totalenergies_dynamic_v.pdf"), "flanders"
+        "totalenergies_mydynamic",
+        fixture_text("totalenergies_dynamic_v.pdf", layout=True),
+        "flanders",
     )
     b = parse_snapshot(
-        "totalenergies_mydynamic", _text("totalenergies_dynamic_b.pdf"), "brussels"
+        "totalenergies_mydynamic",
+        fixture_text("totalenergies_dynamic_b.pdf", layout=True),
+        "brussels",
     )
     # Federal excise (rounded to 2 decimals on TotalEnergies cards).
     assert w.taxes.federal_excise == pytest.approx(0.0503)

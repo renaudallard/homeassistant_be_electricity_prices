@@ -29,12 +29,11 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from custom_components.be_electricity_prices.providers._pdf import extract_pdf_text
+from tests import fixture_text
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     FixedRates,
@@ -45,15 +44,9 @@ from custom_components.be_electricity_prices.providers.eneco import (
     parse_snapshot,
 )
 
-FIX = Path(__file__).parent / "fixtures"
-
-
-def _text(name: str) -> str:
-    return extract_pdf_text((FIX / name).read_bytes())
-
 
 def test_fix_extracts_energy_block() -> None:
-    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
     assert isinstance(snap.energy, FixedRates)
     assert snap.energy.single == pytest.approx(0.1865)
     assert snap.energy.peak == pytest.approx(0.2055)
@@ -63,7 +56,7 @@ def test_fix_extracts_energy_block() -> None:
 
 
 def test_fix_extracts_dso_overlay() -> None:
-    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
     aieg = snap.dsos["aieg"]
     assert aieg.distribution_single == pytest.approx(0.1087)
     assert aieg.distribution_peak == pytest.approx(0.1205)
@@ -78,12 +71,12 @@ def test_fix_extracts_dso_overlay() -> None:
 def test_fix_fluvius_has_no_prosumer_rate() -> None:
     # Flemish digital meter rows print "-" for the prosumer column - SMR3
     # connections don't sit under the compensation regime.
-    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
     assert snap.dsos["fluvius_antwerpen"].prosumer_eur_per_kva_year is None
 
 
 def test_fix_extracts_all_fluvius_sub_areas() -> None:
-    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
     expected_keys = {
         "fluvius_halle_vilvoorde",
         "fluvius_antwerpen",
@@ -110,7 +103,7 @@ def test_fix_extracts_all_fluvius_sub_areas() -> None:
 
 
 def test_fix_fluvius_sub_areas_have_distinct_rates() -> None:
-    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
     rates = {
         key: snap.dsos[key].distribution_single
         for key in snap.dsos
@@ -122,7 +115,7 @@ def test_fix_fluvius_sub_areas_have_distinct_rates() -> None:
 
 
 def test_fix_extracts_taxes() -> None:
-    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
     assert snap.taxes.federal_excise == pytest.approx(0.050329)
     assert snap.taxes.energy_contribution == pytest.approx(0.002042)
     # Both regional rates are populated from the PDF; the pricing engine
@@ -150,7 +143,7 @@ def test_fix_extracts_taxes() -> None:
 
 
 def test_flex_extracts_current_monthly_rate() -> None:
-    snap = parse_snapshot(_text("eneco_flex.pdf"), "power_flex", "test://flex")
+    snap = parse_snapshot(fixture_text("eneco_flex.pdf"), "power_flex", "test://flex")
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.current == pytest.approx(0.1390)
     assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
@@ -158,7 +151,7 @@ def test_flex_extracts_current_monthly_rate() -> None:
 
 
 def test_dynamic_extracts_factor_and_base() -> None:
-    snap = parse_snapshot(_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
+    snap = parse_snapshot(fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
     assert isinstance(snap.energy, DynamicRates)
     # PDF formula: (0.102 x BELPEX-H_eur_per_mwh + 1) x 1.06  c€/kWh
     # ENTSO-E client gives spot in EUR/kWh, so the integration uses:
@@ -174,7 +167,7 @@ def test_dynamic_extracts_factor_and_base() -> None:
 
 
 def test_dynamic_publication_label_present() -> None:
-    snap = parse_snapshot(_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
+    snap = parse_snapshot(fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
     assert snap.publication_label  # non-empty
 
 
@@ -189,12 +182,12 @@ def test_extracts_valid_until_from_geldig_line() -> None:
         ("eneco_flex.pdf", "power_flex"),
         ("eneco_dyn.pdf", "power_dynamic"),
     ):
-        snap = parse_snapshot(_text(fixture), contract, f"test://{fixture}")
+        snap = parse_snapshot(fixture_text(fixture), contract, f"test://{fixture}")
         assert snap.valid_until == date(2026, 4, 30), fixture
 
 
 def test_fix_extracts_injection_rates() -> None:
-    snap = parse_snapshot(_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
     inj = snap.injection
     assert inj is not None
     # Power Fix prints "Maandprijs 4,76 c/kWh" + formula "0,08 X BELPEX -2,65".
@@ -205,7 +198,7 @@ def test_fix_extracts_injection_rates() -> None:
 
 
 def test_dynamic_extracts_injection_rates() -> None:
-    snap = parse_snapshot(_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
+    snap = parse_snapshot(fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
     inj = snap.injection
     assert inj is not None
     # Power Dynamic formula: "0,1 X BELPEX-H -1,188". No "Maandprijs" - falls
@@ -225,8 +218,7 @@ def _run(coro: object) -> object:
 def test_fetch_for_month_returns_snapshot_when_url_matches_month() -> None:
     """The Dec-2025 fixture parses cleanly and validates against the
     requested year-month: fetch_for_month must surface the snapshot."""
-    pdf_bytes = (FIX / "eneco_flex_dec25.pdf").read_bytes()
-    text = extract_pdf_text(pdf_bytes)
+    text = fixture_text("eneco_flex_dec25.pdf")
     with patch(
         "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
         new=AsyncMock(return_value=text),
@@ -242,8 +234,7 @@ def test_fetch_for_month_rejects_when_validity_does_not_cover_month() -> None:
     current card (the typical archive-miss failure mode), the parsed
     valid_until won't intersect the requested month and we must
     return None instead of trusting it."""
-    pdf_bytes = (FIX / "eneco_flex_dec25.pdf").read_bytes()
-    text = extract_pdf_text(pdf_bytes)
+    text = fixture_text("eneco_flex_dec25.pdf")
     with patch(
         "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
         new=AsyncMock(return_value=text),

@@ -28,7 +28,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 import pytest
 
@@ -43,12 +42,13 @@ from custom_components.be_electricity_prices.providers.base import (
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.octaplus import parse_snapshot
-
-FIX = Path(__file__).parent / "fixtures"
+from tests import FIXTURES
 
 
 def _text(name: str) -> str:
-    return extract_pdf_text_aligned((FIX / name).read_bytes(), x_join_threshold=1.0)
+    return extract_pdf_text_aligned(
+        (FIXTURES / name).read_bytes(), x_join_threshold=1.0
+    )
 
 
 def test_octaplus_is_registered() -> None:

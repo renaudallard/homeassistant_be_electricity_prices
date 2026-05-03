@@ -35,7 +35,6 @@ that grows the catalogue, fails fast.
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import Any
 
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
@@ -50,7 +49,9 @@ from custom_components.be_electricity_prices.providers import (
     totalenergies as totalenergies_mod,
 )
 
-FIX = Path(__file__).parent / "fixtures" / "discover"
+from tests import FIXTURES
+
+FIX = FIXTURES / "discover"
 
 
 class _FakeResponse:

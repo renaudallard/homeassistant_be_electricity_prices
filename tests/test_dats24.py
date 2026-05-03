@@ -28,23 +28,16 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 
 import pytest
 
 from custom_components.be_electricity_prices.providers.base import VariableRates
-from custom_components.be_electricity_prices.providers.dats24 import (
-    extract_pdf_text_layout,
-    parse_snapshot,
-)
-
-_FIX = Path(__file__).parent / "fixtures"
+from custom_components.be_electricity_prices.providers.dats24 import parse_snapshot
+from tests import fixture_text
 
 
 def _text() -> str:
-    return extract_pdf_text_layout(
-        (_FIX / "dats24_groen_variabel_apr.pdf").read_bytes()
-    )
+    return fixture_text("dats24_groen_variabel_apr.pdf", layout=True)
 
 
 def _snap(region: str) -> object:
@@ -178,9 +171,7 @@ def test_may_card_uses_dot_decimal_separator() -> None:
     (Afname1 10.64 11.77 9.60 9.60 instead of 12,18 13,48 10,97 10,97).
     Without dot-tolerant regexes the parser raised "could not parse
     DATS 24 indicative afname row"."""
-    text = extract_pdf_text_layout(
-        (_FIX / "dats24_groen_variabel_may.pdf").read_bytes()
-    )
+    text = fixture_text("dats24_groen_variabel_may.pdf", layout=True)
     snap = parse_snapshot(text, "test://may", "flanders")
     assert isinstance(snap.energy, VariableRates)
     assert snap.publication_label == "mei 2026"

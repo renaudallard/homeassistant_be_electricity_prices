@@ -29,14 +29,13 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
-from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers._pdf import extract_pdf_text
+from tests import fixture_text
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
@@ -46,12 +45,6 @@ from custom_components.be_electricity_prices.providers.cociter import (
     fetch_for_month,
     parse_snapshot,
 )
-
-FIX = Path(__file__).parent / "fixtures"
-
-
-def _text(name: str) -> str:
-    return extract_pdf_text((FIX / name).read_bytes())
 
 
 def test_cociter_is_registered() -> None:
@@ -63,7 +56,7 @@ def test_cociter_is_registered() -> None:
 
 def test_variable_extracts_indicative_rates() -> None:
     snap = parse_snapshot(
-        _text("cociter_var_2604.pdf"),
+        fixture_text("cociter_var_2604.pdf"),
         "cociter_variable",
         "test://var",
         "2026-04",
@@ -80,7 +73,7 @@ def test_variable_extracts_indicative_rates() -> None:
 
 def test_variable_extracts_dso_overlay() -> None:
     snap = parse_snapshot(
-        _text("cociter_var_2604.pdf"),
+        fixture_text("cociter_var_2604.pdf"),
         "cociter_variable",
         "test://var",
         "2026-04",
@@ -100,7 +93,7 @@ def test_dynamic_has_no_prosumer_rate() -> None:
     # Dynamic SMR3 contract has no compensation regime - the row swaps the
     # prosumer column for three Tarif Impact columns.
     snap = parse_snapshot(
-        _text("cociter_dyn_2604.pdf"),
+        fixture_text("cociter_dyn_2604.pdf"),
         "cociter_dynamic",
         "test://dyn",
         "2026-04",
@@ -114,7 +107,7 @@ def test_dso_extraction_keys_off_header_not_column_count() -> None:
     # count. Strip the header out of the variable card and the parser
     # must report no prosumer rate even though column 6 still has a
     # number that looks like one.
-    raw = _text("cociter_var_2604.pdf")
+    raw = fixture_text("cociter_var_2604.pdf")
     without_header = raw.replace("Tarif prosumer", "Tarif Impact")
     from custom_components.be_electricity_prices.providers.cociter import (
         _extract_dsos,
@@ -128,7 +121,7 @@ def test_dso_extraction_keys_off_header_not_column_count() -> None:
 
 def test_variable_extracts_taxes() -> None:
     snap = parse_snapshot(
-        _text("cociter_var_2604.pdf"),
+        fixture_text("cociter_var_2604.pdf"),
         "cociter_variable",
         "test://var",
         "2026-04",
@@ -144,7 +137,7 @@ def test_variable_extracts_taxes() -> None:
 
 def test_dynamic_extracts_factor_and_base() -> None:
     snap = parse_snapshot(
-        _text("cociter_dyn_2604.pdf"),
+        fixture_text("cociter_dyn_2604.pdf"),
         "cociter_dynamic",
         "test://dyn",
         "2026-04",
@@ -160,7 +153,7 @@ def test_dynamic_extracts_factor_and_base() -> None:
 
 def test_variable_extracts_injection_formula() -> None:
     snap = parse_snapshot(
-        _text("cociter_var_2604.pdf"),
+        fixture_text("cociter_var_2604.pdf"),
         "cociter_variable",
         "test://var",
         "2026-04",
@@ -176,7 +169,7 @@ def test_variable_extracts_injection_formula() -> None:
 
 def test_dynamic_extracts_injection_formula() -> None:
     snap = parse_snapshot(
-        _text("cociter_dyn_2604.pdf"),
+        fixture_text("cociter_dyn_2604.pdf"),
         "cociter_dynamic",
         "test://dyn",
         "2026-04",
@@ -233,7 +226,7 @@ class _Session:
 def test_fetch_for_month_returns_snapshot_when_listing_has_url() -> None:
     """The Dec-2025 fixture parses cleanly and the listing URL with
     matching YYMM is what fetch_for_month must surface."""
-    text = _text("cociter_var_2512.pdf")
+    text = fixture_text("cociter_var_2512.pdf")
     with patch(
         "custom_components.be_electricity_prices.providers.cociter.fetch_pdf_text",
         new=AsyncMock(return_value=text),

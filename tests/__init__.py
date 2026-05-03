@@ -22,3 +22,33 @@
 # CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
+
+"""Shared test helpers."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from custom_components.be_electricity_prices.providers._pdf import (
+    extract_pdf_text,
+    extract_pdf_text_layout,
+)
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def fixture_text(name: str, *, layout: bool = False) -> str:
+    """Read ``tests/fixtures/<name>`` and run it through the PDF extractor.
+
+    ``layout=True`` routes through ``extract_pdf_text_layout`` for
+    suppliers whose tariff cards rely on column positions (Bolt,
+    DATS 24, Ecopower, TotalEnergies). Default is ``extract_pdf_text``
+    (pypdf), which is fine for the rest.
+    """
+    payload = (FIXTURES / name).read_bytes()
+    if layout:
+        return extract_pdf_text_layout(payload)
+    return extract_pdf_text(payload)
+
+
+__all__ = ["FIXTURES", "fixture_text"]

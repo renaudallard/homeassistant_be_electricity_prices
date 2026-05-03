@@ -28,12 +28,11 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers._pdf import extract_pdf_text
+from tests import fixture_text
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
@@ -43,28 +42,28 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.providers.luminus import parse_snapshot
 
-FIX = Path(__file__).parent / "fixtures"
-
-
-def _text(name: str) -> str:
-    return extract_pdf_text((FIX / name).read_bytes())
-
 
 def _dynamic_w() -> object:
-    return parse_snapshot("luminus_dynamic", _text("luminus_dynamic_w.pdf"), "wallonia")
+    return parse_snapshot(
+        "luminus_dynamic", fixture_text("luminus_dynamic_w.pdf"), "wallonia"
+    )
 
 
 def _dynamic_v() -> object:
-    return parse_snapshot("luminus_dynamic", _text("luminus_dynamic_v.pdf"), "flanders")
+    return parse_snapshot(
+        "luminus_dynamic", fixture_text("luminus_dynamic_v.pdf"), "flanders"
+    )
 
 
 def _comfy_w() -> object:
-    return parse_snapshot("luminus_comfy", _text("luminus_comfy_w.pdf"), "wallonia")
+    return parse_snapshot(
+        "luminus_comfy", fixture_text("luminus_comfy_w.pdf"), "wallonia"
+    )
 
 
 def _comfyflex_v() -> object:
     return parse_snapshot(
-        "luminus_comfyflex", _text("luminus_comfyflex_v.pdf"), "flanders"
+        "luminus_comfyflex", fixture_text("luminus_comfyflex_v.pdf"), "flanders"
     )
 
 
@@ -190,7 +189,7 @@ def test_taxes_split_correctly_per_region() -> None:
 def test_comfyflex_plus_parses_as_variable() -> None:
     snap = parse_snapshot(
         "luminus_comfyflex_plus",
-        _text("luminus_comfyflex_plus_w.pdf"),
+        fixture_text("luminus_comfyflex_plus_w.pdf"),
         "wallonia",
     )
     assert isinstance(snap.energy, VariableRates)
@@ -205,7 +204,7 @@ def test_comfyflex_plus_parses_as_variable() -> None:
 
 def test_maxxflex_parses_as_variable() -> None:
     snap = parse_snapshot(
-        "luminus_maxxflex", _text("luminus_maxxflex_w.pdf"), "wallonia"
+        "luminus_maxxflex", fixture_text("luminus_maxxflex_w.pdf"), "wallonia"
     )
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.current is not None
@@ -214,7 +213,7 @@ def test_maxxflex_parses_as_variable() -> None:
 
 def test_smartflex_parses_as_time_of_use() -> None:
     snap = parse_snapshot(
-        "luminus_smartflex", _text("luminus_smartflex_w.pdf"), "wallonia"
+        "luminus_smartflex", fixture_text("luminus_smartflex_w.pdf"), "wallonia"
     )
     # SmartFlex's only sensible energy schema is TOU. The PDF prints
     #   "Énergie fournie  (c€/kWh) 15,54 13,29 6,72"
@@ -244,7 +243,9 @@ def test_publication_label_tolerates_padded_parens() -> None:
     surface a non-empty publication_label."""
     apr = _comfy_w()
     assert apr.publication_label == "avril 2026"
-    may = parse_snapshot("luminus_comfy", _text("luminus_comfy_w_may.pdf"), "wallonia")
+    may = parse_snapshot(
+        "luminus_comfy", fixture_text("luminus_comfy_w_may.pdf"), "wallonia"
+    )
     assert may.publication_label == "mai 2026"
 
 

@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
-from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -37,16 +36,14 @@ import pytest
 
 from custom_components.be_electricity_prices.providers.base import VariableRates
 from custom_components.be_electricity_prices.providers.ecopower import (
-    extract_pdf_text_layout,
     fetch_for_month,
     parse_snapshot,
 )
-
-_FIX = Path(__file__).parent / "fixtures"
+from tests import fixture_text
 
 
 def _text(name: str) -> str:
-    return extract_pdf_text_layout((_FIX / name).read_bytes())
+    return fixture_text(name, layout=True)
 
 
 def _april_snap() -> object:

@@ -28,7 +28,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 import pytest
 
@@ -38,7 +37,7 @@ from custom_components.be_electricity_prices.const import (
     REGION_WALLONIA,
 )
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from custom_components.be_electricity_prices.providers._pdf import extract_pdf_text
+from tests import fixture_text
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
@@ -48,18 +47,12 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.providers.engie import parse_snapshot
 
-FIX = Path(__file__).parent / "fixtures"
-
-
-def _text(name: str) -> str:
-    return extract_pdf_text((FIX / name).read_bytes())
-
 
 def _dynamic_three_regions() -> dict[str, str]:
     return {
-        REGION_FLANDERS: _text("engie_dynamic_v.pdf"),
-        REGION_WALLONIA: _text("engie_dynamic_w.pdf"),
-        REGION_BRUSSELS: _text("engie_dynamic_b.pdf"),
+        REGION_FLANDERS: fixture_text("engie_dynamic_v.pdf"),
+        REGION_WALLONIA: fixture_text("engie_dynamic_w.pdf"),
+        REGION_BRUSSELS: fixture_text("engie_dynamic_b.pdf"),
     }
 
 
@@ -80,7 +73,7 @@ def test_empower_flextime_extracts_tou_triplet() -> None:
     # 4/5/6 (peak / transition / offpeak in c€/kWh).
     snap = parse_snapshot(
         "engie_empower_flextime",
-        {REGION_WALLONIA: _text("engie_empower_flextime_w.pdf")},
+        {REGION_WALLONIA: fixture_text("engie_empower_flextime_w.pdf")},
     )
     assert isinstance(snap.energy, TimeOfUseRates)
     # Pinned literals from April 2026 card; they re-index monthly so
@@ -96,7 +89,7 @@ def test_empower_flextime_extracts_tou_triplet() -> None:
 def test_empower_flextime_dsos_match_wallonia_set() -> None:
     snap = parse_snapshot(
         "engie_empower_flextime",
-        {REGION_WALLONIA: _text("engie_empower_flextime_w.pdf")},
+        {REGION_WALLONIA: fixture_text("engie_empower_flextime_w.pdf")},
     )
     assert {"aieg", "aiesh", "ores", "resa", "rew"} <= set(snap.dsos)
 
@@ -186,7 +179,7 @@ def test_dynamic_extracts_taxes_for_every_region() -> None:
 def test_easy_fixed_extracts_bihourly_rates() -> None:
     snap = parse_snapshot(
         "engie_easy_fixed",
-        {REGION_FLANDERS: _text("engie_easy_fixed_v.pdf")},
+        {REGION_FLANDERS: fixture_text("engie_easy_fixed_v.pdf")},
     )
     assert isinstance(snap.energy, FixedRates)
     # PDF: 18,938  20,197  17,176  17,176  (mono / day / night / excl_night).
@@ -210,7 +203,7 @@ def test_empower_variable_skips_flextime_tiers() -> None:
     # so the Flextime middle three are skipped on purpose.
     snap = parse_snapshot(
         "engie_empower_variable",
-        {REGION_FLANDERS: _text("engie_empower_variable_v.pdf")},
+        {REGION_FLANDERS: fixture_text("engie_empower_variable_v.pdf")},
     )
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.current == pytest.approx(0.13775)
@@ -228,7 +221,7 @@ def test_empty_house_is_mono_only() -> None:
     # instead of the standard 4-prices-+-1-renewables.
     snap = parse_snapshot(
         "engie_empty_house",
-        {REGION_FLANDERS: _text("engie_empty_house_v.pdf")},
+        {REGION_FLANDERS: fixture_text("engie_empty_house_v.pdf")},
     )
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.current == pytest.approx(0.24505)
@@ -241,7 +234,7 @@ def test_empty_house_is_mono_only() -> None:
 def test_easy_variable_uses_monthly_not_annual_estimate() -> None:
     snap = parse_snapshot(
         "engie_easy_variable",
-        {REGION_FLANDERS: _text("engie_easy_indexed_v.pdf")},
+        {REGION_FLANDERS: fixture_text("engie_easy_indexed_v.pdf")},
     )
     assert isinstance(snap.energy, VariableRates)
     # The Variable PDF prints two Consommation rows: 'Prix mensuels' (the
@@ -269,7 +262,7 @@ def test_parse_snapshot_with_partial_regions_still_works() -> None:
     # snapshot with only that region's DSOs.
     snap = parse_snapshot(
         "engie_dynamic",
-        {REGION_BRUSSELS: _text("engie_dynamic_b.pdf")},
+        {REGION_BRUSSELS: fixture_text("engie_dynamic_b.pdf")},
     )
     assert set(snap.dsos) == {"sibelga"}
     assert snap.taxes.brussels_renewables == pytest.approx(0.02652)
