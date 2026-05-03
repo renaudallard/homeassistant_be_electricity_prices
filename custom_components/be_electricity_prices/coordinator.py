@@ -429,10 +429,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self.entry.data.get(CONF_CONTRACT),
             self.entry.data.get(CONF_REGION),
         )
-        tuple_mismatch = (
-            any(persisted_tuple)  # keys exist (post-fix file)
-            and persisted_tuple != current_tuple
-        )
+        # A persisted file that predates the entry-tuple keys was likely
+        # written for a different supplier/contract/region: better to drop
+        # it and let the next refresh repopulate than to serve stale wrong
+        # prices on first boot after an OptionsFlow change.
+        tuple_mismatch = persisted_tuple != current_tuple
         snap = stored.get("snapshot")
         if isinstance(snap, dict) and not tuple_mismatch:
             try:
