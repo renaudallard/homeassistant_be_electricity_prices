@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import calendar
 import json
+import logging
 import re
 import unicodedata
 from datetime import date
@@ -40,6 +41,8 @@ import aiohttp
 import pypdf
 
 from .base import ExtractorError
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _read_version() -> str:
@@ -98,7 +101,27 @@ async def fetch_pdf_text(session: aiohttp.ClientSession, url: str) -> str:
 def extract_pdf_text(payload: bytes) -> str:
     try:
         reader = pypdf.PdfReader(BytesIO(payload))
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
+        pages = list(reader.pages)
+        chunks: list[str] = []
+        failures = 0
+        for idx, page in enumerate(pages):
+            text = page.extract_text()
+            if text is None:
+                # pypdf returns None when a page cannot be decoded (e.g.
+                # an unsupported font). The caller would otherwise see a
+                # corrupt snapshot with regex misses on whatever was on
+                # that page; log so the failure is visible in HA logs.
+                _LOGGER.warning(
+                    "pypdf returned None for page %d/%d", idx + 1, len(pages)
+                )
+                failures += 1
+                continue
+            chunks.append(text)
+        if pages and failures == len(pages):
+            raise ExtractorError("PDF parse error: every page failed to decode")
+        return "\n".join(chunks)
+    except ExtractorError:
+        raise
     except Exception as err:
         raise ExtractorError(f"PDF parse error: {err}") from err
 
