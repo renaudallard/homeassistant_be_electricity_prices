@@ -1368,6 +1368,51 @@ def _default_band_ratio_for(day: date) -> tuple[float, float]:
     return (peak_hours / 24.0, (24 - peak_hours) / 24.0)
 
 
+async def _ytd_static_fees(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: SupplierExtractor,
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    today: date,
+) -> float:
+    """Pro-rated YTD total of yearly_fixed_fee + 12*energy_fund using each
+    month's archived snapshot.
+
+    Uses the same uniform days_in_year proration as before but reads the
+    rate from the archived snapshot for each past month, so a supplier
+    indexation that lands mid-year is honoured for the months it applies
+    to (the per-month energy and prosumer paths already do this; this
+    helper closes the asymmetry on the fees side). Falls back to the
+    current snapshot for months with no archive, matching the rest of
+    the YTD machinery.
+    """
+    region = entry.data.get(CONF_REGION, "")
+    contract = entry.data[CONF_CONTRACT]
+    days_in_year = 366 if calendar.isleap(today.year) else 365
+
+    total = 0.0
+    cur = date(today.year, 1, 1)
+    while cur <= today:
+        month_first = date(cur.year, cur.month, 1)
+        snap_m = await _snapshot_for_month(
+            hass, session, extractor, contract, region, month_first, snapshot
+        )
+        annual = (
+            getattr(snap_m.energy, "yearly_fixed_fee", 0.0)
+            + snap_m.taxes.energy_fund_eur_per_month * 12.0
+        )
+        if cur.month == 12:
+            next_first = date(cur.year + 1, 1, 1)
+        else:
+            next_first = date(cur.year, cur.month + 1, 1)
+        month_end_in_ytd = min(next_first - timedelta(days=1), today)
+        days_in_ytd = (month_end_in_ytd - cur).days + 1
+        total += annual * (days_in_ytd / days_in_year)
+        cur = next_first
+    return total
+
+
 async def _ytd_prosumer(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -1574,13 +1619,13 @@ async def _compute_current_year_cost(
     of higher consumption.
 
     Plus fees: the supplier yearly fixed fee and the Flemish energy
-    fund are pro-rated to the elapsed fraction of the calendar year
-    (``elapsed_days / days_in_year``). The Walloon prosumer fee is
-    summed per archived month using each month's DSO overlay (so a
-    CWaPE indexation that lands mid-year is honoured for the months
-    it applies to), pro-rated within the current month by elapsed
-    days. The running bill grows day by day instead of jumping to the
-    full annual on Jan 1.
+    fund are summed per archived month using each month's snapshot
+    (so a supplier indexation that lands mid-year is honoured for the
+    months it applies to), pro-rated by ``days_in_month_in_ytd /
+    days_in_year`` so the YTD total still grows uniformly across the
+    calendar year. The Walloon prosumer fee follows the same per-month
+    walk against each month's DSO overlay. The running bill grows day
+    by day instead of jumping to the full annual on Jan 1.
 
     ``inj_m`` is each month's snapshot's ``injection.current`` (the
     printed monthly indicative).
@@ -1614,15 +1659,12 @@ async def _compute_current_year_cost(
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
 
     jan1 = date(today.year, 1, 1)
-    days_in_year = 366 if calendar.isleap(today.year) else 365
-    # Inclusive: on Jan 1 one day has elapsed, on Dec 31 all of them.
-    elapsed_days = (today - jan1).days + 1
-    year_fraction = elapsed_days / days_in_year
 
-    fixed = getattr(snapshot.energy, "yearly_fixed_fee", 0.0)
-    fund_yearly = snapshot.taxes.energy_fund_eur_per_month * 12.0
+    static_fees = await _ytd_static_fees(
+        hass, session, extractor, snapshot, entry, today
+    )
     prosumer_ytd = await _ytd_prosumer(hass, session, extractor, snapshot, entry, today)
-    fees = (fixed + fund_yearly) * year_fraction + prosumer_ytd
+    fees = static_fees + prosumer_ytd
 
     # Dynamic contracts need historical hourly ENTSO-E spots that v1 does
     # not replay; bail with the fees-only floor *before* iterating hours.
