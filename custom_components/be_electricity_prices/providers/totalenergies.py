@@ -415,15 +415,16 @@ def _extract_fee_and_renewables(text: str) -> tuple[float, float]:
     """Pull the (yearly_fee_eur, renewables_eur_per_kwh) pair.
 
     TotalEnergies prints them on a dedicated 2-number line in the energy
-    block: ``90,00 1,57``. The position of the line varies per contract
-    (after the consumption row for variable/dynamic, between Tarif annuel
-    and Injection for static), so we anchor on the value shape: a 2-3
-    digit fee with 2 decimals plus a 1-digit renewables with 2-3 decimals.
-    Other rows (consumption indicative, injection indicative) have all
-    2-digit integer parts so they don't match.
+    block: ``90,00 1,57``. The position varies per contract (after the
+    consumption row for variable/dynamic, between Tarif annuel and
+    Injection for static), but every layout precedes the line with a
+    ``Tarif (mensuel|annuel)`` header. Anchor on that header and require
+    the following 2-number line; this rejects unrelated value pairs that
+    happen to share the shape (e.g. footer rows).
     """
     match = re.search(
-        r"^(\d{2,3}[.,]\d{1,2})\s+(\d[.,]\d{1,3})\s*$",
+        r"Tarif\s+(?:mensuel|annuel)[\s\S]{0,400}?"
+        r"^(\d{2,3}[.,]\d{2})\s+(\d[.,]\d{1,3})\s*$",
         text,
         re.MULTILINE,
     )
