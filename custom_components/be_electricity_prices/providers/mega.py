@@ -356,7 +356,10 @@ def _extract_meter_value(text: str, label: str) -> float | None:
 
 
 def _extract_yearly_fee(text: str) -> float:
-    match = re.search(r"Redevance fixe\s*\(€/an\)\s*\n\s*([\d.,]+)", text)
+    # Mega's dynamic card splits the heading across two lines
+    # ('Redevance fixe\n(€/an)\n42.4'); fixed cards keep them together
+    # ('Redevance fixe (€/an)\n111.3'). Accept either layout.
+    match = re.search(r"Redevance fixe\s*\n?\s*\(€/an\)\s*\n?\s*([\d.,]+)", text)
     return to_float(match.group(1)) if match else 0.0
 
 
