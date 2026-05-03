@@ -31,6 +31,7 @@ to keep ``requirements`` empty in ``manifest.json``.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from xml.etree import ElementTree as ET
 
@@ -87,7 +88,11 @@ class EntsoeClient:
         except aiohttp.ClientError as err:
             raise EntsoeError(str(err)) from err
 
-        return parse_day_ahead_xml(payload)
+        # ENTSO-E's A44 doc is small today (~100 KB hourly, larger if
+        # the bidding zone moves to PT15M). Offload XML parsing to a
+        # worker thread so the coordinator's update tick can't ever
+        # stall HA's event loop.
+        return await asyncio.to_thread(parse_day_ahead_xml, payload)
 
 
 def parse_day_ahead_xml(xml: str) -> dict[datetime, float]:
