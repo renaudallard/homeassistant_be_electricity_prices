@@ -454,23 +454,38 @@ def parse_valid_until(text: str) -> date | None:
     if not windows:
         return None
 
+    # Tariff cards never advertise validity past a few years out;
+    # numeric_re will happily eat a 4-digit run that follows DD/MM
+    # (e.g. "30/04/2625" from a corrupted phone-number footnote)
+    # and produce date(2625, 4, 30). Clamp candidates to a loose
+    # horizon around today's year so a stray captured year can't
+    # masquerade as a real validity date.
+    max_year = date.today().year + 5
+
+    def _accept(d: date) -> bool:
+        return d.year <= max_year
+
     candidates: list[date] = []
     for window in windows:
         for match in spelled_re.finditer(window):
             day, month_name, year = match.group(1), match.group(2), match.group(3)
             try:
-                candidates.append(date(int(year), _MONTH_NAMES[month_name], int(day)))
+                cand = date(int(year), _MONTH_NAMES[month_name], int(day))
             except ValueError:
                 continue
+            if _accept(cand):
+                candidates.append(cand)
         for match in numeric_re.finditer(window):
             day, month, year = match.group(1), match.group(2), match.group(3)
             try:
                 year_i = int(year)
                 if year_i < 100:
                     year_i += 2000
-                candidates.append(date(year_i, int(month), int(day)))
+                cand = date(year_i, int(month), int(day))
             except ValueError:
                 continue
+            if _accept(cand):
+                candidates.append(cand)
 
     if candidates:
         return max(candidates)
@@ -482,7 +497,9 @@ def parse_valid_until(text: str) -> date | None:
             try:
                 month = _MONTH_NAMES[month_name]
                 last_day = calendar.monthrange(int(year), month)[1]
-                candidates.append(date(int(year), month, last_day))
+                cand = date(int(year), month, last_day)
             except (KeyError, ValueError):
                 continue
+            if _accept(cand):
+                candidates.append(cand)
     return max(candidates) if candidates else None

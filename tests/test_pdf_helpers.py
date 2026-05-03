@@ -83,3 +83,14 @@ def test_parse_valid_until_returns_none_when_no_keyword_present() -> None:
 def test_parse_valid_until_returns_none_for_keyword_without_date() -> None:
     text = "Cette tarification est valable conformement aux conditions generales."
     assert parse_valid_until(text) is None
+
+
+def test_parse_valid_until_clamps_implausible_far_future_year() -> None:
+    """A captured 4-digit year that's centuries away (typically a
+    chunk of a corrupted phone number / fax that happens to look
+    like DD/MM/YYYY inside a validity window) must not bubble out as
+    a real validity date.
+    """
+    text = "Cette carte est valable du 01/04/2026 au 30/04/2625."
+    # The 2026 candidate is the only one that survives the year clamp.
+    assert parse_valid_until(text) == date(2026, 4, 1)
