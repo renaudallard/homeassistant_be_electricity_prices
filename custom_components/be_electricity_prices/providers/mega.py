@@ -338,12 +338,19 @@ def _extract_meter_value(text: str, label: str) -> float | None:
 
     Mega prints labels and values on separate lines; the consumption rate
     is the first number after the label and the injection rate is the
-    second. Skip both ``Tarif jour`` and ``Tarif nuit`` for products that
-    only label them under a parent ``Compteur bi-horaire`` header.
+    second. Tarif jour / Tarif nuit / Exclusif nuit are only meaningful
+    under the ``Compteur bi-horaire`` header; anchor on it so a later
+    mention in dynamic-formula footnotes can't shadow the energy-block
+    value.
     """
+    scope = text
+    if label in ("Tarif jour", "Tarif nuit", "Exclusif nuit"):
+        anchor = text.find("Compteur bi-horaire")
+        if anchor >= 0:
+            scope = text[anchor:]
     match = re.search(
         rf"{re.escape(label)}\s*\n\s*([\d.,]+)",
-        text,
+        scope,
     )
     return to_float(match.group(1)) / 100.0 if match else None
 
