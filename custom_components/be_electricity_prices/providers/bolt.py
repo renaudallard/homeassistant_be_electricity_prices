@@ -372,13 +372,13 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
         raise ExtractorError("Bolt: 'Droit d'accise spécial' row not found")
     if contribution_match is None:
         raise ExtractorError("Bolt: 'Contribution sur l'énergie' row not found")
-    # Connection fee row prints two single-digit footnote refs ahead of
-    # the values: "Redevance de raccordement (c€/kWh) 6 7 - 0,075 -".
-    # ``(?:\d\s+)*`` skips the footnote refs; the three trailing tokens
-    # are FL/WAL/BX (some are "-" when not applicable). The whole row is
+    # Connection fee row prints footnote refs ahead of the values:
+    # "Redevance de raccordement (c€/kWh) 6 7 - 0,075 -". Allow
+    # multi-digit footnote markers; the three trailing tokens are
+    # FL/WAL/BX (some are "-" when not applicable). The whole row is
     # Wallonia-only on real Bolt cards, so a regex miss is permitted.
     connection_match = re.search(
-        r"Redevance de raccordement[^\n]*?\(c€/kWh\)\s*(?:\d\s+)*"
+        r"Redevance de raccordement[^\n]*?\(c€/kWh\)\s*(?:\d+\s+)*"
         r"(-|[\d.,]+)\s+(-|[\d.,]+)\s+(-|[\d.,]+)",
         text,
     )
