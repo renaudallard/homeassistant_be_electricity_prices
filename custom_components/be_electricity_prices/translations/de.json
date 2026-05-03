@@ -204,7 +204,7 @@
       "fields": {
         "duration_hours": {
           "name": "Dauer",
-          "description": "Fensterlaenge in Stunden (auf volle Stunden aufgerundet)."
+          "description": "Fensterlaenge in Stunden (auf die naechste volle Stunde gerundet; die Preistabelle ist stuendlich)."
         },
         "entry_id": {
           "name": "Entry-ID",
@@ -226,7 +226,7 @@
       "fields": {
         "duration_hours": {
           "name": "Dauer",
-          "description": "Fensterlaenge in Stunden (auf volle Stunden aufgerundet)."
+          "description": "Fensterlaenge in Stunden (auf die naechste volle Stunde gerundet; die Preistabelle ist stuendlich)."
         },
         "entry_id": {
           "name": "Entry-ID",

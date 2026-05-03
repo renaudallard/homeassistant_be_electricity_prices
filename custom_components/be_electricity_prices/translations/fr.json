@@ -204,7 +204,7 @@
       "fields": {
         "duration_hours": {
           "name": "Duree",
-          "description": "Longueur de la plage en heures (arrondie a l'heure)."
+          "description": "Longueur de la plage en heures (arrondie a l'heure la plus proche; la table de prix est horaire)."
         },
         "entry_id": {
           "name": "ID de l'entree",
@@ -226,7 +226,7 @@
       "fields": {
         "duration_hours": {
           "name": "Duree",
-          "description": "Longueur de la plage en heures (arrondie a l'heure)."
+          "description": "Longueur de la plage en heures (arrondie a l'heure la plus proche; la table de prix est horaire)."
         },
         "entry_id": {
           "name": "ID de l'entree",
