@@ -259,15 +259,20 @@ def _resolve_window_inputs(
 
     earliest = call.data.get("earliest_start") or dt_util.utcnow()
     latest = call.data.get("latest_end")
-    earliest_utc = (earliest if earliest.tzinfo else earliest.astimezone()).astimezone(
-        dt_util.UTC
-    )
-    latest_utc = (
-        (latest if latest.tzinfo else latest.astimezone()).astimezone(dt_util.UTC)
-        if latest is not None
-        else None
-    )
+    # Naive datetimes from YAML are interpreted as the user's HA time
+    # zone (typically Europe/Brussels), not the host machine's tz.
+    # Otherwise a HA install on a UTC server with a Brussels user shifts
+    # the requested wall-clock hour by 1-2 hours.
+    earliest_utc = _to_utc(earliest)
+    latest_utc = _to_utc(latest) if latest is not None else None
     return data.hourly, duration_slots, earliest_utc, latest_utc
+
+
+def _to_utc(value: datetime) -> datetime:
+    """Coerce a service-call datetime to UTC, treating naive as HA tz."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    return value.astimezone(dt_util.UTC)
 
 
 async def _async_cheapest_window_service(call: ServiceCall) -> ServiceResponse:
