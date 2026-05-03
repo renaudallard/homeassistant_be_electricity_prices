@@ -186,15 +186,26 @@ async def fetch(
     url = _document_url(contract)
     try:
         text = await fetch_pdf_text_layout(session, url)
-    except ExtractorError:
+    except ExtractorError as primary_err:
         # Fixed cards may not be published yet on the 1st of the month;
-        # fall back to the previous month.
+        # fall back to the previous month so the user keeps seeing
+        # plausible prices instead of UpdateFailed. The fallback PDF
+        # carries last month's `valid_until`, so the
+        # ``tomorrow_prices_available`` sensor still reflects staleness.
         if contract.folder != "fix":
             raise
         previous = (datetime.now(UTC).replace(day=1) - timedelta(days=1)).strftime(
             "%Y%m"
         )
-        url = _document_url(contract, suffix=previous)
+        fallback_url = _document_url(contract, suffix=previous)
+        _LOGGER.warning(
+            "Bolt %s: current-month PDF unavailable (%s); "
+            "falling back to previous-month card %s",
+            contract_id,
+            primary_err,
+            fallback_url,
+        )
+        url = fallback_url
         text = await fetch_pdf_text_layout(session, url)
     return parse_snapshot(contract_id, text, region, url)
 
