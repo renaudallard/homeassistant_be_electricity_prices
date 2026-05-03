@@ -373,7 +373,7 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
         ),
         source_url=_API_URL,
         publication_label=publication_label,
-        valid_until=parse_valid_until(text),
+        valid_until=parse_valid_until(any_text),
         injection=injection,
     )
 
