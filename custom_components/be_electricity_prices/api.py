@@ -32,6 +32,7 @@ to keep ``requirements`` empty in ``manifest.json``.
 from __future__ import annotations
 
 import asyncio
+import math
 from datetime import UTC, datetime, timedelta
 from xml.etree import ElementTree as ET
 
@@ -151,7 +152,13 @@ def parse_day_ahead_xml(xml: str) -> dict[datetime, float]:
             continue
         if end_text:
             end = _parse_iso_utc(end_text)
-            total = max(int((end - start) / step), max(explicit))
+            # Round up so a window that isn't an exact multiple of the
+            # resolution doesn't drop its trailing sub-hour slot. Use
+            # max() with the explicit positions as a floor in case the
+            # publication shrinks the interval relative to the points.
+            span_s = max(0.0, (end - start).total_seconds())
+            inferred = math.ceil(span_s / step.total_seconds())
+            total = max(inferred, max(explicit))
         else:
             total = max(explicit)
         last: float | None = None
