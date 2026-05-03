@@ -261,9 +261,16 @@ def parse_snapshot(
 
 
 def _extract_yearly_fee(text: str) -> float:
-    """Bolt prints a monthly platform fee (``€ 10,99 / mois``); convert to /year."""
+    """Bolt prints a monthly platform fee (``€ 10,99 / mois``); convert to /year.
+
+    The platform fee is the entire Bolt monetisation; a missing match is
+    a layout drift that would silently undercount the user's bill by
+    ~130 EUR/year, so raise instead of returning 0.
+    """
     match = re.search(r"€\s*(\d+[.,]\d+)\s*/\s*mois", text)
-    return to_float(match.group(1)) * 12.0 if match else 0.0
+    if match is None:
+        raise ExtractorError("Bolt: '€ N,NN / mois' platform fee not found")
+    return to_float(match.group(1)) * 12.0
 
 
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
@@ -345,10 +352,20 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
         text,
         re.S,
     )
+    # Federal excise and energy contribution are mandatory federal levies
+    # printed on every Belgian supplier card; a regex miss means the
+    # layout drifted and the snapshot would silently under-bill by
+    # several c€/kWh. Raise so the coordinator falls back to the cached
+    # snapshot instead.
+    if excise_match is None:
+        raise ExtractorError("Bolt: 'Droit d'accise spécial' row not found")
+    if contribution_match is None:
+        raise ExtractorError("Bolt: 'Contribution sur l'énergie' row not found")
     # Connection fee row prints two single-digit footnote refs ahead of
     # the values: "Redevance de raccordement (c€/kWh) 6 7 - 0,075 -".
     # ``(?:\d\s+)*`` skips the footnote refs; the three trailing tokens
-    # are FL/WAL/BX (some are "-" when not applicable).
+    # are FL/WAL/BX (some are "-" when not applicable). The whole row is
+    # Wallonia-only on real Bolt cards, so a regex miss is permitted.
     connection_match = re.search(
         r"Redevance de raccordement[^\n]*?\(c€/kWh\)\s*(?:\d\s+)*"
         r"(-|[\d.,]+)\s+(-|[\d.,]+)\s+(-|[\d.,]+)",
@@ -388,12 +405,14 @@ def _extract_renewables(text: str) -> tuple[float, float, float]:
         text,
         re.S,
     )
-    # WKK row: 'WKK (c€/kWh) 8 0,39 -' - skip the single-digit footnote
+    # WKK row: 'WKK (c€/kWh) 8 0,39 -' - skip the (multi-digit) footnote
     # ref before capturing the Flanders value. The remaining ' -' tokens
     # are placeholders for Wallonia / Brussels (no WKK there).
-    wkk = re.search(r"WKK\s*\(c€/kWh\)\s*\d?\s*([\d.,]+)", text)
+    wkk = re.search(r"WKK\s*\(c€/kWh\)\s*\d*\s*([\d.,]+)", text)
     if cert is None:
-        return 0.0, 0.0, 0.0
+        # Renewables (certificats verts) are charged in every region; a
+        # regex miss is a layout drift that would silently zero ~3 c€/kWh.
+        raise ExtractorError("Bolt: 'Certificats verts' renewables row not found")
     fl_cents = to_float(cert.group(1))
     wal_cents = to_float(cert.group(2))
     bx_cents = to_float(cert.group(3))
