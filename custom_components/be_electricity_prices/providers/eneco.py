@@ -454,9 +454,8 @@ def _find_fluvius_row(text: str, label: str, transport: float) -> DsoOverlay | N
     return DsoOverlay(
         distribution_single=to_float(digital_match.group(1)) / 100.0,
         # Post-capacity-tariff Flemish meters bill at a single rate; the
-        # Uitsl. nacht column only matters for exclusive-night meters which
-        # we surface as exclusive_night for completeness but do not yet
-        # use in pricing.
+        # Uitsl. nacht column (group 2) is dropped because DsoOverlay does
+        # not model an exclusive-night distribution rate.
         distribution_peak=None,
         distribution_offpeak=None,
         transport=transport,
