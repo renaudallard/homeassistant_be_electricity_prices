@@ -415,6 +415,13 @@ def _extract_taxes(text: str) -> TaxOverlay:
     )
     if not taxes_block:
         raise ExtractorError("could not parse Cociter taxes block")
+    if not renewables:
+        # The Walloon green-energy contribution is ~3 c€/kWh and is
+        # mandatory on every Cociter card; a regex miss is a layout
+        # drift that would silently zero it.
+        raise ExtractorError(
+            "could not parse Cociter Walloon renewables (énergies renouvelables)"
+        )
 
     energy_contrib = to_float(taxes_block.group(1)) / 100.0
     federal_excise = to_float(taxes_block.group(2)) / 100.0
@@ -424,9 +431,7 @@ def _extract_taxes(text: str) -> TaxOverlay:
     return TaxOverlay(
         federal_excise=federal_excise,
         energy_contribution=energy_contrib,
-        wallonia_renewables=to_float(renewables.group(1)) / 100.0
-        if renewables
-        else 0.0,
+        wallonia_renewables=to_float(renewables.group(1)) / 100.0,
         region_connection_fee=connection_fee,
         vat_rate=0.0,
     )
