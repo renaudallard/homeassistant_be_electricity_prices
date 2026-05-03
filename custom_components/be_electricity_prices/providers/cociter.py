@@ -262,17 +262,40 @@ def _extract_injection(text: str) -> InjectionRates | None:
     The variable PDF prints ``(0,097 x BELPEX – 2,1)`` (hourly, hTVA).
     The dynamic PDF prints ``(0,097 x QUARTER HOURLY BELPEX – 2,1)``.
     Injection is VAT-exempt for residential.
+
+    The dynamic card carries two Compteur SMR3 formulas (consumption
+    first, injection later); anchor the regex on the ``Le prix de
+    l'injection`` lead-in so the second formula is the one that
+    matches even when both sides use the same sign character.
+
+    Accept any of ``+ - ‒ – — U+2212`` between the BELPEX factor and
+    the base: Cociter prints en-dash today, but a sign flip (or a
+    swap to Unicode minus) shouldn't silently drop the rate. The
+    sign is captured and applied to the base instead of being
+    hardcoded.
     """
     formula = re.search(
+        r"Le\s+prix\s+de\s+l['’’]\s*injection.*?"
         r"(?:Tout compteur[^\n]*|Compteur SMR3)\s*"
         r"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
-        r"[–—\-]\s*([\d,]+)\)",
+        r"([+\-‒–—−])\s*([\d,]+)\)",
         text,
+        re.S,
     )
+    if formula is None:
+        # Variable PDF has no anchor prose around the injection block;
+        # fall back to the first formula on a Tout compteur line.
+        formula = re.search(
+            r"Tout compteur[^\n]*\s*"
+            r"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
+            r"([+\-‒–—−])\s*([\d,]+)\)",
+            text,
+        )
     if not formula:
         return None
     factor_pdf = to_float(formula.group(1))
-    base_pdf_cents = -to_float(formula.group(2))
+    sign = -1.0 if formula.group(2) in ("-", "‒", "–", "—", "−") else 1.0
+    base_pdf_cents = sign * to_float(formula.group(3))
     return InjectionRates(
         current=None,
         factor=factor_pdf * 10.0,
