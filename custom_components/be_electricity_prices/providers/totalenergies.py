@@ -54,7 +54,14 @@ from dataclasses import dataclass
 import aiohttp
 
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import USER_AGENT, fetch_pdf_text_layout, parse_valid_until, to_float
+from ._pdf import (
+    SIGN_CHARS,
+    USER_AGENT,
+    fetch_pdf_text_layout,
+    parse_sign,
+    parse_valid_until,
+    to_float,
+)
 from .base import (
     Contract,
     DsoOverlay,
@@ -313,7 +320,7 @@ def parse_snapshot(
 # on the next: "0.1034 * BELPEXH + ... + Formule tarifaire\n3.85 3.85 ...".
 # _resolve_consumption_formula handles both the same-line and split-line
 # layouts via these two patterns.
-_FACTOR_ONLY_RE = re.compile(r"([\d.,]+)\s*\*\s*BELPEXH\s*([+\-–—])")
+_FACTOR_ONLY_RE = re.compile(rf"([\d.,]+)\s*\*\s*BELPEXH\s*([{SIGN_CHARS}])")
 _BASE_AFTER_FORMULE_RE = re.compile(r"Formule tarifaire\s*\n\s*([\d.,]+)")
 
 
@@ -331,7 +338,7 @@ def _resolve_consumption_formula(text: str) -> tuple[float, float, float] | None
     if first_match is None:
         return None
     factor = to_float(first_match.group(1))
-    sign = -1.0 if first_match.group(2) in ("-", "–", "—") else 1.0
+    sign = parse_sign(first_match.group(2))
 
     # Same-line base: a complete number, terminated by whitespace or
     # end-of-string, that is NOT followed by another ``* BELPEXH``
@@ -457,14 +464,13 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # ("0.1 * BELPEXH -1.3 ..."). Anchor the search after "Injection"
         # so the consumption formula above can never be picked up.
         match = re.search(
-            r"Injection\*{0,5}[^\n]*\n[^\n]*\n\s*([\d.,]+)\s*\*\s*BELPEXH\s*"
-            r"([+\-–—])\s*([\d.,]+)",
+            rf"Injection\*{{0,5}}[^\n]*\n[^\n]*\n\s*([\d.,]+)\s*\*\s*BELPEXH\s*"
+            rf"([{SIGN_CHARS}])\s*([\d.,]+)",
             text,
         )
         if match is not None:
             f_pdf = to_float(match.group(1))
-            sign = -1.0 if match.group(2) in ("-", "–", "—") else 1.0
-            b_cents = sign * to_float(match.group(3))
+            b_cents = parse_sign(match.group(2)) * to_float(match.group(3))
             # Injection is VAT-exempt residential.
             factor = f_pdf * 10.0
             base = b_cents / 100.0

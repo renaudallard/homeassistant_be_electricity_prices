@@ -47,8 +47,10 @@ import aiohttp
 
 from ..const import REGION_WALLONIA
 from ._pdf import (
+    SIGN_CHARS,
     USER_AGENT,
     fetch_pdf_text,
+    parse_sign,
     parse_valid_until,
     text_mentions_month,
     to_float,
@@ -275,10 +277,10 @@ def _extract_injection(text: str) -> InjectionRates | None:
     hardcoded.
     """
     formula = re.search(
-        r"Le\s+prix\s+de\s+l['’’]\s*injection.*?"
-        r"(?:Tout compteur[^\n]*|Compteur SMR3)\s*"
-        r"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
-        r"([+\-‒–—−])\s*([\d,]+)\)",
+        rf"Le\s+prix\s+de\s+l['’’]\s*injection.*?"
+        rf"(?:Tout compteur[^\n]*|Compteur SMR3)\s*"
+        rf"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
+        rf"([{SIGN_CHARS}])\s*([\d,]+)\)",
         text,
         re.S,
     )
@@ -286,16 +288,15 @@ def _extract_injection(text: str) -> InjectionRates | None:
         # Variable PDF has no anchor prose around the injection block;
         # fall back to the first formula on a Tout compteur line.
         formula = re.search(
-            r"Tout compteur[^\n]*\s*"
-            r"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
-            r"([+\-‒–—−])\s*([\d,]+)\)",
+            rf"Tout compteur[^\n]*\s*"
+            rf"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
+            rf"([{SIGN_CHARS}])\s*([\d,]+)\)",
             text,
         )
     if not formula:
         return None
     factor_pdf = to_float(formula.group(1))
-    sign = -1.0 if formula.group(2) in ("-", "‒", "–", "—", "−") else 1.0
-    base_pdf_cents = sign * to_float(formula.group(3))
+    base_pdf_cents = parse_sign(formula.group(2)) * to_float(formula.group(3))
     return InjectionRates(
         current=None,
         factor=factor_pdf * 10.0,

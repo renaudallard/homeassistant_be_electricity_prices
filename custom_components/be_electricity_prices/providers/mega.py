@@ -59,7 +59,14 @@ from datetime import date
 import aiohttp
 
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import USER_AGENT, fetch_pdf_text, parse_valid_until, to_float
+from ._pdf import (
+    SIGN_CHARS,
+    USER_AGENT,
+    fetch_pdf_text,
+    parse_sign,
+    parse_valid_until,
+    to_float,
+)
 from .base import (
     Contract,
     DsoOverlay,
@@ -274,10 +281,9 @@ def parse_snapshot(
 #     (TVAC; spot is in c€/kWh and result is in c€/kWh)
 #   - Injection:   "...la formule suivante (HTVA) : Day Ahead ... * X - Y c€/kWh"
 #     (HTVA but injection is VAT-exempt residential, so no scaling needed)
-# Both formulas use the en-dash for negative bases - we match it explicitly.
 _FORMULA_TAIL = (
     r"Day Ahead [Ee][Pp][Ee][Xx]\s*[Ss][Pp][Oo][Tt](?:\s*Belgium)?\s*\*\s*"
-    r"([\d,]+)\s*([+\-–—])\s*([\d,]+)\s*c€/kWh"
+    rf"([\d,]+)\s*([{SIGN_CHARS}])\s*([\d,]+)\s*c€/kWh"
 )
 _CONSUMPTION_FORMULA_RE = re.compile(
     r"formule tarifaire suivante[^*]+?" + _FORMULA_TAIL, re.S
@@ -291,8 +297,7 @@ def _parse_formula(match: re.Match[str] | None) -> tuple[float, float] | None:
     if match is None:
         return None
     factor = to_float(match.group(1))
-    sign = -1.0 if match.group(2) in ("-", "–", "—") else 1.0
-    base_cents = sign * to_float(match.group(3))
+    base_cents = parse_sign(match.group(2)) * to_float(match.group(3))
     return factor, base_cents / 100.0
 
 

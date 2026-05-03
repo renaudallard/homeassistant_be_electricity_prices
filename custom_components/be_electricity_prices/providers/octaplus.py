@@ -47,7 +47,14 @@ from dataclasses import dataclass
 import aiohttp
 
 from ..const import REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import USER_AGENT, fetch_pdf_text_aligned, parse_valid_until, to_float
+from ._pdf import (
+    SIGN_CHARS,
+    USER_AGENT,
+    fetch_pdf_text_aligned,
+    parse_sign,
+    parse_valid_until,
+    to_float,
+)
 from .base import (
     Contract,
     DsoOverlay,
@@ -250,14 +257,13 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         # the injection formula appears later, after "Le prix de votre
         # injection est indexé". Match the first occurrence.
         formula = re.search(
-            r"Epex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*([+\-–—])\s*(\d+(?:[.,]\d+)?)",
+            rf"Epex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)",
             text,
         )
         if not formula:
             raise ExtractorError("could not parse OCTA+ dynamic formula")
         factor_pdf = to_float(formula.group(1))
-        sign = -1.0 if formula.group(2) in ("-", "–", "—") else 1.0
-        base_pdf_eur_mwh = sign * to_float(formula.group(3))
+        base_pdf_eur_mwh = parse_sign(formula.group(2)) * to_float(formula.group(3))
         vat = _vat_multiplier(text)
         # Formula is HTVA; the rest of the snapshot is TVAC, so apply
         # the parsed VAT multiplier. spot in our model is EUR/kWh so:
@@ -324,15 +330,14 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # "Le prix de votre injection est indexé ..."
         # so we anchor on that lead-in to skip the consumption formula.
         inj = re.search(
-            r"Le\s+prix\s+de\s+votre\s+injection.*?"
-            r"Epex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*([+\-–—])\s*(\d+(?:[.,]\d+)?)",
+            rf"Le\s+prix\s+de\s+votre\s+injection.*?"
+            rf"Epex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)",
             text,
             re.S,
         )
         if inj is not None:
             f_pdf = to_float(inj.group(1))
-            sign = -1.0 if inj.group(2) in ("-", "–", "—") else 1.0
-            b_eur_mwh = sign * to_float(inj.group(3))
+            b_eur_mwh = parse_sign(inj.group(2)) * to_float(inj.group(3))
             factor = f_pdf  # injection is VAT-exempt
             base = b_eur_mwh / 1000.0
             formula = inj.group(0)

@@ -52,7 +52,14 @@ from dataclasses import dataclass
 import aiohttp
 
 from ..const import REGION_FLANDERS, REGION_WALLONIA
-from ._pdf import USER_AGENT, fetch_pdf_text, parse_valid_until, to_float
+from ._pdf import (
+    SIGN_CHARS,
+    USER_AGENT,
+    fetch_pdf_text,
+    parse_sign,
+    parse_valid_until,
+    to_float,
+)
 from .base import (
     Contract,
     DsoOverlay,
@@ -221,11 +228,11 @@ def parse_snapshot(
 
 
 _DYNAMIC_FORMULA_RE = re.compile(
-    r"Prélèvement\s*\([^)]+\)\s*=\s*([\d,]+)\s*x\s*Belpex\s*H\s*([+\-–—])\s*([\d,]+)",
+    rf"Prélèvement\s*\([^)]+\)\s*=\s*([\d,]+)\s*x\s*Belpex\s*H\s*([{SIGN_CHARS}])\s*([\d,]+)",
     re.S,
 )
 _INJECTION_FORMULA_RE = re.compile(
-    r"Injection\s*\([^)]+\)\s*=\s*([\d,]+)\s*x\s*Belpex\s*H\s*([+\-–—])\s*([\d,]+)",
+    rf"Injection\s*\([^)]+\)\s*=\s*([\d,]+)\s*x\s*Belpex\s*H\s*([{SIGN_CHARS}])\s*([\d,]+)",
     re.S,
 )
 
@@ -270,8 +277,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         if not match:
             raise ExtractorError("could not parse Luminus dynamic formula")
         factor_pdf = to_float(match.group(1))
-        sign = -1.0 if match.group(2) in ("-", "–", "—") else 1.0
-        base_pre_vat_cents = sign * to_float(match.group(3))
+        base_pre_vat_cents = parse_sign(match.group(2)) * to_float(match.group(3))
         vat = _vat_multiplier(text)
         # PDF formula: c€/kWh hors TVA = factor_pdf * Belpex_eur_mwh + base_cents.
         # Spot in EUR/kWh = Belpex_eur_mwh / 1000. Convert to:
@@ -344,8 +350,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         match = _INJECTION_FORMULA_RE.search(text)
         if match:
             factor_pdf = to_float(match.group(1))
-            sign = -1.0 if match.group(2) in ("-", "–", "—") else 1.0
-            base_pdf_cents = sign * to_float(match.group(3))
+            base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
             # Residential injection is VAT-exempt in Belgium.
             factor = factor_pdf * 10.0
             base = base_pdf_cents / 100.0

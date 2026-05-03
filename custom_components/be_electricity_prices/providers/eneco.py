@@ -47,8 +47,10 @@ import aiohttp
 
 from ..const import REGION_FLANDERS, REGION_WALLONIA
 from ._pdf import (
+    SIGN_CHARS,
     USER_AGENT,
     fetch_pdf_text,
+    parse_sign,
     parse_valid_until,
     text_mentions_month,
     to_float,
@@ -357,14 +359,15 @@ def _extract_dynamic(text: str) -> DynamicRates:
     # branch already does, and a future card with a negative base must
     # not silently 404 the parser.
     formula_match = re.search(
-        r"\((0,\d+)\s*X\s*BELPEX[\w\-]+\s*([+\-–—])\s*(\d+(?:,\d+)?)\)\s*X\s*(\d+,\d+)",
+        rf"\((0,\d+)\s*X\s*BELPEX[\w\-]+\s*([{SIGN_CHARS}])\s*(\d+(?:,\d+)?)\)\s*X\s*(\d+,\d+)",
         text,
     )
     if not yearly_fee_match or not formula_match:
         raise ExtractorError("could not parse Eneco dynamic energy block")
     factor_pdf = to_float(formula_match.group(1))
-    base_sign = -1.0 if formula_match.group(2) in ("-", "–", "—") else 1.0
-    base_pre_vat_cents = base_sign * to_float(formula_match.group(3))
+    base_pre_vat_cents = parse_sign(formula_match.group(2)) * to_float(
+        formula_match.group(3)
+    )
     vat_multiplier = to_float(formula_match.group(4))
     # PDF formula yields c€/kWh from BELPEX in €/MWh:
     #   energy_c_eur_kwh = (factor_pdf * BELPEX_eur_mwh + base_cents) * vat_mult
@@ -564,7 +567,7 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
     maand = re.search(rf"((?:{_NUM}\s+){{1,4}}){_WS}*Maandprijs", section)
     yearly = re.search(rf"((?:{_NUM}\s+){{1,4}}){_WS}*Geschatte jaarprijs", section)
     formula = re.search(
-        r"(0,\d+)\s*X\s*BELPEX[\w\-]*\s*([+\-–—])\s*(\d+(?:,\d+)?)",
+        rf"(0,\d+)\s*X\s*BELPEX[\w\-]*\s*([{SIGN_CHARS}])\s*(\d+(?:,\d+)?)",
         section,
     )
 
@@ -582,8 +585,7 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
     base: float | None = None
     if formula:
         factor_pdf = to_float(formula.group(1))
-        sign = -1.0 if formula.group(2) in {"-", "–", "—"} else 1.0
-        base_pdf_cents = to_float(formula.group(3)) * sign
+        base_pdf_cents = parse_sign(formula.group(2)) * to_float(formula.group(3))
         # PDF formula yields c/kWh (no VAT) from BELPEX in EUR/MWh; spot is
         # EUR/kWh = EUR/MWh / 1000:
         #   factor_eur_kwh = factor_pdf * 1000 / 100 = factor_pdf * 10

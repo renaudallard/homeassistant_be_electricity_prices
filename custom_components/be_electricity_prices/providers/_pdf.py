@@ -299,6 +299,27 @@ def to_float(text: str) -> float:
     return float(cleaned.replace(",", "."))
 
 
+# Single source of truth for the sign character that appears between
+# BELPEX/Epex factor and base across every supplier formula (both
+# consumption and injection sides). Hyphen-minus, ASCII plus,
+# figure-dash, en-dash, em-dash, and U+2212 mathematical minus are
+# all encountered in the wild; supplier PDFs flip silently between
+# them on re-renders.
+_NEGATIVE_SIGNS = ("-", "‒", "–", "—", "−")
+SIGN_CHARS = r"+\-‒–—−"
+"""Drop into a regex character class: ``[`` + SIGN_CHARS + ``]``."""
+
+
+def parse_sign(char: str) -> float:
+    """Return -1.0 for any hyphen / dash / Unicode-minus, +1.0 otherwise.
+
+    Use as ``base = parse_sign(m.group(N)) * to_float(m.group(N+1))`` so
+    a future card that swaps to U+2212 (or '+' for an indexation that
+    flips polarity) doesn't silently break the parser.
+    """
+    return -1.0 if char in _NEGATIVE_SIGNS else 1.0
+
+
 # Month names recognised in publication strings, mapped to their 1-12
 # index. Each language's full name + a few common abbreviations Belgian
 # tariff cards use. The lookup key is lowercase, accent-stripped not
