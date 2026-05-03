@@ -70,7 +70,15 @@ class Contract:
 
 @dataclass(frozen=True, kw_only=True)
 class FixedRates:
-    """Fixed energy contract: constant EUR/kWh, optionally bi-hourly."""
+    """Fixed energy contract: constant EUR/kWh, optionally bi-hourly.
+
+    ``exclusive_night`` is parsed for diagnostics / future expansion;
+    the price engine does not yet route a separate meter circuit
+    through it -- households with a dedicated night-circuit meter are
+    billed at the day / single rate. Surfaced here so a downstream
+    consumer (diagnostics, custom dashboards) can still read it; not
+    referenced by ``compute_breakdown``.
+    """
 
     single: float
     peak: float | None = None
@@ -87,6 +95,12 @@ class VariableRates:
     populate ``peak`` / ``offpeak`` so a bi-hourly meter gets its own rate.
     Suppliers that publish a single rate (e.g. Eneco Power Flex) leave them
     None and the pricing engine falls back to ``current`` for any meter type.
+
+    ``exclusive_night`` is parsed for diagnostics / future expansion;
+    the price engine does not yet route a separate meter circuit
+    through it -- households with a dedicated night-circuit meter are
+    billed at the ``current`` / day rate. Same caveat applies to the
+    DSO side: ``DsoOverlay`` has no exclusive-night column either.
     """
 
     current: float

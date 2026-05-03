@@ -319,13 +319,16 @@ for today + tomorrow. Attach it when reporting an issue.
 
 ## Known limitations
 
-- **Exclusive-night DSO distribution rate.** Belgian DSOs publish a separate
-  distribution rate for exclusive-night meters (electric water heaters and
-  similar circuits wired only at night). The integration currently bills
-  those hours at the standard day rate (`distribution_single`); on most
-  cards the exclusive-night distribution rate is close to the day rate, so
-  the resulting error stays under ~0.01 EUR/kWh on the affected hours,
-  but exclusive-night users should treat the bill estimate as approximate.
+- **Exclusive-night meter circuit.** Belgian suppliers and DSOs publish a
+  dedicated rate for exclusive-night meters (electric water heaters and
+  similar circuits wired only at night) on both the energy side
+  (`FixedRates.exclusive_night` / `VariableRates.exclusive_night`) and
+  the distribution side. The integration does not yet route a separate
+  meter type through these rates: those hours are billed at the
+  standard day / `distribution_single` value. On most cards the
+  exclusive-night rate is close to the day rate, so the error stays
+  under ~0.01 EUR/kWh on the affected hours, but exclusive-night users
+  should treat the bill estimate as approximate.
 
 ## Development
 

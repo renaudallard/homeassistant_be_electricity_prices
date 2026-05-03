@@ -167,7 +167,12 @@ def energy_eur_per_kwh(
 
     bi-hourly and SMR3 (digital) meters both register peak/offpeak,
     so they share the bi-horaire branch when the supplier publishes
-    the split.
+    the split. ``FixedRates.exclusive_night`` /
+    ``VariableRates.exclusive_night`` is intentionally not consulted
+    here: the integration does not model an exclusive-night meter
+    circuit (no ``MeterType`` for it, no DSO overlay column), so a
+    household with one is billed at the day / single rate. The field
+    is parsed for diagnostics and future expansion.
     """
     bi_capable = meter in ("bi", "dynamic")
     if isinstance(energy, FixedRates):
