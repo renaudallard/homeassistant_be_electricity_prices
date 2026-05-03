@@ -416,10 +416,12 @@ def _extract_renewables(text: str) -> tuple[float, float, float]:
         text,
         re.S,
     )
-    # WKK row: 'WKK (c€/kWh) 8 0,39 -' - skip the (multi-digit) footnote
-    # ref before capturing the Flanders value. The remaining ' -' tokens
-    # are placeholders for Wallonia / Brussels (no WKK there).
-    wkk = re.search(r"WKK\s*\(c€/kWh\)\s*\d*\s*([\d.,]+)", text)
+    # WKK row: 'WKK (c€/kWh) 8 0,39 -' - skip the optional (multi-digit)
+    # footnote ref before capturing the Flanders value. Require a real
+    # whitespace separator so the greedy ``\d*`` can't swallow the
+    # leading digits of a multi-digit value when the footnote is absent.
+    # The trailing ' -' tokens are placeholders for Wallonia / Brussels.
+    wkk = re.search(r"WKK\s*\(c€/kWh\)\s+(?:\d+\s+)?([\d.,]+)", text)
     if cert is None:
         # Renewables (certificats verts) are charged in every region; a
         # regex miss is a layout drift that would silently zero ~3 c€/kWh.
