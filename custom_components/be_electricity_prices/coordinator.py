@@ -717,7 +717,14 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         # Our own snapshot may already be valid against this probe.
         if self._snapshot is not None and self._self_is_fresh(probe_key, now, ttl):
-            self._snapshot_fetched_at = now
+            if probe_key is not None:
+                # Probe verified the supplier hasn't published a new card,
+                # so refresh the snapshot_age sensor's clock to "just
+                # checked". The probe-less / probe-failed path keeps the
+                # original fetched_at; otherwise stamping it on every
+                # tick that passes the TTL check resets the TTL clock
+                # and the supplier is never re-fetched.
+                self._snapshot_fetched_at = now
             return
 
         # Negative cache: if a sibling just failed on this same key,

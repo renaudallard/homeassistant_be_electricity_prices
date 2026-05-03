@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant
@@ -309,6 +309,83 @@ async def test_probe_mismatch_triggers_fetch(hass: HomeAssistant) -> None:
         await coord._maybe_refresh_snapshot()  # key-B, refetch
     assert fetch_calls == 2
     assert coord._snapshot_probe_key == "key-B"
+
+
+async def test_probe_none_self_fresh_does_not_reset_fetched_at(
+    hass: HomeAssistant,
+) -> None:
+    """The TTL fallback must elapse based on the *real* fetch time.
+
+    A persisted snapshot loaded from disk with the shared cache empty
+    (typical state right after an HA restart) hits the self-fresh
+    branch in _maybe_refresh_snapshot. That branch used to stamp
+    _snapshot_fetched_at = now on every tick that passed the TTL
+    check, which reset the TTL clock and the supplier was never
+    re-fetched. Probe-less suppliers must keep the original
+    fetched_at so the 24h TTL actually triggers.
+    """
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _fake_probe(*_args: object, **_kwargs: object) -> str | None:
+        return None  # probe-less supplier (or probe failed)
+
+    extractor = type(
+        "E",
+        (),
+        {"fetch": staticmethod(AsyncMock()), "probe": staticmethod(_fake_probe)},
+    )
+
+    # Simulate a post-restart state: snapshot loaded from disk, shared
+    # cache (in-memory) empty. fetched_at is well within TTL.
+    coord._snapshot = _fake_snapshot()
+    original_fetched_at = dt_util.utcnow() - timedelta(hours=12)
+    coord._snapshot_fetched_at = original_fetched_at
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+
+    # The self-fresh return must not move fetched_at forward; doing so
+    # resets the TTL clock and the snapshot would never expire.
+    assert coord._snapshot_fetched_at == original_fetched_at
+
+
+async def test_probe_match_self_fresh_refreshes_fetched_at(
+    hass: HomeAssistant,
+) -> None:
+    """Probe-based suppliers can stamp fetched_at on a probe match -- we
+    just verified the supplier hasn't published a new card, so the
+    snapshot_age sensor should reset to "just checked"."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _fake_probe(*_args: object, **_kwargs: object) -> str | None:
+        return "stable-key"
+
+    extractor = type(
+        "E",
+        (),
+        {"fetch": staticmethod(AsyncMock()), "probe": staticmethod(_fake_probe)},
+    )
+
+    coord._snapshot = _fake_snapshot()
+    coord._snapshot_probe_key = "stable-key"
+    old_fetched_at = dt_util.utcnow() - timedelta(hours=12)
+    coord._snapshot_fetched_at = old_fetched_at
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+
+    assert coord._snapshot_fetched_at is not None
+    assert coord._snapshot_fetched_at > old_fetched_at
 
 
 async def test_probe_none_falls_back_to_ttl(hass: HomeAssistant) -> None:
