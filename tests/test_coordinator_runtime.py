@@ -354,6 +354,42 @@ async def test_probe_none_self_fresh_does_not_reset_fetched_at(
     assert coord._snapshot_fetched_at == original_fetched_at
 
 
+async def test_self_fresh_populates_empty_shared_cache(
+    hass: HomeAssistant,
+) -> None:
+    """Post-restart, the shared cache is empty; the self-fresh return
+    must populate it so a sibling coord on the same tuple can adopt
+    without re-running its own probe / TTL check on every tick."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _fake_probe(*_args: object, **_kwargs: object) -> str | None:
+        return "stable-key"
+
+    extractor = type(
+        "E",
+        (),
+        {"fetch": staticmethod(AsyncMock()), "probe": staticmethod(_fake_probe)},
+    )
+
+    coord._snapshot = _fake_snapshot()
+    coord._snapshot_probe_key = "stable-key"
+    coord._snapshot_fetched_at = dt_util.utcnow() - timedelta(hours=12)
+    assert _shared_snapshots(hass).get(coord._shared_key()) is None
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+
+    shared = _shared_snapshots(hass).get(coord._shared_key())
+    assert shared is not None
+    assert shared.snapshot is coord._snapshot
+    assert shared.probe_key == "stable-key"
+
+
 async def test_probe_match_self_fresh_refreshes_fetched_at(
     hass: HomeAssistant,
 ) -> None:

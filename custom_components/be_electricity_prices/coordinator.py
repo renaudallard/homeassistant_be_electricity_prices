@@ -725,6 +725,21 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 # tick that passes the TTL check resets the TTL clock
                 # and the supplier is never re-fetched.
                 self._snapshot_fetched_at = now
+            # Populate the shared cache when this tick is the first to
+            # verify a disk-loaded snapshot after restart. Without this
+            # every sibling on the same tuple would re-run its own
+            # probe / TTL check on every tick instead of adopting.
+            # Re-use the previous probe_key when the current probe
+            # came back empty (probe-less suppliers stay None; a
+            # transiently-failing probe keeps the last known key).
+            if cache.get(key) is None and self._snapshot_fetched_at is not None:
+                cache[key] = _SharedSnapshot(
+                    snapshot=self._snapshot,
+                    fetched_at=self._snapshot_fetched_at,
+                    probe_key=probe_key
+                    if probe_key is not None
+                    else self._snapshot_probe_key,
+                )
             return
 
         # Negative cache: if a sibling just failed on this same key,
