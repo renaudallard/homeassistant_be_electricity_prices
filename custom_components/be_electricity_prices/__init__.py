@@ -40,9 +40,17 @@ from homeassistant.core import (
 )
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_CONTRACT, CONF_REGION, CONF_SUPPLIER, DOMAIN, PLATFORMS
+from .const import (
+    CONF_CONTRACT,
+    CONF_REGION,
+    CONF_SUPPLIER,
+    DOMAIN,
+    PLATFORMS,
+    STORAGE_VERSION,
+)
 from .coordinator import BePricesCoordinator, evict_shared_caches
 from .pricing import PriceBreakdown
 
@@ -146,14 +154,20 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> None:
-    """Drop the per-entry repair issue when the user removes the entry.
+    """Drop per-entry state when the user removes the entry.
 
     The 'snapshot stale' issue id embeds the entry id; once the entry
     is gone the coordinator can't auto-resolve it, so it would linger
     in the Repairs panel forever. HA calls this hook after
-    ``async_unload_entry`` for a removal (not for a reload).
+    ``async_unload_entry`` for a removal (not for a reload). The
+    persistent snapshot Store is also deleted so the JSON blob the
+    coordinator writes under ``.storage/`` doesn't outlive the entry.
     """
     issue_registry.async_delete_issue(hass, DOMAIN, f"snapshot_stale_{entry.entry_id}")
+    store: Store[dict[str, Any]] = Store(
+        hass, STORAGE_VERSION, f"{DOMAIN}_cache_{entry.entry_id}"
+    )
+    await store.async_remove()
 
 
 async def _async_options_updated(
