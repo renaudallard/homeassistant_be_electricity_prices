@@ -1051,24 +1051,27 @@ def _read_kwh(hass: HomeAssistant, entity_id: str | None) -> float | None:
         return None
 
 
-async def _recorder_daily_kwh(
-    hass: HomeAssistant, entity_id: str, start: date, end: date
-) -> dict[date, float]:
-    """Per-day kWh deltas for ``entity_id`` over ``[start, end]``.
+async def _recorder_rows(
+    hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
+) -> list[Any]:
+    """Fetch HA recorder ``change`` rows for ``entity_id`` over ``[start, end]``.
 
-    Wraps ``statistics_during_period`` via the recorder's executor: the
-    function is synchronous and hits the SQLite store, so it must not
-    run on the event loop. Returns ``{local_day: kWh}``. An empty dict
-    surfaces every failure mode we know about (recorder not ready,
-    entity has no statistics, transient DB error) so the caller can
-    fall back to a fees-only floor without raising.
+    Wraps ``statistics_during_period`` via the recorder's executor so a
+    SQLite query never runs on the event loop. Returns a (possibly
+    empty) list -- every failure mode (recorder not ready, no
+    statistics, transient DB error) collapses to ``[]`` so callers can
+    fall back to the fees-only floor without raising.
 
     Reads the ``change`` field, which the recorder defines as the delta
-    of the cumulative ``sum`` between the period's first and last
+    of the cumulative ``sum`` between the bucket's first and last
     sample. Reading ``sum`` directly would yield the all-time running
-    total at each bucket boundary -- summing those would multiply the
-    bill by however many years of statistics the meter has
-    accumulated.
+    total -- summing those would multiply the bill by however many
+    years of statistics the meter has accumulated.
+
+    Pass the date directly: HA's start_of_local_day treats a naive
+    datetime as UTC, which round-trips correctly only for tz east of
+    the prime meridian. Hand it the date so the function takes its
+    date-typed branch and produces the unambiguous local midnight.
     """
     try:
         # mypy --strict flags both names because the recorder module
@@ -1082,11 +1085,7 @@ async def _recorder_daily_kwh(
             statistics_during_period,
         )
     except ImportError:
-        return {}
-    # Pass the date directly: HA's start_of_local_day treats a naive
-    # datetime as UTC, which round-trips correctly only for tz east of
-    # the prime meridian. Hand it the date so the function takes its
-    # date-typed branch and produces the unambiguous local midnight.
+        return []
     start_dt = dt_util.start_of_local_day(start).astimezone(UTC)
     # +1 day so the bucket containing ``end`` is included.
     end_dt = dt_util.start_of_local_day(end).astimezone(UTC) + timedelta(days=1)
@@ -1097,15 +1096,22 @@ async def _recorder_daily_kwh(
             start_dt,
             end_dt,
             {entity_id},
-            "day",
+            period,
             None,
             {"change"},
         )
     except Exception:  # noqa: BLE001 - recorder may surface anything
-        return {}
-    rows = stats.get(entity_id, [])
+        return []
+    rows: list[Any] = list(stats.get(entity_id, []))
+    return rows
+
+
+async def _recorder_daily_kwh(
+    hass: HomeAssistant, entity_id: str, start: date, end: date
+) -> dict[date, float]:
+    """Per-day kWh deltas for ``entity_id`` keyed by local-day date."""
     out: dict[date, float] = {}
-    for row in rows:
+    for row in await _recorder_rows(hass, entity_id, start, end, "day"):
         ts = row.get("start")
         delta = row.get("change")
         if ts is None or delta is None:
@@ -1122,36 +1128,9 @@ async def _recorder_hourly_kwh(
 
     Used by the TOU year-cost path: TOU contracts have a different
     energy rate per hour-of-day, so day-level granularity is too coarse.
-    Mirrors ``_recorder_daily_kwh`` but at ``period="hour"``. Reads
-    ``change`` for the same reason (``sum`` is monotonic).
     """
-    try:
-        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
-            get_instance,
-        )
-        from homeassistant.components.recorder.statistics import (
-            statistics_during_period,
-        )
-    except ImportError:
-        return {}
-    start_dt = dt_util.start_of_local_day(start).astimezone(UTC)
-    end_dt = dt_util.start_of_local_day(end).astimezone(UTC) + timedelta(days=1)
-    try:
-        stats = await get_instance(hass).async_add_executor_job(
-            statistics_during_period,
-            hass,
-            start_dt,
-            end_dt,
-            {entity_id},
-            "hour",
-            None,
-            {"change"},
-        )
-    except Exception:  # noqa: BLE001
-        return {}
-    rows = stats.get(entity_id, [])
     out: dict[datetime, float] = {}
-    for row in rows:
+    for row in await _recorder_rows(hass, entity_id, start, end, "hour"):
         ts = row.get("start")
         delta = row.get("change")
         if ts is None or delta is None:
@@ -1171,46 +1150,13 @@ async def _recorder_daily_band_ratio(
     Used for the totals-only + bi-hourly path: we don't have separate
     day / night registers, so we recover the band split from hourly
     statistics by binning each hour on ``is_offpeak``. The two ratios
-    sum to 1.0 (or default to ``(1.0, 0.0)`` for days with no
-    accumulation, treating everything as day-band -- the user's bill
-    is approximate in that branch and we don't need to be precise).
-
-    Reads the ``change`` field for the same reason as
-    ``_recorder_daily_kwh``: ``sum`` is monotonic, ``change`` is the
-    actual hourly delta we want to bin.
+    sum to 1.0 (or default to a day-of-week split for days with no
+    accumulation, so a Sunday isn't billed at peak rate just because
+    the hourly stats are flat).
     """
-    try:
-        # mypy --strict flags both names because the recorder module
-        # does not re-export them via __all__; they're public per HA's
-        # docs and import-time errors degrade gracefully via the
-        # ImportError handler below.
-        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
-            get_instance,
-        )
-        from homeassistant.components.recorder.statistics import (
-            statistics_during_period,
-        )
-    except ImportError:
-        return {}
-    start_dt = dt_util.start_of_local_day(start).astimezone(UTC)
-    end_dt = dt_util.start_of_local_day(end).astimezone(UTC) + timedelta(days=1)
-    try:
-        stats = await get_instance(hass).async_add_executor_job(
-            statistics_during_period,
-            hass,
-            start_dt,
-            end_dt,
-            {entity_id},
-            "hour",
-            None,
-            {"change"},
-        )
-    except Exception:  # noqa: BLE001
-        return {}
-    rows = stats.get(entity_id, [])
     per_day_day: dict[date, float] = {}
     per_day_night: dict[date, float] = {}
-    for row in rows:
+    for row in await _recorder_rows(hass, entity_id, start, end, "hour"):
         ts = row.get("start")
         delta = row.get("change")
         if ts is None or delta is None:
@@ -1229,10 +1175,6 @@ async def _recorder_daily_band_ratio(
         if total > 0:
             out[day] = (d / total, n / total)
         else:
-            # Recorder logged a row but the deltas summed to zero (e.g.
-            # the meter didn't move). Fall back to the day-of-week split
-            # used when no row exists at all so a Sunday isn't billed at
-            # peak rate just because the hourly stats are flat.
             out[day] = _default_band_ratio_for(day)
     return out
 
