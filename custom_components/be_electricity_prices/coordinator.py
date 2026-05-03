@@ -527,8 +527,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             # DSO -- typically a regex drift on a new card. Surface a
             # clean UpdateFailed instead of bubbling KeyError through HA
             # core; the coordinator keeps serving the last good data.
+            # Read CONF_DSO defensively: a corrupt entry that lost the
+            # key would otherwise re-raise KeyError on the format
+            # string and mask the original error.
             raise UpdateFailed(
-                f"snapshot missing DSO {self.entry.data[CONF_DSO]!r}: {err}"
+                f"snapshot missing DSO {self.entry.data.get(CONF_DSO)!r}: {err}"
             ) from err
 
         capacity_cost = 0.0
