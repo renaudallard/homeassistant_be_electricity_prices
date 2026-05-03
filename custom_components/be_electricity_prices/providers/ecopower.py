@@ -374,7 +374,10 @@ def _extract_taxes(text: str) -> TaxOverlay:
 
 
 _INJECTION_RE = re.compile(
-    r"Terugleververgoeding[^\n]*digitale meter[^\n]*?(-?\s*[\d,]+)\s*euro/kWh",
+    # Accept ASCII hyphen plus en-dash, em-dash, and U+2212 minus so a
+    # PDF re-render that swaps the glyph doesn't silently flip the sign.
+    r"Terugleververgoeding[^\n]*digitale meter[^\n]*?"
+    r"([\-–—−]?\s*[\d,]+)\s*euro/kWh",
     re.IGNORECASE,
 )
 
@@ -393,6 +396,11 @@ def _extract_injection(text: str) -> InjectionRates | None:
     if not match:
         return None
     raw = match.group(1).replace(" ", "")
+    # Normalise non-ASCII minus glyphs to '-' so to_float can parse them.
+    for variant in ("–", "—", "−"):
+        if raw.startswith(variant):
+            raw = "-" + raw[len(variant) :]
+            break
     return InjectionRates(current=to_float(raw))
 
 
