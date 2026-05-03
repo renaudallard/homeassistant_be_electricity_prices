@@ -407,7 +407,7 @@ def _find_wallonia_row(text: str, label: str) -> DsoOverlay | None:
     pattern = re.compile(
         rf"{escaped}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}"
         rf"(?:\s+{_NUM}\s+{_NUM}\s+{_NUM})?\s+{_NUM}\s+{_NUM}\s+{_NUM}",
-        re.S,
+        re.S | re.IGNORECASE,
     )
     match = pattern.search(text)
     if not match:
@@ -447,7 +447,7 @@ def _find_fluvius_row(text: str, label: str, transport: float) -> DsoOverlay | N
     digital_match = re.search(
         rf"DIGITALE METER.*?{escaped}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}",
         text,
-        re.S,
+        re.S | re.IGNORECASE,
     )
     if not digital_match:
         return None

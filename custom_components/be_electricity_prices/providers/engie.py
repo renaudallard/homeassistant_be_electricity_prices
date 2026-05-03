@@ -595,6 +595,7 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
         row = re.search(
             rf"{re.escape(label)}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)",
             block_text,
+            re.IGNORECASE,
         )
         if not row:
             continue
@@ -631,7 +632,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         row = re.search(
             rf"^{re.escape(label)}\s+((?:[\d,]+\s+){{8,}}[\d,]+)",
             text,
-            re.MULTILINE,
+            re.MULTILINE | re.IGNORECASE,
         )
         if not row:
             continue

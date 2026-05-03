@@ -493,6 +493,7 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
         match = re.search(
             rf"{re.escape(label)}\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)",
             text,
+            re.IGNORECASE,
         )
         if not match:
             continue
@@ -531,7 +532,11 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     if prosumer_block:
         prosumer_text = prosumer_block.group(0)
         for label, key in _WALLONIA_LABELS.items():
-            match = re.search(rf"{re.escape(label)}\s*\n\s*([\d.,]+)", prosumer_text)
+            match = re.search(
+                rf"{re.escape(label)}\s*\n\s*([\d.,]+)",
+                prosumer_text,
+                re.IGNORECASE,
+            )
             if match:
                 prosumer_by_key[key] = to_float(match.group(1))
     out: dict[str, DsoOverlay] = {}
@@ -542,6 +547,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             rf"([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*"
             rf"([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)",
             text,
+            re.IGNORECASE,
         )
         if not match:
             continue
