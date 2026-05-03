@@ -1080,13 +1080,13 @@ async def _recorder_daily_kwh(
         )
     except ImportError:
         return {}
-    start_dt = dt_util.start_of_local_day(
-        datetime(start.year, start.month, start.day)
-    ).astimezone(UTC)
+    # Pass the date directly: HA's start_of_local_day treats a naive
+    # datetime as UTC, which round-trips correctly only for tz east of
+    # the prime meridian. Hand it the date so the function takes its
+    # date-typed branch and produces the unambiguous local midnight.
+    start_dt = dt_util.start_of_local_day(start).astimezone(UTC)
     # +1 day so the bucket containing ``end`` is included.
-    end_dt = dt_util.start_of_local_day(
-        datetime(end.year, end.month, end.day)
-    ).astimezone(UTC) + timedelta(days=1)
+    end_dt = dt_util.start_of_local_day(end).astimezone(UTC) + timedelta(days=1)
     try:
         stats = await get_instance(hass).async_add_executor_job(
             statistics_during_period,
@@ -1131,12 +1131,8 @@ async def _recorder_hourly_kwh(
         )
     except ImportError:
         return {}
-    start_dt = dt_util.start_of_local_day(
-        datetime(start.year, start.month, start.day)
-    ).astimezone(UTC)
-    end_dt = dt_util.start_of_local_day(
-        datetime(end.year, end.month, end.day)
-    ).astimezone(UTC) + timedelta(days=1)
+    start_dt = dt_util.start_of_local_day(start).astimezone(UTC)
+    end_dt = dt_util.start_of_local_day(end).astimezone(UTC) + timedelta(days=1)
     try:
         stats = await get_instance(hass).async_add_executor_job(
             statistics_during_period,
@@ -1193,12 +1189,8 @@ async def _recorder_daily_band_ratio(
         )
     except ImportError:
         return {}
-    start_dt = dt_util.start_of_local_day(
-        datetime(start.year, start.month, start.day)
-    ).astimezone(UTC)
-    end_dt = dt_util.start_of_local_day(
-        datetime(end.year, end.month, end.day)
-    ).astimezone(UTC) + timedelta(days=1)
+    start_dt = dt_util.start_of_local_day(start).astimezone(UTC)
+    end_dt = dt_util.start_of_local_day(end).astimezone(UTC) + timedelta(days=1)
     try:
         stats = await get_instance(hass).async_add_executor_job(
             statistics_during_period,
