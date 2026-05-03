@@ -973,6 +973,28 @@ def _compute_injection_price(
     return inj.current
 
 
+def _historical_injection_rate(
+    injection: InjectionRates | None, spot: float | None = None
+) -> float | None:
+    """Best-effort EUR/kWh injection rate for a *past* hour.
+
+    Static contracts publish a monthly indicative (``current``); use it.
+    Dynamic-injection contracts publish only ``factor*spot + base`` — if
+    the caller has the historical spot, compose; otherwise we don't have
+    enough to price the hour exactly, so leave it uncredited rather than
+    fabricating a rate from a different field. Symmetric across the TOU
+    and static YTD paths so both report the same number for the same
+    hour.
+    """
+    if injection is None:
+        return None
+    if injection.current is not None:
+        return injection.current
+    if injection.factor is not None and injection.base is not None and spot is not None:
+        return injection.factor * spot + injection.base
+    return None
+
+
 def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
     """Monthly prosumer (compensation regime) cost in EUR.
 
@@ -1484,8 +1506,7 @@ async def _ytd_tou_energy(
             d_cost = (kwh_cons - kwh_inj) * bd.all_in
         elif regime == SOLAR_REGIME_INJECTION:
             d_cost = kwh_cons * bd.all_in
-            inj_block = snap_h.injection
-            inj_rate = inj_block.current if inj_block is not None else None
+            inj_rate = _historical_injection_rate(snap_h.injection)
             if inj_rate is not None:
                 d_cost -= kwh_inj * inj_rate
         else:
@@ -1671,8 +1692,7 @@ async def _compute_current_year_cost(
                 d_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
             else:
                 d_cost = total_cons * single_bd.all_in
-            inj_block = snap_d.injection
-            inj_rate = inj_block.current if inj_block is not None else None
+            inj_rate = _historical_injection_rate(snap_d.injection)
             if inj_rate is not None:
                 d_cost -= total_inj * inj_rate
         else:  # none
