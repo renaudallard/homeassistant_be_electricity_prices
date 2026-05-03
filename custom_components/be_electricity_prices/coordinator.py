@@ -401,6 +401,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._snapshot: SupplierSnapshot | None = None
         self._snapshot_fetched_at: datetime | None = None
         self._snapshot_probe_key: str | None = None
+        # Set by async_force_refresh; cleared on the next successful
+        # extractor fetch. Acts as an out-of-band signal to bypass both
+        # the probe-based and TTL-based freshness paths in
+        # _self_is_fresh without having to lie about fetched_at -- the
+        # latter would block _save_persistent from writing the cached
+        # snapshot until the next successful fetch lands.
+        self._force_refresh = False
         self._spot_cache: dict[datetime, float] = {}
         self._spot_cache_day: date | None = None
         self._spot_cache_includes_tomorrow = False
@@ -590,17 +597,18 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
         Invoked by the be_electricity_prices.refresh service when the user
         wants the integration to pick up a new tariff card or correct an
-        error without waiting for the 24h refresh tick. Resets the
-        freshness markers (fetched_at, probe_key) and clears the spot
-        cache, the shared snapshot row, and the negative-fetch marker
-        so a sibling coordinator on the same (supplier, contract,
+        error without waiting for the 24h refresh tick. Sets a one-shot
+        ``_force_refresh`` flag that ``_self_is_fresh`` honours, clears
+        the spot cache, the shared snapshot row, and the negative-fetch
+        marker so a sibling coordinator on the same (supplier, contract,
         region) tuple also re-fetches on its next refresh. The current
-        ``self._snapshot`` is intentionally kept so a transient fetch
-        failure during the forced refresh doesn't blank the entry --
-        the next successful tick overwrites it.
+        ``self._snapshot`` and ``_snapshot_fetched_at`` are intentionally
+        kept: a transient fetch failure during the forced refresh
+        doesn't blank the entry, and ``_save_persistent`` keeps writing
+        the cached snapshot so an HA restart between the forced
+        refresh and the next successful tick recovers from disk.
         """
-        self._snapshot_fetched_at = None
-        self._snapshot_probe_key = None
+        self._force_refresh = True
         self._spot_cache = {}
         self._spot_cache_day = None
         self._spot_cache_includes_tomorrow = False
@@ -625,6 +633,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._snapshot_fetched_at = shared.fetched_at
         self._snapshot_probe_key = shared.probe_key
         self._last_error = ""
+        self._force_refresh = False
 
     async def _maybe_refresh_snapshot(self) -> None:
         """Run a cheap probe; only refetch the full PDF when it says so.
@@ -728,6 +737,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._snapshot_fetched_at = fetched_at
                 self._snapshot_probe_key = probe_key
                 self._last_error = ""
+                self._force_refresh = False
             except Exception as err:
                 # Any extractor failure (including unexpected aiohttp /
                 # parser exceptions) must populate the negative cache so
@@ -749,6 +759,8 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self, probe_key: str | None, now: datetime, ttl: timedelta
     ) -> bool:
         """Whether our own snapshot can be reused without a refetch."""
+        if self._force_refresh:
+            return False
         if probe_key is not None:
             return self._snapshot_probe_key == probe_key
         if self._snapshot_fetched_at is None:

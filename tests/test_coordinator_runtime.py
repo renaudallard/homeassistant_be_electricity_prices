@@ -46,6 +46,7 @@ from custom_components.be_electricity_prices.coordinator import (
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
+    ExtractorError,
     FixedRates,
     SupplierSnapshot,
     TaxOverlay,
@@ -72,7 +73,8 @@ async def test_force_refresh_drops_caches_and_requests_update(
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    coord._snapshot_fetched_at = object()  # type: ignore[assignment]
+    sentinel = object()
+    coord._snapshot_fetched_at = sentinel  # type: ignore[assignment]
     coord._spot_cache = {object(): 0.10}  # type: ignore[dict-item]
     coord._spot_cache_day = date(2026, 4, 29)
     coord._spot_cache_includes_tomorrow = True
@@ -80,7 +82,10 @@ async def test_force_refresh_drops_caches_and_requests_update(
 
     await coord.async_force_refresh()
 
-    assert coord._snapshot_fetched_at is None
+    # fetched_at is intentionally preserved so _save_persistent can
+    # still write the cached snapshot if the forced refresh fails.
+    assert coord._snapshot_fetched_at is sentinel
+    assert coord._force_refresh is True
     assert coord._spot_cache == {}
     assert coord._spot_cache_day is None
     assert coord._spot_cache_includes_tomorrow is False
@@ -129,6 +134,51 @@ async def test_two_coordinators_share_snapshot_and_only_fetch_once(
     assert fetch_calls == 1
     assert coord_a._snapshot is fetched
     assert coord_b._snapshot is fetched
+
+
+async def test_force_refresh_keeps_snapshot_when_refetch_fails(
+    hass: HomeAssistant,
+) -> None:
+    """A failing forced refetch must not blank the cached snapshot or
+    its fetched_at marker, so _save_persistent can still write the
+    blob to disk and survive an HA restart before the next attempt."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+
+    initial_call = True
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        if initial_call:
+            return _fake_snapshot()
+        raise ExtractorError("boom")
+
+    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+    assert coord._snapshot is not None
+    initial_fetched_at = coord._snapshot_fetched_at
+    initial_snapshot = coord._snapshot
+
+    await coord.async_force_refresh()
+    assert coord._force_refresh is True
+
+    initial_call = False
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+
+    # Force flag remains set so the next tick retries; cached snapshot
+    # is intact so _save_persistent can still write it.
+    assert coord._force_refresh is True
+    assert coord._snapshot is initial_snapshot
+    assert coord._snapshot_fetched_at is initial_fetched_at
 
 
 async def test_force_refresh_evicts_shared_cache_for_other_coordinator(
