@@ -48,6 +48,7 @@ Two entry points:
 
 from __future__ import annotations
 
+import calendar
 import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -63,16 +64,21 @@ from .const import (
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_REGION,
+    CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     DOMAIN,
     DSO_MODE_BI_HORAIRE,
     METER_MONO,
+    SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
 from .coordinator import (
     BePricesCoordinator,
     _historical_injection_rate,
+    _hourly_consumption_sensors,
+    _hourly_injection_sensors,
+    _recorder_hourly_kwh,
     _snapshot_for_month,
 )
 from .pricing import compute_breakdown
@@ -95,6 +101,23 @@ _PRICE_SENSOR_KEYS: tuple[str, ...] = (
     "taxes_component",
 )
 _INJECTION_PRICE_SENSOR_KEY = "injection_price"
+_COST_SENSOR_KEY = "current_year_cost"
+
+
+def _hours_in_month(month_first: date) -> int:
+    if month_first.month == 12:
+        next_first = date(month_first.year + 1, 1, 1)
+    else:
+        next_first = date(month_first.year, month_first.month + 1, 1)
+    return (next_first - month_first).days * 24
+
+
+def _solar_kva(entry: ConfigEntry) -> float:
+    try:
+        kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+    return kva if kva > 0.0 else 0.0
 
 
 def _stat_id(hass: HomeAssistant, entry: ConfigEntry, key: str) -> str | None:
@@ -364,6 +387,158 @@ async def _backfill_price_sensors(
     return counts
 
 
+async def _backfill_cost_sensor(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BePricesCoordinator,
+    hours: list[datetime],
+    spots: dict[datetime, float],
+) -> dict[str, int]:
+    """Write cumulative state/sum rows for ``current_year_cost`` over ``hours``.
+
+    Mirrors the live :func:`_compute_current_year_cost` engine but
+    produces one running-total point per hour instead of one
+    end-of-day number, so the recorder can render the YTD bill as a
+    growing line on the Energy dashboard / Statistics card.
+
+    Per-hour fee proration uses ``annual_for_this_month / hours_in_year``
+    (vs. the live ``days_in_ytd / days_in_year`` per-day proration);
+    the two converge at end-of-day, but the hourly variant gives a
+    smoother in-day curve. Per-month tariff archives are honoured the
+    same way as in the live path.
+
+    Returns a per-statistic-id row count (one entry max). Skips
+    silently when the sensor isn't registered (auto path firing
+    before platform setup completes).
+    """
+    from homeassistant.components.recorder.models import (
+        StatisticData,
+        StatisticMetaData,
+    )
+    from homeassistant.components.recorder.statistics import (
+        StatisticMeanType,
+        async_import_statistics,
+    )
+
+    sid = _stat_id(hass, entry, _COST_SENSOR_KEY)
+    if sid is None:
+        return {}
+
+    snap = coordinator._snapshot
+    assert snap is not None
+    extractor = get_extractor(entry.data[CONF_SUPPLIER])
+    contract = entry.data[CONF_CONTRACT]
+    region = entry.data.get(CONF_REGION, "")
+    dso = entry.data[CONF_DSO]
+    meter = entry.data.get(CONF_METER, METER_MONO)
+    dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
+    regime = entry.data.get(CONF_SOLAR_REGIME, "none")
+    is_compensation = regime == SOLAR_REGIME_COMPENSATION
+    kva = _solar_kva(entry) if is_compensation else 0.0
+
+    # One bulk fetch per recorder entity; bin into UTC-hour totals.
+    cons_per_hour: dict[datetime, float] = {}
+    inj_per_hour: dict[datetime, float] = {}
+    if hours:
+        start_d = hours[0].date()
+        end_d = hours[-1].date()
+        for cid in _hourly_consumption_sensors(entry):
+            for k, v in (await _recorder_hourly_kwh(hass, cid, start_d, end_d)).items():
+                cons_per_hour[k] = cons_per_hour.get(k, 0.0) + v
+        for iid in _hourly_injection_sensors(entry):
+            for k, v in (await _recorder_hourly_kwh(hass, iid, start_d, end_d)).items():
+                inj_per_hour[k] = inj_per_hour.get(k, 0.0) + v
+
+    month_cache: dict[date, SupplierSnapshot] = {}
+
+    async def _snap_for(month_first: date) -> SupplierSnapshot:
+        if month_first not in month_cache:
+            month_cache[month_first] = await _snapshot_for_month(
+                hass,
+                coordinator._session,
+                extractor,
+                contract,
+                region,
+                month_first,
+                snap,
+            )
+        return month_cache[month_first]
+
+    rows: list[Any] = []
+    running_energy = 0.0
+    running_fees = 0.0
+    for utc_hour in hours:
+        local = dt_util.as_local(utc_hour)
+        month_first = date(local.year, local.month, 1)
+        snap_h = await _snap_for(month_first)
+        spot = spots.get(utc_hour) if spots else None
+
+        # Energy term: skipped when the supplier is dynamic and we
+        # have no spot for this hour (formula factor*spot+base needs
+        # both), or when compute_breakdown can't evaluate the hour.
+        if not (isinstance(snap_h.energy, DynamicRates) and spot is None):
+            try:
+                bd = compute_breakdown(
+                    snap_h, dso, region, local, spot, meter, dso_mode
+                )
+            except (KeyError, ValueError):
+                bd = None
+            if bd is not None:
+                cons = cons_per_hour.get(utc_hour, 0.0)
+                inj = inj_per_hour.get(utc_hour, 0.0)
+                if is_compensation:
+                    running_energy += (cons - inj) * bd.all_in
+                elif regime == SOLAR_REGIME_INJECTION:
+                    running_energy += cons * bd.all_in
+                    inj_rate = _historical_injection_rate(snap_h.injection, spot)
+                    if inj_rate is not None:
+                        running_energy -= inj * inj_rate
+                else:
+                    running_energy += cons * bd.all_in
+
+        # Fee accrual: matches the live ytd per-day fee proration when
+        # summed over a full day (annual / days_in_year vs. annual /
+        # hours_in_year * 24). The hourly variant keeps the YTD line
+        # growing smoothly between live ticks.
+        days_in_year = 366 if calendar.isleap(local.year) else 365
+        annual_static = (
+            getattr(snap_h.energy, "yearly_fixed_fee", 0.0)
+            + snap_h.taxes.energy_fund_eur_per_month * 12.0
+        )
+        running_fees += annual_static / (days_in_year * 24)
+
+        if is_compensation and kva > 0.0:
+            overlay = snap_h.dsos.get(dso)
+            if overlay is not None and overlay.prosumer_eur_per_kva_year is not None:
+                monthly_fee = kva * overlay.prosumer_eur_per_kva_year / 12.0
+                running_fees += monthly_fee / _hours_in_month(month_first)
+
+        # Compensation regime clamps the YTD energy term at zero
+        # (Walloon meter forfeits surplus injection past
+        # consumption); injection / none never go negative through
+        # the energy term alone.
+        displayed_energy = (
+            max(running_energy, 0.0) if is_compensation else running_energy
+        )
+        state = round(displayed_energy + running_fees, 4)
+        rows.append(StatisticData(start=utc_hour, state=state, sum=state))
+
+    if not rows:
+        return {sid: 0}
+
+    metadata = StatisticMetaData(
+        mean_type=StatisticMeanType.NONE,
+        has_sum=True,
+        name=None,
+        source="recorder",
+        statistic_id=sid,
+        unit_class=None,
+        unit_of_measurement="EUR",
+    )
+    async_import_statistics(hass, metadata, rows)
+    return {sid: len(rows)}
+
+
 async def backfill_range(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -395,7 +570,7 @@ async def backfill_range(
 
     if clear:
         ids: list[str] = []
-        keys = list(_PRICE_SENSOR_KEYS)
+        keys = list(_PRICE_SENSOR_KEYS) + [_COST_SENSOR_KEY]
         if entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION:
             keys.append(_INJECTION_PRICE_SENSOR_KEY)
         for key in keys:
@@ -406,9 +581,10 @@ async def backfill_range(
             await _clear_range(hass, ids)
 
     counts = await _backfill_price_sensors(hass, entry, coordinator, hours, spots)
+    counts.update(await _backfill_cost_sensor(hass, entry, coordinator, hours, spots))
     total = sum(counts.values())
     _LOGGER.info(
-        "backfill wrote %d price-statistic rows for %s over %s..%s",
+        "backfill wrote %d statistic rows for %s over %s..%s",
         total,
         entry.entry_id,
         start_utc.isoformat(),
