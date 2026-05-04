@@ -511,6 +511,75 @@ async def test_sync_stale_issue_creates_and_clears(hass: HomeAssistant) -> None:
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_sync_extractor_failed_issue_creates_and_clears(
+    hass: HomeAssistant,
+) -> None:
+    """A persistent ExtractorError from the supplier path must surface
+    as a Repairs entry the user can act on, and clear the moment a
+    refresh succeeds."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"extractor_failed_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    coord._sync_extractor_failed_issue("could not parse Eneco fixed energy block")
+    issue = registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_key == "extractor_failed"
+    assert "Eneco fixed" in (issue.translation_placeholders or {}).get("error", "")
+
+    coord._sync_extractor_failed_issue(None)
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_sync_entsoe_auth_issue_creates_and_clears(
+    hass: HomeAssistant,
+) -> None:
+    """An ENTSO-E 401 must raise an ERROR-severity Repairs entry that
+    points the user at rotating the API key, distinct from transient
+    network issues which the coordinator absorbs silently."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"entsoe_auth_failed_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    coord._sync_entsoe_auth_issue(True, "ENTSO-E rejected the API key")
+    issue = registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.severity == ir.IssueSeverity.ERROR
+    assert issue.translation_key == "entsoe_auth_failed"
+
+    coord._sync_entsoe_auth_issue(False)
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_async_remove_entry_clears_all_repair_issues(
+    hass: HomeAssistant,
+) -> None:
+    """All three issue kinds (snapshot_stale, extractor_failed,
+    entsoe_auth_failed) embed the entry id, so async_remove_entry
+    must clear each of them or they'd linger forever."""
+    from custom_components.be_electricity_prices import async_remove_entry
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._sync_stale_issue(True)
+    coord._sync_extractor_failed_issue("boom")
+    coord._sync_entsoe_auth_issue(True, "401")
+
+    registry = ir.async_get(hass)
+    for kind in ("snapshot_stale", "extractor_failed", "entsoe_auth_failed"):
+        assert registry.async_get_issue(DOMAIN, f"{kind}_{entry.entry_id}") is not None
+
+    await async_remove_entry(hass, entry)
+
+    for kind in ("snapshot_stale", "extractor_failed", "entsoe_auth_failed"):
+        assert registry.async_get_issue(DOMAIN, f"{kind}_{entry.entry_id}") is None
+
+
 async def test_evict_shared_caches_drops_rows_for_tuple(hass: HomeAssistant) -> None:
     """evict_shared_caches must remove every cache row pinned to the
     given (supplier, contract, region) tuple, leaving rows for other

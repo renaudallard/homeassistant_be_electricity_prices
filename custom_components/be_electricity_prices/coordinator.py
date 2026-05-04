@@ -541,7 +541,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if isinstance(self._snapshot.energy, DynamicRates):
             try:
                 spot_prices = await self._fetch_spot_prices()
+                self._sync_entsoe_auth_issue(False)
             except EntsoeAuthError as err:
+                self._sync_entsoe_auth_issue(True, str(err))
                 raise UpdateFailed(f"ENTSO-E auth: {err}") from err
             except EntsoeError as err:
                 # A transient ENTSO-E outage must not blank the entry: the
@@ -624,6 +626,59 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
                     "days": str(SNAPSHOT_STALE_DAYS),
                     "last_error": self._last_error or "unknown",
+                },
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+    def _sync_extractor_failed_issue(self, message: str | None) -> None:
+        """Raise or clear the 'supplier extractor failed' repair issue.
+
+        ``message`` is the extractor's error string (re-raised by the
+        provider when the supplier's tariff card layout drifted, the
+        URL 404'd, or aiohttp timed out). ``None`` means the most
+        recent fetch succeeded and any prior issue should be cleared.
+        """
+        issue_id = f"extractor_failed_{self.entry.entry_id}"
+        if message:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="extractor_failed",
+                translation_placeholders={
+                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
+                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
+                    "error": message,
+                },
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+    def _sync_entsoe_auth_issue(self, active: bool, message: str = "") -> None:
+        """Raise or clear the 'ENTSO-E rejected the API key' issue.
+
+        Fired only on ``EntsoeAuthError`` (transparency.entsoe.eu
+        responded 401), so the user knows the fix is "rotate the token
+        in the entry's options" rather than waiting on a transient
+        outage. Cleared as soon as a refresh succeeds with a key the
+        endpoint accepts.
+        """
+        issue_id = f"entsoe_auth_failed_{self.entry.entry_id}"
+        if active:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="entsoe_auth_failed",
+                translation_placeholders={
+                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
+                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
+                    "error": message or "401 Unauthorized",
                 },
             )
         else:
@@ -797,6 +852,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._snapshot_probe_key = probe_key
                 self._last_error = ""
                 self._force_refresh = False
+                self._sync_extractor_failed_issue(None)
             except Exception as err:
                 # Any extractor failure (including unexpected aiohttp /
                 # parser exceptions) must populate the negative cache so
@@ -805,6 +861,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 if _tuple_generation(self.hass, key) == gen_at_entry:
                     failed[key] = (dt_util.utcnow(), str(err))
                 self._last_error = str(err)
+                self._sync_extractor_failed_issue(str(err))
                 _LOGGER.warning(
                     "snapshot refresh failed for %s/%s: %s; keeping cached",
                     self.entry.data.get(CONF_SUPPLIER),

@@ -247,6 +247,14 @@
     "snapshot_stale": {
       "title": "Tariff data for {supplier} ({contract}) is more than {days} days old",
       "description": "The integration could not refresh the tariff card from the supplier and is serving cached data older than {days} days. Last fetch error: {last_error}. Prices may no longer reflect what is actually billed. Try the be_electricity_prices.refresh service, check your network, or open an issue on GitHub if the problem persists."
+    },
+    "extractor_failed": {
+      "title": "Could not parse the tariff card for {supplier} ({contract})",
+      "description": "The supplier extractor raised an error: {error}. The integration is still serving the last successfully parsed prices, but they may no longer match what is actually billed. This usually means the supplier changed the layout of its tariff PDF or HTML page; please open an issue on GitHub with the supplier and contract so the extractor can be updated."
+    },
+    "entsoe_auth_failed": {
+      "title": "ENTSO-E rejected the API key for {supplier} ({contract})",
+      "description": "transparency.entsoe.eu returned 401 for the configured API key: {error}. Edit the entry's options and replace the key with a fresh token from your transparency.entsoe.eu account (My Account Settings -> Web API Security Token). Until then this entry's dynamic price sensors will go unknown."
     }
   },
   "entity": {

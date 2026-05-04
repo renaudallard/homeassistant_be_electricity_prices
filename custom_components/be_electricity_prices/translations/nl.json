@@ -247,6 +247,14 @@
     "snapshot_stale": {
       "title": "Tariefgegevens voor {supplier} ({contract}) zijn ouder dan {days} dagen",
       "description": "De integratie kon de tariefkaart niet bij de leverancier vernieuwen en gebruikt een cache van meer dan {days} dagen oud. Laatste fout: {last_error}. Prijzen geven mogelijk niet meer weer wat werkelijk wordt gefactureerd. Probeer de service be_electricity_prices.refresh, controleer je netwerk, of open een issue op GitHub als het probleem aanhoudt."
+    },
+    "extractor_failed": {
+      "title": "Tariefkaart voor {supplier} ({contract}) kon niet ontleed worden",
+      "description": "De leveranciers-extractor gaf een fout: {error}. De integratie blijft de laatst goed ontledede prijzen tonen, maar die komen mogelijk niet meer overeen met de werkelijke factuur. Meestal heeft de leverancier de layout van zijn tariefkaart aangepast; open een issue op GitHub met leverancier en contract zodat de extractor bijgewerkt kan worden."
+    },
+    "entsoe_auth_failed": {
+      "title": "ENTSO-E weigerde de API-sleutel voor {supplier} ({contract})",
+      "description": "transparency.entsoe.eu antwoordde 401 op de geconfigureerde sleutel: {error}. Bewerk de opties van deze entry en vervang de sleutel door een nieuwe op transparency.entsoe.eu (My Account Settings -> Web API Security Token). Tot dan zullen de dynamische prijssensoren onbekend zijn."
     }
   },
   "entity": {

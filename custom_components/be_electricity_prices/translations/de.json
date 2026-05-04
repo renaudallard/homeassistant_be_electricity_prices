@@ -247,6 +247,14 @@
     "snapshot_stale": {
       "title": "Tarifdaten fuer {supplier} ({contract}) sind aelter als {days} Tage",
       "description": "Die Integration konnte die Tarifkarte beim Lieferanten nicht aktualisieren und verwendet einen Cache, der aelter als {days} Tage ist. Letzter Fehler: {last_error}. Die Preise spiegeln moeglicherweise nicht mehr wider, was tatsaechlich abgerechnet wird. Versuchen Sie den Dienst be_electricity_prices.refresh, pruefen Sie Ihr Netzwerk, oder oeffnen Sie ein Issue auf GitHub, wenn das Problem weiter besteht."
+    },
+    "extractor_failed": {
+      "title": "Tarifkarte fuer {supplier} ({contract}) konnte nicht ausgewertet werden",
+      "description": "Der Lieferanten-Extractor lieferte einen Fehler: {error}. Die Integration verwendet weiterhin die zuletzt erfolgreich ausgewerteten Preise, diese stimmen aber moeglicherweise nicht mehr mit der Abrechnung ueberein. Meist hat der Lieferant das Layout seiner Tarif-PDF oder HTML-Seite geaendert; oeffnen Sie ein Issue auf GitHub mit Lieferant und Vertrag, damit der Extractor aktualisiert werden kann."
+    },
+    "entsoe_auth_failed": {
+      "title": "ENTSO-E hat den API-Schluessel fuer {supplier} ({contract}) abgelehnt",
+      "description": "transparency.entsoe.eu antwortete mit 401 fuer den konfigurierten Schluessel: {error}. Bearbeiten Sie die Optionen des Eintrags und ersetzen Sie den Schluessel durch einen neuen aus Ihrem Konto auf transparency.entsoe.eu (My Account Settings -> Web API Security Token). Bis dahin bleiben die dynamischen Preissensoren unbekannt."
     }
   },
   "entity": {

@@ -247,6 +247,14 @@
     "snapshot_stale": {
       "title": "Les donnees tarifaires de {supplier} ({contract}) ont plus de {days} jours",
       "description": "L'integration n'a pas pu rafraichir la carte tarifaire chez le fournisseur et utilise un cache de plus de {days} jours. Derniere erreur : {last_error}. Les prix peuvent ne plus refleter ce qui est facture. Essayez le service be_electricity_prices.refresh, verifiez votre reseau, ou ouvrez un ticket sur GitHub si le probleme persiste."
+    },
+    "extractor_failed": {
+      "title": "Impossible d'analyser la carte tarifaire de {supplier} ({contract})",
+      "description": "L'extracteur du fournisseur a leve une erreur : {error}. L'integration sert encore les derniers prix correctement analyses, mais ils ne correspondent peut-etre plus a ce qui est facture. Cela signifie generalement que le fournisseur a change la mise en page de son PDF ou de sa page HTML; ouvrez un ticket sur GitHub avec le fournisseur et le contrat pour que l'extracteur soit mis a jour."
+    },
+    "entsoe_auth_failed": {
+      "title": "ENTSO-E a refuse la cle API pour {supplier} ({contract})",
+      "description": "transparency.entsoe.eu a renvoye 401 pour la cle configuree : {error}. Modifiez les options de l'entree et remplacez la cle par un nouveau jeton via votre compte transparency.entsoe.eu (My Account Settings -> Web API Security Token). En attendant, les capteurs de prix dynamiques resteront inconnus."
     }
   },
   "entity": {

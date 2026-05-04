@@ -261,10 +261,19 @@ next refresh.
 
 If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
-attributes on `sensor.<...>_current_price`. Snapshots older than **7 days**
-surface a repair issue under **Settings → System → Repairs**, so the
-warning is visible without inspecting attributes; the issue auto-clears on
-the next successful refresh.
+attributes on `sensor.<...>_current_price`. Three repair issues surface
+under **Settings → System → Repairs** so problems are visible without
+inspecting attributes; each auto-clears on the next successful refresh:
+
+- **`snapshot_stale_<entry>`** — the cached snapshot is older than **7
+  days**.
+- **`extractor_failed_<entry>`** — the supplier extractor raised an
+  error (typically a layout drift on the supplier's PDF/HTML); cached
+  prices keep serving.
+- **`entsoe_auth_failed_<entry>`** *(dynamic contracts only)* — ENTSO-E
+  returned 401 for the configured API key. Edit the entry's options
+  and replace the key with a fresh token from
+  transparency.entsoe.eu.
 
 ### `be_electricity_prices.refresh` service
 
