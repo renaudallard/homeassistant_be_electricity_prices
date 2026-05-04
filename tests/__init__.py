@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 from custom_components.be_electricity_prices.providers._pdf import (
@@ -37,6 +38,7 @@ from custom_components.be_electricity_prices.providers._pdf import (
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
+@lru_cache(maxsize=None)
 def fixture_text(name: str, *, layout: bool = False) -> str:
     """Read ``tests/fixtures/<name>`` and run it through the PDF extractor.
 
@@ -44,6 +46,12 @@ def fixture_text(name: str, *, layout: bool = False) -> str:
     suppliers whose tariff cards rely on column positions (Bolt,
     DATS 24, Ecopower, TotalEnergies). Default is ``extract_pdf_text``
     (pypdf), which is fine for the rest.
+
+    Cached for the lifetime of the pytest session: PDF extraction
+    is the dominant cost in the test suite (~10s per fixture), and
+    every call with the same arguments returns the same string. The
+    cache cuts the full suite from ~190s to ~30s. Tests must not
+    mutate the returned string (they don't today).
     """
     payload = (FIXTURES / name).read_bytes()
     if layout:
