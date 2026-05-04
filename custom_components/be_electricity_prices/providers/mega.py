@@ -211,6 +211,63 @@ async def fetch(
     return parse_snapshot(contract_id, text, region, pdf_url)
 
 
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """Fetch the Mega card for a specific ``(year, month)``.
+
+    Mega's CDN keeps every monthly issue under a stable URL pattern:
+    ``Mega-FR-EL-B2C-<REGION>-<MMYYYY>-<Product>01<MM>.pdf``. The
+    product stem is stable across months; only ``<MMYYYY>`` and the
+    trailing ``01<MM>`` day-suffix rotate. Resolve the current URL
+    via the listing first to capture the product stem, then swap the
+    month placeholders.
+
+    Returns ``None`` when the URL 404s, the parse fails, or the
+    requested month falls outside the archived range.
+    """
+    if contract_id not in _CONTRACTS_BY_ID:
+        return None
+    contract = _CONTRACTS_BY_ID[contract_id]
+    region_code = _REGION_TO_CODE.get(region)
+    if region_code is None:
+        return None
+    try:
+        listing = await _fetch_listing_html(session)
+    except ExtractorError:
+        return None
+    current_url = _find_pdf_url(listing, contract.product_name, region_code)
+    if current_url is None:
+        return None
+    # Replace MMYYYY in the path and the trailing 01MM in the
+    # filename. The latter is anchored on the literal '.pdf' so a
+    # product blob containing '01' elsewhere doesn't get clobbered.
+    historical_mmyyyy = f"{year_month.month:02d}{year_month.year}"
+    new_url = re.sub(
+        r"-(?:\d{6})-(?=[^/]*\.pdf$)",
+        f"-{historical_mmyyyy}-",
+        current_url,
+    )
+    new_url = re.sub(
+        r"01\d{2}\.pdf$",
+        f"01{year_month.month:02d}.pdf",
+        new_url,
+    )
+    if new_url == current_url:
+        return None
+    try:
+        text = await fetch_pdf_text(session, new_url)
+    except ExtractorError:
+        return None
+    try:
+        return parse_snapshot(contract_id, text, region, new_url)
+    except ExtractorError:
+        return None
+
+
 def parse_snapshot(
     contract_id: str, text: str, region: str, source_url: str = _LISTING_URL
 ) -> SupplierSnapshot:
@@ -657,5 +714,6 @@ EXTRACTOR = SupplierExtractor(
         Contract(id=c.contract_id, label=c.label, kind=c.kind) for c in _CONTRACTS
     ),
     fetch=fetch,
+    fetch_for_month=fetch_for_month,
     probe=probe,
 )

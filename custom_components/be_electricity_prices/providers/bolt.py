@@ -50,7 +50,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import aiohttp
 
@@ -207,6 +207,40 @@ async def fetch(
         url = fallback_url
         text = await fetch_pdf_text_layout(session, url)
     return parse_snapshot(contract_id, text, region, url)
+
+
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """Fetch a past month's Bolt fix-family card (returns ``None`` for
+    products without a date-keyed archive).
+
+    Bolt's fix family is archived monthly under the ``YYYYMM`` suffix
+    going back to 2024-01. The variable family (and the ``plenty_fix``
+    variant) uses a stable version-number suffix, so older months
+    can't be addressed -- those return ``None`` and the YTD path falls
+    back to the current snapshot as a proxy.
+    """
+    if contract_id not in _CONTRACTS_BY_ID:
+        return None
+    contract = _CONTRACTS_BY_ID[contract_id]
+    if contract.folder != "fix" or contract.slug != "fix":
+        # Only the bolt_fix family carries a stable monthly archive.
+        return None
+    suffix = year_month.strftime("%Y%m")
+    url = _document_url(contract, suffix=suffix)
+    try:
+        text = await fetch_pdf_text_layout(session, url)
+    except ExtractorError:
+        return None
+    try:
+        snap = parse_snapshot(contract_id, text, region, url)
+    except ExtractorError:
+        return None
+    return snap
 
 
 def parse_snapshot(
@@ -628,5 +662,6 @@ EXTRACTOR = SupplierExtractor(
         Contract(id=c.contract_id, label=c.label, kind=c.kind) for c in _CONTRACTS
     ),
     fetch=fetch,
+    fetch_for_month=fetch_for_month,
     probe=probe,
 )
