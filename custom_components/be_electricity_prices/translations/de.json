@@ -210,7 +210,8 @@
       "options": {
         "mono": "Mono (Eintarif)",
         "bi": "Doppeltarif (Tag / Nacht)",
-        "dynamic": "Dynamisch (intelligenter Zaehler)"
+        "dynamic": "Dynamisch (intelligenter Zaehler)",
+        "exclusive_night": "Exklusiv-Nachtkreis (separater Zaehler)"
       }
     },
     "dso_tariff_mode": {

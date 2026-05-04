@@ -360,18 +360,26 @@ menu **→ Download diagnostics** dumps the active config (with the ENTSO-E
 API key redacted), the snapshot metadata, and the full hourly breakdown
 for today + tomorrow. Attach it when reporting an issue.
 
-## Known limitations
+## Exclusive-night meter circuit
 
-- **Exclusive-night meter circuit.** Belgian suppliers and DSOs publish a
-  dedicated rate for exclusive-night meters (electric water heaters and
-  similar circuits wired only at night) on both the energy side
-  (`FixedRates.exclusive_night` / `VariableRates.exclusive_night`) and
-  the distribution side. The integration does not yet route a separate
-  meter type through these rates: those hours are billed at the
-  standard day / `distribution_single` value. On most cards the
-  exclusive-night rate is close to the day rate, so the error stays
-  under ~0.01 EUR/kWh on the affected hours, but exclusive-night users
-  should treat the bill estimate as approximate.
+Belgian households with an electric water heater or night-storage
+heater often have a separate exclusive-night meter circuit billed at
+the supplier's published `exclusive_night` rate. Configure it as a
+**second config entry**:
+
+1. Add a new Belgian Electricity Prices entry alongside your primary
+   one.
+2. On the meter step, pick **Exclusive-night circuit (separate
+   meter)**.
+3. On the energy meters step, point the cumulative-consumption sensor
+   at your exclusive-night kWh sensor (the second register on a
+   bi-hourly meter, or a dedicated kWh sensor on a separate circuit).
+
+Energy is billed at the supplier's `exclusive_night` rate; distribution
+falls back to the DSO's off-peak rate (closer to the real bill than
+the day rate). The primary entry keeps your day-circuit consumption
+on mono / bi / dynamic; YTD and capacity tracking work normally on
+both entries.
 
 ## Development
 

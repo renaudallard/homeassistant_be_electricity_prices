@@ -216,7 +216,8 @@
       "options": {
         "mono": "Mono (enkel tarief)",
         "bi": "Bi-uurlijks (dag / nacht)",
-        "dynamic": "Dynamisch (digitale meter)"
+        "dynamic": "Dynamisch (digitale meter)",
+        "exclusive_night": "Exclusief-nachtkring (aparte meter)"
       }
     },
     "solar_regime": {

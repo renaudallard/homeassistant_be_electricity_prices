@@ -209,7 +209,8 @@
       "options": {
         "mono": "Mono (tarif unique)",
         "bi": "Bi-horaire (jour / nuit)",
-        "dynamic": "Dynamique (compteur intelligent)"
+        "dynamic": "Dynamique (compteur intelligent)",
+        "exclusive_night": "Circuit exclusif nuit (compteur separe)"
       }
     },
     "dso_tariff_mode": {

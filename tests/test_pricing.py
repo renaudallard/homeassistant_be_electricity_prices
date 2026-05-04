@@ -453,3 +453,45 @@ def test_compute_breakdown_unknown_dso_raises() -> None:
     snap = _snapshot(FixedRates(single=0.18))
     with pytest.raises(KeyError):
         compute_breakdown(snap, "missing_dso", "flanders", datetime(2026, 4, 29, 12))
+
+
+def test_exclusive_night_routes_through_supplier_exclusive_night_rate() -> None:
+    """An exclusive-night meter circuit (electric water heater /
+    night-storage heater) bills its energy at the supplier's published
+    exclusive_night rate. compute_breakdown must pick it up regardless
+    of hour-of-day -- the meter physically only registers during DSO
+    off-peak hours, so we don't gate on is_offpeak() inside the energy
+    helper."""
+    snap = _snapshot(
+        FixedRates(single=0.18, peak=0.20, offpeak=0.16, exclusive_night=0.10)
+    )
+    # Pick a peak hour to make sure the call doesn't fall through to
+    # the bi-hourly peak/offpeak branch.
+    when = datetime(2026, 4, 29, 12, 0)
+    energy = energy_eur_per_kwh(snap.energy, when, None, meter="exclusive_night")
+    assert energy == pytest.approx(0.10)
+
+
+def test_exclusive_night_distribution_falls_back_to_offpeak_rate() -> None:
+    """The DSO overlay doesn't (yet) expose an exclusive_night
+    distribution column; route through distribution_offpeak when
+    published, distribution_single otherwise. Either way is closer to
+    the real bill than always charging at the day rate."""
+    overlay = DsoOverlay(
+        distribution_single=0.05,
+        distribution_peak=0.06,
+        distribution_offpeak=0.04,
+        transport=0.015,
+    )
+    # Daytime hour - exclusive-night still routes to offpeak.
+    network = network_eur_per_kwh(
+        overlay, datetime(2026, 4, 29, 12, 0), "exclusive_night"
+    )
+    assert network == pytest.approx(0.04 + 0.015)
+
+    # DSO without a peak/offpeak split: falls back to single.
+    overlay_mono = DsoOverlay(distribution_single=0.05, transport=0.015)
+    network_mono = network_eur_per_kwh(
+        overlay_mono, datetime(2026, 4, 29, 12, 0), "exclusive_night"
+    )
+    assert network_mono == pytest.approx(0.05 + 0.015)

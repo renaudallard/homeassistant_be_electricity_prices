@@ -209,7 +209,8 @@
       "options": {
         "mono": "Mono (single rate)",
         "bi": "Bi-hourly (peak / off-peak)",
-        "dynamic": "Dynamic (smart meter)"
+        "dynamic": "Dynamic (smart meter)",
+        "exclusive_night": "Exclusive-night circuit (separate meter)"
       }
     },
     "dso_tariff_mode": {

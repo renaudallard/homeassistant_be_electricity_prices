@@ -80,8 +80,15 @@ CONF_API_KEY: Final = "api_key"
 METER_MONO: Final = "mono"
 METER_BI: Final = "bi"
 METER_DYNAMIC: Final = "dynamic"
+# Separate exclusive-night meter circuit (electric water heater,
+# night-storage heater): the meter only registers consumption during
+# DSO off-peak hours and bills at the supplier's published
+# exclusive_night rate. Configure as a SECOND config entry pointing at
+# the exclusive-night kWh sensor; the primary (day) meter stays on
+# mono / bi / dynamic.
+METER_EXCLUSIVE_NIGHT: Final = "exclusive_night"
 
-METER_TYPES: Final = (METER_MONO, METER_BI, METER_DYNAMIC)
+METER_TYPES: Final = (METER_MONO, METER_BI, METER_DYNAMIC, METER_EXCLUSIVE_NIGHT)
 
 # DSO-side billing mode, orthogonal to the supplier meter. Wallonia
 # users with a smart meter can opt into "impact" (Tarif Impact, set by

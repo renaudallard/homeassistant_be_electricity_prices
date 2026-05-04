@@ -60,7 +60,7 @@ from .providers.base import (
     VariableRates,
 )
 
-MeterType = Literal["mono", "bi", "dynamic"]
+MeterType = Literal["mono", "bi", "dynamic", "exclusive_night"]
 
 
 @dataclass(frozen=True)
@@ -167,19 +167,21 @@ def energy_eur_per_kwh(
 
     bi-hourly and SMR3 (digital) meters both register peak/offpeak,
     so they share the bi-horaire branch when the supplier publishes
-    the split. ``FixedRates.exclusive_night`` /
-    ``VariableRates.exclusive_night`` is intentionally not consulted
-    here: the integration does not model an exclusive-night meter
-    circuit (no ``MeterType`` for it, no DSO overlay column), so a
-    household with one is billed at the day / single rate. The field
-    is parsed for diagnostics and future expansion.
+    the split. ``meter == "exclusive_night"`` routes through the
+    supplier's ``exclusive_night`` rate when published; the meter
+    physically only registers during DSO off-peak hours, so we don't
+    need to gate by ``is_offpeak(when)`` here.
     """
     bi_capable = meter in ("bi", "dynamic")
     if isinstance(energy, FixedRates):
+        if meter == "exclusive_night" and energy.exclusive_night is not None:
+            return energy.exclusive_night
         if bi_capable and energy.peak is not None and energy.offpeak is not None:
             return energy.offpeak if is_offpeak(when) else energy.peak
         return energy.single
     if isinstance(energy, VariableRates):
+        if meter == "exclusive_night" and energy.exclusive_night is not None:
+            return energy.exclusive_night
         if bi_capable and energy.peak is not None and energy.offpeak is not None:
             return energy.offpeak if is_offpeak(when) else energy.peak
         return energy.current
@@ -315,7 +317,10 @@ def network_eur_per_kwh(
     ``bi_horaire`` falls back to the single rate when the DSO doesn't
     publish a peak/offpeak split. ``meter`` decides whether the meter
     can register a peak/offpeak split: bi-hourly meters and digital
-    (SMR3) meters can; mono meters cannot.
+    (SMR3) meters can; mono meters cannot. ``exclusive_night`` meters
+    only run during DSO off-peak hours, so distribution is billed at
+    the off-peak rate when published, falling back to the single rate
+    on DSOs that don't expose a split.
     """
     if dso_tariff_mode == "impact" and dso.distribution_pic is not None:
         band = dso_impact_band(when)
@@ -327,6 +332,16 @@ def network_eur_per_kwh(
         else:
             assert dso.distribution_eco is not None
             dist = dso.distribution_eco
+        return dist + dso.transport
+    if meter == "exclusive_night":
+        # Exclusive-night meters physically only register during DSO
+        # off-peak hours; bill distribution at the offpeak rate when
+        # the DSO publishes one, else single.
+        dist = (
+            dso.distribution_offpeak
+            if dso.distribution_offpeak is not None
+            else dso.distribution_single
+        )
         return dist + dso.transport
     if (
         dso_tariff_mode != "simple"
