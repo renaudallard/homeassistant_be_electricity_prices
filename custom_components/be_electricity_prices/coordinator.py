@@ -451,6 +451,10 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._spot_cache: dict[datetime, float] = {}
         self._spot_cache_day: date | None = None
         self._spot_cache_includes_tomorrow = False
+        # UTC-hour -> EUR/kWh spot prices for past hours, used to
+        # replay dynamic energy costs in current_year_cost. Persisted
+        # to Store so a fresh restart doesn't lose the YTD window.
+        self._historical_spots: dict[datetime, float] = {}
         self._peak_kw: float = 0.0
         self._peak_month: date | None = None
         self._last_error: str = ""
@@ -518,6 +522,18 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     self._peak_month = date.fromisoformat(month)
                 except ValueError:
                     self._peak_month = None
+        hist = stored.get("historical_spots")
+        if isinstance(hist, dict):
+            for k, v in hist.items():
+                if not isinstance(k, str) or not isinstance(v, (int, float)):
+                    continue
+                try:
+                    when = datetime.fromisoformat(k)
+                except ValueError:
+                    continue
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=UTC)
+                self._historical_spots[when] = float(v)
         # Older persisted blobs may carry kwh_buckets / kwh_baselines /
         # year_start / year_start_register_baselines from a previous
         # release that tracked monthly accumulation in-process. Those
@@ -584,12 +600,22 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         injection_price = _compute_injection_price(
             self._snapshot, self.entry, spot_prices
         )
+        # Dynamic contracts replay historical hourly spots to bill the
+        # YTD energy term. Backfill any missing hours in [Jan 1, today]
+        # before calling the engine; failures degrade to "no data" for
+        # those hours rather than tearing the tick down.
+        if isinstance(self._snapshot.energy, DynamicRates):
+            today_local = dt_util.now().date()
+            await self._ensure_historical_spots(
+                date(today_local.year, 1, 1), today_local
+            )
         current_year_cost = await _compute_current_year_cost(
             self.hass,
             self._session,
             get_extractor(self.entry.data[CONF_SUPPLIER]),
             self._snapshot,
             self.entry,
+            historical_spots=self._historical_spots,
         )
 
         await self._save_persistent()
@@ -901,6 +927,68 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return shared.probe_key == probe_key
         return now - shared.fetched_at < ttl
 
+    async def _ensure_historical_spots(self, start: date, end: date) -> None:
+        """Make sure ``self._historical_spots`` covers every UTC hour in
+        ``[start, end]``, fetching missing ranges from ENTSO-E.
+
+        Walks the day axis once. A day is considered "present" when at
+        least 20 of its 24 UTC hours are already cached -- ENTSO-E
+        occasionally leaves gaps under the carry-forward rule and a
+        few missing hours per day shouldn't trigger a re-fetch every
+        coordinator tick. Failed fetches are logged and skipped; the
+        caller treats absent hours as "no data" for that hour rather
+        than tearing the YTD computation down.
+        """
+        api_key = self.entry.data.get(CONF_API_KEY)
+        if not api_key:
+            return
+        # Collect contiguous date ranges where the cache is sparse.
+        missing_ranges: list[tuple[date, date]] = []
+        range_start: date | None = None
+        cur = start
+        while cur <= end:
+            day_start_utc = datetime.combine(cur, datetime.min.time(), tzinfo=UTC)
+            present = sum(
+                1
+                for h in range(24)
+                if (day_start_utc + timedelta(hours=h)) in self._historical_spots
+            )
+            if present < 20:
+                if range_start is None:
+                    range_start = cur
+            elif range_start is not None:
+                missing_ranges.append((range_start, cur))
+                range_start = None
+            cur += timedelta(days=1)
+        if range_start is not None:
+            missing_ranges.append((range_start, cur))
+        if not missing_ranges:
+            return
+        client = EntsoeClient(api_key, self._session)
+        for r_start, r_end in missing_ranges:
+            chunk_start = r_start
+            while chunk_start < r_end:
+                # Week-sized chunks: trade off per-request latency
+                # against total round-trips for a 365-day backfill.
+                chunk_end = min(chunk_start + timedelta(days=7), r_end)
+                start_utc = datetime.combine(
+                    chunk_start, datetime.min.time(), tzinfo=UTC
+                )
+                end_utc = datetime.combine(chunk_end, datetime.min.time(), tzinfo=UTC)
+                try:
+                    prices = await client.fetch_day_ahead(start_utc, end_utc)
+                except (EntsoeError, EntsoeAuthError) as err:
+                    _LOGGER.warning(
+                        "ENTSO-E historical fetch failed for %s..%s: %s",
+                        chunk_start,
+                        chunk_end,
+                        err,
+                    )
+                    chunk_start = chunk_end
+                    continue
+                self._historical_spots.update(prices)
+                chunk_start = chunk_end
+
     async def _fetch_spot_prices(self) -> dict[datetime, float]:
         api_key = self.entry.data.get(CONF_API_KEY)
         if not api_key:
@@ -1059,6 +1147,18 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._snapshot_fetched_at,
                 self._snapshot_probe_key,
             )
+        if self._historical_spots:
+            # Drop spots older than the current YTD window so the blob
+            # doesn't grow unbounded across years.
+            today = dt_util.now().date()
+            keep_after = datetime.combine(
+                date(today.year, 1, 1), datetime.min.time(), tzinfo=UTC
+            )
+            payload["historical_spots"] = {
+                h.isoformat(): v
+                for h, v in self._historical_spots.items()
+                if h >= keep_after
+            }
         await self._store.async_save(payload)
 
 
@@ -1676,6 +1776,91 @@ async def _ytd_tou_energy(
     return energy_cost
 
 
+async def _ytd_dynamic_energy(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: SupplierExtractor,
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    today: date,
+    *,
+    contract: str | None = None,
+    meter: MeterType | None = None,
+    historical_spots: dict[datetime, float],
+) -> float | None:
+    """YTD energy cost for a dynamic contract, billed per hour against
+    historical ENTSO-E spots.
+
+    For each recorded YTD hour the spot is looked up in
+    ``historical_spots`` (the coordinator persists it between runs);
+    ``compute_breakdown`` then evaluates ``factor*spot+base`` for the
+    energy term, the user's DSO overlay for the network term, and the
+    region-specific tax stack. Hours with no spot in the cache are
+    skipped (they don't contribute) so a partial backfill still
+    produces a meaningful YTD instead of falling all the way back to
+    the fees-only floor.
+
+    Solar handling matches the TOU path:
+      - ``compensation``: per-hour ``(cons - inj) * all_in``, summed
+        and clamped at zero (Walloon meter forfeits surplus).
+      - ``injection``: per-hour ``cons * all_in - inj * inj_rate``
+        where ``inj_rate`` is the supplier's ``factor*spot+base``
+        injection formula at that hour's spot.
+      - ``none``: per-hour ``cons * all_in``.
+
+    Returns ``None`` when no kWh sensor is wired (caller falls back to
+    the fees-only floor).
+    """
+    region = entry.data.get(CONF_REGION, "")
+    dso = entry.data.get(CONF_DSO, "")
+    contract = contract or entry.data[CONF_CONTRACT]
+    meter = meter or entry.data.get(CONF_METER, METER_MONO)
+    dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
+    regime = entry.data.get(CONF_SOLAR_REGIME, "none")
+
+    cons_ids = _hourly_consumption_sensors(entry)
+    inj_ids = _hourly_injection_sensors(entry)
+    if not cons_ids and not inj_ids:
+        return None
+
+    jan1 = date(today.year, 1, 1)
+    cons_per_hour: dict[datetime, float] = {}
+    for cid in cons_ids:
+        for k, v in (await _recorder_hourly_kwh(hass, cid, jan1, today)).items():
+            cons_per_hour[k] = cons_per_hour.get(k, 0.0) + v
+    inj_per_hour: dict[datetime, float] = {}
+    for iid in inj_ids:
+        for k, v in (await _recorder_hourly_kwh(hass, iid, jan1, today)).items():
+            inj_per_hour[k] = inj_per_hour.get(k, 0.0) + v
+
+    energy_cost = 0.0
+    for utc_hour in cons_per_hour.keys() | inj_per_hour.keys():
+        spot = historical_spots.get(utc_hour)
+        if spot is None:
+            continue
+        local = dt_util.as_local(utc_hour)
+        try:
+            bd = compute_breakdown(snapshot, dso, region, local, spot, meter, dso_mode)
+        except (KeyError, ValueError):
+            continue
+        kwh_cons = cons_per_hour.get(utc_hour, 0.0)
+        kwh_inj = inj_per_hour.get(utc_hour, 0.0)
+        if regime == SOLAR_REGIME_COMPENSATION:
+            d_cost = (kwh_cons - kwh_inj) * bd.all_in
+        elif regime == SOLAR_REGIME_INJECTION:
+            d_cost = kwh_cons * bd.all_in
+            inj_rate = _historical_injection_rate(snapshot.injection, spot)
+            if inj_rate is not None:
+                d_cost -= kwh_inj * inj_rate
+        else:
+            d_cost = kwh_cons * bd.all_in
+        energy_cost += d_cost
+
+    if regime == SOLAR_REGIME_COMPENSATION:
+        energy_cost = max(energy_cost, 0.0)
+    return energy_cost
+
+
 async def _compute_current_year_cost(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -1685,6 +1870,7 @@ async def _compute_current_year_cost(
     *,
     contract_override: str | None = None,
     meter_override: MeterType | None = None,
+    historical_spots: dict[datetime, float] | None = None,
 ) -> float | None:
     """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
@@ -1738,10 +1924,15 @@ async def _compute_current_year_cost(
     wiring is rejected so a missing band can't silently undercount.
 
     **Dynamic contracts** (Cociter Dynamique, Eneco Power Dynamic,
-    OCTA+ Dynamic, etc.) need historical hourly ENTSO-E spots to bill
-    correctly. v1 does not replay historical spots, so the energy
-    component is reported as 0 and the sensor surfaces the pro-rated
-    fees-only floor. The live ``current_price`` sensor is unaffected.
+    OCTA+ Dynamic, etc.) replay historical hourly ENTSO-E spots from
+    the coordinator's persistent cache (filled lazily by
+    ``_ensure_historical_spots``). Each past kWh is then billed at
+    its actual ``factor*spot+base`` rate via ``compute_breakdown``,
+    same code path as the live current_price. Hours with no spot in
+    the cache (cold start before the backfill, or a gap left by an
+    ENTSO-E publication outage) are skipped rather than zeroed; the
+    caller still gets the fees-only floor when the cache is entirely
+    empty.
 
     Returns ``None`` only when there is no meter input wired at all
     AND no snapshot to show fees against. In every other case the
@@ -1771,15 +1962,27 @@ async def _compute_current_year_cost(
     )
     fees = static_fees + prosumer_ytd
 
-    # Dynamic contracts need historical hourly ENTSO-E spots that v1 does
-    # not replay; bail with the fees-only floor *before* iterating hours.
-    # Otherwise the TOU loop would silently swallow ValueError on every
-    # hour (compute_breakdown rejects DynamicRates without a spot) and
-    # the static loop would discard every month (static_breakdown returns
-    # None for DynamicRates) — same result, but a wasted recorder pass
-    # and an inconsistency for users who picked dso_mode=impact.
+    # Dynamic contracts replay historical hourly ENTSO-E spots so each
+    # past kWh hits its actual factor*spot+base rate. Caller passes the
+    # spot cache (the coordinator persists it between runs); when
+    # absent or empty we fall back to the fees-only floor.
     if isinstance(snapshot.energy, DynamicRates):
-        return fees
+        if not historical_spots:
+            return fees
+        dyn_energy = await _ytd_dynamic_energy(
+            hass,
+            session,
+            extractor,
+            snapshot,
+            entry,
+            today,
+            contract=contract,
+            meter=meter,
+            historical_spots=historical_spots,
+        )
+        if dyn_energy is None:
+            return fees
+        return dyn_energy + fees
 
     # Per-hour billing is required when the supplier's energy rates
     # vary by hour (TOU contracts) AND when the DSO bills per Impact

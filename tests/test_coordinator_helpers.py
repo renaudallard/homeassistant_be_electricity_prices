@@ -53,6 +53,7 @@ from custom_components.be_electricity_prices.coordinator import (
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
+    DynamicRates,
     FixedRates,
     InjectionRates,
     SupplierExtractor,
@@ -987,6 +988,112 @@ async def test_year_cost_tou_recognises_injection_only_wiring(
     # Fees pro-rated to zero (no yearly_fixed_fee, no energy_fund,
     # not on compensation regime so no prosumer).
     assert cost == pytest.approx(-0.05)
+
+
+async def test_year_cost_dynamic_replays_historical_spots(
+    hass: HomeAssistant,
+) -> None:
+    """Dynamic contracts must replay historical hourly ENTSO-E spots
+    via the coordinator's persistent cache. With one consumed kWh at
+    a known UTC hour and a known spot for that hour, the YTD cost
+    must equal the ``factor*spot+base`` rate * 1 kWh + the DSO/tax
+    overlay -- no longer the fees-only floor that v1 returned."""
+    from custom_components.be_electricity_prices import coordinator
+
+    snap = SupplierSnapshot(
+        supplier="test",
+        contract="test_dynamic",
+        energy=DynamicRates(factor=1.0, base=0.0),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://dyn",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "none",
+            "consumption_kwh": "sensor.cons_total",
+            "dso_tariff_mode": "bi_horaire",
+        },
+    )
+    spot_hour = datetime(2026, 1, 6, 13, 0, tzinfo=UTC)
+    historical_spots = {spot_hour: 0.20}
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.cons_total":
+            return {spot_hour: 1.0}
+        return {}
+
+    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots=historical_spots,
+        )
+    # factor*spot + base = 1.0*0.20 + 0 = 0.20 EUR/kWh energy
+    # + 0.10 distribution + 0.0145 transport + 0.05 + 0.002 taxes
+    # = 0.3665 EUR/kWh on 1 kWh; no fees on the stub snapshot.
+    assert cost == pytest.approx(0.20 + 0.10 + 0.0145 + 0.052)
+
+
+async def test_year_cost_dynamic_falls_back_to_fees_when_no_spots(
+    hass: HomeAssistant,
+) -> None:
+    """When the historical-spots cache is empty (cold start, ENTSO-E
+    fetch failed entirely), the dynamic YTD must still produce the
+    fees-only floor rather than crashing or returning None."""
+    from custom_components.be_electricity_prices import coordinator
+
+    snap = SupplierSnapshot(
+        supplier="test",
+        contract="test_dynamic",
+        energy=DynamicRates(factor=1.0, base=0.0, yearly_fixed_fee=120.0),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://dyn",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "none",
+            "consumption_kwh": "sensor.cons_total",
+        },
+    )
+
+    async def _fake_hourly(
+        _hass: object, _entity: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return {}
+
+    today = dt_util.now().date()
+    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots={},
+        )
+    # Fees-only floor: yearly_fixed_fee=120 pro-rated by elapsed
+    # fraction of year. Within a EUR rounding tolerance.
+    assert cost is not None
+    assert cost == pytest.approx(120.0 * _year_fraction(today), abs=0.01)
 
 
 def test_energy_kind_handles_tou() -> None:
