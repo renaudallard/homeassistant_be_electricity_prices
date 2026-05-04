@@ -294,17 +294,30 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         raise ExtractorError(f"could not parse Bolt {kind} consumption block")
     mono = to_float(match.group(1)) / 100.0
     excl = to_float(match.group(2)) / 100.0
-    # The bi-horaire row sits inside the 'Prix de l'électricité verte'
-    # block as "<jour> <nuit>" on a single line, immediately followed by
-    # the SECOND "Jour Nuit" header (the injection one). Anchoring on
-    # that trailing header skips over the annual-estimate values that
-    # pdfplumber renders vertically right above.
-    bihoraire = re.search(
-        r"([\d.,]+)\s+([\d.,]+)\s*\n\s*Jour\s+Nuit",
+    # The "Prix de l'électricité verte" block prints two "Jour Nuit"
+    # subheads -- the first is for consumption (with our bi-horaire
+    # row), the second is for injection. The bi-horaire row is always
+    # the LAST same-line adjacent-number pair between them. pdfplumber
+    # sometimes renders the annual-estimate column vertically above
+    # that row (variable cards) and sometimes drops it entirely (fixed
+    # cards), so we can't anchor on a fixed offset; restricting to the
+    # span between the two subheads is the stable invariant.
+    span = re.search(
+        r"Prix de l'électricité verte.*?Jour\s+Nuit(.*?)Jour\s+Nuit",
         text,
+        re.S,
     )
-    peak = to_float(bihoraire.group(1)) / 100.0 if bihoraire else mono
-    offpeak = to_float(bihoraire.group(2)) / 100.0 if bihoraire else mono
+    pairs = (
+        re.findall(
+            r"^[ \t]*([\d.,]+)[ \t]+([\d.,]+)[ \t]*$",
+            span.group(1),
+            re.MULTILINE,
+        )
+        if span
+        else []
+    )
+    peak = to_float(pairs[-1][0]) / 100.0 if pairs else mono
+    offpeak = to_float(pairs[-1][1]) / 100.0 if pairs else mono
 
     if kind == "fixed":
         return FixedRates(
