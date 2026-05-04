@@ -122,6 +122,13 @@
           "meter": "Type de compteur"
         }
       },
+      "compare_api_key": {
+        "title": "Comparer un autre fournisseur",
+        "description": "Le fournisseur choisi propose un contrat dynamique indexe sur les prix day-ahead d'ENTSO-E. Collez un jeton ENTSO-E pour que le devis recupere le prix horaire courant. Le jeton n'est utilise que pour ce devis et n'est pas enregistre.",
+        "data": {
+          "api_key": "Cle API ENTSO-E"
+        }
+      },
       "compare_result": {
         "title": "Devis ponctuel",
         "description": "Type de compteur utilise : {meter_used}. Estimation annuelle calculee avec {annual_kwh} kWh consommes ({consumption_source}). {solar_note}\n\n**Votre entree actuelle**\n  {current_supplier} - {current_contract}\n  Par kWh maintenant : {current_per_kwh} EUR/kWh\n  Facture annuelle estimee : {current_annual} EUR/an\n\n**Comparee a**\n  {compare_supplier} - {compare_contract}\n  Par kWh maintenant : {compare_per_kwh} EUR/kWh\n  Facture annuelle estimee : {compare_annual} EUR/an\n\n**Difference annuelle** : {delta_annual} EUR/an (positif = alternative plus chere).\n\n```\n{annual_chart}\n```\n\n**Depuis le 1er janvier** ({ytd_kwh} kWh consommes, {ytd_injection_kwh} kWh injectes, au tarif actuel de chaque fournisseur) :\n  Actuel : {current_ytd} EUR\n  Alternative : {compare_ytd} EUR\n  Difference : {delta_ytd} EUR\n\n```\n{ytd_chart}\n```\n\n{error}\n\nRien n'a ete enregistre. Validez pour fermer ce dialogue."

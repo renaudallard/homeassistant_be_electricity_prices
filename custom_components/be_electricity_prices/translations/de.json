@@ -122,6 +122,13 @@
           "meter": "Zaehlerart"
         }
       },
+      "compare_api_key": {
+        "title": "Anderen Lieferanten vergleichen",
+        "description": "Der gewaehlte Lieferant bietet einen dynamischen Vertrag gekoppelt an ENTSO-E day-ahead Preise. ENTSO-E API-Token einfuegen, damit das Angebot den aktuellen Stundenpreis abruft. Der Token wird nur fuer dieses Angebot verwendet, nicht gespeichert.",
+        "data": {
+          "api_key": "ENTSO-E API-Schluessel"
+        }
+      },
       "compare_result": {
         "title": "Einmaliges Angebot",
         "description": "Verwendete Zaehlerart: {meter_used}. Jahresschaetzung verwendet {annual_kwh} kWh Verbrauch ({consumption_source}). {solar_note}\n\n**Ihr aktueller Eintrag**\n  {current_supplier} - {current_contract}\n  Pro kWh jetzt: {current_per_kwh} EUR/kWh\n  Geschaetzte Jahresrechnung: {current_annual} EUR/Jahr\n\n**Verglichen mit**\n  {compare_supplier} - {compare_contract}\n  Pro kWh jetzt: {compare_per_kwh} EUR/kWh\n  Geschaetzte Jahresrechnung: {compare_annual} EUR/Jahr\n\n**Jahresdifferenz**: {delta_annual} EUR/Jahr (positiv = Alternative ist teurer).\n\n```\n{annual_chart}\n```\n\n**Seit 1. Januar** ({ytd_kwh} kWh verbraucht, {ytd_injection_kwh} kWh eingespeist, zum aktuellen Tarif jedes Lieferanten):\n  Aktuell: {current_ytd} EUR\n  Alternative: {compare_ytd} EUR\n  Differenz: {delta_ytd} EUR\n\n```\n{ytd_chart}\n```\n\n{error}\n\nNichts wurde gespeichert. Mit Bestaetigen den Dialog schliessen.",

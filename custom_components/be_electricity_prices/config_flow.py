@@ -155,31 +155,18 @@ def _contract_kind(supplier_id: str, contract_id: str) -> str:
     return ""
 
 
-def _compare_compatible(current_kind: str, other_kind: str) -> bool:
-    """Whether ``other_kind`` can be quoted side-by-side with ``current_kind``.
-
-    Dynamic contracts price each hour against an ENTSO-E spot, so a
-    static-vs-dynamic quote would either need a fresh API call (hidden
-    cost on a UI dialog) or fall back to the dynamic's printed
-    monthly indicative (lies about what the user would actually pay).
-    Refuse those crossings outright. Among static-ish kinds (fixed,
-    variable, tou) the per-kWh number is directly comparable.
-    """
-    return (current_kind == "dynamic") == (other_kind == "dynamic")
-
-
 def _compare_supplier_options(region: str, current_kind: str) -> list[SelectOptionDict]:
-    """Suppliers that have at least one same-kind contract in the user's
-    region. Filtering at the supplier level avoids the user picking a
-    supplier and then seeing an empty contract dropdown."""
+    """Suppliers that have at least one contract available in the
+    user's region. ``current_kind`` is kept in the signature for
+    callers that may want to pre-filter, but the compare flow now
+    accepts cross-kind quotes (static <-> dynamic) -- the dynamic
+    side is priced from the user's spot cache or a fresh ENTSO-E
+    fetch when crossing into dynamic territory."""
     out: list[SelectOptionDict] = []
     for ext in all_extractors():
         if region not in ext.regions():
             continue
-        if not any(
-            _compare_compatible(current_kind, c.kind) and region in c.regions
-            for c in ext.contracts
-        ):
+        if not any(region in c.regions for c in ext.contracts):
             continue
         out.append(SelectOptionDict(value=ext.id, label=ext.label))
     return out
@@ -188,13 +175,12 @@ def _compare_supplier_options(region: str, current_kind: str) -> list[SelectOpti
 def _compare_contract_schema(
     supplier_id: str, region: str, current_kind: str, exclude_contract: str
 ) -> vol.Schema:
-    """Contract picker scoped to same-kind contracts in the user's region,
-    minus the user's current contract (so they don't quote against
-    themselves)."""
+    """Contract picker scoped to the user's region, minus the user's
+    current contract (so they don't quote against themselves).
+    Includes both static and dynamic contracts so the user can ask
+    'should I switch from fixed to dynamic'."""
     contracts = [
-        c
-        for c in _contracts_for(supplier_id, region)
-        if _compare_compatible(current_kind, c.kind) and c.id != exclude_contract
+        c for c in _contracts_for(supplier_id, region) if c.id != exclude_contract
     ]
     options = [SelectOptionDict(value=c.id, label=c.label) for c in contracts]
     return vol.Schema(
@@ -1113,13 +1099,13 @@ class BePricesOptionsFlow(OptionsFlow):
         """
         if user_input is not None:
             self._compare.update(user_input)
-            return await self.async_step_compare_result()
+            return await self._after_compare_meter()
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
         )
         if other_kind in ("dynamic", "tou"):
             self._compare[CONF_METER] = METER_DYNAMIC
-            return await self.async_step_compare_result()
+            return await self._after_compare_meter()
         current_meter = self.config_entry.data.get(CONF_METER, METER_MONO)
         return self.async_show_form(
             step_id="compare_meter",
@@ -1134,6 +1120,40 @@ class BePricesOptionsFlow(OptionsFlow):
                     )
                 }
             ),
+        )
+
+    async def _after_compare_meter(self) -> ConfigFlowResult:
+        """Hand off to compare_result, prompting for an ENTSO-E key
+        first if the alternative is a dynamic contract and the user's
+        current entry doesn't already carry one (i.e. they're on a
+        static contract today and we have no spot data to price the
+        dynamic side)."""
+        other_kind = _contract_kind(
+            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+        )
+        if other_kind == "dynamic" and not self.config_entry.data.get(CONF_API_KEY):
+            return await self.async_step_compare_api_key()
+        return await self.async_step_compare_result()
+
+    async def async_step_compare_api_key(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Static-vs-dynamic compare needs an ENTSO-E key for the
+        dynamic side's hour rate. Borrow the user's existing key when
+        their entry already has one (handled in _after_compare_meter);
+        otherwise prompt and validate against the live endpoint
+        before reaching the result page."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            err = await _validate_entsoe_key(self.hass, user_input[CONF_API_KEY])
+            if err is None:
+                self._compare[CONF_API_KEY] = user_input[CONF_API_KEY]
+                return await self.async_step_compare_result()
+            errors[CONF_API_KEY] = err
+        return self.async_show_form(
+            step_id="compare_api_key",
+            data_schema=vol.Schema({vol.Required(CONF_API_KEY): TextSelector()}),
+            errors=errors,
         )
 
     async def async_step_compare_result(
@@ -1209,10 +1229,35 @@ class BePricesOptionsFlow(OptionsFlow):
         days_in_year = (today_local.replace(year=today_local.year + 1) - jan1).days
         days_elapsed = (today_local - jan1).days + 1
         fee_proration = days_elapsed / days_in_year
-        spot = (coord._spot_cache or {}).get(now_hour)
         spot_dict: dict[datetime, float] = (
             dict(coord._spot_cache) if coord._spot_cache else {}
         )
+        # Cross-kind comparisons (static <-> dynamic) need spot data
+        # for the dynamic side. The user's coordinator already has
+        # spots when they're on dynamic; otherwise borrow the api key
+        # they just typed in compare_api_key (or the one already on
+        # their entry) and fetch the day-ahead window for today.
+        current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        other_kind = _contract_kind(
+            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+        )
+        need_spot = "dynamic" in (current_kind, other_kind)
+        if need_spot and not spot_dict:
+            api_key = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
+            if api_key:
+                from .api import EntsoeClient
+
+                try:
+                    client = EntsoeClient(api_key, async_get_clientsession(self.hass))
+                    day_start = now_utc.replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    )
+                    spot_dict = await client.fetch_day_ahead(
+                        day_start, day_start + timedelta(days=1)
+                    )
+                except Exception:  # noqa: BLE001 - degrade to '-' for the dynamic side
+                    pass
+        spot = spot_dict.get(now_hour)
 
         # Measured consumption / injection from the user's kWh sensors.
         # Injection is only relevant when a solar regime is configured;

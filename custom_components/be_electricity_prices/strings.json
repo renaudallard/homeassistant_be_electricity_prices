@@ -122,6 +122,13 @@
           "meter": "Meter type"
         }
       },
+      "compare_api_key": {
+        "title": "Compare another supplier",
+        "description": "The supplier you picked offers a dynamic contract priced against ENTSO-E day-ahead spots. Paste an ENTSO-E API token so the quote can fetch the current hour's spot for the dynamic side. The token is used only for the quote and is not saved.",
+        "data": {
+          "api_key": "[%key:component::be_electricity_prices::config::step::api_key::data::api_key%]"
+        }
+      },
       "compare_result": {
         "title": "One-off quote",
         "description": "Meter type used: {meter_used}. Annual estimate uses {annual_kwh} kWh consumed ({consumption_source}). {solar_note}\n\n**Your current entry**\n  {current_supplier} - {current_contract}\n  Per kWh now: {current_per_kwh} EUR/kWh\n  Estimated yearly bill: {current_annual} EUR/year\n\n**Compared with**\n  {compare_supplier} - {compare_contract}\n  Per kWh now: {compare_per_kwh} EUR/kWh\n  Estimated yearly bill: {compare_annual} EUR/year\n\n**Annual difference**: {delta_annual} EUR/year (positive means the alternative is more expensive).\n\n```\n{annual_chart}\n```\n\n**Year-to-date so far** ({ytd_kwh} kWh consumed, {ytd_injection_kwh} kWh injected since 1 January at each supplier's current rate):\n  Current: {current_ytd} EUR\n  Alternative: {compare_ytd} EUR\n  Difference: {delta_ytd} EUR\n\n```\n{ytd_chart}\n```\n\n{error}\n\nNothing has been saved. Submit to close this dialog."

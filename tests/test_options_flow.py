@@ -398,44 +398,93 @@ async def test_compare_branch_quotes_against_other_supplier(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_compare_branch_filters_to_same_kind(hass: HomeAssistant) -> None:
-    """A user on a static contract must NOT see dynamic-only suppliers
-    in the compare picker, otherwise we'd quote a static-vs-dynamic
-    pair and either fabricate spot data or show the supplier's monthly
-    indicative as if it were today's price."""
+async def test_compare_branch_supplier_picker_lists_all_in_region(
+    hass: HomeAssistant,
+) -> None:
+    """The compare flow now allows cross-kind quotes (static <->
+    dynamic), so the supplier picker is filtered only by region and
+    by 'has at least one contract here'. The kind switch happens at
+    the contract picker (via _compare_contract_schema) and the
+    api_key step kicks in when the user crosses into dynamic
+    territory without a saved key."""
     from custom_components.be_electricity_prices.config_flow import (
         _compare_supplier_options,
     )
 
-    # Eneco offers both fixed and dynamic. From a static-eneco user's
-    # perspective, compatible alternatives must include other static
-    # suppliers; the picker is keyed on suppliers having at least one
-    # same-kind contract. Eneco's own contracts include dynamic, but
-    # dynamic-only suppliers (none in current registry) would be
-    # excluded. Sanity-check that the function shape works and that
-    # eneco's static-side compatibility includes typical Walloon
-    # static suppliers.
+    # Static-side caller still gets every Walloon supplier.
     static_options = _compare_supplier_options("wallonia", "fixed")
     static_ids = {o["value"] for o in static_options}
     assert "eneco" in static_ids
     assert "cociter" in static_ids
-
-    # From a dynamic user's perspective, only suppliers with a
-    # dynamic-kind contract show up.
+    # Dynamic-side caller gets the same set: cross-kind is allowed.
     dynamic_options = _compare_supplier_options("wallonia", "dynamic")
     dynamic_ids = {o["value"] for o in dynamic_options}
-    # Eneco has power_dynamic.
-    assert "eneco" in dynamic_ids
-    # Sanity: no overlap-by-name with non-dynamic-only suppliers
-    # depends on the registry; we only assert the function honours
-    # the kind boundary.
-    for sid in dynamic_ids:
-        from custom_components.be_electricity_prices.providers import (
-            get as get_extractor,
-        )
+    assert dynamic_ids == static_ids
 
-        kinds = {c.kind for c in get_extractor(sid).contracts}
-        assert "dynamic" in kinds
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_branch_static_to_dynamic_prompts_for_api_key(
+    hass: HomeAssistant,
+) -> None:
+    """A static-contract user comparing against a dynamic contract
+    needs an ENTSO-E spot for the dynamic side. When their entry has
+    no api_key yet, the compare flow detours through compare_api_key
+    after the contract pick (meter is auto-locked to dynamic)."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers.base import (
+        DynamicRates,
+        DsoOverlay,
+        InjectionRates,
+        SupplierSnapshot,
+        TaxOverlay,
+    )
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    other_snap = SupplierSnapshot(
+        supplier="cociter",
+        contract="cociter_dynamic",
+        energy=DynamicRates(factor=1.0, base=0.0, yearly_fixed_fee=60.0),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+            )
+        },
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        injection=InjectionRates(current=0.05),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    fake = replace(EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap))
+    with patch.dict(EXTRACTORS, {"cociter": fake}):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        assert result["step_id"] == "compare"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        assert result["step_id"] == "compare_contract"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_dynamic"}
+        )
+        # Dynamic locks the meter to dynamic and skips compare_meter,
+        # then routes to compare_api_key because the static entry has
+        # no saved api_key.
+        assert result["step_id"] == "compare_api_key"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"api_key": "valid-token"}
+        )
+        # _validate_entsoe_key is auto-bypassed by the test fixture; the
+        # next step is the result page.
+        assert result["step_id"] == "compare_result"
 
 
 async def _drive_compare(
