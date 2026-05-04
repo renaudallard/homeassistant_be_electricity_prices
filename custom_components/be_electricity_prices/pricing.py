@@ -382,9 +382,17 @@ def compute_breakdown(
     network = network_eur_per_kwh(overlay, when, meter, dso_tariff_mode)
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
     vat_factor = 1.0 + snapshot.taxes.vat_rate
+    # Apply VAT to each component first, then sum, so the invariant
+    # "energy + network + taxes == all_in" holds bit-for-bit even when
+    # vat_rate becomes non-zero in a future extractor that parses
+    # ex-VAT prices. Computing all_in as (e+n+t)*vat would diverge from
+    # the per-component sum by sub-femto-euro rounding error.
+    energy_v = energy * vat_factor
+    network_v = network * vat_factor
+    taxes_v = taxes * vat_factor
     return PriceBreakdown(
-        energy=energy * vat_factor,
-        network=network * vat_factor,
-        taxes=taxes * vat_factor,
-        all_in=(energy + network + taxes) * vat_factor,
+        energy=energy_v,
+        network=network_v,
+        taxes=taxes_v,
+        all_in=energy_v + network_v + taxes_v,
     )
