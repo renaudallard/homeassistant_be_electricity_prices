@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
@@ -34,10 +35,54 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_API_KEY
-from .coordinator import BePricesCoordinator
+from .const import (
+    CONF_API_KEY,
+    CONF_CONSUMPTION_KWH,
+    CONF_DAY_CONSUMPTION_KWH,
+    CONF_DAY_INJECTION_KWH,
+    CONF_INJECTION_KWH,
+    CONF_NIGHT_CONSUMPTION_KWH,
+    CONF_NIGHT_INJECTION_KWH,
+)
+from .coordinator import (
+    BePricesCoordinator,
+    _monthly_snapshots,
+    _recorder_daily_kwh,
+    _shared_failed_fetches,
+)
 
 TO_REDACT = {CONF_API_KEY}
+
+
+async def _kwh_window(
+    hass: HomeAssistant, entry: ConfigEntry, days: int, *, side: str
+) -> float | None:
+    """Sum of kWh for ``side`` (``consumption`` or ``injection``) over
+    the last ``days`` days from the entry's configured sensors.
+
+    Returns ``None`` when no sensor is wired or the recorder has no
+    data; the diagnostics blob renders that as a missing field rather
+    than zero so a bug-report reader can tell the difference."""
+    if side == "injection":
+        day_id = entry.data.get(CONF_DAY_INJECTION_KWH)
+        night_id = entry.data.get(CONF_NIGHT_INJECTION_KWH)
+        total_id = entry.data.get(CONF_INJECTION_KWH)
+    else:
+        day_id = entry.data.get(CONF_DAY_CONSUMPTION_KWH)
+        night_id = entry.data.get(CONF_NIGHT_CONSUMPTION_KWH)
+        total_id = entry.data.get(CONF_CONSUMPTION_KWH)
+    today = dt_util.now().date()
+    start = today - timedelta(days=days)
+    if day_id and night_id:
+        d = await _recorder_daily_kwh(hass, day_id, start, today)
+        n = await _recorder_daily_kwh(hass, night_id, start, today)
+        total = sum(d.values()) + sum(n.values())
+        return total if total > 0 else None
+    if total_id:
+        d = await _recorder_daily_kwh(hass, total_id, start, today)
+        total = sum(d.values())
+        return total if total > 0 else None
+    return None
 
 
 async def async_get_config_entry_diagnostics(
@@ -48,6 +93,42 @@ async def async_get_config_entry_diagnostics(
     data = coordinator.data
 
     hourly = sorted(data.hourly.items())
+
+    # Recorder-backed consumption + injection roll-ups so the bug
+    # reporter can see at a glance whether their kWh sensors are wired
+    # up and feeding the recorder; mirrors what current_year_cost reads.
+    today = dt_util.now().date()
+    jan1 = today.replace(month=1, day=1)
+    cons_year = await _kwh_window(hass, entry, 365, side="consumption")
+    cons_ytd = await _kwh_window(hass, entry, (today - jan1).days, side="consumption")
+    inj_year = await _kwh_window(hass, entry, 365, side="injection")
+    inj_ytd = await _kwh_window(hass, entry, (today - jan1).days, side="injection")
+
+    # Per-month archived snapshot publication labels: the YTD path
+    # caches one snapshot per (supplier, contract, region, YYYY-MM).
+    # Surfacing the labels makes "did the right cards land for past
+    # months?" a one-glance check in a diagnostics dump.
+    monthly_labels: dict[str, str | None] = {}
+    extractor_id = entry.data.get("supplier")
+    contract_id = entry.data.get("contract")
+    region = entry.data.get("region")
+    if extractor_id and contract_id and region:
+        for key, snap in sorted(_monthly_snapshots(hass).items()):
+            if key[0] == extractor_id and key[1] == contract_id and key[2] == region:
+                monthly_labels[key[3]] = (
+                    snap.publication_label if snap is not None else None
+                )
+
+    # Sibling-coordinator negative-fetch markers for this supplier
+    # tuple; lets a bug reporter see whether the integration backed
+    # off and why, without having to grep logs.
+    failed_marker = None
+    if extractor_id and contract_id and region:
+        rec = _shared_failed_fetches(hass).get((extractor_id, contract_id, region))
+        if rec is not None:
+            ts, msg = rec
+            failed_marker = {"at": ts.isoformat(), "error": msg}
+
     return {
         "entry": {
             "title": entry.title,
@@ -85,4 +166,12 @@ async def async_get_config_entry_diagnostics(
                 for h, bd in hourly
             ],
         },
+        "consumption": {
+            "rolling_year_kwh": cons_year,
+            "ytd_kwh": cons_ytd,
+            "rolling_year_injection_kwh": inj_year,
+            "ytd_injection_kwh": inj_ytd,
+        },
+        "monthly_snapshot_labels": monthly_labels,
+        "shared_failure": failed_marker,
     }

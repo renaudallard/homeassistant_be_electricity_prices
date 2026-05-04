@@ -109,3 +109,72 @@ async def test_diagnostics_includes_snapshot_and_hourly(hass: HomeAssistant) -> 
     assert coord["current_year_cost_eur"] == 345.67
     assert len(coord["hourly"]) == 1
     assert coord["hourly"][0]["all_in"] == 0.312
+
+
+async def test_diagnostics_includes_consumption_and_monthly_labels(
+    hass: HomeAssistant,
+) -> None:
+    """The new top-level keys (consumption / monthly_snapshot_labels /
+    shared_failure) must appear in the dump so a bug reporter can see
+    whether the recorder has data, which past months are cached, and
+    whether sibling-coordinator backoff is currently active."""
+    from datetime import UTC, datetime
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices.coordinator import (
+        _monthly_snapshots,
+        _shared_failed_fetches,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        FixedRates,
+        SupplierSnapshot,
+        TaxOverlay,
+    )
+
+    entry = _entry_with_data()
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(data=_coordinator_data())
+
+    # Seed the per-month archive cache for this entry's tuple so the
+    # diagnostics dump should surface its publication label.
+    archived = SupplierSnapshot(
+        supplier="eneco",
+        contract="power_dynamic",
+        energy=FixedRates(single=0.18),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://archived",
+        publication_label="march 2026",
+    )
+    _monthly_snapshots(hass)[("eneco", "power_dynamic", "wallonia", "2026-03")] = (
+        archived
+    )
+    # And one for a different tuple that must NOT leak into our dump.
+    _monthly_snapshots(hass)[("bolt", "bolt_fix", "wallonia", "2026-03")] = archived
+    # Seed a shared-failure marker for our tuple.
+    _shared_failed_fetches(hass)[("eneco", "power_dynamic", "wallonia")] = (
+        datetime(2026, 5, 4, 10, 0, tzinfo=UTC),
+        "transient HTTP 503 from supplier",
+    )
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: object, end: object
+    ) -> dict[object, float]:
+        # No kWh sensors configured on the test entry, so this won't
+        # be called. Patch returns empty defensively.
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.diagnostics._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        dump = await async_get_config_entry_diagnostics(hass, entry)
+
+    # Consumption block always present, values None when no sensor wired.
+    assert dump["consumption"]["rolling_year_kwh"] is None
+    assert dump["consumption"]["ytd_kwh"] is None
+    # Per-month archive labels: only this entry's tuple, not bolt's.
+    assert dump["monthly_snapshot_labels"] == {"2026-03": "march 2026"}
+    # Shared-failure marker round-tripped.
+    assert dump["shared_failure"]["error"] == "transient HTTP 503 from supplier"
