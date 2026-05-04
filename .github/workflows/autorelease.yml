@@ -54,10 +54,45 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set +e
           tag="${{ steps.version.outputs.tag }}"
+          # Tag + push are idempotent enough to leave outside the retry
+          # loop: if the tag is already on origin we still want to
+          # proceed to release creation. The push command tolerates the
+          # "already exists" case the same way 'git push origin <tag>'
+          # does locally.
           git tag "$tag"
           git push origin "$tag"
-          gh release create "$tag" \
-            --title "$tag" \
-            --generate-notes \
-            dist/be_electricity_prices.zip
+          # gh release create is the operation that lost v0.5.28 to a
+          # 504 from GitHub's REST API. Retry up to 5 times with
+          # exponential backoff so a transient API blip doesn't strand
+          # a release without an attached zip.
+          attempts=5
+          delays="10 30 60 120"
+          set -- $delays
+          for i in $(seq 1 "$attempts"); do
+            echo "::group::release attempt $i"
+            gh release create "$tag" \
+              --title "$tag" \
+              --generate-notes \
+              dist/be_electricity_prices.zip
+            rc=$?
+            echo "::endgroup::"
+            if [ $rc -eq 0 ]; then
+              break
+            fi
+            # If the release was created on a prior attempt that died
+            # mid-call, treat it as success on the retry.
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "release $tag already exists, treating as success"
+              rc=0
+              break
+            fi
+            if [ "$i" -lt "$attempts" ]; then
+              sleep_for=$1
+              shift
+              echo "release attempt $i failed (exit $rc), sleeping ${sleep_for}s..." >&2
+              sleep "$sleep_for"
+            fi
+          done
+          exit $rc
