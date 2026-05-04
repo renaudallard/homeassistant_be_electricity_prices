@@ -45,6 +45,7 @@ the coordinator from each supplier's own publication.
 
 from __future__ import annotations
 
+import re
 from datetime import timedelta
 from typing import Any
 
@@ -355,6 +356,151 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(fields)
 
 
+_DAY_TARIFF_TOKENS = frozenset({"peak", "day", "jour", "dag", "piek"})
+_NIGHT_TARIFF_TOKENS = frozenset({"night", "nuit", "nacht", "dal"})
+_TARIFF_SEPARATORS = re.compile(r"[_\-\s]+")
+
+
+def _classify_tariff(name: str) -> str | None:
+    """Map a utility_meter tariff name to ``"day"`` / ``"night"``.
+
+    Belgian users mix English (peak/offpeak), French (jour/nuit), and
+    Dutch (dag/nacht, piek/dal) when naming their utility_meter
+    tariffs. Tokenize on ``_-`` and whitespace and match exactly so
+    "offpeak" doesn't accidentally collide with "peak". Names with
+    both a day and a night token (e.g. "peak_night_combined") return
+    ``None`` so the caller can refuse to pre-fill rather than guess.
+    """
+    n = name.lower()
+    # "offpeak" / "off_peak" / "off-peak" all collapse to a contiguous
+    # "offpeak"; treat that as night regardless of token splitting.
+    if "offpeak" in _TARIFF_SEPARATORS.sub("", n):
+        return "night"
+    tokens = set(_TARIFF_SEPARATORS.split(n))
+    is_day = bool(tokens & _DAY_TARIFF_TOKENS)
+    is_night = bool(tokens & _NIGHT_TARIFF_TOKENS)
+    if is_day and not is_night:
+        return "day"
+    if is_night and not is_day:
+        return "night"
+    return None
+
+
+def _utility_meter_day_night_children(
+    hass: HomeAssistant, source_entity_id: str
+) -> dict[str, str]:
+    """Return ``{"day": ..., "night": ...}`` entity ids for a
+    utility_meter helper splitting ``source_entity_id`` into a day /
+    night pair, or ``{}`` if no unambiguous match is found.
+
+    Walks ``utility_meter`` config entries (the modern UI-configured
+    helpers; YAML-configured helpers don't appear here, so users with
+    those keep manual selection). Bails on any ambiguity rather than
+    guessing -- a wrong day/night pick mis-bills the year cost.
+    """
+    from homeassistant.helpers import entity_registry as er
+
+    for entry in hass.config_entries.async_entries("utility_meter"):
+        opts = {**entry.data, **entry.options}
+        if opts.get("source") != source_entity_id:
+            continue
+        tariffs = opts.get("tariffs") or []
+        slot_tariffs: dict[str, str] = {}
+        ambiguous = False
+        for tariff in tariffs:
+            slot = _classify_tariff(tariff)
+            if slot is None:
+                continue
+            if slot in slot_tariffs:
+                ambiguous = True
+                break
+            slot_tariffs[slot] = tariff
+        if ambiguous or "day" not in slot_tariffs or "night" not in slot_tariffs:
+            continue
+        ent_reg = er.async_get(hass)
+        registry_entries = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
+        out: dict[str, str] = {}
+        for slot, tariff in slot_tariffs.items():
+            for re_entry in registry_entries:
+                if re_entry.unique_id.endswith(f"_{tariff}"):
+                    out[slot] = re_entry.entity_id
+                    break
+        if "day" in out and "night" in out:
+            return out
+    return {}
+
+
+async def _apply_energy_manager_defaults(
+    hass: HomeAssistant, defaults: dict[str, Any]
+) -> None:
+    """Pre-fill the cumulative consumption / injection sensors (and,
+    when a utility_meter helper is wired up, the day/night registers)
+    from the user's Energy dashboard when nothing is already set.
+
+    The Energy dashboard's grid source records the same kind of
+    cumulative-kWh totals the coordinator reads via the recorder, so
+    treating it as the default saves the user from picking the same
+    sensor twice. For the day/night split we follow utility_meter
+    helpers rooted at the same source -- only when the tariff names
+    map unambiguously to day/night.
+    """
+    if any(
+        defaults.get(k) is not None
+        for k in (
+            CONF_CONSUMPTION_KWH,
+            CONF_INJECTION_KWH,
+            CONF_DAY_CONSUMPTION_KWH,
+            CONF_NIGHT_CONSUMPTION_KWH,
+            CONF_DAY_INJECTION_KWH,
+            CONF_NIGHT_INJECTION_KWH,
+        )
+    ):
+        return
+    try:
+        from homeassistant.components.energy.data import async_get_manager
+    except ImportError:
+        return
+    try:
+        manager = await async_get_manager(hass)
+    except Exception:  # noqa: BLE001 - energy may not be ready
+        return
+    prefs: dict[str, Any] | None = manager.data  # type: ignore[assignment]
+    if not prefs:
+        return
+    sources: list[dict[str, Any]] = prefs.get("energy_sources") or []
+    for source in sources:
+        if source.get("type") != "grid":
+            continue
+        flow_from: list[dict[str, Any]] = source.get("flow_from") or []
+        flow_to: list[dict[str, Any]] = source.get("flow_to") or []
+        consumption_stat: str | None = None
+        injection_stat: str | None = None
+        if flow_from:
+            stat = flow_from[0].get("stat_energy_from")
+            # EntitySelector only accepts real entities; recorder-only
+            # statistic ids (no leading "sensor.") would render as a
+            # broken default.
+            if isinstance(stat, str) and stat.startswith("sensor."):
+                consumption_stat = stat
+        if flow_to:
+            stat = flow_to[0].get("stat_energy_to")
+            if isinstance(stat, str) and stat.startswith("sensor."):
+                injection_stat = stat
+        if consumption_stat is not None:
+            defaults[CONF_CONSUMPTION_KWH] = consumption_stat
+            day_night = _utility_meter_day_night_children(hass, consumption_stat)
+            if day_night:
+                defaults[CONF_DAY_CONSUMPTION_KWH] = day_night["day"]
+                defaults[CONF_NIGHT_CONSUMPTION_KWH] = day_night["night"]
+        if injection_stat is not None:
+            defaults[CONF_INJECTION_KWH] = injection_stat
+            day_night = _utility_meter_day_night_children(hass, injection_stat)
+            if day_night:
+                defaults[CONF_DAY_INJECTION_KWH] = day_night["day"]
+                defaults[CONF_NIGHT_INJECTION_KWH] = day_night["night"]
+        return
+
+
 def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
@@ -492,8 +638,10 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._data.update(user_input)
             return self._finalize()
+        defaults = dict(self._data)
+        await _apply_energy_manager_defaults(self.hass, defaults)
         return self.async_show_form(
-            step_id="meters", data_schema=_meters_schema(self._data)
+            step_id="meters", data_schema=_meters_schema(defaults)
         )
 
     async def async_step_dso_tariff_mode(
@@ -649,8 +797,10 @@ class BePricesOptionsFlow(OptionsFlow):
         if user_input is not None:
             self._data.update(user_input)
             return self._finalize()
+        defaults = dict(self._data)
+        await _apply_energy_manager_defaults(self.hass, defaults)
         return self.async_show_form(
-            step_id="meters", data_schema=_meters_schema(self._data)
+            step_id="meters", data_schema=_meters_schema(defaults)
         )
 
     async def async_step_dso_tariff_mode(

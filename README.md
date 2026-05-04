@@ -203,6 +203,18 @@ supplier's tariff card.
    - When both wirings are filled for the same side the day/night
      registers win. Missing inputs collapse to the fees-only floor —
      the sensor never goes unknown.
+   - **Auto-fill from the Energy dashboard**: if you've already
+     configured a grid source in HA's Energy dashboard, the cumulative
+     consumption / injection fields are pre-selected from the
+     dashboard's first grid source so you don't pick the same sensor
+     twice. When a `utility_meter` helper rooted at that grid source
+     splits it into peak / offpeak (or jour / nuit, dag / nacht, piek /
+     dal — case-insensitive, separator-tolerant) child tariffs, the
+     four day/night registers are pre-selected too. Tariffs whose
+     names don't map unambiguously to a day/night slot are left blank
+     so a misnamed helper can't silently mis-bill. Whatever is
+     pre-filled stays editable; an existing manual pick is never
+     overwritten.
 
 ### Getting an ENTSO-E API key
 
