@@ -62,7 +62,7 @@
       },
       "meters": {
         "title": "Energiezaehler (Kosten dieses Jahr)",
-        "description": "Optional. Entweder auf die vier Tag-/Nachtregister des Zaehlers zeigen (bevorzugt - exakt von Anfang an), oder auf einzelne kumulative Verbrauchs- / Einspeisesensoren (die Integration liest kWh aus dem HA-Recorder und teilt jeden vergangenen Tag bei Bedarf via Bi-Uhren-Plan in Tag/Nacht). Jede Seite - Verbrauch, Einspeisung - wird unabhaengig aufgeloest; eine Seite als Register und die andere als Gesamtsensor ist erlaubt. Wenn beide Verkabelungen fuer dieselbe Seite ausgefuellt sind, gewinnen die Tag-/Nachtregister.",
+        "description": "Optional. Entweder auf die vier Tag-/Nachtregister des Zaehlers zeigen (bevorzugt - exakt von Anfang an), oder auf einzelne kumulative Verbrauchs- / Einspeisesensoren (die Integration liest kWh aus dem HA-Recorder und teilt jeden vergangenen Tag bei Bedarf via Bi-Uhren-Plan in Tag/Nacht). Jede Seite - Verbrauch, Einspeisung - wird unabhaengig aufgeloest; eine Seite als Register und die andere als Gesamtsensor ist erlaubt. Wenn beide Verkabelungen fuer dieselbe Seite ausgefuellt sind, gewinnen die Tag-/Nachtregister. Wenn das HA-Energie-Dashboard bereits eingerichtet ist, werden die kumulativen Felder - und die Tag-/Nachtregister, sofern ein utility_meter Helper die Netzquelle in peak/offpeak (oder jour/nuit, dag/nacht, piek/dal) Tarife teilt - automatisch vorausgewaehlt. Vorausgefuellte Werte bleiben editierbar.",
         "data": {
           "day_consumption_kwh": "Verbrauch Tag (kWh)",
           "night_consumption_kwh": "Verbrauch Nacht (kWh)",
@@ -145,7 +145,7 @@
       },
       "meters": {
         "title": "Energiezaehler (Kosten dieses Jahr)",
-        "description": "Optional. Entweder auf die vier Tag-/Nachtregister des Zaehlers zeigen (bevorzugt - exakt von Anfang an), oder auf einzelne kumulative Verbrauchs- / Einspeisesensoren (die Integration liest kWh aus dem HA-Recorder und teilt jeden vergangenen Tag bei Bedarf via Bi-Uhren-Plan in Tag/Nacht). Jede Seite - Verbrauch, Einspeisung - wird unabhaengig aufgeloest; eine Seite als Register und die andere als Gesamtsensor ist erlaubt. Wenn beide Verkabelungen fuer dieselbe Seite ausgefuellt sind, gewinnen die Tag-/Nachtregister.",
+        "description": "Optional. Entweder auf die vier Tag-/Nachtregister des Zaehlers zeigen (bevorzugt - exakt von Anfang an), oder auf einzelne kumulative Verbrauchs- / Einspeisesensoren (die Integration liest kWh aus dem HA-Recorder und teilt jeden vergangenen Tag bei Bedarf via Bi-Uhren-Plan in Tag/Nacht). Jede Seite - Verbrauch, Einspeisung - wird unabhaengig aufgeloest; eine Seite als Register und die andere als Gesamtsensor ist erlaubt. Wenn beide Verkabelungen fuer dieselbe Seite ausgefuellt sind, gewinnen die Tag-/Nachtregister. Wenn das HA-Energie-Dashboard bereits eingerichtet ist, werden die kumulativen Felder - und die Tag-/Nachtregister, sofern ein utility_meter Helper die Netzquelle in peak/offpeak (oder jour/nuit, dag/nacht, piek/dal) Tarife teilt - automatisch vorausgewaehlt. Vorausgefuellte Werte bleiben editierbar.",
         "data": {
           "day_consumption_kwh": "Verbrauch Tag (kWh)",
           "night_consumption_kwh": "Verbrauch Nacht (kWh)",

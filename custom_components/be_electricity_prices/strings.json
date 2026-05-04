@@ -62,7 +62,7 @@
       },
       "meters": {
         "title": "Energy meters (current year cost)",
-        "description": "Optional. Either point at the four day/night registers from your meter (preferred - exact from the start), or at single cumulative consumption / injection sensors (the integration reads kWh from HA's recorder and splits each past day's total into day/night via the bi-hourly schedule when needed). Each side - consumption, injection - is resolved independently; you can mix one side as registers and the other as a single total. When both wirings are filled for the same side, the day/night registers win.",
+        "description": "Optional. Either point at the four day/night registers from your meter (preferred - exact from the start), or at single cumulative consumption / injection sensors (the integration reads kWh from HA's recorder and splits each past day's total into day/night via the bi-hourly schedule when needed). Each side - consumption, injection - is resolved independently; you can mix one side as registers and the other as a single total. When both wirings are filled for the same side, the day/night registers win. If you've already set up HA's Energy dashboard, the cumulative fields - and the day/night registers when a utility_meter helper splits the grid source into peak/offpeak (or jour/nuit, dag/nacht, piek/dal) tariffs - are pre-selected for you. Anything pre-filled stays editable.",
         "data": {
           "day_consumption_kwh": "Day consumption (kWh)",
           "night_consumption_kwh": "Night consumption (kWh)",

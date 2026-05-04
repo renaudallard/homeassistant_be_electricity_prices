@@ -62,7 +62,7 @@
       },
       "meters": {
         "title": "Compteurs (cout de l annee)",
-        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit des capteurs cumulatifs uniques de consommation / injection (l'integration lit les kWh depuis le recorder de HA et repartit chaque journee passee en jour/nuit via l'horaire bi-horaire au besoin). Chaque cote - consommation, injection - est resolu independamment; vous pouvez melanger un cote en registres et l'autre en capteur unique. Quand les deux cablages sont remplis pour le meme cote, les registres jour/nuit l'emportent.",
+        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit des capteurs cumulatifs uniques de consommation / injection (l'integration lit les kWh depuis le recorder de HA et repartit chaque journee passee en jour/nuit via l'horaire bi-horaire au besoin). Chaque cote - consommation, injection - est resolu independamment; vous pouvez melanger un cote en registres et l'autre en capteur unique. Quand les deux cablages sont remplis pour le meme cote, les registres jour/nuit l'emportent. Si le tableau de bord Energie de HA est deja configure, les champs cumulatifs - et les registres jour/nuit lorsque un helper utility_meter divise la source en tarifs jour/nuit (ou peak/offpeak, dag/nacht, piek/dal) - sont pre-selectionnes. Les valeurs pre-remplies restent modifiables.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
           "night_consumption_kwh": "Consommation nuit (kWh)",
@@ -145,7 +145,7 @@
       },
       "meters": {
         "title": "Compteurs (cout de l annee)",
-        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit des capteurs cumulatifs uniques de consommation / injection (l'integration lit les kWh depuis le recorder de HA et repartit chaque journee passee en jour/nuit via l'horaire bi-horaire au besoin). Chaque cote - consommation, injection - est resolu independamment; vous pouvez melanger un cote en registres et l'autre en capteur unique. Quand les deux cablages sont remplis pour le meme cote, les registres jour/nuit l'emportent.",
+        "description": "Facultatif. Selectionnez soit les quatre registres jour/nuit du compteur (recommande - exact des le depart), soit des capteurs cumulatifs uniques de consommation / injection (l'integration lit les kWh depuis le recorder de HA et repartit chaque journee passee en jour/nuit via l'horaire bi-horaire au besoin). Chaque cote - consommation, injection - est resolu independamment; vous pouvez melanger un cote en registres et l'autre en capteur unique. Quand les deux cablages sont remplis pour le meme cote, les registres jour/nuit l'emportent. Si le tableau de bord Energie de HA est deja configure, les champs cumulatifs - et les registres jour/nuit lorsque un helper utility_meter divise la source en tarifs jour/nuit (ou peak/offpeak, dag/nacht, piek/dal) - sont pre-selectionnes. Les valeurs pre-remplies restent modifiables.",
         "data": {
           "day_consumption_kwh": "Consommation jour (kWh)",
           "night_consumption_kwh": "Consommation nuit (kWh)",
