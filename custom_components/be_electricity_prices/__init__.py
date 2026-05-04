@@ -43,7 +43,7 @@ from homeassistant.helpers import issue_registry
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .backfill import backfill_if_missing
+from .backfill import backfill_if_missing, backfill_range
 from .const import (
     CONF_CONTRACT,
     CONF_REGION,
@@ -60,6 +60,7 @@ type BePricesConfigEntry = ConfigEntry[BePricesCoordinator]
 SERVICE_REFRESH = "refresh"
 SERVICE_CHEAPEST_WINDOW = "cheapest_window"
 SERVICE_MOST_EXPENSIVE_WINDOW = "most_expensive_window"
+SERVICE_BACKFILL_STATISTICS = "backfill_statistics"
 
 WINDOW_SCHEMA = vol.Schema(
     {
@@ -73,6 +74,15 @@ WINDOW_SCHEMA = vol.Schema(
         vol.Optional("entry_id"): cv.string,
         vol.Optional("earliest_start"): cv.datetime,
         vol.Optional("latest_end"): cv.datetime,
+    }
+)
+
+BACKFILL_SCHEMA = vol.Schema(
+    {
+        vol.Optional("entry_id"): cv.string,
+        vol.Optional("start"): cv.datetime,
+        vol.Optional("end"): cv.datetime,
+        vol.Optional("clear", default=False): cv.boolean,
     }
 )
 
@@ -105,6 +115,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
             _async_most_expensive_window_service,
             schema=WINDOW_SCHEMA,
             supports_response=SupportsResponse.ONLY,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_BACKFILL_STATISTICS):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_BACKFILL_STATISTICS,
+            _async_backfill_service,
+            schema=BACKFILL_SCHEMA,
+            supports_response=SupportsResponse.OPTIONAL,
         )
 
     # One-shot backfill: only fires when the recorder has no
@@ -162,6 +180,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         hass.services.async_remove(DOMAIN, SERVICE_REFRESH)
         hass.services.async_remove(DOMAIN, SERVICE_CHEAPEST_WINDOW)
         hass.services.async_remove(DOMAIN, SERVICE_MOST_EXPENSIVE_WINDOW)
+        hass.services.async_remove(DOMAIN, SERVICE_BACKFILL_STATISTICS)
     return unloaded
 
 
@@ -321,3 +340,30 @@ async def _async_most_expensive_window_service(call: ServiceCall) -> ServiceResp
     """Find the most-expensive contiguous N-hour window in the upcoming price table."""
     hourly, slots, earliest, latest = _resolve_window_inputs(call)
     return _find_window(hourly, slots, earliest, latest, minimize=False)
+
+
+async def _async_backfill_service(call: ServiceCall) -> ServiceResponse:
+    """Backfill long-term statistics for the targeted entry over [start, end).
+
+    Defaults match the auto-backfill path (Jan 1 of the current local
+    year through "now"); pass ``start`` / ``end`` to redo a narrower
+    window after fixing a tariff card. ``clear=True`` deletes the
+    target series first; without it, ``async_import_statistics``
+    upserts on (statistic_id, start) so a re-run silently overwrites
+    the requested hours.
+    """
+    entries = call.hass.config_entries.async_loaded_entries(DOMAIN)
+    target_id = call.data.get("entry_id")
+    if target_id is not None:
+        entries = [e for e in entries if e.entry_id == target_id]
+    if not entries:
+        raise ValueError(
+            f"no loaded {DOMAIN} entry" + (f" with id {target_id}" if target_id else "")
+        )
+    return await backfill_range(
+        call.hass,
+        entries[0],
+        call.data.get("start"),
+        call.data.get("end"),
+        clear=bool(call.data.get("clear", False)),
+    )

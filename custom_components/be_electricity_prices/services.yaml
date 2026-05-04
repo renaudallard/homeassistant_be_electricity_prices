@@ -49,6 +49,55 @@ cheapest_window:
       selector:
         datetime:
 
+backfill_statistics:
+  name: Backfill statistics
+  description: >-
+    Populate the recorder's long-term statistics for this entry's
+    price sensors and current_year_cost over a date range. Useful to
+    redo a window after fixing a tariff card or to seed history
+    further back than the automatic Jan 1 anchor. Re-runs are safe:
+    rows are upserted by (statistic_id, hour). Pass clear=true to
+    delete the target series first when the underlying tariff
+    changed.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: >-
+        Target a specific config entry. Defaults to the first loaded
+        entry when omitted (only matters if multiple suppliers are
+        configured).
+      example: 4f3c8...
+      selector:
+        config_entry:
+          integration: be_electricity_prices
+    start:
+      name: Start
+      description: >-
+        First hour to backfill. Default = Jan 1 00:00 of the current
+        local year.
+      example: "2026-01-01T00:00:00+01:00"
+      selector:
+        datetime:
+    end:
+      name: End
+      description: >-
+        First hour NOT to backfill (exclusive). Default = current
+        hour, so the in-progress hour the live coordinator is about
+        to write itself stays untouched.
+      example: "2026-05-01T00:00:00+02:00"
+      selector:
+        datetime:
+    clear:
+      name: Clear before re-import
+      description: >-
+        Delete the target statistic series before re-importing.
+        Otherwise the import overwrites only the hours in the
+        requested range. Set to true when a tariff card changed and
+        old rows would mislead.
+      default: false
+      selector:
+        boolean:
+
 most_expensive_window:
   name: Most expensive window
   description: >-

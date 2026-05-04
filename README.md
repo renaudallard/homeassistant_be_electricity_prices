@@ -51,6 +51,7 @@ publication and how to parse it.
 - **Solar** — prosumer fee for the Walloon compensation regime (until 2030-12-31), and a per-kWh injection price entity that plugs straight into HA Energy.
 - **Year-to-date cost** — `current_year_cost` sensor reports your running bill in EUR since Jan 1, computed day by day (or hour by hour for TOU and dynamic contracts) from HA's recorder (consumption × the tariff of the month that day/hour belongs to). Each day is billed at its own month's published rate when the supplier archives historical cards (Eneco / Cociter / Ecopower / Bolt fix / Mega); other suppliers fall back to the current rate as a proxy. **TOU contracts** (Engie Empower Flextime, Luminus SmartFlex) use the per-hour path so each kWh hits its actual peak / transition / offpeak rate. **Dynamic contracts** replay historical hourly ENTSO-E day-ahead spots from a persistent cache so each past kWh is billed at its actual `factor × spot + base` rate; missing hours (cold-start gaps) are skipped rather than zeroed. Compensation regime nets injection against consumption across the whole year (clamped at zero, since most Walloon suppliers forfeit surplus injection past consumption). Annual fees are pro-rated to the elapsed fraction of the year so the figure grows day by day instead of jumping to the full annual on Jan 1.
 - **Cheapest / most-expensive window services** — find the optimal contiguous N-hour window in the upcoming price table for EV charging, heat-pump cycles, or peak avoidance.
+- **Statistics backfill** — on first install (or after a database reset) the integration populates the recorder's long-term statistics for the price sensors and `current_year_cost` from Jan 1 of the current year up to "now", so the Energy dashboard shows price history immediately. A `backfill_statistics` service is exposed for re-runs after a tariff change.
 - **Tomorrow-available trigger** — `tomorrow_prices_available` binary sensor flips ON once ENTSO-E publishes the next-day curve, so dynamic automations don't fire too early.
 - **ENTSO-E key validated at setup** — the config flow hits the real endpoint with the entered token and rejects bad keys before the entry is saved.
 - **Translated UI** — English, French, Dutch and German.
@@ -355,6 +356,38 @@ action:
       entity_id: switch.ev_charger
     # Schedule the rest of the automation at window.start.
 ```
+
+### `be_electricity_prices.backfill_statistics` service
+
+Populates the recorder's long-term statistics for this entry's price
+sensors (`current_price`, `energy_component`, `network_component`,
+`taxes_component`, plus `injection_price` for injection-regime users)
+and the `current_year_cost` running bill. The Energy dashboard and
+the Statistics graph card then show price + cost history that
+predates the entry's first live update tick.
+
+The integration auto-triggers a one-shot backfill on first install
+(or after a database reset) covering Jan 1 of the current local year
+through "now"; the service is for re-runs after fixing a tariff card
+or to redo a narrower window:
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `entry_id` | first loaded | Optional config entry to target. |
+| `start` | Jan 1 00:00 local | First hour to backfill. |
+| `end` | current hour | First hour NOT to backfill (exclusive); the in-progress hour is left to the live coordinator. |
+| `clear` | `false` | Delete the target series first. Use after a tariff change so old rows don't mislead. |
+
+Re-runs without `clear` are idempotent (rows are upserted by
+`(statistic_id, hour)`). For dynamic suppliers the service reuses
+the coordinator's ENTSO-E historical-spot cache, so a year-wide
+backfill on a fresh install can take tens of seconds while the spots
+land. Response is a `{rows_written, sensors, range}` object you can
+inspect from Developer Tools → Services.
+
+States history (the per-entity timeline shown in the **History**
+view) is append-only by design and is not affected; only the
+long-term statistics tables are written.
 
 ### Diagnostics
 
