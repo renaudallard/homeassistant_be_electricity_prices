@@ -36,6 +36,7 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.config_flow import (
+    _apply_energy_manager_capacity_default,
     _apply_energy_manager_defaults,
     _classify_tariff,
 )
@@ -239,3 +240,83 @@ async def test_utility_meter_with_unrecognised_tariffs_skips_day_night(
     assert defaults["consumption_kwh"] == "sensor.electricity_meter_total"
     assert "day_consumption_kwh" not in defaults
     assert "night_consumption_kwh" not in defaults
+
+
+def _add_integration_helper(
+    hass: HomeAssistant,
+    *,
+    source_kw: str,
+    output_kwh: str,
+    entry_id: str,
+) -> None:
+    """Register a fake Riemann integration helper turning a kW power
+    sensor into a kWh energy sensor, the typical bridge between a P1
+    power reading and the Energy dashboard."""
+    entry = MockConfigEntry(
+        domain="integration",
+        entry_id=entry_id,
+        data={},
+        options={"source": source_kw},
+    )
+    entry.add_to_hass(hass)
+    ent_reg = er.async_get(hass)
+    ent_reg.async_get_or_create(
+        domain="sensor",
+        platform="integration",
+        unique_id=entry_id,
+        config_entry=entry,
+        suggested_object_id=output_kwh.removeprefix("sensor."),
+    )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_capacity_pre_fill_walks_integration_helper_to_kw_source(
+    hass: HomeAssistant,
+) -> None:
+    """The Energy dashboard tracks kWh; the capacity tariff needs kW.
+    When the dashboard sensor was produced by a Riemann integration
+    helper, the helper's source is the kW reading we want."""
+    _add_integration_helper(
+        hass,
+        source_kw="sensor.electricity_meter_power",
+        output_kwh="sensor.electricity_meter_total",
+        entry_id="riemann_kwh",
+    )
+    defaults: dict[str, Any] = {}
+    prefs = _grid_prefs(consumption="sensor.electricity_meter_total")
+    with _patch_manager(prefs):
+        await _apply_energy_manager_capacity_default(hass, defaults)
+    assert defaults["capacity_peak_sensor"] == "sensor.electricity_meter_power"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_capacity_pre_fill_skips_when_no_integration_helper(
+    hass: HomeAssistant,
+) -> None:
+    """Users with a native kWh sensor (no Riemann helper) keep the
+    capacity peak sensor blank -- there's no automatic way to derive
+    a kW source from a native kWh reading."""
+    defaults: dict[str, Any] = {}
+    prefs = _grid_prefs(consumption="sensor.native_kwh")
+    with _patch_manager(prefs):
+        await _apply_energy_manager_capacity_default(hass, defaults)
+    assert "capacity_peak_sensor" not in defaults
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_capacity_pre_fill_does_not_override_existing_choice(
+    hass: HomeAssistant,
+) -> None:
+    """OptionsFlow seeds defaults with whatever the user saved. The
+    capacity helper must not blow that away."""
+    _add_integration_helper(
+        hass,
+        source_kw="sensor.dashboard_power",
+        output_kwh="sensor.electricity_meter_total",
+        entry_id="riemann_kwh2",
+    )
+    defaults: dict[str, Any] = {"capacity_peak_sensor": "sensor.user_pick"}
+    prefs = _grid_prefs(consumption="sensor.electricity_meter_total")
+    with _patch_manager(prefs):
+        await _apply_energy_manager_capacity_default(hass, defaults)
+    assert defaults["capacity_peak_sensor"] == "sensor.user_pick"

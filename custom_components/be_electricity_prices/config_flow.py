@@ -501,6 +501,68 @@ async def _apply_energy_manager_defaults(
         return
 
 
+async def _apply_energy_manager_capacity_default(
+    hass: HomeAssistant, defaults: dict[str, Any]
+) -> None:
+    """Pre-fill the Flemish capacity peak sensor from the Energy
+    dashboard when nothing is already set.
+
+    The dashboard tracks cumulative kWh, but the capacity tariff needs
+    a kW power sensor. The common bridge is a Riemann ``integration``
+    helper that turns a kW input into the kWh output the dashboard
+    consumes. Walk back: dashboard kWh sensor -> integration helper
+    config entry -> the helper's ``source`` (the kW sensor we want).
+
+    Skipped when:
+      - the user already picked a sensor (preserve manual choice),
+      - the energy component isn't loaded,
+      - the dashboard has no grid source,
+      - the consumption sensor isn't a Riemann-integration child
+        (no way to derive the kW source automatically).
+    """
+    if defaults.get(CONF_CAPACITY_PEAK_SENSOR) is not None:
+        return
+    try:
+        from homeassistant.components.energy.data import async_get_manager
+    except ImportError:
+        return
+    try:
+        manager = await async_get_manager(hass)
+    except Exception:  # noqa: BLE001 - energy may not be ready
+        return
+    prefs: dict[str, Any] | None = manager.data  # type: ignore[assignment]
+    if not prefs:
+        return
+    sources: list[dict[str, Any]] = prefs.get("energy_sources") or []
+    consumption_stat: str | None = None
+    for source in sources:
+        if source.get("type") != "grid":
+            continue
+        flow_from: list[dict[str, Any]] = source.get("flow_from") or []
+        if flow_from:
+            stat = flow_from[0].get("stat_energy_from")
+            if isinstance(stat, str) and stat.startswith("sensor."):
+                consumption_stat = stat
+        break
+    if consumption_stat is None:
+        return
+    from homeassistant.helpers import entity_registry as er
+
+    ent_reg = er.async_get(hass)
+    re_entry = ent_reg.async_get(consumption_stat)
+    if re_entry is None or re_entry.platform != "integration":
+        return
+    if re_entry.config_entry_id is None:
+        return
+    ce = hass.config_entries.async_get_entry(re_entry.config_entry_id)
+    if ce is None:
+        return
+    opts = {**ce.data, **ce.options}
+    source_sensor = opts.get("source")
+    if isinstance(source_sensor, str) and source_sensor.startswith("sensor."):
+        defaults[CONF_CAPACITY_PEAK_SENSOR] = source_sensor
+
+
 def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
@@ -618,8 +680,10 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_solar()
+        defaults = dict(self._data)
+        await _apply_energy_manager_capacity_default(self.hass, defaults)
         return self.async_show_form(
-            step_id="capacity", data_schema=_capacity_schema(self._data)
+            step_id="capacity", data_schema=_capacity_schema(defaults)
         )
 
     async def async_step_solar(
@@ -777,8 +841,10 @@ class BePricesOptionsFlow(OptionsFlow):
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_solar()
+        defaults = dict(self._data)
+        await _apply_energy_manager_capacity_default(self.hass, defaults)
         return self.async_show_form(
-            step_id="capacity", data_schema=_capacity_schema(self._data)
+            step_id="capacity", data_schema=_capacity_schema(defaults)
         )
 
     async def async_step_solar(

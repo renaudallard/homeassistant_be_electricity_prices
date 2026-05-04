@@ -175,7 +175,10 @@ supplier's tariff card.
    entry is saved.
 7. **Capacity tariff peak source** *(Flanders only)* — either a power sensor
    reporting your live kW draw, or a fixed kW value (default 2.5 kW, the VREG
-   regulated minimum).
+   regulated minimum). The peak sensor field is auto-filled from the kW input
+   of any Riemann `integration` helper that feeds the Energy dashboard's grid
+   source, so users with the typical P1-power → kWh-Riemann → dashboard chain
+   don't have to pick the same sensor twice.
 8. **Solar panels** — inverter capacity in kVA + the regime that applies:
    - **No solar panels** *(default)* — no extra sensors.
    - **Compensation regime** — Wallonia only, installations **certified before
