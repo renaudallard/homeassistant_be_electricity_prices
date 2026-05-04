@@ -341,6 +341,7 @@ async def _snapshot_for_month(
         if cache_key in cache:
             cached = cache[cache_key]
             return cached if cached is not None else current_snapshot
+        fetch_failed = False
         try:
             snap = await fetch_archived(session, contract, region, year_month)
         except Exception as err:  # noqa: BLE001 - per-month fetch must never break the year loop
@@ -353,10 +354,16 @@ async def _snapshot_for_month(
                 err,
             )
             snap = None
+            fetch_failed = True
         # Skip the cache write if eviction ran during the await: the
         # tuple is no longer this entry's, and re-creating the row
         # would orphan it for any future re-add of the same tuple.
-        if _tuple_generation(hass, cache_key) == gen_at_entry:
+        # Also skip when the fetch raised: a transient error must not
+        # be cached as "supplier doesn't archive this month", which is
+        # the meaning a cached None carries here. Leaving the key
+        # absent lets the next refresh retry instead of locking in
+        # stale "uncredited" output until the entry reloads.
+        if not fetch_failed and _tuple_generation(hass, cache_key) == gen_at_entry:
             cache[cache_key] = snap
     return snap if snap is not None else current_snapshot
 

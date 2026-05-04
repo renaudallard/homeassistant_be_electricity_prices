@@ -495,6 +495,52 @@ async def test_snapshot_for_month_caches_negative_results(
     assert fetch_calls == 1
 
 
+async def test_snapshot_for_month_does_not_cache_transient_failures(
+    hass: HomeAssistant,
+) -> None:
+    """A raised exception during fetch_for_month must NOT poison the
+    cache: caching the failure as None would mean the same wording as
+    'supplier doesn't archive this month' and the entry would serve
+    uncredited rates for that month until the next reload. The next
+    refresh should retry, and a second call that succeeds should
+    populate the cache normally."""
+
+    current = _archive_snapshot("2026-04")
+    archived = _archive_snapshot("2024-06")
+    call = 0
+
+    async def _flaky(*_args: object, **_kw: object) -> SupplierSnapshot:
+        nonlocal call
+        call += 1
+        if call == 1:
+            raise RuntimeError("transient network blip")
+        return archived
+
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_flaky,
+    )
+    _monthly_snapshots(hass).clear()
+    snap = await _snapshot_for_month(
+        hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
+    )
+    # First call raised: falls back to current snapshot, but the cache
+    # must NOT have been populated.
+    assert snap is current
+    cache_key = ("test", "test", "wallonia", "2024-06")
+    assert cache_key not in _monthly_snapshots(hass)
+    # Second call succeeds and is cached.
+    snap = await _snapshot_for_month(
+        hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
+    )
+    assert snap is archived
+    assert call == 2
+    assert _monthly_snapshots(hass)[cache_key] is archived
+
+
 # ---- _compute_current_year_cost (recorder-driven) -----------------------------
 
 
