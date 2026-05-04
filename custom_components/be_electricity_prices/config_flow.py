@@ -1151,6 +1151,8 @@ class BePricesOptionsFlow(OptionsFlow):
                 "annual_kwh": f"{DEFAULT_ANNUAL_KWH:.0f}",
                 "ytd_kwh": "-",
                 "consumption_source": "default (entry reloading)",
+                "annual_chart": "",
+                "ytd_chart": "",
                 "error": "current entry is reloading; try again in a moment",
             }
 
@@ -1223,6 +1225,8 @@ class BePricesOptionsFlow(OptionsFlow):
             "delta_ytd": "-",
             "annual_kwh": f"{annual_kwh:.0f}",
             "ytd_kwh": f"{ytd_kwh:.0f}" if ytd_kwh is not None else "-",
+            "annual_chart": "",
+            "ytd_chart": "",
             "annual_injection_kwh": (
                 f"{rolling_inj_kwh:.0f}" if regime != SOLAR_REGIME_NONE else "-"
             ),
@@ -1383,6 +1387,11 @@ class BePricesOptionsFlow(OptionsFlow):
                 placeholders["delta_ytd"] = (
                     f"{'+' if ytd_delta >= 0 else ''}{ytd_delta:.2f}"
                 )
+                _populate_charts(
+                    placeholders,
+                    current_label=_label_for_supplier(current[CONF_SUPPLIER]),
+                    compare_label=_label_for_supplier(self._compare[CONF_SUPPLIER]),
+                )
                 return placeholders
             # Fall through to the simple model on engine failure.
 
@@ -1419,7 +1428,57 @@ class BePricesOptionsFlow(OptionsFlow):
             placeholders["delta_ytd"] = (
                 f"{'+' if ytd_delta >= 0 else ''}{ytd_delta:.2f}"
             )
+        _populate_charts(
+            placeholders,
+            current_label=_label_for_supplier(current[CONF_SUPPLIER]),
+            compare_label=_label_for_supplier(self._compare[CONF_SUPPLIER]),
+        )
         return placeholders
+
+
+def _populate_charts(
+    placeholders: dict[str, str], *, current_label: str, compare_label: str
+) -> None:
+    """Render the annual / YTD bars from the numeric placeholders.
+
+    Reads the ``current_annual`` / ``compare_annual`` (and YTD pair)
+    placeholders and replaces ``annual_chart`` / ``ytd_chart`` with a
+    two-row bar visualisation. Leaves them empty when either side is
+    "-" so the result page still looks clean for the no-quote-yet
+    case (e.g. fetch failed)."""
+    for prefix, chart_key in (("annual", "annual_chart"), ("ytd", "ytd_chart")):
+        cur = placeholders.get(f"current_{prefix}", "-")
+        cmp_ = placeholders.get(f"compare_{prefix}", "-")
+        if cur == "-" or cmp_ == "-":
+            continue
+        try:
+            cur_v = float(cur)
+            cmp_v = float(cmp_)
+        except ValueError:
+            continue
+        placeholders[chart_key] = _bar_chart(
+            {current_label: cur_v, compare_label: cmp_v}
+        )
+
+
+def _bar_chart(values: dict[str, float], width: int = 20) -> str:
+    """Two-row unicode bar chart, both rows scaled against the larger
+    value so the visual ratio matches the numeric one. Labels are
+    padded so the bars line up. Returns ``""`` when any input is non-
+    finite (negative-billing cases are clamped to zero for the bar
+    only; the EUR values still render to keep the sign visible)."""
+    if not values:
+        return ""
+    max_v = max(max(values.values(), default=0.0), 1.0)
+    label_w = max(len(k) for k in values)
+    rows: list[str] = []
+    for label, v in values.items():
+        bar_v = max(v, 0.0)  # negative annuals (huge solar credit) clamp to empty
+        filled = round((bar_v / max_v) * width)
+        filled = max(0, min(width, filled))
+        bar = "█" * filled + "░" * (width - filled)
+        rows.append(f"  {label.ljust(label_w)} {bar} {v:.0f} EUR")
+    return "\n".join(rows)
 
 
 def _solar_note(regime: str, rolling_inj_kwh: float) -> str:

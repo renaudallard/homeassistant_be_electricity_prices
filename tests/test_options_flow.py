@@ -526,6 +526,12 @@ async def test_compare_uses_measured_rolling_year_kwh(
     assert ph["annual_kwh"] == "7000"
     assert ph["ytd_kwh"] == "2400"
     assert "measured" in ph["consumption_source"]
+    # Bar chart placeholders are populated with both supplier labels
+    # and unicode block characters; the result page renders them as a
+    # side-by-side visual.
+    assert "Eneco" in ph["annual_chart"]
+    assert "Cociter" in ph["annual_chart"]
+    assert "█" in ph["annual_chart"]
     # Annual at 7000 kWh > annual at 3500 kWh, sanity check the helper
     # actually used the measured value (compare_annual is rate * 7000
     # + fees, which for cociter@0.16 alone is > 1000 EUR).
