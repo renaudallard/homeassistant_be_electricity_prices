@@ -123,7 +123,7 @@ All sensors share one device per config entry.
 | `taxes_component` | Levies EUR/kWh now (VAT-inclusive). |
 | `fixed_fee_eur_per_year` | Supplier's flat annual subscription fee (EUR/year), parsed from the tariff card. |
 | `energy_fund_eur_per_month` | Flemish Energiefonds in EUR/month (€0 outside Flanders, and €0 in Flanders for domiciled customers). |
-| `current_year_cost` | Running bill **since Jan 1 of the current year**, computed day by day against HA's recorder. Configure once in the **Energy meters** step, two ways: (a) point at the four day/night register sensors directly (preferred when available); or (b) point at single cumulative consumption / injection sensors (for bi-hourly meters the integration recovers the day/night split per past day from the recorder's hourly statistics binned by the bi-hourly schedule). Each day's kWh is multiplied by the tariff card published for the month it belongs to: when the supplier archives historical cards (Eneco / Cociter / Ecopower) past months use their own published rates; suppliers without an archive (Bolt / Mega / OCTA+ / TotalEnergies / Engie / Luminus / DATS 24) fall back to the current rate as a proxy. Annual fees (`yearly_fixed_fee + 12 × energy_fund_eur_per_month + 12 × prosumer_cost`) are summed per archived month using each month's snapshot, then pro-rated by `days_in_month_in_ytd / days_in_year` so the YTD running total still grows uniformly across the calendar year — on Jan 1 the sensor sits at ~0 and grows day by day, and on Dec 31 it carries the full annual amount. A supplier that re-indexes its fixed fee or energy fund mid-year is honoured for the months it applies to (same per-month snapshot path the prosumer fee already uses). Under Walloon compensation regime, injection is netted against consumption across the whole YTD and the energy term is clamped at zero (most suppliers forfeit surplus injection past consumption, so the bill never settles negative). Always numeric: a fresh install in May still produces a meaningful figure for the year so far, as long as the recorder has been collecting daily statistics for the configured kWh sensors. |
+| `current_year_cost` | Running bill **since Jan 1 of the current year**, computed against HA's recorder (per day for fixed/variable, per hour for TOU and dynamic). Configure once in the **Energy meters** step, two ways: (a) point at the four day/night register sensors directly (preferred when available); or (b) point at single cumulative consumption / injection sensors (for bi-hourly meters the integration recovers the day/night split per past day from the recorder's hourly statistics binned by the bi-hourly schedule). Each kWh is multiplied by the tariff in effect for the month/hour it belongs to: when the supplier archives historical cards (Eneco / Cociter / Ecopower / Bolt fix / Mega) past months use their own published rates; suppliers without an archive (OCTA+ / TotalEnergies / Engie / Luminus / DATS 24) fall back to the current rate as a proxy. Dynamic contracts replay historical hourly ENTSO-E spots from a persistent cache so each past kWh hits its actual `factor × spot + base` rate; missing hours (cold-start gaps) are skipped rather than zeroed. Annual fees (`yearly_fixed_fee + 12 × energy_fund_eur_per_month + 12 × prosumer_cost`) are summed per archived month using each month's snapshot, then pro-rated by `days_in_month_in_ytd / days_in_year` so the YTD running total still grows uniformly across the calendar year — on Jan 1 the sensor sits at ~0 and grows day by day, and on Dec 31 it carries the full annual amount. A supplier that re-indexes its fixed fee or energy fund mid-year is honoured for the months it applies to (same per-month snapshot path the prosumer fee already uses). Under Walloon compensation regime, injection is netted against consumption across the whole YTD and the energy term is clamped at zero (most suppliers forfeit surplus injection past consumption, so the bill never settles negative). Always numeric: a fresh install in May still produces a meaningful figure for the year so far, as long as the recorder has been collecting daily statistics for the configured kWh sensors. |
 | `tomorrow_prices_available` | Binary sensor. ON once the price table covers at least one hour with tomorrow's local date. Useful as a trigger for dynamic-tariff automations that should only fire after ENTSO-E publishes the next-day curve (~13:00 CET); always ON for fixed/variable contracts. |
 
 ### Conditional
@@ -268,7 +268,7 @@ opens a two-option menu:
   Multiple entries pointing at the same
   `(supplier, contract, region)` tuple share their fetched snapshot
   through an in-memory cache, so the same PDF is never polled twice.
-- **Spot prices** *(dynamic only)* — hourly via ENTSO-E; tomorrow's curve picked up after publication around midday CET.
+- **Spot prices** *(dynamic only)* — hourly via ENTSO-E; tomorrow's curve picked up after publication around midday CET. Historical hourly spots are backfilled lazily into a per-entry persistent cache so dynamic `current_year_cost` replays each past hour at its actual rate without re-fetching the same window every tick.
 - **Monthly capacity peak** *(Flanders)* — tracked continuously, resets on the 1st of each local month.
 - **`current_year_cost`** — recomputed every coordinator tick from HA's
   recorder. The recorder's daily statistics are the source of truth for
@@ -375,14 +375,16 @@ the supplier's published `exclusive_night` rate. Configure it as a
 2. On the meter step, pick **Exclusive-night circuit (separate
    meter)**.
 3. On the energy meters step, point the cumulative-consumption sensor
-   at your exclusive-night kWh sensor (the second register on a
-   bi-hourly meter, or a dedicated kWh sensor on a separate circuit).
+   at the kWh sensor wired to the exclusive-night circuit.
 
 Energy is billed at the supplier's `exclusive_night` rate; distribution
-falls back to the DSO's off-peak rate (closer to the real bill than
-the day rate). The primary entry keeps your day-circuit consumption
-on mono / bi / dynamic; YTD and capacity tracking work normally on
-both entries.
+uses the DSO's published exclusive-night rate when the extractor
+parses it (Bolt, Cociter, DATS 24, Ecopower, Eneco, Engie Brussels,
+Luminus, Mega, OCTA+, TotalEnergies), falling back to the DSO's
+off-peak rate for the few rows where the column position isn't yet
+mapped — both better approximations than the day rate. The primary
+entry keeps your day-circuit consumption on mono / bi / dynamic; YTD
+and capacity tracking work normally on both entries.
 
 ## Development
 
