@@ -438,6 +438,279 @@ async def test_compare_branch_filters_to_same_kind(hass: HomeAssistant) -> None:
         assert "dynamic" in kinds
 
 
+async def _drive_compare(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    *,
+    other_snap: Any,
+    other_supplier: str = "cociter",
+    other_contract: str = "cociter_variable",
+    meter: str = "mono",
+) -> dict[str, str]:
+    """Walk the compare flow end-to-end and return the result form's
+    description placeholders. Replaces the alternative supplier's
+    fetch with a stub returning ``other_snap`` (SupplierExtractor is
+    a frozen dataclass, so we swap the registry entry instead of
+    patching .fetch directly)."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    fake = replace(EXTRACTORS[other_supplier], fetch=AsyncMock(return_value=other_snap))
+    with patch.dict(EXTRACTORS, {other_supplier: fake}):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": other_supplier}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": other_contract}
+        )
+        if result["step_id"] == "compare_meter":
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"meter": meter}
+            )
+        assert result["step_id"] == "compare_result"
+    return result["description_placeholders"]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_uses_measured_rolling_year_kwh(
+    hass: HomeAssistant,
+) -> None:
+    """When a consumption sensor is configured and the recorder has
+    history, the annual estimate must use the measured rolling-year
+    kWh instead of the 3500 kWh fallback."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.house_total",
+        },
+        title="Eneco - Wallonia",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    other_snap = _stub_snapshot("cociter", "cociter_variable", 0.16)
+
+    measured_rolling = 7000.0  # double the 3500 default; isolates the path
+    measured_ytd = 2400.0
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id != "sensor.house_total":
+            return {}
+        # Compress the period total into a single synthetic day so the
+        # caller's sum() picks it up. The compare path scopes by
+        # (rolling_year_start vs jan1) so we can branch on the gap.
+        delta = (end - start).days
+        if delta >= 360:
+            return {start: measured_rolling}
+        return {start: measured_ytd}
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        ph = await _drive_compare(hass, entry, other_snap=other_snap)
+    # 7000 kWh, not 3500.
+    assert ph["annual_kwh"] == "7000"
+    assert ph["ytd_kwh"] == "2400"
+    assert "measured" in ph["consumption_source"]
+    # Annual at 7000 kWh > annual at 3500 kWh, sanity check the helper
+    # actually used the measured value (compare_annual is rate * 7000
+    # + fees, which for cociter@0.16 alone is > 1000 EUR).
+    assert float(ph["compare_annual"]) > 1000.0
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_compensation_regime_nets_consumption(
+    hass: HomeAssistant,
+) -> None:
+    """Walloon compensation regime users have their meter netted 1:1
+    on consumption vs injection. The compare quote must reflect that:
+    a household consuming 5000 kWh and injecting 5000 kWh pays for
+    roughly zero net energy + fees, not 5000 kWh worth."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.cons",
+            "injection_kwh": "sensor.inj",
+            "solar_regime": "compensation",
+            "solar_kva": 5.0,
+        },
+        title="Eneco - Wallonia compensation",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    other_snap = _stub_snapshot("cociter", "cociter_variable", 0.16)
+
+    # Equal consumption and injection -> netted to 0 billable kWh; the
+    # bill collapses to fees only.
+    cons = 5000.0
+    inj = 5000.0
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return {start: cons}
+        if entity_id == "sensor.inj":
+            return {start: inj}
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        ph = await _drive_compare(hass, entry, other_snap=other_snap)
+    # Per-kWh × annual_kwh is zero (netted), so the annual bill equals
+    # the fees-only floor. For the stub eneco snapshot fees are
+    # yearly_fixed_fee=60 + energy_fund=0 + capacity=0 + prosumer (no
+    # prosumer_eur_per_kva_year on the stub DSO) = 60 EUR. Same for
+    # cociter. The delta should be ~0.
+    assert abs(float(ph["compare_annual"]) - 60.0) < 1.0
+    assert abs(float(ph["current_annual"]) - 60.0) < 1.0
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_injection_regime_credits_injection_price(
+    hass: HomeAssistant,
+) -> None:
+    """Injection regime users get a per-kWh credit for energy fed to
+    the grid at each supplier's printed injection_price. The annual
+    bill for the alternative must subtract that credit, so a
+    higher-credit supplier shows a lower bill even at the same
+    consumption rate."""
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+        SupplierSnapshot,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.cons",
+            "injection_kwh": "sensor.inj",
+            "solar_regime": "injection",
+            "solar_kva": 5.0,
+        },
+        title="Eneco - Wallonia injection",
+    )
+    entry.add_to_hass(hass)
+
+    # Equal energy rates so the only difference is the injection
+    # credit.
+    current_snap = _stub_snapshot("eneco", "power_fix", 0.20)
+    object.__setattr__(
+        current_snap, "injection", InjectionRates(current=0.05)
+    )  # 5 c€/kWh credited
+    other_snap = SupplierSnapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
+        dsos=current_snap.dsos,
+        taxes=current_snap.taxes,
+        injection=InjectionRates(current=0.10),  # higher credit
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+
+    cons = 5000.0
+    inj = 4000.0
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return {start: cons}
+        if entity_id == "sensor.inj":
+            return {start: inj}
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        ph = await _drive_compare(hass, entry, other_snap=other_snap)
+    # Both suppliers price energy the same; alternative credits 0.10
+    # vs current 0.05. Difference = (0.10 - 0.05) * 4000 = 200 EUR
+    # cheaper for the alternative.
+    diff = float(ph["current_annual"]) - float(ph["compare_annual"])
+    assert abs(diff - 200.0) < 1.0
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_meter_override_changes_per_kwh(
+    hass: HomeAssistant,
+) -> None:
+    """The compare flow lets static-contract users override the meter
+    type. Picking 'bi' must route compute_breakdown through the
+    peak/offpeak rates, producing a different per-kWh number than
+    the user's mono setup would."""
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        FixedRates,
+        SupplierSnapshot,
+        TaxOverlay,
+    )
+
+    # Snapshot with distinct peak / offpeak rates so meter=bi yields a
+    # different per-kWh than meter=mono.
+    bi_aware_snap = SupplierSnapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=FixedRates(single=0.20, peak=0.25, offpeak=0.10, yearly_fixed_fee=60.0),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.12,
+                distribution_offpeak=0.08,
+                transport=0.0145,
+            )
+        },
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    ph_mono = await _drive_compare(hass, entry, other_snap=bi_aware_snap, meter="mono")
+    ph_bi = await _drive_compare(hass, entry, other_snap=bi_aware_snap, meter="bi")
+    # Mono uses the single-rate column; bi routes through peak/offpeak
+    # depending on the current hour. Either way the two should not
+    # produce the same compare_per_kwh.
+    assert ph_mono["meter_used"] == "mono"
+    assert ph_bi["meter_used"] == "bi"
+    assert ph_mono["compare_per_kwh"] != ph_bi["compare_per_kwh"]
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_branch_aborts_when_no_alternative(
     hass: HomeAssistant,
