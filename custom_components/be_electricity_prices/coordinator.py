@@ -974,13 +974,17 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
             return
         payload: dict[str, Any] = {
-            # Stamp the entry's identity into the file so the load path
-            # can refuse a blob written under a different supplier
-            # tuple (defence in depth in case the identity guard above
-            # is ever weakened).
-            "entry_supplier": self.entry.data.get(CONF_SUPPLIER),
-            "entry_contract": self.entry.data.get(CONF_CONTRACT),
-            "entry_region": self.entry.data.get(CONF_REGION),
+            # Stamp the snapshot's actual provenance (the tuple this
+            # coordinator was constructed under) so the load path can
+            # refuse a blob written under a different supplier tuple.
+            # Reading entry.data here would race with OptionsFlow:
+            # async_update_entry mutates entry.data before the reload
+            # listener swaps runtime_data, so a slow tick that resumes
+            # in that window would stamp the new tuple over the old
+            # snapshot and the next HA boot would adopt it as fresh.
+            "entry_supplier": self._supplier_tuple[0],
+            "entry_contract": self._supplier_tuple[1],
+            "entry_region": self._supplier_tuple[2],
             "peak": {
                 "kw": self._peak_kw,
                 "month": self._peak_month.isoformat() if self._peak_month else "",
