@@ -130,6 +130,11 @@ def parse_day_ahead_xml(xml: str) -> dict[datetime, float]:
             continue
         start = _parse_iso_utc(start_text)
         step = _resolution_to_timedelta(resolution)
+        if step is None:
+            # Skip series at a resolution we don't know how to bucket
+            # (e.g. PT5M) instead of aborting the whole document; other
+            # series in the same publication may still be hourly.
+            continue
         # IEC 62325-451-3 / A44 lets a publication document omit any
         # Point whose price is unchanged from the previous position
         # ("carry forward" semantics). Collect only the explicit points
@@ -192,11 +197,11 @@ def _parse_iso_utc(text: str) -> datetime:
     return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(UTC)
 
 
-def _resolution_to_timedelta(resolution: str) -> timedelta:
+def _resolution_to_timedelta(resolution: str) -> timedelta | None:
     if resolution == "PT60M":
         return timedelta(hours=1)
     if resolution == "PT15M":
         return timedelta(minutes=15)
     if resolution == "PT30M":
         return timedelta(minutes=30)
-    raise EntsoeError(f"unsupported resolution: {resolution}")
+    return None

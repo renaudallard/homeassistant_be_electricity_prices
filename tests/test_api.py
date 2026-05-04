@@ -100,3 +100,31 @@ def test_quarter_hour_points_aggregate_to_hour_mean() -> None:
 def test_invalid_xml_raises_entsoe_error() -> None:
     with pytest.raises(EntsoeError):
         parse_day_ahead_xml("<<<not xml")
+
+
+def test_unknown_resolution_skips_series_instead_of_aborting() -> None:
+    """A series at a resolution we don't bucket (e.g. PT5M) must be
+    skipped silently so the rest of the document still parses. Aborting
+    the whole document would empty the spot table whenever ENTSO-E
+    publishes a mixed-resolution document or moves to a new granularity.
+    """
+    point = "<Point><position>1</position><price.amount>40</price.amount></Point>"
+    body = (
+        "<TimeSeries><Period><timeInterval>"
+        "<start>2026-04-29T22:00Z</start><end>2026-04-29T23:00Z</end>"
+        "</timeInterval><resolution>PT5M</resolution>"
+        f"{point}</Period></TimeSeries>"
+        "<TimeSeries><Period><timeInterval>"
+        "<start>2026-04-30T22:00Z</start><end>2026-04-30T23:00Z</end>"
+        "</timeInterval><resolution>PT60M</resolution>"
+        f"{point}</Period></TimeSeries>"
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<Publication_MarketDocument"
+        ' xmlns="urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3">'
+        f"{body}</Publication_MarketDocument>"
+    )
+    parsed = parse_day_ahead_xml(xml)
+    assert datetime(2026, 4, 30, 22, 0, tzinfo=UTC) in parsed
+    assert datetime(2026, 4, 29, 22, 0, tzinfo=UTC) not in parsed
