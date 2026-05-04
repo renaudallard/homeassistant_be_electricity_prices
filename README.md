@@ -54,8 +54,9 @@ publication and how to parse it.
 - **Tomorrow-available trigger** — `tomorrow_prices_available` binary sensor flips ON once ENTSO-E publishes the next-day curve, so dynamic automations don't fire too early.
 - **ENTSO-E key validated at setup** — the config flow hits the real endpoint with the entered token and rejects bad keys before the entry is saved.
 - **Translated UI** — English, French, Dutch and German.
-- **Self-healing** — last-known prices keep serving on outage; a repair issue surfaces if the snapshot goes stale.
-- **Catalog drift detection** — the daily live-check diffs each supplier's public catalog against the registry and opens a GitHub issue when a new product appears.
+- **One-off supplier comparison** — the OptionsFlow has a *Compare another supplier* path that quotes a different supplier and contract against your current region / DSO / meter / peak / solar settings, returning a side-by-side per-kWh price and projected yearly bill. No second entry, no extra polling, nothing saved.
+- **Self-healing** — last-known prices keep serving on outage. Three repair issues surface under **Settings → System → Repairs**: snapshot older than 7 days, supplier extractor parse failure, and ENTSO-E rejecting the API key. Each auto-clears on the next successful refresh.
+- **Catalog drift detection** — the daily live-check diffs each supplier's public catalog against the registry and opens a GitHub issue when a new product appears, plus per-supplier wallclock + bytes-received telemetry to flag silent slowdowns and PDF size jumps.
 
 ## Supported providers
 
@@ -164,8 +165,9 @@ supplier's tariff card.
    Impact only appears in Wallonia).
 3. **DSO** — filtered by region.
 4. **Meter type** — *mono* (single rate), *bi* (peak / off-peak), or
-   *dynamic* (smart meter). TOU contracts (Luminus SmartFlex, Engie
-   Empower Flextime) default to *dynamic*.
+   *dynamic* (smart meter). Dynamic and TOU contracts (Luminus SmartFlex,
+   Engie Empower Flextime) lock the picker to *dynamic* — the SMR3
+   meter is required to bill by hour-of-day.
 5. **DSO billing mode** *(Wallonia only)* — *Simple* / *Bi-horaire* / *Tarif
    Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
    requires a smart meter; Simple and Bi-horaire follow the existing
