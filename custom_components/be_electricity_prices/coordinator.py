@@ -1833,14 +1833,24 @@ async def _ytd_dynamic_energy(
         for k, v in (await _recorder_hourly_kwh(hass, iid, jan1, today)).items():
             inj_per_hour[k] = inj_per_hour.get(k, 0.0) + v
 
+    month_snap_cache: dict[date, SupplierSnapshot] = {}
+
+    async def _snap_for(month_first: date) -> SupplierSnapshot:
+        if month_first not in month_snap_cache:
+            month_snap_cache[month_first] = await _snapshot_for_month(
+                hass, session, extractor, contract, region, month_first, snapshot
+            )
+        return month_snap_cache[month_first]
+
     energy_cost = 0.0
     for utc_hour in cons_per_hour.keys() | inj_per_hour.keys():
         spot = historical_spots.get(utc_hour)
         if spot is None:
             continue
         local = dt_util.as_local(utc_hour)
+        snap_h = await _snap_for(date(local.year, local.month, 1))
         try:
-            bd = compute_breakdown(snapshot, dso, region, local, spot, meter, dso_mode)
+            bd = compute_breakdown(snap_h, dso, region, local, spot, meter, dso_mode)
         except (KeyError, ValueError):
             continue
         kwh_cons = cons_per_hour.get(utc_hour, 0.0)
@@ -1849,7 +1859,7 @@ async def _ytd_dynamic_energy(
             d_cost = (kwh_cons - kwh_inj) * bd.all_in
         elif regime == SOLAR_REGIME_INJECTION:
             d_cost = kwh_cons * bd.all_in
-            inj_rate = _historical_injection_rate(snapshot.injection, spot)
+            inj_rate = _historical_injection_rate(snap_h.injection, spot)
             if inj_rate is not None:
                 d_cost -= kwh_inj * inj_rate
         else:
