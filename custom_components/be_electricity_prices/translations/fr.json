@@ -115,9 +115,16 @@
           "contract": "Contrat"
         }
       },
+      "compare_meter": {
+        "title": "Comparer un autre fournisseur",
+        "description": "Type de compteur pour la comparaison. Par defaut le reglage de votre entree actuelle; modifiez pour voir la facture sous un autre mode (mono = tarif unique, bi = jour / nuit).",
+        "data": {
+          "meter": "Type de compteur"
+        }
+      },
       "compare_result": {
         "title": "Devis ponctuel",
-        "description": "Devis calcule maintenant, en supposant une consommation annuelle de {annual_kwh} kWh.\n\n**Votre entree actuelle**\n  {current_supplier} - {current_contract}\n  Par kWh maintenant : {current_per_kwh} EUR/kWh\n  Facture annuelle estimee : {current_annual} EUR/an\n\n**Comparee a**\n  {compare_supplier} - {compare_contract}\n  Par kWh maintenant : {compare_per_kwh} EUR/kWh\n  Facture annuelle estimee : {compare_annual} EUR/an\n\n**Difference** : {delta_annual} EUR/an (positif = alternative plus chere).\n\n{error}\n\nRien n'a ete enregistre. Validez pour fermer ce dialogue."
+        "description": "Type de compteur utilise : {meter_used}. Estimation annuelle calculee avec {annual_kwh} kWh consommes ({consumption_source}). {solar_note}\n\n**Votre entree actuelle**\n  {current_supplier} - {current_contract}\n  Par kWh maintenant : {current_per_kwh} EUR/kWh\n  Facture annuelle estimee : {current_annual} EUR/an\n\n**Comparee a**\n  {compare_supplier} - {compare_contract}\n  Par kWh maintenant : {compare_per_kwh} EUR/kWh\n  Facture annuelle estimee : {compare_annual} EUR/an\n\n**Difference annuelle** : {delta_annual} EUR/an (positif = alternative plus chere).\n\n**Depuis le 1er janvier** ({ytd_kwh} kWh consommes, {ytd_injection_kwh} kWh injectes, au tarif actuel de chaque fournisseur) :\n  Actuel : {current_ytd} EUR\n  Alternative : {compare_ytd} EUR\n  Difference : {delta_ytd} EUR\n\n{error}\n\nRien n'a ete enregistre. Validez pour fermer ce dialogue."
       },
       "contract": {
         "title": "Contrat",

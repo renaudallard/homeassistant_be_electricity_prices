@@ -115,9 +115,16 @@
           "contract": "Vertrag"
         }
       },
+      "compare_meter": {
+        "title": "Anderen Lieferanten vergleichen",
+        "description": "Zaehlerart fuer den Vergleich. Standard ist die Einstellung Ihres aktuellen Eintrags; aendern, um die Rechnung unter einer anderen Abrechnungsart zu sehen (mono = einheitlich, bi = Spitze / Nebenzeit).",
+        "data": {
+          "meter": "Zaehlerart"
+        }
+      },
       "compare_result": {
         "title": "Einmaliges Angebot",
-        "description": "Angebot fuer jetzt berechnet, bei angenommenem Jahresverbrauch von {annual_kwh} kWh.\n\n**Ihr aktueller Eintrag**\n  {current_supplier} - {current_contract}\n  Pro kWh jetzt: {current_per_kwh} EUR/kWh\n  Geschaetzte Jahresrechnung: {current_annual} EUR/Jahr\n\n**Verglichen mit**\n  {compare_supplier} - {compare_contract}\n  Pro kWh jetzt: {compare_per_kwh} EUR/kWh\n  Geschaetzte Jahresrechnung: {compare_annual} EUR/Jahr\n\n**Differenz**: {delta_annual} EUR/Jahr (positiv = Alternative ist teurer).\n\n{error}\n\nNichts wurde gespeichert. Mit Bestaetigen den Dialog schliessen.",
+        "description": "Verwendete Zaehlerart: {meter_used}. Jahresschaetzung verwendet {annual_kwh} kWh Verbrauch ({consumption_source}). {solar_note}\n\n**Ihr aktueller Eintrag**\n  {current_supplier} - {current_contract}\n  Pro kWh jetzt: {current_per_kwh} EUR/kWh\n  Geschaetzte Jahresrechnung: {current_annual} EUR/Jahr\n\n**Verglichen mit**\n  {compare_supplier} - {compare_contract}\n  Pro kWh jetzt: {compare_per_kwh} EUR/kWh\n  Geschaetzte Jahresrechnung: {compare_annual} EUR/Jahr\n\n**Jahresdifferenz**: {delta_annual} EUR/Jahr (positiv = Alternative ist teurer).\n\n**Seit 1. Januar** ({ytd_kwh} kWh verbraucht, {ytd_injection_kwh} kWh eingespeist, zum aktuellen Tarif jedes Lieferanten):\n  Aktuell: {current_ytd} EUR\n  Alternative: {compare_ytd} EUR\n  Differenz: {delta_ytd} EUR\n\n{error}\n\nNichts wurde gespeichert. Mit Bestaetigen den Dialog schliessen.",
         "data": {}
       },
       "contract": {

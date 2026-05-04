@@ -115,9 +115,16 @@
           "contract": "Contract"
         }
       },
+      "compare_meter": {
+        "title": "Andere leverancier vergelijken",
+        "description": "Metertype voor de vergelijking. Standaard de instelling van je huidige ingang; wijzig om te zien wat de factuur zou zijn onder een ander factuurmodel (mono = enkelvoudig tarief, bi = piek / dal).",
+        "data": {
+          "meter": "Metertype"
+        }
+      },
       "compare_result": {
         "title": "Eenmalige offerte",
-        "description": "Offerte berekend voor nu, met aangenomen jaarverbruik van {annual_kwh} kWh.\n\n**Jouw huidige ingang**\n  {current_supplier} - {current_contract}\n  Per kWh nu: {current_per_kwh} EUR/kWh\n  Geschatte jaarlijkse factuur: {current_annual} EUR/jaar\n\n**Vergeleken met**\n  {compare_supplier} - {compare_contract}\n  Per kWh nu: {compare_per_kwh} EUR/kWh\n  Geschatte jaarlijkse factuur: {compare_annual} EUR/jaar\n\n**Verschil**: {delta_annual} EUR/jaar (positief = alternatief is duurder).\n\n{error}\n\nEr is niets opgeslagen. Bevestig om dit dialoog te sluiten."
+        "description": "Gebruikt metertype: {meter_used}. Jaarraming gebruikt {annual_kwh} kWh verbruikt ({consumption_source}). {solar_note}\n\n**Jouw huidige ingang**\n  {current_supplier} - {current_contract}\n  Per kWh nu: {current_per_kwh} EUR/kWh\n  Geschatte jaarlijkse factuur: {current_annual} EUR/jaar\n\n**Vergeleken met**\n  {compare_supplier} - {compare_contract}\n  Per kWh nu: {compare_per_kwh} EUR/kWh\n  Geschatte jaarlijkse factuur: {compare_annual} EUR/jaar\n\n**Jaarlijks verschil**: {delta_annual} EUR/jaar (positief = alternatief is duurder).\n\n**Sinds 1 januari** ({ytd_kwh} kWh verbruikt, {ytd_injection_kwh} kWh geinjecteerd, aan het huidige tarief van elke leverancier):\n  Huidig: {current_ytd} EUR\n  Alternatief: {compare_ytd} EUR\n  Verschil: {delta_ytd} EUR\n\n{error}\n\nEr is niets opgeslagen. Bevestig om dit dialoog te sluiten."
       },
       "contract": {
         "title": "Contract",

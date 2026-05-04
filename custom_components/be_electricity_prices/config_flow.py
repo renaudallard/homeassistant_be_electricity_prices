@@ -46,7 +46,7 @@ the coordinator from each supplier's own publication.
 from __future__ import annotations
 
 import re
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -1045,7 +1045,7 @@ class BePricesOptionsFlow(OptionsFlow):
         current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
         if user_input is not None:
             self._compare.update(user_input)
-            return await self.async_step_compare_result()
+            return await self.async_step_compare_meter()
         # Only show same-kind contracts (filter built into the schema)
         # and exclude the user's current contract iff the picked supplier
         # is the user's current one.
@@ -1061,6 +1061,43 @@ class BePricesOptionsFlow(OptionsFlow):
                 current[CONF_REGION],
                 current_kind,
                 exclude,
+            ),
+        )
+
+    async def async_step_compare_meter(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Optionally override the meter type for the comparison.
+
+        Static contracts (fixed / variable) can be quoted at mono or
+        bi-hourly billing -- some users want to know "what would I pay
+        if I switched billing mode AND supplier". Dynamic / TOU
+        contracts skip this step: their distribution requires a smart
+        meter, picking bi-hourly would route distribution one way and
+        energy another.
+        """
+        if user_input is not None:
+            self._compare.update(user_input)
+            return await self.async_step_compare_result()
+        other_kind = _contract_kind(
+            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+        )
+        if other_kind in ("dynamic", "tou"):
+            self._compare[CONF_METER] = METER_DYNAMIC
+            return await self.async_step_compare_result()
+        current_meter = self.config_entry.data.get(CONF_METER, METER_MONO)
+        return self.async_show_form(
+            step_id="compare_meter",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_METER, default=current_meter): SelectSelector(
+                        SelectSelectorConfig(
+                            options=list(METER_TYPES),
+                            mode=SelectSelectorMode.LIST,
+                            translation_key="meter",
+                        )
+                    )
+                }
             ),
         )
 
@@ -1091,7 +1128,7 @@ class BePricesOptionsFlow(OptionsFlow):
         from .coordinator import BePricesCoordinator
         from .pricing import compute_breakdown
 
-        DEFAULT_ANNUAL_KWH = 3500.0  # typical Belgian residential consumption
+        DEFAULT_ANNUAL_KWH = 3500.0  # fallback when no consumption sensor is wired
 
         current = self.config_entry.data
         coord = getattr(self.config_entry, "runtime_data", None)
@@ -1108,19 +1145,64 @@ class BePricesOptionsFlow(OptionsFlow):
                 "current_annual": "-",
                 "compare_annual": "-",
                 "delta_annual": "-",
+                "current_ytd": "-",
+                "compare_ytd": "-",
+                "delta_ytd": "-",
                 "annual_kwh": f"{DEFAULT_ANNUAL_KWH:.0f}",
+                "ytd_kwh": "-",
+                "consumption_source": "default (entry reloading)",
                 "error": "current entry is reloading; try again in a moment",
             }
 
         region = current[CONF_REGION]
         dso = current[CONF_DSO]
-        meter = current.get(CONF_METER, METER_MONO)
+        # Comparison may override the meter type for static contracts;
+        # falls back to the current entry's setting.
+        meter = self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
         dso_mode = current.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
         peak_kw = max(coord._peak_kw or 0.0, VREG_CAPACITY_FLOOR_KW)
+        regime = current.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
 
         now_utc = dt_util.utcnow()
         now_hour = now_utc.replace(minute=0, second=0, microsecond=0)
+        today_local = dt_util.now().date()
+        jan1 = today_local.replace(month=1, day=1)
+        year_ago = today_local - timedelta(days=365)
+        # Inclusive of today: leap years -> 366.
+        days_in_year = (today_local.replace(year=today_local.year + 1) - jan1).days
+        days_elapsed = (today_local - jan1).days + 1
+        fee_proration = days_elapsed / days_in_year
         spot = (coord._spot_cache or {}).get(now_hour)
+        spot_dict: dict[datetime, float] = (
+            dict(coord._spot_cache) if coord._spot_cache else {}
+        )
+
+        # Measured consumption / injection from the user's kWh sensors.
+        # Injection is only relevant when a solar regime is configured;
+        # for the "none" regime it stays 0 even if a sensor is wired.
+        rolling_year_kwh = await _read_total_kwh(
+            self.hass, self.config_entry, year_ago, today_local
+        )
+        ytd_kwh = await _read_total_kwh(self.hass, self.config_entry, jan1, today_local)
+        rolling_inj_kwh = 0.0
+        ytd_inj_kwh = 0.0
+        if regime != SOLAR_REGIME_NONE:
+            r = await _read_total_kwh(
+                self.hass, self.config_entry, year_ago, today_local, side="injection"
+            )
+            y = await _read_total_kwh(
+                self.hass, self.config_entry, jan1, today_local, side="injection"
+            )
+            rolling_inj_kwh = r or 0.0
+            ytd_inj_kwh = y or 0.0
+        if rolling_year_kwh is not None:
+            annual_kwh = rolling_year_kwh
+            consumption_source = "measured (last 365 days)"
+        else:
+            annual_kwh = DEFAULT_ANNUAL_KWH
+            consumption_source = (
+                "default 3500 kWh - wire a kWh sensor for a measured estimate"
+            )
 
         placeholders: dict[str, str] = {
             "current_supplier": _label_for_supplier(current[CONF_SUPPLIER]),
@@ -1136,7 +1218,20 @@ class BePricesOptionsFlow(OptionsFlow):
             "current_annual": "-",
             "compare_annual": "-",
             "delta_annual": "-",
-            "annual_kwh": f"{DEFAULT_ANNUAL_KWH:.0f}",
+            "current_ytd": "-",
+            "compare_ytd": "-",
+            "delta_ytd": "-",
+            "annual_kwh": f"{annual_kwh:.0f}",
+            "ytd_kwh": f"{ytd_kwh:.0f}" if ytd_kwh is not None else "-",
+            "annual_injection_kwh": (
+                f"{rolling_inj_kwh:.0f}" if regime != SOLAR_REGIME_NONE else "-"
+            ),
+            "ytd_injection_kwh": (
+                f"{ytd_inj_kwh:.0f}" if regime != SOLAR_REGIME_NONE else "-"
+            ),
+            "solar_note": _solar_note(regime, rolling_inj_kwh),
+            "consumption_source": consumption_source,
+            "meter_used": meter,
             "error": "",
         }
 
@@ -1187,15 +1282,35 @@ class BePricesOptionsFlow(OptionsFlow):
                 except Exception as err:  # noqa: BLE001
                     placeholders["error"] = f"compute failed: {err}"
 
+        # Per-supplier injection price (only used in the "injection"
+        # regime; compensation regime nets at the meter, none has
+        # nothing to credit). Compute from each snapshot via the
+        # coordinator's existing helper, which returns None when the
+        # snapshot has no injection data or the user isn't on the
+        # injection regime.
+        from .coordinator import _compute_injection_price
+
+        current_inj_price: float | None = None
+        compare_inj_price: float | None = None
+        if regime == "injection":
+            if coord._snapshot is not None:
+                current_inj_price = _compute_injection_price(
+                    coord._snapshot, self.config_entry, spot_dict
+                )
+            if other_snap is not None:
+                compare_inj_price = _compute_injection_price(
+                    other_snap, self.config_entry, spot_dict
+                )
+
         if current_per_kwh is not None:
             placeholders["current_per_kwh"] = f"{current_per_kwh:.4f}"
             placeholders["current_annual"] = (
-                f"{_annual_bill(coord._snapshot, self.config_entry, peak_kw, current_per_kwh, DEFAULT_ANNUAL_KWH):.2f}"
+                f"{_annual_bill(coord._snapshot, self.config_entry, peak_kw, current_per_kwh, annual_kwh, rolling_inj_kwh, current_inj_price):.2f}"
             )
         if other_per_kwh is not None and other_snap is not None:
             placeholders["compare_per_kwh"] = f"{other_per_kwh:.4f}"
             placeholders["compare_annual"] = (
-                f"{_annual_bill(other_snap, self.config_entry, peak_kw, other_per_kwh, DEFAULT_ANNUAL_KWH):.2f}"
+                f"{_annual_bill(other_snap, self.config_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price):.2f}"
             )
         if (
             current_per_kwh is not None
@@ -1208,16 +1323,74 @@ class BePricesOptionsFlow(OptionsFlow):
                 self.config_entry,
                 peak_kw,
                 other_per_kwh,
-                DEFAULT_ANNUAL_KWH,
+                annual_kwh,
+                rolling_inj_kwh,
+                compare_inj_price,
             ) - _annual_bill(
                 coord._snapshot,
                 self.config_entry,
                 peak_kw,
                 current_per_kwh,
-                DEFAULT_ANNUAL_KWH,
+                annual_kwh,
+                rolling_inj_kwh,
+                current_inj_price,
             )
             placeholders["delta_annual"] = f"{'+' if delta >= 0 else ''}{delta:.2f}"
+
+        # Year-to-date what-if: each side uses the same kWh totals and
+        # the same fee proration, just different rates / fees / injection
+        # prices. Apples-to-apples so the delta isolates the
+        # supplier-driven difference.
+        if (
+            ytd_kwh is not None
+            and current_per_kwh is not None
+            and other_per_kwh is not None
+            and other_snap is not None
+            and coord._snapshot is not None
+        ):
+            current_ytd = _annual_bill(
+                coord._snapshot,
+                self.config_entry,
+                peak_kw,
+                current_per_kwh,
+                ytd_kwh,
+                ytd_inj_kwh,
+                current_inj_price,
+                fee_proration=fee_proration,
+            )
+            compare_ytd = _annual_bill(
+                other_snap,
+                self.config_entry,
+                peak_kw,
+                other_per_kwh,
+                ytd_kwh,
+                ytd_inj_kwh,
+                compare_inj_price,
+                fee_proration=fee_proration,
+            )
+            placeholders["current_ytd"] = f"{current_ytd:.2f}"
+            placeholders["compare_ytd"] = f"{compare_ytd:.2f}"
+            ytd_delta = compare_ytd - current_ytd
+            placeholders["delta_ytd"] = (
+                f"{'+' if ytd_delta >= 0 else ''}{ytd_delta:.2f}"
+            )
         return placeholders
+
+
+def _solar_note(regime: str, rolling_inj_kwh: float) -> str:
+    """One-line description of how solar is folded into the comparison.
+
+    Renders into the result form's description placeholder. Empty for
+    the no-solar case so the page doesn't show a misleading label."""
+    if regime == "compensation":
+        if rolling_inj_kwh > 0:
+            return f"compensation regime: meter netted (consumption -= {rolling_inj_kwh:.0f} kWh, surplus forfeited)"
+        return "compensation regime configured but no injection sensor wired - net = consumption"
+    if regime == "injection":
+        if rolling_inj_kwh > 0:
+            return f"injection regime: {rolling_inj_kwh:.0f} kWh credited at each supplier's injection price"
+        return "injection regime configured but no injection sensor wired - no injection credit applied"
+    return ""
 
 
 def _label_for_supplier(supplier_id: str) -> str:
@@ -1242,19 +1415,44 @@ def _annual_bill(
     entry: ConfigEntry,
     peak_kw: float,
     per_kwh: float,
-    annual_kwh: float,
+    consumption_kwh: float,
+    injection_kwh: float = 0.0,
+    injection_price: float | None = None,
+    fee_proration: float = 1.0,
 ) -> float:
-    """Estimated full-year EUR bill for ``snapshot`` at the current
-    entry's region / DSO / solar / peak. Uses ``annual_kwh`` as the
-    consumption assumption (3500 kWh = typical Belgian household).
+    """Estimated EUR bill for ``snapshot`` over the period that produced
+    ``consumption_kwh`` and ``injection_kwh``.
 
-    Composes:
-      energy: per_kwh * annual_kwh
-      yearly_fixed_fee
-      energy_fund: 12 * snapshot.taxes.energy_fund_eur_per_month
-      capacity (Flanders only): 12 * _compute_capacity(...)
-      prosumer (Walloon compensation only): 12 * _compute_prosumer(...)
+    ``fee_proration`` scales the EUR/year fee components (1.0 for a
+    full year, ``days_elapsed/days_in_year`` for YTD).
+
+    Solar handling honours the entry's configured regime:
+
+    - ``"none"``: ``cost = consumption_kwh * per_kwh + fees``
+    - ``"compensation"``: meter is netted 1:1 (Walloon pre-2024
+      installations until 2030). The billable kWh is
+      ``max(consumption - injection, 0)``; surplus injection is
+      forfeited, never paid out. Fees include the prosumer charge.
+    - ``"injection"``: consumption is billed at ``per_kwh`` AND
+      injection is credited at ``injection_price``; the credit is
+      subtracted from the cost and can drive the bill negative when
+      injection income exceeds consumption + fees.
     """
+    fees = _annual_fees(snapshot, entry, peak_kw) * fee_proration
+    regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
+    if regime == "compensation":
+        billable = max(consumption_kwh - injection_kwh, 0.0)
+        return fees + per_kwh * billable
+    if regime == "injection" and injection_price is not None:
+        return fees + per_kwh * consumption_kwh - injection_price * injection_kwh
+    return fees + per_kwh * consumption_kwh
+
+
+def _annual_fees(snapshot: Any, entry: ConfigEntry, peak_kw: float) -> float:
+    """Just the EUR/year fee components (no per-kWh term).
+
+    Pulled out so the YTD comparison can pro-rate fees by the elapsed
+    fraction of the year without re-computing the per-kWh part."""
     from .coordinator import _compute_capacity, _compute_prosumer
 
     yearly_fixed = float(getattr(snapshot.energy, "yearly_fixed_fee", 0.0) or 0.0)
@@ -1263,4 +1461,43 @@ def _annual_bill(
     if entry.data.get(CONF_REGION) == REGION_FLANDERS:
         capacity = 12.0 * _compute_capacity(snapshot, entry, peak_kw)
     prosumer = 12.0 * _compute_prosumer(snapshot, entry)
-    return per_kwh * annual_kwh + yearly_fixed + energy_fund + capacity + prosumer
+    return yearly_fixed + energy_fund + capacity + prosumer
+
+
+async def _read_total_kwh(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    start: date,
+    end: date,
+    *,
+    side: str = "consumption",
+) -> float | None:
+    """Sum of consumption (or injection) kWh between ``start`` and ``end``
+    from the entry's configured kWh sensors.
+
+    Prefers the 4-register day/night wiring when both are filled (more
+    accurate when the meter exposes them directly); falls back to the
+    single cumulative sensor. Returns ``None`` when no sensor is wired
+    or the recorder has nothing in the requested window -- the caller
+    falls back to a default consumption assumption in that case so the
+    quote page still renders."""
+    from .coordinator import _recorder_daily_kwh
+
+    if side == "injection":
+        day_id = entry.data.get(CONF_DAY_INJECTION_KWH)
+        night_id = entry.data.get(CONF_NIGHT_INJECTION_KWH)
+        total_id = entry.data.get(CONF_INJECTION_KWH)
+    else:
+        day_id = entry.data.get(CONF_DAY_CONSUMPTION_KWH)
+        night_id = entry.data.get(CONF_NIGHT_CONSUMPTION_KWH)
+        total_id = entry.data.get(CONF_CONSUMPTION_KWH)
+    if day_id and night_id:
+        d = await _recorder_daily_kwh(hass, day_id, start, end)
+        n = await _recorder_daily_kwh(hass, night_id, start, end)
+        total = sum(d.values()) + sum(n.values())
+        return total if total > 0 else None
+    if total_id:
+        d = await _recorder_daily_kwh(hass, total_id, start, end)
+        total = sum(d.values())
+        return total if total > 0 else None
+    return None

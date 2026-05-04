@@ -54,7 +54,7 @@ publication and how to parse it.
 - **Tomorrow-available trigger** — `tomorrow_prices_available` binary sensor flips ON once ENTSO-E publishes the next-day curve, so dynamic automations don't fire too early.
 - **ENTSO-E key validated at setup** — the config flow hits the real endpoint with the entered token and rejects bad keys before the entry is saved.
 - **Translated UI** — English, French, Dutch and German.
-- **One-off supplier comparison** — the OptionsFlow has a *Compare another supplier* path that quotes a different supplier and contract against your current region / DSO / meter / peak / solar settings, returning a side-by-side per-kWh price and projected yearly bill. No second entry, no extra polling, nothing saved.
+- **One-off supplier comparison** — the OptionsFlow has a *Compare another supplier* path that quotes a different supplier and contract against your current region / DSO / peak / solar settings. The annual estimate uses your **measured rolling-year consumption** (and, for solar users, injection) read from the same kWh sensors that feed `current_year_cost`, with a sensible 3500 kWh fallback when no sensor is wired. The result page also shows a **year-to-date what-if**: the actual kWh you've used since 1 January re-priced at each supplier's current rate. The meter type is overridable for static contracts (compare *what if I were on bi-hourly billing under supplier X*). Solar regimes are honoured: compensation nets consumption against injection, injection regime credits each supplier's own injection price. No second entry, no extra polling, nothing saved.
 - **Self-healing** — last-known prices keep serving on outage. Three repair issues surface under **Settings → System → Repairs**: snapshot older than 7 days, supplier extractor parse failure, and ENTSO-E rejecting the API key. Each auto-clears on the next successful refresh.
 - **Catalog drift detection** — the daily live-check diffs each supplier's public catalog against the registry and opens a GitHub issue when a new product appears, plus per-supplier wallclock + bytes-received telemetry to flag silent slowdowns and PDF size jumps.
 
@@ -239,12 +239,19 @@ opens a two-option menu:
   parameters — anything. The integration reloads automatically when you
   finish, picking the new tariff card on the next refresh.
 - **Compare another supplier** — one-off price quote against a different
-  supplier and contract, with your region / DSO / meter / peak / solar
-  settings held fixed for an apples-to-apples comparison. Only suppliers
-  offering a contract of the same kind as yours (static vs dynamic) are
-  shown. The result page lists per-kWh price now and an estimated
-  yearly bill (assuming a 3500 kWh/year residential profile + your
-  configured fees, capacity peak, and prosumer kVA where applicable).
+  supplier and contract, with your region / DSO / peak / solar
+  settings held fixed for an apples-to-apples comparison. Only
+  suppliers offering a contract of the same kind as yours (static
+  vs dynamic) are shown. Static contracts also let you override the
+  meter type (mono / bi) so you can quote *what if I were on bi-hourly
+  billing under supplier X*. The result page lists per-kWh price now,
+  a projected yearly bill computed from your **measured rolling-year
+  kWh** (recorder data from the consumption sensor configured in the
+  meters step, or a 3500 kWh fallback), and a **year-to-date what-if**
+  that re-prices your actual YTD kWh at each supplier's current rate
+  with pro-rated annual fees. Solar regimes are honoured: compensation
+  nets consumption against injection, injection regime credits each
+  supplier's own injection price against the bill.
   Submit closes the dialog without changing anything; nothing is saved.
 
 ## Daily operation

@@ -367,6 +367,11 @@ async def test_compare_branch_quotes_against_other_supplier(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"contract": "cociter_variable"}
         )
+        # Static contracts now ask for the meter type; default to mono.
+        assert result["step_id"] == "compare_meter"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
         assert result["step_id"] == "compare_result"
         ph = result["description_placeholders"]
         assert ph["current_supplier"] == "Eneco"
