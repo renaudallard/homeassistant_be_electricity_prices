@@ -43,6 +43,7 @@ from homeassistant.helpers import issue_registry
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .backfill import backfill_if_missing
 from .const import (
     CONF_CONTRACT,
     CONF_REGION,
@@ -105,6 +106,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
             schema=WINDOW_SCHEMA,
             supports_response=SupportsResponse.ONLY,
         )
+
+    # One-shot backfill: only fires when the recorder has no
+    # statistics for current_price at the Jan 1 anchor, so a normal
+    # restart adds zero work. Runs in a background task because the
+    # ENTSO-E historical fetch can take tens of seconds for a fresh
+    # install on a dynamic supplier and must not block setup.
+    entry.async_create_background_task(
+        hass,
+        backfill_if_missing(hass, entry),
+        f"{DOMAIN}_backfill_{entry.entry_id}",
+    )
     return True
 
 
