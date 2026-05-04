@@ -240,6 +240,7 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
             continue
         out[key] = DsoOverlay(
             distribution_single=to_float(row.group(2)) / 100.0,
+            distribution_exclusive_night=to_float(row.group(3)) / 100.0,
             transport=0.0,  # rolled into Fluvius distribution on this card
             capacity_eur_per_kw_year=to_float(row.group(1)),
             data_management_per_year=to_float(row.group(10)),
@@ -275,6 +276,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=to_float(row.group(1)) / 100.0,
             distribution_peak=to_float(row.group(2)) / 100.0,
             distribution_offpeak=to_float(row.group(3)) / 100.0,
+            distribution_exclusive_night=to_float(row.group(7)) / 100.0,
             distribution_pic=to_float(row.group(4)) / 100.0,
             distribution_medium=to_float(row.group(5)) / 100.0,
             distribution_eco=to_float(row.group(6)) / 100.0,

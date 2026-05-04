@@ -288,12 +288,15 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         databeheer = to_float(row.group(1))
         capacity = to_float(row.group(2))
         single = to_float(row.group(3))
-        # offpeak rate (group 4) is the *exclusive-night* meter rate
-        # which doesn't map to standard mono / bi-hourly billing -- we
-        # leave it out, defaulting to single via static_breakdown's
-        # fallback when the user is on a bi meter.
+        # Group 4 is the exclusive-night meter rate (separate circuit
+        # for an electric water heater / night-storage heater). It
+        # used to be dropped because there was no DsoOverlay column
+        # for it; now propagated for users on the exclusive_night
+        # meter type. Same scaling as ``single``.
+        excl_night = to_float(row.group(4))
         out[key] = DsoOverlay(
             distribution_single=single,
+            distribution_exclusive_night=excl_night,
             transport=0.0,  # rolled into distribution on Ecopower's card
             capacity_eur_per_kw_year=capacity,
             data_management_per_year=databeheer,

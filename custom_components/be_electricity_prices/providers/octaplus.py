@@ -441,6 +441,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         pic = to_float(match.group(4))
         medium = to_float(match.group(5))
         eco = to_float(match.group(6))
+        excl_night = to_float(match.group(7))
         terme_fixe = to_float(match.group(8))
         prosumer = to_float(match.group(9))
         transport = to_float(match.group(10))
@@ -448,6 +449,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=mono / 100.0,
             distribution_peak=peak / 100.0,
             distribution_offpeak=offpeak / 100.0,
+            distribution_exclusive_night=excl_night / 100.0,
             distribution_pic=pic / 100.0,
             distribution_medium=medium / 100.0,
             distribution_eco=eco / 100.0,
@@ -509,10 +511,12 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
         if not match:
             continue
         dist_normal = to_float(match.group(1))
+        dist_excl_night = to_float(match.group(2))
         data_mgmt_year = to_float(match.group(4))
         capacity = to_float(match.group(5))
         out[key] = DsoOverlay(
             distribution_single=dist_normal / 100.0,
+            distribution_exclusive_night=dist_excl_night / 100.0,
             transport=0.0,
             data_management_per_year=data_mgmt_year,
             capacity_eur_per_kw_year=capacity,

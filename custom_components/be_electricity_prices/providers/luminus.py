@@ -502,6 +502,7 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
         prosumer: float | None = nums[7] if len(nums) >= 8 else None
         out[key] = DsoOverlay(
             distribution_single=nums[2] / 100.0,
+            distribution_exclusive_night=nums[3] / 100.0,
             transport=0.0,
             data_management_per_year=nums[0],
             capacity_eur_per_kw_year=nums[1],
@@ -548,11 +549,13 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             # (different from OCTA+/Bolt where the columns are PIC
             # first, descending). Map to the schema's distribution_*.
             eco, medium, pic = nums[3], nums[4], nums[5]
+            excl_night = nums[6]
             transport = nums[7]
             data_mgmt = nums[8]
             prosumer: float | None = None
         elif len(nums) >= 7:
             mono, pleines, creuses = nums[0], nums[1], nums[2]
+            excl_night = nums[3]
             transport = nums[4]
             data_mgmt = nums[5]
             prosumer = nums[6]
@@ -562,6 +565,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=mono / 100.0,
             distribution_peak=pleines / 100.0,
             distribution_offpeak=creuses / 100.0,
+            distribution_exclusive_night=excl_night / 100.0,
             distribution_pic=pic / 100.0 if pic is not None else None,
             distribution_medium=medium / 100.0 if medium is not None else None,
             distribution_eco=eco / 100.0 if eco is not None else None,

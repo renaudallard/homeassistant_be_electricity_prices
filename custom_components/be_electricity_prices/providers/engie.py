@@ -675,6 +675,7 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=nums[0] / 100.0,
             distribution_peak=nums[1] / 100.0,
             distribution_offpeak=nums[2] / 100.0,
+            distribution_exclusive_night=nums[3] / 100.0,
             transport=nums[7] / 100.0,
             data_management_per_year=nums[4],
         )

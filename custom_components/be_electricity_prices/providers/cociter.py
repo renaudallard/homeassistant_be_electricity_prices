@@ -385,6 +385,7 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=to_float(row.group(2)) / 100.0,
             distribution_peak=to_float(row.group(3)) / 100.0,
             distribution_offpeak=to_float(row.group(4)) / 100.0,
+            distribution_exclusive_night=to_float(row.group(5)) / 100.0,
             distribution_pic=pic,
             distribution_medium=medium,
             distribution_eco=eco,
