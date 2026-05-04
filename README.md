@@ -229,11 +229,21 @@ Required only for dynamic contracts. Register on the
 ### Reconfiguring later
 
 **Settings → Devices & services → Belgian Electricity Prices → Configure**
-walks the same chain of steps, pre-filled with the current values. Change
-supplier, contract, region, DSO, meter, DSO billing mode, ENTSO-E API
-key, capacity peak source, or solar parameters — anything. The integration
-reloads automatically when you finish, picking the new tariff card on the
-next refresh.
+opens a two-option menu:
+
+- **Edit settings** — walks the same chain of steps, pre-filled with the
+  current values. Change supplier, contract, region, DSO, meter, DSO
+  billing mode, ENTSO-E API key, capacity peak source, or solar
+  parameters — anything. The integration reloads automatically when you
+  finish, picking the new tariff card on the next refresh.
+- **Compare another supplier** — one-off price quote against a different
+  supplier and contract, with your region / DSO / meter / peak / solar
+  settings held fixed for an apples-to-apples comparison. Only suppliers
+  offering a contract of the same kind as yours (static vs dynamic) are
+  shown. The result page lists per-kWh price now and an estimated
+  yearly bill (assuming a 3500 kWh/year residential profile + your
+  configured fees, capacity peak, and prosumer kVA where applicable).
+  Submit closes the dialog without changing anything; nothing is saved.
 
 ## Daily operation
 

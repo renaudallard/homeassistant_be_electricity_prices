@@ -155,6 +155,57 @@ def _contract_kind(supplier_id: str, contract_id: str) -> str:
     return ""
 
 
+def _compare_compatible(current_kind: str, other_kind: str) -> bool:
+    """Whether ``other_kind`` can be quoted side-by-side with ``current_kind``.
+
+    Dynamic contracts price each hour against an ENTSO-E spot, so a
+    static-vs-dynamic quote would either need a fresh API call (hidden
+    cost on a UI dialog) or fall back to the dynamic's printed
+    monthly indicative (lies about what the user would actually pay).
+    Refuse those crossings outright. Among static-ish kinds (fixed,
+    variable, tou) the per-kWh number is directly comparable.
+    """
+    return (current_kind == "dynamic") == (other_kind == "dynamic")
+
+
+def _compare_supplier_options(region: str, current_kind: str) -> list[SelectOptionDict]:
+    """Suppliers that have at least one same-kind contract in the user's
+    region. Filtering at the supplier level avoids the user picking a
+    supplier and then seeing an empty contract dropdown."""
+    out: list[SelectOptionDict] = []
+    for ext in all_extractors():
+        if region not in ext.regions():
+            continue
+        if not any(
+            _compare_compatible(current_kind, c.kind) and region in c.regions
+            for c in ext.contracts
+        ):
+            continue
+        out.append(SelectOptionDict(value=ext.id, label=ext.label))
+    return out
+
+
+def _compare_contract_schema(
+    supplier_id: str, region: str, current_kind: str, exclude_contract: str
+) -> vol.Schema:
+    """Contract picker scoped to same-kind contracts in the user's region,
+    minus the user's current contract (so they don't quote against
+    themselves)."""
+    contracts = [
+        c
+        for c in _contracts_for(supplier_id, region)
+        if _compare_compatible(current_kind, c.kind) and c.id != exclude_contract
+    ]
+    options = [SelectOptionDict(value=c.id, label=c.label) for c in contracts]
+    return vol.Schema(
+        {
+            vol.Required(CONF_CONTRACT): SelectSelector(
+                SelectSelectorConfig(options=options, mode=SelectSelectorMode.LIST)
+            )
+        }
+    )
+
+
 def _user_schema(defaults: dict[str, Any]) -> vol.Schema:
     supplier_default = defaults.get(CONF_SUPPLIER, vol.UNDEFINED)
     region_default = defaults.get(CONF_REGION, vol.UNDEFINED)
@@ -764,11 +815,25 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class BePricesOptionsFlow(OptionsFlow):
-    """Walk every config step pre-filled, save back to entry.data."""
+    """Walk every config step pre-filled, save back to entry.data.
+
+    Two top-level paths from the init menu: edit the existing entry
+    (the original options flow) or run a one-off comparison quote
+    against a different supplier (no save, no extra entry).
+    """
 
     _data: dict[str, Any]
+    _compare: dict[str, Any]
 
     async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["edit", "compare"],
+        )
+
+    async def async_step_edit(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if not hasattr(self, "_data"):
@@ -777,7 +842,7 @@ class BePricesOptionsFlow(OptionsFlow):
             self._data.update(user_input)
             return await self.async_step_contract()
         return self.async_show_form(
-            step_id="init", data_schema=_user_schema(self._data)
+            step_id="edit", data_schema=_user_schema(self._data)
         )
 
     async def async_step_contract(
@@ -937,3 +1002,265 @@ class BePricesOptionsFlow(OptionsFlow):
                 unique_id=new_unique,
             )
         return self.async_create_entry(title="", data={})
+
+    # ---- compare-another-supplier branch ---------------------------------
+    #
+    # Walks supplier -> contract -> result. Region, DSO, meter, peak,
+    # solar etc. all stay the same as the current entry so the quote is
+    # apples-to-apples. The result step shows a side-by-side breakdown
+    # and exits via async_abort -- no entry, no options, nothing saved.
+
+    async def async_step_compare(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        current = self.config_entry.data
+        current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        if not hasattr(self, "_compare"):
+            self._compare = {}
+        if user_input is not None:
+            self._compare.update(user_input)
+            return await self.async_step_compare_contract()
+        options = _compare_supplier_options(current[CONF_REGION], current_kind)
+        if not options:
+            return self.async_abort(reason="compare_no_alternative")
+        return self.async_show_form(
+            step_id="compare",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_SUPPLIER): SelectSelector(
+                        SelectSelectorConfig(
+                            options=options,
+                            mode=SelectSelectorMode.DROPDOWN,
+                            translation_key="supplier",
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_compare_contract(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        current = self.config_entry.data
+        current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        if user_input is not None:
+            self._compare.update(user_input)
+            return await self.async_step_compare_result()
+        # Only show same-kind contracts (filter built into the schema)
+        # and exclude the user's current contract iff the picked supplier
+        # is the user's current one.
+        exclude = (
+            current[CONF_CONTRACT]
+            if self._compare[CONF_SUPPLIER] == current[CONF_SUPPLIER]
+            else ""
+        )
+        return self.async_show_form(
+            step_id="compare_contract",
+            data_schema=_compare_contract_schema(
+                self._compare[CONF_SUPPLIER],
+                current[CONF_REGION],
+                current_kind,
+                exclude,
+            ),
+        )
+
+    async def async_step_compare_result(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_abort(reason="compare_done")
+        placeholders = await self._build_compare_placeholders()
+        return self.async_show_form(
+            step_id="compare_result",
+            data_schema=vol.Schema({}),
+            description_placeholders=placeholders,
+            last_step=True,
+        )
+
+    async def _build_compare_placeholders(self) -> dict[str, str]:
+        """Fetch the picked supplier's snapshot and compute a side-by-side
+        annual estimate against the user's current entry.
+
+        Annual = per_kwh_now * DEFAULT_ANNUAL_KWH + yearly fees, where the
+        yearly fees are yearly_fixed_fee + 12 * energy_fund + 12 *
+        capacity (Flanders) + 12 * prosumer (Wallonia compensation +
+        solar). Errors collapse to ``-`` so the page always renders.
+        """
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+        from .coordinator import BePricesCoordinator
+        from .pricing import compute_breakdown
+
+        DEFAULT_ANNUAL_KWH = 3500.0  # typical Belgian residential consumption
+
+        current = self.config_entry.data
+        coord = getattr(self.config_entry, "runtime_data", None)
+        # Coordinator may not be a BePricesCoordinator if the entry is
+        # mid-reload (UNDEFINED sentinel) or never finished setup.
+        if not isinstance(coord, BePricesCoordinator):
+            return {
+                "current_supplier": str(current.get(CONF_SUPPLIER, "")),
+                "current_contract": str(current.get(CONF_CONTRACT, "")),
+                "compare_supplier": str(self._compare.get(CONF_SUPPLIER, "")),
+                "compare_contract": str(self._compare.get(CONF_CONTRACT, "")),
+                "current_per_kwh": "-",
+                "compare_per_kwh": "-",
+                "current_annual": "-",
+                "compare_annual": "-",
+                "delta_annual": "-",
+                "annual_kwh": f"{DEFAULT_ANNUAL_KWH:.0f}",
+                "error": "current entry is reloading; try again in a moment",
+            }
+
+        region = current[CONF_REGION]
+        dso = current[CONF_DSO]
+        meter = current.get(CONF_METER, METER_MONO)
+        dso_mode = current.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
+        peak_kw = max(coord._peak_kw or 0.0, VREG_CAPACITY_FLOOR_KW)
+
+        now_utc = dt_util.utcnow()
+        now_hour = now_utc.replace(minute=0, second=0, microsecond=0)
+        spot = (coord._spot_cache or {}).get(now_hour)
+
+        placeholders: dict[str, str] = {
+            "current_supplier": _label_for_supplier(current[CONF_SUPPLIER]),
+            "current_contract": _label_for_contract(
+                current[CONF_SUPPLIER], current[CONF_CONTRACT]
+            ),
+            "compare_supplier": _label_for_supplier(self._compare[CONF_SUPPLIER]),
+            "compare_contract": _label_for_contract(
+                self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+            ),
+            "current_per_kwh": "-",
+            "compare_per_kwh": "-",
+            "current_annual": "-",
+            "compare_annual": "-",
+            "delta_annual": "-",
+            "annual_kwh": f"{DEFAULT_ANNUAL_KWH:.0f}",
+            "error": "",
+        }
+
+        current_per_kwh: float | None = None
+        if coord._snapshot is not None:
+            try:
+                bd = compute_breakdown(
+                    coord._snapshot,
+                    dso,
+                    region,
+                    dt_util.as_local(now_utc),
+                    spot,
+                    meter,
+                    dso_mode,
+                )
+                current_per_kwh = bd.all_in
+            except Exception:  # noqa: BLE001 - degrade to '-'
+                pass
+
+        # Other supplier: fetch + compute.
+        session = async_get_clientsession(self.hass)
+        other_extractor = get_extractor(self._compare[CONF_SUPPLIER])
+        other_per_kwh: float | None = None
+        other_snap = None
+        try:
+            other_snap = await other_extractor.fetch(
+                session, self._compare[CONF_CONTRACT], region
+            )
+        except Exception as err:  # noqa: BLE001
+            placeholders["error"] = f"could not fetch quote: {err}"
+        else:
+            if dso not in other_snap.dsos:
+                placeholders["error"] = (
+                    f"{self._compare[CONF_SUPPLIER]} doesn't serve DSO {dso}"
+                )
+            else:
+                try:
+                    bd = compute_breakdown(
+                        other_snap,
+                        dso,
+                        region,
+                        dt_util.as_local(now_utc),
+                        spot,
+                        meter,
+                        dso_mode,
+                    )
+                    other_per_kwh = bd.all_in
+                except Exception as err:  # noqa: BLE001
+                    placeholders["error"] = f"compute failed: {err}"
+
+        if current_per_kwh is not None:
+            placeholders["current_per_kwh"] = f"{current_per_kwh:.4f}"
+            placeholders["current_annual"] = (
+                f"{_annual_bill(coord._snapshot, self.config_entry, peak_kw, current_per_kwh, DEFAULT_ANNUAL_KWH):.2f}"
+            )
+        if other_per_kwh is not None and other_snap is not None:
+            placeholders["compare_per_kwh"] = f"{other_per_kwh:.4f}"
+            placeholders["compare_annual"] = (
+                f"{_annual_bill(other_snap, self.config_entry, peak_kw, other_per_kwh, DEFAULT_ANNUAL_KWH):.2f}"
+            )
+        if (
+            current_per_kwh is not None
+            and other_per_kwh is not None
+            and other_snap is not None
+            and coord._snapshot is not None
+        ):
+            delta = _annual_bill(
+                other_snap,
+                self.config_entry,
+                peak_kw,
+                other_per_kwh,
+                DEFAULT_ANNUAL_KWH,
+            ) - _annual_bill(
+                coord._snapshot,
+                self.config_entry,
+                peak_kw,
+                current_per_kwh,
+                DEFAULT_ANNUAL_KWH,
+            )
+            placeholders["delta_annual"] = f"{'+' if delta >= 0 else ''}{delta:.2f}"
+        return placeholders
+
+
+def _label_for_supplier(supplier_id: str) -> str:
+    try:
+        return get_extractor(supplier_id).label
+    except Exception:  # noqa: BLE001 - stale id
+        return supplier_id
+
+
+def _label_for_contract(supplier_id: str, contract_id: str) -> str:
+    try:
+        for c in get_extractor(supplier_id).contracts:
+            if c.id == contract_id:
+                return c.label
+    except Exception:  # noqa: BLE001 - stale id
+        pass
+    return contract_id
+
+
+def _annual_bill(
+    snapshot: Any,
+    entry: ConfigEntry,
+    peak_kw: float,
+    per_kwh: float,
+    annual_kwh: float,
+) -> float:
+    """Estimated full-year EUR bill for ``snapshot`` at the current
+    entry's region / DSO / solar / peak. Uses ``annual_kwh`` as the
+    consumption assumption (3500 kWh = typical Belgian household).
+
+    Composes:
+      energy: per_kwh * annual_kwh
+      yearly_fixed_fee
+      energy_fund: 12 * snapshot.taxes.energy_fund_eur_per_month
+      capacity (Flanders only): 12 * _compute_capacity(...)
+      prosumer (Walloon compensation only): 12 * _compute_prosumer(...)
+    """
+    from .coordinator import _compute_capacity, _compute_prosumer
+
+    yearly_fixed = float(getattr(snapshot.energy, "yearly_fixed_fee", 0.0) or 0.0)
+    energy_fund = 12.0 * float(snapshot.taxes.energy_fund_eur_per_month or 0.0)
+    capacity = 0.0
+    if entry.data.get(CONF_REGION) == REGION_FLANDERS:
+        capacity = 12.0 * _compute_capacity(snapshot, entry, peak_kw)
+    prosumer = 12.0 * _compute_prosumer(snapshot, entry)
+    return per_kwh * annual_kwh + yearly_fixed + energy_fund + capacity + prosumer

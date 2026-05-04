@@ -75,7 +75,9 @@
     },
     "abort": {
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Ga terug en kies een andere combinatie.",
-      "already_configured": "Een andere ingang bevraagt al dezelfde combinatie (leverancier, contract, regio, DNB). Bewerk die ingang of kies een andere combinatie."
+      "already_configured": "Een andere ingang bevraagt al dezelfde combinatie (leverancier, contract, regio, DNB). Bewerk die ingang of kies een andere combinatie.",
+      "compare_no_alternative": "Geen andere geschikte leverancier beschikbaar in jouw regio voor dit type contract.",
+      "compare_done": "Vergelijking voltooid - geen wijzigingen opgeslagen."
     },
     "error": {
       "invalid_api_key": "ENTSO-E heeft deze token geweigerd. Controleer de waarde op transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
@@ -86,11 +88,36 @@
     "step": {
       "init": {
         "title": "Belgische elektriciteitsprijzen",
+        "menu_options": {
+          "edit": "Instellingen wijzigen",
+          "compare": "Andere leverancier vergelijken (eenmalige offerte)"
+        }
+      },
+      "edit": {
+        "title": "Belgische elektriciteitsprijzen",
         "description": "Kies je leverancier en regio. Energie- en nettarieven worden live opgehaald uit de eigen publicatie van de leverancier.",
         "data": {
           "supplier": "Leverancier",
           "region": "Regio"
         }
+      },
+      "compare": {
+        "title": "Andere leverancier vergelijken",
+        "description": "Kies een leverancier om mee te vergelijken. Regio, DNB, metertype, piek en zonneparameters blijven dezelfde als bij je huidige ingang, zodat de vergelijking eerlijk is. Enkel leveranciers met een contract van hetzelfde type als het jouwe (statisch vs dynamisch) verschijnen hier.",
+        "data": {
+          "supplier": "Leverancier"
+        }
+      },
+      "compare_contract": {
+        "title": "Andere leverancier vergelijken",
+        "description": "Kies een contract van {supplier}. Enkel contracten van hetzelfde type als het jouwe worden getoond.",
+        "data": {
+          "contract": "Contract"
+        }
+      },
+      "compare_result": {
+        "title": "Eenmalige offerte",
+        "description": "Offerte berekend voor nu, met aangenomen jaarverbruik van {annual_kwh} kWh.\n\n**Jouw huidige ingang**\n  {current_supplier} - {current_contract}\n  Per kWh nu: {current_per_kwh} EUR/kWh\n  Geschatte jaarlijkse factuur: {current_annual} EUR/jaar\n\n**Vergeleken met**\n  {compare_supplier} - {compare_contract}\n  Per kWh nu: {compare_per_kwh} EUR/kWh\n  Geschatte jaarlijkse factuur: {compare_annual} EUR/jaar\n\n**Verschil**: {delta_annual} EUR/jaar (positief = alternatief is duurder).\n\n{error}\n\nEr is niets opgeslagen. Bevestig om dit dialoog te sluiten."
       },
       "contract": {
         "title": "Contract",

@@ -75,7 +75,9 @@
     },
     "abort": {
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Please go back and pick a different combination.",
-      "already_configured": "Another entry already polls the same (supplier, contract, region, DSO) tuple. Edit that entry instead, or pick a different combination."
+      "already_configured": "Another entry already polls the same (supplier, contract, region, DSO) tuple. Edit that entry instead, or pick a different combination.",
+      "compare_no_alternative": "No other compatible supplier is available in your region for this kind of contract.",
+      "compare_done": "Comparison complete - no changes saved."
     },
     "error": {
       "invalid_api_key": "ENTSO-E rejected this token. Double-check the value at transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
@@ -85,12 +87,37 @@
   "options": {
     "step": {
       "init": {
+        "title": "Belgian Electricity Prices",
+        "menu_options": {
+          "edit": "Edit settings",
+          "compare": "Compare another supplier (one-off quote)"
+        }
+      },
+      "edit": {
         "title": "[%key:component::be_electricity_prices::config::step::user::title%]",
         "description": "[%key:component::be_electricity_prices::config::step::user::description%]",
         "data": {
           "supplier": "[%key:component::be_electricity_prices::config::step::user::data::supplier%]",
           "region": "[%key:component::be_electricity_prices::config::step::user::data::region%]"
         }
+      },
+      "compare": {
+        "title": "Compare another supplier",
+        "description": "Pick a supplier to quote against. Region, DSO, meter type, peak and solar settings stay the same as your current entry, so the comparison is apples-to-apples. Only suppliers offering a contract of the same kind as yours (static vs dynamic) appear here.",
+        "data": {
+          "supplier": "Supplier"
+        }
+      },
+      "compare_contract": {
+        "title": "Compare another supplier",
+        "description": "Pick a contract from {supplier}. Only contracts of the same kind as yours are listed.",
+        "data": {
+          "contract": "Contract"
+        }
+      },
+      "compare_result": {
+        "title": "One-off quote",
+        "description": "Quote computed for now, at an assumed annual consumption of {annual_kwh} kWh.\n\n**Your current entry**\n  {current_supplier} - {current_contract}\n  Per kWh now: {current_per_kwh} EUR/kWh\n  Estimated yearly bill: {current_annual} EUR/year\n\n**Compared with**\n  {compare_supplier} - {compare_contract}\n  Per kWh now: {compare_per_kwh} EUR/kWh\n  Estimated yearly bill: {compare_annual} EUR/year\n\n**Difference**: {delta_annual} EUR/year (positive means the alternative is more expensive).\n\n{error}\n\nNothing has been saved. Submit to close this dialog."
       },
       "contract": {
         "title": "[%key:component::be_electricity_prices::config::step::contract::title%]",

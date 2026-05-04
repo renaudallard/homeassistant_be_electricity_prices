@@ -75,7 +75,9 @@
     },
     "abort": {
       "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewaehlten Region keinen Privathaushaltsstrom. Bitte zurueck und eine andere Kombination waehlen.",
-      "already_configured": "Ein anderer Eintrag ruft bereits dasselbe Tupel (Anbieter, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder waehlen Sie eine andere Kombination."
+      "already_configured": "Ein anderer Eintrag ruft bereits dasselbe Tupel (Anbieter, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder waehlen Sie eine andere Kombination.",
+      "compare_no_alternative": "Kein anderer kompatibler Anbieter in Ihrer Region fuer diese Vertragsart verfuegbar.",
+      "compare_done": "Vergleich abgeschlossen - keine Aenderungen gespeichert."
     },
     "error": {
       "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Pruefen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
@@ -86,11 +88,37 @@
     "step": {
       "init": {
         "title": "Belgische Strompreise",
+        "menu_options": {
+          "edit": "Einstellungen bearbeiten",
+          "compare": "Anderen Lieferanten vergleichen (einmaliges Angebot)"
+        }
+      },
+      "edit": {
+        "title": "Belgische Strompreise",
         "description": "Lieferant und Region waehlen. Energie- und Netztarife werden live aus der Veroeffentlichung des Lieferanten geholt.",
         "data": {
           "supplier": "Lieferant",
           "region": "Region"
         }
+      },
+      "compare": {
+        "title": "Anderen Lieferanten vergleichen",
+        "description": "Lieferanten zum Vergleich waehlen. Region, Netzbetreiber, Zaehlerart, Spitze und Solar-Einstellungen bleiben gleich wie beim aktuellen Eintrag, damit der Vergleich fair ist. Es erscheinen nur Lieferanten mit einem Vertrag derselben Art wie Ihrer (statisch vs dynamisch).",
+        "data": {
+          "supplier": "Lieferant"
+        }
+      },
+      "compare_contract": {
+        "title": "Anderen Lieferanten vergleichen",
+        "description": "Vertrag von {supplier} waehlen. Es werden nur Vertraege derselben Art wie Ihrer aufgelistet.",
+        "data": {
+          "contract": "Vertrag"
+        }
+      },
+      "compare_result": {
+        "title": "Einmaliges Angebot",
+        "description": "Angebot fuer jetzt berechnet, bei angenommenem Jahresverbrauch von {annual_kwh} kWh.\n\n**Ihr aktueller Eintrag**\n  {current_supplier} - {current_contract}\n  Pro kWh jetzt: {current_per_kwh} EUR/kWh\n  Geschaetzte Jahresrechnung: {current_annual} EUR/Jahr\n\n**Verglichen mit**\n  {compare_supplier} - {compare_contract}\n  Pro kWh jetzt: {compare_per_kwh} EUR/kWh\n  Geschaetzte Jahresrechnung: {compare_annual} EUR/Jahr\n\n**Differenz**: {delta_annual} EUR/Jahr (positiv = Alternative ist teurer).\n\n{error}\n\nNichts wurde gespeichert. Mit Bestaetigen den Dialog schliessen.",
+        "data": {}
       },
       "contract": {
         "title": "Vertrag",
