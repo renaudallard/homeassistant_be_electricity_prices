@@ -54,9 +54,11 @@ import aiohttp
 
 from ..const import REGION_FLANDERS, REGION_WALLONIA
 from ._pdf import (
+    SIGN_CHARS,
     USER_AGENT,
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
+    parse_sign,
     parse_valid_until,
     to_float,
 )
@@ -370,7 +372,7 @@ def _extract_injection(text: str) -> InjectionRates | None:
     types, so a single InjectionRates entry covers everyone.
     """
     formula = re.search(
-        r"\(BE_spotSPP\s*x\s*([\d,.]+)\s*[-–]\s*([\d,.]+)\)",
+        rf"\(BE_spotSPP\s*x\s*([\d,.]+)\s*([{SIGN_CHARS}])\s*([\d,.]+)\)",
         text,
     )
     indicative = re.search(r"Teruglevering2?\s*\(c€/kWh\)\s+([\d,.]+)", text)
@@ -381,7 +383,7 @@ def _extract_injection(text: str) -> InjectionRates | None:
     formula_text = ""
     if formula:
         factor = to_float(formula.group(1)) * 10.0
-        base = -to_float(formula.group(2)) / 100.0
+        base = parse_sign(formula.group(2)) * to_float(formula.group(3)) / 100.0
         formula_text = formula.group(0)
     current = to_float(indicative.group(1)) / 100.0 if indicative else None
     return InjectionRates(

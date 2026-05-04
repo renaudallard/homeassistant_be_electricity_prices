@@ -114,6 +114,22 @@ def test_april_card_injection_carries_formula_and_indicative() -> None:
     assert inj.base == pytest.approx(-0.0111)
 
 
+def test_injection_formula_handles_plus_operator() -> None:
+    """A future card with '(BE_spotSPP x 0,0766 + 0,5)' must parse with
+    a positive base, not silently lose the formula. Previously the
+    regex hard-coded '-' and any other operator dropped factor/base to
+    None."""
+    from custom_components.be_electricity_prices.providers.dats24 import (
+        _extract_injection,
+    )
+
+    text = "Teruglevering2 (c€/kWh) 3,26\nFormula: (BE_spotSPP x 0,0766 + 0,5) c€/kWh\n"
+    inj = _extract_injection(text)
+    assert inj is not None
+    assert inj.factor == pytest.approx(0.766)
+    assert inj.base == pytest.approx(0.005)
+
+
 def test_april_card_flanders_dsos_cover_all_eight_fluvius() -> None:
     snap = _snap("flanders")
     assert set(snap.dsos) == {
