@@ -422,6 +422,7 @@ def _find_wallonia_row(text: str, label: str) -> DsoOverlay | None:
         distribution_single=to_float(groups[0]) / 100.0,
         distribution_peak=to_float(groups[1]) / 100.0,
         distribution_offpeak=to_float(groups[2]) / 100.0,
+        distribution_exclusive_night=to_float(groups[3]) / 100.0,
         distribution_pic=pic,
         distribution_medium=medium,
         distribution_eco=eco,
@@ -449,11 +450,12 @@ def _find_fluvius_row(text: str, label: str, transport: float) -> DsoOverlay | N
         return None
     return DsoOverlay(
         distribution_single=to_float(digital_match.group(1)) / 100.0,
-        # Post-capacity-tariff Flemish meters bill at a single rate; the
-        # Uitsl. nacht column (group 2) is dropped because DsoOverlay does
-        # not model an exclusive-night distribution rate.
+        # Post-capacity-tariff Flemish meters bill at a single rate, so
+        # peak / off-peak don't apply; the Uitsl. nacht column (group 2)
+        # is the dedicated exclusive-night meter circuit rate.
         distribution_peak=None,
         distribution_offpeak=None,
+        distribution_exclusive_night=to_float(digital_match.group(2)) / 100.0,
         transport=transport,
         data_management_per_year=to_float(digital_match.group(4)),
         capacity_eur_per_kw_year=to_float(digital_match.group(5)),

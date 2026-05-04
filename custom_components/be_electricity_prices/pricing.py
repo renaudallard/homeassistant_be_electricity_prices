@@ -335,13 +335,17 @@ def network_eur_per_kwh(
         return dist + dso.transport
     if meter == "exclusive_night":
         # Exclusive-night meters physically only register during DSO
-        # off-peak hours; bill distribution at the offpeak rate when
-        # the DSO publishes one, else single.
-        dist = (
-            dso.distribution_offpeak
-            if dso.distribution_offpeak is not None
-            else dso.distribution_single
-        )
+        # off-peak hours and DSOs publish a dedicated distribution
+        # rate for the circuit. Prefer that rate when the extractor
+        # parses it, fall back to the off-peak rate, then to the
+        # single rate -- each fall-back step is closer to the real
+        # bill than the day rate the previous code applied.
+        if dso.distribution_exclusive_night is not None:
+            dist = dso.distribution_exclusive_night
+        elif dso.distribution_offpeak is not None:
+            dist = dso.distribution_offpeak
+        else:
+            dist = dso.distribution_single
         return dist + dso.transport
     if (
         dso_tariff_mode != "simple"

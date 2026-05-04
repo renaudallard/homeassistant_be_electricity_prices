@@ -61,6 +61,11 @@ def test_fix_extracts_dso_overlay() -> None:
     assert aieg.distribution_single == pytest.approx(0.1087)
     assert aieg.distribution_peak == pytest.approx(0.1205)
     assert aieg.distribution_offpeak == pytest.approx(0.0666)
+    # The Wallonia row's "Uitsl. nacht" column is now propagated as the
+    # dedicated exclusive-night meter distribution rate; it happens to
+    # match offpeak on this card, but the field carries the published
+    # number rather than falling back to a different column.
+    assert aieg.distribution_exclusive_night == pytest.approx(0.0666)
     assert aieg.transport == pytest.approx(0.0274)
     assert aieg.data_management_per_year == pytest.approx(19.49)
     # Wallonia DSOs publish a prosumer (compensation-regime) tariff in the
@@ -96,6 +101,10 @@ def test_fix_extracts_all_fluvius_sub_areas() -> None:
     # No peak/offpeak split for Flemish digital meters post-capacity-tariff.
     assert antwerpen.distribution_peak is None
     assert antwerpen.distribution_offpeak is None
+    # Fluvius's second column ("Uitsl. nacht" 4,81 c/kWh) is the
+    # dedicated exclusive-night meter circuit rate, distinct from the
+    # day rate.
+    assert antwerpen.distribution_exclusive_night == pytest.approx(0.0481)
     # Transport is the (national) Elia rate, propagated from the Wallonia rows.
     assert antwerpen.transport == pytest.approx(0.0274)
     assert antwerpen.data_management_per_year == pytest.approx(18.92)

@@ -188,6 +188,12 @@ class DsoOverlay:
     distribution_single: float
     distribution_peak: float | None = None
     distribution_offpeak: float | None = None
+    # Distribution rate billed on a separate exclusive-night meter
+    # circuit (electric water heater, night-storage heater). Belgian
+    # DSOs publish this on every tariff card; populated by extractors
+    # that parse the dedicated column. None falls back to
+    # distribution_offpeak in pricing.network_eur_per_kwh.
+    distribution_exclusive_night: float | None = None
     transport: float
     data_management_per_year: float = 0.0
     capacity_eur_per_kw_year: float | None = None
