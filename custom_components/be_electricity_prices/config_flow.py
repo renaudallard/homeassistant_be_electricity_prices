@@ -444,10 +444,19 @@ def _utility_meter_day_night_children(
     utility_meter helper splitting ``source_entity_id`` into a day /
     night pair, or ``{}`` if no unambiguous match is found.
 
-    Walks ``utility_meter`` config entries (the modern UI-configured
-    helpers; YAML-configured helpers don't appear here, so users with
-    those keep manual selection). Bails on any ambiguity rather than
-    guessing -- a wrong day/night pick mis-bills the year cost.
+    Walks two paths:
+
+    1. ``utility_meter`` config entries (modern UI-configured helpers).
+       These store ``source`` + ``tariffs`` in entry options and their
+       per-tariff child sensors share the entry's config_entry_id.
+
+    2. Entity-registry entries with ``platform == "utility_meter"`` and
+       no config_entry_id (YAML-configured helpers; common in older
+       HA installs). The source + tariff name come from the live
+       state attributes set by the utility_meter component.
+
+    Bails on any ambiguity rather than guessing -- a wrong day/night
+    pick mis-bills the year cost.
     """
     from homeassistant.helpers import entity_registry as er
 
@@ -478,6 +487,32 @@ def _utility_meter_day_night_children(
                     break
         if "day" in out and "night" in out:
             return out
+
+    # YAML-rooted helpers: walk the entity registry for utility_meter
+    # children whose runtime ``source`` attribute matches our grid
+    # sensor. The ``tariff`` attribute carries the configured tariff
+    # name, which we classify the same way as UI-configured tariffs.
+    ent_reg = er.async_get(hass)
+    yaml_slot_to_entity: dict[str, str] = {}
+    for re_entry in ent_reg.entities.values():
+        if re_entry.platform != "utility_meter":
+            continue
+        if re_entry.config_entry_id is not None:
+            continue  # UI-configured, already handled above
+        state = hass.states.get(re_entry.entity_id)
+        if state is None:
+            continue
+        if state.attributes.get("source") != source_entity_id:
+            continue
+        tariff_name = str(state.attributes.get("tariff") or "")
+        slot = _classify_tariff(tariff_name)
+        if slot is None:
+            continue
+        if slot in yaml_slot_to_entity:
+            return {}  # ambiguous: two YAML children for the same slot
+        yaml_slot_to_entity[slot] = re_entry.entity_id
+    if "day" in yaml_slot_to_entity and "night" in yaml_slot_to_entity:
+        return yaml_slot_to_entity
     return {}
 
 

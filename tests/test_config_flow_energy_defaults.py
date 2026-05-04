@@ -215,6 +215,57 @@ async def test_utility_meter_helper_fills_day_night_registers(
     assert defaults["night_injection_kwh"] == "sensor.injection_nuit"
 
 
+def _add_yaml_utility_meter(
+    hass: HomeAssistant,
+    *,
+    source: str,
+    children: dict[str, str],
+) -> None:
+    """Register fake YAML-rooted utility_meter children: entity-registry
+    entries with platform=utility_meter and no config_entry_id, plus
+    states carrying the runtime ``source`` and ``tariff`` attributes
+    the YAML platform sets."""
+    ent_reg = er.async_get(hass)
+    for tariff, entity_id in children.items():
+        ent_reg.async_get_or_create(
+            domain="sensor",
+            platform="utility_meter",
+            unique_id=f"yaml_{tariff}",
+            suggested_object_id=entity_id.removeprefix("sensor."),
+        )
+        hass.states.async_set(
+            entity_id,
+            "0",
+            {"source": source, "tariff": tariff},
+        )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_utility_meter_yaml_helper_fills_day_night_registers(
+    hass: HomeAssistant,
+) -> None:
+    """YAML-configured utility_meter helpers don't appear under
+    config_entries.async_entries('utility_meter') -- they live in the
+    entity registry with platform=utility_meter and a runtime
+    ``source`` attribute on each child sensor. Picker must walk both
+    paths so older YAML installs aren't second-class."""
+    _add_yaml_utility_meter(
+        hass,
+        source="sensor.electricity_meter_total",
+        children={
+            "peak": "sensor.yaml_consumption_peak",
+            "offpeak": "sensor.yaml_consumption_offpeak",
+        },
+    )
+    defaults: dict[str, Any] = {}
+    prefs = _grid_prefs(consumption="sensor.electricity_meter_total")
+    with _patch_manager(prefs):
+        await _apply_energy_manager_defaults(hass, defaults)
+    assert defaults["consumption_kwh"] == "sensor.electricity_meter_total"
+    assert defaults["day_consumption_kwh"] == "sensor.yaml_consumption_peak"
+    assert defaults["night_consumption_kwh"] == "sensor.yaml_consumption_offpeak"
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_utility_meter_with_unrecognised_tariffs_skips_day_night(
     hass: HomeAssistant,
