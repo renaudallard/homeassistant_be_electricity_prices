@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -764,6 +765,66 @@ async def test_compare_meter_override_changes_per_kwh(
     assert ph_mono["meter_used"] == "mono"
     assert ph_bi["meter_used"] == "bi"
     assert ph_mono["compare_per_kwh"] != ph_bi["compare_per_kwh"]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_tou_uses_weighted_average_across_slots(
+    hass: HomeAssistant,
+) -> None:
+    """A TOU contract's per-kWh number for the annual estimate must
+    be a time-weighted average across peak / transition / offpeak
+    slots, not whichever slot the user happens to be in when they
+    open the dialog. The helper computes breakdowns at three
+    representative weekday hours and weights by the standard CWaPE
+    slot durations."""
+    from custom_components.be_electricity_prices.config_flow import (
+        _tou_weighted_per_kwh,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        SupplierSnapshot,
+        TaxOverlay,
+        TimeOfUseRates,
+    )
+
+    snap = SupplierSnapshot(
+        supplier="luminus",
+        contract="luminus_smartflex",
+        energy=TimeOfUseRates(
+            peak=0.30,
+            transition=0.20,
+            offpeak=0.10,
+            yearly_fixed_fee=60.0,
+            weekend_rule="weekend_offpeak",
+        ),
+        dsos={
+            "ores": DsoOverlay(distribution_single=0.10, transport=0.0145),
+        },
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    # Run at 14:00 on a Wednesday so compute_breakdown's "live" call
+    # would land in peak slot (0.30). The weighted average must come
+    # out lower, between offpeak and peak.
+    weekday_peak = datetime(2026, 4, 29, 14, 0, tzinfo=UTC)
+    avg = _tou_weighted_per_kwh(
+        snap, "ores", "wallonia", weekday_peak, None, "dynamic", "bi_horaire"
+    )
+    assert avg is not None
+    # Energy weights for weekend_offpeak: peak=45h, transition=45h,
+    # offpeak=78h, total 168h. Weighted-avg energy =
+    # (45*0.30 + 45*0.20 + 78*0.10) / 168 = 30.30 / 168 = 0.1804 EUR.
+    # Plus DSO + transport + taxes (no VAT in the stub) -> roughly
+    # 0.1804 + 0.10 + 0.0145 + 0.052 = ~0.347 EUR/kWh.
+    expected_energy = (45 * 0.30 + 45 * 0.20 + 78 * 0.10) / 168
+    # Live peak rate would be 0.30 + ... ~0.466 EUR/kWh; weighted
+    # average must be materially lower.
+    assert avg < 0.40
+    # And the energy component of the weighted avg matches our hand
+    # calculation: avg minus the constants leaves the energy term.
+    constants = 0.10 + 0.0145 + (0.05 + 0.002)
+    assert abs((avg - constants) - expected_energy) < 0.001
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

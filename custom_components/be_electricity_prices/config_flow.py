@@ -46,7 +46,7 @@ the coordinator from each supplier's own publication.
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -1181,7 +1181,6 @@ class BePricesOptionsFlow(OptionsFlow):
         from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
         from .coordinator import BePricesCoordinator
-        from .pricing import compute_breakdown
 
         DEFAULT_ANNUAL_KWH = 3500.0  # fallback when no consumption sensor is wired
 
@@ -1321,19 +1320,15 @@ class BePricesOptionsFlow(OptionsFlow):
 
         current_per_kwh: float | None = None
         if coord._snapshot is not None:
-            try:
-                bd = compute_breakdown(
-                    coord._snapshot,
-                    dso,
-                    region,
-                    dt_util.as_local(now_utc),
-                    spot,
-                    meter,
-                    dso_mode,
-                )
-                current_per_kwh = bd.all_in
-            except Exception:  # noqa: BLE001 - degrade to '-'
-                pass
+            current_per_kwh = _tou_weighted_per_kwh(
+                coord._snapshot,
+                dso,
+                region,
+                dt_util.as_local(now_utc),
+                spot,
+                meter,
+                dso_mode,
+            )
 
         # Other supplier: fetch + compute.
         session = async_get_clientsession(self.hass)
@@ -1352,19 +1347,17 @@ class BePricesOptionsFlow(OptionsFlow):
                     f"{self._compare[CONF_SUPPLIER]} doesn't serve DSO {dso}"
                 )
             else:
-                try:
-                    bd = compute_breakdown(
-                        other_snap,
-                        dso,
-                        region,
-                        dt_util.as_local(now_utc),
-                        spot,
-                        meter,
-                        dso_mode,
-                    )
-                    other_per_kwh = bd.all_in
-                except Exception as err:  # noqa: BLE001
-                    placeholders["error"] = f"compute failed: {err}"
+                other_per_kwh = _tou_weighted_per_kwh(
+                    other_snap,
+                    dso,
+                    region,
+                    dt_util.as_local(now_utc),
+                    spot,
+                    meter,
+                    dso_mode,
+                )
+                if other_per_kwh is None:
+                    placeholders["error"] = "compute failed"
 
         # Per-supplier injection price (only used in the "injection"
         # regime; compensation regime nets at the meter, none has
@@ -1514,6 +1507,80 @@ class BePricesOptionsFlow(OptionsFlow):
             compare_label=_label_for_supplier(self._compare[CONF_SUPPLIER]),
         )
         return placeholders
+
+
+def _tou_weighted_per_kwh(
+    snapshot: Any,
+    dso: str,
+    region: str,
+    when_now: datetime,
+    spot: float | None,
+    meter: Any,
+    dso_mode: Any,
+) -> float | None:
+    """Per-kWh EUR/kWh for the compare flow's annual estimate, with a
+    TOU-aware time-weighted average when the snapshot's energy rate
+    splits by hour-of-day.
+
+    For Fixed / Variable / Dynamic the live breakdown at ``when_now``
+    is the right number. For TOU contracts (Luminus SmartFlex, Engie
+    Empower Flextime) ``compute_breakdown`` returns one of three slot
+    rates depending on the hour the user opens the dialog -- biased.
+    Compute breakdowns at three representative weekday hours (one per
+    slot) and weight by the standard CWaPE-defined slot durations
+    across a week, so the annual estimate isn't dragged toward
+    whichever slot the user happens to be in.
+
+    Returns ``None`` on compute failure so the caller can render '-'
+    on the result page rather than tear the flow down.
+    """
+    from .pricing import compute_breakdown, is_belgian_holiday
+    from .providers.base import TimeOfUseRates
+
+    try:
+        bd = compute_breakdown(snapshot, dso, region, when_now, spot, meter, dso_mode)
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(snapshot.energy, TimeOfUseRates):
+        return bd.all_in
+    # Pick a recent non-holiday weekday so each slot lookup hits the
+    # weekday rule. Walk back from today's local date.
+    weekday = when_now.date()
+    for _ in range(8):
+        if not is_belgian_holiday(weekday) and weekday.weekday() < 5:
+            break
+        weekday -= timedelta(days=1)
+    base = datetime.combine(weekday, time(), tzinfo=when_now.tzinfo)
+    # CWaPE weekday TOU windows (shared across products):
+    #   peak       07-11 + 17-22
+    #   transition 11-17 + 22-01
+    #   offpeak    01-07
+    # Pick one hour comfortably inside each window so the slot lookup
+    # is unambiguous regardless of off-by-one boundary handling.
+    try:
+        bd_peak = compute_breakdown(
+            snapshot, dso, region, base.replace(hour=9), spot, meter, dso_mode
+        )
+        bd_trans = compute_breakdown(
+            snapshot, dso, region, base.replace(hour=13), spot, meter, dso_mode
+        )
+        bd_offpeak = compute_breakdown(
+            snapshot, dso, region, base.replace(hour=3), spot, meter, dso_mode
+        )
+    except Exception:  # noqa: BLE001
+        return bd.all_in  # fall back to live slot rate
+    # Slot weights = hours-per-week the slot is active, derived from
+    # the published TOU rules and a 5-weekday / 2-weekend split.
+    if snapshot.energy.weekend_rule == "weekend_no_peak":
+        # Engie Empower Flextime: weekend is transition (07-01) +
+        # offpeak (01-07 + 11-17). Weekday rule applies on weekdays.
+        wp, wt, wo = 45.0, 69.0, 54.0
+    else:
+        # weekend_offpeak (Luminus SmartFlex, default): weekends are
+        # entirely off-peak.
+        wp, wt, wo = 45.0, 45.0, 78.0
+    total = wp + wt + wo
+    return (bd_peak.all_in * wp + bd_trans.all_in * wt + bd_offpeak.all_in * wo) / total
 
 
 def _populate_charts(
