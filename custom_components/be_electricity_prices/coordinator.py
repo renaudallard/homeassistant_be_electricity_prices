@@ -87,7 +87,13 @@ from .const import (
     UPDATE_INTERVAL_MINUTES,
     VREG_CAPACITY_FLOOR_KW,
 )
-from .pricing import PriceBreakdown, compute_breakdown, is_offpeak, static_breakdown
+from .pricing import (
+    MeterType,
+    PriceBreakdown,
+    compute_breakdown,
+    is_offpeak,
+    static_breakdown,
+)
 from .providers import (
     DynamicRates,
     ExtractorError,
@@ -1447,6 +1453,8 @@ async def _walk_ytd_months(
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
     today: date,
+    *,
+    contract: str | None = None,
 ) -> AsyncIterator[tuple[SupplierSnapshot, date, int, int]]:
     """Yield ``(snap_m, month_first, days_in_full_month, days_in_ytd)``
     for each month from Jan 1 of today's year up through today.
@@ -1455,9 +1463,13 @@ async def _walk_ytd_months(
     the proration formula and the per-month archive lookup stay in one
     place. ``snap_m`` falls back to the current snapshot for months
     with no archive (see :func:`_snapshot_for_month`).
+
+    ``contract`` overrides the entry's stored contract id; the
+    OptionsFlow compare path uses this to walk months for an
+    alternative supplier without mutating the live entry.
     """
     region = entry.data.get(CONF_REGION, "")
-    contract = entry.data[CONF_CONTRACT]
+    contract = contract or entry.data[CONF_CONTRACT]
     cur = date(today.year, 1, 1)
     while cur <= today:
         month_first = date(cur.year, cur.month, 1)
@@ -1482,6 +1494,8 @@ async def _ytd_static_fees(
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
     today: date,
+    *,
+    contract: str | None = None,
 ) -> float:
     """Pro-rated YTD total of yearly_fixed_fee + 12*energy_fund using each
     month's archived snapshot.
@@ -1494,7 +1508,7 @@ async def _ytd_static_fees(
     days_in_year = 366 if calendar.isleap(today.year) else 365
     total = 0.0
     async for snap_m, _, _, days_in_ytd in _walk_ytd_months(
-        hass, session, extractor, snapshot, entry, today
+        hass, session, extractor, snapshot, entry, today, contract=contract
     ):
         annual = (
             getattr(snap_m.energy, "yearly_fixed_fee", 0.0)
@@ -1511,6 +1525,8 @@ async def _ytd_prosumer(
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
     today: date,
+    *,
+    contract: str | None = None,
 ) -> float:
     """Sum the monthly prosumer fee across YTD using each month's archived
     snapshot's DSO overlay, so a CWaPE indexation that lands mid-year is
@@ -1527,7 +1543,7 @@ async def _ytd_prosumer(
 
     total = 0.0
     async for snap_m, _, days_in_full_month, days_in_ytd in _walk_ytd_months(
-        hass, session, extractor, snapshot, entry, today
+        hass, session, extractor, snapshot, entry, today, contract=contract
     ):
         overlay = snap_m.dsos.get(dso)
         if overlay is None or overlay.prosumer_eur_per_kva_year is None:
@@ -1580,6 +1596,9 @@ async def _ytd_tou_energy(
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
     today: date,
+    *,
+    contract: str | None = None,
+    meter: MeterType | None = None,
 ) -> float | None:
     """YTD energy cost for a Time-of-Use contract, billed per hour.
 
@@ -1599,8 +1618,8 @@ async def _ytd_tou_energy(
     """
     region = entry.data.get(CONF_REGION, "")
     dso = entry.data.get(CONF_DSO, "")
-    contract = entry.data[CONF_CONTRACT]
-    meter = entry.data.get(CONF_METER, METER_MONO)
+    contract = contract or entry.data[CONF_CONTRACT]
+    meter = meter or entry.data.get(CONF_METER, METER_MONO)
     dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
 
@@ -1663,6 +1682,9 @@ async def _compute_current_year_cost(
     extractor: SupplierExtractor,
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
+    *,
+    contract_override: str | None = None,
+    meter_override: MeterType | None = None,
 ) -> float | None:
     """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
@@ -1727,19 +1749,26 @@ async def _compute_current_year_cost(
     rather than exposing ``unknown`` to the user.
     """
     today = dt_util.now().date()
-    contract = entry.data[CONF_CONTRACT]
+    # contract / meter overrides let the OptionsFlow's compare path run
+    # this same engine against an alternative supplier's snapshot
+    # without mutating the live entry. The user's region / DSO / regime /
+    # solar_kva always come from the entry: those are the user's setup,
+    # not the alternative's.
+    contract = contract_override or entry.data[CONF_CONTRACT]
     region = entry.data.get(CONF_REGION, "")
     dso = entry.data.get(CONF_DSO, "")
-    meter = entry.data.get(CONF_METER, METER_MONO)
+    meter = meter_override or entry.data.get(CONF_METER, METER_MONO)
     dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
 
     jan1 = date(today.year, 1, 1)
 
     static_fees = await _ytd_static_fees(
-        hass, session, extractor, snapshot, entry, today
+        hass, session, extractor, snapshot, entry, today, contract=contract
     )
-    prosumer_ytd = await _ytd_prosumer(hass, session, extractor, snapshot, entry, today)
+    prosumer_ytd = await _ytd_prosumer(
+        hass, session, extractor, snapshot, entry, today, contract=contract
+    )
     fees = static_fees + prosumer_ytd
 
     # Dynamic contracts need historical hourly ENTSO-E spots that v1 does
@@ -1762,7 +1791,14 @@ async def _compute_current_year_cost(
     )
     if needs_hourly:
         hourly_energy = await _ytd_tou_energy(
-            hass, session, extractor, snapshot, entry, today
+            hass,
+            session,
+            extractor,
+            snapshot,
+            entry,
+            today,
+            contract=contract,
+            meter=meter,
         )
         if hourly_energy is None:
             return fees

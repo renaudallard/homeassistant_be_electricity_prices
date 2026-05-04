@@ -1337,10 +1337,55 @@ class BePricesOptionsFlow(OptionsFlow):
             )
             placeholders["delta_annual"] = f"{'+' if delta >= 0 else ''}{delta:.2f}"
 
-        # Year-to-date what-if: each side uses the same kWh totals and
-        # the same fee proration, just different rates / fees / injection
-        # prices. Apples-to-apples so the delta isolates the
-        # supplier-driven difference.
+        # Year-to-date what-if. Two paths:
+        #   1. Archive-capable suppliers (Eneco / Cociter / Ecopower):
+        #      reuse the coordinator's _compute_current_year_cost engine
+        #      against each snapshot chain, so per-month tariff transitions
+        #      and the same proration model the user's actual bill uses
+        #      apply to both sides. Most accurate.
+        #   2. Suppliers without an archive (Bolt / Mega / OCTA+ / Engie /
+        #      Luminus / DATS 24 / TotalEnergies): fall back to the simple
+        #      "current rate * ytd_kwh + pro-rated fees" model. Same per_kwh
+        #      and same proration on both sides, so the delta still isolates
+        #      the supplier-driven difference.
+        from .coordinator import _compute_current_year_cost
+
+        current_extractor = get_extractor(current[CONF_SUPPLIER])
+        archive_capable = (
+            current_extractor.fetch_for_month is not None
+            and other_extractor.fetch_for_month is not None
+        )
+        if archive_capable and other_snap is not None and coord._snapshot is not None:
+            try:
+                current_ytd_val = await _compute_current_year_cost(
+                    self.hass,
+                    session,
+                    current_extractor,
+                    coord._snapshot,
+                    self.config_entry,
+                )
+                compare_ytd_val = await _compute_current_year_cost(
+                    self.hass,
+                    session,
+                    other_extractor,
+                    other_snap,
+                    self.config_entry,
+                    contract_override=self._compare[CONF_CONTRACT],
+                    meter_override=meter,
+                )
+            except Exception:  # noqa: BLE001 - degrade to '-'
+                current_ytd_val = None
+                compare_ytd_val = None
+            if current_ytd_val is not None and compare_ytd_val is not None:
+                placeholders["current_ytd"] = f"{current_ytd_val:.2f}"
+                placeholders["compare_ytd"] = f"{compare_ytd_val:.2f}"
+                ytd_delta = compare_ytd_val - current_ytd_val
+                placeholders["delta_ytd"] = (
+                    f"{'+' if ytd_delta >= 0 else ''}{ytd_delta:.2f}"
+                )
+                return placeholders
+            # Fall through to the simple model on engine failure.
+
         if (
             ytd_kwh is not None
             and current_per_kwh is not None
