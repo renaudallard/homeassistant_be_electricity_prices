@@ -41,11 +41,15 @@ from __future__ import annotations
 import asyncio
 import importlib.util as iu
 import sys
+import time
 import traceback
 import types
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import aiohttp
 
@@ -111,6 +115,74 @@ class Check:
 
 
 CHECKS: list[Check] = []
+
+
+# Per-supplier wallclock + bytes-received accounting. Populated via an
+# aiohttp TraceConfig that tags every request with whichever supplier
+# is currently being checked (set by the _attributed() context
+# manager). Surfaces silent slowdowns and PDF-size jumps in the
+# report; both are leading indicators that a supplier reworked its
+# tariff publication.
+METRICS: dict[str, dict[str, float]] = {}
+_CURRENT_SUPPLIER: ContextVar[str | None] = ContextVar(
+    "be_live_check_supplier", default=None
+)
+
+
+def _metrics_bucket(supplier: str) -> dict[str, float]:
+    return METRICS.setdefault(
+        supplier, {"fetches": 0.0, "elapsed_s": 0.0, "bytes": 0.0}
+    )
+
+
+async def _on_request_start(
+    _session: aiohttp.ClientSession,
+    ctx: SimpleNamespace,
+    _params: aiohttp.TraceRequestStartParams,
+) -> None:
+    ctx.start = time.monotonic()
+
+
+async def _on_request_end(
+    _session: aiohttp.ClientSession,
+    ctx: SimpleNamespace,
+    params: aiohttp.TraceRequestEndParams,
+) -> None:
+    supplier = _CURRENT_SUPPLIER.get()
+    if supplier is None:
+        return
+    bucket = _metrics_bucket(supplier)
+    bucket["fetches"] += 1.0
+    bucket["elapsed_s"] += time.monotonic() - getattr(ctx, "start", time.monotonic())
+    cl = params.response.headers.get("Content-Length")
+    if cl is not None:
+        try:
+            bucket["bytes"] += float(cl)
+        except ValueError:
+            # Non-numeric header is upstream noise, not our problem.
+            pass
+
+
+def _trace_config() -> aiohttp.TraceConfig:
+    tc = aiohttp.TraceConfig()
+    tc.on_request_start.append(_on_request_start)
+    tc.on_request_end.append(_on_request_end)
+    return tc
+
+
+@contextmanager
+def _attributed(supplier: str) -> Iterator[None]:
+    """Attribute every aiohttp request inside this block to ``supplier``.
+
+    Wrapping each ``_check_<supplier>`` call lets the trace hooks tag
+    timing + Content-Length without each check function having to
+    thread the supplier id through. Re-entry is safe via ContextVar.
+    """
+    token = _CURRENT_SUPPLIER.set(supplier)
+    try:
+        yield
+    finally:
+        _CURRENT_SUPPLIER.reset(token)
 
 
 def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
@@ -742,7 +814,30 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
         )
 
 
-def _render_report(checks: Iterable[Check]) -> str:
+def _render_metrics(metrics: dict[str, dict[str, float]]) -> str:
+    """Per-supplier wallclock + bytes-received block for the report.
+
+    Empty when nothing was traced (e.g. the catalog-only report).
+    Emits a leading blank line so it slots cleanly between sections
+    without collapsing into an adjacent table.
+    """
+    if not metrics:
+        return ""
+    rows = ["", "## Per-supplier latency / size", ""]
+    rows.append("| Supplier | Fetches | Wallclock (s) | Bytes received |")
+    rows.append("| --- | ---: | ---: | ---: |")
+    for supplier, m in sorted(metrics.items()):
+        bytes_str = f"{int(m['bytes']):,}" if m["bytes"] else "-"
+        rows.append(
+            f"| `{supplier}` | {int(m['fetches'])} | "
+            f"{m['elapsed_s']:.2f} | {bytes_str} |"
+        )
+    return "\n".join(rows) + "\n"
+
+
+def _render_report(
+    checks: Iterable[Check], metrics: dict[str, dict[str, float]] | None = None
+) -> str:
     rows: list[str] = []
     pass_count = sum(1 for c in checks if c.ok)
     fail_count = sum(1 for c in checks if not c.ok)
@@ -763,7 +858,10 @@ def _render_report(checks: Iterable[Check]) -> str:
     for c in checks:
         marker = "[x]" if c.ok else "[ ]"
         rows.append(f"- {marker} {c.label}")
-    return "\n".join(rows) + "\n"
+    out = "\n".join(rows) + "\n"
+    if metrics:
+        out += _render_metrics(metrics)
+    return out
 
 
 async def _run() -> int:
@@ -792,23 +890,41 @@ async def _run() -> int:
         "octaplus": octaplus,
     }
     timeout = aiohttp.ClientTimeout(total=60)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        await _check_eneco(session, eneco)
-        await _check_cociter(session, cociter)
-        await _check_dats24(session, dats24)
-        await _check_ecopower(session, ecopower)
-        await _check_engie(session, engie)
-        await _check_luminus(session, luminus)
-        await _check_mega(session, mega)
-        await _check_totalenergies(session, totalenergies)
-        await _check_bolt(session, bolt)
-        await _check_octaplus(session, octaplus)
-        await _check_catalogs(session, modules)
+    async with aiohttp.ClientSession(
+        timeout=timeout, trace_configs=[_trace_config()]
+    ) as session:
+        with _attributed("eneco"):
+            await _check_eneco(session, eneco)
+        with _attributed("cociter"):
+            await _check_cociter(session, cociter)
+        with _attributed("dats24"):
+            await _check_dats24(session, dats24)
+        with _attributed("ecopower"):
+            await _check_ecopower(session, ecopower)
+        with _attributed("engie"):
+            await _check_engie(session, engie)
+        with _attributed("luminus"):
+            await _check_luminus(session, luminus)
+        with _attributed("mega"):
+            await _check_mega(session, mega)
+        with _attributed("totalenergies"):
+            await _check_totalenergies(session, totalenergies)
+        with _attributed("bolt"):
+            await _check_bolt(session, bolt)
+        with _attributed("octaplus"):
+            await _check_octaplus(session, octaplus)
+        # Catalog probes fan out across suppliers; attribute them
+        # to a synthetic bucket so they don't double-count against
+        # any one supplier's per-card timing.
+        with _attributed("_catalog"):
+            await _check_catalogs(session, modules)
 
     extractor_checks = [c for c in CHECKS if c.kind == "extractor"]
     catalog_checks = [c for c in CHECKS if c.kind == "catalog"]
     # Stdout = extractor report (existing workflow consumes this).
-    print(_render_report(extractor_checks))
+    # Metrics piggyback on the extractor report so silent slowdowns and
+    # PDF-size jumps surface daily without a separate pipeline.
+    print(_render_report(extractor_checks, METRICS))
     # Side-channel: catalog report goes to a known file the workflow
     # picks up to open / update its own issue, separate from the
     # extractor-broken issue so the two failure modes don't conflate.
