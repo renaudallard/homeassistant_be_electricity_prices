@@ -5,6 +5,11 @@ on:
     # 06:00 UTC = 07:00 CET / 08:00 CEST (after suppliers' overnight publication).
     - cron: "0 6 * * *"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "custom_components/be_electricity_prices/providers/**"
+      - "scripts/live_check.py"
+      - ".github/workflows/live_check.yml"
 
 permissions:
   contents: read
@@ -57,12 +62,16 @@ jobs:
           exit 0
 
       - name: Open or update extractor-broken issue
-        # rc bit 0 set: extractor failure.
+        # rc bit 0 set: extractor failure. Skipped on pull_request so
+        # PR-time runs fail the job (next step) instead of opening an
+        # issue against the parent repo.
         if: |
-          steps.check.outputs.rc == '1'
-          || steps.check.outputs.rc == '3'
-          || steps.check.outputs.rc == '5'
-          || steps.check.outputs.rc == '7'
+          github.event_name != 'pull_request' && (
+            steps.check.outputs.rc == '1'
+            || steps.check.outputs.rc == '3'
+            || steps.check.outputs.rc == '5'
+            || steps.check.outputs.rc == '7'
+          )
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -96,8 +105,9 @@ jobs:
       - name: Open or update drift issue
         # rc bit 2 (4): per-supplier latency or byte budget blown.
         # Independent issue from the extractor / catalog ones so the
-        # three failure modes don't conflate in one thread.
-        if: always() && (
+        # three failure modes don't conflate in one thread. Skipped
+        # on pull_request -- the failing job is the signal there.
+        if: always() && github.event_name != 'pull_request' && (
             steps.check.outputs.rc == '4'
             || steps.check.outputs.rc == '5'
             || steps.check.outputs.rc == '6'
@@ -137,7 +147,8 @@ jobs:
         # rc bit 1 set: a new product was detected at a supplier we
         # know how to discover. Independent issue from the extractor
         # one so the two failure modes don't conflate in one thread.
-        if: always() && (
+        # Skipped on pull_request -- failing job is the signal.
+        if: always() && github.event_name != 'pull_request' && (
             steps.check.outputs.rc == '2'
             || steps.check.outputs.rc == '3'
             || steps.check.outputs.rc == '6'
@@ -171,4 +182,18 @@ jobs:
             gh issue create \
               --title "$title_prefix ($(date -u +%Y-%m-%d))" \
               --body-file catalog_issue_body.md
+          fi
+
+      - name: Fail PR job on extractor or drift signal
+        # Surface live-check failures on the PR check status without
+        # opening issues against the parent repo (which a fork-pushed
+        # PR can't do anyway). Catalog signal alone (rc==2) is
+        # informational, not a regression -- don't fail the PR for it.
+        if: github.event_name == 'pull_request'
+        run: |
+          rc='${{ steps.check.outputs.rc }}'
+          # Mask away the catalog-only bit; fail if anything else is set.
+          if [ $((rc & ~2)) -ne 0 ]; then
+            echo "live-check rc=$rc; failing PR check" >&2
+            exit 1
           fi
