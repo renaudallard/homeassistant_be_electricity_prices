@@ -37,8 +37,9 @@ jobs:
             rc=$?
             cat report.md
             echo "::endgroup::"
-            # rc bit 0 (1 / 3) = extractor failure — worth retrying.
-            # rc bit 1 only (2) = catalog signal, stable — don't retry.
+            # rc bit 0 (1) = extractor failure — worth retrying.
+            # rc bit 1 (2) = catalog signal, stable — don't retry.
+            # rc bit 2 (4) = drift signal, stable — don't retry.
             # rc 0 = all green.
             if [ $((rc & 1)) -eq 0 ]; then
               break
@@ -57,7 +58,11 @@ jobs:
 
       - name: Open or update extractor-broken issue
         # rc bit 0 set: extractor failure.
-        if: steps.check.outputs.rc == '1' || steps.check.outputs.rc == '3'
+        if: |
+          steps.check.outputs.rc == '1'
+          || steps.check.outputs.rc == '3'
+          || steps.check.outputs.rc == '5'
+          || steps.check.outputs.rc == '7'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -88,11 +93,56 @@ jobs:
               --body-file issue_body.md
           fi
 
+      - name: Open or update drift issue
+        # rc bit 2 (4): per-supplier latency or byte budget blown.
+        # Independent issue from the extractor / catalog ones so the
+        # three failure modes don't conflate in one thread.
+        if: always() && (
+            steps.check.outputs.rc == '4'
+            || steps.check.outputs.rc == '5'
+            || steps.check.outputs.rc == '6'
+            || steps.check.outputs.rc == '7'
+          )
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title_prefix='[live-check] supplier drift detected'
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          {
+            echo "## Run"
+            echo
+            echo "$run_url"
+            echo
+            echo "## Drift report"
+            echo
+            cat drift_report.md
+          } > drift_issue_body.md
+
+          existing=$(gh issue list \
+            --state open \
+            --search "\"$title_prefix\" in:title" \
+            --json number,title \
+            --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            echo "appending comment to issue #$existing"
+            gh issue comment "$existing" --body-file drift_issue_body.md
+          else
+            gh issue create \
+              --title "$title_prefix ($(date -u +%Y-%m-%d))" \
+              --body-file drift_issue_body.md
+          fi
+
       - name: Open or update new-products issue
         # rc bit 1 set: a new product was detected at a supplier we
         # know how to discover. Independent issue from the extractor
         # one so the two failure modes don't conflate in one thread.
-        if: always() && (steps.check.outputs.rc == '2' || steps.check.outputs.rc == '3')
+        if: always() && (
+            steps.check.outputs.rc == '2'
+            || steps.check.outputs.rc == '3'
+            || steps.check.outputs.rc == '6'
+            || steps.check.outputs.rc == '7'
+          )
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -929,14 +929,56 @@ async def _run() -> int:
     # picks up to open / update its own issue, separate from the
     # extractor-broken issue so the two failure modes don't conflate.
     Path("catalog_report.md").write_text(_render_report(catalog_checks))
+    drift_warnings = _drift_warnings(METRICS)
+    Path("drift_report.md").write_text(_render_drift(drift_warnings))
     extractor_failed = any(not c.ok for c in extractor_checks)
     catalog_failed = any(not c.ok for c in catalog_checks)
-    # Distinct exit codes so the workflow knows which issue to open:
-    #   0 = all green
-    #   1 = extractor failure (existing behaviour)
-    #   2 = catalog-only (extractor green, but new products at suppliers)
-    #   3 = both
-    return (1 if extractor_failed else 0) | (2 if catalog_failed else 0)
+    drift_alert = bool(drift_warnings)
+    # Bit-encoded exit codes:
+    #   bit 0 (1) = extractor failure
+    #   bit 1 (2) = catalog signal
+    #   bit 2 (4) = drift alert
+    return (
+        (1 if extractor_failed else 0)
+        | (2 if catalog_failed else 0)
+        | (4 if drift_alert else 0)
+    )
+
+
+# Static drift thresholds. These are intentionally generous: a healthy
+# Belgian supplier endpoint serves a tariff PDF in under a few seconds
+# at well under 1 MB, so 60s wallclock or 5 MB body size is a clear
+# signal that something changed at the supplier (slower endpoint,
+# bloated PDF, anti-bot interstitial). Per-supplier baselines could
+# follow once these prove too loose.
+LATENCY_WARN_THRESHOLD_S = 60.0
+BYTES_WARN_THRESHOLD = 5_000_000
+
+
+def _drift_warnings(metrics: dict[str, dict[str, float]]) -> list[str]:
+    """Static-threshold drift signals: latency or byte budgets blown."""
+    warnings: list[str] = []
+    for supplier, m in sorted(metrics.items()):
+        if m["elapsed_s"] > LATENCY_WARN_THRESHOLD_S:
+            warnings.append(
+                f"`{supplier}` wallclock {m['elapsed_s']:.1f}s "
+                f"exceeds {LATENCY_WARN_THRESHOLD_S:.0f}s budget"
+            )
+        if m["bytes"] > BYTES_WARN_THRESHOLD:
+            warnings.append(
+                f"`{supplier}` received {int(m['bytes']):,} bytes "
+                f"exceeds {BYTES_WARN_THRESHOLD:,} byte budget"
+            )
+    return warnings
+
+
+def _render_drift(warnings: list[str]) -> str:
+    if not warnings:
+        return "# Live-check drift — no warnings\n"
+    rows = ["# Live-check drift — alerts", ""]
+    for w in warnings:
+        rows.append(f"- {w}")
+    return "\n".join(rows) + "\n"
 
 
 def main() -> int:
