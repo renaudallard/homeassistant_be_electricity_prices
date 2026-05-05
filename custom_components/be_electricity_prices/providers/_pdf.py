@@ -72,6 +72,11 @@ def _is_pdf_payload(payload: bytes) -> bool:
 
 async def fetch_pdf_text(session: aiohttp.ClientSession, url: str) -> str:
     """Download ``url`` and return the concatenated extracted text."""
+    # Catch TimeoutError alongside ClientError in every fetch helper:
+    # aiohttp's ClientTimeout fires asyncio.TimeoutError (==
+    # builtins.TimeoutError on 3.11+), which is NOT a subclass of
+    # ClientError, so a slow supplier endpoint would otherwise bubble a
+    # bare TimeoutError out of discover/fetch and crash the live-check.
     try:
         async with session.get(
             url,
@@ -81,7 +86,7 @@ async def fetch_pdf_text(session: aiohttp.ClientSession, url: str) -> str:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             payload = await resp.read()
-    except aiohttp.ClientError as err:
+    except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
 
     if not _is_pdf_payload(payload):
@@ -224,7 +229,7 @@ async def fetch_pdf_text_aligned(
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             payload = await resp.read()
-    except aiohttp.ClientError as err:
+    except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
     if not _is_pdf_payload(payload):
         raise ExtractorError(
@@ -251,7 +256,7 @@ async def fetch_pdf_text_layout(session: aiohttp.ClientSession, url: str) -> str
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             payload = await resp.read()
-    except aiohttp.ClientError as err:
+    except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
     if not _is_pdf_payload(payload):
         raise ExtractorError(
@@ -284,7 +289,7 @@ async def fetch_text(
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             return await resp.text()
-    except aiohttp.ClientError as err:
+    except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
 
 

@@ -27,9 +27,18 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 
-from custom_components.be_electricity_prices.providers._pdf import parse_valid_until
+import aiohttp
+import pytest
+
+from custom_components.be_electricity_prices.providers._pdf import (
+    fetch_pdf_text,
+    fetch_text,
+    parse_valid_until,
+)
+from custom_components.be_electricity_prices.providers.base import ExtractorError
 
 
 def test_parse_valid_until_dutch_geldig_van_tem() -> None:
@@ -94,3 +103,51 @@ def test_parse_valid_until_clamps_implausible_far_future_year() -> None:
     text = "Cette carte est valable du 01/04/2026 au 30/04/2625."
     # The 2026 candidate is the only one that survives the year clamp.
     assert parse_valid_until(text) == date(2026, 4, 1)
+
+
+# ---- network-error normalization ----------------------------------------------
+
+
+class _FakeSession:
+    """Minimal aiohttp.ClientSession stand-in whose .get() raises on entry."""
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def get(self, *_args: object, **_kwargs: object) -> "_FakeCtx":
+        return _FakeCtx(self._exc)
+
+
+class _FakeCtx:
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    async def __aenter__(self) -> object:  # pragma: no cover - re-raises immediately
+        raise self._exc
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+
+async def test_fetch_text_converts_timeout_to_extractor_error() -> None:
+    """aiohttp's ClientTimeout fires asyncio.TimeoutError, which is NOT
+    a ClientError. Without explicit catching the bare TimeoutError
+    bubbles out of every supplier's discover/fetch and crashes the
+    live-check (regression: engie/catalog 2026-05-05)."""
+    session = _FakeSession(asyncio.TimeoutError())
+    with pytest.raises(ExtractorError, match="network error"):
+        await fetch_text(session, "https://example.com/")  # type: ignore[arg-type]
+
+
+async def test_fetch_pdf_text_converts_timeout_to_extractor_error() -> None:
+    session = _FakeSession(asyncio.TimeoutError())
+    with pytest.raises(ExtractorError, match="network error"):
+        await fetch_pdf_text(session, "https://example.com/x.pdf")  # type: ignore[arg-type]
+
+
+async def test_fetch_text_still_converts_aiohttp_client_errors() -> None:
+    """Regression guard: the broader except tuple must still catch
+    plain ClientError so a network-down case doesn't bubble either."""
+    session = _FakeSession(aiohttp.ClientConnectionError("dns failed"))
+    with pytest.raises(ExtractorError, match="network error"):
+        await fetch_text(session, "https://example.com/")  # type: ignore[arg-type]
