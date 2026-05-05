@@ -959,14 +959,31 @@ async def _run() -> int:
     )
 
 
-# Static drift thresholds. These are intentionally generous: a healthy
-# Belgian supplier endpoint serves a tariff PDF in under a few seconds
-# at well under 1 MB, so 60s wallclock or 5 MB body size is a clear
-# signal that something changed at the supplier (slower endpoint,
-# bloated PDF, anti-bot interstitial). Per-supplier baselines could
-# follow once these prove too loose.
+# Static drift thresholds. The default (5 MB / 60 s) catches a fresh
+# regression at any supplier; per-supplier overrides cover known-large
+# catalogs whose total over the full check is honestly above the
+# default but stable. The override is the budget we expect plus ~25%
+# headroom; cross it and something genuinely changed.
 LATENCY_WARN_THRESHOLD_S = 60.0
 BYTES_WARN_THRESHOLD = 5_000_000
+
+# Per-supplier byte budgets (override the global). Picked off the
+# steady-state metrics table after the bolt 3x-refetch fix:
+#   * bolt: ~32 MB (6 contracts x ~5 MB PDF, parsed once for all 3
+#     regions). Allow 50 MB for headroom and a possible new product.
+#   * totalenergies: ~11 MB (7 contracts x 3 regions, ~0.45 MB each).
+#     Allow 15 MB.
+#   * engie: ~5.4 MB (sitemap discovery + ~24 region PDFs). Allow 8 MB
+#     so we don't fire on a slow day.
+_BYTES_BUDGET_OVERRIDES: dict[str, int] = {
+    "bolt": 50_000_000,
+    "totalenergies": 15_000_000,
+    "engie": 8_000_000,
+}
+
+
+def _bytes_budget(supplier: str) -> int:
+    return _BYTES_BUDGET_OVERRIDES.get(supplier, BYTES_WARN_THRESHOLD)
 
 
 def _drift_warnings(metrics: dict[str, dict[str, float]]) -> list[str]:
@@ -978,10 +995,11 @@ def _drift_warnings(metrics: dict[str, dict[str, float]]) -> list[str]:
                 f"`{supplier}` wallclock {m['elapsed_s']:.1f}s "
                 f"exceeds {LATENCY_WARN_THRESHOLD_S:.0f}s budget"
             )
-        if m["bytes"] > BYTES_WARN_THRESHOLD:
+        budget = _bytes_budget(supplier)
+        if m["bytes"] > budget:
             warnings.append(
                 f"`{supplier}` received {int(m['bytes']):,} bytes "
-                f"exceeds {BYTES_WARN_THRESHOLD:,} byte budget"
+                f"exceeds {budget:,} byte budget"
             )
     return warnings
 
