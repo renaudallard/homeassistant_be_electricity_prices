@@ -29,8 +29,11 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -42,3 +45,32 @@ def auto_enable_custom_integrations(
 ) -> None:
     """Enable custom_components/ loading for every test that uses hass."""
     return
+
+
+@pytest.fixture(autouse=True)
+def _force_brussels_timezone(request: pytest.FixtureRequest):
+    """Pin every test to Europe/Brussels.
+
+    The pytest-homeassistant-custom-component ``hass`` fixture sets
+    ``US/Pacific`` by default; for a Belgian-electricity integration
+    that hides DST, off-peak window, and per-month archive bugs that
+    would surface in production. Sync fixture so it doesn't drag the
+    event loop into pure-helper tests; when ``hass`` is requested we
+    force it to set up first (it sets US/Pacific) and then override
+    to Brussels.
+    """
+    if "hass" in request.fixturenames:
+        hass: HomeAssistant = request.getfixturevalue("hass")
+        # async_set_time_zone updates dt_util.DEFAULT_TIME_ZONE in
+        # addition to hass.config.time_zone; the call has to await,
+        # but we're in a sync fixture, so route through hass's
+        # async_create_task and block on it.
+        hass.loop.run_until_complete(hass.config.async_set_time_zone("Europe/Brussels"))
+        yield
+        return
+    orig = dt_util.get_default_time_zone()
+    dt_util.set_default_time_zone(ZoneInfo("Europe/Brussels"))
+    try:
+        yield
+    finally:
+        dt_util.set_default_time_zone(orig)

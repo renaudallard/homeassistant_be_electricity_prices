@@ -31,6 +31,7 @@ from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -46,6 +47,12 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
+
+# Belgian integration: tests pin Europe/Brussels via conftest, but
+# tz-sensitive constants in this file spell it out so the intent is
+# clear at the assertion site rather than implicit through the
+# DEFAULT_TIME_ZONE indirection.
+BRUSSELS = ZoneInfo("Europe/Brussels")
 
 
 # ---- pure helpers -------------------------------------------------------------
@@ -96,25 +103,21 @@ def test_solar_kva_invalid_inputs_clamp_to_zero() -> None:
 
 
 def test_normalize_window_defaults_to_jan1_through_now() -> None:
-    fixed_now = datetime(2026, 5, 4, 13, 30, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    fixed_now = datetime(2026, 5, 4, 13, 30, tzinfo=BRUSSELS)
     with patch.object(dt_util, "now", return_value=fixed_now):
         start_utc, end_utc = bf._normalize_window(None, None)
-    assert start_utc == datetime(
-        2026, 1, 1, 0, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE
-    ).astimezone(UTC)
+    assert start_utc == datetime(2026, 1, 1, 0, 0, tzinfo=BRUSSELS).astimezone(UTC)
     # End is floored to the top of the current hour, exclusive of the
     # in-progress hour.
-    assert end_utc == datetime(
-        2026, 5, 4, 13, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE
-    ).astimezone(UTC)
+    assert end_utc == datetime(2026, 5, 4, 13, 0, tzinfo=BRUSSELS).astimezone(UTC)
 
 
 def test_normalize_window_treats_naive_datetime_as_local_tz() -> None:
     naive = datetime(2026, 3, 1, 6, 0)  # no tzinfo
-    fixed_now = datetime(2026, 5, 4, 13, 30, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    fixed_now = datetime(2026, 5, 4, 13, 30, tzinfo=BRUSSELS)
     with patch.object(dt_util, "now", return_value=fixed_now):
         start_utc, _ = bf._normalize_window(naive, None)
-    expected = naive.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE).astimezone(UTC)
+    expected = naive.replace(tzinfo=BRUSSELS).astimezone(UTC)
     assert start_utc == expected
 
 
@@ -254,8 +257,8 @@ async def test_backfill_range_writes_one_mean_row_per_hour_per_price_sensor(
     def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
         captured.append((metadata["statistic_id"], list(statistics)))
 
-    start = datetime(2026, 5, 1, 0, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
-    end = datetime(2026, 5, 1, 3, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    start = datetime(2026, 5, 1, 0, 0, tzinfo=BRUSSELS)
+    end = datetime(2026, 5, 1, 3, 0, tzinfo=BRUSSELS)
     instance = MagicMock()
     instance.async_add_executor_job = AsyncMock(return_value={})
     with (
@@ -322,7 +325,7 @@ async def test_cost_backfill_running_sum_is_monotonic_for_non_compensation(
     def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
         captured.append((metadata["statistic_id"], list(statistics)))
 
-    start = datetime(2026, 5, 1, 0, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    start = datetime(2026, 5, 1, 0, 0, tzinfo=BRUSSELS)
     end = start + timedelta(hours=4)
     instance = MagicMock()
     instance.async_add_executor_job = AsyncMock(return_value={})
