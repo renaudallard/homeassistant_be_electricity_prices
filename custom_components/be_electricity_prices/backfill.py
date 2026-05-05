@@ -280,7 +280,11 @@ async def _backfill_price_sensors(
         StatisticData,
         StatisticMetaData,
     )
-    from homeassistant.components.recorder.statistics import (
+
+    # mypy --strict flags StatisticMeanType because the recorder module
+    # doesn't re-export it via __all__; same shape coordinator.py uses
+    # for statistics_during_period and get_instance.
+    from homeassistant.components.recorder.statistics import (  # type: ignore[attr-defined]
         StatisticMeanType,
         async_import_statistics,
     )
@@ -415,7 +419,11 @@ async def _backfill_cost_sensor(
         StatisticData,
         StatisticMetaData,
     )
-    from homeassistant.components.recorder.statistics import (
+
+    # mypy --strict flags StatisticMeanType because the recorder module
+    # doesn't re-export it via __all__; same shape coordinator.py uses
+    # for statistics_during_period and get_instance.
+    from homeassistant.components.recorder.statistics import (  # type: ignore[attr-defined]
         StatisticMeanType,
         async_import_statistics,
     )
