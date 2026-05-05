@@ -172,19 +172,20 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 # ---- top-level fetch + parser -------------------------------------------------
 
 
-async def fetch(
-    session: aiohttp.ClientSession,
-    contract_id: str,
-    region: str,
-) -> SupplierSnapshot:
-    """Fetch the latest Bolt PDF for ``contract_id`` (covers every region)."""
-    if contract_id not in _CONTRACTS_BY_ID:
-        raise ExtractorError(f"unknown Bolt contract {contract_id!r}")
-    contract = _CONTRACTS_BY_ID[contract_id]
+async def _fetch_pdf_text(
+    session: aiohttp.ClientSession, contract: _ContractDef
+) -> tuple[str, str]:
+    """Fetch the latest PDF text for ``contract``, applying the
+    fixed-card fallback. Returns ``(url, text)``.
 
+    Lifted out of :func:`fetch` so the live-check script can fetch
+    once per contract and parse three region-specific snapshots from
+    the same text -- Bolt's PDFs cover all regions, so doing it
+    per-(contract, region) wastes a 5+ MB round-trip twice.
+    """
     url = _document_url(contract)
     try:
-        text = await fetch_pdf_text_layout(session, url)
+        return url, await fetch_pdf_text_layout(session, url)
     except ExtractorError as primary_err:
         # Fixed cards may not be published yet on the 1st of the month;
         # fall back to the previous month so the user keeps seeing
@@ -200,12 +201,23 @@ async def fetch(
         _LOGGER.warning(
             "Bolt %s: current-month PDF unavailable (%s); "
             "falling back to previous-month card %s",
-            contract_id,
+            contract.contract_id,
             primary_err,
             fallback_url,
         )
-        url = fallback_url
-        text = await fetch_pdf_text_layout(session, url)
+        return fallback_url, await fetch_pdf_text_layout(session, fallback_url)
+
+
+async def fetch(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+) -> SupplierSnapshot:
+    """Fetch the latest Bolt PDF for ``contract_id`` (covers every region)."""
+    if contract_id not in _CONTRACTS_BY_ID:
+        raise ExtractorError(f"unknown Bolt contract {contract_id!r}")
+    contract = _CONTRACTS_BY_ID[contract_id]
+    url, text = await _fetch_pdf_text(session, contract)
     return parse_snapshot(contract_id, text, region, url)
 
 

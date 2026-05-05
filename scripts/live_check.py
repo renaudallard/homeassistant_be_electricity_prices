@@ -467,12 +467,26 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
     }
     for contract in bolt._CONTRACTS:
         cid = contract.contract_id
+        # Bolt's PDF covers every region, so fetch once per contract
+        # and re-parse for each region from the cached text. Without
+        # this the daily check downloads the same 5 MB PDF three
+        # times (once per region) and trips the byte budget.
+        try:
+            url, text = await bolt._fetch_pdf_text(session, contract)
+        except Exception as err:
+            for region_key in ("flanders", "wallonia", "brussels"):
+                _record(
+                    f"bolt/{cid}/{region_key}: fetch",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                )
+            continue
         for region_key in ("flanders", "wallonia", "brussels"):
             prefix = f"bolt/{cid}/{region_key}"
             try:
-                snap = await bolt.fetch(session, cid, region_key)
+                snap = bolt.parse_snapshot(cid, text, region_key, url)
             except Exception as err:
-                _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+                _record(f"{prefix}: parse", False, f"{type(err).__name__}: {err}")
                 continue
             _expect(
                 f"{prefix}: expected DSOs present",
