@@ -123,6 +123,23 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
 
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
+# Product names Mega lists on the public catalog page that this
+# integration intentionally does not model. The daily live-check
+# subtracts both _CONTRACTS and this set from the discovered list, so
+# truly new residential electricity products surface as actionable
+# signal while these stay quiet.
+#
+#   * Prepaid Fixed / Prepaid Flex -- topup-card products with a
+#     different billing model (no monthly invoice, no recorder-backed
+#     consumption sensors), out of scope for the Energy-dashboard
+#     integration.
+_KNOWN_UNSUPPORTED_PRODUCTS: frozenset[str] = frozenset(
+    {
+        "Prepaid Fixed",
+        "Prepaid Flex",
+    }
+)
+
 
 # ---- listing HTML -> PDF URL --------------------------------------------------
 
@@ -150,17 +167,21 @@ async def _fetch_listing_html(session: aiohttp.ClientSession) -> str:
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
-    """Return every ``data-product-element`` value from Mega's listing.
+    """Return every ``data-product-element`` value from Mega's listing,
+    minus the products this integration deliberately doesn't model.
 
     Best-effort catalog discovery for the daily live-check: the diff
     against ``{c.product_name for c in _CONTRACTS}`` flags any new Mega
-    product that should be added to the registry.
+    product that should be added to the registry. Filtering out
+    :data:`_KNOWN_UNSUPPORTED_PRODUCTS` keeps prepaid (topup-card)
+    products from re-opening the same catalog issue every day.
     """
     try:
         listing = await _fetch_listing_html(session)
     except ExtractorError:
         return set()
-    return set(re.findall(r'data-product-element="([^"]+)"', listing))
+    found = set(re.findall(r'data-product-element="([^"]+)"', listing))
+    return found - _KNOWN_UNSUPPORTED_PRODUCTS
 
 
 # ---- top-level fetch + parser -------------------------------------------------

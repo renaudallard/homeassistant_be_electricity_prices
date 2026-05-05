@@ -28,10 +28,12 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import patch
 
 import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import mega as mega_mod
 from tests import FIXTURES, fixture_text
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
@@ -209,3 +211,25 @@ def test_unknown_contract_raises() -> None:
             await EXTRACTORS["mega"].fetch(None, "bogus", "wallonia")  # type: ignore[arg-type]
 
     asyncio.run(_run())
+
+
+# ---- discover() filters known-unsupported products ----------------------------
+
+
+async def test_discover_filters_known_unsupported_products() -> None:
+    """Mega's listing exposes prepaid topup-card products that this
+    integration deliberately does not model. The catalog discovery
+    must exclude them so the daily live-check doesn't re-open the
+    same issue every day (regression: 2026-05-05)."""
+    listing = (
+        '<a data-product-element="Smart Fixed" href="x">'
+        '<a data-product-element="Prepaid Fixed" href="y">'
+        '<a data-product-element="Prepaid Flex" href="z">'
+        '<a data-product-element="Hypothetical New" href="w">'
+    )
+    with patch.object(mega_mod, "_fetch_listing_html", return_value=listing):
+        out = await mega_mod.discover(None)  # type: ignore[arg-type]
+    assert "Smart Fixed" in out
+    assert "Hypothetical New" in out
+    assert "Prepaid Fixed" not in out
+    assert "Prepaid Flex" not in out
