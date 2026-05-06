@@ -305,13 +305,12 @@ async def _validate_entsoe_key(hass: HomeAssistant, api_key: str) -> str | None:
 
     Returns ``None`` on success, ``"invalid_api_key"`` when ENTSO-E
     rejects the token, or ``"cannot_connect"`` for transport / parse
-    errors *or* an empty publication-document response (rate-limit
-    /no-data path: ENTSO-E returns HTTP 200 with an
-    Acknowledgement_MarketDocument that ``parse_day_ahead_xml`` flattens
-    to an empty dict). Querying yesterday's window guarantees the
-    bidding zone has actually published prices for that span, so an
-    empty response really does mean the key/connection is bad rather
-    than 'too early in the day'.
+    errors. A 200 OK with an Acknowledgement_MarketDocument and no
+    TimeSeries (e.g. ENTSO-E maintenance window or BE bidding-zone
+    publication gap) is accepted as valid: the server saw and
+    authorised the request, so the key works. The regular live
+    coordinator's stale-snapshot repair surfaces any persistent
+    no-data path on the next refresh tick.
     """
     session = async_get_clientsession(hass)
     client = EntsoeClient(api_key, session)
@@ -319,17 +318,12 @@ async def _validate_entsoe_key(hass: HomeAssistant, api_key: str) -> str | None:
         hour=10, minute=0, second=0, microsecond=0
     ) - timedelta(days=1)
     try:
-        prices = await client.fetch_day_ahead(
+        await client.fetch_day_ahead(
             yesterday_noon, yesterday_noon + timedelta(hours=2)
         )
     except EntsoeAuthError:
         return "invalid_api_key"
     except EntsoeError:
-        return "cannot_connect"
-    if not prices:
-        # 200 OK but no TimeSeries -> Acknowledgement document, treat
-        # as connection failure so the wizard doesn't finalise an
-        # entry that will fail on first refresh.
         return "cannot_connect"
     return None
 
