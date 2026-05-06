@@ -72,6 +72,8 @@ from homeassistant.helpers.selector import (
     SelectSelectorConfig,
     SelectSelectorMode,
     TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .const import (
@@ -289,7 +291,13 @@ def _meter_schema(
 
 def _api_key_schema(defaults: dict[str, Any]) -> vol.Schema:
     current = defaults.get(CONF_API_KEY, "")
-    return vol.Schema({vol.Required(CONF_API_KEY, default=current): TextSelector()})
+    return vol.Schema(
+        {
+            vol.Required(CONF_API_KEY, default=current): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            )
+        }
+    )
 
 
 async def _validate_entsoe_key(hass: HomeAssistant, api_key: str) -> str | None:
@@ -1055,7 +1063,13 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             errors[CONF_API_KEY] = err
         return self.async_show_form(
             step_id="compare_api_key",
-            data_schema=vol.Schema({vol.Required(CONF_API_KEY): TextSelector()}),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_API_KEY): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    )
+                }
+            ),
             errors=errors,
         )
 
