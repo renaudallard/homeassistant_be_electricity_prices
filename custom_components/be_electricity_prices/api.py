@@ -86,7 +86,12 @@ class EntsoeClient:
                     body = await resp.text()
                     raise EntsoeError(f"ENTSO-E HTTP {resp.status}: {body[:200]}")
                 payload = await resp.text()
-        except aiohttp.ClientError as err:
+        except (aiohttp.ClientError, TimeoutError) as err:
+            # aiohttp.ClientTimeout fires asyncio.TimeoutError, which is
+            # NOT an aiohttp.ClientError on 3.11+; without the second
+            # alternative, a slow ENTSO-E response would bubble a bare
+            # TimeoutError through the wizard and the coordinator
+            # categorisation paths.
             raise EntsoeError(str(err)) from err
 
         # ENTSO-E's A44 doc is small today (~100 KB hourly, larger if
