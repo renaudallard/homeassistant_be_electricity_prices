@@ -51,7 +51,23 @@ from dataclasses import dataclass
 
 import aiohttp
 
-from ..const import REGION_FLANDERS, REGION_WALLONIA
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_FLUVIUS_ANTWERPEN,
+    DSO_FLUVIUS_HALLE_VILVOORDE,
+    DSO_FLUVIUS_IMEWO,
+    DSO_FLUVIUS_INTERGEM,
+    DSO_FLUVIUS_IVEKA,
+    DSO_FLUVIUS_LIMBURG,
+    DSO_FLUVIUS_WEST,
+    DSO_FLUVIUS_ZENNE_DIJLE,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+)
 from ._pdf import (
     SIGN_CHARS,
     fetch_pdf_text,
@@ -461,14 +477,14 @@ def _extract_wallonia_renewables(text: str) -> float:
 
 
 _FLANDERS_LABELS: dict[str, str] = {
-    "Fluvius Antwerpen": "fluvius_antwerpen",
-    "Fluvius Halle-Vilvoorde": "fluvius_halle_vilvoorde",
-    "Fluvius Imewo": "fluvius_imewo",
-    "Fluvius Kempen": "fluvius_iveka",
-    "Fluvius Limburg": "fluvius_limburg",
-    "Fluvius Midden-Vlaanderen": "fluvius_intergem",
-    "Fluvius West": "fluvius_west",
-    "Fluvius Zenne-Dijle": "fluvius_zenne_dijle",
+    "Fluvius Antwerpen": DSO_FLUVIUS_ANTWERPEN,
+    "Fluvius Halle-Vilvoorde": DSO_FLUVIUS_HALLE_VILVOORDE,
+    "Fluvius Imewo": DSO_FLUVIUS_IMEWO,
+    "Fluvius Kempen": DSO_FLUVIUS_IVEKA,
+    "Fluvius Limburg": DSO_FLUVIUS_LIMBURG,
+    "Fluvius Midden-Vlaanderen": DSO_FLUVIUS_INTERGEM,
+    "Fluvius West": DSO_FLUVIUS_WEST,
+    "Fluvius Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
 }
 
 
@@ -512,11 +528,11 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
 
 
 _WALLONIA_LABELS: dict[str, str] = {
-    "AIEG": "aieg",
-    "AIESH": "aiesh",
-    "ORES (Brabant Wallon)": "ores",
-    "TECTEO RESA": "resa",
-    "WAVRE": "rew",
+    "AIEG": DSO_AIEG,
+    "AIESH": DSO_AIESH,
+    "ORES (Brabant Wallon)": DSO_ORES,
+    "TECTEO RESA": DSO_RESA,
+    "WAVRE": DSO_REW,
 }
 
 

@@ -54,7 +54,25 @@ from datetime import UTC, date, datetime, timedelta
 
 import aiohttp
 
-from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_FLUVIUS_ANTWERPEN,
+    DSO_FLUVIUS_HALLE_VILVOORDE,
+    DSO_FLUVIUS_IMEWO,
+    DSO_FLUVIUS_INTERGEM,
+    DSO_FLUVIUS_IVEKA,
+    DSO_FLUVIUS_LIMBURG,
+    DSO_FLUVIUS_WEST,
+    DSO_FLUVIUS_ZENNE_DIJLE,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    DSO_SIBELGA,
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+)
 from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
@@ -487,14 +505,14 @@ def _extract_renewables(text: str) -> tuple[float, float, float]:
 
 
 _FLANDERS_LABELS: dict[str, str] = {
-    "Fluvius Antwerpen": "fluvius_antwerpen",
-    "Fluvius Halle-Vilvoorde": "fluvius_halle_vilvoorde",
-    "Fluvius Imewo": "fluvius_imewo",
-    "Fluvius Kempen": "fluvius_iveka",
-    "Fluvius Limburg": "fluvius_limburg",
-    "Fluvius Midden-Vl": "fluvius_intergem",
-    "Fluvius West": "fluvius_west",
-    "Fluvius Zenne-Dijle": "fluvius_zenne_dijle",
+    "Fluvius Antwerpen": DSO_FLUVIUS_ANTWERPEN,
+    "Fluvius Halle-Vilvoorde": DSO_FLUVIUS_HALLE_VILVOORDE,
+    "Fluvius Imewo": DSO_FLUVIUS_IMEWO,
+    "Fluvius Kempen": DSO_FLUVIUS_IVEKA,
+    "Fluvius Limburg": DSO_FLUVIUS_LIMBURG,
+    "Fluvius Midden-Vl": DSO_FLUVIUS_INTERGEM,
+    "Fluvius West": DSO_FLUVIUS_WEST,
+    "Fluvius Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
 }
 
 
@@ -543,11 +561,11 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
 # Bolt's PDF ever stops triggering the misalignment the check logs a
 # WARNING so the swap can be removed.
 _WALLONIA_LABELS: dict[str, str] = {
-    "AIEG": "aieg",
-    "AIESH": "aiesh",
-    "ORES (Brabant Wallon)": "ores",
-    "TECTEO RESA": "rew",
-    "WAVRE": "resa",
+    "AIEG": DSO_AIEG,
+    "AIESH": DSO_AIESH,
+    "ORES (Brabant Wallon)": DSO_ORES,
+    "TECTEO RESA": DSO_REW,
+    "WAVRE": DSO_RESA,
 }
 
 
@@ -597,8 +615,8 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     # our compensating swap now inverts correct values -- log a
     # warning so the maintainer can drop the swap from
     # _WALLONIA_LABELS instead of silently mis-billing.
-    resa = out.get("resa")
-    rew = out.get("rew")
+    resa = out.get(DSO_RESA)
+    rew = out.get(DSO_REW)
     if resa is None and rew is None:
         # Both rows missing: regex drift covers the whole table; the
         # rest of the parser will already have raised. Stay quiet
@@ -609,8 +627,8 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         # the swap, since the surviving row may now be carrying the
         # other DSO's values without anything else to compare it
         # against. Surface it so the maintainer can investigate.
-        parsed = "resa" if resa is not None else "rew"
-        missing = "rew" if resa is not None else "resa"
+        parsed = DSO_RESA if resa is not None else DSO_REW
+        missing = DSO_REW if resa is not None else DSO_RESA
         _LOGGER.warning(
             "Bolt RESA/REW row drift: only %s parsed; the label swap "
             "in _WALLONIA_LABELS may now be inverting %s's values",
@@ -648,7 +666,7 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     transport = to_float(match.group(5))
     terme_fixe = to_float(match.group(6))
     return {
-        "sibelga": DsoOverlay(
+        DSO_SIBELGA: DsoOverlay(
             distribution_single=mono / 100.0,
             distribution_peak=peak / 100.0,
             distribution_offpeak=offpeak / 100.0,

@@ -45,7 +45,23 @@ from datetime import date
 
 import aiohttp
 
-from ..const import REGION_FLANDERS, REGION_WALLONIA
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_FLUVIUS_ANTWERPEN,
+    DSO_FLUVIUS_HALLE_VILVOORDE,
+    DSO_FLUVIUS_IMEWO,
+    DSO_FLUVIUS_INTERGEM,
+    DSO_FLUVIUS_IVEKA,
+    DSO_FLUVIUS_LIMBURG,
+    DSO_FLUVIUS_WEST,
+    DSO_FLUVIUS_ZENNE_DIJLE,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+)
 from ._pdf import (
     SIGN_CHARS,
     fetch_pdf_text,
@@ -110,11 +126,11 @@ _CONTRACT_SLUGS: dict[str, str] = {
 # + transport + databeheer + prosument). ORES sub-zones share a uniform rate so
 # we just keep the first one encountered as the canonical "ores" row.
 _WALLONIA_LABELS: dict[str, str] = {
-    "AIEG": "aieg",
-    "AIESH": "aiesh",
-    "ORES (Brabant Wallon)": "ores",
-    "REGIE DE WAVRE": "rew",
-    "TECTEO RESA": "resa",
+    "AIEG": DSO_AIEG,
+    "AIESH": DSO_AIESH,
+    "ORES (Brabant Wallon)": DSO_ORES,
+    "REGIE DE WAVRE": DSO_REW,
+    "TECTEO RESA": DSO_RESA,
 }
 
 # Flanders Fluvius digital-meter sub-areas (column layout: Normaal,
@@ -123,14 +139,14 @@ _WALLONIA_LABELS: dict[str, str] = {
 # capacity rates. Transport is not in the row; the Wallonia rows carry the
 # (national) Elia transport value, which we propagate.
 _FLUVIUS_LABELS: dict[str, str] = {
-    "FLUVIUS HALLE VILVOORDE": "fluvius_halle_vilvoorde",
-    "FLUVIUS ANTWERPEN": "fluvius_antwerpen",
-    "FLUVIUS IMEWO": "fluvius_imewo",
-    "FLUVIUS LIMBURG": "fluvius_limburg",
-    "FLUVIUS WEST": "fluvius_west",
-    "FLUVIUS MIDDEN VLAANDEREN (INTERGEM)": "fluvius_intergem",
-    "FLUVIUS KEMPEN (IVEKA)": "fluvius_iveka",
-    "FLUVIUS ZENNE DIJLE": "fluvius_zenne_dijle",
+    "FLUVIUS HALLE VILVOORDE": DSO_FLUVIUS_HALLE_VILVOORDE,
+    "FLUVIUS ANTWERPEN": DSO_FLUVIUS_ANTWERPEN,
+    "FLUVIUS IMEWO": DSO_FLUVIUS_IMEWO,
+    "FLUVIUS LIMBURG": DSO_FLUVIUS_LIMBURG,
+    "FLUVIUS WEST": DSO_FLUVIUS_WEST,
+    "FLUVIUS MIDDEN VLAANDEREN (INTERGEM)": DSO_FLUVIUS_INTERGEM,
+    "FLUVIUS KEMPEN (IVEKA)": DSO_FLUVIUS_IVEKA,
+    "FLUVIUS ZENNE DIJLE": DSO_FLUVIUS_ZENNE_DIJLE,
 }
 
 _NUM = r"(\d{1,3}(?:[\.,]\d{1,4})?)"

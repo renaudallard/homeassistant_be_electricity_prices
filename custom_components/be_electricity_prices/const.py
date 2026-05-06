@@ -42,28 +42,65 @@ REGION_BRUSSELS: Final = "brussels"
 
 REGIONS: Final = (REGION_FLANDERS, REGION_WALLONIA, REGION_BRUSSELS)
 
+# Canonical DSO sub-area keys. Stable forever: stored verbatim in
+# every user's CONF_DSO and surfaced as keys in SupplierSnapshot.dsos,
+# so renaming would silently break every existing entry. Per-provider
+# extractors map their PDF labels onto these.
+DSO_FLUVIUS_ANTWERPEN: Final = "fluvius_antwerpen"
+DSO_FLUVIUS_HALLE_VILVOORDE: Final = "fluvius_halle_vilvoorde"
+DSO_FLUVIUS_IMEWO: Final = "fluvius_imewo"
+DSO_FLUVIUS_INTERGEM: Final = "fluvius_intergem"
+DSO_FLUVIUS_IVEKA: Final = "fluvius_iveka"
+DSO_FLUVIUS_LIMBURG: Final = "fluvius_limburg"
+DSO_FLUVIUS_WEST: Final = "fluvius_west"
+DSO_FLUVIUS_ZENNE_DIJLE: Final = "fluvius_zenne_dijle"
+
+DSO_AIEG: Final = "aieg"
+DSO_AIESH: Final = "aiesh"
+DSO_ORES: Final = "ores"
+DSO_RESA: Final = "resa"
+DSO_REW: Final = "rew"
+
+DSO_SIBELGA: Final = "sibelga"
+
+FLUVIUS_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        DSO_FLUVIUS_ANTWERPEN,
+        DSO_FLUVIUS_HALLE_VILVOORDE,
+        DSO_FLUVIUS_IMEWO,
+        DSO_FLUVIUS_INTERGEM,
+        DSO_FLUVIUS_IVEKA,
+        DSO_FLUVIUS_LIMBURG,
+        DSO_FLUVIUS_WEST,
+        DSO_FLUVIUS_ZENNE_DIJLE,
+    }
+)
+WALLONIA_DSO_KEYS: Final[frozenset[str]] = frozenset(
+    {DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW}
+)
+
 # DSO selection per region. Flanders has eight Fluvius sub-areas with
 # materially different distribution rates; Wallonia DSOs are uniform per
 # operator; Brussels has one (Sibelga).
 DSO_CHOICES: Final[dict[str, tuple[tuple[str, str], ...]]] = {
     REGION_FLANDERS: (
-        ("fluvius_antwerpen", "Fluvius Antwerpen"),
-        ("fluvius_halle_vilvoorde", "Fluvius Halle-Vilvoorde"),
-        ("fluvius_imewo", "Fluvius Imewo"),
-        ("fluvius_intergem", "Fluvius Midden-Vlaanderen (Intergem)"),
-        ("fluvius_iveka", "Fluvius Kempen (Iveka)"),
-        ("fluvius_limburg", "Fluvius Limburg"),
-        ("fluvius_west", "Fluvius West"),
-        ("fluvius_zenne_dijle", "Fluvius Zenne-Dijle"),
+        (DSO_FLUVIUS_ANTWERPEN, "Fluvius Antwerpen"),
+        (DSO_FLUVIUS_HALLE_VILVOORDE, "Fluvius Halle-Vilvoorde"),
+        (DSO_FLUVIUS_IMEWO, "Fluvius Imewo"),
+        (DSO_FLUVIUS_INTERGEM, "Fluvius Midden-Vlaanderen (Intergem)"),
+        (DSO_FLUVIUS_IVEKA, "Fluvius Kempen (Iveka)"),
+        (DSO_FLUVIUS_LIMBURG, "Fluvius Limburg"),
+        (DSO_FLUVIUS_WEST, "Fluvius West"),
+        (DSO_FLUVIUS_ZENNE_DIJLE, "Fluvius Zenne-Dijle"),
     ),
     REGION_WALLONIA: (
-        ("aieg", "AIEG"),
-        ("aiesh", "AIESH"),
-        ("ores", "ORES"),
-        ("resa", "RESA"),
-        ("rew", "Regie de Wavre"),
+        (DSO_AIEG, "AIEG"),
+        (DSO_AIESH, "AIESH"),
+        (DSO_ORES, "ORES"),
+        (DSO_RESA, "RESA"),
+        (DSO_REW, "Regie de Wavre"),
     ),
-    REGION_BRUSSELS: (("sibelga", "Sibelga"),),
+    REGION_BRUSSELS: ((DSO_SIBELGA, "Sibelga"),),
 }
 
 TARIFF_FIXED: Final = "fixed"

@@ -52,7 +52,23 @@ import re
 
 import aiohttp
 
-from ..const import REGION_FLANDERS, REGION_WALLONIA
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_FLUVIUS_ANTWERPEN,
+    DSO_FLUVIUS_HALLE_VILVOORDE,
+    DSO_FLUVIUS_IMEWO,
+    DSO_FLUVIUS_INTERGEM,
+    DSO_FLUVIUS_IVEKA,
+    DSO_FLUVIUS_LIMBURG,
+    DSO_FLUVIUS_WEST,
+    DSO_FLUVIUS_ZENNE_DIJLE,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+)
 from ._pdf import (
     SIGN_CHARS,
     USER_AGENT,
@@ -84,14 +100,14 @@ _CONTRACT_LABEL = "DATS 24 Elektriciteit Groen Variabel"
 
 
 _FLANDERS_DSOS: dict[str, str] = {
-    "ANTWERPEN": "fluvius_antwerpen",
-    "HALLE-VILVOORDE": "fluvius_halle_vilvoorde",
-    "IMEWO": "fluvius_imewo",
-    "KEMPEN": "fluvius_iveka",
-    "LIMBURG": "fluvius_limburg",
-    "MIDDEN-VLAANDEREN": "fluvius_intergem",
-    "WEST": "fluvius_west",
-    "ZENNE-DIJLE": "fluvius_zenne_dijle",
+    "ANTWERPEN": DSO_FLUVIUS_ANTWERPEN,
+    "HALLE-VILVOORDE": DSO_FLUVIUS_HALLE_VILVOORDE,
+    "IMEWO": DSO_FLUVIUS_IMEWO,
+    "KEMPEN": DSO_FLUVIUS_IVEKA,
+    "LIMBURG": DSO_FLUVIUS_LIMBURG,
+    "MIDDEN-VLAANDEREN": DSO_FLUVIUS_INTERGEM,
+    "WEST": DSO_FLUVIUS_WEST,
+    "ZENNE-DIJLE": DSO_FLUVIUS_ZENNE_DIJLE,
 }
 
 # Wallonia DSO labels as they appear on DATS 24's card. Multiple ORES
@@ -99,11 +115,11 @@ _FLANDERS_DSOS: dict[str, str] = {
 # Verviers) all carry identical numbers, so we collapse them onto our
 # single "ores" key by picking the Brabant Wallon row.
 _WALLONIA_DSOS: tuple[tuple[str, str], ...] = (
-    ("AIEG", "aieg"),
-    ("AIESH", "aiesh"),
-    ("ORES (Brabant Wallon)", "ores"),
-    ("RÉGIE DE WAVRE", "rew"),
-    ("RESA", "resa"),
+    ("AIEG", DSO_AIEG),
+    ("AIESH", DSO_AIESH),
+    ("ORES (Brabant Wallon)", DSO_ORES),
+    ("RÉGIE DE WAVRE", DSO_REW),
+    ("RESA", DSO_RESA),
 )
 
 

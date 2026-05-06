@@ -50,7 +50,25 @@ from dataclasses import dataclass
 
 import aiohttp
 
-from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_FLUVIUS_ANTWERPEN,
+    DSO_FLUVIUS_HALLE_VILVOORDE,
+    DSO_FLUVIUS_IMEWO,
+    DSO_FLUVIUS_INTERGEM,
+    DSO_FLUVIUS_IVEKA,
+    DSO_FLUVIUS_LIMBURG,
+    DSO_FLUVIUS_WEST,
+    DSO_FLUVIUS_ZENNE_DIJLE,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    DSO_SIBELGA,
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+)
 from ._pdf import fetch_pdf_text, fetch_text, parse_valid_until, to_float
 from .base import (
     Contract,
@@ -558,14 +576,14 @@ def _extract_connection_fee(text: str) -> float:
 
 
 _FLANDERS_LABELS: dict[str, str] = {
-    "FLUVIUS ANTWERPEN": "fluvius_antwerpen",
-    "FLUVIUS HALLE-VILVOORDE": "fluvius_halle_vilvoorde",
-    "FLUVIUS IMEWO": "fluvius_imewo",
-    "FLUVIUS KEMPEN": "fluvius_iveka",
-    "FLUVIUS LIMBURG": "fluvius_limburg",
-    "FLUVIUS MIDDEN-VLAANDEREN": "fluvius_intergem",
-    "FLUVIUS WEST": "fluvius_west",
-    "FLUVIUS ZENNE-DIJLE": "fluvius_zenne_dijle",
+    "FLUVIUS ANTWERPEN": DSO_FLUVIUS_ANTWERPEN,
+    "FLUVIUS HALLE-VILVOORDE": DSO_FLUVIUS_HALLE_VILVOORDE,
+    "FLUVIUS IMEWO": DSO_FLUVIUS_IMEWO,
+    "FLUVIUS KEMPEN": DSO_FLUVIUS_IVEKA,
+    "FLUVIUS LIMBURG": DSO_FLUVIUS_LIMBURG,
+    "FLUVIUS MIDDEN-VLAANDEREN": DSO_FLUVIUS_INTERGEM,
+    "FLUVIUS WEST": DSO_FLUVIUS_WEST,
+    "FLUVIUS ZENNE-DIJLE": DSO_FLUVIUS_ZENNE_DIJLE,
 }
 
 
@@ -605,11 +623,11 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
 
 
 _WALLONIA_LABELS: dict[str, str] = {
-    "AIEG": "aieg",
-    "AIESH": "aiesh",
-    "ORES (Brab. Wal.)": "ores",
-    "REGIE DE WAVRE": "rew",
-    "TECTEO - RESA": "resa",
+    "AIEG": DSO_AIEG,
+    "AIESH": DSO_AIESH,
+    "ORES (Brab. Wal.)": DSO_ORES,
+    "REGIE DE WAVRE": DSO_REW,
+    "TECTEO - RESA": DSO_RESA,
 }
 
 
@@ -671,7 +689,7 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
         return {}
     nums = [to_float(row.group(i)) for i in range(1, 9)]
     return {
-        "sibelga": DsoOverlay(
+        DSO_SIBELGA: DsoOverlay(
             distribution_single=nums[0] / 100.0,
             distribution_peak=nums[1] / 100.0,
             distribution_offpeak=nums[2] / 100.0,

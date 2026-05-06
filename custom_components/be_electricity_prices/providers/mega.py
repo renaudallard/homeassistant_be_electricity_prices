@@ -58,7 +58,25 @@ from datetime import date
 
 import aiohttp
 
-from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_FLUVIUS_ANTWERPEN,
+    DSO_FLUVIUS_HALLE_VILVOORDE,
+    DSO_FLUVIUS_IMEWO,
+    DSO_FLUVIUS_INTERGEM,
+    DSO_FLUVIUS_IVEKA,
+    DSO_FLUVIUS_LIMBURG,
+    DSO_FLUVIUS_WEST,
+    DSO_FLUVIUS_ZENNE_DIJLE,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    DSO_SIBELGA,
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+)
 from ._pdf import (
     SIGN_CHARS,
     fetch_pdf_text,
@@ -575,14 +593,14 @@ def _extract_renewables(text: str, region_label: str) -> float:
 
 
 _FLANDERS_LABELS: dict[str, str] = {
-    "Fluvius Antwerpen": "fluvius_antwerpen",
-    "Fluvius Halle-Vilvoorde": "fluvius_halle_vilvoorde",
-    "Fluvius Imewo": "fluvius_imewo",
-    "Fluvius Kempen": "fluvius_iveka",
-    "Fluvius Limburg": "fluvius_limburg",
-    "Fluvius Midden-Vlaanderen": "fluvius_intergem",
-    "Fluvius West": "fluvius_west",
-    "Fluvius Zenne-Dijle": "fluvius_zenne_dijle",
+    "Fluvius Antwerpen": DSO_FLUVIUS_ANTWERPEN,
+    "Fluvius Halle-Vilvoorde": DSO_FLUVIUS_HALLE_VILVOORDE,
+    "Fluvius Imewo": DSO_FLUVIUS_IMEWO,
+    "Fluvius Kempen": DSO_FLUVIUS_IVEKA,
+    "Fluvius Limburg": DSO_FLUVIUS_LIMBURG,
+    "Fluvius Midden-Vlaanderen": DSO_FLUVIUS_INTERGEM,
+    "Fluvius West": DSO_FLUVIUS_WEST,
+    "Fluvius Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
 }
 
 
@@ -629,11 +647,11 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
 
 
 _WALLONIA_LABELS: dict[str, str] = {
-    "AIEG": "aieg",
-    "AIESH": "aiesh",
-    "ORES (Brabant wallon)": "ores",
-    "RESA": "resa",
-    "Régie de Wavre": "rew",
+    "AIEG": DSO_AIEG,
+    "AIESH": DSO_AIESH,
+    "ORES (Brabant wallon)": DSO_ORES,
+    "RESA": DSO_RESA,
+    "Régie de Wavre": DSO_REW,
 }
 
 
@@ -717,7 +735,7 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     transport = to_float(match.group(5))
     mesure = to_float(match.group(6))
     return {
-        "sibelga": DsoOverlay(
+        DSO_SIBELGA: DsoOverlay(
             distribution_single=mono / 100.0,
             distribution_peak=peak / 100.0,
             distribution_offpeak=offpeak / 100.0,

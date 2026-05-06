@@ -46,7 +46,23 @@ from dataclasses import dataclass
 
 import aiohttp
 
-from ..const import REGION_FLANDERS, REGION_WALLONIA
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_FLUVIUS_ANTWERPEN,
+    DSO_FLUVIUS_HALLE_VILVOORDE,
+    DSO_FLUVIUS_IMEWO,
+    DSO_FLUVIUS_INTERGEM,
+    DSO_FLUVIUS_IVEKA,
+    DSO_FLUVIUS_LIMBURG,
+    DSO_FLUVIUS_WEST,
+    DSO_FLUVIUS_ZENNE_DIJLE,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+)
 from ._pdf import (
     SIGN_CHARS,
     fetch_pdf_text_aligned,
@@ -393,16 +409,16 @@ def _extract_flanders_renewables(text: str) -> float:
 
 
 _WALLONIA_LABELS: tuple[tuple[str, str], ...] = (
-    ("AIEG", "aieg"),
-    ("AIESH", "aiesh"),
+    ("AIEG", DSO_AIEG),
+    ("AIESH", DSO_AIESH),
     # Eight ORES sub-areas share the same tariff line; match the first.
     # ``ORES`` may or may not have a space before the opening paren
     # depending on which OCTA+ card we hit.
-    (r"ORES\s*\(", "ores"),
-    (r"TECTEO\s*-\s*RESA", "resa"),
+    (r"ORES\s*\(", DSO_ORES),
+    (r"TECTEO\s*-\s*RESA", DSO_RESA),
     # Different OCTA+ cards print this either as "REGIEDEWAVRE",
     # "REGIE DE WAVRE", or other spacing combinations.
-    (r"REGIE\s*DE\s*WAVRE", "rew"),
+    (r"REGIE\s*DE\s*WAVRE", DSO_REW),
 )
 
 
@@ -449,14 +465,14 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
 
 
 _FLANDERS_LABELS: dict[str, str] = {
-    "Fluvius Antwerpen": "fluvius_antwerpen",
-    "Fluvius Halle-Vilvoorde": "fluvius_halle_vilvoorde",
-    "Fluvius Imewo": "fluvius_imewo",
-    "Fluvius Kempen": "fluvius_iveka",
-    "Fluvius Limburg": "fluvius_limburg",
-    "Fluvius Midden-Vlaanderen": "fluvius_intergem",
-    "Fluvius West": "fluvius_west",
-    "Fluvius Zenne-Dijle": "fluvius_zenne_dijle",
+    "Fluvius Antwerpen": DSO_FLUVIUS_ANTWERPEN,
+    "Fluvius Halle-Vilvoorde": DSO_FLUVIUS_HALLE_VILVOORDE,
+    "Fluvius Imewo": DSO_FLUVIUS_IMEWO,
+    "Fluvius Kempen": DSO_FLUVIUS_IVEKA,
+    "Fluvius Limburg": DSO_FLUVIUS_LIMBURG,
+    "Fluvius Midden-Vlaanderen": DSO_FLUVIUS_INTERGEM,
+    "Fluvius West": DSO_FLUVIUS_WEST,
+    "Fluvius Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
 }
 
 
