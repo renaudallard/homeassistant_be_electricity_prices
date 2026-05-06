@@ -40,7 +40,7 @@ from pathlib import Path
 import aiohttp
 import pypdf
 
-from .base import ExtractorError
+from .base import ExtractorError, SupplierSnapshot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -523,6 +523,45 @@ def text_mentions_month(
     # footers and comparison tables further down.
     windows = [haystack[:1000], *_validity_windows(haystack)]
     return any(n in w for n in needles for w in windows)
+
+
+def archive_validity_check(
+    snap: SupplierSnapshot,
+    text: str,
+    year_month: date,
+    *,
+    month_names: tuple[str, ...] | None = None,
+) -> SupplierSnapshot | None:
+    """Confirm an archived snapshot actually covers ``year_month``.
+
+    Returns ``snap`` when the cross-check passes, ``None`` otherwise -
+    so the caller (a provider's ``fetch_for_month``) can fall back to
+    the proxy snapshot rather than mis-billing past consumption at a
+    CDN-substituted current card's rates.
+
+    Two tiers, matching the ``fetch_for_month`` pattern shared between
+    eneco / cociter / ebem:
+
+    1. ``snap.valid_until`` parsed: reject when it doesn't fall in the
+       requested month. Authoritative when present.
+    2. ``snap.valid_until`` missing: when ``month_names`` is provided
+       (eneco / cociter), require a textual mention of the requested
+       month via :func:`text_mentions_month`; reject when missing.
+       When ``month_names`` is ``None`` (ebem) the textual fallback is
+       skipped and the snapshot is accepted on the strength of the URL
+       resolver alone.
+    """
+    if snap.valid_until is not None:
+        if (
+            snap.valid_until.year != year_month.year
+            or snap.valid_until.month != year_month.month
+        ):
+            return None
+    elif month_names is not None and not text_mentions_month(
+        text, year_month, month_names
+    ):
+        return None
+    return snap
 
 
 def parse_valid_until(text: str) -> date | None:

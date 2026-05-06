@@ -65,6 +65,7 @@ from ..const import (
 )
 from ._pdf import (
     SIGN_CHARS,
+    archive_validity_check,
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
@@ -181,12 +182,7 @@ async def fetch_for_month(
         snap = parse_snapshot(contract_id, text, url, label)
     except ExtractorError:
         return None
-    if snap.valid_until is not None and (
-        snap.valid_until.year != year_month.year
-        or snap.valid_until.month != year_month.month
-    ):
-        return None
-    return snap
+    return archive_validity_check(snap, text, year_month)
 
 
 async def probe(

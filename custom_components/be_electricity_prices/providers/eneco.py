@@ -64,11 +64,11 @@ from ..const import (
 )
 from ._pdf import (
     SIGN_CHARS,
+    archive_validity_check,
     fetch_pdf_text,
     fetch_text,
     parse_sign,
     parse_valid_until,
-    text_mentions_month,
     to_float,
 )
 from .base import (
@@ -105,14 +105,6 @@ _NL_MONTHS = (
     "november",
     "december",
 )
-
-
-def _text_mentions_month(text: str, year_month: date) -> bool:
-    """Validity-anchored cross-check that ``text`` references the
-    requested year+month -- delegates to the shared helper so a
-    retrospective mention elsewhere in the PDF doesn't masquerade as
-    the validity statement."""
-    return text_mentions_month(text, year_month, _NL_MONTHS)
 
 
 # Contract id -> the POWER_<NAME> token Eneco uses in its filenames.
@@ -201,22 +193,7 @@ async def fetch_for_month(
         snap = parse_snapshot(text, contract_id, url)
     except ExtractorError:
         return None
-    if snap.valid_until is not None:
-        # Parsed validity beats every heuristic: reject when it
-        # contradicts the requested year+month.
-        if (
-            snap.valid_until.year != year_month.year
-            or snap.valid_until.month != year_month.month
-        ):
-            return None
-    elif not _text_mentions_month(text, year_month):
-        # No parsed validity *and* no textual mention of the requested
-        # month: this is what a CDN-substituted current card looks
-        # like, since the URL slug we asked for never matches the
-        # served card's printed dates. Reject so the caller falls back
-        # to the proxy snapshot rather than mis-billing past months.
-        return None
-    return snap
+    return archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
 
 
 async def probe(
