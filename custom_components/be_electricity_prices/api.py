@@ -34,7 +34,13 @@ from __future__ import annotations
 import asyncio
 import math
 from datetime import UTC, datetime, timedelta
-from xml.etree import ElementTree as ET
+
+# defusedxml's ElementTree disables entity expansion / external-entity
+# loading on the stdlib parser. The ENTSO-E endpoint is HTTPS-trusted,
+# but a bare xml.etree parse leaves a TLS-MitM-exposed XXE surface for
+# free; defusedxml is a HA core dependency so we get it without
+# bumping the manifest.
+from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
 
 import aiohttp
 
