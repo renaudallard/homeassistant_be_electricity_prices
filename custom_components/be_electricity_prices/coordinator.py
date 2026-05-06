@@ -1689,7 +1689,7 @@ def _hourly_injection_sensors(entry: ConfigEntry) -> list[str]:
     return []
 
 
-async def _ytd_tou_energy(
+async def _ytd_hourly_energy(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
     extractor: SupplierExtractor,
@@ -1699,22 +1699,37 @@ async def _ytd_tou_energy(
     *,
     contract: str | None = None,
     meter: MeterType | None = None,
+    historical_spots: dict[datetime, float] | None = None,
 ) -> float | None:
-    """YTD energy cost for a Time-of-Use contract, billed per hour.
+    """YTD energy cost for hourly-billed contracts (TOU + dynamic).
 
-    TOU energy rates change with the hour of day, so the per-day path
-    used for fixed/variable contracts is too coarse. This helper bins
-    the recorder's hourly kWh deltas through ``compute_breakdown`` at
-    each local hour, picking up the TOU slot rate from the supplier and
-    the bi-hourly distribution band from the user's DSO mode in one
-    call. Reads from ``CONF_CONSUMPTION_KWH`` (single totals) when
-    available, else sums the four day/night register sensors at hourly
-    granularity. Each side -- consumption, injection -- is resolved
-    independently, mirroring the static-path behaviour: a user with
-    only injection wired (e.g. an inverter exposing solar export but
-    no smart-meter consumption sensor) still gets the injection
-    credit recognised. Returns ``None`` only when neither side has
-    any meters wired (the caller surfaces the fees-only floor).
+    Bins the recorder's hourly kWh deltas through ``compute_breakdown``
+    at each local hour, picking up the TOU slot rate (or the dynamic
+    factor*spot+base) from the supplier and the bi-hourly / Impact
+    distribution band from the user's DSO mode in one call. Reads from
+    ``CONF_CONSUMPTION_KWH`` (single totals) when available, else sums
+    the four day/night register sensors at hourly granularity. Each
+    side -- consumption, injection -- is resolved independently,
+    mirroring the static-path behaviour: a user with only injection
+    wired (e.g. an inverter exposing solar export but no smart-meter
+    consumption sensor) still gets the injection credit recognised.
+
+    ``historical_spots`` is required for dynamic contracts (factor*spot+
+    base needs a spot per hour); hours missing from the cache are
+    skipped so a partial backfill still produces a meaningful YTD
+    instead of falling all the way back to the fees-only floor. TOU
+    callers pass ``None`` and every hour gets billed at the slot rate.
+
+    Solar handling is uniform across both paths:
+      - ``compensation``: per-hour ``(cons - inj) * all_in``, summed
+        and clamped at zero (Walloon meter forfeits surplus).
+      - ``injection``: per-hour ``cons * all_in - inj * inj_rate``
+        where ``inj_rate`` is the supplier's monthly indicative for TOU
+        and ``factor*spot+base`` for dynamic at that hour's spot.
+      - ``none``: per-hour ``cons * all_in``.
+
+    Returns ``None`` only when neither side has any meters wired (the
+    caller surfaces the fees-only floor).
     """
     region = entry.data.get(CONF_REGION, "")
     dso = entry.data.get(CONF_DSO, "")
@@ -1751,107 +1766,17 @@ async def _ytd_tou_energy(
     # Iterate the union of both sides so an injection-only wiring
     # still contributes its credit (mirroring _resolve_daily_kwh).
     for utc_hour in cons_per_hour.keys() | inj_per_hour.keys():
-        local = dt_util.as_local(utc_hour)
-        snap_h = await _snap_for(date(local.year, local.month, 1))
-        try:
-            bd = compute_breakdown(snap_h, dso, region, local, None, meter, dso_mode)
-        except (KeyError, ValueError):
-            # Missing DSO row or non-static rate kind: skip this hour.
-            continue
-        kwh_cons = cons_per_hour.get(utc_hour, 0.0)
-        kwh_inj = inj_per_hour.get(utc_hour, 0.0)
-        if regime == SOLAR_REGIME_COMPENSATION:
-            d_cost = (kwh_cons - kwh_inj) * bd.all_in
-        elif regime == SOLAR_REGIME_INJECTION:
-            d_cost = kwh_cons * bd.all_in
-            inj_rate = _historical_injection_rate(snap_h.injection)
-            if inj_rate is not None:
-                d_cost -= kwh_inj * inj_rate
-        else:
-            d_cost = kwh_cons * bd.all_in
-        energy_cost += d_cost
-
-    if regime == SOLAR_REGIME_COMPENSATION:
-        energy_cost = max(energy_cost, 0.0)
-    return energy_cost
-
-
-async def _ytd_dynamic_energy(
-    hass: HomeAssistant,
-    session: aiohttp.ClientSession,
-    extractor: SupplierExtractor,
-    snapshot: SupplierSnapshot,
-    entry: ConfigEntry,
-    today: date,
-    *,
-    contract: str | None = None,
-    meter: MeterType | None = None,
-    historical_spots: dict[datetime, float],
-) -> float | None:
-    """YTD energy cost for a dynamic contract, billed per hour against
-    historical ENTSO-E spots.
-
-    For each recorded YTD hour the spot is looked up in
-    ``historical_spots`` (the coordinator persists it between runs);
-    ``compute_breakdown`` then evaluates ``factor*spot+base`` for the
-    energy term, the user's DSO overlay for the network term, and the
-    region-specific tax stack. Hours with no spot in the cache are
-    skipped (they don't contribute) so a partial backfill still
-    produces a meaningful YTD instead of falling all the way back to
-    the fees-only floor.
-
-    Solar handling matches the TOU path:
-      - ``compensation``: per-hour ``(cons - inj) * all_in``, summed
-        and clamped at zero (Walloon meter forfeits surplus).
-      - ``injection``: per-hour ``cons * all_in - inj * inj_rate``
-        where ``inj_rate`` is the supplier's ``factor*spot+base``
-        injection formula at that hour's spot.
-      - ``none``: per-hour ``cons * all_in``.
-
-    Returns ``None`` when no kWh sensor is wired (caller falls back to
-    the fees-only floor).
-    """
-    region = entry.data.get(CONF_REGION, "")
-    dso = entry.data.get(CONF_DSO, "")
-    contract = contract or entry.data[CONF_CONTRACT]
-    meter = meter or entry.data.get(CONF_METER, METER_MONO)
-    dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
-    regime = entry.data.get(CONF_SOLAR_REGIME, "none")
-
-    cons_ids = _hourly_consumption_sensors(entry)
-    inj_ids = _hourly_injection_sensors(entry)
-    if not cons_ids and not inj_ids:
-        return None
-
-    jan1 = date(today.year, 1, 1)
-    cons_per_hour: dict[datetime, float] = {}
-    for cid in cons_ids:
-        for k, v in (await _recorder_hourly_kwh(hass, cid, jan1, today)).items():
-            cons_per_hour[k] = cons_per_hour.get(k, 0.0) + v
-    inj_per_hour: dict[datetime, float] = {}
-    for iid in inj_ids:
-        for k, v in (await _recorder_hourly_kwh(hass, iid, jan1, today)).items():
-            inj_per_hour[k] = inj_per_hour.get(k, 0.0) + v
-
-    month_snap_cache: dict[date, SupplierSnapshot] = {}
-
-    async def _snap_for(month_first: date) -> SupplierSnapshot:
-        if month_first not in month_snap_cache:
-            month_snap_cache[month_first] = await _snapshot_for_month(
-                hass, session, extractor, contract, region, month_first, snapshot
-            )
-        return month_snap_cache[month_first]
-
-    energy_cost = 0.0
-    for utc_hour in cons_per_hour.keys() | inj_per_hour.keys():
-        spot = historical_spots.get(utc_hour)
-        if spot is None:
-            continue
+        spot: float | None = None
+        if historical_spots is not None:
+            spot = historical_spots.get(utc_hour)
+            if spot is None:
+                continue
         local = dt_util.as_local(utc_hour)
         snap_h = await _snap_for(date(local.year, local.month, 1))
         try:
             bd = compute_breakdown(snap_h, dso, region, local, spot, meter, dso_mode)
         except (KeyError, ValueError):
+            # Missing DSO row or non-static rate kind: skip this hour.
             continue
         kwh_cons = cons_per_hour.get(utc_hour, 0.0)
         kwh_inj = inj_per_hour.get(utc_hour, 0.0)
@@ -1979,7 +1904,7 @@ async def _compute_current_year_cost(
     if isinstance(snapshot.energy, DynamicRates):
         if not historical_spots:
             return fees
-        dyn_energy = await _ytd_dynamic_energy(
+        dyn_energy = await _ytd_hourly_energy(
             hass,
             session,
             extractor,
@@ -2003,7 +1928,7 @@ async def _compute_current_year_cost(
         isinstance(snapshot.energy, TimeOfUseRates) or dso_mode == DSO_MODE_IMPACT
     )
     if needs_hourly:
-        hourly_energy = await _ytd_tou_energy(
+        hourly_energy = await _ytd_hourly_energy(
             hass,
             session,
             extractor,
