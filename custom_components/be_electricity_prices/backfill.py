@@ -445,11 +445,16 @@ async def _backfill_cost_sensor(
     kva = _solar_kva(entry) if is_compensation else 0.0
 
     # One bulk fetch per recorder entity; bin into UTC-hour totals.
+    # _recorder_rows treats the start/end arguments as local-day
+    # boundaries; pass the local dates of the first / last UTC hour so
+    # the recorder query window aligns with the backfill's _hour_iter.
+    # Passing UTC dates here would shift the window by 1-2h vs local
+    # midnight and either drop or double-include the end-of-range hour.
     cons_per_hour: dict[datetime, float] = {}
     inj_per_hour: dict[datetime, float] = {}
     if hours:
-        start_d = hours[0].date()
-        end_d = hours[-1].date()
+        start_d = dt_util.as_local(hours[0]).date()
+        end_d = dt_util.as_local(hours[-1]).date()
         for cid in _hourly_consumption_sensors(entry):
             for k, v in (await _recorder_hourly_kwh(hass, cid, start_d, end_d)).items():
                 cons_per_hour[k] = cons_per_hour.get(k, 0.0) + v
