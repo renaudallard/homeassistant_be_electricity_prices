@@ -39,6 +39,7 @@ from typing import Any
 
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.providers import cociter as cociter_mod
+from custom_components.be_electricity_prices.providers import ebem as ebem_mod
 from custom_components.be_electricity_prices.providers import ecofix as ecofix_mod
 from custom_components.be_electricity_prices.providers import ecopower as ecopower_mod
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
@@ -142,6 +143,31 @@ def test_cociter_discover_returns_known_family_ids() -> None:
     discovered = _run(cociter_mod.discover(session))
     # Cociter maps known family prefixes back to registry contract ids.
     assert discovered == {"cociter_variable", "cociter_dynamic"}
+
+
+def test_ebem_discover_matches_registry() -> None:
+    """EBEM discover() maps PDF kinds to contract ids: every 'elek' PDF
+    surfaces both Variabel + B@sic+ (they share the card), and every
+    'dynamic' PDF surfaces Dyn@mic. The fixture lists all three kinds,
+    so the registry's full contract id set must be returned."""
+    session = _FakeSession(_read("ebem.html"))
+    discovered = _run(ebem_mod.discover(session))
+    expected = {c.contract_id for c in ebem_mod._CONTRACTS}
+    assert discovered == expected
+
+
+def test_ebem_discover_surfaces_unknown_pdf_kind() -> None:
+    """Ebem stopped offering fixed contracts ('Ebem biedt voorlopig
+    geen vaste contracten meer aan'), so a future revival is a real
+    new-product signal: a third PDF kind in the listing should surface
+    verbatim so live_check files a tracking issue."""
+    body = _read("ebem.html") + (
+        '\n<a href="/media/abc12345/ebem_tariefkaart-fix-06-2026.pdf">x</a>\n'
+    )
+    session = _FakeSession(body)
+    discovered = _run(ebem_mod.discover(session))
+    known = {c.contract_id for c in ebem_mod._CONTRACTS}
+    assert "fix" in discovered - known
 
 
 def test_engie_discover_returns_only_known_families_no_noise() -> None:
@@ -254,3 +280,5 @@ def test_discover_returns_empty_on_http_error() -> None:
     # Ecofix uses HEAD-probe discovery; a 5xx on every URL means every
     # contract is dropped.
     assert _run(ecofix_mod.discover(session)) == set()
+    # EBEM scrapes the listing page; an HTTP error must yield set().
+    assert _run(ebem_mod.discover(session)) == set()
