@@ -49,9 +49,9 @@ import aiohttp
 from ..const import REGION_FLANDERS, REGION_WALLONIA
 from ._pdf import (
     SIGN_CHARS,
-    USER_AGENT,
     fetch_pdf_text_aligned,
     fetch_text,
+    head_freshness_key,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -125,19 +125,7 @@ async def probe(
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None or region not in _REGION_TO_CODE:
         return None
-    url = _document_url(contract, region)
-    try:
-        async with session.head(
-            url,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=10),
-            allow_redirects=True,
-        ) as resp:
-            if resp.status >= 400:
-                return None
-            return resp.headers.get("Last-Modified") or resp.headers.get("ETag")
-    except aiohttp.ClientError:
-        return None
+    return await head_freshness_key(session, _document_url(contract, region))
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:

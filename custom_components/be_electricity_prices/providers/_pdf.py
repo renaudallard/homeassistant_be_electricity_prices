@@ -265,6 +265,42 @@ async def fetch_pdf_text_layout(session: aiohttp.ClientSession, url: str) -> str
     return await asyncio.to_thread(extract_pdf_text_layout, payload)
 
 
+async def head_freshness_key(
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    prefer: tuple[str, ...] = ("Last-Modified", "ETag"),
+) -> str | None:
+    """HEAD ``url`` and return the first present header from ``prefer``.
+
+    Used as a cheap freshness probe by suppliers whose tariff cards live
+    behind a CDN that honours ``If-Modified-Since`` / ``If-None-Match``.
+    Returns ``None`` on any 4xx/5xx, network error, or when none of the
+    preferred headers are populated; the coordinator treats ``None`` as
+    "no signal" and falls back to its time-based TTL.
+
+    Bolt prefers ETag first because its listing returns a stable ETag
+    while ``Last-Modified`` flips on every CDN edge cache; every other
+    supplier prefers Last-Modified.
+    """
+    try:
+        async with session.head(
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=10),
+            allow_redirects=True,
+        ) as resp:
+            if resp.status >= 400:
+                return None
+            for key in prefer:
+                value = resp.headers.get(key)
+                if value:
+                    return value
+            return None
+    except aiohttp.ClientError:
+        return None
+
+
 async def fetch_text(
     session: aiohttp.ClientSession, url: str, *, timeout: int = 20
 ) -> str:

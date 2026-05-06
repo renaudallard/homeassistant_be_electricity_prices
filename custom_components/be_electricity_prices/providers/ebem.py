@@ -55,9 +55,9 @@ import aiohttp
 from ..const import REGION_FLANDERS
 from ._pdf import (
     SIGN_CHARS,
-    USER_AGENT,
     fetch_pdf_text_layout,
     fetch_text,
+    head_freshness_key,
     parse_sign,
     to_float,
 )
@@ -190,18 +190,7 @@ async def probe(
     opaque media-hash URL changes for every month), so the listing's
     freshness header is the right key for every contract at once.
     """
-    try:
-        async with session.head(
-            _LISTING_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=10),
-            allow_redirects=True,
-        ) as resp:
-            if resp.status >= 400:
-                return None
-            return resp.headers.get("Last-Modified") or resp.headers.get("ETag")
-    except aiohttp.ClientError:
-        return None
+    return await head_freshness_key(session, _LISTING_URL)
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:

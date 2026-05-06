@@ -53,10 +53,10 @@ import aiohttp
 
 from ..const import REGION_FLANDERS
 from ._pdf import (
-    USER_AGENT,
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
     fetch_text,
+    head_freshness_key,
     parse_valid_until,
     to_float,
 )
@@ -166,19 +166,7 @@ async def probe(
     """
     if contract_id != _CONTRACT_ID:
         return None
-    try:
-        async with session.head(
-            _PRICE_PAGE,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=10),
-            allow_redirects=True,
-        ) as resp:
-            if resp.status >= 400:
-                return None
-            value = resp.headers.get("Last-Modified") or resp.headers.get("ETag")
-            return value
-    except aiohttp.ClientError:
-        return None
+    return await head_freshness_key(session, _PRICE_PAGE)
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:

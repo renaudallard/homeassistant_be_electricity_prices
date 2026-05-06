@@ -62,6 +62,7 @@ from ._pdf import (
     SIGN_CHARS,
     USER_AGENT,
     fetch_pdf_text_layout,
+    head_freshness_key,
     parse_sign,
     to_float,
 )
@@ -158,19 +159,7 @@ async def probe(
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None:
         return None
-    url = _document_url(contract)
-    try:
-        async with session.head(
-            url,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=10),
-            allow_redirects=True,
-        ) as resp:
-            if resp.status >= 400:
-                return None
-            return resp.headers.get("Last-Modified") or resp.headers.get("ETag")
-    except aiohttp.ClientError:
-        return None
+    return await head_freshness_key(session, _document_url(contract))
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
