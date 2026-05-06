@@ -319,10 +319,20 @@ CAPACITY_SENSORS: tuple[BePriceSensorDescription, ...] = (
         key="monthly_peak_kw",
         translation_key="monthly_peak_kw",
         device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
+        # The value is the running monthly peak: monotonically
+        # non-decreasing within a calendar month, then resets at the
+        # month boundary. TOTAL with last_reset = first of the current
+        # local month tells HA's long-term-statistics engine to
+        # bucket each month as its own period (so the graph shows
+        # one peak per month) instead of averaging the running max
+        # the way MEASUREMENT did.
+        state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement="kW",
         suggested_display_precision=2,
         value_fn=lambda d: d.monthly_peak_kw,
+        last_reset_fn=lambda: dt_util.now().replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        ),
     ),
 )
 
