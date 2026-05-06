@@ -558,8 +558,13 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
 # return the correct numbers. ``_extract_wallonia_dsos`` runs an
 # additional runtime sanity check after parsing (RESA must remain
 # cheaper than REW under the current Walloon tariff structure); if
-# Bolt's PDF ever stops triggering the misalignment the check logs a
-# WARNING so the swap can be removed.
+# Bolt's PDF ever stops triggering the misalignment the check logs at
+# ERROR level so the swap can be removed.
+#
+# Last manual re-validation against the live PDFs: 2026-05.
+# Re-verify at least every 6 months (next: 2026-11) by parsing a
+# current Bolt Wallonia card and confirming TECTEO RESA's printed
+# distribution_single is HIGHER than WAVRE's (the swap target).
 _WALLONIA_LABELS: dict[str, str] = {
     "AIEG": DSO_AIEG,
     "AIESH": DSO_AIESH,
@@ -626,10 +631,11 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         # Only one of the two parsed -- the more dangerous case for
         # the swap, since the surviving row may now be carrying the
         # other DSO's values without anything else to compare it
-        # against. Surface it so the maintainer can investigate.
+        # against. Log at ERROR so it surfaces in HA's notification
+        # bell rather than disappearing into routine WARNING noise.
         parsed = DSO_RESA if resa is not None else DSO_REW
         missing = DSO_REW if resa is not None else DSO_RESA
-        _LOGGER.warning(
+        _LOGGER.error(
             "Bolt RESA/REW row drift: only %s parsed; the label swap "
             "in _WALLONIA_LABELS may now be inverting %s's values",
             parsed,
@@ -637,7 +643,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         )
         return out
     if resa.distribution_single >= rew.distribution_single:
-        _LOGGER.warning(
+        _LOGGER.error(
             "Bolt RESA/REW post-swap invariant tripped "
             "(resa=%.4f rew=%.4f); the upstream PDF may have been "
             "fixed and the label swap in _WALLONIA_LABELS likely "
