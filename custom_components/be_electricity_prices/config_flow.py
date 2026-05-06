@@ -919,9 +919,14 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         # a reload, tearing down all entities and the warmed snapshot for
         # no benefit.
         new_title = _entry_title(self._data)
+        # ``self._data`` was seeded as ``{**entry.data, **entry.options}`` so
+        # an entry that already carried options would otherwise miss this
+        # shortcut on every re-edit (the merged dict can never equal
+        # entry.data alone). Compare against the same merge so a no-op
+        # re-edit really skips the reload.
+        merged = {**self.config_entry.data, **self.config_entry.options}
         unchanged = (
-            dict(self.config_entry.data) == self._data
-            and not self.config_entry.options
+            merged == self._data
             and self.config_entry.title == new_title
             and self.config_entry.unique_id == new_unique
         )
