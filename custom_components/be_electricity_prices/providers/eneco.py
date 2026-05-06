@@ -174,26 +174,33 @@ async def fetch_for_month(
     """Fetch the Eneco card for a specific (year, month).
 
     The CDN keeps every monthly issue indefinitely under the URL pattern
-    ``BC_032_<01YYMM>_NL_ENECO_POWER_<NAME>.pdf`` (volume ``01`` + 2-digit
-    year + 2-digit month). Returns ``None`` when the URL 404s, the
-    extractor can't parse the PDF, or the parsed validity period doesn't
-    cover the requested month - the latter guards against Eneco silently
-    serving the current card on a missing-archive request.
+    ``BC_032_<VOLYYMM>_NL_ENECO_POWER_<NAME>.pdf``. ``VOL`` is the
+    issue number for that month: ``01`` for the first publication,
+    ``02`` and higher for re-issues. Most months only ever have ``01``
+    so that's tried first; on 404 or validity-mismatch we walk a
+    small range of higher volumes before giving up. Returns ``None``
+    when no volume in the range parses to a snapshot whose validity
+    covers the requested month.
     """
     slug = _CONTRACT_SLUGS.get(contract_id)
     if slug is None:
         return None
-    issue = f"01{year_month.year % 100:02d}{year_month.month:02d}"
-    url = f"{_BASE_URL}/BC_032_{issue}_NL_ENECO_POWER_{slug}.pdf"
-    try:
-        text = await fetch_pdf_text(session, url)
-    except ExtractorError:
-        return None
-    try:
-        snap = parse_snapshot(text, contract_id, url)
-    except ExtractorError:
-        return None
-    return archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
+    yymm = f"{year_month.year % 100:02d}{year_month.month:02d}"
+    for volume in ("01", "02", "03", "04", "05"):
+        issue = f"{volume}{yymm}"
+        url = f"{_BASE_URL}/BC_032_{issue}_NL_ENECO_POWER_{slug}.pdf"
+        try:
+            text = await fetch_pdf_text(session, url)
+        except ExtractorError:
+            continue
+        try:
+            snap = parse_snapshot(text, contract_id, url)
+        except ExtractorError:
+            continue
+        result = archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
+        if result is not None:
+            return result
+    return None
 
 
 async def probe(
