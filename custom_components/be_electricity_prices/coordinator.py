@@ -414,6 +414,28 @@ class CoordinatorData:
     current_year_cost_eur: float | None = None
 
 
+class _MigratingStore(Store[dict[str, Any]]):
+    """Store subclass that drops blobs from a previous STORAGE_VERSION.
+
+    Every field in the persisted snapshot is re-derivable from a fresh
+    extractor fetch, so wiping the cache on a major-version mismatch is
+    safe and avoids HA logging the default migrator's "missing migration
+    function" warning. Returning an empty dict from
+    ``_async_migrate_func`` makes ``async_load`` return ``{}`` and the
+    coordinator re-fetches on its first refresh.
+    """
+
+    async def _async_migrate_func(
+        self,
+        old_major_version: int,
+        old_minor_version: int,  # noqa: ARG002 - HA signature.
+        old_data: dict[str, Any],  # noqa: ARG002 - dropped wholesale.
+    ) -> dict[str, Any]:
+        if old_major_version < STORAGE_VERSION:
+            return {}
+        return old_data
+
+
 class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
     """Pull supplier snapshot + ENTSO-E spot, build the hourly price table."""
 
@@ -435,7 +457,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES),
         )
         self._session: aiohttp.ClientSession = async_get_clientsession(hass)
-        self._store: Store[dict[str, Any]] = Store(
+        # Older blobs (any STORAGE_VERSION < the current one) are
+        # discarded rather than migrated: every field they hold is
+        # re-derivable from a fresh extractor fetch on the next tick,
+        # so silencing the auto-migrator's warning is the goal here.
+        self._store: Store[dict[str, Any]] = _MigratingStore(
             hass, STORAGE_VERSION, f"{DOMAIN}_cache_{entry.entry_id}"
         )
         self._snapshot: SupplierSnapshot | None = None
