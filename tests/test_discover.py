@@ -39,6 +39,7 @@ from typing import Any
 
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.providers import cociter as cociter_mod
+from custom_components.be_electricity_prices.providers import ecofix as ecofix_mod
 from custom_components.be_electricity_prices.providers import ecopower as ecopower_mod
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
 from custom_components.be_electricity_prices.providers import engie as engie_mod
@@ -73,13 +74,20 @@ class _FakeResponse:
 
 
 class _FakeSession:
-    """ClientSession stand-in: returns a fixed body regardless of URL."""
+    """ClientSession stand-in: returns a fixed body regardless of URL.
+
+    Provides ``get`` for listing-page-based discovery and ``head`` for
+    HEAD-probe-based discovery (Ecofix).
+    """
 
     def __init__(self, body: str, status: int = 200) -> None:
         self._body = body
         self._status = status
 
     def get(self, *_args: Any, **_kwargs: Any) -> _FakeResponse:
+        return _FakeResponse(self._body, self._status)
+
+    def head(self, *_args: Any, **_kwargs: Any) -> _FakeResponse:
         return _FakeResponse(self._body, self._status)
 
 
@@ -243,3 +251,6 @@ def test_discover_returns_empty_on_http_error() -> None:
     assert _run(engie_mod.discover(session)) == set()
     assert _run(luminus_mod.discover(session)) == set()
     assert _run(ecopower_mod.discover(session)) == set()
+    # Ecofix uses HEAD-probe discovery; a 5xx on every URL means every
+    # contract is dropped.
+    assert _run(ecofix_mod.discover(session)) == set()
