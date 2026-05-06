@@ -644,6 +644,10 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     Static-contract rows have 10 numbers (with prosumer column) and
     dynamic-contract rows have 9 (the prosumer column is replaced with
     nothing). Last column is always the c€/kWh transport rate.
+
+    Layout (c€/kWh except where noted):
+        single | peak | offpeak | PIC | MEDIUM | ECO | excl_night |
+        data_mgmt (€/an) | [prosumer (€/kVA/an)?] | transport
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
@@ -672,6 +676,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_pic=nums[3] / 100.0,
             distribution_medium=nums[4] / 100.0,
             distribution_eco=nums[5] / 100.0,
+            distribution_exclusive_night=nums[6] / 100.0,
             transport=transport / 100.0,
             data_management_per_year=data_mgmt,
             prosumer_eur_per_kva_year=prosumer,
