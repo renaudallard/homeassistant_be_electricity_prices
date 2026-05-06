@@ -51,12 +51,11 @@ from custom_components.be_electricity_prices.providers.base import (
     TimeOfUseRates,
     VariableRates,
 )
+from tests import make_snapshot
 
 
 def _snapshot(energy: EnergyRates, vat: float = 0.0) -> SupplierSnapshot:
-    return SupplierSnapshot(
-        supplier="test",
-        contract="test",
+    return make_snapshot(
         energy=energy,
         dsos={
             "fluvius": DsoOverlay(
@@ -74,7 +73,6 @@ def _snapshot(energy: EnergyRates, vat: float = 0.0) -> SupplierSnapshot:
             region_connection_fee=0.001,
             vat_rate=vat,
         ),
-        source_url="test://",
     )
 
 

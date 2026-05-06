@@ -45,12 +45,10 @@ from custom_components.be_electricity_prices.coordinator import (
     evict_shared_caches,
 )
 from custom_components.be_electricity_prices.providers.base import (
-    DsoOverlay,
     ExtractorError,
-    FixedRates,
     SupplierSnapshot,
-    TaxOverlay,
 )
+from tests import make_snapshot
 
 
 def _entry() -> MockConfigEntry:
@@ -93,14 +91,7 @@ async def test_force_refresh_drops_caches_and_requests_update(
 
 
 def _fake_snapshot(supplier: str = "eneco") -> SupplierSnapshot:
-    return SupplierSnapshot(
-        supplier=supplier,
-        contract="power_fix",
-        energy=FixedRates(single=0.18),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
-        source_url="test://",
-    )
+    return make_snapshot(supplier=supplier, contract="power_fix")
 
 
 async def test_two_coordinators_share_snapshot_and_only_fetch_once(
@@ -837,14 +828,7 @@ async def test_first_refresh_end_to_end_does_not_crash(hass: HomeAssistant) -> N
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
 
-    snap = SupplierSnapshot(
-        supplier="eneco",
-        contract="power_fix",
-        energy=FixedRates(single=0.18),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
-        source_url="test://",
-    )
+    snap = make_snapshot(supplier="eneco", contract="power_fix")
 
     async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
         return snap

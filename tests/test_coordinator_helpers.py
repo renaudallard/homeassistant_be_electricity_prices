@@ -61,6 +61,7 @@ from custom_components.be_electricity_prices.providers.base import (
     TaxOverlay,
     TimeOfUseRates,
 )
+from tests import make_snapshot
 
 
 def _snapshot(
@@ -68,10 +69,7 @@ def _snapshot(
     capacity: float | None,
     injection: InjectionRates | None = None,
 ) -> SupplierSnapshot:
-    return SupplierSnapshot(
-        supplier="test",
-        contract="test",
-        energy=FixedRates(single=0.18),
+    return make_snapshot(
         dsos={
             "ores": DsoOverlay(
                 distribution_single=0.10,
@@ -80,8 +78,6 @@ def _snapshot(
                 capacity_eur_per_kw_year=capacity,
             )
         },
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002, vat_rate=0.0),
-        source_url="test://",
         injection=injection,
     )
 
@@ -234,15 +230,11 @@ def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:
         distribution_offpeak=0.0753,
         transport=0.0227,
     )
-    snap = SupplierSnapshot(
-        supplier="test",
-        contract="test",
-        energy=FixedRates(single=0.18),
+    snap = make_snapshot(
         dsos={"sibelga": sibelga},
         taxes=TaxOverlay(
             federal_excise=0.05, energy_contribution=0.002, brussels_renewables=0.0265
         ),
-        source_url="test://",
         injection=InjectionRates(current=0.0476),
     )
     brussels_entry = MockConfigEntry(
@@ -376,17 +368,8 @@ async def test_recorder_daily_kwh_swallows_recorder_errors(
 
 
 def _archive_snapshot(label: str) -> SupplierSnapshot:
-    return SupplierSnapshot(
-        supplier="test",
-        contract="test",
+    return make_snapshot(
         energy=FixedRates(single=0.20),
-        dsos={
-            "ores": DsoOverlay(
-                distribution_single=0.10,
-                transport=0.0145,
-            )
-        },
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url=f"test://{label}",
         publication_label=label,
     )
@@ -547,9 +530,7 @@ async def test_snapshot_for_month_does_not_cache_transient_failures(
 
 def _yearly_snapshot() -> SupplierSnapshot:
     """Snapshot with single=0.18 + dist=0.10 + transport=0.0145 + WAL taxes."""
-    return SupplierSnapshot(
-        supplier="test",
-        contract="test",
+    return make_snapshot(
         energy=FixedRates(single=0.18, peak=0.20, offpeak=0.16),
         dsos={
             "ores": DsoOverlay(
@@ -563,9 +544,7 @@ def _yearly_snapshot() -> SupplierSnapshot:
             federal_excise=0.05,
             energy_contribution=0.002,
             wallonia_renewables=0.03,
-            energy_fund_eur_per_month=0.0,
         ),
-        source_url="test://",
     )
 
 
@@ -674,9 +653,7 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
     fraction of the year; the prosumer fee is summed per archived
     month."""
 
-    snap = SupplierSnapshot(
-        supplier="test",
-        contract="test",
+    snap = make_snapshot(
         energy=FixedRates(single=0.18, yearly_fixed_fee=65.0),
         dsos={
             "ores": DsoOverlay(
@@ -688,7 +665,6 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
         taxes=TaxOverlay(
             federal_excise=0.0, energy_contribution=0.0, energy_fund_eur_per_month=2.5
         ),
-        source_url="test://",
     )
     entry = _yearly_entry(meter="mono", solar_regime="compensation", solar_kva=2.0)
     today = dt_util.now().date()
@@ -723,21 +699,9 @@ async def test_year_cost_uses_per_month_snapshot_when_archive_available(
     if today.month == 1:
         pytest.skip("test needs at least one past month")
 
-    cheap = SupplierSnapshot(
-        supplier="test",
-        contract="test",
-        energy=FixedRates(single=0.10),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
-        source_url="test://cheap",
-    )
-    expensive = SupplierSnapshot(
-        supplier="test",
-        contract="test",
-        energy=FixedRates(single=0.30),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
-        source_url="test://expensive",
+    cheap = make_snapshot(energy=FixedRates(single=0.10), source_url="test://cheap")
+    expensive = make_snapshot(
+        energy=FixedRates(single=0.30), source_url="test://expensive"
     )
     jan_first = date(today.year, 1, 1)
 
@@ -782,15 +746,11 @@ async def test_year_cost_falls_back_to_fees_when_no_meters_configured(
     floor instead of zero - the user has to wire up at least one
     consumption sensor for the recorder path to produce a number."""
 
-    snap = SupplierSnapshot(
-        supplier="test",
-        contract="test",
+    snap = make_snapshot(
         energy=FixedRates(single=0.18, yearly_fixed_fee=65.0),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
         taxes=TaxOverlay(
             federal_excise=0.0, energy_contribution=0.0, energy_fund_eur_per_month=2.5
         ),
-        source_url="test://",
     )
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -829,22 +789,12 @@ async def test_year_cost_skips_month_when_archived_snapshot_lacks_dso(
 
     # Archived snapshot for January is missing the user's DSO key
     # entirely, simulating a regex drift on the historical card.
-    bad_archive = SupplierSnapshot(
-        supplier="test",
-        contract="test",
+    bad_archive = make_snapshot(
         energy=FixedRates(single=0.10),
         dsos={},  # no DSO at all
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://bad",
     )
-    current = SupplierSnapshot(
-        supplier="test",
-        contract="test",
-        energy=FixedRates(single=0.30),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
-        source_url="test://current",
-    )
+    current = make_snapshot(energy=FixedRates(single=0.30), source_url="test://current")
 
     async def _fake_fetch_for_month(
         _session: object, _contract: str, _region: str, year_month: date
@@ -886,12 +836,9 @@ async def test_year_cost_tou_bills_per_hourly_slot(hass: HomeAssistant) -> None:
 
     today = dt_util.now().date()
 
-    snap = SupplierSnapshot(
-        supplier="test",
+    snap = make_snapshot(
         contract="test_tou",
         energy=TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://tou",
     )
     entry = MockConfigEntry(
@@ -942,12 +889,9 @@ async def test_year_cost_tou_recognises_injection_only_wiring(
     accrue, mirroring the static-path behaviour."""
     from custom_components.be_electricity_prices import coordinator
 
-    snap = SupplierSnapshot(
-        supplier="test",
+    snap = make_snapshot(
         contract="test_tou",
         energy=TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://tou",
         injection=InjectionRates(current=0.05),
     )
@@ -1000,12 +944,9 @@ async def test_year_cost_dynamic_replays_historical_spots(
     overlay -- no longer the fees-only floor that v1 returned."""
     from custom_components.be_electricity_prices import coordinator
 
-    snap = SupplierSnapshot(
-        supplier="test",
+    snap = make_snapshot(
         contract="test_dynamic",
         energy=DynamicRates(factor=1.0, base=0.0),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://dyn",
     )
     entry = MockConfigEntry(
@@ -1054,12 +995,9 @@ async def test_year_cost_dynamic_falls_back_to_fees_when_no_spots(
     fees-only floor rather than crashing or returning None."""
     from custom_components.be_electricity_prices import coordinator
 
-    snap = SupplierSnapshot(
-        supplier="test",
+    snap = make_snapshot(
         contract="test_dynamic",
         energy=DynamicRates(factor=1.0, base=0.0, yearly_fixed_fee=120.0),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://dyn",
     )
     entry = MockConfigEntry(
@@ -1108,12 +1046,10 @@ def test_snapshot_round_trip_for_tou_contract() -> None:
     """A TOU snapshot must serialize and deserialize without raising,
     so HA's Store can persist last-known prices for SmartFlex /
     Empower Flextime users."""
-    snap = SupplierSnapshot(
+    snap = make_snapshot(
         supplier="luminus",
         contract="smartflex",
         energy=TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://tou",
     )
     fetched_at = datetime(2026, 4, 29, 12, 0, tzinfo=UTC)

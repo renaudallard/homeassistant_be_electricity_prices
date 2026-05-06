@@ -42,11 +42,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.be_electricity_prices import backfill as bf
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.providers.base import (
-    DsoOverlay,
     FixedRates,
     SupplierSnapshot,
     TaxOverlay,
 )
+from tests import make_snapshot
 
 # Belgian integration: tests pin Europe/Brussels via conftest, but
 # tz-sensitive constants in this file spell it out so the intent is
@@ -180,17 +180,15 @@ def _fixed_snapshot() -> SupplierSnapshot:
     # yearly_fixed_fee=72 + energy_fund=1.5/month gives a clearly
     # non-zero fee accrual so the cost-backfill series can be checked
     # for strict monotonic growth even with no kWh sensors wired.
-    return SupplierSnapshot(
+    return make_snapshot(
         supplier="eneco",
         contract="power_fix",
         energy=FixedRates(single=0.18, yearly_fixed_fee=72.0),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
         taxes=TaxOverlay(
             federal_excise=0.05,
             energy_contribution=0.002,
             energy_fund_eur_per_month=1.5,
         ),
-        source_url="test://",
     )
 
 

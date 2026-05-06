@@ -125,12 +125,7 @@ async def test_diagnostics_includes_consumption_and_monthly_labels(
         _monthly_snapshots,
         _shared_failed_fetches,
     )
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        FixedRates,
-        SupplierSnapshot,
-        TaxOverlay,
-    )
+    from tests import make_snapshot
 
     entry = _entry_with_data()
     entry.add_to_hass(hass)
@@ -138,12 +133,9 @@ async def test_diagnostics_includes_consumption_and_monthly_labels(
 
     # Seed the per-month archive cache for this entry's tuple so the
     # diagnostics dump should surface its publication label.
-    archived = SupplierSnapshot(
+    archived = make_snapshot(
         supplier="eneco",
         contract="power_dynamic",
-        energy=FixedRates(single=0.18),
-        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://archived",
         publication_label="march 2026",
     )

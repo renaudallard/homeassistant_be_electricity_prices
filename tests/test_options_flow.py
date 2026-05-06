@@ -306,24 +306,14 @@ def _stub_snapshot(supplier: str, contract: str, single_rate: float) -> Any:
     on. Walloon DSO with a typical distribution / transport / tax stack
     so the all-in number is in a realistic range without depending on
     fixture PDFs."""
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        FixedRates,
-        SupplierSnapshot,
-        TaxOverlay,
-    )
+    from custom_components.be_electricity_prices.providers.base import FixedRates
 
-    return SupplierSnapshot(
+    from tests import make_snapshot
+
+    return make_snapshot(
         supplier=supplier,
         contract=contract,
         energy=FixedRates(single=single_rate, yearly_fixed_fee=60.0),
-        dsos={
-            "ores": DsoOverlay(
-                distribution_single=0.10,
-                transport=0.0145,
-            )
-        },
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://stub",
         publication_label="april 2026",
     )
@@ -436,28 +426,20 @@ async def test_compare_branch_static_to_dynamic_prompts_for_api_key(
     from custom_components.be_electricity_prices.providers import EXTRACTORS
     from custom_components.be_electricity_prices.providers.base import (
         DynamicRates,
-        DsoOverlay,
         InjectionRates,
-        SupplierSnapshot,
-        TaxOverlay,
     )
+
+    from tests import make_snapshot
 
     entry = _make_entry()
     entry.add_to_hass(hass)
     entry.runtime_data = _real_coordinator(
         hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
     )
-    other_snap = SupplierSnapshot(
+    other_snap = make_snapshot(
         supplier="cociter",
         contract="cociter_dynamic",
         energy=DynamicRates(factor=1.0, base=0.0, yearly_fixed_fee=60.0),
-        dsos={
-            "ores": DsoOverlay(
-                distribution_single=0.10,
-                transport=0.0145,
-            )
-        },
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         injection=InjectionRates(current=0.05),
         source_url="test://stub",
         publication_label="april 2026",
@@ -657,8 +639,9 @@ async def test_compare_injection_regime_credits_injection_price(
     from custom_components.be_electricity_prices.providers.base import (
         FixedRates,
         InjectionRates,
-        SupplierSnapshot,
     )
+
+    from tests import make_snapshot
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -683,7 +666,7 @@ async def test_compare_injection_regime_credits_injection_price(
     object.__setattr__(
         current_snap, "injection", InjectionRates(current=0.05)
     )  # 5 c€/kWh credited
-    other_snap = SupplierSnapshot(
+    other_snap = make_snapshot(
         supplier="cociter",
         contract="cociter_variable",
         energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
@@ -730,13 +713,13 @@ async def test_compare_meter_override_changes_per_kwh(
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
         FixedRates,
-        SupplierSnapshot,
-        TaxOverlay,
     )
+
+    from tests import make_snapshot
 
     # Snapshot with distinct peak / offpeak rates so meter=bi yields a
     # different per-kWh than meter=mono.
-    bi_aware_snap = SupplierSnapshot(
+    bi_aware_snap = make_snapshot(
         supplier="cociter",
         contract="cociter_variable",
         energy=FixedRates(single=0.20, peak=0.25, offpeak=0.10, yearly_fixed_fee=60.0),
@@ -748,7 +731,6 @@ async def test_compare_meter_override_changes_per_kwh(
                 transport=0.0145,
             )
         },
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://stub",
         publication_label="april 2026",
     )
@@ -780,14 +762,11 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     from custom_components.be_electricity_prices.config_flow import (
         _tou_weighted_per_kwh,
     )
-    from custom_components.be_electricity_prices.providers.base import (
-        DsoOverlay,
-        SupplierSnapshot,
-        TaxOverlay,
-        TimeOfUseRates,
-    )
+    from custom_components.be_electricity_prices.providers.base import TimeOfUseRates
 
-    snap = SupplierSnapshot(
+    from tests import make_snapshot
+
+    snap = make_snapshot(
         supplier="luminus",
         contract="luminus_smartflex",
         energy=TimeOfUseRates(
@@ -797,10 +776,6 @@ async def test_compare_tou_uses_weighted_average_across_slots(
             yearly_fixed_fee=60.0,
             weekend_rule="weekend_offpeak",
         ),
-        dsos={
-            "ores": DsoOverlay(distribution_single=0.10, transport=0.0145),
-        },
-        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
         source_url="test://stub",
         publication_label="april 2026",
     )

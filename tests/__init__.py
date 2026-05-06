@@ -27,12 +27,21 @@
 
 from __future__ import annotations
 
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
 from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text,
     extract_pdf_text_layout,
+)
+from custom_components.be_electricity_prices.providers.base import (
+    DsoOverlay,
+    EnergyRates,
+    FixedRates,
+    InjectionRates,
+    SupplierSnapshot,
+    TaxOverlay,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -59,4 +68,41 @@ def fixture_text(name: str, *, layout: bool = False) -> str:
     return extract_pdf_text(payload)
 
 
-__all__ = ["FIXTURES", "fixture_text"]
+def make_snapshot(
+    *,
+    supplier: str = "test",
+    contract: str = "test",
+    energy: EnergyRates | None = None,
+    dsos: dict[str, DsoOverlay] | None = None,
+    taxes: TaxOverlay | None = None,
+    source_url: str = "test://",
+    publication_label: str = "",
+    injection: InjectionRates | None = None,
+    valid_until: date | None = None,
+) -> SupplierSnapshot:
+    """SupplierSnapshot with sensible defaults for tests.
+
+    Defaults are a canonical Wallonia fixed-rate snapshot under ORES;
+    override any field a test cares about. ``dsos={}`` is preserved (the
+    factory only fills in defaults when the kwarg is ``None``).
+    """
+    if energy is None:
+        energy = FixedRates(single=0.18)
+    if dsos is None:
+        dsos = {"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)}
+    if taxes is None:
+        taxes = TaxOverlay(federal_excise=0.05, energy_contribution=0.002)
+    return SupplierSnapshot(
+        supplier=supplier,
+        contract=contract,
+        energy=energy,
+        dsos=dsos,
+        taxes=taxes,
+        source_url=source_url,
+        publication_label=publication_label,
+        injection=injection,
+        valid_until=valid_until,
+    )
+
+
+__all__ = ["FIXTURES", "fixture_text", "make_snapshot"]
