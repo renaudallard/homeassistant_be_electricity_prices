@@ -1141,8 +1141,10 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         today_local = dt_util.now().date()
         jan1 = today_local.replace(month=1, day=1)
         year_ago = today_local - timedelta(days=365)
-        # Inclusive of today: leap years -> 366.
-        days_in_year = (today_local.replace(year=today_local.year + 1) - jan1).days
+        # Inclusive of today: leap years -> 366. Compute via
+        # (Jan 1 next year - Jan 1 this year) so today=Feb 29 doesn't
+        # raise (year+1 has no Feb 29).
+        days_in_year = (date(today_local.year + 1, 1, 1) - jan1).days
         days_elapsed = (today_local - jan1).days + 1
         fee_proration = days_elapsed / days_in_year
         spot_dict: dict[datetime, float] = (
