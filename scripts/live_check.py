@@ -74,6 +74,11 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
         spec.loader.exec_module(mod)
         return mod
 
+    const = _load("be_pkg.const", PKG / "const.py")
+    global _FLUVIUS_KEYS, _WALLONIA_DSO_KEYS
+    _FLUVIUS_KEYS = const.FLUVIUS_KEYS
+    _WALLONIA_DSO_KEYS = const.WALLONIA_DSO_KEYS
+
     _load("be_pkg.providers.base", PKG / "providers" / "base.py")
     _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
     eneco = _load("be_pkg.providers.eneco", PKG / "providers" / "eneco.py")
@@ -119,6 +124,11 @@ class Check:
 
 
 CHECKS: list[Check] = []
+
+# Populated from custom_components.be_electricity_prices.const at startup.
+# Declared here so module-load doesn't fail before _load_providers() runs.
+_FLUVIUS_KEYS: frozenset[str] = frozenset()
+_WALLONIA_DSO_KEYS: frozenset[str] = frozenset()
 
 
 # Per-supplier wallclock + bytes-received accounting. Populated via an
@@ -199,23 +209,7 @@ def _expect(label: str, condition: bool, detail: str = "") -> bool:
 
 
 async def _check_eneco(session: aiohttp.ClientSession, eneco: types.ModuleType) -> None:
-    expected_dso_keys = {
-        # Wallonia
-        "aieg",
-        "aiesh",
-        "ores",
-        "resa",
-        "rew",
-        # Fluvius sub-areas (Flanders)
-        "fluvius_antwerpen",
-        "fluvius_halle_vilvoorde",
-        "fluvius_imewo",
-        "fluvius_intergem",
-        "fluvius_iveka",
-        "fluvius_limburg",
-        "fluvius_west",
-        "fluvius_zenne_dijle",
-    }
+    expected_dso_keys = _WALLONIA_DSO_KEYS | _FLUVIUS_KEYS
     for cid in ("power_fix", "power_flex", "power_dynamic"):
         prefix = f"eneco/{cid}"
         try:
@@ -260,7 +254,7 @@ async def _check_eneco(session: aiohttp.ClientSession, eneco: types.ModuleType) 
 async def _check_cociter(
     session: aiohttp.ClientSession, cociter: types.ModuleType
 ) -> None:
-    expected_dso_keys = {"aieg", "aiesh", "ores", "resa", "rew"}
+    expected_dso_keys = _WALLONIA_DSO_KEYS
     for cid in ("cociter_variable", "cociter_dynamic"):
         prefix = f"cociter/{cid}"
         try:
@@ -290,19 +284,7 @@ async def _check_cociter(
 async def _check_dats24(
     session: aiohttp.ClientSession, dats24: types.ModuleType
 ) -> None:
-    expected = {
-        "flanders": {
-            "fluvius_antwerpen",
-            "fluvius_halle_vilvoorde",
-            "fluvius_imewo",
-            "fluvius_intergem",
-            "fluvius_iveka",
-            "fluvius_limburg",
-            "fluvius_west",
-            "fluvius_zenne_dijle",
-        },
-        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
-    }
+    expected = {"flanders": _FLUVIUS_KEYS, "wallonia": _WALLONIA_DSO_KEYS}
     cid = "dats24_groen_variabel"
     for region in ("flanders", "wallonia"):
         prefix = f"dats24/{cid}/{region}"
@@ -342,16 +324,7 @@ async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) ->
     # carries both Groen Variabel and Groen B@sic+ in one PDF; the
     # 'dynamic' card carries Groen Dyn@mic. Walk every contract — they
     # all hit the same listing-page resolver but parse different blocks.
-    expected_dsos = {
-        "fluvius_antwerpen",
-        "fluvius_halle_vilvoorde",
-        "fluvius_imewo",
-        "fluvius_intergem",
-        "fluvius_iveka",
-        "fluvius_limburg",
-        "fluvius_west",
-        "fluvius_zenne_dijle",
-    }
+    expected_dsos = _FLUVIUS_KEYS
     for contract in ebem._CONTRACTS:
         cid = contract.contract_id
         prefix = f"ebem/{cid}/flanders"
@@ -391,19 +364,7 @@ async def _check_ecofix(
     # (no Brussels offering). The same PDF carries both regions; the
     # parser narrows the snapshot down to the requested region. Walk
     # every (contract, region) pair to verify both code paths.
-    expected_dsos = {
-        "flanders": {
-            "fluvius_antwerpen",
-            "fluvius_halle_vilvoorde",
-            "fluvius_imewo",
-            "fluvius_intergem",
-            "fluvius_iveka",
-            "fluvius_limburg",
-            "fluvius_west",
-            "fluvius_zenne_dijle",
-        },
-        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
-    }
+    expected_dsos = {"flanders": _FLUVIUS_KEYS, "wallonia": _WALLONIA_DSO_KEYS}
     renewables_field = {
         "flanders": "flanders_renewables",
         "wallonia": "wallonia_renewables",
@@ -444,16 +405,7 @@ async def _check_ecofix(
 async def _check_ecopower(
     session: aiohttp.ClientSession, ecopower: types.ModuleType
 ) -> None:
-    expected_dso_keys = {
-        "fluvius_antwerpen",
-        "fluvius_halle_vilvoorde",
-        "fluvius_imewo",
-        "fluvius_intergem",
-        "fluvius_iveka",
-        "fluvius_limburg",
-        "fluvius_west",
-        "fluvius_zenne_dijle",
-    }
+    expected_dso_keys = _FLUVIUS_KEYS
     cid = "ecopower_burgerstroom"
     prefix = f"ecopower/{cid}"
     try:
@@ -500,19 +452,7 @@ async def _check_luminus(
     # Luminus serves Flanders and Wallonia for every market product
     # (Brussels carries only the regulated Social tariff, which is
     # excluded from the registry). Walk every (contract, region) pair.
-    expected_dsos = {
-        "flanders": {
-            "fluvius_antwerpen",
-            "fluvius_halle_vilvoorde",
-            "fluvius_imewo",
-            "fluvius_intergem",
-            "fluvius_iveka",
-            "fluvius_limburg",
-            "fluvius_west",
-            "fluvius_zenne_dijle",
-        },
-        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
-    }
+    expected_dsos = {"flanders": _FLUVIUS_KEYS, "wallonia": _WALLONIA_DSO_KEYS}
     renewables_field = {
         "flanders": "flanders_renewables",
         "wallonia": "wallonia_renewables",
@@ -555,18 +495,9 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
     # in one document), so we walk every (contract, region) pair just to
     # verify the parsing path for each region works.
     expected_dsos = {
-        "flanders": {
-            "fluvius_antwerpen",
-            "fluvius_halle_vilvoorde",
-            "fluvius_imewo",
-            "fluvius_intergem",
-            "fluvius_iveka",
-            "fluvius_limburg",
-            "fluvius_west",
-            "fluvius_zenne_dijle",
-        },
-        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
-        "brussels": {"sibelga"},
+        "flanders": _FLUVIUS_KEYS,
+        "wallonia": _WALLONIA_DSO_KEYS,
+        "brussels": frozenset({"sibelga"}),
     }
     renewables_field = {
         "flanders": "flanders_renewables",
@@ -620,18 +551,9 @@ async def _check_totalenergies(
     # TotalEnergies serves all 3 regions for every product. Walk every
     # (contract, region) pair against the real /latest/ PDFs.
     expected_dsos = {
-        "flanders": {
-            "fluvius_antwerpen",
-            "fluvius_halle_vilvoorde",
-            "fluvius_imewo",
-            "fluvius_intergem",
-            "fluvius_iveka",
-            "fluvius_limburg",
-            "fluvius_west",
-            "fluvius_zenne_dijle",
-        },
-        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
-        "brussels": {"sibelga"},
+        "flanders": _FLUVIUS_KEYS,
+        "wallonia": _WALLONIA_DSO_KEYS,
+        "brussels": frozenset({"sibelga"}),
     }
     renewables_field = {
         "flanders": "flanders_renewables",
@@ -672,18 +594,9 @@ async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) ->
     # by scraping mega.be/fr/cartes-tarifaires; walk every (contract,
     # region) pair to verify both the listing scrape and the PDF parse.
     expected_dsos = {
-        "flanders": {
-            "fluvius_antwerpen",
-            "fluvius_halle_vilvoorde",
-            "fluvius_imewo",
-            "fluvius_intergem",
-            "fluvius_iveka",
-            "fluvius_limburg",
-            "fluvius_west",
-            "fluvius_zenne_dijle",
-        },
-        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
-        "brussels": {"sibelga"},
+        "flanders": _FLUVIUS_KEYS,
+        "wallonia": _WALLONIA_DSO_KEYS,
+        "brussels": frozenset({"sibelga"}),
     }
     renewables_field = {
         "flanders": "flanders_renewables",
@@ -723,19 +636,7 @@ async def _check_octaplus(
     # OCTA+ only sells residential electricity in Flanders and Wallonia
     # (Brussels offerings are professional-only). One PDF per (contract,
     # region) at https://files.octaplus.be/tariffs/E_OCTA_<SLUG>_RE_<VL|WL>_FR.pdf
-    expected_dsos = {
-        "flanders": {
-            "fluvius_antwerpen",
-            "fluvius_halle_vilvoorde",
-            "fluvius_imewo",
-            "fluvius_intergem",
-            "fluvius_iveka",
-            "fluvius_limburg",
-            "fluvius_west",
-            "fluvius_zenne_dijle",
-        },
-        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
-    }
+    expected_dsos = {"flanders": _FLUVIUS_KEYS, "wallonia": _WALLONIA_DSO_KEYS}
     renewables_field = {
         "flanders": "flanders_renewables",
         "wallonia": "wallonia_renewables",
@@ -779,18 +680,9 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
     # for a single merged snapshot. If a region fetch ever stops working
     # the report flags the specific (contract, region) pair.
     expected_dsos = {
-        "flanders": {
-            "fluvius_antwerpen",
-            "fluvius_halle_vilvoorde",
-            "fluvius_imewo",
-            "fluvius_intergem",
-            "fluvius_iveka",
-            "fluvius_limburg",
-            "fluvius_west",
-            "fluvius_zenne_dijle",
-        },
-        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
-        "brussels": {"sibelga"},
+        "flanders": _FLUVIUS_KEYS,
+        "wallonia": _WALLONIA_DSO_KEYS,
+        "brussels": frozenset({"sibelga"}),
     }
     region_letter = {"flanders": "V", "wallonia": "W", "brussels": "B"}
     renewables_field = {
