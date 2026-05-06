@@ -79,6 +79,7 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
     eneco = _load("be_pkg.providers.eneco", PKG / "providers" / "eneco.py")
     cociter = _load("be_pkg.providers.cociter", PKG / "providers" / "cociter.py")
     dats24 = _load("be_pkg.providers.dats24", PKG / "providers" / "dats24.py")
+    ecofix = _load("be_pkg.providers.ecofix", PKG / "providers" / "ecofix.py")
     ecopower = _load("be_pkg.providers.ecopower", PKG / "providers" / "ecopower.py")
     engie = _load("be_pkg.providers.engie", PKG / "providers" / "engie.py")
     luminus = _load("be_pkg.providers.luminus", PKG / "providers" / "luminus.py")
@@ -92,6 +93,7 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
         eneco,
         cociter,
         dats24,
+        ecofix,
         ecopower,
         engie,
         luminus,
@@ -331,6 +333,63 @@ async def _check_dats24(
                 detail=str(snap.taxes),
             )
         _validate_energy(prefix, cid, snap.energy)
+
+
+async def _check_ecofix(
+    session: aiohttp.ClientSession, ecofix: types.ModuleType
+) -> None:
+    # Ecofix sells residential electricity in Flanders and Wallonia
+    # (no Brussels offering). The same PDF carries both regions; the
+    # parser narrows the snapshot down to the requested region. Walk
+    # every (contract, region) pair to verify both code paths.
+    expected_dsos = {
+        "flanders": {
+            "fluvius_antwerpen",
+            "fluvius_halle_vilvoorde",
+            "fluvius_imewo",
+            "fluvius_intergem",
+            "fluvius_iveka",
+            "fluvius_limburg",
+            "fluvius_west",
+            "fluvius_zenne_dijle",
+        },
+        "wallonia": {"aieg", "aiesh", "ores", "resa", "rew"},
+    }
+    renewables_field = {
+        "flanders": "flanders_renewables",
+        "wallonia": "wallonia_renewables",
+    }
+    for contract in ecofix._CONTRACTS:
+        cid = contract.contract_id
+        for region_key in ("flanders", "wallonia"):
+            prefix = f"ecofix/{cid}/{region_key}"
+            try:
+                snap = await ecofix.fetch(session, cid, region_key)
+            except Exception as err:
+                _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+                continue
+            _expect(f"{prefix}: publication label", bool(snap.publication_label))
+            _expect(
+                f"{prefix}: expected DSOs present",
+                expected_dsos[region_key] <= set(snap.dsos),
+                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
+            )
+            _expect(
+                f"{prefix}: regional renewables > 0",
+                getattr(snap.taxes, renewables_field[region_key]) > 0,
+                detail=str(snap.taxes),
+            )
+            _expect(
+                f"{prefix}: federal excise > 0",
+                snap.taxes.federal_excise > 0,
+                detail=str(snap.taxes),
+            )
+            _expect(
+                f"{prefix}: energy contribution > 0",
+                snap.taxes.energy_contribution > 0,
+                detail=str(snap.taxes),
+            )
+            _validate_energy(prefix, cid, snap.energy)
 
 
 async def _check_ecopower(
@@ -739,6 +798,7 @@ async def _check_catalogs(
         "totalenergies": {c.slug for c in modules["totalenergies"]._CONTRACTS},
         "octaplus": {c.slug for c in modules["octaplus"]._CONTRACTS},
         "cociter": {"cociter_variable", "cociter_dynamic"},
+        "ecofix": {c.contract_id for c in modules["ecofix"]._CONTRACTS},
         "ecopower": {"ecopower_burgerstroom"},
         "dats24": {"dats24_groen_variabel"},
     }
@@ -883,6 +943,7 @@ async def _run() -> int:
         eneco,
         cociter,
         dats24,
+        ecofix,
         ecopower,
         engie,
         luminus,
@@ -895,6 +956,7 @@ async def _run() -> int:
         "eneco": eneco,
         "cociter": cociter,
         "dats24": dats24,
+        "ecofix": ecofix,
         "ecopower": ecopower,
         "engie": engie,
         "luminus": luminus,
@@ -913,6 +975,8 @@ async def _run() -> int:
             await _check_cociter(session, cociter)
         with _attributed("dats24"):
             await _check_dats24(session, dats24)
+        with _attributed("ecofix"):
+            await _check_ecofix(session, ecofix)
         with _attributed("ecopower"):
             await _check_ecopower(session, ecopower)
         with _attributed("engie"):
