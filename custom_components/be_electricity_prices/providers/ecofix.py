@@ -81,6 +81,7 @@ from ._pdf import (
     head_freshness_key,
     parse_sign,
     to_float,
+    vat_multiplier,
 )
 from .base import (
     Contract,
@@ -344,11 +345,13 @@ def _extract_energy(text: str, kind: TariffKind, yearly_fee: float) -> EnergyRat
         factor_pdf = to_float(formulas[0][0])
         base_pdf_cents = parse_sign(formulas[0][1]) * to_float(formulas[0][2])
         # PDF formula is c€/kWh ex-VAT against Belpex in €/MWh. The card
-        # banner says "Prijzen inclusief 6% BTW", so we apply 6% VAT to
-        # match the snapshot's VAT-incl convention. Conversion to
-        # EUR/kWh-against-EUR/kWh-spot: factor stays unitless (×1000/100
-        # = ×10) and base divides cents->EUR (/100).
-        vat = 1.06
+        # banner prints "Prijzen inclusief X% BTW"; read X to track future
+        # VAT changes without a code update. Conversion to
+        # EUR/kWh-against-EUR/kWh-spot: factor stays unitless (x1000/100
+        # = x10) and base divides cents->EUR (/100).
+        vat = vat_multiplier(
+            text, re.compile(r"inclusief\s+(\d+)\s*%\s*BTW", re.IGNORECASE)
+        )
         return DynamicRates(
             factor=factor_pdf * vat * 10.0,
             base=base_pdf_cents * vat / 100.0,

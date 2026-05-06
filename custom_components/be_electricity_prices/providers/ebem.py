@@ -71,6 +71,7 @@ from ._pdf import (
     head_freshness_key,
     parse_sign,
     to_float,
+    vat_multiplier,
 )
 from .base import (
     Contract,
@@ -318,17 +319,24 @@ def _extract_validity(text: str) -> date | None:
 
 # ---- energy + injection -----------------------------------------------------
 
-# 6% Belgian residential VAT applied to the ex-VAT formula factors so the
+
+# Belgian residential VAT applied to the ex-VAT formula factors so the
 # stored snapshot value matches the registry's VAT-incl convention. Identical
-# to ``cociter.py``'s dynamic conversion: factor * 1.06 * 10 (cents/kWh per
-# €/MWh -> EUR/kWh per EUR/kWh), base * 1.06 / 100.
-_VAT = 1.06
+# to ``cociter.py``'s dynamic conversion: factor * vat * 10 (cents/kWh per
+# €/MWh -> EUR/kWh per EUR/kWh), base * vat / 100. Read from the card so
+# a future regulator-driven rate change propagates without a code change.
+def _vat_multiplier(text: str) -> float:
+    return vat_multiplier(
+        text,
+        re.compile(r"INCL\.?\s*BTW\s*(\d+)\s*%", re.IGNORECASE),
+        re.compile(r"BTW\s*(\d+)\s*%", re.IGNORECASE),
+    )
 
 
 def _formula_to_dynamic(
-    factor_pdf: float, base_pdf_cents: float
+    factor_pdf: float, base_pdf_cents: float, vat: float
 ) -> tuple[float, float]:
-    return factor_pdf * _VAT * 10.0, base_pdf_cents * _VAT / 100.0
+    return factor_pdf * vat * 10.0, base_pdf_cents * vat / 100.0
 
 
 def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
@@ -346,7 +354,7 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
         if not match:
             raise ExtractorError("EBEM Dyn@mic: consumption formula not found")
         factor, base = _formula_to_dynamic(
-            to_float(match.group(1)), to_float(match.group(2))
+            to_float(match.group(1)), to_float(match.group(2)), _vat_multiplier(text)
         )
         yearly_fee = _extract_yearly_fee_abonnement(text)
         return DynamicRates(
