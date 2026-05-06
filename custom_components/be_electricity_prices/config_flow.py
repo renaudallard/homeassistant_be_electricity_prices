@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime, time, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
 from homeassistant.config_entries import (
@@ -669,27 +669,24 @@ def _entry_title(data: dict[str, Any]) -> str:
     return f"{extractor.label} - {contract_label} ({data[CONF_REGION].capitalize()})"
 
 
-# ---- ConfigFlow ---------------------------------------------------------------
+# ---- shared wizard steps ------------------------------------------------------
 
 
-class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Multi-step config flow."""
+class _WizardStepsMixin:
+    """Wizard steps shared by ``BePricesConfigFlow`` and ``BePricesOptionsFlow``.
 
-    VERSION = 1
+    Both flows walk supplier -> contract -> dso -> meter -> ... -> meters; only
+    the entry step and ``_finalize`` differ. ``_after_meter`` is overridden in
+    ``BePricesConfigFlow`` to add the install-time unique-id reject.
+    """
 
     _data: dict[str, Any]
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if not hasattr(self, "_data"):
-            self._data = {}
-        if user_input is not None:
-            self._data.update(user_input)
-            return await self.async_step_contract()
-        return self.async_show_form(
-            step_id="user", data_schema=_user_schema(self._data)
-        )
+    if TYPE_CHECKING:
+        hass: HomeAssistant
+
+        def async_show_form(self, **kwargs: Any) -> ConfigFlowResult: ...
+        def async_abort(self, **kwargs: Any) -> ConfigFlowResult: ...
 
     async def async_step_contract(
         self, user_input: dict[str, Any] | None = None
@@ -792,15 +789,6 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def _after_meter(self) -> ConfigFlowResult:
-        # Reject duplicate entries: the same (supplier, contract,
-        # region, dso) tuple already running its own coordinator would
-        # double-poll the supplier.
-        unique = (
-            f"{self._data[CONF_SUPPLIER]}:{self._data[CONF_CONTRACT]}"
-            f":{self._data[CONF_REGION]}:{self._data[CONF_DSO]}"
-        )
-        await self.async_set_unique_id(unique)
-        self._abort_if_unique_id_configured()
         # Tarif Impact is Wallonia-only; outside Wallonia the
         # distribution mode question doesn't apply (Brussels has only
         # Sibelga, Flanders bills via the capacity tariff).
@@ -824,6 +812,42 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
         return await self.async_step_solar()
 
     def _finalize(self) -> ConfigFlowResult:
+        raise NotImplementedError
+
+
+# ---- ConfigFlow ---------------------------------------------------------------
+
+
+class BePricesConfigFlow(_WizardStepsMixin, ConfigFlow, domain=DOMAIN):
+    """Multi-step config flow."""
+
+    VERSION = 1
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if not hasattr(self, "_data"):
+            self._data = {}
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_contract()
+        return self.async_show_form(
+            step_id="user", data_schema=_user_schema(self._data)
+        )
+
+    async def _after_meter(self) -> ConfigFlowResult:
+        # Reject duplicate entries: the same (supplier, contract,
+        # region, dso) tuple already running its own coordinator would
+        # double-poll the supplier.
+        unique = (
+            f"{self._data[CONF_SUPPLIER]}:{self._data[CONF_CONTRACT]}"
+            f":{self._data[CONF_REGION]}:{self._data[CONF_DSO]}"
+        )
+        await self.async_set_unique_id(unique)
+        self._abort_if_unique_id_configured()
+        return await super()._after_meter()
+
+    def _finalize(self) -> ConfigFlowResult:
         return self.async_create_entry(title=_entry_title(self._data), data=self._data)
 
     @staticmethod
@@ -835,7 +859,7 @@ class BePricesConfigFlow(ConfigFlow, domain=DOMAIN):
 # ---- OptionsFlow --------------------------------------------------------------
 
 
-class BePricesOptionsFlow(OptionsFlow):
+class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
     """Walk every config step pre-filled, save back to entry.data.
 
     Two top-level paths from the init menu: edit the existing entry
@@ -843,7 +867,6 @@ class BePricesOptionsFlow(OptionsFlow):
     against a different supplier (no save, no extra entry).
     """
 
-    _data: dict[str, Any]
     _compare: dict[str, Any]
 
     async def async_step_init(
@@ -865,126 +888,6 @@ class BePricesOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="edit", data_schema=_user_schema(self._data)
         )
-
-    async def async_step_contract(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        supplier = self._data[CONF_SUPPLIER]
-        region = self._data[CONF_REGION]
-        if not _contracts_for(supplier, region):
-            return self.async_abort(reason="supplier_region_unavailable")
-        if user_input is not None:
-            self._data.update(user_input)
-            return await self.async_step_dso()
-        return self.async_show_form(
-            step_id="contract",
-            data_schema=_contract_schema(supplier, region, self._data),
-        )
-
-    async def async_step_dso(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            self._data.update(user_input)
-            return await self.async_step_meter()
-        return self.async_show_form(
-            step_id="dso",
-            data_schema=_dso_schema(self._data[CONF_REGION], self._data),
-        )
-
-    async def async_step_meter(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            self._data.update(user_input)
-            return await self._after_meter()
-        return self.async_show_form(
-            step_id="meter",
-            data_schema=_meter_schema(
-                self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT], self._data
-            ),
-        )
-
-    async def async_step_api_key(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            err = await _validate_entsoe_key(self.hass, user_input[CONF_API_KEY])
-            if err is None:
-                self._data.update(user_input)
-                return await self._after_api_key()
-            errors[CONF_API_KEY] = err
-        return self.async_show_form(
-            step_id="api_key",
-            data_schema=_api_key_schema(self._data),
-            errors=errors,
-        )
-
-    async def async_step_capacity(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            self._data.update(user_input)
-            return await self.async_step_solar()
-        defaults = dict(self._data)
-        await _apply_energy_manager_capacity_default(self.hass, defaults)
-        return self.async_show_form(
-            step_id="capacity", data_schema=_capacity_schema(defaults)
-        )
-
-    async def async_step_solar(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            self._data.update(user_input)
-            return await self.async_step_meters()
-        return self.async_show_form(
-            step_id="solar", data_schema=_solar_schema(self._data)
-        )
-
-    async def async_step_meters(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            self._data.update(user_input)
-            return self._finalize()
-        defaults = dict(self._data)
-        await _apply_energy_manager_defaults(self.hass, defaults)
-        return self.async_show_form(
-            step_id="meters", data_schema=_meters_schema(defaults)
-        )
-
-    async def async_step_dso_tariff_mode(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            self._data.update(user_input)
-            return await self._after_dso_tariff_mode()
-        return self.async_show_form(
-            step_id="dso_tariff_mode",
-            data_schema=_dso_tariff_mode_schema(self._data),
-        )
-
-    async def _after_meter(self) -> ConfigFlowResult:
-        if self._data[CONF_REGION] == REGION_WALLONIA:
-            return await self.async_step_dso_tariff_mode()
-        return await self._after_dso_tariff_mode()
-
-    async def _after_dso_tariff_mode(self) -> ConfigFlowResult:
-        if (
-            _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
-            == "dynamic"
-        ):
-            return await self.async_step_api_key()
-        if self._data[CONF_REGION] == REGION_FLANDERS:
-            return await self.async_step_capacity()
-        return await self.async_step_solar()
-
-    async def _after_api_key(self) -> ConfigFlowResult:
-        if self._data[CONF_REGION] == REGION_FLANDERS:
-            return await self.async_step_capacity()
-        return await self.async_step_solar()
 
     def _finalize(self) -> ConfigFlowResult:
         # Reject edits that collide with another existing entry. Two
