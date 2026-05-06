@@ -301,6 +301,36 @@ async def head_freshness_key(
         return None
 
 
+def vat_multiplier(
+    text: str,
+    *patterns: str | re.Pattern[str],
+    default: float = 1.06,
+) -> float:
+    """Read the VAT percentage from a card header and return 1 + N/100.
+
+    Each supplier's tariff card prints the rate in a different phrasing
+    ("Tarifs 6% TVAC", "TVA 6%", "6% de TVA comprise", ...); every
+    extractor passes its own ``patterns``. The helper picks the first
+    match across the list and converts the captured group via
+    :func:`to_float` so cards that print a fractional rate (e.g.
+    ``"21,5%"``) work without per-provider parsing.
+
+    Falls back to ``default`` (1.06, the current Belgian residential rate)
+    when none of the patterns match - the value of the multiplier itself
+    is not load-bearing because most cards either ship VAT-incl numbers
+    (no rescaling needed) or print the rate explicitly.
+    """
+    for pattern in patterns:
+        match = (
+            re.search(pattern, text)
+            if isinstance(pattern, str)
+            else pattern.search(text)
+        )
+        if match:
+            return 1.0 + to_float(match.group(1)) / 100.0
+    return default
+
+
 async def fetch_text(
     session: aiohttp.ClientSession, url: str, *, timeout: int = 20
 ) -> str:

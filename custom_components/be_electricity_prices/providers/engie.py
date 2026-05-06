@@ -69,7 +69,13 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from ._pdf import fetch_pdf_text, fetch_text, parse_valid_until, to_float
+from ._pdf import (
+    fetch_pdf_text,
+    fetch_text,
+    parse_valid_until,
+    to_float,
+    vat_multiplier,
+)
 from .base import (
     Contract,
     DsoOverlay,
@@ -393,8 +399,9 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
 
 
 def _vat_multiplier(text: str) -> float:
-    match = re.search(r"(\d+)\s*%\s*de\s*tva\s*comprise", text, re.IGNORECASE)
-    return 1.0 + (int(match.group(1)) / 100.0) if match else 1.06
+    return vat_multiplier(
+        text, re.compile(r"(\d+)\s*%\s*de\s*tva\s*comprise", re.IGNORECASE)
+    )
 
 
 _FORMULA_RE = re.compile(

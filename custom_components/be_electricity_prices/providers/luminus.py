@@ -75,6 +75,7 @@ from ._pdf import (
     parse_sign,
     parse_valid_until,
     to_float,
+    vat_multiplier,
 )
 from .base import (
     Contract,
@@ -247,10 +248,11 @@ _INJECTION_FORMULA_RE = re.compile(
 
 
 def _vat_multiplier(text: str) -> float:
-    match = re.search(r"TVA\s*sur\s*les\s*prix.+?(\d+)\s*%", text, re.S)
-    if not match:
-        match = re.search(r"TVA\s*(\d+)\s*%", text)
-    return 1.0 + (int(match.group(1)) / 100.0) if match else 1.06
+    return vat_multiplier(
+        text,
+        re.compile(r"TVA\s*sur\s*les\s*prix.+?(\d+)\s*%", re.S),
+        r"TVA\s*(\d+)\s*%",
+    )
 
 
 def _extract_yearly_fee(text: str) -> float:

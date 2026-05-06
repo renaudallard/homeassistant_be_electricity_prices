@@ -80,6 +80,7 @@ from ._pdf import (
     parse_sign,
     parse_valid_until,
     to_float,
+    vat_multiplier,
 )
 from .base import (
     Contract,
@@ -359,8 +360,7 @@ def _resolve_consumption_formula(text: str) -> tuple[float, float, float] | None
 
 
 def _vat_multiplier(text: str) -> float:
-    match = re.search(r"TVA\s*(\d+)\s*%", text)
-    return 1.0 + (int(match.group(1)) / 100.0) if match else 1.06
+    return vat_multiplier(text, r"TVA\s*(\d+)\s*%")
 
 
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:

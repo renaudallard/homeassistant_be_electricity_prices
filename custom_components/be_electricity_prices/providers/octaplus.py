@@ -71,6 +71,7 @@ from ._pdf import (
     parse_sign,
     parse_valid_until,
     to_float,
+    vat_multiplier,
 )
 from .base import (
     Contract,
@@ -233,16 +234,8 @@ def _extract_yearly_fee(text: str) -> float:
 
 
 def _vat_multiplier(text: str) -> float:
-    """Read the VAT % from the card header ('Tarifs 6% TVAC').
-
-    Falls back to 1.06 (the current Belgian residential rate) if the
-    header has been reshaped, but reads it whenever it can so the
-    parser tracks future VAT changes without a code update.
-    """
-    match = re.search(r"Tarifs\s+(\d+(?:[.,]\d+)?)\s*%\s*TVAC", text)
-    if match:
-        return 1.0 + to_float(match.group(1)) / 100.0
-    return 1.06
+    """Read the VAT % from the card header ('Tarifs 6% TVAC')."""
+    return vat_multiplier(text, r"Tarifs\s+(\d+(?:[.,]\d+)?)\s*%\s*TVAC")
 
 
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
