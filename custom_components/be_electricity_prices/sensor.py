@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -93,62 +93,47 @@ def _next_hour(data: CoordinatorData) -> PriceBreakdown | None:
     return data.hourly.get(target)
 
 
-def _today_hours(data: CoordinatorData) -> list[PriceBreakdown]:
-    today = dt_util.now().date()
-    return [
-        bd for hour, bd in data.hourly.items() if dt_util.as_local(hour).date() == today
+def _bucket(
+    data: CoordinatorData,
+    when: date,
+    reducer: Callable[[list[float]], float],
+) -> float | None:
+    values = [
+        bd.all_in
+        for hour, bd in data.hourly.items()
+        if dt_util.as_local(hour).date() == when
     ]
+    if not values:
+        return None
+    return reducer(values)
+
+
+def _avg(values: list[float]) -> float:
+    return sum(values) / len(values)
 
 
 def _today_avg(data: CoordinatorData) -> float | None:
-    hours = _today_hours(data)
-    if not hours:
-        return None
-    return sum(h.all_in for h in hours) / len(hours)
+    return _bucket(data, dt_util.now().date(), _avg)
 
 
 def _today_min(data: CoordinatorData) -> float | None:
-    hours = _today_hours(data)
-    if not hours:
-        return None
-    return min(h.all_in for h in hours)
+    return _bucket(data, dt_util.now().date(), min)
 
 
 def _today_max(data: CoordinatorData) -> float | None:
-    hours = _today_hours(data)
-    if not hours:
-        return None
-    return max(h.all_in for h in hours)
-
-
-def _tomorrow_hours(data: CoordinatorData) -> list[PriceBreakdown]:
-    tomorrow = dt_util.now().date() + timedelta(days=1)
-    return [
-        bd
-        for hour, bd in data.hourly.items()
-        if dt_util.as_local(hour).date() == tomorrow
-    ]
+    return _bucket(data, dt_util.now().date(), max)
 
 
 def _tomorrow_avg(data: CoordinatorData) -> float | None:
-    hours = _tomorrow_hours(data)
-    if not hours:
-        return None
-    return sum(h.all_in for h in hours) / len(hours)
+    return _bucket(data, dt_util.now().date() + timedelta(days=1), _avg)
 
 
 def _tomorrow_min(data: CoordinatorData) -> float | None:
-    hours = _tomorrow_hours(data)
-    if not hours:
-        return None
-    return min(h.all_in for h in hours)
+    return _bucket(data, dt_util.now().date() + timedelta(days=1), min)
 
 
 def _tomorrow_max(data: CoordinatorData) -> float | None:
-    hours = _tomorrow_hours(data)
-    if not hours:
-        return None
-    return max(h.all_in for h in hours)
+    return _bucket(data, dt_util.now().date() + timedelta(days=1), max)
 
 
 def _today_ranked(
@@ -222,95 +207,35 @@ def _current_field(field: str) -> Callable[[CoordinatorData], float | None]:
     return _inner
 
 
+def _eur_per_kwh(
+    key: str, value_fn: Callable[[CoordinatorData], float | None]
+) -> BePriceSensorDescription:
+    """Build a EUR/kWh measurement description with the standard precision."""
+    return BePriceSensorDescription(
+        key=key,
+        translation_key=key,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        suggested_display_precision=4,
+        value_fn=value_fn,
+    )
+
+
 SENSORS: tuple[BePriceSensorDescription, ...] = (
-    BePriceSensorDescription(
-        key="current_price",
-        translation_key="current_price",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=_current_field("all_in"),
+    _eur_per_kwh("current_price", _current_field("all_in")),
+    _eur_per_kwh(
+        "next_hour_price",
+        lambda d: None if (bd := _next_hour(d)) is None else bd.all_in,
     ),
-    BePriceSensorDescription(
-        key="next_hour_price",
-        translation_key="next_hour_price",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=lambda d: None if (bd := _next_hour(d)) is None else bd.all_in,
-    ),
-    BePriceSensorDescription(
-        key="today_average",
-        translation_key="today_average",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=_today_avg,
-    ),
-    BePriceSensorDescription(
-        key="today_min",
-        translation_key="today_min",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=_today_min,
-    ),
-    BePriceSensorDescription(
-        key="today_max",
-        translation_key="today_max",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=_today_max,
-    ),
-    BePriceSensorDescription(
-        key="tomorrow_average",
-        translation_key="tomorrow_average",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=_tomorrow_avg,
-    ),
-    BePriceSensorDescription(
-        key="tomorrow_min",
-        translation_key="tomorrow_min",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=_tomorrow_min,
-    ),
-    BePriceSensorDescription(
-        key="tomorrow_max",
-        translation_key="tomorrow_max",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=_tomorrow_max,
-    ),
-    BePriceSensorDescription(
-        key="energy_component",
-        translation_key="energy_component",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=_current_field("energy"),
-    ),
-    BePriceSensorDescription(
-        key="network_component",
-        translation_key="network_component",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=_current_field("network"),
-    ),
-    BePriceSensorDescription(
-        key="taxes_component",
-        translation_key="taxes_component",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=_current_field("taxes"),
-    ),
+    _eur_per_kwh("today_average", _today_avg),
+    _eur_per_kwh("today_min", _today_min),
+    _eur_per_kwh("today_max", _today_max),
+    _eur_per_kwh("tomorrow_average", _tomorrow_avg),
+    _eur_per_kwh("tomorrow_min", _tomorrow_min),
+    _eur_per_kwh("tomorrow_max", _tomorrow_max),
+    _eur_per_kwh("energy_component", _current_field("energy")),
+    _eur_per_kwh("network_component", _current_field("network")),
+    _eur_per_kwh("taxes_component", _current_field("taxes")),
 )
 
 PROSUMER_SENSORS: tuple[BePriceSensorDescription, ...] = (
@@ -325,14 +250,7 @@ PROSUMER_SENSORS: tuple[BePriceSensorDescription, ...] = (
 )
 
 INJECTION_SENSORS: tuple[BePriceSensorDescription, ...] = (
-    BePriceSensorDescription(
-        key="injection_price",
-        translation_key="injection_price",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="EUR/kWh",
-        suggested_display_precision=4,
-        value_fn=lambda d: d.injection_price_eur_per_kwh,
-    ),
+    _eur_per_kwh("injection_price", lambda d: d.injection_price_eur_per_kwh),
 )
 
 FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
