@@ -915,14 +915,24 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return False
         return now - self._snapshot_fetched_at < ttl
 
-    @staticmethod
     def _shared_is_fresh(
+        self,
         shared: _SharedSnapshot,
         probe_key: str | None,
         now: datetime,
         ttl: timedelta,
     ) -> bool:
-        """Whether a sibling's shared snapshot can be adopted as-is."""
+        """Whether a sibling's shared snapshot can be adopted as-is.
+
+        ``async_force_refresh`` flips ``_force_refresh`` to opt the
+        coordinator out of every adoption shortcut: without this guard
+        a sibling that re-seeded the shared cache between the
+        ``_shared_snapshots.pop`` and the next tick would silently
+        satisfy the forced refresh, making the user-facing refresh
+        service a no-op on multi-entry installs.
+        """
+        if self._force_refresh:
+            return False
         if probe_key is not None:
             return shared.probe_key == probe_key
         return now - shared.fetched_at < ttl
