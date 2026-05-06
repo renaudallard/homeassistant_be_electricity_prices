@@ -79,6 +79,7 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
     eneco = _load("be_pkg.providers.eneco", PKG / "providers" / "eneco.py")
     cociter = _load("be_pkg.providers.cociter", PKG / "providers" / "cociter.py")
     dats24 = _load("be_pkg.providers.dats24", PKG / "providers" / "dats24.py")
+    ebem = _load("be_pkg.providers.ebem", PKG / "providers" / "ebem.py")
     ecofix = _load("be_pkg.providers.ecofix", PKG / "providers" / "ecofix.py")
     ecopower = _load("be_pkg.providers.ecopower", PKG / "providers" / "ecopower.py")
     engie = _load("be_pkg.providers.engie", PKG / "providers" / "engie.py")
@@ -93,6 +94,7 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
         eneco,
         cociter,
         dats24,
+        ebem,
         ecofix,
         ecopower,
         engie,
@@ -332,6 +334,53 @@ async def _check_dats24(
                 snap.taxes.wallonia_renewables > 0,
                 detail=str(snap.taxes),
             )
+        _validate_energy(prefix, cid, snap.energy)
+
+
+async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) -> None:
+    # EBEM only sells residential electricity in Flanders. The 'elek' card
+    # carries both Groen Variabel and Groen B@sic+ in one PDF; the
+    # 'dynamic' card carries Groen Dyn@mic. Walk every contract — they
+    # all hit the same listing-page resolver but parse different blocks.
+    expected_dsos = {
+        "fluvius_antwerpen",
+        "fluvius_halle_vilvoorde",
+        "fluvius_imewo",
+        "fluvius_intergem",
+        "fluvius_iveka",
+        "fluvius_limburg",
+        "fluvius_west",
+        "fluvius_zenne_dijle",
+    }
+    for contract in ebem._CONTRACTS:
+        cid = contract.contract_id
+        prefix = f"ebem/{cid}/flanders"
+        try:
+            snap = await ebem.fetch(session, cid, "flanders")
+        except Exception as err:
+            _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+            continue
+        _expect(f"{prefix}: publication label", bool(snap.publication_label))
+        _expect(
+            f"{prefix}: all eight Fluvius DSOs present",
+            expected_dsos <= set(snap.dsos),
+            detail=f"missing: {sorted(expected_dsos - set(snap.dsos))}",
+        )
+        _expect(
+            f"{prefix}: flanders renewables > 0",
+            snap.taxes.flanders_renewables > 0,
+            detail=str(snap.taxes),
+        )
+        _expect(
+            f"{prefix}: federal excise > 0",
+            snap.taxes.federal_excise > 0,
+            detail=str(snap.taxes),
+        )
+        _expect(
+            f"{prefix}: energy contribution > 0",
+            snap.taxes.energy_contribution > 0,
+            detail=str(snap.taxes),
+        )
         _validate_energy(prefix, cid, snap.energy)
 
 
@@ -798,6 +847,7 @@ async def _check_catalogs(
         "totalenergies": {c.slug for c in modules["totalenergies"]._CONTRACTS},
         "octaplus": {c.slug for c in modules["octaplus"]._CONTRACTS},
         "cociter": {"cociter_variable", "cociter_dynamic"},
+        "ebem": {c.contract_id for c in modules["ebem"]._CONTRACTS},
         "ecofix": {c.contract_id for c in modules["ecofix"]._CONTRACTS},
         "ecopower": {"ecopower_burgerstroom"},
         "dats24": {"dats24_groen_variabel"},
@@ -943,6 +993,7 @@ async def _run() -> int:
         eneco,
         cociter,
         dats24,
+        ebem,
         ecofix,
         ecopower,
         engie,
@@ -956,6 +1007,7 @@ async def _run() -> int:
         "eneco": eneco,
         "cociter": cociter,
         "dats24": dats24,
+        "ebem": ebem,
         "ecofix": ecofix,
         "ecopower": ecopower,
         "engie": engie,
@@ -975,6 +1027,8 @@ async def _run() -> int:
             await _check_cociter(session, cociter)
         with _attributed("dats24"):
             await _check_dats24(session, dats24)
+        with _attributed("ebem"):
+            await _check_ebem(session, ebem)
         with _attributed("ecofix"):
             await _check_ecofix(session, ecofix)
         with _attributed("ecopower"):
