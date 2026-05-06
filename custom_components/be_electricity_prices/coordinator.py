@@ -1160,6 +1160,28 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self.entry.entry_id,
             )
             return
+        # Tuple guard: covers the window where ``runtime_data`` is
+        # still UNDEFINED (in-flight reload) but ``entry.data`` has
+        # already been swapped to the new supplier/contract/region by
+        # ``async_update_entry``. A late-finishing tick on the obsolete
+        # coordinator would otherwise stamp this coord's old tuple over
+        # whatever the new coord already wrote; the load path discards
+        # mismatched blobs but only at the next HA boot, leaving a
+        # window where a crash between writes loses the new state.
+        live_tuple = (
+            self.entry.data.get(CONF_SUPPLIER),
+            self.entry.data.get(CONF_CONTRACT),
+            self.entry.data.get(CONF_REGION),
+        )
+        if live_tuple != self._supplier_tuple:
+            _LOGGER.debug(
+                "skipping _save_persistent for %s: entry tuple drifted "
+                "(coord=%s, entry=%s)",
+                self.entry.entry_id,
+                self._supplier_tuple,
+                live_tuple,
+            )
+            return
         payload: dict[str, Any] = {
             # Stamp the snapshot's actual provenance (the tuple this
             # coordinator was constructed under) so the load path can

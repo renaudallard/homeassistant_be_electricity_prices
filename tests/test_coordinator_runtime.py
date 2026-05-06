@@ -692,15 +692,16 @@ async def test_save_persistent_runs_during_first_refresh(
     assert saved_payload["entry_supplier"] == entry.data["supplier"]
 
 
-async def test_save_persistent_stamps_construction_tuple_not_current_entry_data(
+async def test_save_persistent_skips_when_entry_tuple_drifted(
     hass: HomeAssistant,
 ) -> None:
     """OptionsFlow mutates entry.data via async_update_entry before the
     reload listener swaps runtime_data. A slow tick on the OLD
-    coordinator that resumes in that window must stamp the OLD tuple
-    (the snapshot's actual provenance) so the next load can detect the
-    mismatch and discard, instead of stamping the NEW tuple over the
-    OLD snapshot and serving it as fresh on next boot."""
+    coordinator that resumes in that window must NOT write to disk:
+    the save would either stamp the OLD tuple (which the load path
+    later has to discard) or worse, race the new coord's first write.
+    Skipping outright lets the new coord own the blob from the first
+    save."""
     entry = _entry()
     entry.add_to_hass(hass)
     old_coord = BePricesCoordinator(hass, entry)
@@ -720,9 +721,7 @@ async def test_save_persistent_stamps_construction_tuple_not_current_entry_data(
     with patch.object(old_coord._store, "async_save", new=_fake_save):
         await old_coord._save_persistent()
 
-    assert saved_payload is not None
-    assert saved_payload["entry_supplier"] == "eneco"
-    assert saved_payload["entry_contract"] == "power_fix"
+    assert saved_payload is None
 
 
 async def test_load_persistent_discards_blob_for_other_supplier(
