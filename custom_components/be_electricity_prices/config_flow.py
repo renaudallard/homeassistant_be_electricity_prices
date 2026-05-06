@@ -986,6 +986,17 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             if self._compare[CONF_SUPPLIER] == current[CONF_SUPPLIER]
             else ""
         )
+        # Picking yourself when the supplier only has one contract in
+        # your region leaves the dropdown empty with nothing to confirm.
+        # Abort with the same reason as "no alternative supplier" so
+        # the user knows there's nothing to compare against.
+        remaining = [
+            c
+            for c in _contracts_for(self._compare[CONF_SUPPLIER], current[CONF_REGION])
+            if c.id != exclude
+        ]
+        if not remaining:
+            return self.async_abort(reason="compare_no_alternative")
         return self.async_show_form(
             step_id="compare_contract",
             data_schema=_compare_contract_schema(
