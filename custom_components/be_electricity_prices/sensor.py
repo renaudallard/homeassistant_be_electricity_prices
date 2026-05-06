@@ -152,7 +152,12 @@ def _today_ranked(
     ]
     if not pairs:
         return [], []
-    by_price_asc = sorted(pairs, key=lambda x: x[1].all_in)
+    # Secondary key on the hour breaks ties deterministically across
+    # reloads. Without it, dict-insertion order leaks into the
+    # cheapest_4h_today / most_expensive_4h_today attributes whenever
+    # multiple hours share the same all-in price (common on static
+    # contracts where every hour rounds to the same four decimals).
+    by_price_asc = sorted(pairs, key=lambda x: (x[1].all_in, x[0]))
     cheapest_pairs = by_price_asc[:count]
     remaining = by_price_asc[count:]
     most_expensive_pairs = remaining[-count:] if remaining else []
