@@ -1185,10 +1185,14 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
         if self._historical_spots:
             # Drop spots older than the current YTD window so the blob
-            # doesn't grow unbounded across years.
+            # doesn't grow unbounded across years. Anchor on local
+            # midnight: in Brussels (UTC+1/+2) the local Jan 1 00:00
+            # falls one or two hours BEFORE UTC Jan 1 00:00, so a UTC
+            # anchor would silently drop the first hour or two of YTD
+            # whenever HA restarted in early January.
             today = dt_util.now().date()
-            keep_after = datetime.combine(
-                date(today.year, 1, 1), datetime.min.time(), tzinfo=UTC
+            keep_after = dt_util.start_of_local_day(date(today.year, 1, 1)).astimezone(
+                UTC
             )
             payload["historical_spots"] = {
                 h.isoformat(): v
