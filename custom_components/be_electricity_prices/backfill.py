@@ -619,7 +619,27 @@ async def backfill_if_missing(
     user who deletes their HA database mid-year still triggers a
     fresh backfill on next restart, while the steady-state restart
     path adds zero work.
+
+    Tolerates entry removal mid-flight: this runs as a fire-and-forget
+    background task, and the user can delete the entry between scheduling
+    and execution. ``hass.config_entries.async_get_entry`` returns None
+    when the entry is gone; ``runtime_data`` becomes UNDEFINED on unload.
+    Bail in either case so the background task never writes statistics
+    for an entry the user has removed.
     """
+    if hass.config_entries.async_get_entry(entry.entry_id) is None:
+        _LOGGER.debug(
+            "backfill skipped: entry %s was removed before the task ran",
+            entry.entry_id,
+        )
+        return None
+    runtime = getattr(entry, "runtime_data", None)
+    if not isinstance(runtime, BePricesCoordinator):
+        _LOGGER.debug(
+            "backfill skipped: coordinator not ready for %s",
+            entry.entry_id,
+        )
+        return None
     sid = _stat_id(hass, entry, "current_price")
     if sid is None:
         _LOGGER.debug(
