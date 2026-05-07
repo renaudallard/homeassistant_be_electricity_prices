@@ -778,8 +778,10 @@ async def _check_catalogs(
             )
             continue
         if not discovered:
-            # No discovery surface (Engie / Luminus) or transient
-            # failure — no signal either way.
+            # discover() returned an empty set: either the module has
+            # no discovery surface (rare today; every supplier ships
+            # one) or the listing fetch transiently failed. Either way
+            # there is no signal we can act on, so skip silently.
             continue
         new_ids = sorted(discovered - known.get(name, set()))
         _record(
