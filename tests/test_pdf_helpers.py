@@ -33,12 +33,22 @@ from datetime import date
 import aiohttp
 import pytest
 
+import re
+
 from custom_components.be_electricity_prices.providers._pdf import (
+    archive_validity_check,
     fetch_pdf_text,
     fetch_text,
     parse_valid_until,
+    vat_multiplier,
 )
-from custom_components.be_electricity_prices.providers.base import ExtractorError
+from custom_components.be_electricity_prices.providers.base import (
+    DsoOverlay,
+    ExtractorError,
+    FixedRates,
+    SupplierSnapshot,
+    TaxOverlay,
+)
 
 
 def test_parse_valid_until_dutch_geldig_van_tem() -> None:
@@ -151,3 +161,105 @@ async def test_fetch_text_still_converts_aiohttp_client_errors() -> None:
     session = _FakeSession(aiohttp.ClientConnectionError("dns failed"))
     with pytest.raises(ExtractorError, match="network error"):
         await fetch_text(session, "https://example.com/")  # type: ignore[arg-type]
+
+
+# ---- vat_multiplier ----------------------------------------------------------
+
+
+def test_vat_multiplier_single_pattern_matches() -> None:
+    """Single-pattern call: the helper returns 1 + N/100 from the
+    capture group when the pattern matches."""
+    assert vat_multiplier(
+        "Tarifs 6% TVAC", r"Tarifs\s+(\d+)\s*%\s*TVAC"
+    ) == pytest.approx(1.06)
+    assert vat_multiplier("TVA 21%", r"TVA\s*(\d+)\s*%") == pytest.approx(1.21)
+
+
+def test_vat_multiplier_returns_default_when_pattern_misses() -> None:
+    """No match falls back to the default (1.06 unless overridden)."""
+    assert vat_multiplier("nothing relevant", r"TVA\s*(\d+)\s*%") == pytest.approx(1.06)
+    assert vat_multiplier(
+        "nothing relevant", r"TVA\s*(\d+)\s*%", default=1.21
+    ) == pytest.approx(1.21)
+
+
+def test_vat_multiplier_multi_pattern_falls_back_to_second() -> None:
+    """Luminus-style two-regex fallback: if the primary doesn't match,
+    the secondary is tried before the default. Verify both branches."""
+    primary = re.compile(r"TVA\s*sur\s*les\s*prix.+?(\d+)\s*%", re.S)
+    secondary = r"TVA\s*(\d+)\s*%"
+    # Primary matches: secondary irrelevant.
+    assert vat_multiplier(
+        "TVA sur les prix de l'energie 21 %", primary, secondary
+    ) == pytest.approx(1.21)
+    # Only secondary matches.
+    assert vat_multiplier("TVA 6%", primary, secondary) == pytest.approx(1.06)
+    # Neither matches: default fires.
+    assert vat_multiplier("nothing", primary, secondary) == pytest.approx(1.06)
+
+
+def test_vat_multiplier_handles_decimal_capture() -> None:
+    """Octa+'s pattern allows a fractional rate (e.g. ``21,5%``).
+    The helper routes the capture through to_float so a card with a
+    decimal VAT parses correctly."""
+    pattern = r"Tarifs\s+(\d+(?:[.,]\d+)?)\s*%\s*TVAC"
+    assert vat_multiplier("Tarifs 21,5% TVAC", pattern) == pytest.approx(1.215)
+
+
+# ---- archive_validity_check --------------------------------------------------
+
+
+def _stub_snapshot(valid_until: date | None) -> SupplierSnapshot:
+    return SupplierSnapshot(
+        supplier="test",
+        contract="test",
+        energy=FixedRates(single=0.18),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        source_url="test://",
+        valid_until=valid_until,
+    )
+
+
+def test_archive_validity_check_valid_until_in_requested_month_is_accepted() -> None:
+    """When valid_until parses cleanly and falls in the requested
+    year-month, the snapshot is surfaced as-is."""
+    snap = _stub_snapshot(date(2025, 12, 31))
+    out = archive_validity_check(snap, "anything", date(2025, 12, 1))
+    assert out is snap
+
+
+def test_archive_validity_check_valid_until_in_other_month_is_rejected() -> None:
+    """When valid_until parses but doesn't intersect the requested
+    month, the snapshot is rejected even with a textual fallback
+    available."""
+    snap = _stub_snapshot(date(2025, 12, 31))
+    text = "december 2025"  # mentions the wrong month deliberately
+    out = archive_validity_check(
+        snap, text, date(2025, 3, 1), month_names=("january", "february", "march")
+    )
+    assert out is None
+
+
+def test_archive_validity_check_falls_back_to_text_when_valid_until_missing() -> None:
+    """No parsed validity, but month_names is provided: require a
+    textual mention of the requested month inside the validity window."""
+    snap = _stub_snapshot(None)
+    months = ("januari", "februari", "maart", "april", "mei", "juni")
+    text = "Geldig van 1 mei 2026 t.e.m 31 mei 2026."
+    assert (
+        archive_validity_check(snap, text, date(2026, 5, 1), month_names=months) is snap
+    )
+    # Wrong month: the validity window mentions May, not March.
+    assert (
+        archive_validity_check(snap, text, date(2026, 3, 1), month_names=months) is None
+    )
+
+
+def test_archive_validity_check_no_textual_fallback_when_month_names_none() -> None:
+    """EBEM-style: month_names=None means trust the URL resolver. With
+    valid_until=None and no textual cross-check available, accept the
+    snapshot as-is rather than rejecting on missing validity."""
+    snap = _stub_snapshot(None)
+    out = archive_validity_check(snap, "no validity here", date(2026, 5, 1))
+    assert out is snap
