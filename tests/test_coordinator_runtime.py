@@ -776,6 +776,47 @@ async def test_save_persistent_skips_when_entry_tuple_drifted(
     assert saved_payload is None
 
 
+async def test_save_persistent_skipped_during_reload_window(
+    hass: HomeAssistant,
+) -> None:
+    """End-to-end coverage of the reload window: between
+    async_unload_entry and the new async_setup_entry's runtime_data
+    assignment, runtime_data is HA's UNDEFINED singleton. A late tick
+    on the OLD coordinator that resumes in this window must not
+    write to disk if the entry tuple has already drifted (the
+    OptionsFlow path), and must not blindly clobber the new
+    coordinator's first save when the tuple is unchanged but the
+    runtime is UNDEFINED."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    old_coord = BePricesCoordinator(hass, entry)
+
+    # Step 1: simulate post-unload state. HA clears runtime_data to
+    # UNDEFINED via the type-name singleton; we mimic that by deleting
+    # the attribute (matches MockConfigEntry's pre-set behaviour).
+    entry.runtime_data = type("UndefinedType", (), {"_singleton": 0})()
+
+    # Step 2: simulate OptionsFlow having swapped entry.data BEFORE
+    # the new coord lands. The tuple guard must skip the save.
+    hass.config_entries.async_update_entry(
+        entry,
+        data={**entry.data, "supplier": "bolt", "contract": "bolt_fix"},
+    )
+
+    saved: list[dict[str, object]] = []
+
+    async def _fake_save(payload: dict[str, object]) -> None:
+        saved.append(payload)
+
+    with patch.object(old_coord._store, "async_save", new=_fake_save):
+        await old_coord._save_persistent()
+
+    assert saved == [], (
+        "obsolete coordinator must not write during the reload window "
+        "when entry.data has drifted"
+    )
+
+
 async def test_load_persistent_discards_blob_for_other_supplier(
     hass: HomeAssistant,
 ) -> None:
