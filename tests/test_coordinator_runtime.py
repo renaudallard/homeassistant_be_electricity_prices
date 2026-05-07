@@ -779,25 +779,28 @@ async def test_save_persistent_skips_when_entry_tuple_drifted(
 async def test_save_persistent_skipped_during_reload_window(
     hass: HomeAssistant,
 ) -> None:
-    """End-to-end coverage of the reload window: between
-    async_unload_entry and the new async_setup_entry's runtime_data
-    assignment, runtime_data is HA's UNDEFINED singleton. A late tick
-    on the OLD coordinator that resumes in this window must not
-    write to disk if the entry tuple has already drifted (the
-    OptionsFlow path), and must not blindly clobber the new
-    coordinator's first save when the tuple is unchanged but the
-    runtime is UNDEFINED."""
+    """The OLD coordinator's tuple guard must skip the save when
+    OptionsFlow has already swapped entry.data but the new coordinator
+    isn't yet assigned to runtime_data.
+
+    Production _save_persistent has two guards: (1) the runtime_data
+    isinstance check (covered by
+    test_save_persistent_skipped_when_runtime_data_replaced) and (2)
+    the tuple guard against entry.data drift. This test exercises the
+    second guard. The synthetic UNDEFINED-shaped runtime_data is a
+    realistic stand-in for the brief window after async_unload but
+    before async_setup_entry assigns the new coord; that branch is
+    not what the assertion validates."""
     entry = _entry()
     entry.add_to_hass(hass)
     old_coord = BePricesCoordinator(hass, entry)
 
-    # Step 1: simulate post-unload state. HA clears runtime_data to
-    # UNDEFINED via the type-name singleton; we mimic that by deleting
-    # the attribute (matches MockConfigEntry's pre-set behaviour).
+    # Sentinel-shaped runtime_data so the isinstance(BePricesCoordinator)
+    # check fails identically to the real UNDEFINED case.
     entry.runtime_data = type("UndefinedType", (), {"_singleton": 0})()
 
-    # Step 2: simulate OptionsFlow having swapped entry.data BEFORE
-    # the new coord lands. The tuple guard must skip the save.
+    # Simulate OptionsFlow having swapped entry.data BEFORE the new
+    # coord lands. The tuple guard must skip the save.
     hass.config_entries.async_update_entry(
         entry,
         data={**entry.data, "supplier": "bolt", "contract": "bolt_fix"},
