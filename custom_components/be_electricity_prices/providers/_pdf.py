@@ -619,10 +619,20 @@ def parse_valid_until(text: str) -> date | None:
     # and produce date(2625, 4, 30). Clamp candidates to a loose
     # horizon around today's year so a stray captured year can't
     # masquerade as a real validity date.
-    max_year = date.today().year + 5
+    #
+    # Lower bound: cards mostly advertise the current month, but some
+    # publishers re-issue with the previous month's start date in the
+    # validity statement. Allow current-year-1 so a January card that
+    # mentions "valable du 01/12/<previous year> au 31/01/<this year>"
+    # doesn't silently shed the previous-year start as out-of-range,
+    # but reject anything older - a retrospective-only validity window
+    # in a pathological card would otherwise win over any real date.
+    today = date.today()
+    max_year = today.year + 5
+    min_year = today.year - 1
 
     def _accept(d: date) -> bool:
-        return d.year <= max_year
+        return min_year <= d.year <= max_year
 
     candidates: list[date] = []
     for window in windows:

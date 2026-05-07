@@ -115,6 +115,16 @@ def test_parse_valid_until_clamps_implausible_far_future_year() -> None:
     assert parse_valid_until(text) == date(2026, 4, 1)
 
 
+def test_parse_valid_until_rejects_retrospective_only_window() -> None:
+    """A pathological card whose validity window mentions only dates
+    older than current_year - 1 must not surface a misleading
+    valid_until -- archive_validity_check would otherwise accept the
+    snapshot for the wrong month. Synthesise a window with only a
+    2020 date range and confirm None is returned."""
+    text = "valable du 1 janvier 2020 au 31 decembre 2020."
+    assert parse_valid_until(text) is None
+
+
 # ---- network-error normalization ----------------------------------------------
 
 
