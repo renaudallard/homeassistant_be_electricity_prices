@@ -96,6 +96,11 @@ from .base import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Process-wide latch for the RESA/REW invariant ERROR. Tripped on the
+# first occurrence per HA boot and skipped thereafter so a long-lived
+# Bolt regression doesn't repeatedly ring HA's notification bell.
+_RESA_REW_LOGGED = False
+
 _BASE_URL = "https://files.boltenergie.be/pricelists"
 _LISTING_URL = "https://www.boltenergie.be/fr/listes-des-prix"
 _VARIABLE_SUFFIX = "11"  # current variable-card version
@@ -620,6 +625,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     # our compensating swap now inverts correct values -- log a
     # warning so the maintainer can drop the swap from
     # _WALLONIA_LABELS instead of silently mis-billing.
+    global _RESA_REW_LOGGED
     resa = out.get(DSO_RESA)
     rew = out.get(DSO_REW)
     if resa is None and rew is None:
@@ -631,26 +637,31 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         # Only one of the two parsed -- the more dangerous case for
         # the swap, since the surviving row may now be carrying the
         # other DSO's values without anything else to compare it
-        # against. Log at ERROR so it surfaces in HA's notification
-        # bell rather than disappearing into routine WARNING noise.
-        parsed = DSO_RESA if resa is not None else DSO_REW
-        missing = DSO_REW if resa is not None else DSO_RESA
-        _LOGGER.error(
-            "Bolt RESA/REW row drift: only %s parsed; the label swap "
-            "in _WALLONIA_LABELS may now be inverting %s's values",
-            parsed,
-            missing,
-        )
+        # against. Log at ERROR (once per process) so it surfaces in
+        # HA's notification bell without re-ringing on every snapshot
+        # refresh.
+        if not _RESA_REW_LOGGED:
+            parsed = DSO_RESA if resa is not None else DSO_REW
+            missing = DSO_REW if resa is not None else DSO_RESA
+            _LOGGER.error(
+                "Bolt RESA/REW row drift: only %s parsed; the label swap "
+                "in _WALLONIA_LABELS may now be inverting %s's values",
+                parsed,
+                missing,
+            )
+            _RESA_REW_LOGGED = True
         return out
     if resa.distribution_single >= rew.distribution_single:
-        _LOGGER.error(
-            "Bolt RESA/REW post-swap invariant tripped "
-            "(resa=%.4f rew=%.4f); the upstream PDF may have been "
-            "fixed and the label swap in _WALLONIA_LABELS likely "
-            "needs to be removed",
-            resa.distribution_single,
-            rew.distribution_single,
-        )
+        if not _RESA_REW_LOGGED:
+            _LOGGER.error(
+                "Bolt RESA/REW post-swap invariant tripped "
+                "(resa=%.4f rew=%.4f); the upstream PDF may have been "
+                "fixed and the label swap in _WALLONIA_LABELS likely "
+                "needs to be removed",
+                resa.distribution_single,
+                rew.distribution_single,
+            )
+            _RESA_REW_LOGGED = True
     return out
 
 
