@@ -444,6 +444,7 @@ _MONTH_NAMES: dict[str, int] = {
     "février": 2,
     "mars": 3,
     "avril": 4,
+    "mai": 5,
     "juin": 6,
     "juillet": 7,
     "aout": 8,

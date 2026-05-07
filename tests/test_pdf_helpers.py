@@ -62,6 +62,15 @@ def test_parse_valid_until_french_valable_jusqu_au() -> None:
     assert parse_valid_until(text) == date(2026, 4, 30)
 
 
+def test_parse_valid_until_french_mai() -> None:
+    """Regression: French May (mai) must be in _MONTH_NAMES so a card
+    whose validity is spelled out only in French ("valable jusqu'au
+    31 mai 2026") parses its actual end date instead of falling
+    through to None."""
+    text = "Cette carte tarifaire est valable jusqu'au 31 mai 2026."
+    assert parse_valid_until(text) == date(2026, 5, 31)
+
+
 def test_parse_valid_until_numeric_dd_mm_yyyy() -> None:
     text = "Validité: du 01/04/2026 au 30/04/2026."
     assert parse_valid_until(text) == date(2026, 4, 30)
