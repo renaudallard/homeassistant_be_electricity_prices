@@ -102,6 +102,11 @@ _PDF_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Non-electricity PDF kinds EBEM publishes on the same listing page;
+# this integration is electricity-only, so drop them from discover()
+# instead of routing them through the catalog drift alert.
+_NON_ELEC_KINDS: frozenset[str] = frozenset({"gas", "aardgas"})
+
 
 @dataclass(frozen=True)
 class _ContractDef:
@@ -203,14 +208,16 @@ async def probe(
 async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Return EBEM contract ids visible on the listing page.
 
-    Maps the two distinct PDF kinds to contract ids:
+    Maps the two distinct electricity PDF kinds to contract ids:
       - any ``elek`` PDF surfaces ``ebem_variable`` and ``ebem_basic_plus``
         (both products live in the same card),
       - any ``dynamic`` PDF surfaces ``ebem_dynamic``.
 
-    A future third PDF kind (e.g. ``fix`` for a fixed contract -- the
-    variable card explicitly notes Ebem stopped selling those for now)
-    surfaces verbatim so live_check files a tracking issue.
+    Non-electricity kinds on the listing (``gas`` / ``aardgas`` / etc.)
+    are out of scope for this integration and dropped silently. A
+    future electricity PDF kind (e.g. ``fix`` for a fixed contract --
+    the variable card explicitly notes Ebem stopped selling those
+    for now) surfaces verbatim so live_check files a tracking issue.
     """
     try:
         html = await fetch_text(session, _LISTING_URL)
@@ -224,6 +231,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
             out.add("ebem_basic_plus")
         elif kind == "dynamic":
             out.add("ebem_dynamic")
+        elif kind in _NON_ELEC_KINDS:
+            continue
         else:
             out.add(kind)
     return out

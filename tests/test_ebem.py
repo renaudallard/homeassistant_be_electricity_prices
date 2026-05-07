@@ -41,6 +41,7 @@ from custom_components.be_electricity_prices.providers.base import (
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.ebem import (
+    discover,
     fetch_for_month,
     parse_snapshot,
 )
@@ -348,3 +349,19 @@ def test_fetch_for_month_unknown_contract_returns_none() -> None:
         )
     )
     assert snap is None
+
+
+def test_discover_drops_non_electricity_kinds() -> None:
+    """EBEM publishes gas tariff cards on the same listing page; this
+    integration is electricity-only, so discover() must skip them
+    rather than surface 'gas' as an unknown contract id and trip the
+    catalog-drift alert."""
+    listing = (
+        '<a href="/media/abc/ebem_tariefkaart-elek-05-2026.pdf">elek</a>'
+        '<a href="/media/def/ebem_tariefkaart-gas-05-2026.pdf">gas</a>'
+        '<a href="/media/ghi/ebem_tariefkaart-aardgas-05-2026.pdf">aardgas</a>'
+    )
+    out = asyncio.run(discover(_Session(listing)))  # type: ignore[arg-type]
+    assert "gas" not in out
+    assert "aardgas" not in out
+    assert {"ebem_variable", "ebem_basic_plus"} <= out
