@@ -160,7 +160,7 @@ async def _on_request_start(
 async def _on_request_end(
     _session: aiohttp.ClientSession,
     ctx: SimpleNamespace,
-    params: aiohttp.TraceRequestEndParams,
+    _params: aiohttp.TraceRequestEndParams,
 ) -> None:
     supplier = _CURRENT_SUPPLIER.get()
     if supplier is None:
@@ -168,22 +168,38 @@ async def _on_request_end(
     bucket = _metrics_bucket(supplier)
     bucket["fetches"] += 1.0
     bucket["elapsed_s"] += time.monotonic() - getattr(ctx, "start", time.monotonic())
-    # ``response.content_length`` is aiohttp's post-decode body length
-    # and is populated even on chunked responses where the
-    # ``Content-Length`` request header is absent. The earlier
-    # header-only read silently undercounted any supplier serving
-    # ``Transfer-Encoding: chunked``, so the per-supplier byte budgets
-    # measured an arbitrarily smaller quantity than the variable name
-    # suggests.
-    body_bytes = params.response.content_length
-    if body_bytes is not None:
-        bucket["bytes"] += float(body_bytes)
+    # Bytes are accumulated per-chunk in `_on_response_chunk_received`
+    # because aiohttp's `response.content_length` is just the
+    # ``Content-Length`` header verbatim and is None on
+    # ``Transfer-Encoding: chunked`` responses (verified against
+    # aiohttp.helpers.HeadersMixin.content_length).
+
+
+async def _on_response_chunk_received(
+    _session: aiohttp.ClientSession,
+    _ctx: SimpleNamespace,
+    params: aiohttp.TraceResponseChunkReceivedParams,
+) -> None:
+    """Accumulate actual response body bytes per supplier.
+
+    `on_response_chunk_received` fires once per chunk of body data
+    aiohttp delivers to the application, regardless of whether the
+    server set Content-Length or used Transfer-Encoding: chunked.
+    Summing `len(chunk)` here gives an honest byte total even for
+    chunked responses, which the previous Content-Length-only path
+    silently counted as zero.
+    """
+    supplier = _CURRENT_SUPPLIER.get()
+    if supplier is None:
+        return
+    _metrics_bucket(supplier)["bytes"] += float(len(params.chunk))
 
 
 def _trace_config() -> aiohttp.TraceConfig:
     tc = aiohttp.TraceConfig()
     tc.on_request_start.append(_on_request_start)
     tc.on_request_end.append(_on_request_end)
+    tc.on_response_chunk_received.append(_on_response_chunk_received)
     return tc
 
 
