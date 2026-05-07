@@ -616,20 +616,15 @@ def parse_valid_until(text: str) -> date | None:
     # Tariff cards never advertise validity past a few years out;
     # numeric_re will happily eat a 4-digit run that follows DD/MM
     # (e.g. "30/04/2625" from a corrupted phone-number footnote)
-    # and produce date(2625, 4, 30). Clamp candidates to a loose
-    # horizon around today's year so a stray captured year can't
-    # masquerade as a real validity date.
-    #
-    # Lower bound: cards mostly advertise the current month, but some
-    # publishers re-issue with the previous month's start date in the
-    # validity statement. Allow current-year-1 so a January card that
-    # mentions "valable du 01/12/<previous year> au 31/01/<this year>"
-    # doesn't silently shed the previous-year start as out-of-range,
-    # but reject anything older - a retrospective-only validity window
-    # in a pathological card would otherwise win over any real date.
+    # and produce date(2625, 4, 30). Clamp candidates to a symmetric
+    # 5-year horizon around today so the year-2625 typo and the
+    # year-1900 typo are both rejected, but legitimate archive cards
+    # (Eneco / Cociter going several years back via fetch_for_month)
+    # still parse a real validity_until rather than silently falling
+    # through to the textual fallback.
     today = date.today()
     max_year = today.year + 5
-    min_year = today.year - 1
+    min_year = today.year - 5
 
     def _accept(d: date) -> bool:
         return min_year <= d.year <= max_year

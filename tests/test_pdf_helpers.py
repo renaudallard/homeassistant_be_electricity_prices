@@ -117,12 +117,23 @@ def test_parse_valid_until_clamps_implausible_far_future_year() -> None:
 
 def test_parse_valid_until_rejects_retrospective_only_window() -> None:
     """A pathological card whose validity window mentions only dates
-    older than current_year - 1 must not surface a misleading
-    valid_until -- archive_validity_check would otherwise accept the
-    snapshot for the wrong month. Synthesise a window with only a
-    2020 date range and confirm None is returned."""
-    text = "valable du 1 janvier 2020 au 31 decembre 2020."
+    older than today.year - 5 must not surface a misleading valid_until
+    -- archive_validity_check would otherwise accept the snapshot for
+    the wrong month. Synthesise a window with only a 2010 date range
+    and confirm None is returned."""
+    text = "valable du 1 janvier 2010 au 31 decembre 2010."
     assert parse_valid_until(text) is None
+
+
+def test_parse_valid_until_accepts_archive_year_within_5_years() -> None:
+    """fetch_for_month walks back through Eneco/Cociter archives; a
+    card from year-3 (well within the legitimate archive horizon)
+    must still parse its printed validity rather than fall through
+    to the textual-mention fallback."""
+    text = "valable du 1 juin 2023 au 30 juin 2023."
+    # Today (test run) - 3 years is in range; assert an actual date,
+    # not None. Exact date matches the second numeric of the window.
+    assert parse_valid_until(text) == date(2023, 6, 30)
 
 
 # ---- network-error normalization ----------------------------------------------
