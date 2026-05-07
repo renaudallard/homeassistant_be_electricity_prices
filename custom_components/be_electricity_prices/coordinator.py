@@ -625,7 +625,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # tuple disagrees with the current entry.
         try:
             return await self._update_body()
-        except UpdateFailed:
+        except UpdateFailed as err:
             # Snapshot age is independent of the current tick's
             # success: if the snapshot was already stale and *this*
             # tick fails for an unrelated reason (ENTSO-E auth,
@@ -635,7 +635,15 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             # than whatever failure first raised the issue. Without
             # this the placeholder freezes until the next *clean*
             # tick reaches the bottom of _update_body.
+            #
+            # When _maybe_refresh_snapshot succeeded (``_last_error``
+            # empty) but a downstream step like _build_hourly raised
+            # UpdateFailed, fall back to the UpdateFailed message so
+            # the placeholder doesn't render as the "unknown" sentinel
+            # from _sync_stale_issue.
             if self._snapshot is not None and self._snapshot_fetched_at is not None:
+                if not self._last_error:
+                    self._last_error = str(err)
                 age = self._snapshot_age_hours()
                 stale = age > SNAPSHOT_STALE_DAYS * 24
                 self._sync_stale_issue(stale)
