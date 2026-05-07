@@ -632,10 +632,16 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
 
         spot_prices: dict[datetime, float] = {}
+        # Auth-issue clear path runs OUTSIDE the DynamicRates branch so
+        # that an existing "auth failed" Repairs entry auto-resolves
+        # when the user switches a previously-dynamic contract to a
+        # static one (the new snapshot type makes the dynamic branch
+        # unreachable; without this, the issue would linger forever
+        # because only an entry deletion wipes it).
+        self._sync_entsoe_auth_issue(False)
         if isinstance(self._snapshot.energy, DynamicRates):
             try:
                 spot_prices = await self._fetch_spot_prices()
-                self._sync_entsoe_auth_issue(False)
             except EntsoeAuthError as err:
                 self._sync_entsoe_auth_issue(True, str(err))
                 raise UpdateFailed(f"ENTSO-E auth: {err}") from err
