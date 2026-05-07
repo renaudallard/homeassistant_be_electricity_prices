@@ -76,6 +76,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           title_prefix='[live-check] supplier extractor broken'
+          label='live-check-extractor'
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           {
             echo "## Run"
@@ -87,10 +88,19 @@ jobs:
             cat report.md
           } > issue_body.md
 
+          # Make sure the label exists; idempotent.
+          gh label create "$label" \
+            --color FBCA04 \
+            --description "Auto-filed by .github/workflows/live_check.yml" \
+            --force >/dev/null 2>&1 || true
+
+          # Dedup on the deterministic label rather than a title
+          # substring so a manually-opened "Re: [live-check] ..."
+          # issue can never catch comments from this job.
           existing=$(gh issue list \
             --state open \
-            --search "\"$title_prefix\" in:title" \
-            --json number,title \
+            --label "$label" \
+            --json number \
             --jq '.[0].number // empty')
 
           if [ -n "$existing" ]; then
@@ -99,6 +109,7 @@ jobs:
           else
             gh issue create \
               --title "$title_prefix ($(date -u +%Y-%m-%d))" \
+              --label "$label" \
               --body-file issue_body.md
           fi
 
@@ -117,6 +128,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           title_prefix='[live-check] supplier drift detected'
+          label='live-check-drift'
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           {
             echo "## Run"
@@ -128,10 +140,15 @@ jobs:
             cat drift_report.md
           } > drift_issue_body.md
 
+          gh label create "$label" \
+            --color FBCA04 \
+            --description "Auto-filed by .github/workflows/live_check.yml" \
+            --force >/dev/null 2>&1 || true
+
           existing=$(gh issue list \
             --state open \
-            --search "\"$title_prefix\" in:title" \
-            --json number,title \
+            --label "$label" \
+            --json number \
             --jq '.[0].number // empty')
 
           if [ -n "$existing" ]; then
@@ -140,6 +157,7 @@ jobs:
           else
             gh issue create \
               --title "$title_prefix ($(date -u +%Y-%m-%d))" \
+              --label "$label" \
               --body-file drift_issue_body.md
           fi
 
@@ -158,6 +176,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           title_prefix='[live-check] new supplier products detected'
+          label='live-check-catalog'
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           {
             echo "## Run"
@@ -169,10 +188,15 @@ jobs:
             cat catalog_report.md
           } > catalog_issue_body.md
 
+          gh label create "$label" \
+            --color FBCA04 \
+            --description "Auto-filed by .github/workflows/live_check.yml" \
+            --force >/dev/null 2>&1 || true
+
           existing=$(gh issue list \
             --state open \
-            --search "\"$title_prefix\" in:title" \
-            --json number,title \
+            --label "$label" \
+            --json number \
             --jq '.[0].number // empty')
 
           if [ -n "$existing" ]; then
@@ -181,6 +205,7 @@ jobs:
           else
             gh issue create \
               --title "$title_prefix ($(date -u +%Y-%m-%d))" \
+              --label "$label" \
               --body-file catalog_issue_body.md
           fi
 
