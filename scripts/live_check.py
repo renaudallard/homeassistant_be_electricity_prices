@@ -218,6 +218,16 @@ def _attributed(supplier: str) -> Iterator[None]:
         _CURRENT_SUPPLIER.reset(token)
 
 
+# Hard cap for a single supplier's whole check, well above the largest
+# per-supplier latency drift budget (90 s for bolt / engie). aiohttp's
+# session-level total=60 s only bounds individual requests, so a check
+# that issues many sequential requests can still drag for minutes if
+# one of them is slow but not stalled. wait_for cuts that off so a
+# single broken supplier can never block the gather() and starve the
+# rest of the run.
+_SUPPLIER_HARD_TIMEOUT_S = 240.0
+
+
 async def _attributed_check(
     supplier: str,
     fn: Callable[..., Awaitable[None]],
@@ -229,9 +239,21 @@ async def _attributed_check(
     task gets its own ContextVar slot; setting `_CURRENT_SUPPLIER`
     inside the task only affects that task's view, which is what the
     TraceConfig hooks observe when aiohttp issues a request.
+
+    A per-supplier wait_for caps total wallclock so one hung supplier
+    can't starve the gather. Timeouts surface as a recorded extractor
+    failure instead of propagating, mirroring how individual fetch
+    errors are handled inside each `_check_*`.
     """
     with _attributed(supplier):
-        await fn(*args)
+        try:
+            await asyncio.wait_for(fn(*args), timeout=_SUPPLIER_HARD_TIMEOUT_S)
+        except TimeoutError:
+            _record(
+                f"{supplier}: hard timeout",
+                False,
+                f"exceeded {_SUPPLIER_HARD_TIMEOUT_S:.0f}s wallclock",
+            )
 
 
 def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
