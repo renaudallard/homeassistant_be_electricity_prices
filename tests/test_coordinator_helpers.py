@@ -689,15 +689,18 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
 
 
 async def test_year_cost_uses_per_month_snapshot_when_archive_available(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """When fetch_for_month returns a different snapshot for a past
     month, the year-cost loop must apply that month's rate to **its**
     days -- not today's snapshot rate to everything."""
 
+    # Pin a mid-year Brussels date so the test always covers at least
+    # four past months regardless of when the suite is run; the
+    # previous skip-on-January meant the per-month archive replay
+    # branch was uncovered for an entire calendar month every year.
+    freezer.move_to("2026-05-15 12:00:00+02:00")
     today = dt_util.now().date()
-    if today.month == 1:
-        pytest.skip("test needs at least one past month")
 
     cheap = make_snapshot(energy=FixedRates(single=0.10), source_url="test://cheap")
     expensive = make_snapshot(
@@ -776,15 +779,14 @@ async def test_year_cost_falls_back_to_fees_when_no_meters_configured(
 
 
 async def test_year_cost_skips_month_when_archived_snapshot_lacks_dso(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """An archived month-snapshot whose DSO row regex missed for the
     user's DSO must not crash the YTD tick. The month falls back to
     "no rate to apply" (like dynamic/TOU) and the loop keeps going."""
 
+    freezer.move_to("2026-05-15 12:00:00+02:00")
     today = dt_util.now().date()
-    if today.month == 1:
-        pytest.skip("test needs at least one past month")
     jan_first = date(today.year, 1, 1)
 
     # Archived snapshot for January is missing the user's DSO key
