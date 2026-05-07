@@ -46,7 +46,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Literal
+from typing import Final, Literal
 
 from .const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
 from .providers.base import (
@@ -71,6 +71,14 @@ class PriceBreakdown:
     network: float
     taxes: float
     all_in: float
+
+
+# Federal fixed-date holidays (month, day). Lifted to module scope so
+# is_belgian_holiday doesn't reallocate the set on every call along the
+# 8760-iteration backfill path and the per-hour TOU slot lookup.
+_FIXED_HOLIDAYS: Final[frozenset[tuple[int, int]]] = frozenset(
+    {(1, 1), (5, 1), (7, 21), (8, 15), (11, 1), (11, 11), (12, 25)}
+)
 
 
 def _easter_sunday(year: int) -> date:
@@ -99,8 +107,7 @@ def is_belgian_holiday(d: date) -> bool:
     Brussels) are deliberately excluded — DSO billing applies federal
     rules uniformly.
     """
-    fixed = {(1, 1), (5, 1), (7, 21), (8, 15), (11, 1), (11, 11), (12, 25)}
-    if (d.month, d.day) in fixed:
+    if (d.month, d.day) in _FIXED_HOLIDAYS:
         return True
     easter = _easter_sunday(d.year)
     if d == easter + timedelta(days=1):  # Easter Monday
