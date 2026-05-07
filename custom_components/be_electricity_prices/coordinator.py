@@ -489,6 +489,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             entry.data.get(CONF_CONTRACT, ""),
             entry.data.get(CONF_REGION, ""),
         )
+        # Frozen snapshot of every load-bearing entry.data field at
+        # construction. Used by ``__init__._async_options_updated`` to
+        # decide whether a finalize-time options write actually changed
+        # anything that needs a reload, or was a no-op options-clear.
+        self._entry_data_signature: frozenset[tuple[str, Any]] = (
+            self._compute_data_signature(entry)
+        )
         super().__init__(
             hass,
             _LOGGER,
@@ -808,6 +815,20 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # and the service appears to do nothing.
         _shared_failed_fetches(self.hass).pop(key, None)
         await self.async_request_refresh()
+
+    @staticmethod
+    def _compute_data_signature(entry: ConfigEntry) -> frozenset[tuple[str, Any]]:
+        """Frozen snapshot of every load-bearing entry.data field.
+
+        Used by ``__init__._async_options_updated`` to skip a needless
+        reload when the OptionsFlow's no-op finalize wrote
+        ``options = {}`` on top of an already-empty options dict (the
+        listener fires whenever options changes, even if entry.data
+        didn't). Every meaningful field on this integration lives in
+        entry.data, so an entry.options change without entry.data
+        change can be ignored.
+        """
+        return frozenset(entry.data.items())
 
     def _shared_key(self) -> tuple[str, str, str]:
         return (

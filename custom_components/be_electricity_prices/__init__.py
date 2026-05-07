@@ -219,6 +219,24 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
 async def _async_options_updated(
     hass: HomeAssistant, entry: BePricesConfigEntry
 ) -> None:
+    """Reload the entry only when entry.data actually changed.
+
+    HA fires this listener whenever ``entry.options`` (or ``entry.data``)
+    changes via ``async_update_entry``. The OptionsFlow's no-op
+    ``async_create_entry(data={})`` finalize writes ``options = {}``;
+    if the entry pre-existed with non-empty options (a hold-over from
+    an older HA version's options-flow contract), HA sees options
+    `{...} -> {}` as a real change and would otherwise trigger a
+    needless reload that tears down the warmed snapshot. The
+    integration carries every load-bearing field in ``entry.data``,
+    not in ``entry.options``, so an options-only change can skip the
+    reload safely.
+    """
+    coordinator = getattr(entry, "runtime_data", None)
+    if isinstance(coordinator, BePricesCoordinator):
+        live_data = coordinator._entry_data_signature
+        if BePricesCoordinator._compute_data_signature(entry) == live_data:
+            return
     await hass.config_entries.async_reload(entry.entry_id)
 
 
