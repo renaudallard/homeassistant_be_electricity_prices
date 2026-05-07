@@ -623,6 +623,25 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # entity reads our self.data after the swap, and the
         # async_load_persistent guard discards a blob whose stamped
         # tuple disagrees with the current entry.
+        try:
+            return await self._update_body()
+        except UpdateFailed:
+            # Snapshot age is independent of the current tick's
+            # success: if the snapshot was already stale and *this*
+            # tick fails for an unrelated reason (ENTSO-E auth,
+            # missing DSO, ENTSO-E transient), refresh the
+            # stale-snapshot Repairs placeholder with the latest
+            # last_error so the user sees the current error rather
+            # than whatever failure first raised the issue. Without
+            # this the placeholder freezes until the next *clean*
+            # tick reaches the bottom of _update_body.
+            if self._snapshot is not None and self._snapshot_fetched_at is not None:
+                age = self._snapshot_age_hours()
+                stale = age > SNAPSHOT_STALE_DAYS * 24
+                self._sync_stale_issue(stale)
+            raise
+
+    async def _update_body(self) -> CoordinatorData:
         await self._maybe_refresh_snapshot()
         await self._track_monthly_peak()
 
