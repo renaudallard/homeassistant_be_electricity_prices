@@ -46,6 +46,10 @@ jobs:
             # rc bit 1 (2) = catalog signal, stable — don't retry.
             # rc bit 2 (4) = drift signal, stable — don't retry.
             # rc 0 = all green.
+            # rc 8 = harness crash (top-level Python exception); the
+            #        traceback is in the run's stdout. None of the
+            #        issue-creation steps below fire for rc=8, so the
+            #        PR check (last step) is the only push-time signal.
             if [ $((rc & 1)) -eq 0 ]; then
               break
             fi

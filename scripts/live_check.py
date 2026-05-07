@@ -1064,8 +1064,11 @@ def main() -> int:
     try:
         return asyncio.run(_run())
     except Exception:
+        # Harness crash. Use rc=8 (outside the documented 1/2/4 bit
+        # space) so the workflow doesn't open a "supplier extractor
+        # broken" issue for what's actually a bug in this script.
         traceback.print_exc()
-        return 1
+        return 8
 
 
 if __name__ == "__main__":
