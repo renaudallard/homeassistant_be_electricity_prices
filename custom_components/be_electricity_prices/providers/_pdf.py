@@ -600,7 +600,13 @@ def parse_valid_until(text: str) -> date | None:
     # like "30/04/26"). 2-digit years are normalized to 20YY downstream.
     # Word-boundary on both ends so an embedded run like "02/123/4567"
     # in a phone number can't fragment into a fake "02/12/34" match.
-    numeric_re = re.compile(r"(?<!\d)(\d{1,2})/(\d{1,2})/(\d{2}(?:\d{2})?)(?!\d)")
+    # The separator class also covers DD-MM-YYYY and DD.MM.YYYY for
+    # publications that legal-style their dates with dashes or dots
+    # (no Belgian supplier in the registry uses these today, but the
+    # cost is one regex character class).
+    numeric_re = re.compile(
+        r"(?<!\d)(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2}(?:\d{2})?)(?!\d)"
+    )
     bare_month_re = re.compile(rf"\b({name_alt})\s+(20\d{{2}})\b")
 
     # Build the set of windows to scan: every occurrence of a validity

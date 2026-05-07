@@ -76,6 +76,15 @@ def test_parse_valid_until_numeric_dd_mm_yyyy() -> None:
     assert parse_valid_until(text) == date(2026, 4, 30)
 
 
+def test_parse_valid_until_numeric_accepts_dash_and_dot_separators() -> None:
+    """Legal-style date publications occasionally use dashes or dots
+    instead of slashes (DD-MM-YYYY, DD.MM.YYYY). No supplier in the
+    registry currently does, but the cost of supporting them is one
+    regex character class and avoids a future fragility."""
+    assert parse_valid_until("validité: 30-04-2026") == date(2026, 4, 30)
+    assert parse_valid_until("validité: 30.04.2026") == date(2026, 4, 30)
+
+
 def test_parse_valid_until_picks_latest_in_window() -> None:
     """Both validity-start and validity-end appear in one statement;
     the helper must return the end (latest)."""
