@@ -319,20 +319,19 @@ CAPACITY_SENSORS: tuple[BePriceSensorDescription, ...] = (
         key="monthly_peak_kw",
         translation_key="monthly_peak_kw",
         device_class=SensorDeviceClass.POWER,
-        # The value is the running monthly peak: monotonically
-        # non-decreasing within a calendar month, then resets at the
-        # month boundary. TOTAL with last_reset = first of the current
-        # local month tells HA's long-term-statistics engine to
-        # bucket each month as its own period (so the graph shows
-        # one peak per month) instead of averaging the running max
-        # the way MEASUREMENT did.
-        state_class=SensorStateClass.TOTAL,
+        # MEASUREMENT is the only state class HA's sensor base class
+        # accepts under the POWER device class
+        # (DEVICE_CLASS_STATE_CLASSES[POWER] == {MEASUREMENT}); TOTAL
+        # would log a "state class is impossible considering device
+        # class" warning on every entity setup. The Energy /
+        # statistics graph defaults to the mean aggregation, which is
+        # not what the user wants here -- ask HA's developer-tools
+        # statistics view for the per-hour MAX instead, which tracks
+        # the true monthly running peak.
+        state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="kW",
         suggested_display_precision=2,
         value_fn=lambda d: d.monthly_peak_kw,
-        last_reset_fn=lambda: dt_util.now().replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0
-        ),
     ),
 )
 
