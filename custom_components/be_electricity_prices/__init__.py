@@ -356,7 +356,17 @@ def _resolve_window_inputs(
 
 
 def _to_utc(value: datetime) -> datetime:
-    """Coerce a service-call datetime to UTC, treating naive as HA tz."""
+    """Coerce a service-call datetime to UTC, treating naive as HA tz.
+
+    Naive inputs land on the HA-configured timezone. On DST seam days
+    a non-existent local hour (Brussels 02:30 on the spring-forward
+    Sunday) defers to ``zoneinfo``'s ``fold=0`` interpretation, which
+    aligns with HA's convention everywhere else (recorder, automations,
+    the price table). Ambiguous fall-back hours likewise pick the
+    first occurrence. Document the choice rather than try to detect
+    invalid wall-clock times - the affected window is one weekend per
+    year and the price table is hourly anyway.
+    """
     if value.tzinfo is None:
         value = value.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
     return value.astimezone(dt_util.UTC)
