@@ -172,6 +172,50 @@ def test_tou_slot_holiday_treated_as_weekend_no_peak_rule() -> None:
     assert tou_slot(datetime(2026, 5, 1, 13, 0), rule) == "offpeak"
 
 
+def test_tou_slot_weekend_offpeak_at_hour_boundaries() -> None:
+    """SmartFlex weekend_offpeak rule maps every weekend hour to
+    offpeak. Probe both Saturday and Sunday at the weekday boundaries
+    (07:00, 11:00, 17:00, 22:00, 01:00) so a regression that flipped
+    `<` to `<=` (or vice versa) on either edge surfaces here."""
+    # Saturday 2026-05-02
+    for hour in (0, 1, 6, 7, 10, 11, 16, 17, 21, 22, 23):
+        assert tou_slot(datetime(2026, 5, 2, hour, 0)) == "offpeak", (
+            f"weekend_offpeak Sat {hour:02d}:00"
+        )
+    # Sunday 2026-05-03
+    for hour in (0, 1, 6, 7, 10, 11, 16, 17, 21, 22, 23):
+        assert tou_slot(datetime(2026, 5, 3, hour, 0)) == "offpeak", (
+            f"weekend_offpeak Sun {hour:02d}:00"
+        )
+
+
+def test_tou_slot_weekend_no_peak_at_hour_boundaries() -> None:
+    """Engie Empower Flextime weekend_no_peak rule:
+        transition : 07:00-11:00 + 17:00-01:00 (wraps midnight)
+        offpeak    : 01:00-07:00 + 11:00-17:00
+
+    Probe each boundary hour on both Saturday and Sunday."""
+    rule = "weekend_no_peak"
+    # Saturday boundary table: (hour, expected_slot)
+    for day in (date(2026, 5, 2), date(2026, 5, 3)):  # Sat + Sun
+        for hour, expected in [
+            (0, "transition"),  # 17-01 wraps midnight
+            (1, "offpeak"),  # 01:00 flips to offpeak
+            (6, "offpeak"),
+            (7, "transition"),  # 07:00 flips to transition (morning)
+            (10, "transition"),
+            (11, "offpeak"),  # 11:00 flips to offpeak
+            (16, "offpeak"),
+            (17, "transition"),  # 17:00 flips to transition (evening)
+            (22, "transition"),
+            (23, "transition"),
+        ]:
+            assert (
+                tou_slot(datetime(day.year, day.month, day.day, hour, 0), rule)
+                == expected
+            ), f"weekend_no_peak {day} {hour:02d}:00"
+
+
 def test_dso_impact_band_does_not_observe_holidays() -> None:
     # Tarif Impact applies 7 days a week per CWaPE and is explicitly
     # NOT sensitive to weekends or holidays. May 1, 2026 17h is still
