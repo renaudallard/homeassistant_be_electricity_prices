@@ -204,6 +204,58 @@ async def test_force_refresh_evicts_shared_cache_for_other_coordinator(
         assert fetch_calls == 2
 
 
+async def test_force_refresh_not_defeated_by_sibling_cache(
+    hass: HomeAssistant,
+) -> None:
+    """Regression for c073448: A's async_force_refresh pops the shared
+    cache row and sets _force_refresh, then sibling B re-seeds the
+    shared cache from its own already-warm snapshot before A's next
+    tick. _shared_is_fresh must return False under _force_refresh so
+    A still calls extractor.fetch instead of silently adopting B's
+    snapshot. Without the guard, the user-facing be_electricity_prices.
+    refresh service is a no-op on multi-entry installs."""
+    from custom_components.be_electricity_prices.coordinator import (
+        _SharedSnapshot,
+        _shared_snapshots,
+    )
+
+    entry_a = _entry()
+    entry_a.add_to_hass(hass)
+    coord_a = BePricesCoordinator(hass, entry_a)
+    coord_a.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+
+    fetch_calls = 0
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return _fake_snapshot()
+
+    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        # A starts the user-initiated refresh: own snapshot blanked,
+        # shared row popped, _force_refresh raised.
+        await coord_a.async_force_refresh()
+        # Simulate sibling B re-seeding the shared cache between A's
+        # pop and A's next tick (the actual race the regression covers).
+        cache = _shared_snapshots(hass)
+        cache[coord_a._shared_key()] = _SharedSnapshot(
+            snapshot=_fake_snapshot(),
+            fetched_at=dt_util.utcnow(),
+            probe_key=None,
+        )
+        # A's next refresh tick must NOT adopt B's seed; it must fetch.
+        await coord_a._maybe_refresh_snapshot()
+
+    assert fetch_calls == 1, (
+        f"force_refresh should still fetch even when sibling re-seeded; "
+        f"saw {fetch_calls} fetches"
+    )
+
+
 async def test_shared_cache_expires_after_ttl(hass: HomeAssistant) -> None:
     """Snapshots older than SNAPSHOT_REFRESH_HOURS (24h) must be re-fetched."""
     entry_a = _entry()
