@@ -89,7 +89,15 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for one config entry."""
-    coordinator: BePricesCoordinator = entry.runtime_data
+    # Mid-reload, ``entry.runtime_data`` is HA's ``UNDEFINED`` singleton:
+    # a user clicking "Download diagnostics" in that window would
+    # otherwise see ``AttributeError`` rather than a usable dump.
+    # Detect the sentinel via the singleton's type name (importing
+    # UNDEFINED would couple to a HA-private symbol).
+    runtime = getattr(entry, "runtime_data", None)
+    if runtime is None or type(runtime).__name__ == "UndefinedType":
+        return {"status": "coordinator_not_ready"}
+    coordinator: BePricesCoordinator = runtime
     data = coordinator.data
 
     hourly = sorted(data.hourly.items())

@@ -170,3 +170,16 @@ async def test_diagnostics_includes_consumption_and_monthly_labels(
     assert dump["monthly_snapshot_labels"] == {"2026-03": "march 2026"}
     # Shared-failure marker round-tripped.
     assert dump["shared_failure"]["error"] == "transient HTTP 503 from supplier"
+
+
+async def test_diagnostics_returns_placeholder_when_runtime_data_undefined(
+    hass: HomeAssistant,
+) -> None:
+    """A user clicking 'Download diagnostics' mid-reload (entry.runtime_data
+    is HA's UNDEFINED singleton) must get a structured placeholder rather
+    than an AttributeError on coordinator.data."""
+    entry = _entry_with_data()
+    entry.add_to_hass(hass)
+    # Don't assign runtime_data: HA returns UNDEFINED for unset attributes.
+    dump = await async_get_config_entry_diagnostics(hass, entry)
+    assert dump == {"status": "coordinator_not_ready"}
