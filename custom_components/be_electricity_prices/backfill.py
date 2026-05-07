@@ -105,11 +105,23 @@ _COST_SENSOR_KEY = "current_year_cost"
 
 
 def _hours_in_month(month_first: date) -> int:
+    """Local-time hours between this 1st-of-month and the next.
+
+    Brussels March has 743 hours and October 745: ``days * 24`` would
+    misallocate the prosumer monthly fee on DST seam months by ~1/744
+    each. Anchoring on local midnight and routing through UTC absorbs
+    the DST offset; subtracting two zoneinfo-aware datetimes directly
+    returns the *wall-clock* span (always 31 days = 744h here) and
+    silently re-introduces the bug.
+    """
     if month_first.month == 12:
         next_first = date(month_first.year + 1, 1, 1)
     else:
         next_first = date(month_first.year, month_first.month + 1, 1)
-    return (next_first - month_first).days * 24
+    span = dt_util.start_of_local_day(next_first).astimezone(UTC) - (
+        dt_util.start_of_local_day(month_first).astimezone(UTC)
+    )
+    return round(span.total_seconds() / 3600)
 
 
 def _solar_kva(entry: ConfigEntry) -> float:
