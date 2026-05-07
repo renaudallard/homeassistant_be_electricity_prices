@@ -92,8 +92,10 @@ def test_find_window_respects_latest_end() -> None:
 
 
 def test_find_window_raises_when_too_few_hours() -> None:
+    from homeassistant.exceptions import ServiceValidationError
+
     start = datetime(2026, 4, 30, 0, 0, tzinfo=UTC)
-    with pytest.raises(ValueError, match="only 2 hours available"):
+    with pytest.raises(ServiceValidationError, match="only 2 hours available"):
         _find_window(_hourly([0.10, 0.10], start), 4, start, None, minimize=True)
 
 

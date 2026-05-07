@@ -32,6 +32,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -250,7 +251,7 @@ def _find_window(
             (h, bd) for h, bd in candidates if h + timedelta(hours=1) <= latest_utc
         ]
     if len(candidates) < duration_slots:
-        raise ValueError(
+        raise ServiceValidationError(
             f"only {len(candidates)} hours available in the requested window; "
             f"need {duration_slots}"
         )
@@ -289,7 +290,9 @@ def _resolve_window_inputs(
     """Parse a window-finding ServiceCall into pure-helper arguments."""
     duration_hours = float(call.data["duration_hours"])
     if duration_hours < 1:
-        raise ValueError("duration_hours must be at least 1 (price table is hourly)")
+        raise ServiceValidationError(
+            "duration_hours must be at least 1 (price table is hourly)"
+        )
     # The price table is hourly; round half-up so 1.5h becomes 2h windows
     # rather than silently widening to 1h. The service schema now exposes
     # whole-hour steps so callers shouldn't trip this branch from the UI.
@@ -302,15 +305,15 @@ def _resolve_window_inputs(
     if target_id is not None:
         entries = [e for e in entries if e.entry_id == target_id]
     if not entries:
-        raise ValueError(
+        raise ServiceValidationError(
             f"no loaded {DOMAIN} entry" + (f" with id {target_id}" if target_id else "")
         )
     coordinator = getattr(entries[0], "runtime_data", None)
     if not isinstance(coordinator, BePricesCoordinator):
-        raise ValueError("entry is reloading; try again in a moment")
+        raise ServiceValidationError("entry is reloading; try again in a moment")
     data = coordinator.data
     if data is None or not data.hourly:
-        raise ValueError("price table is empty; refresh the entry first")
+        raise ServiceValidationError("price table is empty; refresh the entry first")
 
     earliest = call.data.get("earliest_start") or dt_util.utcnow()
     latest = call.data.get("latest_end")
@@ -357,7 +360,7 @@ async def _async_backfill_service(call: ServiceCall) -> ServiceResponse:
     if target_id is not None:
         entries = [e for e in entries if e.entry_id == target_id]
     if not entries:
-        raise ValueError(
+        raise ServiceValidationError(
             f"no loaded {DOMAIN} entry" + (f" with id {target_id}" if target_id else "")
         )
     return await backfill_range(
