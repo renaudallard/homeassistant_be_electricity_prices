@@ -38,11 +38,14 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_API_KEY,
     CONF_CONSUMPTION_KWH,
+    CONF_CONTRACT,
     CONF_DAY_CONSUMPTION_KWH,
     CONF_DAY_INJECTION_KWH,
     CONF_INJECTION_KWH,
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
+    CONF_REGION,
+    CONF_SUPPLIER,
 )
 from .coordinator import (
     BePricesCoordinator,
@@ -117,9 +120,9 @@ async def async_get_config_entry_diagnostics(
     # Surfacing the labels makes "did the right cards land for past
     # months?" a one-glance check in a diagnostics dump.
     monthly_labels: dict[str, str | None] = {}
-    extractor_id = entry.data.get("supplier")
-    contract_id = entry.data.get("contract")
-    region = entry.data.get("region")
+    extractor_id = entry.data.get(CONF_SUPPLIER)
+    contract_id = entry.data.get(CONF_CONTRACT)
+    region = entry.data.get(CONF_REGION)
     if extractor_id and contract_id and region:
         for key, snap in sorted(_monthly_snapshots(hass).items()):
             if key[0] == extractor_id and key[1] == contract_id and key[2] == region:
