@@ -307,6 +307,26 @@
       }
     }
   },
+  "exceptions": {
+    "not_enough_hours": {
+      "message": "Only {available} hours are available in the requested window; need {needed}."
+    },
+    "duration_too_small": {
+      "message": "duration_hours must be at least 1 (the price table is hourly)."
+    },
+    "no_loaded_entry": {
+      "message": "No loaded Belgian Electricity Prices entry."
+    },
+    "no_loaded_entry_with_id": {
+      "message": "No loaded Belgian Electricity Prices entry with id {entry_id}."
+    },
+    "entry_reloading": {
+      "message": "The entry is reloading; try again in a moment."
+    },
+    "price_table_empty": {
+      "message": "The price table is empty; refresh the entry first."
+    }
+  },
   "issues": {
     "snapshot_stale": {
       "title": "Tariff data for {supplier} ({contract}) is more than {days} days old",

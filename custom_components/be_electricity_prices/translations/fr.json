@@ -307,6 +307,26 @@
       }
     }
   },
+  "exceptions": {
+    "not_enough_hours": {
+      "message": "Seulement {available} heures sont disponibles dans la fenetre demandee; il en faut {needed}."
+    },
+    "duration_too_small": {
+      "message": "duration_hours doit valoir au moins 1 (le tableau de prix est horaire)."
+    },
+    "no_loaded_entry": {
+      "message": "Aucune entree Belgian Electricity Prices chargee."
+    },
+    "no_loaded_entry_with_id": {
+      "message": "Aucune entree Belgian Electricity Prices chargee avec l'id {entry_id}."
+    },
+    "entry_reloading": {
+      "message": "L'entree est en cours de rechargement; reessayez dans un instant."
+    },
+    "price_table_empty": {
+      "message": "Le tableau de prix est vide; rafraichissez l'entree d'abord."
+    }
+  },
   "issues": {
     "snapshot_stale": {
       "title": "Les donnees tarifaires de {supplier} ({contract}) ont plus de {days} jours",

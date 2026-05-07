@@ -282,7 +282,13 @@ def _find_window(
     if len(candidates) < duration_slots:
         raise ServiceValidationError(
             f"only {len(candidates)} hours available in the requested window; "
-            f"need {duration_slots}"
+            f"need {duration_slots}",
+            translation_domain=DOMAIN,
+            translation_key="not_enough_hours",
+            translation_placeholders={
+                "available": str(len(candidates)),
+                "needed": str(duration_slots),
+            },
         )
 
     best_idx = 0
@@ -313,6 +319,28 @@ def _find_window(
     }
 
 
+def _no_loaded_entry_error(target_id: str | None) -> ServiceValidationError:
+    """Standard ServiceValidationError for a missing loaded entry.
+
+    Two translation keys (with vs without id) so the localised message
+    can phrase each variant naturally instead of injecting an empty
+    string.
+    """
+    suffix = f" with id {target_id}" if target_id else ""
+    if target_id:
+        return ServiceValidationError(
+            f"no loaded {DOMAIN} entry{suffix}",
+            translation_domain=DOMAIN,
+            translation_key="no_loaded_entry_with_id",
+            translation_placeholders={"entry_id": target_id},
+        )
+    return ServiceValidationError(
+        f"no loaded {DOMAIN} entry",
+        translation_domain=DOMAIN,
+        translation_key="no_loaded_entry",
+    )
+
+
 def _resolve_window_inputs(
     call: ServiceCall,
 ) -> tuple[dict[datetime, PriceBreakdown], int, datetime, datetime | None]:
@@ -320,7 +348,9 @@ def _resolve_window_inputs(
     duration_hours = float(call.data["duration_hours"])
     if duration_hours < 1:
         raise ServiceValidationError(
-            "duration_hours must be at least 1 (price table is hourly)"
+            "duration_hours must be at least 1 (price table is hourly)",
+            translation_domain=DOMAIN,
+            translation_key="duration_too_small",
         )
     # The price table is hourly; round half-up so 1.5h becomes 2h windows
     # rather than silently widening to 1h. The service schema now exposes
@@ -334,15 +364,21 @@ def _resolve_window_inputs(
     if target_id is not None:
         entries = [e for e in entries if e.entry_id == target_id]
     if not entries:
-        raise ServiceValidationError(
-            f"no loaded {DOMAIN} entry" + (f" with id {target_id}" if target_id else "")
-        )
+        raise _no_loaded_entry_error(target_id)
     coordinator = getattr(entries[0], "runtime_data", None)
     if not isinstance(coordinator, BePricesCoordinator):
-        raise ServiceValidationError("entry is reloading; try again in a moment")
+        raise ServiceValidationError(
+            "entry is reloading; try again in a moment",
+            translation_domain=DOMAIN,
+            translation_key="entry_reloading",
+        )
     data = coordinator.data
     if data is None or not data.hourly:
-        raise ServiceValidationError("price table is empty; refresh the entry first")
+        raise ServiceValidationError(
+            "price table is empty; refresh the entry first",
+            translation_domain=DOMAIN,
+            translation_key="price_table_empty",
+        )
 
     earliest = call.data.get("earliest_start") or dt_util.utcnow()
     latest = call.data.get("latest_end")
@@ -399,9 +435,7 @@ async def _async_backfill_service(call: ServiceCall) -> ServiceResponse:
     if target_id is not None:
         entries = [e for e in entries if e.entry_id == target_id]
     if not entries:
-        raise ServiceValidationError(
-            f"no loaded {DOMAIN} entry" + (f" with id {target_id}" if target_id else "")
-        )
+        raise _no_loaded_entry_error(target_id)
     return await backfill_range(
         call.hass,
         entries[0],

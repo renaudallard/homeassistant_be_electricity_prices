@@ -307,6 +307,26 @@
       }
     }
   },
+  "exceptions": {
+    "not_enough_hours": {
+      "message": "Nur {available} Stunden sind im gewuenschten Fenster verfuegbar; benoetigt: {needed}."
+    },
+    "duration_too_small": {
+      "message": "duration_hours muss mindestens 1 sein (die Preistabelle ist stuendlich)."
+    },
+    "no_loaded_entry": {
+      "message": "Kein geladener Eintrag von Belgian Electricity Prices."
+    },
+    "no_loaded_entry_with_id": {
+      "message": "Kein geladener Eintrag von Belgian Electricity Prices mit ID {entry_id}."
+    },
+    "entry_reloading": {
+      "message": "Der Eintrag wird neu geladen; bitte gleich erneut versuchen."
+    },
+    "price_table_empty": {
+      "message": "Die Preistabelle ist leer; aktualisieren Sie den Eintrag zuerst."
+    }
+  },
   "issues": {
     "snapshot_stale": {
       "title": "Tarifdaten fuer {supplier} ({contract}) sind aelter als {days} Tage",
