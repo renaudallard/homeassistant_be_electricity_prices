@@ -1028,19 +1028,33 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     "ecofix": 8_000_000,
 }
 
+# Per-supplier wallclock budgets (override the global). Symmetric to
+# the byte overrides: known-slow suppliers (bolt parses 6 large PDFs,
+# engie fans out across regions) honestly take longer than the 60-s
+# default. Same "steady-state + 25%" rule.
+_LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
+    "bolt": 90.0,
+    "engie": 90.0,
+}
+
 
 def _bytes_budget(supplier: str) -> int:
     return _BYTES_BUDGET_OVERRIDES.get(supplier, BYTES_WARN_THRESHOLD)
+
+
+def _latency_budget(supplier: str) -> float:
+    return _LATENCY_BUDGET_OVERRIDES.get(supplier, LATENCY_WARN_THRESHOLD_S)
 
 
 def _drift_warnings(metrics: dict[str, dict[str, float]]) -> list[str]:
     """Static-threshold drift signals: latency or byte budgets blown."""
     warnings: list[str] = []
     for supplier, m in sorted(metrics.items()):
-        if m["elapsed_s"] > LATENCY_WARN_THRESHOLD_S:
+        latency_budget = _latency_budget(supplier)
+        if m["elapsed_s"] > latency_budget:
             warnings.append(
                 f"`{supplier}` wallclock {m['elapsed_s']:.1f}s "
-                f"exceeds {LATENCY_WARN_THRESHOLD_S:.0f}s budget"
+                f"exceeds {latency_budget:.0f}s budget"
             )
         budget = _bytes_budget(supplier)
         if m["bytes"] > budget:
