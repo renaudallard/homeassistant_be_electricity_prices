@@ -39,6 +39,7 @@ from pathlib import Path
 
 import aiohttp
 import pypdf
+from homeassistant.util import dt as dt_util
 
 from .base import ExtractorError, SupplierSnapshot
 
@@ -621,8 +622,11 @@ def parse_valid_until(text: str) -> date | None:
     # year-1900 typo are both rejected, but legitimate archive cards
     # (Eneco / Cociter going several years back via fetch_for_month)
     # still parse a real validity_until rather than silently falling
-    # through to the textual fallback.
-    today = date.today()
+    # through to the textual fallback. Anchor on Brussels local time so
+    # a HA host running UTC doesn't compute a wrong year off the OS
+    # clock late in the local evening (the +-5-year window absorbs the
+    # narrow miss anyway, but matching the timezone is honest).
+    today = dt_util.now().date()
     max_year = today.year + 5
     min_year = today.year - 5
 
