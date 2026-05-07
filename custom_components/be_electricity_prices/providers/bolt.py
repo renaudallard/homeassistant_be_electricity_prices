@@ -50,7 +50,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
 import aiohttp
 
@@ -73,6 +73,8 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
+from homeassistant.util import dt as dt_util
+
 from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
@@ -137,8 +139,11 @@ _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
 def _document_url(contract: _ContractDef, suffix: str | None = None) -> str:
     if contract.folder == "fix":
-        # Fixed cards roll monthly; default to the current YYYYMM.
-        suffix = suffix or datetime.now(UTC).strftime("%Y%m")
+        # Fixed cards roll monthly on the Belgian calendar boundary.
+        # Use Brussels local time so the suffix flips at the same
+        # instant the supplier rotates the URL; UTC would mis-key by
+        # last month for the first 1-2 hours of every Brussels month.
+        suffix = suffix or dt_util.now().strftime("%Y%m")
     else:
         suffix = suffix or _VARIABLE_SUFFIX
     return f"{_BASE_URL}/{contract.folder}/{contract.slug}_res_el_fr_{suffix}.pdf"
@@ -208,9 +213,10 @@ async def _fetch_pdf_text(
         # ``tomorrow_prices_available`` sensor still reflects staleness.
         if contract.folder != "fix":
             raise
-        previous = (datetime.now(UTC).replace(day=1) - timedelta(days=1)).strftime(
-            "%Y%m"
-        )
+        # Same Brussels-local anchor as ``_document_url``: the
+        # "previous month" boundary follows local time so we don't
+        # accidentally roll back two months on the new-month UTC seam.
+        previous = (dt_util.now().replace(day=1) - timedelta(days=1)).strftime("%Y%m")
         fallback_url = _document_url(contract, suffix=previous)
         _LOGGER.warning(
             "Bolt %s: current-month PDF unavailable (%s); "
