@@ -1162,11 +1162,18 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return self._spot_cache
 
         client = EntsoeClient(api_key, self._session)
-        start_local = datetime.combine(
-            local_today, datetime.min.time(), tzinfo=now_local.tzinfo
+        # Anchor both endpoints on local midnight so the fetched UTC
+        # window matches the actual local-day hour count. A naive
+        # ``end = start + timedelta(days=N)`` adds 24 UTC hours and
+        # falls one hour short on the fall-back Sunday (local day has
+        # 25 hours), so the last local hour ends up missing from the
+        # spot cache. Same anchoring as ``_recorder_rows`` uses for the
+        # recorder window.
+        start = dt_util.start_of_local_day(local_today).astimezone(UTC)
+        days = 2 if want_tomorrow else 1
+        end = dt_util.start_of_local_day(local_today + timedelta(days=days)).astimezone(
+            UTC
         )
-        start = start_local.astimezone(UTC)
-        end = start + timedelta(days=2 if want_tomorrow else 1)
         prices = await client.fetch_day_ahead(start, end)
         self._spot_cache = prices
         self._spot_cache_day = local_today

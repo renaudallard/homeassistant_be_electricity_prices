@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant
@@ -63,6 +64,47 @@ def _entry() -> MockConfigEntry:
         },
         title="Eneco - Eneco Zon & Wind Vast (Wallonia)",
     )
+
+
+async def test_fetch_spot_prices_window_covers_local_day_on_dst_fallback(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Brussels fall-back Sunday (Oct 25 2026) has 25 local hours but
+    a naive ``end = start + timedelta(days=N)`` only walks 24 UTC hours,
+    leaving the last local hour (23:00 CET = Oct 25 22:00 UTC) outside
+    the fetched window. Pin a morning hour so want_tomorrow=False and
+    confirm the request reaches the actual local Oct 26 midnight."""
+    freezer.move_to("2026-10-25 09:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    captured: dict[str, datetime] = {}
+
+    async def _fake_fetch(start: datetime, end: datetime) -> dict[datetime, float]:
+        captured["start"] = start
+        captured["end"] = end
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+    ) as mock_client_cls:
+        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        await coord._fetch_spot_prices()
+
+    # Local Oct 25 00:00 CEST = Oct 24 22:00 UTC; local Oct 26 00:00 CET
+    # = Oct 25 23:00 UTC (25-hour day spans 25 UTC hours).
+    assert captured["start"] == datetime(2026, 10, 24, 22, 0, tzinfo=UTC)
+    assert captured["end"] == datetime(2026, 10, 25, 23, 0, tzinfo=UTC)
 
 
 async def test_force_refresh_drops_caches_and_requests_update(
