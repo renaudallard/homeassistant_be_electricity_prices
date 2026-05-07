@@ -226,3 +226,16 @@ jobs:
             echo "live-check rc=$rc; failing PR check" >&2
             exit 1
           fi
+
+      - name: Fail run on harness crash
+        # rc=8 means scripts/live_check.py raised at the top level
+        # (uncaught exception, e.g. unhandled aiohttp / SSL error in
+        # the harness itself, not a supplier signal). None of the
+        # issue-creation steps above fire for rc=8, so without this
+        # the run would end green with the traceback buried in the
+        # logs. Fail the run on push so it shows red on the Actions
+        # tab; the PR-fail step above already covers PR runs.
+        if: always() && github.event_name != 'pull_request' && steps.check.outputs.rc == '8'
+        run: |
+          echo "live-check harness crashed (rc=8); see traceback above" >&2
+          exit 1
