@@ -985,10 +985,13 @@ BYTES_WARN_THRESHOLD = 5_000_000
 #     Allow 15 MB.
 #   * engie: ~5.4 MB (sitemap discovery + ~24 region PDFs). Allow 8 MB
 #     so we don't fire on a slow day.
+#   * ecofix: ~6.6 MB (3 contracts x 2 regions, ~1.1 MB each PDF).
+#     Allow 8 MB.
 _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     "bolt": 50_000_000,
     "totalenergies": 15_000_000,
     "engie": 8_000_000,
+    "ecofix": 8_000_000,
 }
 
 
