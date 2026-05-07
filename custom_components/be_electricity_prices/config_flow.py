@@ -301,29 +301,32 @@ def _api_key_schema(defaults: dict[str, Any]) -> vol.Schema:
 
 
 async def _validate_entsoe_key(hass: HomeAssistant, api_key: str) -> str | None:
-    """Test the ENTSO-E key with a small day-ahead query.
+    """Test the ENTSO-E key with a day-ahead query.
 
     Returns ``None`` on success, ``"invalid_api_key"`` when ENTSO-E
     rejects the token, or ``"cannot_connect"`` for transport / parse
-    errors. A 200 OK with an Acknowledgement_MarketDocument and no
-    TimeSeries (e.g. ENTSO-E maintenance window or BE bidding-zone
-    publication gap) is accepted as valid: the server saw and
-    authorised the request, so the key works. The regular live
-    coordinator's stale-snapshot repair surfaces any persistent
-    no-data path on the next refresh tick.
+    errors and for HTTP 200 responses that come back as an
+    Acknowledgement_MarketDocument with no TimeSeries. Use a 24h
+    window anchored on yesterday: a quota-exhausted token returns
+    HTTP 200 + an empty Acknowledgement, and the BE bidding zone
+    rarely (never, in practice) goes a full local day with no
+    publication, so an empty 24h response really does mean "the
+    server can't fulfil the request" - whether quota or maintenance,
+    the right answer is "key not usable" rather than letting the
+    user finalise an entry that fails on first refresh.
     """
     session = async_get_clientsession(hass)
     client = EntsoeClient(api_key, session)
-    yesterday_noon = dt_util.utcnow().replace(
-        hour=10, minute=0, second=0, microsecond=0
+    yesterday = dt_util.utcnow().replace(
+        hour=0, minute=0, second=0, microsecond=0
     ) - timedelta(days=1)
     try:
-        await client.fetch_day_ahead(
-            yesterday_noon, yesterday_noon + timedelta(hours=2)
-        )
+        prices = await client.fetch_day_ahead(yesterday, yesterday + timedelta(days=1))
     except EntsoeAuthError:
         return "invalid_api_key"
     except EntsoeError:
+        return "cannot_connect"
+    if not prices:
         return "cannot_connect"
     return None
 
