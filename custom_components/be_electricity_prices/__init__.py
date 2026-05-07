@@ -270,7 +270,8 @@ def _find_window(
       latest_utc     if set, only hours whose end (h + 1h) is on/before
                      this UTC time are considered.
 
-    Raises ``ValueError`` when fewer than ``duration_slots`` hours match.
+    Raises ``ServiceValidationError`` (translation_key=``not_enough_hours``)
+    when fewer than ``duration_slots`` hours match.
     """
     hours = sorted(hourly.items())
     earliest_anchor = earliest_utc.replace(minute=0, second=0, microsecond=0)
