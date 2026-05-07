@@ -115,7 +115,7 @@ All sensors share one device per config entry.
 
 | Sensor | Description |
 | --- | --- |
-| `current_price` | All-in EUR/kWh **now**. Attributes: `today` and `tomorrow` (chronological lists of `{start, energy, network, taxes, all_in}`), snapshot age, last fetch error, `cheapest_4h_today` and `most_expensive_4h_today` (chronologically sorted, disjoint lists of `{start, price}`). |
+| `current_price` | All-in EUR/kWh **now**. Attributes: `today` and `tomorrow` (chronological lists of `{start, energy, network, taxes, all_in}`), snapshot age, last fetch error, `cheapest_4h_today` and `most_expensive_4h_today` (chronologically sorted, disjoint lists of `{start, price}`). On flat-tariff days where every hour rounds to the same all-in price (typical for fixed contracts), the cheapest list always comes back as the first 4 hours of the day and the most-expensive as the last 4 — automations keying on these for "cheapest window" should treat the output as undefined when the day's prices don't actually vary. |
 | `next_hour_price` | All-in EUR/kWh for the next hour. |
 | `today_average` | Daily average all-in EUR/kWh. |
 | `today_min` / `today_max` | Daily extremes. |
@@ -134,7 +134,7 @@ All sensors share one device per config entry.
 | Sensor | Created when | Description |
 | --- | --- | --- |
 | `capacity_cost` | Region = Flanders | Current monthly capacity cost in EUR (`peak_kw × DSO_capacity_rate / 12`). |
-| `monthly_peak_kw` | Region = Flanders | Running monthly peak power in kW (resets the 1st). |
+| `monthly_peak_kw` | Region = Flanders | Running monthly peak power in kW (resets the 1st). State class is `MEASUREMENT` (mandated by HA for the POWER device class), so the long-term-statistics graph defaults to the **mean** aggregation. To see the true monthly peaks, switch the statistic-graph card to **Max** under Developer Tools → Statistics. |
 | `prosumer_cost` | Compensation regime + `solar_kva > 0` | Monthly DSO compensation fee in EUR (`solar_kva × DSO_prosumer_rate / 12`). Only valid for Walloon installations certified before 2024-01-01; ends 2030-12-31. |
 | `injection_price` | Injection regime | EUR/kWh paid for energy fed back to the grid. Dynamic contracts get `factor × spot + base` from the supplier's PDF using the live ENTSO-E spot; static contracts get the supplier's printed monthly indicative. Plug into HA Energy's *Solar production* → *I receive variable compensation based on a tariff* slot. Can go negative at low spot (you pay to inject). |
 
