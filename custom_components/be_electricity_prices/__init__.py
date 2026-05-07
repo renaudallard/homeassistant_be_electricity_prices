@@ -42,6 +42,7 @@ from homeassistant.core import (
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import dt as dt_util
 
 from .backfill import backfill_if_missing, backfill_range
@@ -88,6 +89,44 @@ BACKFILL_SCHEMA = vol.Schema(
 )
 
 
+CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa: ARG001 - HA hook signature
+    """Register the integration's services once at startup.
+
+    Service handlers are domain-scoped, not entry-scoped, so they live
+    here rather than in ``async_setup_entry``. Registering once
+    eliminates the deregister-then-reregister window when the user
+    reloads the only config entry: a ``be_electricity_prices.refresh``
+    automation firing in that window used to fail with "service not
+    found" until setup completed again.
+    """
+    hass.services.async_register(DOMAIN, SERVICE_REFRESH, _async_refresh_service)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CHEAPEST_WINDOW,
+        _async_cheapest_window_service,
+        schema=WINDOW_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_MOST_EXPENSIVE_WINDOW,
+        _async_most_expensive_window_service,
+        schema=WINDOW_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_BACKFILL_STATISTICS,
+        _async_backfill_service,
+        schema=BACKFILL_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> bool:
     """Set up one config entry."""
     coordinator = BePricesCoordinator(hass, entry)
@@ -98,33 +137,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    if not hass.services.has_service(DOMAIN, SERVICE_REFRESH):
-        hass.services.async_register(DOMAIN, SERVICE_REFRESH, _async_refresh_service)
-    if not hass.services.has_service(DOMAIN, SERVICE_CHEAPEST_WINDOW):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_CHEAPEST_WINDOW,
-            _async_cheapest_window_service,
-            schema=WINDOW_SCHEMA,
-            supports_response=SupportsResponse.ONLY,
-        )
-    if not hass.services.has_service(DOMAIN, SERVICE_MOST_EXPENSIVE_WINDOW):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_MOST_EXPENSIVE_WINDOW,
-            _async_most_expensive_window_service,
-            schema=WINDOW_SCHEMA,
-            supports_response=SupportsResponse.ONLY,
-        )
-    if not hass.services.has_service(DOMAIN, SERVICE_BACKFILL_STATISTICS):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_BACKFILL_STATISTICS,
-            _async_backfill_service,
-            schema=BACKFILL_SCHEMA,
-            supports_response=SupportsResponse.OPTIONAL,
-        )
 
     # One-shot backfill: only fires when the recorder has no
     # statistics for current_price at the Jan 1 anchor, so a normal
@@ -177,11 +189,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
             ]
             if not siblings:
                 evict_shared_caches(hass, cached_key, cached_key[0])
-    if unloaded and not hass.config_entries.async_loaded_entries(DOMAIN):
-        hass.services.async_remove(DOMAIN, SERVICE_REFRESH)
-        hass.services.async_remove(DOMAIN, SERVICE_CHEAPEST_WINDOW)
-        hass.services.async_remove(DOMAIN, SERVICE_MOST_EXPENSIVE_WINDOW)
-        hass.services.async_remove(DOMAIN, SERVICE_BACKFILL_STATISTICS)
+    # Services live for the integration's lifetime (registered in
+    # async_setup), so they're not torn down here. The previous
+    # per-entry registration window briefly returned "service not
+    # found" to in-flight automations during a single-entry reload.
     return unloaded
 
 
