@@ -1013,6 +1013,51 @@ async def test_load_persistent_discards_blob_for_other_supplier(
     assert coord._snapshot_fetched_at is None
 
 
+async def test_load_persistent_drops_historical_spots_on_tuple_mismatch(
+    hass: HomeAssistant,
+) -> None:
+    """When the persisted snapshot tuple differs from the current entry
+    (e.g. user just swapped a Cociter dynamic contract for an Eneco
+    fixed one via OptionsFlow), the ENTSO-E historical spots harvested
+    under the previous tuple are no longer queried by any code path on
+    the new contract. Loading them anyway leaves stale state in memory
+    and re-saves it indefinitely; the load must skip them whenever the
+    tuple guard rejects the snapshot."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "none",
+            "api_key": "k",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    stale_payload = {
+        "entry_supplier": "cociter",
+        "entry_contract": "cociter_dynamic",
+        "entry_region": "wallonia",
+        "historical_spots": {
+            "2026-01-01T00:00:00+00:00": 0.123,
+            "2026-01-01T01:00:00+00:00": 0.125,
+        },
+    }
+
+    async def _fake_load() -> dict[str, object]:
+        return stale_payload
+
+    with patch.object(coord._store, "async_load", new=_fake_load):
+        await coord.async_load_persistent()
+
+    assert coord._historical_spots == {}, (
+        "historical_spots from a different supplier tuple must be discarded"
+    )
+
+
 async def test_evict_bumps_tuple_generation_blocks_inflight_write(
     hass: HomeAssistant,
 ) -> None:

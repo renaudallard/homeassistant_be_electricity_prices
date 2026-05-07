@@ -594,8 +594,14 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     self._peak_month = date.fromisoformat(month)
                 except ValueError:
                     self._peak_month = None
+        # Same tuple_mismatch gate as the snapshot above: ENTSO-E spots
+        # were collected while the entry was on a *dynamic* contract on
+        # the previous tuple. After an OptionsFlow swap to a static
+        # supplier they're never queried again but would otherwise be
+        # re-saved indefinitely (pruned only at year-end), wasting
+        # ~140KB of disk/memory until the next Jan 1.
         hist = stored.get("historical_spots")
-        if isinstance(hist, dict):
+        if isinstance(hist, dict) and not tuple_mismatch:
             for k, v in hist.items():
                 if not isinstance(k, str) or not isinstance(v, (int, float)):
                     continue
