@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/github/actions/workflow/status/renaudallard/homeassistant_be_electricity_prices/test.yml?style=flat-square&label=tests" alt="Tests"/>
   </a>
   <a href="https://www.home-assistant.io/">
-    <img src="https://img.shields.io/badge/Home%20Assistant-2026.4%2B-41BDF5?logo=home-assistant&logoColor=white&style=flat-square" alt="Home Assistant"/>
+    <img src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-41BDF5?logo=home-assistant&logoColor=white&style=flat-square" alt="Home Assistant"/>
   </a>
   <a href="https://hacs.xyz">
     <img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square" alt="HACS"/>
@@ -38,7 +38,7 @@ tariff card. **No EUR values are hardcoded in the source.** Add a supplier
 by writing one Python module that knows where to find that supplier's
 publication and how to parse it.
 
-> Targets Home Assistant **2026.4 or newer**.
+> Targets Home Assistant **2026.2 or newer** (the version pinned in CI).
 
 ## Highlights
 
