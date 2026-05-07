@@ -90,6 +90,17 @@ def test_hours_in_month_handles_leap_and_non_leap_february() -> None:
     assert bf._hours_in_month(date(2026, 12, 1)) == 31 * 24  # rolls into next year
 
 
+def test_hours_in_month_accounts_for_dst_seam() -> None:
+    """Brussels DST: spring-forward Sunday in March drops one local hour
+    (so March has 743), fall-back Sunday in October adds one (October
+    has 745). Anchoring the span on UTC after start_of_local_day is the
+    only way to surface that; subtracting two zoneinfo-aware datetimes
+    directly returns the wall-clock 744 and silently re-introduces the
+    pre-cycle-10 drift in the prosumer-fee accrual."""
+    assert bf._hours_in_month(date(2026, 3, 1)) == 743
+    assert bf._hours_in_month(date(2026, 10, 1)) == 745
+
+
 def test_solar_kva_invalid_inputs_clamp_to_zero() -> None:
     # Each branch of the helper: missing key, non-numeric, negative.
     e_missing = SimpleNamespace(data={})
