@@ -103,10 +103,6 @@ DSO_CHOICES: Final[dict[str, tuple[tuple[str, str], ...]]] = {
     REGION_BRUSSELS: ((DSO_SIBELGA, "Sibelga"),),
 }
 
-TARIFF_FIXED: Final = "fixed"
-TARIFF_VARIABLE: Final = "variable"
-TARIFF_DYNAMIC: Final = "dynamic"
-
 CONF_REGION: Final = "region"
 CONF_DSO: Final = "dso"
 CONF_SUPPLIER: Final = "supplier"
