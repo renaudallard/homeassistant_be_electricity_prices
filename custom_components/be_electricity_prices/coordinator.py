@@ -632,13 +632,19 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
 
         spot_prices: dict[datetime, float] = {}
-        # Auth-issue clear path runs OUTSIDE the DynamicRates branch so
-        # that an existing "auth failed" Repairs entry auto-resolves
-        # when the user switches a previously-dynamic contract to a
-        # static one (the new snapshot type makes the dynamic branch
-        # unreachable; without this, the issue would linger forever
-        # because only an entry deletion wipes it).
+        # Auth + extractor issue clear paths run OUTSIDE the
+        # DynamicRates branch so that an existing Repairs entry
+        # auto-resolves regardless of how the snapshot got refreshed
+        # this tick (sibling-cache adoption, self-fresh probe match,
+        # negative-cache propagation, or a fresh fetch). Reaching this
+        # point means we have a usable snapshot, so the extractor is
+        # currently working - even if the prior tick had to mark it
+        # broken. Without this, a stuck issue could only auto-resolve
+        # on the next *fresh fetch* (line 987), which probe-matched
+        # / sibling-adopted ticks skip entirely. Same shape as the
+        # cycle-7 entsoe_auth_failed fix.
         self._sync_entsoe_auth_issue(False)
+        self._sync_extractor_failed_issue(None)
         if isinstance(self._snapshot.energy, DynamicRates):
             try:
                 spot_prices = await self._fetch_spot_prices()

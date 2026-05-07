@@ -676,6 +676,38 @@ async def test_static_contract_clears_stuck_entsoe_auth_issue(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_successful_tick_clears_stuck_extractor_failed_issue(
+    hass: HomeAssistant,
+) -> None:
+    """Regression for cycle-9 #1: a previously-set extractor_failed
+    issue must auto-resolve on the next successful tick regardless of
+    whether the snapshot came from a fresh fetch or from any of the
+    short-circuit paths (sibling adoption, self-fresh probe-match).
+    Without the unconditional clear after the snapshot check, the
+    issue lingers forever after the failing tuple recovers via a
+    sibling coordinator. Same shape as the cycle-7 entsoe_auth_failed
+    fix."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"extractor_failed_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    coord._sync_extractor_failed_issue("regex drift in tax block")
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    # Drop a static snapshot in place; mock _maybe_refresh_snapshot so
+    # the tick reaches the unconditional clear without going through a
+    # network round-trip (mimicking the sibling-cache-adopt path).
+    coord._snapshot = make_snapshot()
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+
+    await coord._async_update_data()
+
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
 async def test_async_remove_entry_clears_all_repair_issues(
     hass: HomeAssistant,
 ) -> None:
