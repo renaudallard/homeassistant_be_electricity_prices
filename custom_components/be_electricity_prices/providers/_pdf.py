@@ -454,7 +454,11 @@ _MONTH_NAMES: dict[str, int] = {
     "novembre": 11,
     "decembre": 12,
     "décembre": 12,
-    # English (some cards mix languages on cross-region documents)
+    # English (some cards mix languages on cross-region documents).
+    # april / september / november / december share their spelling
+    # with Dutch and are already registered above; repeating them
+    # here would trip ruff's F601 (duplicate dict key literal), so
+    # the English block lists only the names that actually differ.
     "january": 1,
     "february": 2,
     "march": 3,
