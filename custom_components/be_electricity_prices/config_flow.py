@@ -58,9 +58,6 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.util import dt as dt_util
-
-from .api import EntsoeAuthError, EntsoeClient, EntsoeError
 from homeassistant.helpers.selector import (
     EntitySelector,
     EntitySelectorConfig,
@@ -75,7 +72,9 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
     TextSelectorType,
 )
+from homeassistant.util import dt as dt_util
 
+from .api import EntsoeAuthError, EntsoeClient, EntsoeError
 from .const import (
     CAPACITY_MODE_FIXED,
     CAPACITY_MODE_SENSOR,
