@@ -45,7 +45,15 @@ from datetime import date
 
 import aiohttp
 
-from ..const import REGION_WALLONIA
+from ..const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    REGION_WALLONIA,
+    WALLONIA_DSO_KEYS,
+)
 from ._pdf import (
     SIGN_CHARS,
     archive_validity_check,
@@ -97,8 +105,23 @@ _DYN_RE = re.compile(
     r'href="(https?://[^"]*RCDyn_SM3_Coop-(\d{4})-fr\.pdf)"', re.IGNORECASE
 )
 
-_DSO_LABELS = ("AIEG", "AIESH", "ORES", "RESA", "REW")
-_DSO_KEY = {label: label.lower() for label in _DSO_LABELS}
+# Cociter prints one row per Wallonian DSO it serves; the labels are the
+# uppercase strings that anchor each row in the PDF (case-sensitive). The
+# registry key on the right is what the rest of the integration uses. The
+# set of keys must equal WALLONIA_DSO_KEYS — if Cociter starts (or stops)
+# serving a Wallonian DSO, update both this map and const.WALLONIA_DSO_KEYS
+# in lockstep so the snapshot's overlays cover every selectable DSO.
+_DSO_KEY: dict[str, str] = {
+    "AIEG": DSO_AIEG,
+    "AIESH": DSO_AIESH,
+    "ORES": DSO_ORES,
+    "RESA": DSO_RESA,
+    "REW": DSO_REW,
+}
+_DSO_LABELS = tuple(_DSO_KEY)
+assert set(_DSO_KEY.values()) == set(WALLONIA_DSO_KEYS), (
+    "Cociter DSO map drifted from const.WALLONIA_DSO_KEYS"
+)
 
 _CONTRACT_PATTERNS: dict[str, re.Pattern[str]] = {
     "cociter_variable": _VAR_RE,
