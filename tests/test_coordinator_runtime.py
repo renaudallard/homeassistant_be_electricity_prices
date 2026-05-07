@@ -646,6 +646,36 @@ async def test_sync_entsoe_auth_issue_creates_and_clears(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_static_contract_clears_stuck_entsoe_auth_issue(
+    hass: HomeAssistant,
+) -> None:
+    """Regression for f085501: a previously-set ENTSO-E auth issue must
+    auto-resolve on the next successful tick when the coordinator is
+    holding a static (non-Dynamic) snapshot. Without the unconditional
+    clear, the issue lingers in Repairs forever after the user
+    switches a stuck dynamic entry to a static contract via OptionsFlow."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"entsoe_auth_failed_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    # Pre-set the auth issue (the user's stuck-dynamic state).
+    coord._sync_entsoe_auth_issue(True, "ENTSO-E rejected the API key")
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    # Drop a static snapshot in place; mock _maybe_refresh_snapshot and
+    # _track_monthly_peak so the tick reaches the auth-issue clear without
+    # going through a network round-trip.
+    coord._snapshot = make_snapshot()  # default is FixedRates (static)
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+
+    await coord._async_update_data()
+
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
 async def test_async_remove_entry_clears_all_repair_issues(
     hass: HomeAssistant,
 ) -> None:
