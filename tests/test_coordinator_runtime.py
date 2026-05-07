@@ -982,7 +982,7 @@ async def test_load_persistent_discards_blob_for_other_supplier(
     )
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    stale_payload = {
+    stale_payload: dict[str, object] = {
         "entry_supplier": "bolt",  # blob written under a different supplier
         "entry_contract": "bolt_fix",
         "entry_region": "wallonia",
@@ -1037,7 +1037,7 @@ async def test_load_persistent_drops_historical_spots_on_tuple_mismatch(
     )
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    stale_payload = {
+    stale_payload: dict[str, object] = {
         "entry_supplier": "cociter",
         "entry_contract": "cociter_dynamic",
         "entry_region": "wallonia",
