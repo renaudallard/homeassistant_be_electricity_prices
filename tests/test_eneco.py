@@ -228,9 +228,15 @@ def test_fetch_for_month_returns_snapshot_when_url_matches_month() -> None:
     """The Dec-2025 fixture parses cleanly and validates against the
     requested year-month: fetch_for_month must surface the snapshot."""
     text = fixture_text("eneco_flex_dec25.pdf")
-    with patch(
-        "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
-        new=AsyncMock(return_value=text),
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+            new=AsyncMock(return_value="ok"),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+            new=AsyncMock(return_value=text),
+        ),
     ):
         snap = _run(fetch_for_month(None, "power_flex", "wallonia", date(2025, 12, 1)))  # type: ignore[arg-type]
     assert snap is not None
@@ -244,9 +250,15 @@ def test_fetch_for_month_rejects_when_validity_does_not_cover_month() -> None:
     valid_until won't intersect the requested month and we must
     return None instead of trusting it."""
     text = fixture_text("eneco_flex_dec25.pdf")
-    with patch(
-        "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
-        new=AsyncMock(return_value=text),
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+            new=AsyncMock(return_value="ok"),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+            new=AsyncMock(return_value=text),
+        ),
     ):
         # The Dec-2025 fixture covers December, not March.
         snap = _run(fetch_for_month(None, "power_flex", "wallonia", date(2025, 3, 1)))  # type: ignore[arg-type]
@@ -254,13 +266,12 @@ def test_fetch_for_month_rejects_when_validity_does_not_cover_month() -> None:
 
 
 def test_fetch_for_month_returns_none_on_404() -> None:
-    """An archive miss (HTTP 4xx surfaces as ExtractorError) must
-    degrade gracefully so the coordinator can fall back to the proxy."""
-    from custom_components.be_electricity_prices.providers.base import ExtractorError
-
+    """An archive miss (HEAD returns None for every candidate volume)
+    must degrade gracefully so the coordinator can fall back to the
+    proxy."""
     with patch(
-        "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
-        new=AsyncMock(side_effect=ExtractorError("HTTP 404")),
+        "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+        new=AsyncMock(return_value=None),
     ):
         snap = _run(fetch_for_month(None, "power_flex", "wallonia", date(2024, 6, 1)))  # type: ignore[arg-type]
     assert snap is None

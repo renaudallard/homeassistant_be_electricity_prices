@@ -67,6 +67,7 @@ from ._pdf import (
     archive_validity_check,
     fetch_pdf_text,
     fetch_text,
+    head_freshness_key,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -189,6 +190,14 @@ async def fetch_for_month(
     for volume in ("01", "02", "03", "04", "05"):
         issue = f"{volume}{yymm}"
         url = f"{_BASE_URL}/BC_032_{issue}_NL_ENECO_POWER_{slug}.pdf"
+        # HEAD-probe first so a missing volume returns inside the
+        # 10s probe budget instead of waiting on the 30s GET timeout
+        # for each candidate; missing-month worst-case latency drops
+        # from 5 x 30s = 150s to 5 x 10s ~= 50s under sustained CDN
+        # issues, and is unchanged in the typical case (HEAD returns
+        # 404 instantly).
+        if await head_freshness_key(session, url) is None:
+            continue
         try:
             text = await fetch_pdf_text(session, url)
         except ExtractorError:
