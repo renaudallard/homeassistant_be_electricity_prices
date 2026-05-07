@@ -145,6 +145,13 @@ def _today_ranked(
     hours are populated (e.g. right after midnight on a static contract),
     the cheapest take their share first and the most-expensive list gets
     only what remains. Each list is returned in chronological order.
+
+    On flat tariffs (every hour rounded to the same all-in price) the
+    chronological tie-break makes the result fully deterministic: the
+    cheapest list will always be the first ``count`` hours of the day
+    and the most-expensive list will be the last ``count``. Automations
+    keying on these attributes for "cheapest window" should treat the
+    output as undefined when prices don't actually vary across the day.
     """
     today = dt_util.now().date()
     pairs = [
