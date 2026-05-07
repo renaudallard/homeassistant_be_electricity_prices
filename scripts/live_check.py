@@ -168,13 +168,16 @@ async def _on_request_end(
     bucket = _metrics_bucket(supplier)
     bucket["fetches"] += 1.0
     bucket["elapsed_s"] += time.monotonic() - getattr(ctx, "start", time.monotonic())
-    cl = params.response.headers.get("Content-Length")
-    if cl is not None:
-        try:
-            bucket["bytes"] += float(cl)
-        except ValueError:
-            # Non-numeric header is upstream noise, not our problem.
-            pass
+    # ``response.content_length`` is aiohttp's post-decode body length
+    # and is populated even on chunked responses where the
+    # ``Content-Length`` request header is absent. The earlier
+    # header-only read silently undercounted any supplier serving
+    # ``Transfer-Encoding: chunked``, so the per-supplier byte budgets
+    # measured an arbitrarily smaller quantity than the variable name
+    # suggests.
+    body_bytes = params.response.content_length
+    if body_bytes is not None:
+        bucket["bytes"] += float(body_bytes)
 
 
 def _trace_config() -> aiohttp.TraceConfig:
