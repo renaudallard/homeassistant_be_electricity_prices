@@ -168,6 +168,17 @@ _SHARED_FAILURE_TTL = timedelta(minutes=5)
 # refresh. Lives in-memory only; rebuilt fresh on HA restart.
 _MONTHLY_SNAPSHOTS_KEY = "monthly_snapshot_cache"
 
+# Per-(supplier, contract, region, YYYY-MM) timestamp of the last
+# transient ``fetch_for_month`` failure. ``_snapshot_for_month``
+# deliberately does NOT cache a transient error as a negative result
+# (cached None means "no archive for this month"), so without this
+# secondary marker every hourly tick would re-attempt every still-
+# uncached past month against a flaky CDN. The TTL matches the live
+# TTL: long enough to dedupe one hour of update ticks, short enough
+# that a real recovery is picked up promptly.
+_MONTHLY_FAILED_FETCHES_KEY = "monthly_snapshot_failed_fetches"
+_MONTHLY_FAILURE_TTL = timedelta(minutes=30)
+
 
 @dataclass
 class _SharedSnapshot:
@@ -247,8 +258,10 @@ def evict_shared_caches(
         for k in monthly
         if k[0] == extractor_id and k[1] == contract and k[2] == region
     ]
+    monthly_failed = _monthly_failed_fetches(hass)
     for k in stale:
         monthly.pop(k, None)
+        monthly_failed.pop(k, None)
         held_m = monthly_locks.get(k)
         if held_m is not None and not held_m.locked():
             monthly_locks.pop(k, None)
@@ -269,6 +282,15 @@ def _monthly_snapshots(
 ) -> dict[tuple[str, str, str, str], "SupplierSnapshot | None"]:
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     return bucket.setdefault(_MONTHLY_SNAPSHOTS_KEY, {})  # type: ignore[no-any-return]
+
+
+def _monthly_failed_fetches(
+    hass: HomeAssistant,
+) -> dict[tuple[str, str, str, str], datetime]:
+    """Per-(supplier, contract, region, YYYY-MM) timestamp of the last
+    transient ``fetch_for_month`` failure."""
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_MONTHLY_FAILED_FETCHES_KEY, {})  # type: ignore[no-any-return]
 
 
 _MONTHLY_LOCKS_KEY = "monthly_snapshot_locks"
@@ -327,6 +349,7 @@ async def _snapshot_for_month(
     TotalEnergies, Engie, Luminus, DATS 24, Mega, Bolt).
     """
     cache = _monthly_snapshots(hass)
+    failed = _monthly_failed_fetches(hass)
     cache_key = (
         extractor.id,
         contract,
@@ -340,6 +363,15 @@ async def _snapshot_for_month(
     if fetch_archived is None:
         cache[cache_key] = None
         return current_snapshot
+    # Negative cache: a transient fetch_for_month failure is intentionally
+    # NOT written to ``cache`` (a cached None means "no archive for
+    # this month"); without this secondary marker the hourly YTD walk
+    # would re-attempt every uncached month against a flaky CDN. Skip
+    # the retry while the marker is fresh; current_snapshot is the
+    # documented proxy for non-archive months.
+    last_fail = failed.get(cache_key)
+    if last_fail is not None and dt_util.utcnow() - last_fail < _MONTHLY_FAILURE_TTL:
+        return current_snapshot
     gen_at_entry = _tuple_generation(hass, cache_key)
     async with _monthly_lock(hass, cache_key):
         # Re-check under the lock so the second waiter doesn't repeat
@@ -347,6 +379,12 @@ async def _snapshot_for_month(
         if cache_key in cache:
             cached = cache[cache_key]
             return cached if cached is not None else current_snapshot
+        last_fail = failed.get(cache_key)
+        if (
+            last_fail is not None
+            and dt_util.utcnow() - last_fail < _MONTHLY_FAILURE_TTL
+        ):
+            return current_snapshot
         fetch_failed = False
         try:
             snap = await fetch_archived(session, contract, region, year_month)
@@ -361,6 +399,7 @@ async def _snapshot_for_month(
             )
             snap = None
             fetch_failed = True
+            failed[cache_key] = dt_util.utcnow()
         # Skip the cache write if eviction ran during the await: the
         # tuple is no longer this entry's, and re-creating the row
         # would orphan it for any future re-add of the same tuple.

@@ -511,11 +511,14 @@ async def test_snapshot_for_month_does_not_cache_transient_failures(
     hass: HomeAssistant,
 ) -> None:
     """A raised exception during fetch_for_month must NOT poison the
-    cache: caching the failure as None would mean the same wording as
-    'supplier doesn't archive this month' and the entry would serve
-    uncredited rates for that month until the next reload. The next
-    refresh should retry, and a second call that succeeds should
-    populate the cache normally."""
+    positive cache: caching the failure as None would mean the same
+    wording as 'supplier doesn't archive this month' and the entry
+    would serve uncredited rates for that month until the next reload.
+    Once the negative-cache TTL elapses the next refresh retries and
+    a successful retry populates the positive cache normally."""
+    from custom_components.be_electricity_prices.coordinator import (
+        _monthly_failed_fetches,
+    )
 
     current = _archive_snapshot("2026-04")
     archived = _archive_snapshot("2024-06")
@@ -536,15 +539,27 @@ async def test_snapshot_for_month_does_not_cache_transient_failures(
         fetch_for_month=_flaky,
     )
     _monthly_snapshots(hass).clear()
+    _monthly_failed_fetches(hass).clear()
     snap = await _snapshot_for_month(
         hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
     )
-    # First call raised: falls back to current snapshot, but the cache
-    # must NOT have been populated.
+    # First call raised: falls back to current snapshot, but the
+    # positive cache must NOT have been populated.
     assert snap is current
     cache_key = ("test", "test", "wallonia", "2024-06")
     assert cache_key not in _monthly_snapshots(hass)
-    # Second call succeeds and is cached.
+    # Failure marker WAS recorded; the next call returns the proxy
+    # without re-attempting the fetch (avoids the hourly fan-out
+    # against a flaky supplier).
+    assert cache_key in _monthly_failed_fetches(hass)
+    snap = await _snapshot_for_month(
+        hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
+    )
+    assert snap is current
+    assert call == 1
+    # Clear the failure marker (TTL elapsed) and the next call
+    # succeeds and is cached.
+    _monthly_failed_fetches(hass).clear()
     snap = await _snapshot_for_month(
         hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
     )
