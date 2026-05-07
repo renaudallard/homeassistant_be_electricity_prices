@@ -519,15 +519,18 @@ def _extract_flanders_renewables(text: str) -> float:
 
     The card prints both the ex-VAT total (``1,520 c€/kWh excl. BTW``)
     and the incl-VAT total (``1,6112 c€/kWh incl. BTW 6%``). Read the
-    incl-VAT value directly so we don't double-apply VAT.
+    incl-VAT value directly so we don't double-apply VAT. The VAT
+    percentage in the row label is whatever the card printed - match
+    any 1-2 digit number so a future Belgian VAT change doesn't fail
+    the snapshot fetch.
     """
     match = re.search(
-        r"([\d,]+)\s*c€/kWh\s+incl\.?\s*BTW\s*6%",
+        r"([\d,]+)\s*c€/kWh\s+incl\.?\s*BTW\s*\d+\s*%",
         text,
     )
     if not match:
         raise ExtractorError(
-            "EBEM: Flanders renewables 'Totale bijdrage incl. BTW 6%' value not found"
+            "EBEM: Flanders renewables 'Totale bijdrage incl. BTW' value not found"
         )
     return to_float(match.group(1)) / 100.0
 

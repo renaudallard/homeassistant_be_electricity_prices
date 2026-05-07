@@ -238,12 +238,12 @@ def test_unknown_contract_raises() -> None:
 
 def test_missing_renewables_block_is_fatal() -> None:
     """The Bijdrage groene stroom + WKK total is mandatory on every EBEM
-    card; a layout drift that wipes the 'incl. BTW 6%' row would silently
+    card; a layout drift that wipes the 'incl. BTW <N>%' row would silently
     zero ~1.6 c€/kWh of bills without this guard.
     """
     text = _layout(_VARIABLE)
     truncated = text.replace("c€/kWh incl. BTW 6%", "c€/kWh excl. BTW 6%")
-    with pytest.raises(ExtractorError, match="Totale bijdrage incl. BTW 6%"):
+    with pytest.raises(ExtractorError, match="Totale bijdrage incl. BTW"):
         parse_snapshot("ebem_variable", truncated, "test://v", "2026-05")
 
 
