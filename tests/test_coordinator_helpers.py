@@ -328,6 +328,34 @@ async def test_recorder_daily_kwh_uses_change_not_sum(
     assert out == {date(2026, 1, 1): 12.0, date(2026, 1, 2): 11.0}
 
 
+async def test_recorder_daily_kwh_handles_dst_transitions(
+    hass: HomeAssistant,
+) -> None:
+    """Brussels DST seams: spring forward (2026-03-29: 23-hour local
+    day) and fall back (2026-10-25: 25-hour local day) must surface
+    as one-row-per-local-day in the recorder helper. _recorder_rows
+    walks +1 calendar day off start_of_local_day; the local-day
+    binning at line 1348 (datetime.fromtimestamp(ts, UTC).as_local())
+    is what guarantees the bucket lands on the right date even
+    when UTC and local diverge by 1 hour mid-day."""
+    spring_row = _stat_row(2026, 3, 29, 18.0)
+    fall_row = _stat_row(2026, 10, 25, 22.0)
+    fake_stats = {"sensor.day_cons": [spring_row, fall_row]}
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value=fake_stats)
+    with patch(
+        "homeassistant.components.recorder.get_instance",
+        return_value=instance,
+    ):
+        out = await _recorder_daily_kwh(
+            hass, "sensor.day_cons", date(2026, 3, 29), date(2026, 10, 25)
+        )
+    # Each day of the DST transition still maps to its own local date
+    # in the output dict; the 23-hour and 25-hour anomalies don't
+    # collapse two days onto one or split one day across two.
+    assert out == {date(2026, 3, 29): 18.0, date(2026, 10, 25): 22.0}
+
+
 async def test_recorder_daily_kwh_unknown_entity_returns_empty(
     hass: HomeAssistant,
 ) -> None:
