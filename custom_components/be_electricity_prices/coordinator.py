@@ -655,15 +655,20 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # DynamicRates branch so that an existing Repairs entry
         # auto-resolves regardless of how the snapshot got refreshed
         # this tick (sibling-cache adoption, self-fresh probe match,
-        # negative-cache propagation, or a fresh fetch). Reaching this
-        # point means we have a usable snapshot, so the extractor is
-        # currently working - even if the prior tick had to mark it
-        # broken. Without this, a stuck issue could only auto-resolve
-        # on the next *fresh fetch* (line 987), which probe-matched
-        # / sibling-adopted ticks skip entirely. Same shape as the
-        # cycle-7 entsoe_auth_failed fix.
+        # or a fresh fetch). Reaching this point with no live
+        # ``_last_error`` means the extractor produced a clean
+        # snapshot; the cycle-7 entsoe_auth_failed clear is
+        # unconditional because that issue can only ever be set
+        # inside the DynamicRates branch below.
+        #
+        # The extractor clear is gated on ``_last_error`` because
+        # _maybe_refresh_snapshot raises the same Repairs issue when
+        # a fresh fetch fails but a cached snapshot is still usable
+        # (the kept-cached path). Without the gate the unconditional
+        # clear immediately undoes that legitimate alert.
         self._sync_entsoe_auth_issue(False)
-        self._sync_extractor_failed_issue(None)
+        if not self._last_error:
+            self._sync_extractor_failed_issue(None)
         if isinstance(self._snapshot.energy, DynamicRates):
             try:
                 spot_prices = await self._fetch_spot_prices()
