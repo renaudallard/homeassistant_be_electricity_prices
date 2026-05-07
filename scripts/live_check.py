@@ -44,7 +44,7 @@ import sys
 import time
 import traceback
 import types
-from collections.abc import Iterable, Iterator
+from collections.abc import Awaitable, Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -200,6 +200,22 @@ def _attributed(supplier: str) -> Iterator[None]:
         yield
     finally:
         _CURRENT_SUPPLIER.reset(token)
+
+
+async def _attributed_check(
+    supplier: str,
+    fn: Callable[..., Awaitable[None]],
+    *args: object,
+) -> None:
+    """asyncio.gather-friendly wrapper around an `_attributed()` block.
+
+    asyncio.create_task copies the parent context, so each gather'd
+    task gets its own ContextVar slot; setting `_CURRENT_SUPPLIER`
+    inside the task only affects that task's view, which is what the
+    TraceConfig hooks observe when aiohttp issues a request.
+    """
+    with _attributed(supplier):
+        await fn(*args)
 
 
 def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
@@ -916,30 +932,27 @@ async def _run() -> int:
     async with aiohttp.ClientSession(
         timeout=timeout, trace_configs=[_trace_config()]
     ) as session:
-        with _attributed("eneco"):
-            await _check_eneco(session, eneco)
-        with _attributed("cociter"):
-            await _check_cociter(session, cociter)
-        with _attributed("dats24"):
-            await _check_dats24(session, dats24)
-        with _attributed("ebem"):
-            await _check_ebem(session, ebem)
-        with _attributed("ecofix"):
-            await _check_ecofix(session, ecofix)
-        with _attributed("ecopower"):
-            await _check_ecopower(session, ecopower)
-        with _attributed("engie"):
-            await _check_engie(session, engie)
-        with _attributed("luminus"):
-            await _check_luminus(session, luminus)
-        with _attributed("mega"):
-            await _check_mega(session, mega)
-        with _attributed("totalenergies"):
-            await _check_totalenergies(session, totalenergies)
-        with _attributed("bolt"):
-            await _check_bolt(session, bolt)
-        with _attributed("octaplus"):
-            await _check_octaplus(session, octaplus)
+        # Run the per-supplier checks concurrently. ContextVars are
+        # copy-on-write per asyncio.Task, so the _attributed() ContextVar
+        # set inside each task only changes that task's view; aiohttp's
+        # TraceConfig hooks run in the same task that issued the request,
+        # so per-supplier byte / latency attribution stays correct.
+        await asyncio.gather(
+            _attributed_check("eneco", _check_eneco, session, eneco),
+            _attributed_check("cociter", _check_cociter, session, cociter),
+            _attributed_check("dats24", _check_dats24, session, dats24),
+            _attributed_check("ebem", _check_ebem, session, ebem),
+            _attributed_check("ecofix", _check_ecofix, session, ecofix),
+            _attributed_check("ecopower", _check_ecopower, session, ecopower),
+            _attributed_check("engie", _check_engie, session, engie),
+            _attributed_check("luminus", _check_luminus, session, luminus),
+            _attributed_check("mega", _check_mega, session, mega),
+            _attributed_check(
+                "totalenergies", _check_totalenergies, session, totalenergies
+            ),
+            _attributed_check("bolt", _check_bolt, session, bolt),
+            _attributed_check("octaplus", _check_octaplus, session, octaplus),
+        )
         # Catalog probes fan out across suppliers; attribute them
         # to a synthetic bucket so they don't double-count against
         # any one supplier's per-card timing.
