@@ -283,6 +283,28 @@
           "description": "Optionnel. Par defaut: fin de la table en cache."
         }
       }
+    },
+    "backfill_statistics": {
+      "name": "Backfill des statistiques",
+      "description": "Reconstitue les statistiques long terme du recorder pour les capteurs de prix et current_year_cost de cette entree sur une plage de dates, afin que le tableau de bord Energie affiche un historique anterieur au premier tick de l'integration.",
+      "fields": {
+        "entry_id": {
+          "name": "ID de l'entree",
+          "description": "Entree de configuration ciblee (optionnel)."
+        },
+        "start": {
+          "name": "Debut",
+          "description": "Premiere heure a reconstituer. Par defaut: 1er janvier 00:00 de l'annee locale en cours."
+        },
+        "end": {
+          "name": "Fin",
+          "description": "Premiere heure NON reconstituee (exclusif). Par defaut: heure courante."
+        },
+        "clear": {
+          "name": "Effacer avant import",
+          "description": "Supprime la serie statistique cible avant le re-import. Utiliser apres un changement de carte tarifaire pour eviter que d'anciennes valeurs n'induisent en erreur."
+        }
+      }
     }
   },
   "issues": {

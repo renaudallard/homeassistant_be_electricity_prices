@@ -284,6 +284,28 @@
           "description": "Optional. Standard: Ende des Cache."
         }
       }
+    },
+    "backfill_statistics": {
+      "name": "Statistiken nachbefuellen",
+      "description": "Befuellt die Long-Term-Statistik des Recorders fuer die Preissensoren und current_year_cost dieses Eintrags ueber einen Zeitraum, damit das Energie-Dashboard auch Verlaeufe vor der ersten Live-Aktualisierung anzeigt.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry-ID",
+          "description": "Konfigurationseintrag (optional)."
+        },
+        "start": {
+          "name": "Beginn",
+          "description": "Erste Stunde des Backfills. Standard: 1. Januar 00:00 des aktuellen Jahres."
+        },
+        "end": {
+          "name": "Ende",
+          "description": "Erste Stunde, die NICHT mehr befuellt wird (exklusiv). Standard: aktuelle Stunde."
+        },
+        "clear": {
+          "name": "Vor dem Import loeschen",
+          "description": "Loescht die Zielstatistik vor dem erneuten Import. Nach einer Tarifkarten-Aenderung verwenden, damit alte Werte nicht irrefuehren."
+        }
+      }
     }
   },
   "issues": {

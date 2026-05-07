@@ -283,6 +283,28 @@
           "description": "Optioneel. Standaard: einde van de cache."
         }
       }
+    },
+    "backfill_statistics": {
+      "name": "Statistieken aanvullen",
+      "description": "Vult de lange-termijn statistieken van de recorder aan voor de prijssensoren en current_year_cost van deze entry over een datumbereik, zodat het Energy-dashboard ook geschiedenis toont van voor de eerste live tick.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry-ID",
+          "description": "Optionele configuratie-entry om te targeten."
+        },
+        "start": {
+          "name": "Start",
+          "description": "Eerste uur om aan te vullen. Standaard: 1 januari 00:00 van het huidige lokale jaar."
+        },
+        "end": {
+          "name": "Eind",
+          "description": "Eerste uur dat NIET wordt aangevuld (exclusief). Standaard: huidige uur."
+        },
+        "clear": {
+          "name": "Wissen voor herimport",
+          "description": "Verwijdert de doelreeks voor het opnieuw importeren. Gebruik na een tariefkaart-wijziging zodat oude waarden niet misleiden."
+        }
+      }
     }
   },
   "issues": {
