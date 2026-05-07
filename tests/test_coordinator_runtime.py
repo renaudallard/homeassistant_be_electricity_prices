@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant
@@ -1056,6 +1056,51 @@ async def test_load_persistent_drops_historical_spots_on_tuple_mismatch(
     assert coord._historical_spots == {}, (
         "historical_spots from a different supplier tuple must be discarded"
     )
+
+
+async def test_load_persistent_keeps_historical_spots_on_tuple_match(
+    hass: HomeAssistant,
+) -> None:
+    """Symmetric to the discard test: when the persisted tuple matches
+    the current entry, historical_spots survive the load. Without this
+    a future refactor that always-drops historical_spots would still
+    pass the discard test but silently lose every dynamic-contract
+    entry's YTD spot cache across HA restarts."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "none",
+            "api_key": "k",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    payload: dict[str, object] = {
+        "entry_supplier": "cociter",
+        "entry_contract": "cociter_dynamic",
+        "entry_region": "wallonia",
+        "historical_spots": {
+            "2026-01-01T00:00:00+00:00": 0.123,
+            "2026-01-01T01:00:00+00:00": 0.125,
+        },
+    }
+
+    async def _fake_load() -> dict[str, object]:
+        return payload
+
+    with patch.object(coord._store, "async_load", new=_fake_load):
+        await coord.async_load_persistent()
+
+    expected = {
+        datetime(2026, 1, 1, 0, 0, tzinfo=UTC): 0.123,
+        datetime(2026, 1, 1, 1, 0, tzinfo=UTC): 0.125,
+    }
+    assert coord._historical_spots == expected
 
 
 async def test_evict_bumps_tuple_generation_blocks_inflight_write(
