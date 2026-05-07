@@ -1386,8 +1386,14 @@ async def _recorder_rows(
     except ImportError:
         return []
     start_dt = dt_util.start_of_local_day(start).astimezone(UTC)
-    # +1 day so the bucket containing ``end`` is included.
-    end_dt = dt_util.start_of_local_day(end).astimezone(UTC) + timedelta(days=1)
+    # Anchor end_dt on the next local midnight so the bucket containing
+    # ``end`` is included. ``start_of_local_day(end).astimezone(UTC) +
+    # timedelta(days=1)`` would be exactly 24 UTC hours later, which
+    # mis-aligns by one hour on Brussels DST seam days (the next local
+    # midnight is 23 or 25 UTC hours away). Computing
+    # start_of_local_day(end + 1 day) keeps the cap on the right local
+    # boundary year-round.
+    end_dt = dt_util.start_of_local_day(end + timedelta(days=1)).astimezone(UTC)
     try:
         stats = await get_instance(hass).async_add_executor_job(
             statistics_during_period,
