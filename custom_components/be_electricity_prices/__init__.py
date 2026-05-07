@@ -326,10 +326,9 @@ def _no_loaded_entry_error(target_id: str | None) -> ServiceValidationError:
     can phrase each variant naturally instead of injecting an empty
     string.
     """
-    suffix = f" with id {target_id}" if target_id else ""
     if target_id:
         return ServiceValidationError(
-            f"no loaded {DOMAIN} entry{suffix}",
+            f"no loaded {DOMAIN} entry with id {target_id}",
             translation_domain=DOMAIN,
             translation_key="no_loaded_entry_with_id",
             translation_placeholders={"entry_id": target_id},
