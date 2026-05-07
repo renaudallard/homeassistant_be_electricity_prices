@@ -298,6 +298,10 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         # bucket each calendar year as its own period; the value can
         # dip day-over-day on heavy-injection days under the
         # compensation regime, which rules out ``TOTAL_INCREASING``.
+        # ``MONETARY`` device class lets HA's Energy dashboard auto-
+        # suggest this entity in the "Cost" picker rather than the
+        # user having to type it as a manual price/cost entity.
+        device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement="EUR",
         suggested_display_precision=2,
