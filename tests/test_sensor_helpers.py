@@ -44,10 +44,32 @@ from custom_components.be_electricity_prices.sensor import (
 )
 
 
+# Pin the synthetic-day fixtures to 2026-05-15 (a non-DST Thursday in
+# Brussels). The previous helpers used dt_util.now() which would have
+# silently lost an hour on the local fall-back Sunday and produced
+# only 23 distinct UTC keys for a 24-element prices list - a hidden
+# DST-day flake the suite would have hit on 2026-10-25. The fixture
+# below freezes the integration's clock to the same instant so the
+# helpers' "today" matches the SUT's "today".
+
+
+def _fixed_today_local() -> datetime:
+    """Build the synthetic-today midnight in HA's current default
+    timezone. Computed per-call so the conftest fixture that pins
+    Brussels has had a chance to update dt_util.DEFAULT_TIME_ZONE."""
+    return datetime(2026, 5, 15, 0, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+
+@pytest.fixture(autouse=True)
+def _freeze_to_fixed_local_day(freezer: object) -> None:
+    """Anchor the suite at noon on 2026-05-15 Brussels time so
+    dt_util.now() inside the SUT lines up with the fixture builders."""
+    freezer.move_to("2026-05-15 12:00:00+02:00")  # type: ignore[attr-defined]
+
+
 def _today_data(prices: list[float]) -> CoordinatorData:
     """Build a CoordinatorData whose hourly map covers today, hour by hour."""
-    today_local = dt_util.now().replace(minute=0, second=0, microsecond=0)
-    today_midnight = today_local.replace(hour=0)
+    today_midnight = _fixed_today_local()
     hourly: dict[datetime, PriceBreakdown] = {}
     for hour, price in enumerate(prices):
         local = today_midnight + timedelta(hours=hour)
@@ -108,7 +130,7 @@ def _today_and_tomorrow_data(
     today_prices: list[float], tomorrow_prices: list[float]
 ) -> CoordinatorData:
     """Build a CoordinatorData spanning both today and tomorrow."""
-    midnight_today = dt_util.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    midnight_today = _fixed_today_local()
     hourly: dict[datetime, PriceBreakdown] = {}
     for hour, price in enumerate(today_prices):
         local = midnight_today + timedelta(hours=hour)
