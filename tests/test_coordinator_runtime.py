@@ -256,6 +256,54 @@ async def test_force_refresh_not_defeated_by_sibling_cache(
     )
 
 
+async def test_force_refresh_not_defeated_by_sibling_failure_marker(
+    hass: HomeAssistant,
+) -> None:
+    """Symmetric to test_force_refresh_not_defeated_by_sibling_cache:
+    a sibling that fails between A's async_force_refresh clear and A's
+    next tick re-populates _shared_failed_fetches[key]. The negative-
+    cache short-circuit must NOT fire for A's force-refresh tick or the
+    user-facing be_electricity_prices.refresh service silently no-ops
+    for up to _SHARED_FAILURE_TTL (5 min)."""
+    from custom_components.be_electricity_prices.coordinator import (
+        _shared_failed_fetches,
+    )
+
+    entry_a = _entry()
+    entry_a.add_to_hass(hass)
+    coord_a = BePricesCoordinator(hass, entry_a)
+    coord_a.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+
+    fetch_calls = 0
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return _fake_snapshot()
+
+    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        # Step 1: user-initiated refresh sets _force_refresh and
+        # clears the (own view of the) failure marker.
+        await coord_a.async_force_refresh()
+        # Step 2: sibling fails; re-populates the shared failure
+        # marker with a recent timestamp.
+        _shared_failed_fetches(hass)[coord_a._shared_key()] = (
+            dt_util.utcnow(),
+            "transient sibling failure",
+        )
+        # Step 3: A's next refresh tick must NOT short-circuit on the
+        # sibling marker; it must call extractor.fetch.
+        await coord_a._maybe_refresh_snapshot()
+
+    assert fetch_calls == 1, (
+        f"force_refresh should bypass the negative cache; saw {fetch_calls} fetches"
+    )
+
+
 async def test_shared_cache_expires_after_ttl(hass: HomeAssistant) -> None:
     """Snapshots older than SNAPSHOT_REFRESH_HOURS (24h) must be re-fetched."""
     entry_a = _entry()

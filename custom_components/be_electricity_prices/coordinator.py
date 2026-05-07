@@ -866,14 +866,20 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # don't retry until _SHARED_FAILURE_TTL has elapsed. Propagate
         # the sibling's error to ours so a cold-start coordinator sees
         # the real failure reason instead of "cold start".
+        # ``async_force_refresh`` raises ``_force_refresh`` and clears
+        # *its own* view of the marker, but a sibling failing in the
+        # window between the clear and this tick re-populates the row;
+        # bypassing the short-circuit when ``_force_refresh`` is set
+        # keeps the user-facing refresh service from silently no-op'ing.
         failed = _shared_failed_fetches(self.hass)
-        last_fail = failed.get(key)
-        if (
-            last_fail is not None
-            and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
-        ):
-            self._last_error = last_fail[1]
-            return
+        if not self._force_refresh:
+            last_fail = failed.get(key)
+            if (
+                last_fail is not None
+                and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
+            ):
+                self._last_error = last_fail[1]
+                return
 
         gen_at_entry = _tuple_generation(self.hass, key)
         async with _shared_lock(self.hass, key):
@@ -884,14 +890,16 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._adopt_shared(shared)
                 return
             # Re-check the negative cache under the lock so the second
-            # waiter doesn't repeat what the first just failed.
-            last_fail = failed.get(key)
-            if (
-                last_fail is not None
-                and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
-            ):
-                self._last_error = last_fail[1]
-                return
+            # waiter doesn't repeat what the first just failed; same
+            # _force_refresh bypass as above.
+            if not self._force_refresh:
+                last_fail = failed.get(key)
+                if (
+                    last_fail is not None
+                    and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
+                ):
+                    self._last_error = last_fail[1]
+                    return
             try:
                 snap = await extractor.fetch(self._session, contract, region)
                 fetched_at = dt_util.utcnow()
