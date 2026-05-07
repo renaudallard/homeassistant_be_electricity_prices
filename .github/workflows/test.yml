@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -17,7 +18,21 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff mypy pytest pytest-asyncio pypdf pdfplumber homeassistant pytest-homeassistant-custom-component
+          # Pin homeassistant + pytest-homeassistant-custom-component
+          # (and pytest-freezer used by the time-pinned tests) to
+          # known-good versions; an upstream HA-core or test-shim
+          # release would otherwise silently turn the suite red on main.
+          pip install \
+            ruff \
+            mypy \
+            pytest \
+            pytest-asyncio \
+            pytest-freezer==0.4.9 \
+            pypdf \
+            pdfplumber \
+            defusedxml \
+            homeassistant==2026.2.3 \
+            pytest-homeassistant-custom-component==0.13.316
       - name: Lint
         run: |
           ruff check .
