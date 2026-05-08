@@ -357,16 +357,20 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
         # consumption and "injectie alle uren 0,0925 Belpex15' - 1,10" for
         # injection. Anchor on a line that starts with "alle uren" but is
         # NOT preceded by "injectie" so the regex doesn't pick the
-        # injection row by accident.
+        # injection row by accident. Accept any sign char between the
+        # factor and the base so a future re-render that flips to a
+        # Unicode minus or a negative offset doesn't dead-end the parser.
         match = re.search(
-            r"(?<!injectie\s)\balle uren\s+([\d,]+)\s+Belpex\s*15\s*[’']?\s*"
-            r"\+\s*([\d,]+)",
+            rf"(?<!injectie\s)\balle uren\s+([\d,]+)\s+Belpex\s*15\s*[’']?\s*"
+            rf"([{SIGN_CHARS}])\s*([\d,]+)",
             text,
         )
         if not match:
             raise ExtractorError("EBEM Dyn@mic: consumption formula not found")
+        factor_pdf = to_float(match.group(1))
+        base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
         factor, base = _formula_to_dynamic(
-            to_float(match.group(1)), to_float(match.group(2)), _vat_multiplier(text)
+            factor_pdf, base_pdf_cents, _vat_multiplier(text)
         )
         yearly_fee = _extract_yearly_fee_abonnement(text)
         return DynamicRates(
@@ -377,13 +381,13 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
 
     if contract.contract_id == "ebem_basic_plus":
         match = re.search(
-            r"Verbruik alle uren\s+([\d,]+)\s+Belpex\s*\+\s*([\d,]+)",
+            rf"Verbruik alle uren\s+([\d,]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,]+)",
             text,
         )
         if not match:
             raise ExtractorError("EBEM B@sic+: 'Verbruik alle uren' formula not found")
         factor_pdf = to_float(match.group(1))
-        base_pdf_cents = to_float(match.group(2))
+        base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
         # B@sic+ has no peak / off-peak / excl-night split.
         return VariableRates(
             current=_indicative_from_row(text, "Verbruik alle uren"),
@@ -391,12 +395,15 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
             formula=f"({factor_pdf} BelpexRLP0 + {base_pdf_cents}) c€/kWh ex-VAT",
         )
 
-    # ebem_variable: parse all four meter-type rows.
+    # ebem_variable: parse all four meter-type rows. Mirror the dynamic +
+    # injection regexes by accepting any sign char between factor and
+    # base; today every row prints '+', but a re-render to a Unicode
+    # minus or to a negative offset would otherwise raise.
     rows = {
-        "mono": r"Enkelvoudige teller\s+([\d,]+)\s+Belpex\s*\+\s*([\d,]+)",
-        "peak": r"Dubbele teller piek\s+([\d,]+)\s+Belpex\s*\+\s*([\d,]+)",
-        "offpeak": r"Dubbele teller dal\s+([\d,]+)\s+Belpex\s*\+\s*([\d,]+)",
-        "excl_night": r"Exclusief nacht\s+([\d,]+)\s+Belpex\s*\+\s*([\d,]+)",
+        "mono": rf"Enkelvoudige teller\s+([\d,]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,]+)",
+        "peak": rf"Dubbele teller piek\s+([\d,]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,]+)",
+        "offpeak": rf"Dubbele teller dal\s+([\d,]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,]+)",
+        "excl_night": rf"Exclusief nacht\s+([\d,]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,]+)",
     }
     parsed: dict[str, tuple[float, float]] = {}
     for label, pattern in rows.items():
@@ -405,7 +412,10 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
             raise ExtractorError(
                 f"EBEM Groen Variabel: '{label}' formula row not found"
             )
-        parsed[label] = (to_float(m.group(1)), to_float(m.group(2)))
+        parsed[label] = (
+            to_float(m.group(1)),
+            parse_sign(m.group(2)) * to_float(m.group(3)),
+        )
     yearly_fee = _extract_yearly_fee_variable(text)
     return VariableRates(
         current=_indicative_from_row(text, "Enkelvoudige teller"),
