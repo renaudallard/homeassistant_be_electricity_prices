@@ -163,9 +163,12 @@ async def test_diagnostics_includes_consumption_and_monthly_labels(
     ):
         dump = await async_get_config_entry_diagnostics(hass, entry)
 
-    # Consumption block always present, values None when no sensor wired.
+    # Consumption + injection blocks always present, values None when no
+    # sensor wired.
     assert dump["consumption"]["rolling_year_kwh"] is None
     assert dump["consumption"]["ytd_kwh"] is None
+    assert dump["injection"]["rolling_year_kwh"] is None
+    assert dump["injection"]["ytd_kwh"] is None
     # Per-month archive labels: only this entry's tuple, not bolt's.
     assert dump["monthly_snapshot_labels"] == {"2026-03": "march 2026"}
     # Shared-failure marker round-tripped.

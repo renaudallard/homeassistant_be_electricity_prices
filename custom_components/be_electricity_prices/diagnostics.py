@@ -180,8 +180,10 @@ async def async_get_config_entry_diagnostics(
         "consumption": {
             "rolling_year_kwh": cons_year,
             "ytd_kwh": cons_ytd,
-            "rolling_year_injection_kwh": inj_year,
-            "ytd_injection_kwh": inj_ytd,
+        },
+        "injection": {
+            "rolling_year_kwh": inj_year,
+            "ytd_kwh": inj_ytd,
         },
         "monthly_snapshot_labels": monthly_labels,
         "shared_failure": failed_marker,
