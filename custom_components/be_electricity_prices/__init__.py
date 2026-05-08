@@ -356,8 +356,6 @@ def _resolve_window_inputs(
     # rather than silently widening to 1h. The service schema now exposes
     # whole-hour steps so callers shouldn't trip this branch from the UI.
     duration_slots = int(duration_hours + 0.5)
-    if duration_slots < 1:
-        duration_slots = 1
 
     entries = call.hass.config_entries.async_loaded_entries(DOMAIN)
     target_id = call.data.get("entry_id")
