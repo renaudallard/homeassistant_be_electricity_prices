@@ -29,7 +29,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
+from typing import Any
 
+import pytest
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -39,6 +41,18 @@ from custom_components.be_electricity_prices.binary_sensor import (
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import CoordinatorData
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
+
+
+@pytest.fixture(autouse=True)
+def _freeze_brussels(freezer: Any) -> None:
+    """Pin every test in this module to a stable Brussels noon.
+
+    Each test builds a today/tomorrow price table off ``dt_util.now()``;
+    a run that straddles Brussels midnight or DST would otherwise see
+    one half of the test hit a different date than the other. The
+    freeze is a stable mid-month, mid-day, post-DST date.
+    """
+    freezer.move_to("2026-05-15 12:00:00+02:00")
 
 
 def _entry() -> MockConfigEntry:

@@ -180,7 +180,7 @@ def test_injection_price_static_fallback_when_no_spot() -> None:
     assert _compute_injection_price(snap, entry, {}) == pytest.approx(0.0476)
 
 
-def test_injection_price_uses_formula_when_spot_available() -> None:
+def test_injection_price_uses_formula_when_spot_available(freezer: Any) -> None:
     snap = _snapshot(
         prosumer=None,
         capacity=None,
@@ -190,6 +190,10 @@ def test_injection_price_uses_formula_when_spot_available() -> None:
     # 0.10 EUR/kWh spot (= 100 EUR/MWh) -> 0.97 * 0.10 - 0.021 = 0.076.
     from homeassistant.util import dt as dt_util
 
+    # Pin the wall clock so the test's now_hour key and the impl's own
+    # dt_util.utcnow() lookup agree even when the suite straddles an
+    # hour boundary.
+    freezer.move_to("2026-05-15 12:00:00+02:00")
     now_hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
     spot = {now_hour: 0.10}
     assert _compute_injection_price(snap, entry, spot) == pytest.approx(0.076)
@@ -658,11 +662,12 @@ def _patch_recorder_per_entity(
 
 
 async def test_year_cost_recorder_driven_mono_no_solar(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """Recorder returns 5 kWh / day from Jan 1 to today; mono no-solar
     bills it at the single all-in rate. Total = 5 * elapsed_days * 0.3765."""
 
+    freezer.move_to("2026-05-15 12:00:00+02:00")
     snap = _yearly_snapshot()
     entry = _yearly_entry(meter="mono", solar_regime="none")
     today = dt_util.now().date()
@@ -688,7 +693,7 @@ async def test_year_cost_recorder_driven_mono_no_solar(
 
 
 async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """Compensation regime with day-by-day over-injection: YTD energy
     cost clamps at zero (no negative bill), so only the fees remain.
@@ -696,6 +701,7 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
     fraction of the year; the prosumer fee is summed per archived
     month."""
 
+    freezer.move_to("2026-05-15 12:00:00+02:00")
     snap = make_snapshot(
         energy=FixedRates(single=0.18, yearly_fixed_fee=65.0),
         dsos={
@@ -786,12 +792,13 @@ async def test_year_cost_uses_per_month_snapshot_when_archive_available(
 
 
 async def test_year_cost_falls_back_to_fees_when_no_meters_configured(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """A config without any meter sensors surfaces the fees-only
     floor instead of zero - the user has to wire up at least one
     consumption sensor for the recorder path to produce a number."""
 
+    freezer.move_to("2026-05-15 12:00:00+02:00")
     snap = make_snapshot(
         energy=FixedRates(single=0.18, yearly_fixed_fee=65.0),
         taxes=TaxOverlay(
@@ -873,12 +880,19 @@ async def test_year_cost_skips_month_when_archived_snapshot_lacks_dso(
     assert cost == pytest.approx(expected)
 
 
-async def test_year_cost_tou_bills_per_hourly_slot(hass: HomeAssistant) -> None:
+async def test_year_cost_tou_bills_per_hourly_slot(
+    hass: HomeAssistant, freezer: Any
+) -> None:
     """Time-of-Use contracts must read hourly recorder data and apply
     the supplier's slot rate per hour, not the fees-only floor (which
     is what the per-day path returned before)."""
     from custom_components.be_electricity_prices import coordinator
 
+    # Pin a date well past the 2026-01-06 peak hour the test injects so
+    # the YTD window always covers it (early-January runs would
+    # otherwise put today before that hour and the recorder data would
+    # fall outside the [Jan 1, today] window).
+    freezer.move_to("2026-05-15 12:00:00+02:00")
     today = dt_util.now().date()
 
     snap = make_snapshot(
@@ -926,7 +940,7 @@ async def test_year_cost_tou_bills_per_hourly_slot(hass: HomeAssistant) -> None:
 
 
 async def test_year_cost_tou_recognises_injection_only_wiring(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """Injection-regime user on a TOU contract who only wired the
     injection sensor (e.g. inverter exposing solar export but no smart-
@@ -934,6 +948,8 @@ async def test_year_cost_tou_recognises_injection_only_wiring(
     accrue, mirroring the static-path behaviour."""
     from custom_components.be_electricity_prices import coordinator
 
+    # Pin past the 2026-01-06 injection hour the fixture injects.
+    freezer.move_to("2026-05-15 12:00:00+02:00")
     snap = make_snapshot(
         contract="test_tou",
         energy=TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.10),
@@ -980,7 +996,7 @@ async def test_year_cost_tou_recognises_injection_only_wiring(
 
 
 async def test_year_cost_dynamic_replays_historical_spots(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """Dynamic contracts must replay historical hourly ENTSO-E spots
     via the coordinator's persistent cache. With one consumed kWh at
@@ -989,6 +1005,8 @@ async def test_year_cost_dynamic_replays_historical_spots(
     overlay -- no longer the fees-only floor that v1 returned."""
     from custom_components.be_electricity_prices import coordinator
 
+    # Pin past the 2026-01-06 spot hour the fixture injects.
+    freezer.move_to("2026-05-15 12:00:00+02:00")
     snap = make_snapshot(
         contract="test_dynamic",
         energy=DynamicRates(factor=1.0, base=0.0),
@@ -1033,13 +1051,14 @@ async def test_year_cost_dynamic_replays_historical_spots(
 
 
 async def test_year_cost_dynamic_falls_back_to_fees_when_no_spots(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """When the historical-spots cache is empty (cold start, ENTSO-E
     fetch failed entirely), the dynamic YTD must still produce the
     fees-only floor rather than crashing or returning None."""
     from custom_components.be_electricity_prices import coordinator
 
+    freezer.move_to("2026-05-15 12:00:00+02:00")
     snap = make_snapshot(
         contract="test_dynamic",
         energy=DynamicRates(factor=1.0, base=0.0, yearly_fixed_fee=120.0),
