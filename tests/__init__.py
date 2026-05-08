@@ -56,11 +56,19 @@ def fixture_text(name: str, *, layout: bool = False) -> str:
     DATS 24, Ecopower, TotalEnergies). Default is ``extract_pdf_text``
     (pypdf), which is fine for the rest.
 
-    Cached for the lifetime of the pytest session: PDF extraction
-    is the dominant cost in the test suite (~10s per fixture), and
-    every call with the same arguments returns the same string. The
-    cache cuts the full suite from ~190s to ~30s. Tests must not
-    mutate the returned string (they don't today).
+    Cached for the lifetime of the Python process: PDF extraction is
+    the dominant cost in the test suite (~10s per fixture), and every
+    call with the same arguments returns the same string. The cache
+    cuts the full suite from ~190s to ~30s.
+
+    Constraints, because the cache is process-scoped, not session-
+    scoped:
+      * tests must not mutate the returned string (they don't today),
+      * a developer rewriting a fixture file mid-session (e.g. under
+        ``pytest-watch`` / ``--looponfail``) keeps seeing the old
+        text until the Python process restarts. Call
+        ``fixture_text.cache_clear()`` when iterating on a fixture, or
+        re-run pytest from scratch.
     """
     payload = (FIXTURES / name).read_bytes()
     if layout:
