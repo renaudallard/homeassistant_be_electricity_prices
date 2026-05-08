@@ -37,31 +37,32 @@ from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
     FixedRates,
+    SupplierSnapshot,
     TimeOfUseRates,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.luminus import parse_snapshot
 
 
-def _dynamic_w() -> object:
+def _dynamic_w() -> SupplierSnapshot:
     return parse_snapshot(
         "luminus_dynamic", fixture_text("luminus_dynamic_w.pdf"), "wallonia"
     )
 
 
-def _dynamic_v() -> object:
+def _dynamic_v() -> SupplierSnapshot:
     return parse_snapshot(
         "luminus_dynamic", fixture_text("luminus_dynamic_v.pdf"), "flanders"
     )
 
 
-def _comfy_w() -> object:
+def _comfy_w() -> SupplierSnapshot:
     return parse_snapshot(
         "luminus_comfy", fixture_text("luminus_comfy_w.pdf"), "wallonia"
     )
 
 
-def _comfyflex_v() -> object:
+def _comfyflex_v() -> SupplierSnapshot:
     return parse_snapshot(
         "luminus_comfyflex", fixture_text("luminus_comfyflex_v.pdf"), "flanders"
     )

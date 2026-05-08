@@ -31,7 +31,10 @@ from datetime import date
 
 import pytest
 
-from custom_components.be_electricity_prices.providers.base import VariableRates
+from custom_components.be_electricity_prices.providers.base import (
+    SupplierSnapshot,
+    VariableRates,
+)
 from custom_components.be_electricity_prices.providers.dats24 import parse_snapshot
 from tests import fixture_text
 
@@ -40,7 +43,7 @@ def _text() -> str:
     return fixture_text("dats24_groen_variabel_apr.pdf", layout=True)
 
 
-def _snap(region: str) -> object:
+def _snap(region: str) -> SupplierSnapshot:
     return parse_snapshot(_text(), "test://dats24", region)
 
 

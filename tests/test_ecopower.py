@@ -34,7 +34,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from custom_components.be_electricity_prices.providers.base import VariableRates
+from custom_components.be_electricity_prices.providers.base import (
+    SupplierSnapshot,
+    VariableRates,
+)
 from custom_components.be_electricity_prices.providers.ecopower import (
     fetch_for_month,
     parse_snapshot,
@@ -46,7 +49,7 @@ def _text(name: str) -> str:
     return fixture_text(name, layout=True)
 
 
-def _april_snap() -> object:
+def _april_snap() -> SupplierSnapshot:
     return parse_snapshot(
         _text("ecopower_burgerstroom_apr.pdf"),
         "test://ecopower-apr",

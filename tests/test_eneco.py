@@ -28,7 +28,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Coroutine
 from datetime import date
+from typing import Any, TypeVar
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -43,6 +45,8 @@ from custom_components.be_electricity_prices.providers.eneco import (
     fetch_for_month,
     parse_snapshot,
 )
+
+_T = TypeVar("_T")
 
 
 def test_fix_extracts_energy_block() -> None:
@@ -220,7 +224,7 @@ def test_dynamic_extracts_injection_rates() -> None:
 # ---- fetch_for_month (historical billing) ----------------------------------
 
 
-def _run(coro: object) -> object:
+def _run(coro: Coroutine[Any, Any, _T]) -> _T:
     return asyncio.run(coro)
 
 
