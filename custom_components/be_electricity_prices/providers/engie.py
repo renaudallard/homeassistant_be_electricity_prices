@@ -411,6 +411,12 @@ _FORMULA_RE = re.compile(
 
 
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
+    # Engie's standard cards (Easy / Dynamic / Empty House) print the
+    # yearly fee next to "Type d'usage". Empower variants don't carry a
+    # consumption-side yearly fee in this format -- the value lives in
+    # the per-DSO table or is genuinely 0 -- so a missing match is OK
+    # for that family. Defaulting to 0 here is a known weakness for any
+    # future card that drifts away from the "Type d'usage" anchor.
     fee_match = re.search(r"(\d+,\d+)\s*€/an\s*\n?\s*Type\s*\n?\s*d[©']usage", text)
     yearly_fee = to_float(fee_match.group(1)) if fee_match else 0.0
 
