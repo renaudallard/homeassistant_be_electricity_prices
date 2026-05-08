@@ -35,7 +35,9 @@ that grows the catalogue, fails fast.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, cast
+
+import aiohttp
 
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.providers import cociter as cociter_mod
@@ -74,7 +76,7 @@ class _FakeResponse:
         return None
 
 
-class _FakeSession:
+class _FakeSessionImpl:
     """ClientSession stand-in: returns a fixed body regardless of URL.
 
     Provides ``get`` for listing-page-based discovery and ``head`` for
@@ -90,6 +92,16 @@ class _FakeSession:
 
     def head(self, *_args: Any, **_kwargs: Any) -> _FakeResponse:
         return _FakeResponse(self._body, self._status)
+
+
+def _FakeSession(body: str, status: int = 200) -> aiohttp.ClientSession:
+    """Return a duck-typed ClientSession for discover() calls.
+
+    The returned object only implements .get / .head / async-context
+    semantics; cast lets every call site treat it as a real
+    ClientSession without type errors at the discover() boundary.
+    """
+    return cast(aiohttp.ClientSession, _FakeSessionImpl(body, status))
 
 
 def _run(coro: Any) -> Any:
