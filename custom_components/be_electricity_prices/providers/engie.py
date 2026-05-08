@@ -70,8 +70,10 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    SIGN_CHARS,
     fetch_pdf_text,
     fetch_text,
+    parse_sign,
     parse_valid_until,
     to_float,
     vat_multiplier,
@@ -404,9 +406,15 @@ def _vat_multiplier(text: str) -> float:
     )
 
 
+# Engie's formula prints either "Formule de prix hors TVA -1,3135 + (0,1095 x
+# eSpot_15)" (consumption: positive base usually, negative for injection),
+# but a future re-render could flip either side to a Unicode minus or any
+# of the dashes from _pdf.SIGN_CHARS. Accept the full sign-class on both
+# the base and the factor so the regex doesn't silently miss after a
+# punctuation drift, and route through parse_sign for the magnitude.
 _FORMULA_RE = re.compile(
-    r"Formule de prix\s+hors\s+TVA\s+(-?[\d,]+)\s*\+\s*"
-    r"\((-?[\d,]+)\s*x\s*eSpot_15\)"
+    rf"Formule de prix\s+hors\s+TVA\s+([{SIGN_CHARS}]?)\s*([\d,]+)\s*\+\s*"
+    rf"\(([{SIGN_CHARS}]?)\s*([\d,]+)\s*x\s*eSpot_15\)"
 )
 
 
@@ -435,8 +443,9 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         match = _FORMULA_RE.search(text)
         if not match:
             raise ExtractorError("could not parse Engie dynamic consumption formula")
-        base_pre_vat_cents = to_float(match.group(1))
-        factor_pdf = to_float(match.group(2))
+        # Groups: (base_sign, base_magnitude, factor_sign, factor_magnitude).
+        base_pre_vat_cents = parse_sign(match.group(1)) * to_float(match.group(2))
+        factor_pdf = parse_sign(match.group(3)) * to_float(match.group(4))
         vat = _vat_multiplier(text)
         # PDF formula yields c€/kWh hors TVA from BELPEX in EUR/MWh; spot
         # is EUR/kWh = EUR/MWh / 1000:
@@ -533,8 +542,13 @@ def _extract_injection(text: str) -> InjectionRates | None:
     formula: str | None = None
     if len(formulas) >= 2:
         injection_match = formulas[1]
-        base_pdf_cents = to_float(injection_match.group(1))
-        factor_pdf = to_float(injection_match.group(2))
+        # Groups: (base_sign, base_magnitude, factor_sign, factor_magnitude).
+        base_pdf_cents = parse_sign(injection_match.group(1)) * to_float(
+            injection_match.group(2)
+        )
+        factor_pdf = parse_sign(injection_match.group(3)) * to_float(
+            injection_match.group(4)
+        )
         # Residential injection is VAT-exempt.
         factor = factor_pdf * 10.0
         base = base_pdf_cents / 100.0
