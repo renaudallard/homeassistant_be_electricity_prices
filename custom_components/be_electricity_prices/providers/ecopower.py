@@ -63,6 +63,7 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    archive_validity_check,
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
     fetch_text,
@@ -80,6 +81,23 @@ from .base import (
     SupplierSnapshot,
     TaxOverlay,
     VariableRates,
+)
+
+# Dutch month names for archive_validity_check; the helper indexes into
+# this tuple as month_names[year_month.month - 1].
+_NL_MONTHS = (
+    "januari",
+    "februari",
+    "maart",
+    "april",
+    "mei",
+    "juni",
+    "juli",
+    "augustus",
+    "september",
+    "oktober",
+    "november",
+    "december",
 )
 
 _BASE_URL = "https://ecopower.be"
@@ -158,9 +176,14 @@ async def fetch_for_month(
     try:
         text = await fetch_pdf_text_layout(session, pdf_url)
         label = f"{target[:4]}-{target[4:]}"
-        return parse_snapshot(text, pdf_url, label)
+        snap = parse_snapshot(text, pdf_url, label)
     except ExtractorError:
         return None
+    # Cross-check the parsed card actually covers the requested month;
+    # if the CDN ever serves the current card under a historical URL
+    # the validity / title check rejects it instead of mis-billing past
+    # consumption at current rates.
+    return archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
 
 
 async def probe(
