@@ -37,7 +37,15 @@ jobs:
         run: |
           ruff check .
           ruff format --check .
-      - name: Type check
+      - name: Type check (production code, --strict)
         run: mypy --strict custom_components/be_electricity_prices
+      - name: Type check (tests + helper scripts, non-strict)
+        # Tests aren't --strict-clean (the harness has untyped helpers
+        # the integration code never imports), but a non-strict mypy
+        # still catches Mapping[str,str]|None index errors and the
+        # like. live_check.py runs as a daily workflow; covering it
+        # here means a regression surfaces on PR rather than in the
+        # next 06:00 UTC scheduled run.
+        run: mypy custom_components/ tests/ scripts/
       - name: Tests
         run: pytest tests/ -q
