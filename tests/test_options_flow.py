@@ -27,12 +27,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant import data_entry_flow
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -40,7 +42,7 @@ from custom_components.be_electricity_prices.const import DOMAIN
 
 
 @pytest.fixture(autouse=True)
-def _bypass_setup() -> "patch":
+def _bypass_setup() -> Iterator[MagicMock]:
     with patch(
         "custom_components.be_electricity_prices.async_setup_entry",
         return_value=True,
@@ -49,7 +51,7 @@ def _bypass_setup() -> "patch":
 
 
 @pytest.fixture(autouse=True)
-def _bypass_entsoe_validation() -> "patch":
+def _bypass_entsoe_validation() -> Iterator[MagicMock]:
     """Default to a passing ENTSO-E key check so the dynamic flow doesn't
     actually hit transparency.entsoe.eu in tests. Individual tests can
     re-patch this to assert the error paths."""
@@ -74,7 +76,9 @@ def _make_entry() -> MockConfigEntry:
     )
 
 
-async def _enter_edit_branch(hass: HomeAssistant, entry: MockConfigEntry) -> dict:
+async def _enter_edit_branch(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> ConfigFlowResult:
     """Open OptionsFlow and select the 'edit' branch from the init menu.
 
     The menu is the new top-level surface that gates the existing
@@ -148,7 +152,7 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_invalid_api_key_keeps_user_on_form(
     hass: HomeAssistant,
-    _bypass_entsoe_validation: "patch",
+    _bypass_entsoe_validation: MagicMock,
 ) -> None:
     """A bad token from ENTSO-E shows an error and reopens the same step."""
     _bypass_entsoe_validation.return_value = "invalid_api_key"
