@@ -1237,9 +1237,6 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             "ytd_kwh": f"{ytd_kwh:.0f}" if ytd_kwh is not None else "-",
             "annual_chart": "",
             "ytd_chart": "",
-            "annual_injection_kwh": (
-                f"{rolling_inj_kwh:.0f}" if regime != SOLAR_REGIME_NONE else "-"
-            ),
             "ytd_injection_kwh": (
                 f"{ytd_inj_kwh:.0f}" if regime != SOLAR_REGIME_NONE else "-"
             ),
