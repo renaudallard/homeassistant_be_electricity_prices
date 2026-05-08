@@ -424,6 +424,12 @@ def _extract_fee_and_renewables(text: str) -> tuple[float, float]:
     ``Tarif (mensuel|annuel)`` header. Anchor on that header and require
     the following 2-number line; this rejects unrelated value pairs that
     happen to share the shape (e.g. footer rows).
+
+    Both numbers are mandatory on every TE residential card (~90 EUR/yr
+    yearly fee; regional renewables surcharge between 1.6 and 3.2
+    c€/kWh). Raise on miss so a layout drift surfaces as an extractor
+    failure instead of silently dropping ~90 EUR/year and the regional
+    renewables levy from the bill.
     """
     match = re.search(
         r"Tarif\s+(?:mensuel|annuel)[\s\S]{0,400}?"
@@ -432,7 +438,7 @@ def _extract_fee_and_renewables(text: str) -> tuple[float, float]:
         re.MULTILINE,
     )
     if not match:
-        return 0.0, 0.0
+        raise ExtractorError("TotalEnergies: yearly fee + renewables row not found")
     return to_float(match.group(1)), to_float(match.group(2)) / 100.0
 
 
