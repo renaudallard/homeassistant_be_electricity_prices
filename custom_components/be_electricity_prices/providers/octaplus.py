@@ -313,7 +313,16 @@ def _meter_value(text: str, label_pattern: str) -> float | None:
 
 
 def _extract_publication_month(text: str) -> str:
-    match = re.search(r"-\s*(\d{1,2})/(\d{4})\s*-", text)
+    """Pull MM/YYYY off the OCTA+ title line.
+
+    Every card prints ``Clients résidentiels en <region> - MM/YYYY -
+    Tarifs N% TVAC`` near the top. Anchor on that prose so a footer
+    reference matching ``-MM/YYYY-`` can't shadow the title's date.
+    """
+    match = re.search(
+        r"Clients\s+r[ée]sidentiels[^\n]{0,80}?-\s*(\d{1,2})/(\d{4})\s*-",
+        text,
+    )
     return f"{match.group(1)}/{match.group(2)}" if match else ""
 
 
