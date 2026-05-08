@@ -550,20 +550,27 @@ def _extract_consumption_renewables(text: str) -> float:
     The row carries 3 (dynamic) or 5 (fixed/variable) numbers and the last
     one is always the regional renewable surcharge: Flanders cogen + green,
     Wallonia green-energy contribution, or Brussels green-energy levy.
+
+    Mandatory in every region (~1.5-3 c€/kWh); raise on miss so a layout
+    drift surfaces as an extractor failure rather than silently dropping
+    the levy from the user's bill.
     """
     match = re.search(r"Consommation\(2\)\s+((?:[\d,]+\s+)+[\d,]+)", text)
     if not match:
-        return 0.0
+        raise ExtractorError("Engie: Consommation(2) row (renewables) not found")
     nums = match.group(1).split()
     return to_float(nums[-1]) / 100.0
 
 
 def _extract_federal_excise(text: str) -> float:
+    """Federal excise on the 0-3000 kWh tier; mandatory across regions."""
     match = re.search(
         r"Consommation entre\s+0\s+et\s+3\.000\s+kWh\s+([\d,]+)",
         text,
     )
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if not match:
+        raise ExtractorError("Engie: federal excise (0-3000 kWh tier) not found")
+    return to_float(match.group(1)) / 100.0
 
 
 def _extract_energy_contribution(text: str) -> float:
@@ -572,18 +579,21 @@ def _extract_energy_contribution(text: str) -> float:
     Match either shape and reconstruct the decimal value as
     ``0.<digits>``. The regulated rate has 5-6 fractional digits so the
     quantifier ``\\d{4,6}`` covers it without picking up unrelated
-    integers.
+    integers. Mandatory across regions; raise on miss.
     """
     match = re.search(
         r"Cotisation sur l['©]énergie\s+0\s*[,.]?\s*(\d{4,6})",
         text,
     )
     if not match:
-        return 0.0
+        raise ExtractorError("Engie: energy contribution row not found")
     return float(f"0.{match.group(1)}") / 100.0
 
 
 def _extract_energy_fund(text: str) -> float:
+    """Flemish residential energy fund. Optional outside Flanders, so a
+    miss legitimately means 'no fund on this card' -- keep the silent
+    default."""
     match = re.search(
         r"Résidentiel\s+\(avec\s+domicile\)\s+([\d,]+)",
         text,
@@ -592,8 +602,15 @@ def _extract_energy_fund(text: str) -> float:
 
 
 def _extract_connection_fee(text: str) -> float:
+    """Walloon connection fee (0,075 c€/kWh).
+
+    Caller gates the invocation on REGION_WALLONIA so a miss here is a
+    layout drift on a Wallonia card; raise rather than zero out.
+    """
     match = re.search(r"Redevance raccordement\(\d+\)\s+([\d,]+)", text)
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if not match:
+        raise ExtractorError("Engie: Wallonia connection fee row not found")
+    return to_float(match.group(1)) / 100.0
 
 
 # ---- DSO row parsers ----------------------------------------------------------
