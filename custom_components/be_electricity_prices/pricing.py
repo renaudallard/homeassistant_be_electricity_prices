@@ -329,15 +329,28 @@ def network_eur_per_kwh(
     the off-peak rate when published, falling back to the single rate
     on DSOs that don't expose a split.
     """
-    if dso_tariff_mode == "impact" and dso.distribution_pic is not None:
+    if (
+        dso_tariff_mode == "impact"
+        and dso.distribution_pic is not None
+        and dso.distribution_medium is not None
+        and dso.distribution_eco is not None
+    ):
+        # Every parser binds the Impact triplet (pic / medium / eco)
+        # together when it sets pic, so under normal operation a
+        # non-None pic implies the other two are populated. Asserting
+        # that here used to be enough, but Python -O strips asserts
+        # and would let through a TypeError on ``None + transport``.
+        # Treat the Impact mode as "available only when all three are
+        # set" and fall through to the bi-horaire / single path
+        # otherwise -- same end behaviour the per-DSO data drives on
+        # Brussels Sibelga / Flanders Fluvius cards that don't publish
+        # Impact rates at all.
         band = dso_impact_band(when)
         if band == "pic":
             dist = dso.distribution_pic
         elif band == "medium":
-            assert dso.distribution_medium is not None  # paired with pic
             dist = dso.distribution_medium
         else:
-            assert dso.distribution_eco is not None
             dist = dso.distribution_eco
         return dist + dso.transport
     if meter == "exclusive_night":
