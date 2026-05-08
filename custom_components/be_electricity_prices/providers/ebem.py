@@ -361,8 +361,8 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
         # factor and the base so a future re-render that flips to a
         # Unicode minus or a negative offset doesn't dead-end the parser.
         match = re.search(
-            rf"(?<!injectie\s)\balle uren\s+([\d,]+)\s+Belpex\s*15\s*[’']?\s*"
-            rf"([{SIGN_CHARS}])\s*([\d,]+)",
+            rf"(?<!injectie\s)\balle uren\s+([\d,.]+)\s+Belpex\s*15\s*[’']?\s*"
+            rf"([{SIGN_CHARS}])\s*([\d,.]+)",
             text,
         )
         if not match:
@@ -381,7 +381,7 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
 
     if contract.contract_id == "ebem_basic_plus":
         match = re.search(
-            rf"Verbruik alle uren\s+([\d,]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,]+)",
+            rf"Verbruik alle uren\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
             text,
         )
         if not match:
@@ -400,10 +400,10 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
     # base; today every row prints '+', but a re-render to a Unicode
     # minus or to a negative offset would otherwise raise.
     rows = {
-        "mono": rf"Enkelvoudige teller\s+([\d,]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,]+)",
-        "peak": rf"Dubbele teller piek\s+([\d,]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,]+)",
-        "offpeak": rf"Dubbele teller dal\s+([\d,]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,]+)",
-        "excl_night": rf"Exclusief nacht\s+([\d,]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,]+)",
+        "mono": rf"Enkelvoudige teller\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
+        "peak": rf"Dubbele teller piek\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
+        "offpeak": rf"Dubbele teller dal\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
+        "excl_night": rf"Exclusief nacht\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
     }
     parsed: dict[str, tuple[float, float]] = {}
     for label, pattern in rows.items():
@@ -445,8 +445,8 @@ def _indicative_from_row(text: str, label: str) -> float:
     than recomputing against a placeholder spot.
     """
     match = re.search(
-        rf"{re.escape(label)}\s+[\d,]+\s+Belpex\s*\+\s*[\d,]+\s+"
-        rf"[\d,]+\s+([\d,]+)\s+[\d,]+\s+[\d,]+",
+        rf"{re.escape(label)}\s+[\d,.]+\s+Belpex\s*\+\s*[\d,.]+\s+"
+        rf"[\d,.]+\s+([\d,.]+)\s+[\d,.]+\s+[\d,.]+",
         text,
     )
     if not match:
@@ -463,7 +463,7 @@ def _extract_yearly_fee_variable(text: str) -> float:
     convention is to store the incl-VAT value (the second number).
     """
     match = re.search(
-        r"Vaste vergoeding\s*\(jaarlijkse[^)]*\)\s+[\d,]+\s*€/jaar\s+([\d,]+)\s*€/jaar",
+        r"Vaste vergoeding\s*\(jaarlijkse[^)]*\)\s+[\d,.]+\s*€/jaar\s+([\d,.]+)\s*€/jaar",
         text,
     )
     if not match:
@@ -474,7 +474,7 @@ def _extract_yearly_fee_variable(text: str) -> float:
 def _extract_yearly_fee_abonnement(text: str) -> float:
     """``Abonnement 66,04 €/jaar 70 €/jaar`` -- B@sic+ and Dyn@mic share the label."""
     match = re.search(
-        r"Abonnement\s+[\d,]+\s*€/jaar\s+([\d,]+)\s*€/jaar",
+        r"Abonnement\s+[\d,.]+\s*€/jaar\s+([\d,.]+)\s*€/jaar",
         text,
     )
     if not match:
@@ -486,8 +486,8 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | No
     """Parse the injection formula. Belgian residential injection is VAT-exempt."""
     if contract.contract_id == "ebem_dynamic":
         match = re.search(
-            rf"injectie alle uren\s+([\d,]+)\s+Belpex\s*15\s*[’']?\s*"
-            rf"([{SIGN_CHARS}])\s*([\d,]+)",
+            rf"injectie alle uren\s+([\d,.]+)\s+Belpex\s*15\s*[’']?\s*"
+            rf"([{SIGN_CHARS}])\s*([\d,.]+)",
             text,
         )
         formula_label = "Belpex15'"
@@ -496,7 +496,7 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | No
         # formula. The variable card prints the row twice (once per
         # product); the first match is enough -- they're identical.
         match = re.search(
-            rf"Injectie alle uren\s+([\d,]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,]+)",
+            rf"Injectie alle uren\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
             text,
         )
         formula_label = "BelpexSPP0"
@@ -524,9 +524,9 @@ def _extract_federal_taxes(text: str) -> tuple[float, float]:
     Energy contribution sits next to the residential energy-fund row
     on a single visual line (``Beschermende ... €0 0,20417``).
     """
-    excise = re.search(r"0-3\s+MWH\s+([\d,]+)", text)
+    excise = re.search(r"0-3\s+MWH\s+([\d,.]+)", text)
     contribution = re.search(
-        r"Beschermende klanten[\s\S]+?€0\s+([\d,]+)",
+        r"Beschermende klanten[\s\S]+?€0\s+([\d,.]+)",
         text,
     )
     if excise is None:
@@ -551,7 +551,7 @@ def _extract_flanders_renewables(text: str) -> float:
     shadow the renewables value.
     """
     match = re.search(
-        r"Totale bijdrage[\s\S]{0,200}?([\d,]+)\s*c€/kWh\s+incl\.?\s*BTW\s*\d+\s*%",
+        r"Totale bijdrage[\s\S]{0,200}?([\d,.]+)\s*c€/kWh\s+incl\.?\s*BTW\s*\d+\s*%",
         text,
     )
     if not match:
