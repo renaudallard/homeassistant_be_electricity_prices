@@ -79,6 +79,7 @@ from ..const import (
 )
 from ._pdf import (
     SIGN_CHARS,
+    archive_validity_check,
     fetch_pdf_text,
     fetch_text,
     parse_sign,
@@ -302,9 +303,14 @@ async def fetch_for_month(
     except ExtractorError:
         return None
     try:
-        return parse_snapshot(contract_id, text, region, new_url)
+        snap = parse_snapshot(contract_id, text, region, new_url)
     except ExtractorError:
         return None
+    # Cross-check the parsed card actually covers the requested month;
+    # if Mega ever serves a current PDF under a historical URL, the
+    # validity / title check rejects it instead of mis-billing past
+    # consumption at current rates. Same shape as eneco / cociter / ebem.
+    return archive_validity_check(snap, text, year_month, month_names=_FR_MONTH_NAMES)
 
 
 def parse_snapshot(
