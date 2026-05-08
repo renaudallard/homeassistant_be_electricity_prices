@@ -229,8 +229,18 @@ def parse_snapshot(
 
 
 def _extract_yearly_fee(text: str) -> float:
+    """Capture the 'Redevance fixe' / yearly subscription line.
+
+    Every OCTA+ residential card the integration covers prints this
+    line (~65 EUR/year). A regex miss is a layout drift that would
+    silently drop the fee from the user's annual estimate; raise
+    rather than default to 0 so the coordinator surfaces the failure
+    and serves the cached snapshot until the layout is fixed.
+    """
     match = re.search(r"Redevance fixe \(€/an\)\s+([\d.,]+)", text)
-    return to_float(match.group(1)) if match else 0.0
+    if match is None:
+        raise ExtractorError("OCTA+: yearly fee (Redevance fixe) not found")
+    return to_float(match.group(1))
 
 
 def _vat_multiplier(text: str) -> float:
