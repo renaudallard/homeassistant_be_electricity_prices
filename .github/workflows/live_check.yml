@@ -15,6 +15,14 @@ permissions:
   contents: read
   issues: write
 
+# A new schedule fires while the previous one is still attempting
+# retries, or two PRs touching providers/ overlap, would otherwise
+# queue parallel runs that each open the same Repairs / GitHub issue.
+# Serialise per-ref and let the new run win.
+concurrency:
+  group: live-check-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
