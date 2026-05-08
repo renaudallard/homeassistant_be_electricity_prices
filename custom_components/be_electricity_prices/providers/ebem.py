@@ -315,7 +315,10 @@ def _extract_validity(text: str) -> date | None:
     shared helper would return ``None``. The card title ends with
     ``<maand> <jaar>``; parse that directly.
     """
-    match = re.search(r"\b([a-z]+)\s+(20\d{2})\b", text[:600])
+    # Accept both lowercase ("mei 2026") and title case ("Mei 2026"); the
+    # dictionary lookup below already lowercases. Anchoring on lowercase
+    # only would silently miss a future card that drifts to title case.
+    match = re.search(r"\b([A-Za-z]+)\s+(20\d{2})\b", text[:600])
     if not match:
         return None
     month_name = match.group(1).lower()
