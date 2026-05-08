@@ -237,12 +237,19 @@ def parse_snapshot(
 # ---- energy + tax block -------------------------------------------------------
 
 
+# Numeric token: digits optionally followed by a single decimal separator
+# + digits. Anchors on starting + ending digit so a trailing sentence
+# punctuation can't be captured (e.g. '0,1019 x Belpex H + 2,4591.\n'
+# from luminus_dynamic_w would otherwise grab the final '.' if the
+# regex were the lazier '[\d,.]+').
+_NUM = r"\d+(?:[,.]\d+)?"
+
 _DYNAMIC_FORMULA_RE = re.compile(
-    rf"Prélèvement\s*\([^)]+\)\s*=\s*([\d,]+)\s*x\s*Belpex\s*H\s*([{SIGN_CHARS}])\s*([\d,]+)",
+    rf"Prélèvement\s*\([^)]+\)\s*=\s*({_NUM})\s*x\s*Belpex\s*H\s*([{SIGN_CHARS}])\s*({_NUM})",
     re.S,
 )
 _INJECTION_FORMULA_RE = re.compile(
-    rf"Injection\s*\([^)]+\)\s*=\s*([\d,]+)\s*x\s*Belpex\s*H\s*([{SIGN_CHARS}])\s*([\d,]+)",
+    rf"Injection\s*\([^)]+\)\s*=\s*({_NUM})\s*x\s*Belpex\s*H\s*([{SIGN_CHARS}])\s*({_NUM})",
     re.S,
 )
 
@@ -264,7 +271,7 @@ def _extract_yearly_fee(text: str) -> float:
     0 so the coordinator surfaces the failure instead of silently
     dropping ~70 EUR/year from the user's annual estimate.
     """
-    match = re.search(r"Redevance fixe\s*\(€/an\)\s+(\d+,\d+)", text)
+    match = re.search(rf"Redevance fixe\s*\(€/an\)\s+({_NUM})", text)
     if match is None:
         raise ExtractorError("Luminus: yearly fee (Redevance fixe) not found")
     return to_float(match.group(1))
@@ -278,7 +285,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         # second occurrence later in the PDF is the bi-horaire fallback
         # for non-SMR3 customers; we anchor on the first match.
         tou_match = re.search(
-            r"Énergie fournie\s*\(c€/kWh\)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)(?!\s+[\d,])",
+            rf"Énergie fournie\s*\(c€/kWh\)\s+({_NUM})\s+({_NUM})\s+({_NUM})(?!\s+\d)",
             text,
         )
         if not tou_match:
@@ -311,7 +318,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         )
 
     energy_match = re.search(
-        r"Énergie fournie\s*\(c€/kWh\)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)",
+        rf"Énergie fournie\s*\(c€/kWh\)\s+({_NUM})\s+({_NUM})\s+({_NUM})\s+({_NUM})",
         text,
     )
     if not energy_match:
@@ -357,8 +364,8 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     # injection rate ~5x on dynamic_w/v fixtures. Skip an optional
     # digit-then-whitespace before the value capture.
     indicative = re.search(
-        r"Estimation annuelle du tarif\s+de l[\"'’©]énergie injectée"
-        r"[^0-9-]*(?:\d+\s+)?([\d,]+)",
+        rf"Estimation annuelle du tarif\s+de l[\"'’©]énergie injectée"
+        rf"[^0-9-]*(?:\d+\s+)?({_NUM})",
         text,
         re.S,
     )
@@ -418,7 +425,7 @@ def _tax_block_values(text: str) -> list[str]:
     )
     if not block:
         return []
-    return re.findall(r"^\s*(-|\d+,\d+)\s*$", block.group(0), re.MULTILINE)
+    return re.findall(rf"^\s*(-|{_NUM})\s*$", block.group(0), re.MULTILINE)
 
 
 def _extract_per_kwh_taxes(text: str) -> tuple[float, float, float]:
@@ -480,8 +487,8 @@ def _extract_flanders_renewables(text: str) -> float:
     'no levy on this card' case. Raise rather than silently zero.
     """
     match = re.search(
-        r"Coûts énergie verte.*?Coûts cogénération.*?FL\s*\n?\s*"
-        r"(\d+,\d+)\s*\n?\s*(\d+,\d+)",
+        rf"Coûts énergie verte.*?Coûts cogénération.*?FL\s*\n?\s*"
+        rf"({_NUM})\s*\n?\s*({_NUM})",
         text,
         re.S,
     )
@@ -489,7 +496,7 @@ def _extract_flanders_renewables(text: str) -> float:
         return (to_float(match.group(1)) + to_float(match.group(2))) / 100.0
     # Some fixed cards may print only the green-energy line.
     fallback = re.search(
-        r"Coûts énergie verte\s*\(c€/kWh\)[^A-Z]*?FL\s*\n?\s*(\d+,\d+)",
+        rf"Coûts énergie verte\s*\(c€/kWh\)[^A-Z]*?FL\s*\n?\s*({_NUM})",
         text,
         re.S,
     )
@@ -504,7 +511,7 @@ def _extract_wallonia_renewables(text: str) -> float:
     """Mandatory in Wallonia (caller gates on REGION_WALLONIA); raise on
     miss rather than silently zero out."""
     match = re.search(
-        r"Coûts énergie verte\s*\(c€/kWh\)[^A-Z]*?WAL\s*\n?\s*(\d+,\d+)",
+        rf"Coûts énergie verte\s*\(c€/kWh\)[^A-Z]*?WAL\s*\n?\s*({_NUM})",
         text,
         re.S,
     )
@@ -548,7 +555,7 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():
         row = re.search(
-            rf"{re.escape(label)}\s+((?:[\d,]+\s+){{3,}}[\d,]+)",
+            rf"{re.escape(label)}\s+((?:{_NUM}\s+){{3,}}{_NUM})",
             text,
             re.IGNORECASE,
         )
@@ -593,7 +600,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
         row = re.search(
-            rf"{re.escape(label)}\s+((?:[\d,]+\s+){{6,}}[\d,]+)",
+            rf"{re.escape(label)}\s+((?:{_NUM}\s+){{6,}}{_NUM})",
             text,
             re.IGNORECASE,
         )
