@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -48,23 +49,22 @@ def auto_enable_custom_integrations(
 
 
 @pytest.fixture(autouse=True)
-def _force_brussels_timezone(request: pytest.FixtureRequest):
+def _force_brussels_timezone(request: pytest.FixtureRequest) -> Iterator[None]:
     """Pin every test to Europe/Brussels.
 
     The pytest-homeassistant-custom-component ``hass`` fixture sets
     ``US/Pacific`` by default; for a Belgian-electricity integration
     that hides DST, off-peak window, and per-month archive bugs that
-    would surface in production. Sync fixture so it doesn't drag the
-    event loop into pure-helper tests; when ``hass`` is requested we
-    force it to set up first (it sets US/Pacific) and then override
-    to Brussels.
+    would surface in production. Stays sync because pytest-asyncio's
+    auto mode wraps an async autouse fixture in an asyncio.Runner that
+    can't run while another fixture's loop is already up -- the sync
+    branch then short-circuits cleanly for pure-helper tests that
+    don't request ``hass``. The hass branch routes through the loop
+    that ``hass`` itself owns; that loop is set up at fixture setup
+    time but isn't running yet, so ``run_until_complete`` is safe.
     """
     if "hass" in request.fixturenames:
         hass: HomeAssistant = request.getfixturevalue("hass")
-        # async_set_time_zone updates dt_util.DEFAULT_TIME_ZONE in
-        # addition to hass.config.time_zone; the call has to await,
-        # but we're in a sync fixture, so route through hass's
-        # async_create_task and block on it.
         hass.loop.run_until_complete(hass.config.async_set_time_zone("Europe/Brussels"))
         yield
         return
