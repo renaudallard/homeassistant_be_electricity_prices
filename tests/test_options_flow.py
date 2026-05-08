@@ -475,6 +475,63 @@ async def test_compare_branch_static_to_dynamic_prompts_for_api_key(
         assert result["step_id"] == "compare_result"
 
 
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_result_renders_when_coordinator_not_ready(
+    hass: HomeAssistant,
+) -> None:
+    """If the user opens 'compare' while the entry is mid-reload,
+    runtime_data is HA's UNDEFINED sentinel and _build_compare_placeholders
+    short-circuits. Every placeholder the result template references must
+    still be set; otherwise HA renders raw '{token}' literals."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    # Deliberately do NOT assign entry.runtime_data: the isinstance
+    # check in _build_compare_placeholders falls through to the
+    # entry-reloading branch.
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "compare"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "cociter"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "cociter_variable"}
+    )
+    # Static contracts add a meter step before the result.
+    if result["step_id"] == "compare_meter":
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+    assert result["step_id"] == "compare_result"
+    ph = result["description_placeholders"]
+    assert ph is not None
+    # Every token referenced by the result template must be set.
+    for key in (
+        "ytd_injection_kwh",
+        "solar_note",
+        "meter_used",
+        "annual_kwh",
+        "ytd_kwh",
+        "consumption_source",
+        "current_supplier",
+        "compare_supplier",
+        "current_per_kwh",
+        "compare_per_kwh",
+        "current_annual",
+        "compare_annual",
+        "delta_annual",
+        "current_ytd",
+        "compare_ytd",
+        "delta_ytd",
+        "annual_chart",
+        "ytd_chart",
+        "error",
+    ):
+        assert key in ph, f"missing placeholder: {key}"
+    assert ph["error"].startswith("current entry is reloading")
+
+
 async def _drive_compare(
     hass: HomeAssistant,
     entry: MockConfigEntry,

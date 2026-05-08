@@ -1116,7 +1116,10 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         current = self.config_entry.data
         coord = getattr(self.config_entry, "runtime_data", None)
         # Coordinator may not be a BePricesCoordinator if the entry is
-        # mid-reload (UNDEFINED sentinel) or never finished setup.
+        # mid-reload (UNDEFINED sentinel) or never finished setup. We
+        # still need to populate every placeholder the result template
+        # references; otherwise HA renders the missing ones as raw
+        # ``{token}`` text.
         if not isinstance(coord, BePricesCoordinator):
             return {
                 "current_supplier": str(current.get(CONF_SUPPLIER, "")),
@@ -1133,6 +1136,11 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 "delta_ytd": "-",
                 "annual_kwh": f"{DEFAULT_ANNUAL_KWH:.0f}",
                 "ytd_kwh": "-",
+                "ytd_injection_kwh": "-",
+                "solar_note": "",
+                "meter_used": str(
+                    self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
+                ),
                 "consumption_source": "default (entry reloading)",
                 "annual_chart": "",
                 "ytd_chart": "",
