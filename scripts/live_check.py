@@ -650,6 +650,12 @@ async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) ->
     # Mega serves all 3 regions for every contract and resolves the URL
     # by scraping mega.be/fr/cartes-tarifaires; walk every (contract,
     # region) pair to verify both the listing scrape and the PDF parse.
+    #
+    # Mega's fetch() pulls the listing on every call (~342KB x 33 pairs
+    # = ~11MB redundant traffic + 33 round-trips). Pre-fetch the
+    # listing once and override _fetch_listing_html for the duration of
+    # this check so the fetch path is still exercised end-to-end while
+    # the harness stops paying for the same HTML 33 times.
     expected_dsos = {
         "flanders": _FLUVIUS_KEYS,
         "wallonia": _WALLONIA_DSO_KEYS,
@@ -660,6 +666,31 @@ async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) ->
         "wallonia": "wallonia_renewables",
         "brussels": "brussels_renewables",
     }
+    try:
+        listing_html = await mega._fetch_listing_html(session)
+    except Exception as err:
+        _record("mega: listing fetch", False, f"{type(err).__name__}: {err}")
+        return
+
+    async def _cached_listing(_session: aiohttp.ClientSession) -> str:
+        return listing_html
+
+    # mypy treats module-attribute assignment as widening; setattr keeps
+    # the patch contained without forcing a stub for the private helper.
+    original_fetch_listing = mega._fetch_listing_html
+    setattr(mega, "_fetch_listing_html", _cached_listing)  # noqa: B010
+    try:
+        await _check_mega_pairs(session, mega, expected_dsos, renewables_field)
+    finally:
+        setattr(mega, "_fetch_listing_html", original_fetch_listing)  # noqa: B010
+
+
+async def _check_mega_pairs(
+    session: aiohttp.ClientSession,
+    mega: types.ModuleType,
+    expected_dsos: dict[str, frozenset[str]],
+    renewables_field: dict[str, str],
+) -> None:
     for contract in mega._CONTRACTS:
         cid = contract.contract_id
         for region_key in ("flanders", "wallonia", "brussels"):
@@ -1043,11 +1074,15 @@ BYTES_WARN_THRESHOLD = 5_000_000
 #     so we don't fire on a slow day.
 #   * ecofix: ~6.6 MB (3 contracts x 2 regions, ~1.1 MB each PDF).
 #     Allow 8 MB.
+#   * mega: ~5.3 MB (~342KB listing fetched once via the harness's
+#     listing-cache + 33 region PDFs at ~150KB each). Allow 7 MB so a
+#     slow CI day or a slightly larger PDF batch doesn't fire.
 _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     "bolt": 50_000_000,
     "totalenergies": 15_000_000,
     "engie": 8_000_000,
     "ecofix": 8_000_000,
+    "mega": 7_000_000,
 }
 
 # Per-supplier wallclock budgets (override the global). Symmetric to
