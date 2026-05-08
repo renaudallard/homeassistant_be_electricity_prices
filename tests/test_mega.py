@@ -112,6 +112,8 @@ def test_dynamic_consumption_and_injection_are_not_swapped() -> None:
     )
     assert isinstance(snap.energy, DynamicRates)
     assert snap.injection is not None
+    assert snap.injection.factor is not None
+    assert snap.injection.base is not None
     # Consumption factor is higher and base is positive.
     assert snap.energy.factor > snap.injection.factor
     assert snap.energy.base > 0.0

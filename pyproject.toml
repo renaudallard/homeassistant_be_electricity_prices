@@ -12,5 +12,15 @@ asyncio_default_fixture_loop_scope = "function"
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-module = ["pypdf", "pypdf.*", "pdfplumber", "pdfplumber.*"]
+module = [
+    "pypdf",
+    "pypdf.*",
+    "pdfplumber",
+    "pdfplumber.*",
+    # pytest-homeassistant-custom-component ships without py.typed; mypy
+    # would otherwise emit one 'missing library stubs' note per test file
+    # that imports its MockConfigEntry.
+    "pytest_homeassistant_custom_component",
+    "pytest_homeassistant_custom_component.*",
+]
 ignore_missing_imports = true

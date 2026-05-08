@@ -223,8 +223,10 @@ def test_unknown_contract_raises() -> None:
 def test_unknown_region_raises() -> None:
     async def _run() -> None:
         with pytest.raises(ExtractorError, match="unknown region"):
-            await EXTRACTORS["totalenergies"].fetch(  # type: ignore[arg-type]
-                None, "totalenergies_mydynamic", "atlantis"
+            await EXTRACTORS["totalenergies"].fetch(
+                None,  # type: ignore[arg-type]
+                "totalenergies_mydynamic",
+                "atlantis",
             )
 
     asyncio.run(_run())
