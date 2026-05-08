@@ -128,7 +128,7 @@ def extract_pdf_text(payload: bytes) -> str:
         return "\n".join(chunks)
     except ExtractorError:
         raise
-    except Exception as err:
+    except Exception as err:  # noqa: BLE001 - rewrap pypdf surface as ExtractorError
         raise ExtractorError(f"PDF parse error: {err}") from err
 
 
@@ -154,7 +154,7 @@ def extract_pdf_text_layout(payload: bytes) -> str:
             return "\n".join(
                 (page.dedupe_chars().extract_text() or "") for page in pdf.pages
             )
-    except Exception as err:
+    except Exception as err:  # noqa: BLE001 - rewrap pdfplumber surface as ExtractorError
         raise ExtractorError(f"PDF layout parse error: {err}") from err
 
 
@@ -211,7 +211,7 @@ def extract_pdf_text_aligned(
                     lines.append(" ".join(parts))
                 out.append("\n".join(lines))
         return "\f".join(out)
-    except Exception as err:
+    except Exception as err:  # noqa: BLE001 - rewrap pdfplumber surface as ExtractorError
         raise ExtractorError(f"PDF aligned parse error: {err}") from err
 
 

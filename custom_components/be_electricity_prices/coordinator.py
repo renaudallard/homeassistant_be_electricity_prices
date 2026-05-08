@@ -1029,7 +1029,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._last_error = ""
                 self._force_refresh = False
                 self._sync_extractor_failed_issue(None)
-            except Exception as err:
+            except Exception as err:  # noqa: BLE001 - re-raised below for non-extractor types
                 # Any extractor failure (including unexpected aiohttp /
                 # parser exceptions) must populate the negative cache so
                 # sibling coordinators back off instead of refiring the
