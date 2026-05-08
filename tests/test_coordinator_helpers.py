@@ -428,12 +428,12 @@ async def test_snapshot_for_month_uses_archive_when_available(
     )
     _monthly_snapshots(hass).clear()
     snap = await _snapshot_for_month(
-        hass, None, extractor, "test", "wallonia", date(2026, 1, 1), current
+        hass, MagicMock(), extractor, "test", "wallonia", date(2026, 1, 1), current
     )
     assert snap is archived
     # Second call: cache hit, no extra fetch.
     snap = await _snapshot_for_month(
-        hass, None, extractor, "test", "wallonia", date(2026, 1, 1), current
+        hass, MagicMock(), extractor, "test", "wallonia", date(2026, 1, 1), current
     )
     assert snap is archived
     assert fetch_calls == 1
@@ -456,7 +456,7 @@ async def test_snapshot_for_month_falls_back_to_current_when_no_archive(
     )
     _monthly_snapshots(hass).clear()
     snap = await _snapshot_for_month(
-        hass, None, extractor, "test", "wallonia", date(2026, 1, 1), current
+        hass, MagicMock(), extractor, "test", "wallonia", date(2026, 1, 1), current
     )
     assert snap is current
 
@@ -471,7 +471,7 @@ async def test_snapshot_for_month_falls_back_to_current_when_no_archive(
         fetch_for_month=_none_fetch,
     )
     snap = await _snapshot_for_month(
-        hass, None, extractor2, "test", "wallonia", date(2025, 6, 1), current
+        hass, MagicMock(), extractor2, "test", "wallonia", date(2025, 6, 1), current
     )
     assert snap is current
 
@@ -499,10 +499,10 @@ async def test_snapshot_for_month_caches_negative_results(
     )
     _monthly_snapshots(hass).clear()
     await _snapshot_for_month(
-        hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
+        hass, MagicMock(), extractor, "test", "wallonia", date(2024, 6, 1), current
     )
     await _snapshot_for_month(
-        hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
+        hass, MagicMock(), extractor, "test", "wallonia", date(2024, 6, 1), current
     )
     assert fetch_calls == 1
 
@@ -541,7 +541,7 @@ async def test_snapshot_for_month_does_not_cache_transient_failures(
     _monthly_snapshots(hass).clear()
     _monthly_failed_fetches(hass).clear()
     snap = await _snapshot_for_month(
-        hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
+        hass, MagicMock(), extractor, "test", "wallonia", date(2024, 6, 1), current
     )
     # First call raised: falls back to current snapshot, but the
     # positive cache must NOT have been populated.
@@ -553,7 +553,7 @@ async def test_snapshot_for_month_does_not_cache_transient_failures(
     # against a flaky supplier).
     assert cache_key in _monthly_failed_fetches(hass)
     snap = await _snapshot_for_month(
-        hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
+        hass, MagicMock(), extractor, "test", "wallonia", date(2024, 6, 1), current
     )
     assert snap is current
     assert call == 1
@@ -561,7 +561,7 @@ async def test_snapshot_for_month_does_not_cache_transient_failures(
     # succeeds and is cached.
     _monthly_failed_fetches(hass).clear()
     snap = await _snapshot_for_month(
-        hass, None, extractor, "test", "wallonia", date(2024, 6, 1), current
+        hass, MagicMock(), extractor, "test", "wallonia", date(2024, 6, 1), current
     )
     assert snap is archived
     assert call == 2

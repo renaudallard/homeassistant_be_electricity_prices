@@ -53,7 +53,7 @@ def _grid_prefs(
     }
 
 
-def _patch_manager(prefs: dict[str, Any] | None) -> AsyncMock:
+def _patch_manager(prefs: dict[str, Any] | None) -> Any:
     manager = AsyncMock()
     manager.data = prefs
     async_get_manager = AsyncMock(return_value=manager)

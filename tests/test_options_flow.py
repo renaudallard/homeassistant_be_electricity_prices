@@ -365,6 +365,7 @@ async def test_compare_branch_quotes_against_other_supplier(
         )
         assert result["step_id"] == "compare_result"
         ph = result["description_placeholders"]
+        assert ph is not None
         assert ph["current_supplier"] == "Eneco"
         assert ph["compare_supplier"] == "Cociter"
         # Per-kWh non-trivial: stub eneco at 0.18 EUR/kWh + DSO + taxes;
@@ -505,7 +506,9 @@ async def _drive_compare(
                 result["flow_id"], {"meter": meter}
             )
         assert result["step_id"] == "compare_result"
-    return result["description_placeholders"]
+    placeholders = result["description_placeholders"]
+    assert placeholders is not None
+    return dict(placeholders)
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
