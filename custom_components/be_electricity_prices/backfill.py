@@ -237,12 +237,16 @@ async def _existing_stat_window(
     return bool(rows.get(statistic_id))
 
 
-async def _clear_range(hass: HomeAssistant, statistic_ids: list[str]) -> None:
-    """Delete every statistic row for ``statistic_ids``.
+async def _clear_all(hass: HomeAssistant, statistic_ids: list[str]) -> None:
+    """Delete every statistic row for ``statistic_ids`` -- the WHOLE series.
 
-    The recorder API doesn't expose a per-range delete; this drops the
-    full series and the next backfill repopulates it. Acceptable for
-    our use case (one full year, one user-triggered call).
+    The recorder's ``clear_statistics`` is the only public primitive
+    here and it is series-scoped, not range-scoped. Callers must
+    therefore restrict the use of ``clear=True`` to full-year re-runs;
+    a narrower window with ``clear=True`` would wipe rows OUTSIDE the
+    requested range and leave them gone. The user-facing service
+    description in services.yaml + every locale's strings warn about
+    this destructive scope.
     """
     try:
         from homeassistant.components.recorder import (  # type: ignore[attr-defined]
@@ -603,7 +607,7 @@ async def backfill_range(
             if sid is not None:
                 ids.append(sid)
         if ids:
-            await _clear_range(hass, ids)
+            await _clear_all(hass, ids)
 
     counts = await _backfill_price_sensors(hass, entry, coordinator, hours, spots)
     counts.update(await _backfill_cost_sensor(hass, entry, coordinator, hours, spots))

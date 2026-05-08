@@ -301,8 +301,8 @@
           "description": "Premiere heure NON reconstituee (exclusif). Par defaut: heure courante."
         },
         "clear": {
-          "name": "Effacer avant import",
-          "description": "Supprime la serie statistique cible avant le re-import. Utiliser apres un changement de carte tarifaire pour eviter que d'anciennes valeurs n'induisent en erreur."
+          "name": "Effacer TOUTE la serie avant import",
+          "description": "Destructif: supprime toutes les lignes existantes de la serie cible (pas seulement la plage demandee), puis le re-import ne repeuple que la plage demandee. A utiliser UNIQUEMENT pour une re-execution annuelle. Pour des fenetres plus etroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et ecrase deja les heures demandees sans toucher au reste."
         }
       }
     }

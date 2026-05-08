@@ -301,8 +301,8 @@
           "description": "Erste Stunde, die NICHT mehr befuellt wird (exklusiv). Standard: aktuelle Stunde."
         },
         "clear": {
-          "name": "Vor dem Import loeschen",
-          "description": "Loescht die Zielstatistik vor dem erneuten Import. Nach einer Tarifkarten-Aenderung verwenden, damit alte Werte nicht irrefuehren."
+          "name": "GESAMTE Reihe vor dem Import loeschen",
+          "description": "Destruktiv: loescht jede vorhandene Zeile der Zielreihe (nicht nur den angeforderten Bereich); der erneute Import fuellt anschliessend nur den angeforderten Bereich. NUR fuer einen Jahres-Rerun verwenden. Fuer schmalere Fenster: deaktiviert lassen; der Import macht einen Upsert auf (statistic_id, Stunde) und ueberschreibt die angeforderten Stunden bereits, ohne etwas ausserhalb des Bereichs anzuruehren."
         }
       }
     }

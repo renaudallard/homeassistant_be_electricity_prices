@@ -88,12 +88,15 @@ backfill_statistics:
       selector:
         datetime:
     clear:
-      name: Clear before re-import
+      name: Clear ENTIRE series before re-import
       description: >-
-        Delete the target statistic series before re-importing.
-        Otherwise the import overwrites only the hours in the
-        requested range. Set to true when a tariff card changed and
-        old rows would mislead.
+        Destructive: deletes EVERY existing row of the target
+        statistic series, not just the requested range, and the
+        re-import only repopulates the requested range. Use ONLY when
+        re-running a full year (default range = Jan 1 to now). For a
+        narrower window, leave this off: the import upserts on
+        (statistic_id, hour) so a re-run already overwrites the
+        requested hours without touching anything outside the range.
       default: false
       selector:
         boolean:

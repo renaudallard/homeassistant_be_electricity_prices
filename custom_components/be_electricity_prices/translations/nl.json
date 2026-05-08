@@ -301,8 +301,8 @@
           "description": "Eerste uur dat NIET wordt aangevuld (exclusief). Standaard: huidige uur."
         },
         "clear": {
-          "name": "Wissen voor herimport",
-          "description": "Verwijdert de doelreeks voor het opnieuw importeren. Gebruik na een tariefkaart-wijziging zodat oude waarden niet misleiden."
+          "name": "VOLLEDIGE reeks wissen voor herimport",
+          "description": "Destructief: verwijdert elke bestaande rij van de doelreeks (niet alleen het gevraagde bereik), waarna de herimport alleen het gevraagde bereik opnieuw vult. Gebruik dit ALLEEN voor een volledige jaar-herrun. Voor smallere vensters: laat dit uit; de import doet upsert op (statistic_id, uur) en overschrijft de gevraagde uren al zonder iets buiten het bereik aan te raken."
         }
       }
     }

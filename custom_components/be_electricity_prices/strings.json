@@ -301,8 +301,8 @@
           "description": "First hour NOT to backfill (exclusive). Defaults to the current hour."
         },
         "clear": {
-          "name": "Clear before re-import",
-          "description": "Delete the target statistic series before re-importing. Use after a tariff card change so old rows do not mislead."
+          "name": "Clear ENTIRE series before re-import",
+          "description": "Destructive: deletes every existing row of the target series (not just the requested range), then the re-import repopulates only the requested range. Use ONLY for a full-year re-run. For narrower windows, leave this off: the import upserts on (statistic_id, hour) and already overwrites the requested hours without touching anything outside the range."
         }
       }
     }
