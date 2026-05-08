@@ -79,7 +79,15 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
     _FLUVIUS_KEYS = const.FLUVIUS_KEYS
     _WALLONIA_DSO_KEYS = const.WALLONIA_DSO_KEYS
 
-    _load("be_pkg.providers.base", PKG / "providers" / "base.py")
+    base = _load("be_pkg.providers.base", PKG / "providers" / "base.py")
+    # Bind the rate classes for isinstance-based validation in
+    # _validate_energy. Class identity matches because every provider
+    # imports from this same loaded module via ``from ..base import``.
+    global _RATE_FIXED, _RATE_VARIABLE, _RATE_DYNAMIC, _RATE_TOU
+    _RATE_FIXED = base.FixedRates
+    _RATE_VARIABLE = base.VariableRates
+    _RATE_DYNAMIC = base.DynamicRates
+    _RATE_TOU = base.TimeOfUseRates
     _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
     eneco = _load("be_pkg.providers.eneco", PKG / "providers" / "eneco.py")
     cociter = _load("be_pkg.providers.cociter", PKG / "providers" / "cociter.py")
@@ -129,6 +137,17 @@ CHECKS: list[Check] = []
 # Declared here so module-load doesn't fail before _load_providers() runs.
 _FLUVIUS_KEYS: frozenset[str] = frozenset()
 _WALLONIA_DSO_KEYS: frozenset[str] = frozenset()
+
+# Rate-class references bound by _load_providers; ``object`` placeholder
+# until startup so isinstance() in _validate_energy still type-checks
+# pre-load (it runs only after _load_providers, but mypy walks both
+# paths). Bound to the actual base.FixedRates / VariableRates /
+# DynamicRates / TimeOfUseRates classes once the providers package is
+# loaded.
+_RATE_FIXED: type = object
+_RATE_VARIABLE: type = object
+_RATE_DYNAMIC: type = object
+_RATE_TOU: type = object
 
 
 # Per-supplier wallclock + bytes-received accounting. Populated via an
@@ -599,6 +618,11 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
                 snap.taxes.federal_excise > 0,
                 detail=str(snap.taxes),
             )
+            _expect(
+                f"{prefix}: publication label",
+                bool(snap.publication_label),
+                detail=f"label={snap.publication_label!r}",
+            )
             _validate_energy(prefix, cid, snap.energy)
 
 
@@ -642,6 +666,11 @@ async def _check_totalenergies(
                 f"{prefix}: federal excise > 0",
                 snap.taxes.federal_excise > 0,
                 detail=str(snap.taxes),
+            )
+            _expect(
+                f"{prefix}: publication label",
+                bool(snap.publication_label),
+                detail=f"label={snap.publication_label!r}",
             )
             _validate_energy(prefix, cid, snap.energy)
 
@@ -714,6 +743,11 @@ async def _check_mega_pairs(
                 f"{prefix}: federal excise > 0",
                 snap.taxes.federal_excise > 0,
                 detail=str(snap.taxes),
+            )
+            _expect(
+                f"{prefix}: publication label",
+                bool(snap.publication_label),
+                detail=f"label={snap.publication_label!r}",
             )
             _validate_energy(prefix, cid, snap.energy)
 
@@ -861,23 +895,22 @@ async def _check_catalogs(
         )
 
 
-def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
-    kind = type(energy).__name__
-    if kind == "FixedRates":
+def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:  # noqa: ARG001 - contract_id reserved for richer validation
+    if isinstance(energy, _RATE_FIXED):
         rate = getattr(energy, "single", None)
         _expect(
             f"{prefix}: fixed rate in [0.05, 0.50] EUR/kWh",
             rate is not None and 0.05 <= rate <= 0.50,
             detail=f"single={rate}",
         )
-    elif kind == "VariableRates":
+    elif isinstance(energy, _RATE_VARIABLE):
         current = getattr(energy, "current", None)
         _expect(
             f"{prefix}: variable rate in [0.05, 0.50] EUR/kWh",
             current is not None and 0.05 <= current <= 0.50,
             detail=f"current={current}",
         )
-    elif kind == "DynamicRates":
+    elif isinstance(energy, _RATE_DYNAMIC):
         factor = getattr(energy, "factor", None)
         base = getattr(energy, "base", None)
         # factor is in EUR/kWh per spot in EUR/kWh; ~1.0-1.2 today.
@@ -891,7 +924,7 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
             base is not None and 0.0 <= base <= 0.10,
             detail=f"base={base}",
         )
-    elif kind == "TimeOfUseRates":
+    elif isinstance(energy, _RATE_TOU):
         peak = getattr(energy, "peak", None)
         transition = getattr(energy, "transition", None)
         offpeak = getattr(energy, "offpeak", None)
@@ -916,7 +949,7 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
         _record(
             f"{prefix}: energy type",
             False,
-            f"unknown energy class {kind}",
+            f"unknown energy class {type(energy).__name__}",
         )
 
 
@@ -1039,9 +1072,13 @@ async def _run() -> int:
     # Side-channel: catalog report goes to a known file the workflow
     # picks up to open / update its own issue, separate from the
     # extractor-broken issue so the two failure modes don't conflate.
-    Path("catalog_report.md").write_text(_render_report(catalog_checks))
+    # Anchor side-channel reports on the repo root rather than the
+    # process CWD so a developer running this script from any directory
+    # gets the file alongside the existing logs (CI happens to invoke
+    # from repo root, so behaviour there is unchanged).
+    (ROOT / "catalog_report.md").write_text(_render_report(catalog_checks))
     drift_warnings = _drift_warnings(METRICS)
-    Path("drift_report.md").write_text(_render_drift(drift_warnings))
+    (ROOT / "drift_report.md").write_text(_render_drift(drift_warnings))
     extractor_failed = any(not c.ok for c in extractor_checks)
     catalog_failed = any(not c.ok for c in catalog_checks)
     drift_alert = bool(drift_warnings)
