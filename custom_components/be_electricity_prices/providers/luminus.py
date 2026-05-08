@@ -256,8 +256,18 @@ def _vat_multiplier(text: str) -> float:
 
 
 def _extract_yearly_fee(text: str) -> float:
+    """Capture the 'Redevance fixe' line.
+
+    Every Luminus residential card the integration covers prints this
+    line (~65 EUR for static, ~75 EUR for dynamic). A regex miss is a
+    layout drift, not a fee-free contract; raise rather than default to
+    0 so the coordinator surfaces the failure instead of silently
+    dropping ~70 EUR/year from the user's annual estimate.
+    """
     match = re.search(r"Redevance fixe\s*\(€/an\)\s+(\d+,\d+)", text)
-    return to_float(match.group(1)) if match else 0.0
+    if match is None:
+        raise ExtractorError("Luminus: yearly fee (Redevance fixe) not found")
+    return to_float(match.group(1))
 
 
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
