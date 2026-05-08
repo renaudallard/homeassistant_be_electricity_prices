@@ -298,7 +298,14 @@ def _extract_fee_and_flanders_renewables(
         # follow the Verbruik label on a single line:
         #     60,00 meter Piekuren ...
         #     Verbruik 1,60
-        fee_match = re.search(r"(\d+(?:,\d+)?)\s+meter Piekuren", text)
+        # Anchor on the "Vaste ... Vlaanderen" header before the
+        # "meter Piekuren" hit, so a future stray integer earlier in
+        # the document can't shadow the fee.
+        fee_match = re.search(
+            r"Vaste\s+Energieprijs\s+Vlaanderen[\s\S]{0,400}?"
+            r"(\d+(?:,\d+)?)\s+meter Piekuren",
+            text,
+        )
         renew_match = re.search(r"^Verbruik\s+(\d+,\d+)\s*$", text, re.MULTILINE)
         if not fee_match:
             raise ExtractorError("Ecofix Flexy: yearly fixed fee not found")
