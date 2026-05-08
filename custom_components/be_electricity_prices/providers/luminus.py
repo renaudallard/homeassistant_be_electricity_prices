@@ -422,7 +422,15 @@ def _tax_block_values(text: str) -> list[str]:
 
 
 def _extract_per_kwh_taxes(text: str) -> tuple[float, float, float]:
-    """Return (federal_excise, energy_contribution, connection_fee) in EUR/kWh."""
+    """Return (federal_excise, energy_contribution, connection_fee) in EUR/kWh.
+
+    Federal excise + energy contribution are mandatory across regions;
+    Walloon connection fee is mandatory in Wallonia (the
+    'Redevance de raccordement' label is present iff the card is a
+    Wallonia card). Raise on a layout drift that would otherwise zero
+    out the regulated tax silently and underbill ~50 EUR/year per
+    missed tier.
+    """
     values = _tax_block_values(text)
 
     def _decimal(s: str | None) -> float:
@@ -430,10 +438,19 @@ def _extract_per_kwh_taxes(text: str) -> tuple[float, float, float]:
             return 0.0
         return to_float(s) / 100.0
 
-    excise = _decimal(values[2]) if len(values) > 2 else 0.0
-    contribution = _decimal(values[3]) if len(values) > 3 else 0.0
+    if len(values) < 4:
+        raise ExtractorError(
+            f"Luminus: 'Taxes et redevances' block too short ({len(values)} values; "
+            "expected ≥4 BTNR / BTR / excise / contribution)"
+        )
+    excise = _decimal(values[2])
+    contribution = _decimal(values[3])
     has_connection = "Redevance de raccordement" in text
-    connection = _decimal(values[4]) if has_connection and len(values) > 4 else 0.0
+    if has_connection and len(values) < 5:
+        raise ExtractorError(
+            "Luminus: Walloon connection-fee row missing from tax block"
+        )
+    connection = _decimal(values[4]) if has_connection else 0.0
     return excise, contribution, connection
 
 
@@ -458,6 +475,9 @@ def _extract_flanders_renewables(text: str) -> float:
         FL
         <green>
         <cogen>
+
+    Caller gates on REGION_FLANDERS so a miss is a layout drift, not a
+    'no levy on this card' case. Raise rather than silently zero.
     """
     match = re.search(
         r"Coûts énergie verte.*?Coûts cogénération.*?FL\s*\n?\s*"
@@ -473,16 +493,26 @@ def _extract_flanders_renewables(text: str) -> float:
         text,
         re.S,
     )
-    return to_float(fallback.group(1)) / 100.0 if fallback else 0.0
+    if fallback is None:
+        raise ExtractorError(
+            "Luminus: Flanders renewables (Coûts énergie verte) row not found"
+        )
+    return to_float(fallback.group(1)) / 100.0
 
 
 def _extract_wallonia_renewables(text: str) -> float:
+    """Mandatory in Wallonia (caller gates on REGION_WALLONIA); raise on
+    miss rather than silently zero out."""
     match = re.search(
         r"Coûts énergie verte\s*\(c€/kWh\)[^A-Z]*?WAL\s*\n?\s*(\d+,\d+)",
         text,
         re.S,
     )
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if match is None:
+        raise ExtractorError(
+            "Luminus: Wallonia renewables (Coûts énergie verte) row not found"
+        )
+    return to_float(match.group(1)) / 100.0
 
 
 # ---- DSO row parsers ----------------------------------------------------------
