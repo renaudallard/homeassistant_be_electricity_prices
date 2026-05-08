@@ -27,7 +27,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pypdf pdfplumber aiohttp
+          # homeassistant is required because providers/_pdf.py imports
+          # homeassistant.util.dt for the parse_valid_until clamp.
+          # Unpinned: only the dt helpers are touched and they're API-
+          # stable across versions; test.yml owns the version-pinned
+          # CI surface, this job just needs *some* HA core to import.
+          pip install pypdf pdfplumber aiohttp homeassistant
 
       - name: Run live check (up to 5 attempts on extractor failure)
         id: check
