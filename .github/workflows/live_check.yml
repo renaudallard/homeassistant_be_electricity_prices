@@ -28,11 +28,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # homeassistant is required because providers/_pdf.py imports
-          # homeassistant.util.dt for the parse_valid_until clamp.
-          # Unpinned: only the dt helpers are touched and they're API-
-          # stable across versions; test.yml owns the version-pinned
-          # CI surface, this job just needs *some* HA core to import.
-          pip install pypdf pdfplumber aiohttp homeassistant
+          # homeassistant.util.dt for the parse_valid_until clamp. Pin
+          # the same version as test.yml so a breaking HA-core release
+          # can't flip the daily live-check red while the integration
+          # itself still works against the version users actually run.
+          pip install pypdf pdfplumber aiohttp homeassistant==2026.2.3
 
       - name: Run live check (up to 5 attempts on extractor failure)
         id: check
