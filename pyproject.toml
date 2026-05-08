@@ -2,6 +2,15 @@
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
+[tool.mypy]
+# custom_components/be_electricity_prices and tests/ would otherwise be
+# resolved as both 'be_electricity_prices.*' and
+# 'custom_components.be_electricity_prices.*' since neither directory
+# carries an __init__.py at its root. explicit_package_bases tells mypy
+# to treat each directory as its own package root, which matches how
+# pytest collects them.
+explicit_package_bases = true
+
 [[tool.mypy.overrides]]
 module = ["pypdf", "pypdf.*", "pdfplumber", "pdfplumber.*"]
 ignore_missing_imports = true
