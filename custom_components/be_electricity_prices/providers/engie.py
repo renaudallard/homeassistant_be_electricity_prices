@@ -411,14 +411,25 @@ _FORMULA_RE = re.compile(
 
 
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
-    # Engie's standard cards (Easy / Dynamic / Empty House) print the
-    # yearly fee next to "Type d'usage". Empower variants don't carry a
-    # consumption-side yearly fee in this format -- the value lives in
-    # the per-DSO table or is genuinely 0 -- so a missing match is OK
-    # for that family. Defaulting to 0 here is a known weakness for any
-    # future card that drifts away from the "Type d'usage" anchor.
+    # Engie prints the yearly fee in two different layouts:
+    #
+    # 1. Standard cards (Easy / Dynamic / Empty House): the fee sits on
+    #    the same logical row as "Type d'usage", e.g. "65,00 €/an Type
+    #    d'usage".
+    # 2. Empower variants (Variable / Flextime): the fee is the first
+    #    number on the "Prix mensuels" row, just before "Consommation(2)".
+    #    The card has no "Type d'usage" anchor at all.
+    #
+    # Try the standard anchor first, fall back to the Empower layout, and
+    # raise if neither matches: every residential Engie card the
+    # integration covers carries a yearly fee, so a miss is a layout drift
+    # rather than a fee-free contract.
     fee_match = re.search(r"(\d+,\d+)\s*€/an\s*\n?\s*Type\s*\n?\s*d[©']usage", text)
-    yearly_fee = to_float(fee_match.group(1)) if fee_match else 0.0
+    if fee_match is None:
+        fee_match = re.search(r"Prix\s+mensuels\s*\n\s*(\d+,\d+)\s+Consommation", text)
+    if fee_match is None:
+        raise ExtractorError("Engie: yearly fee row not found")
+    yearly_fee = to_float(fee_match.group(1))
 
     if kind == "dynamic":
         match = _FORMULA_RE.search(text)

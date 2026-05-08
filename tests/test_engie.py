@@ -84,6 +84,10 @@ def test_empower_flextime_extracts_tou_triplet() -> None:
     # Engie weekend rule differs from SmartFlex's: weekend keeps the
     # transition/offpeak split rather than collapsing to all-offpeak.
     assert snap.energy.weekend_rule == "weekend_no_peak"
+    # Empower's yearly subscription fee lives on the "Prix mensuels" row
+    # (not the standard "Type d'usage" anchor); the parser's fallback
+    # regex captures it as 90,00 EUR.
+    assert snap.energy.yearly_fixed_fee == pytest.approx(90.0)
 
 
 def test_empower_flextime_dsos_match_wallonia_set() -> None:
