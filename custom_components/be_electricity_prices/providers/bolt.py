@@ -342,10 +342,14 @@ def _extract_yearly_fee(text: str) -> float:
     The platform fee is the entire Bolt monetisation; a missing match is
     a layout drift that would silently undercount the user's bill by
     ~130 EUR/year, so raise instead of returning 0.
+
+    Make the decimal portion optional so a future round fee like
+    ``€ 11 / mois`` still parses; today every Bolt card prints two
+    decimals, but the strictness was a footgun rather than a feature.
     """
-    match = re.search(r"€\s*(\d+[.,]\d+)\s*/\s*mois", text)
+    match = re.search(r"€\s*(\d+(?:[.,]\d+)?)\s*/\s*mois", text)
     if match is None:
-        raise ExtractorError("Bolt: '€ N,NN / mois' platform fee not found")
+        raise ExtractorError("Bolt: '€ N[,NN] / mois' platform fee not found")
     return to_float(match.group(1)) * 12.0
 
 
