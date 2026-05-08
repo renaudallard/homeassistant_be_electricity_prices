@@ -535,9 +535,13 @@ def _extract_flanders_renewables(text: str) -> float:
     percentage in the row label is whatever the card printed - match
     any 1-2 digit number so a future Belgian VAT change doesn't fail
     the snapshot fetch.
+
+    Anchor on ``Totale bijdrage`` so a future footnote that prints
+    another ``incl. BTW N%`` line (e.g. for a different fee) can't
+    shadow the renewables value.
     """
     match = re.search(
-        r"([\d,]+)\s*c€/kWh\s+incl\.?\s*BTW\s*\d+\s*%",
+        r"Totale bijdrage[\s\S]{0,200}?([\d,]+)\s*c€/kWh\s+incl\.?\s*BTW\s*\d+\s*%",
         text,
     )
     if not match:
