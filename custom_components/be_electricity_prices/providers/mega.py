@@ -536,20 +536,34 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
 
 
 def _extract_federal_excise(text: str) -> float:
-    """First excise tier (0-3000 kWh), uniform across regions."""
+    """First excise tier (0-3000 kWh), uniform across regions.
+
+    Federal excise is mandatory on every Belgian residential card; a
+    miss is a layout drift that would silently undercount the bill by
+    ~5 c€/kWh (50 EUR/year at 1000 kWh). Raise rather than default to 0.
+    """
     match = re.search(
         r"Consommation entre\s*\n?\s*0\s*et\s*3000\s*kWh\s*\n\s*([\d.,]+)",
         text,
     )
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if match is None:
+        raise ExtractorError("Mega: federal excise (0-3000 kWh tier) not found")
+    return to_float(match.group(1)) / 100.0
 
 
 def _extract_energy_contribution(text: str) -> float:
+    """Federal energy contribution; same row as the excise.
+
+    Mandatory across regions; raise on miss for the same reason as the
+    excise above.
+    """
     match = re.search(
         r"Consommation entre\s*\n?\s*0\s*et\s*3000\s*kWh\s*\n\s*[\d.,]+\s*\n\s*([\d.,]+)",
         text,
     )
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if match is None:
+        raise ExtractorError("Mega: energy contribution not found")
+    return to_float(match.group(1)) / 100.0
 
 
 def _extract_connection_fee(text: str) -> float:
