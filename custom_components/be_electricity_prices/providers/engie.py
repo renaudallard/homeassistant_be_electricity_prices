@@ -413,8 +413,8 @@ def _vat_multiplier(text: str) -> float:
 # the base and the factor so the regex doesn't silently miss after a
 # punctuation drift, and route through parse_sign for the magnitude.
 _FORMULA_RE = re.compile(
-    rf"Formule de prix\s+hors\s+TVA\s+([{SIGN_CHARS}]?)\s*([\d,]+)\s*\+\s*"
-    rf"\(([{SIGN_CHARS}]?)\s*([\d,]+)\s*x\s*eSpot_15\)"
+    rf"Formule de prix\s+hors\s+TVA\s+([{SIGN_CHARS}]?)\s*([\d,.]+)\s*\+\s*"
+    rf"\(([{SIGN_CHARS}]?)\s*([\d,.]+)\s*x\s*eSpot_15\)"
 )
 
 
@@ -432,9 +432,11 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     # raise if neither matches: every residential Engie card the
     # integration covers carries a yearly fee, so a miss is a layout drift
     # rather than a fee-free contract.
-    fee_match = re.search(r"(\d+,\d+)\s*€/an\s*\n?\s*Type\s*\n?\s*d[©']usage", text)
+    fee_match = re.search(r"(\d+[,.]\d+)\s*€/an\s*\n?\s*Type\s*\n?\s*d[©']usage", text)
     if fee_match is None:
-        fee_match = re.search(r"Prix\s+mensuels\s*\n\s*(\d+,\d+)\s+Consommation", text)
+        fee_match = re.search(
+            r"Prix\s+mensuels\s*\n\s*(\d+[,.]\d+)\s+Consommation", text
+        )
     if fee_match is None:
         raise ExtractorError("Engie: yearly fee row not found")
     yearly_fee = to_float(fee_match.group(1))
@@ -463,7 +465,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     consumption = re.search(r"Consommation\(2\)([^\n]+)", text)
     if not consumption:
         raise ExtractorError(f"could not parse Engie {kind} consumption block")
-    nums = [to_float(n) for n in re.findall(r"[\d,]+", consumption.group(1))]
+    nums = [to_float(n) for n in re.findall(r"[\d,.]+", consumption.group(1))]
     # Last column is the regional renewables levy; drop it, what remains
     # is the price columns.
     prices = nums[:-1] if len(nums) >= 2 else nums
@@ -534,7 +536,7 @@ def _extract_publication_month(text: str) -> str:
 
 
 def _extract_injection(text: str) -> InjectionRates | None:
-    indicative = re.search(r"Injection\(3\)\s+([\d,]+)", text)
+    indicative = re.search(r"Injection\(3\)\s+([\d,.]+)", text)
     formulas = list(_FORMULA_RE.finditer(text))
     current = to_float(indicative.group(1)) / 100.0 if indicative else None
     factor: float | None = None
@@ -569,7 +571,7 @@ def _extract_consumption_renewables(text: str) -> float:
     drift surfaces as an extractor failure rather than silently dropping
     the levy from the user's bill.
     """
-    match = re.search(r"Consommation\(2\)\s+((?:[\d,]+\s+)+[\d,]+)", text)
+    match = re.search(r"Consommation\(2\)\s+((?:[\d,.]+\s+)+[\d,.]+)", text)
     if not match:
         raise ExtractorError("Engie: Consommation(2) row (renewables) not found")
     nums = match.group(1).split()
@@ -579,7 +581,7 @@ def _extract_consumption_renewables(text: str) -> float:
 def _extract_federal_excise(text: str) -> float:
     """Federal excise on the 0-3000 kWh tier; mandatory across regions."""
     match = re.search(
-        r"Consommation entre\s+0\s+et\s+3\.000\s+kWh\s+([\d,]+)",
+        r"Consommation entre\s+0\s+et\s+3\.000\s+kWh\s+([\d,.]+)",
         text,
     )
     if not match:
@@ -609,7 +611,7 @@ def _extract_energy_fund(text: str) -> float:
     miss legitimately means 'no fund on this card' -- keep the silent
     default."""
     match = re.search(
-        r"Résidentiel\s+\(avec\s+domicile\)\s+([\d,]+)",
+        r"Résidentiel\s+\(avec\s+domicile\)\s+([\d,.]+)",
         text,
     )
     return to_float(match.group(1)) if match else 0.0
@@ -621,7 +623,7 @@ def _extract_connection_fee(text: str) -> float:
     Caller gates the invocation on REGION_WALLONIA so a miss here is a
     layout drift on a Wallonia card; raise rather than zero out.
     """
-    match = re.search(r"Redevance raccordement\(\d+\)\s+([\d,]+)", text)
+    match = re.search(r"Redevance raccordement\(\d+\)\s+([\d,.]+)", text)
     if not match:
         raise ExtractorError("Engie: Wallonia connection fee row not found")
     return to_float(match.group(1)) / 100.0
@@ -659,7 +661,7 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():
         row = re.search(
-            rf"{re.escape(label)}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)",
+            rf"{re.escape(label)}\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)",
             block_text,
             re.IGNORECASE,
         )
@@ -700,7 +702,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
         row = re.search(
-            rf"^{re.escape(label)}\s+((?:[\d,]+\s+){{8,}}[\d,]+)",
+            rf"^{re.escape(label)}\s+((?:[\d,.]+\s+){{8,}}[\d,.]+)",
             text,
             re.MULTILINE | re.IGNORECASE,
         )
@@ -740,8 +742,8 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
             Puissance >13kVA (€/an) | Transport (c€/kWh)
     """
     row = re.search(
-        r"^SIBELGA\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+"
-        r"([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)",
+        r"^SIBELGA\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+"
+        r"([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)",
         text,
         re.MULTILINE,
     )
