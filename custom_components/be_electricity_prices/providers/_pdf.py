@@ -71,7 +71,9 @@ def _is_pdf_payload(payload: bytes) -> bool:
     return False
 
 
-async def fetch_pdf_text(session: aiohttp.ClientSession, url: str) -> str:
+async def fetch_pdf_text(
+    session: aiohttp.ClientSession, url: str, *, timeout: int = 30
+) -> str:
     """Download ``url`` and return the concatenated extracted text."""
     # Catch TimeoutError alongside ClientError in every fetch helper:
     # aiohttp's ClientTimeout fires asyncio.TimeoutError (==
@@ -82,7 +84,7 @@ async def fetch_pdf_text(session: aiohttp.ClientSession, url: str) -> str:
         async with session.get(
             url,
             headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=30),
+            timeout=aiohttp.ClientTimeout(total=timeout),
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
@@ -219,13 +221,15 @@ async def fetch_pdf_text_aligned(
     session: aiohttp.ClientSession,
     url: str,
     x_join_threshold: float = 0.0,
+    *,
+    timeout: int = 30,
 ) -> str:
     """Word-coordinate aligned variant of :func:`fetch_pdf_text`."""
     try:
         async with session.get(
             url,
             headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=30),
+            timeout=aiohttp.ClientTimeout(total=timeout),
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
@@ -241,7 +245,9 @@ async def fetch_pdf_text_aligned(
     )
 
 
-async def fetch_pdf_text_layout(session: aiohttp.ClientSession, url: str) -> str:
+async def fetch_pdf_text_layout(
+    session: aiohttp.ClientSession, url: str, *, timeout: int = 30
+) -> str:
     """Layout-preserving variant of :func:`fetch_pdf_text`.
 
     Some CDNs return HTTP 200 with ``text/html`` for missing PDFs (404
@@ -252,7 +258,7 @@ async def fetch_pdf_text_layout(session: aiohttp.ClientSession, url: str) -> str
         async with session.get(
             url,
             headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=30),
+            timeout=aiohttp.ClientTimeout(total=timeout),
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")

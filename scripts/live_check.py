@@ -580,22 +580,27 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
         "wallonia": "wallonia_renewables",
         "brussels": "brussels_renewables",
     }
-    for contract in bolt._CONTRACTS:
+    # Fetch all six contract PDFs concurrently. Sequential fetches
+    # turned the 240 s per-supplier wallclock cap into the binding
+    # constraint on slow-CDN days (issue #13: 5 contracts each at
+    # 30 s timeout already hit the cap). Concurrent gather makes
+    # max(individual time) the wallclock instead of the sum, so a
+    # 60 s per-request budget still fits comfortably under the cap.
+    fetch_results = await asyncio.gather(
+        *(bolt._fetch_pdf_text(session, c) for c in bolt._CONTRACTS),
+        return_exceptions=True,
+    )
+    for contract, result in zip(bolt._CONTRACTS, fetch_results, strict=True):
         cid = contract.contract_id
-        # Bolt's PDF covers every region, so fetch once per contract
-        # and re-parse for each region from the cached text. Without
-        # this the daily check downloads the same 5 MB PDF three
-        # times (once per region) and trips the byte budget.
-        try:
-            url, text = await bolt._fetch_pdf_text(session, contract)
-        except Exception as err:
+        if isinstance(result, BaseException):
             for region_key in ("flanders", "wallonia", "brussels"):
                 _record(
                     f"bolt/{cid}/{region_key}: fetch",
                     False,
-                    f"{type(err).__name__}: {err}",
+                    f"{type(result).__name__}: {result}",
                 )
             continue
+        url, text = result
         for region_key in ("flanders", "wallonia", "brussels"):
             prefix = f"bolt/{cid}/{region_key}"
             try:

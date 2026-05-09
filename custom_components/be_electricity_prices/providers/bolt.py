@@ -202,9 +202,15 @@ async def _fetch_pdf_text(
     the same text -- Bolt's PDFs cover all regions, so doing it
     per-(contract, region) wastes a 5+ MB round-trip twice.
     """
+    # Bolt's tariff PDFs are ~5 MB each and the CDN occasionally needs
+    # well over the shared 30 s default to deliver one (issue #13:
+    # all six fetches timed out for ~25 minutes on 2026-05-09 while
+    # the URLs themselves were healthy). Use a 60 s budget so a 2-3x
+    # CDN slowdown still yields a snapshot instead of UpdateFailed.
+    pdf_timeout = 60
     url = _document_url(contract)
     try:
-        return url, await fetch_pdf_text_layout(session, url)
+        return url, await fetch_pdf_text_layout(session, url, timeout=pdf_timeout)
     except ExtractorError as primary_err:
         # Fixed cards may not be published yet on the 1st of the month;
         # fall back to the previous month so the user keeps seeing
@@ -225,7 +231,9 @@ async def _fetch_pdf_text(
             primary_err,
             fallback_url,
         )
-        return fallback_url, await fetch_pdf_text_layout(session, fallback_url)
+        return fallback_url, await fetch_pdf_text_layout(
+            session, fallback_url, timeout=pdf_timeout
+        )
 
 
 async def fetch(
@@ -265,7 +273,7 @@ async def fetch_for_month(
     suffix = year_month.strftime("%Y%m")
     url = _document_url(contract, suffix=suffix)
     try:
-        text = await fetch_pdf_text_layout(session, url)
+        text = await fetch_pdf_text_layout(session, url, timeout=60)
     except ExtractorError:
         return None
     try:
