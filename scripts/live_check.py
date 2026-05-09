@@ -48,8 +48,10 @@ from collections.abc import Awaitable, Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TypeVar
 
 import aiohttp
 
@@ -284,13 +286,54 @@ def _expect(label: str, condition: bool, detail: str = "") -> bool:
     return condition
 
 
+_RETRY_BACKOFF_S: tuple[float, ...] = (1.0, 3.0)
+_RetryT = TypeVar("_RetryT")
+
+
+async def _fetch_with_retry(
+    factory: Callable[[], Awaitable[_RetryT]],
+    *,
+    attempts: int = 3,
+) -> _RetryT:
+    """Call ``factory()`` up to ``attempts`` times, retrying transient
+    network failures with a short backoff between attempts.
+
+    A "transient" failure is either a bare ``TimeoutError`` or an
+    ``ExtractorError``-shaped exception whose message starts with
+    ``"network error fetching"`` or ``"HTTP "`` -- the two strings the
+    shared PDF helpers in ``providers/_pdf.py`` use to wrap aiohttp
+    surface errors. Any other exception (parse error, regex miss, ...)
+    propagates immediately so a real regression isn't masked by retries.
+
+    A fresh awaitable is created via ``factory()`` for every attempt
+    because awaitables can only be awaited once.
+    """
+    last_err: BaseException | None = None
+    for i in range(attempts):
+        try:
+            return await factory()
+        except Exception as err:
+            msg = str(err)
+            transient = isinstance(err, TimeoutError) or (
+                msg.startswith("network error fetching") or msg.startswith("HTTP ")
+            )
+            if not transient or i == attempts - 1:
+                raise
+            last_err = err
+            await asyncio.sleep(_RETRY_BACKOFF_S[min(i, len(_RETRY_BACKOFF_S) - 1)])
+    assert last_err is not None  # unreachable
+    raise last_err
+
+
 async def _check_eneco(session: aiohttp.ClientSession, eneco: types.ModuleType) -> None:
     expected_dso_keys = _WALLONIA_DSO_KEYS | _FLUVIUS_KEYS
     for cid in ("power_fix", "power_flex", "power_dynamic"):
         prefix = f"eneco/{cid}"
         try:
             # Eneco's PDF carries every region; any one is fine.
-            snap = await eneco.fetch(session, cid, "flanders")
+            snap = await _fetch_with_retry(
+                partial(eneco.fetch, session, cid, "flanders")
+            )
         except Exception as err:
             _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
             continue
@@ -334,7 +377,9 @@ async def _check_cociter(
     for cid in ("cociter_variable", "cociter_dynamic"):
         prefix = f"cociter/{cid}"
         try:
-            snap = await cociter.fetch(session, cid, "wallonia")
+            snap = await _fetch_with_retry(
+                partial(cociter.fetch, session, cid, "wallonia")
+            )
         except Exception as err:
             _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
             continue
@@ -365,7 +410,7 @@ async def _check_dats24(
     for region in ("flanders", "wallonia"):
         prefix = f"dats24/{cid}/{region}"
         try:
-            snap = await dats24.fetch(session, cid, region)
+            snap = await _fetch_with_retry(partial(dats24.fetch, session, cid, region))
         except Exception as err:
             _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
             continue
@@ -405,7 +450,9 @@ async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) ->
         cid = contract.contract_id
         prefix = f"ebem/{cid}/flanders"
         try:
-            snap = await ebem.fetch(session, cid, "flanders")
+            snap = await _fetch_with_retry(
+                partial(ebem.fetch, session, cid, "flanders")
+            )
         except Exception as err:
             _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
             continue
@@ -450,7 +497,9 @@ async def _check_ecofix(
         for region_key in ("flanders", "wallonia"):
             prefix = f"ecofix/{cid}/{region_key}"
             try:
-                snap = await ecofix.fetch(session, cid, region_key)
+                snap = await _fetch_with_retry(
+                    partial(ecofix.fetch, session, cid, region_key)
+                )
             except Exception as err:
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
@@ -485,7 +534,9 @@ async def _check_ecopower(
     cid = "ecopower_burgerstroom"
     prefix = f"ecopower/{cid}"
     try:
-        snap = await ecopower.fetch(session, cid, "flanders")
+        snap = await _fetch_with_retry(
+            partial(ecopower.fetch, session, cid, "flanders")
+        )
     except Exception as err:
         _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
         return
@@ -538,7 +589,9 @@ async def _check_luminus(
         for region_key in ("flanders", "wallonia"):
             prefix = f"luminus/{cid}/{region_key}"
             try:
-                snap = await luminus.fetch(session, cid, region_key)
+                snap = await _fetch_with_retry(
+                    partial(luminus.fetch, session, cid, region_key)
+                )
             except Exception as err:
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
@@ -587,7 +640,10 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
     # max(individual time) the wallclock instead of the sum, so a
     # 60 s per-request budget still fits comfortably under the cap.
     fetch_results = await asyncio.gather(
-        *(bolt._fetch_pdf_text(session, c) for c in bolt._CONTRACTS),
+        *(
+            _fetch_with_retry(partial(bolt._fetch_pdf_text, session, c))
+            for c in bolt._CONTRACTS
+        ),
         return_exceptions=True,
     )
     for contract, result in zip(bolt._CONTRACTS, fetch_results, strict=True):
@@ -653,7 +709,9 @@ async def _check_totalenergies(
                 continue
             prefix = f"totalenergies/{cid}/{region_key}"
             try:
-                snap = await totalenergies.fetch(session, cid, region_key)
+                snap = await _fetch_with_retry(
+                    partial(totalenergies.fetch, session, cid, region_key)
+                )
             except Exception as err:
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
@@ -701,7 +759,9 @@ async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) ->
         "brussels": "brussels_renewables",
     }
     try:
-        listing_html = await mega._fetch_listing_html(session)
+        listing_html = await _fetch_with_retry(
+            partial(mega._fetch_listing_html, session)
+        )
     except Exception as err:
         _record("mega: listing fetch", False, f"{type(err).__name__}: {err}")
         return
@@ -730,7 +790,9 @@ async def _check_mega_pairs(
         for region_key in ("flanders", "wallonia", "brussels"):
             prefix = f"mega/{cid}/{region_key}"
             try:
-                snap = await mega.fetch(session, cid, region_key)
+                snap = await _fetch_with_retry(
+                    partial(mega.fetch, session, cid, region_key)
+                )
             except Exception as err:
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
@@ -773,7 +835,9 @@ async def _check_octaplus(
         for region_key in ("flanders", "wallonia"):
             prefix = f"octaplus/{cid}/{region_key}"
             try:
-                snap = await octaplus.fetch(session, cid, region_key)
+                snap = await _fetch_with_retry(
+                    partial(octaplus.fetch, session, cid, region_key)
+                )
             except Exception as err:
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
@@ -824,7 +888,9 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
                 continue
             prefix = f"engie/{cid}/{region_key}"
             try:
-                snap = await engie.fetch(session, cid, region_key)
+                snap = await _fetch_with_retry(
+                    partial(engie.fetch, session, cid, region_key)
+                )
             except Exception as err:
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
