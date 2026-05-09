@@ -1196,10 +1196,14 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
 # Per-supplier wallclock budgets (override the global). Symmetric to
 # the byte overrides: known-slow suppliers (bolt parses 6 large PDFs,
 # engie fans out across regions) honestly take longer than the 60-s
-# default. Same "steady-state + 25%" rule.
+# default. Sized to "observed slow-day wallclock + ~20% headroom" so
+# the retry helper's per-PDF overhead (1-3s per fired retry, see
+# _fetch_with_retry) doesn't push a normal slow day over budget.
 _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     "bolt": 90.0,
-    "engie": 90.0,
+    "engie": 130.0,
+    "luminus": 90.0,
+    "mega": 75.0,
 }
 
 
