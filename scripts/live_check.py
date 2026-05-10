@@ -1203,7 +1203,8 @@ _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     "bolt": 90.0,
     "engie": 130.0,
     "luminus": 90.0,
-    "mega": 75.0,
+    "mega": 90.0,
+    "totalenergies": 90.0,
 }
 
 
