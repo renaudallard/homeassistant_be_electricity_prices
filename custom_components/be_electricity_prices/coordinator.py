@@ -1212,6 +1212,25 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     value = float(state.state)
                 except (TypeError, ValueError):
                     value = 0.0
+                # Scale by the source unit: the auto-pick walks back
+                # from the Energy dashboard kWh sensor to a Riemann
+                # integration source, which is almost always a power
+                # sensor in W. Without scaling, 4481 W is stored as
+                # 4481 kW and the capacity_cost sensor inflates by
+                # 1000x (issue #19). An empty / missing unit is kept
+                # as kW for back-compat with sensors that never set
+                # the attribute.
+                unit = (state.attributes.get("unit_of_measurement") or "").strip()
+                if unit in ("W", "VA"):
+                    value *= 0.001
+                elif unit not in ("", "kW", "kVA"):
+                    _LOGGER.warning(
+                        "capacity peak sensor %s reports in %r; "
+                        "expected kW/W/VA/kVA, ignoring this update",
+                        entity_id,
+                        unit,
+                    )
+                    value = 0.0
                 if value > self._peak_kw:
                     self._peak_kw = value
 

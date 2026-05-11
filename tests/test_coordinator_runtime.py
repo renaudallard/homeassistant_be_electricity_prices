@@ -1231,3 +1231,110 @@ async def test_first_refresh_end_to_end_does_not_crash(hass: HomeAssistant) -> N
 
     assert coord.last_update_success
     assert coord._snapshot is snap
+
+
+def _flanders_sensor_entry(peak_entity: str) -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "capacity_mode": "sensor",
+            "capacity_peak_sensor": peak_entity,
+        },
+        title="Eneco (Flanders)",
+    )
+
+
+async def test_capacity_peak_scales_watts_to_kilowatts(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Power sensors selected by the auto-pick land on Riemann
+    integration sources, which report in W. Without unit awareness a
+    4481 W reading was stored as 4481 kW and the capacity_cost
+    sensor inflated by 1000x (issue #19)."""
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entity_id = "sensor.house_power"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hass.states.async_set(entity_id, "4481", {"unit_of_measurement": "W"})
+
+    await coord._track_monthly_peak()
+
+    assert coord._peak_kw == 4.481
+
+
+async def test_capacity_peak_keeps_kilowatts_unscaled(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A native kW sensor must be passed through unchanged so the
+    fix doesn't regress users who already had the right unit."""
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entity_id = "sensor.house_power_kw"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hass.states.async_set(entity_id, "4.481", {"unit_of_measurement": "kW"})
+
+    await coord._track_monthly_peak()
+
+    assert coord._peak_kw == 4.481
+
+
+async def test_capacity_peak_treats_missing_unit_as_kilowatts(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Sensors that never set unit_of_measurement existed in the wild
+    before the fix and were treated as kW. Keep that legacy path so
+    the fix is purely additive."""
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entity_id = "sensor.house_power_unitless"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hass.states.async_set(entity_id, "3.0", {})
+
+    await coord._track_monthly_peak()
+
+    assert coord._peak_kw == 3.0
+
+
+async def test_capacity_peak_scales_volt_amperes_to_kilowatts(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Some Belgian P1 readers expose apparent_power in VA. Treat
+    VA the same way as W so those users don't see the same x1000
+    inflation."""
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entity_id = "sensor.house_apparent_power"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hass.states.async_set(entity_id, "4481", {"unit_of_measurement": "VA"})
+
+    await coord._track_monthly_peak()
+
+    assert coord._peak_kw == 4.481
+
+
+async def test_capacity_peak_rejects_energy_sensor(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A user that mistakenly picked a kWh sensor must NOT see the
+    cumulative kWh climb into the monthly-peak slot. Ignore the
+    update; the floor still applies."""
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entity_id = "sensor.monthly_consumption"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hass.states.async_set(entity_id, "4481", {"unit_of_measurement": "kWh"})
+
+    await coord._track_monthly_peak()
+
+    # VREG floor still applies; the bogus 4481 kWh reading is ignored.
+    assert coord._peak_kw == 2.5

@@ -47,7 +47,7 @@ publication and how to parse it.
 - **Dynamic contracts** — `factor × spot + base` per hour, where `spot` is the Belgian day-ahead price from ENTSO-E.
 - **Time-of-Use contracts** — Luminus SmartFlex and Engie Empower Flextime: 3 hour-of-day bands (peak / transition / offpeak) with the supplier's published rates per slot.
 - **Tarif Impact (Wallonia)** — opt-in CWaPE 3-band distribution pricing (PIC 17–22, MEDIUM 7–11 + 22–1, ECO 1–7 + 11–17), orthogonal to the supplier tariff.
-- **Flanders capacity tariff** — monthly peak tracked from any kW sensor or a fixed value; billed against the configured Fluvius sub-area.
+- **Flanders capacity tariff** — monthly peak tracked from any power sensor (W, kW, VA, or kVA — the unit is honoured) or a fixed value; billed against the configured Fluvius sub-area.
 - **Solar** — prosumer fee for the Walloon compensation regime (until 2030-12-31), and a per-kWh injection price entity that plugs straight into HA Energy.
 - **Year-to-date cost** — `current_year_cost` sensor reports your running bill in EUR since Jan 1, computed day by day (or hour by hour for TOU and dynamic contracts) from HA's recorder (consumption × the tariff of the month that day/hour belongs to). Each day is billed at its own month's published rate when the supplier archives historical cards (Eneco / Cociter / Ecopower / Bolt fix / Mega); other suppliers fall back to the current rate as a proxy. **TOU contracts** (Engie Empower Flextime, Luminus SmartFlex) use the per-hour path so each kWh hits its actual peak / transition / offpeak rate. **Dynamic contracts** replay historical hourly ENTSO-E day-ahead spots from a persistent cache so each past kWh is billed at its actual `factor × spot + base` rate; missing hours (cold-start gaps) are skipped rather than zeroed. Compensation regime nets injection against consumption across the whole year (clamped at zero, since most Walloon suppliers forfeit surplus injection past consumption). Annual fees are pro-rated to the elapsed fraction of the year so the figure grows day by day instead of jumping to the full annual on Jan 1.
 - **Cheapest / most-expensive window services** — find the optimal contiguous N-hour window in the upcoming price table for EV charging, heat-pump cycles, or peak avoidance.
@@ -179,11 +179,13 @@ supplier's tariff card.
    real ENTSO-E endpoint at submission; bad keys are rejected before the
    entry is saved.
 7. **Capacity tariff peak source** *(Flanders only)* — either a power sensor
-   reporting your live kW draw, or a fixed kW value (default 2.5 kW, the VREG
-   regulated minimum). The peak sensor field is auto-filled from the kW input
-   of any Riemann `integration` helper that feeds the Energy dashboard's grid
-   source, so users with the typical P1-power → kWh-Riemann → dashboard chain
-   don't have to pick the same sensor twice.
+   reporting your live draw (W, kW, VA, or kVA; the unit is honoured so a
+   Riemann-source sensor in W is not misread as kW), or a fixed kW value
+   (default 2.5 kW, the VREG regulated minimum). The peak sensor field is
+   auto-filled from the power input of any Riemann `integration` helper that
+   feeds the Energy dashboard's grid source, so users with the typical
+   P1-power → kWh-Riemann → dashboard chain don't have to pick the same
+   sensor twice.
 8. **Solar panels** — inverter capacity in kVA + the regime that applies:
    - **No solar panels** *(default)* — no extra sensors.
    - **Compensation regime** — Wallonia only, installations **certified before
