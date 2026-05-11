@@ -402,6 +402,11 @@
       "tomorrow_prices_available": {
         "name": "Prix de demain disponibles"
       }
+    },
+    "button": {
+      "reset_monthly_peak": {
+        "name": "Reinitialiser le pic mensuel"
+      }
     }
   }
 }

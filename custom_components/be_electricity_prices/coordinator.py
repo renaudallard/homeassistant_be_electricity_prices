@@ -866,6 +866,20 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         _shared_failed_fetches(self.hass).pop(key, None)
         await self.async_request_refresh()
 
+    async def reset_monthly_peak(self) -> None:
+        """Drop the persisted monthly peak so the next tick rebuilds it.
+
+        Exposed via the diagnostic Reset peak button. Required when an
+        earlier release stored an inflated peak (e.g. a W-unit sensor
+        misread as kW pre-0.5.45) and the rolling-max comparison would
+        otherwise hold the bad value until the next 1st of the month.
+        Persists immediately so the reset survives an HA restart between
+        now and the next coordinator tick.
+        """
+        self._peak_kw = 0.0
+        await self._save_persistent()
+        await self.async_request_refresh()
+
     @staticmethod
     def _compute_data_signature(entry: ConfigEntry) -> frozenset[tuple[str, Any]]:
         """Frozen snapshot of every load-bearing entry.data field.

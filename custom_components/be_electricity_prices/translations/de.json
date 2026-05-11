@@ -402,6 +402,11 @@
       "tomorrow_prices_available": {
         "name": "Preise fur morgen verfugbar"
       }
+    },
+    "button": {
+      "reset_monthly_peak": {
+        "name": "Monatsspitze zurucksetzen"
+      }
     }
   }
 }

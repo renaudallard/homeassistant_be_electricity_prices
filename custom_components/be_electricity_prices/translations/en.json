@@ -402,6 +402,11 @@
       "tomorrow_prices_available": {
         "name": "Tomorrow prices available"
       }
+    },
+    "button": {
+      "reset_monthly_peak": {
+        "name": "Reset monthly peak"
+      }
     }
   }
 }

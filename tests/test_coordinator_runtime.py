@@ -1338,3 +1338,26 @@ async def test_capacity_peak_rejects_energy_sensor(
 
     # VREG floor still applies; the bogus 4481 kWh reading is ignored.
     assert coord._peak_kw == 2.5
+
+
+async def test_reset_monthly_peak_drops_persisted_value(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The diagnostic reset button must clear the rolling max so a
+    previously inflated value (e.g. 4481 stored when the W-as-kW bug
+    was live) doesn't survive the upgrade. The next tick rebuilds the
+    peak from the corrected sensor reading."""
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entity_id = "sensor.house_power"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_kw = 4481.0  # legacy bad value
+    coord._save_persistent = AsyncMock()  # type: ignore[method-assign]
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+
+    await coord.reset_monthly_peak()
+
+    assert coord._peak_kw == 0.0
+    coord._save_persistent.assert_awaited_once()
+    coord.async_request_refresh.assert_awaited_once()
