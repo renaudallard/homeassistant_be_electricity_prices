@@ -343,14 +343,21 @@ def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
             )
         ),
     }
+    # Restrict the picker to power sensors so the user can't accidentally
+    # land on a kWh / unitless / temperature sensor and have it inflate
+    # the capacity bill (issue #19). Coordinator-side scaling already
+    # honours W / kW / VA / kVA, but cutting the long tail at the picker
+    # is the only real "this bug class can't recur" guarantee.
+    peak_selector = EntitySelectorConfig(
+        domain="sensor",
+        device_class=["power", "apparent_power"],
+    )
     if (sensor := defaults.get(CONF_CAPACITY_PEAK_SENSOR)) is not None:
         fields[vol.Optional(CONF_CAPACITY_PEAK_SENSOR, default=sensor)] = (
-            EntitySelector(EntitySelectorConfig(domain="sensor"))
+            EntitySelector(peak_selector)
         )
     else:
-        fields[vol.Optional(CONF_CAPACITY_PEAK_SENSOR)] = EntitySelector(
-            EntitySelectorConfig(domain="sensor")
-        )
+        fields[vol.Optional(CONF_CAPACITY_PEAK_SENSOR)] = EntitySelector(peak_selector)
     fields[
         vol.Optional(
             CONF_CAPACITY_FIXED_KW,
@@ -376,6 +383,13 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
     When both are filled, the day/night registers win (more accurate;
     no warm-up period).
     """
+    # Restrict to energy-class (cumulative kWh) sensors so the user
+    # cannot land on a power / temperature / unitless sensor and have
+    # the year-cost engine read its raw value as kWh.
+    kwh_selector = EntitySelectorConfig(
+        domain="sensor",
+        device_class="energy",
+    )
     fields = {}
     for conf in (
         CONF_DAY_CONSUMPTION_KWH,
@@ -387,13 +401,9 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
     ):
         default = defaults.get(conf)
         if default is not None:
-            fields[vol.Optional(conf, default=default)] = EntitySelector(
-                EntitySelectorConfig(domain="sensor")
-            )
+            fields[vol.Optional(conf, default=default)] = EntitySelector(kwh_selector)
         else:
-            fields[vol.Optional(conf)] = EntitySelector(
-                EntitySelectorConfig(domain="sensor")
-            )
+            fields[vol.Optional(conf)] = EntitySelector(kwh_selector)
     return vol.Schema(fields)
 
 
@@ -635,8 +645,27 @@ async def _apply_energy_manager_capacity_default(
         return
     opts = {**ce.data, **ce.options}
     source_sensor = opts.get("source")
-    if isinstance(source_sensor, str) and source_sensor.startswith("sensor."):
-        defaults[CONF_CAPACITY_PEAK_SENSOR] = source_sensor
+    if not isinstance(source_sensor, str) or not source_sensor.startswith("sensor."):
+        return
+    # Validate the candidate is an actual power sensor before pre-filling.
+    # A Riemann source can in principle be anything numeric (a flow rate,
+    # a temperature delta...); pre-filling a non-power sensor used to put
+    # the user one click away from issue #19. When unsure, leave the
+    # field blank so the (now device_class-filtered) picker forces a
+    # deliberate choice.
+    state = hass.states.get(source_sensor)
+    if state is None:
+        return
+    device_class = state.attributes.get("device_class")
+    unit = (state.attributes.get("unit_of_measurement") or "").strip()
+    if device_class not in ("power", "apparent_power") and unit not in (
+        "W",
+        "kW",
+        "VA",
+        "kVA",
+    ):
+        return
+    defaults[CONF_CAPACITY_PEAK_SENSOR] = source_sensor
 
 
 def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:

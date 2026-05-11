@@ -333,6 +333,11 @@ async def test_capacity_pre_fill_walks_integration_helper_to_kw_source(
         output_kwh="sensor.electricity_meter_total",
         entry_id="riemann_kwh",
     )
+    hass.states.async_set(
+        "sensor.electricity_meter_power",
+        "1234",
+        {"device_class": "power", "unit_of_measurement": "W"},
+    )
     defaults: dict[str, Any] = {}
     prefs = _grid_prefs(consumption="sensor.electricity_meter_total")
     with _patch_manager(prefs):
@@ -371,3 +376,29 @@ async def test_capacity_pre_fill_does_not_override_existing_choice(
     with _patch_manager(prefs):
         await _apply_energy_manager_capacity_default(hass, defaults)
     assert defaults["capacity_peak_sensor"] == "sensor.user_pick"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_capacity_pre_fill_rejects_non_power_riemann_source(
+    hass: HomeAssistant,
+) -> None:
+    """A Riemann integration helper can in principle be fed any numeric
+    sensor (flow rate, m3 of gas, etc.). Refuse to pre-fill the
+    capacity peak from a source that isn't a power sensor: a wrong
+    pre-fill is one click away from issue #19 again."""
+    _add_integration_helper(
+        hass,
+        source_kw="sensor.gas_flow",
+        output_kwh="sensor.electricity_meter_total",
+        entry_id="riemann_kwh3",
+    )
+    hass.states.async_set(
+        "sensor.gas_flow",
+        "0.5",
+        {"device_class": "gas", "unit_of_measurement": "m³/h"},
+    )
+    defaults: dict[str, Any] = {}
+    prefs = _grid_prefs(consumption="sensor.electricity_meter_total")
+    with _patch_manager(prefs):
+        await _apply_energy_manager_capacity_default(hass, defaults)
+    assert "capacity_peak_sensor" not in defaults

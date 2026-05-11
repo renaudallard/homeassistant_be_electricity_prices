@@ -1488,16 +1488,37 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
 def _read_kwh(hass: HomeAssistant, entity_id: str | None) -> float | None:
     """Read a cumulative kWh sensor's state. Returns None if unset, missing,
     unavailable, or non-numeric -- the caller treats any None as "no
-    current_year_cost computable yet" (signals the sensor to expose ``None``)."""
+    current_year_cost computable yet" (signals the sensor to expose ``None``).
+
+    Honours the source unit so a meter sensor reporting in Wh / MWh
+    isn't read as raw kWh and bill the user 1000x too much (or too
+    little). Same defence-in-depth as the capacity peak path; the
+    OptionsFlow already restricts the picker to device_class=energy
+    sensors but a pre-existing entry can still hold a Wh-unit choice.
+    Refuses non-energy units rather than guess.
+    """
     if not entity_id:
         return None
     state = hass.states.get(entity_id)
     if state is None or state.state in ("", "unknown", "unavailable"):
         return None
     try:
-        return float(state.state)
+        value = float(state.state)
     except (TypeError, ValueError):
         return None
+    unit = (state.attributes.get("unit_of_measurement") or "").strip()
+    if unit in ("", "kWh"):
+        return value
+    if unit == "Wh":
+        return value / 1000.0
+    if unit == "MWh":
+        return value * 1000.0
+    _LOGGER.warning(
+        "kWh sensor %s reports in %r; expected kWh / Wh / MWh, ignoring",
+        entity_id,
+        unit,
+    )
+    return None
 
 
 async def _recorder_rows(

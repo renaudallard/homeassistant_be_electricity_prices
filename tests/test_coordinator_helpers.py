@@ -46,6 +46,7 @@ from custom_components.be_electricity_prices.coordinator import (
     _days_through,
     _energy_kind,
     _monthly_snapshots,
+    _read_kwh,
     _recorder_daily_kwh,
     _snapshot_for_month,
     _snapshot_from_dict,
@@ -1123,3 +1124,37 @@ def test_snapshot_round_trip_for_tou_contract() -> None:
     assert restored.energy.peak == pytest.approx(0.30)
     assert restored.energy.transition == pytest.approx(0.20)
     assert restored.energy.offpeak == pytest.approx(0.10)
+
+
+def test_read_kwh_passes_native_kwh_unchanged(hass: HomeAssistant) -> None:
+    hass.states.async_set(
+        "sensor.house_total_kwh", "1234.5", {"unit_of_measurement": "kWh"}
+    )
+    assert _read_kwh(hass, "sensor.house_total_kwh") == pytest.approx(1234.5)
+
+
+def test_read_kwh_treats_missing_unit_as_kwh(hass: HomeAssistant) -> None:
+    """Pre-existing entries that picked a sensor with no
+    unit_of_measurement (rare, but exists) keep working."""
+    hass.states.async_set("sensor.house_unitless", "42", {})
+    assert _read_kwh(hass, "sensor.house_unitless") == pytest.approx(42.0)
+
+
+def test_read_kwh_scales_wh_to_kwh(hass: HomeAssistant) -> None:
+    """A meter exporting Wh would otherwise read 1 234 500 as kWh and
+    inflate current_year_cost by 1000x."""
+    hass.states.async_set("sensor.house_wh", "1234500", {"unit_of_measurement": "Wh"})
+    assert _read_kwh(hass, "sensor.house_wh") == pytest.approx(1234.5)
+
+
+def test_read_kwh_scales_mwh_to_kwh(hass: HomeAssistant) -> None:
+    hass.states.async_set("sensor.house_mwh", "1.2345", {"unit_of_measurement": "MWh"})
+    assert _read_kwh(hass, "sensor.house_mwh") == pytest.approx(1234.5)
+
+
+def test_read_kwh_rejects_non_energy_unit(hass: HomeAssistant) -> None:
+    """A user that mistakenly picked a power sensor (W) for the
+    cumulative kWh slot must NOT have its instantaneous reading folded
+    into the year cost."""
+    hass.states.async_set("sensor.house_w", "1500", {"unit_of_measurement": "W"})
+    assert _read_kwh(hass, "sensor.house_w") is None
