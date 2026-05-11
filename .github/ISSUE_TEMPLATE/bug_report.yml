@@ -1,0 +1,158 @@
+name: Bug report
+description: Report a problem with the integration
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report. Please fill in every section
+        you can — missing supplier / DSO / contract / version info is the
+        most common reason a bug takes weeks instead of hours to fix.
+
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: e.g. 2026.5.1
+    validations:
+      required: true
+
+  - type: input
+    id: integration_version
+    attributes:
+      label: Integration version
+      description: Settings -> Devices & Services -> be_electricity_prices -> three-dot menu -> "Download diagnostics" shows it under `manifest.version`.
+      placeholder: e.g. 0.5.44
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Install method
+      options:
+        - HACS
+        - Manual copy into custom_components
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: region
+    attributes:
+      label: Region
+      options:
+        - Flanders
+        - Wallonia
+        - Brussels
+    validations:
+      required: true
+
+  - type: dropdown
+    id: dso
+    attributes:
+      label: DSO
+      options:
+        - Fluvius Antwerpen
+        - Fluvius Halle-Vilvoorde
+        - Fluvius Imewo
+        - Fluvius Intergem
+        - Fluvius Iveka
+        - Fluvius Limburg
+        - Fluvius West
+        - Fluvius Zenne-Dijle
+        - AIEG
+        - AIESH
+        - ORES
+        - RESA
+        - REW
+        - Sibelga
+    validations:
+      required: true
+
+  - type: dropdown
+    id: supplier
+    attributes:
+      label: Supplier
+      options:
+        - Eneco
+        - Engie
+        - TotalEnergies
+        - Luminus
+        - Mega
+        - Bolt
+        - Cociter
+        - Dats24
+        - Ebem
+        - Ecofix
+        - Ecopower
+        - Octa+
+    validations:
+      required: true
+
+  - type: input
+    id: contract
+    attributes:
+      label: Contract / tariff card name
+      description: Exact name as shown in the integration's options (e.g. "Easy Indexed", "Dynamic", "Fix 1 jaar").
+    validations:
+      required: true
+
+  - type: dropdown
+    id: meter
+    attributes:
+      label: Meter type
+      options:
+        - Mono-horaire (single rate)
+        - Bi-horaire (peak / off-peak)
+        - Exclusive night
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: What you observed, including any incorrect values (price, capacity cost, peak, injection, etc.).
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Enable debug logging in `configuration.yaml`, reload the
+        integration, then paste the lines from `home-assistant.log`
+        that mention `be_electricity_prices`.
+
+        ```yaml
+        logger:
+          default: warning
+          logs:
+            custom_components.be_electricity_prices: debug
+        ```
+      render: shell
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics download (optional but very helpful)
+      description: Settings -> Devices & Services -> be_electricity_prices -> three-dot menu -> "Download diagnostics", then drag the JSON file into this box.
