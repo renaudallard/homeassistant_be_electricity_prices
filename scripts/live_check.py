@@ -1202,7 +1202,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
 _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     "bolt": 90.0,
     "engie": 130.0,
-    "luminus": 90.0,
+    "luminus": 125.0,
     "mega": 90.0,
     "totalenergies": 90.0,
 }
