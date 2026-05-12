@@ -260,14 +260,16 @@ def _dso_tariff_mode_schema(defaults: dict[str, Any]) -> vol.Schema:
 def _meter_schema(
     supplier_id: str, contract_id: str, defaults: dict[str, Any]
 ) -> vol.Schema:
-    # Dynamic and TOU contracts both require a smart (SMR3) meter to
-    # bill by quarter-hour or by hour-of-day; default the meter step
-    # accordingly and restrict the choice list. Picking 'bi' on a TOU
-    # contract would make compute_breakdown route distribution through
-    # the bi-horaire DSO peak/offpeak split while the supplier still
-    # billed energy by TOU slot -- two billing modes that don't mix.
+    # Dynamic, TOU, and TOU Impact contracts all require a smart (SMR3)
+    # meter to bill by quarter-hour or by hour-of-day; default the meter
+    # step accordingly and restrict the choice list. Picking 'bi' on a
+    # TOU contract would make compute_breakdown route distribution
+    # through the bi-horaire DSO peak/offpeak split while the supplier
+    # still billed energy by TOU slot -- two billing modes that don't
+    # mix. Off-peak Impact additionally requires the user to have the
+    # CWaPE Tarif réseau IMPACT subscription on the DSO side.
     kind = _contract_kind(supplier_id, contract_id)
-    if kind in ("dynamic", "tou"):
+    if kind in ("dynamic", "tou", "tou_impact"):
         options = [METER_DYNAMIC]
         fallback = METER_DYNAMIC
     else:
@@ -1489,24 +1491,24 @@ def _tou_weighted_per_kwh(
 
     For Fixed / Variable / Dynamic the live breakdown at ``when_now``
     is the right number. For TOU contracts (Luminus SmartFlex, Engie
-    Empower Flextime) ``compute_breakdown`` returns one of three slot
-    rates depending on the hour the user opens the dialog -- biased.
-    Compute breakdowns at three representative weekday hours (one per
-    slot) and weight by the standard CWaPE-defined slot durations
-    across a week, so the annual estimate isn't dragged toward
-    whichever slot the user happens to be in.
+    Empower Flextime) and Impact contracts (Mega Off-peak Impact)
+    ``compute_breakdown`` returns one of three slot rates depending on
+    the hour the user opens the dialog -- biased. Compute breakdowns
+    at three representative weekday hours (one per slot) and weight by
+    the published slot durations across a week, so the annual estimate
+    isn't dragged toward whichever slot the user happens to be in.
 
     Returns ``None`` on compute failure so the caller can render '-'
     on the result page rather than tear the flow down.
     """
     from .pricing import compute_breakdown, is_belgian_holiday
-    from .providers.base import TimeOfUseRates
+    from .providers.base import ImpactRates, TimeOfUseRates
 
     try:
         bd = compute_breakdown(snapshot, dso, region, when_now, spot, meter, dso_mode)
     except Exception:  # noqa: BLE001
         return None
-    if not isinstance(snapshot.energy, TimeOfUseRates):
+    if not isinstance(snapshot.energy, (TimeOfUseRates, ImpactRates)):
         return bd.all_in
     # Pick a recent non-holiday weekday so each slot lookup hits the
     # weekday rule. Walk back from today's local date.
@@ -1516,6 +1518,26 @@ def _tou_weighted_per_kwh(
             break
         weekday -= timedelta(days=1)
     base = datetime.combine(weekday, time(), tzinfo=when_now.tzinfo)
+    if isinstance(snapshot.energy, ImpactRates):
+        # CWaPE Impact bands (every day, no weekend exception):
+        #   pic    17-22                (35h/week)
+        #   medium 07-11 + 22-01        (49h/week)
+        #   eco    01-07 + 11-17        (84h/week)
+        try:
+            bd_pic = compute_breakdown(
+                snapshot, dso, region, base.replace(hour=19), spot, meter, dso_mode
+            )
+            bd_med = compute_breakdown(
+                snapshot, dso, region, base.replace(hour=9), spot, meter, dso_mode
+            )
+            bd_eco = compute_breakdown(
+                snapshot, dso, region, base.replace(hour=3), spot, meter, dso_mode
+            )
+        except Exception:  # noqa: BLE001
+            return bd.all_in
+        wp, wm, we = 35.0, 49.0, 84.0
+        total = wp + wm + we
+        return (bd_pic.all_in * wp + bd_med.all_in * wm + bd_eco.all_in * we) / total
     # CWaPE weekday TOU windows (shared across products):
     #   peak       07-11 + 17-22
     #   transition 11-17 + 22-01
