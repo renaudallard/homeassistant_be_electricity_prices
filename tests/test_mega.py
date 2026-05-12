@@ -39,6 +39,7 @@ from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
     FixedRates,
+    ImpactRates,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.mega import (
@@ -205,6 +206,73 @@ def test_smart_flex_is_a_variable_contract() -> None:
     # Mega 'Flex' product values change month to month; just assert the
     # current rate is in a plausible Belgian residential range.
     assert 0.10 <= snap.energy.current <= 0.30
+
+
+def test_offpeak_impact_parses_three_tier_rates() -> None:
+    snap = parse_snapshot(
+        "mega_offpeak_impact_var",
+        fixture_text("mega_offpeak_impact_w.pdf"),
+        "wallonia",
+    )
+    assert isinstance(snap.energy, ImpactRates)
+    # PIC is the most expensive band, ECO the cheapest -- enforced by
+    # live_check too.
+    assert snap.energy.pic > snap.energy.medium > snap.energy.eco
+    assert snap.energy.pic == pytest.approx(0.182)
+    assert snap.energy.medium == pytest.approx(0.1496)
+    assert snap.energy.eco == pytest.approx(0.1011)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(74.2)
+    # Formula text captures all three tiers from the footnote.
+    assert snap.energy.formula is not None
+    assert "Tarif ECO" in snap.energy.formula
+    assert "Tarif MEDIUM" in snap.energy.formula
+    assert "PIC" in snap.energy.formula
+
+
+def test_offpeak_impact_injection_uses_per_tier_column() -> None:
+    snap = parse_snapshot(
+        "mega_offpeak_impact_var",
+        fixture_text("mega_offpeak_impact_w.pdf"),
+        "wallonia",
+    )
+    # The Impact card has no ``Compteur mono-horaire`` anchor; injection
+    # lives as the second number under each Tarif row. All three rows
+    # carry the same rate, so the parser pulls the first occurrence.
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(0.0292)
+
+
+def test_offpeak_impact_wallonia_dsos_carry_impact_triplet() -> None:
+    snap = parse_snapshot(
+        "mega_offpeak_impact_var",
+        fixture_text("mega_offpeak_impact_w.pdf"),
+        "wallonia",
+    )
+    for dso_key, overlay in snap.dsos.items():
+        assert overlay.distribution_pic is not None, dso_key
+        assert overlay.distribution_medium is not None, dso_key
+        assert overlay.distribution_eco is not None, dso_key
+        # Same band ordering invariant as the supplier-side rates.
+        assert (
+            overlay.distribution_pic
+            >= overlay.distribution_medium
+            >= overlay.distribution_eco
+        ), dso_key
+
+
+def test_offpeak_impact_contract_is_wallonia_only() -> None:
+    from custom_components.be_electricity_prices.const import (
+        REGION_BRUSSELS,
+        REGION_FLANDERS,
+        REGION_WALLONIA,
+    )
+
+    contract = next(
+        c for c in EXTRACTORS["mega"].contracts if c.id == "mega_offpeak_impact_var"
+    )
+    assert contract.regions == frozenset({REGION_WALLONIA})
+    assert REGION_FLANDERS not in contract.regions
+    assert REGION_BRUSSELS not in contract.regions
 
 
 def test_unknown_contract_raises() -> None:

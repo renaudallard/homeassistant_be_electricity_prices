@@ -46,6 +46,7 @@ from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     EnergyRates,
     FixedRates,
+    ImpactRates,
     SupplierSnapshot,
     TaxOverlay,
     TimeOfUseRates,
@@ -317,6 +318,20 @@ def test_dso_impact_band_no_weekend_exception() -> None:
     # Tarif Impact applies 7 days a week (unlike bi-horaire). A Saturday
     # 17h-22h block is still PIC.
     assert dso_impact_band(datetime(2026, 5, 2, 18, 0)) == "pic"
+
+
+def test_energy_impact_routes_through_band() -> None:
+    rates = ImpactRates(pic=0.18, medium=0.15, eco=0.10)
+    # 19:00 sits inside the PIC window (17-22).
+    assert energy_eur_per_kwh(rates, datetime(2026, 4, 29, 19, 0), None) == 0.18
+    # 09:00 sits inside the MEDIUM window (07-11).
+    assert energy_eur_per_kwh(rates, datetime(2026, 4, 29, 9, 0), None) == 0.15
+    # 03:00 sits inside the ECO window (01-07).
+    assert energy_eur_per_kwh(rates, datetime(2026, 4, 29, 3, 0), None) == 0.10
+    # 14:00 ECO via the 11-17 second half.
+    assert energy_eur_per_kwh(rates, datetime(2026, 4, 29, 14, 0), None) == 0.10
+    # Weekend keeps the same schedule (no weekend exception).
+    assert energy_eur_per_kwh(rates, datetime(2026, 5, 2, 18, 0), None) == 0.18
 
 
 def test_network_impact_dispatches_by_band() -> None:
