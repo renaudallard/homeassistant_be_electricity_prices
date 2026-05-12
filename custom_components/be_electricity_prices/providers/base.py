@@ -50,7 +50,7 @@ import aiohttp
 
 from ..const import REGIONS
 
-TariffKind = Literal["fixed", "variable", "dynamic", "tou"]
+TariffKind = Literal["fixed", "variable", "dynamic", "tou", "tou_impact"]
 
 _ALL_REGIONS: frozenset[str] = frozenset(REGIONS)
 
@@ -155,7 +155,33 @@ class TimeOfUseRates:
     weekend_rule: WeekendRule = "weekend_offpeak"
 
 
-EnergyRates = FixedRates | VariableRates | DynamicRates | TimeOfUseRates
+@dataclass(frozen=True, kw_only=True)
+class ImpactRates:
+    """Wallonia Tarif Impact energy contract: 3 slots on CWaPE bands.
+
+    Distinct from :class:`TimeOfUseRates` because the hour-of-day
+    schedule is the CWaPE-defined Impact one (every day of the week,
+    no weekend exception), matching the DSO Impact tariff that gates
+    eligibility:
+
+      pic    17:00-22:00            (highest)
+      medium 07:00-11:00 + 22:00-01:00
+      eco    01:00-07:00 + 11:00-17:00 (lowest)
+
+    Requires an SMR3 quarter-hourly smart meter and an opt-in to the
+    DSO Impact tariff. The supplier publishes per-band formulas; the
+    snapshot carries the resolved monthly rates and the formula text
+    for diagnostics.
+    """
+
+    pic: float
+    medium: float
+    eco: float
+    yearly_fixed_fee: float = 0.0
+    formula: str | None = None
+
+
+EnergyRates = FixedRates | VariableRates | DynamicRates | TimeOfUseRates | ImpactRates
 
 
 @dataclass(frozen=True, kw_only=True)

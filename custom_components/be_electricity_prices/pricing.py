@@ -54,6 +54,7 @@ from .providers.base import (
     DynamicRates,
     EnergyRates,
     FixedRates,
+    ImpactRates,
     SupplierSnapshot,
     TaxOverlay,
     TimeOfUseRates,
@@ -203,6 +204,13 @@ def energy_eur_per_kwh(
         if slot == "transition":
             return energy.transition
         return energy.offpeak
+    if isinstance(energy, ImpactRates):
+        band = dso_impact_band(when)
+        if band == "pic":
+            return energy.pic
+        if band == "medium":
+            return energy.medium
+        return energy.eco
     raise TypeError(f"unknown energy rates type: {type(energy).__name__}")
 
 
@@ -214,10 +222,11 @@ def static_energy_eur_per_kwh(energy: EnergyRates, band: StaticBand) -> float | 
 
     Used by ``static_breakdown`` to compute the all-in rate plugged into
     the current_year_cost sensor. Returns ``None`` for DynamicRates (no
-    constant rate exists) and TimeOfUseRates (3-band schema doesn't map
-    onto the bi-hourly meter convention). Falls back to the single rate
-    when the requested peak/offpeak band has no published value
-    (mono-only rate sheet).
+    constant rate exists), TimeOfUseRates (3-band schema doesn't map
+    onto the bi-hourly meter convention), and ImpactRates (per-band
+    rates vary by hour-of-day; caller must go through the hourly path).
+    Falls back to the single rate when the requested peak/offpeak band
+    has no published value (mono-only rate sheet).
     """
     if isinstance(energy, FixedRates):
         if band == "single":

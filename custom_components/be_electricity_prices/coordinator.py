@@ -104,6 +104,7 @@ from .providers.base import (
     DsoOverlay,
     EnergyRates,
     FixedRates,
+    ImpactRates,
     InjectionRates,
     SupplierExtractor,
     TaxOverlay,
@@ -2167,12 +2168,13 @@ async def _compute_current_year_cost(
         return dyn_energy + fees
 
     # Per-hour billing is required when the supplier's energy rates
-    # vary by hour (TOU contracts) AND when the DSO bills per Impact
-    # band (PIC / MEDIUM / ECO change with hour-of-day). Both go
-    # through the same hourly path; the static per-day branch can't
-    # represent either.
+    # vary by hour (TOU + Impact energy contracts) or when the DSO
+    # bills per Impact band (PIC / MEDIUM / ECO change with hour-of-
+    # day). All three go through the same hourly path; the static
+    # per-day branch can't represent any of them.
     needs_hourly = (
-        isinstance(snapshot.energy, TimeOfUseRates) or dso_mode == DSO_MODE_IMPACT
+        isinstance(snapshot.energy, (TimeOfUseRates, ImpactRates))
+        or dso_mode == DSO_MODE_IMPACT
     )
     if needs_hourly:
         hourly_energy = await _ytd_hourly_energy(
@@ -2287,7 +2289,7 @@ async def _compute_current_year_cost(
 # the new field. Loading a snapshot whose schema_version is below this
 # raises in _snapshot_from_dict; async_load_persistent then discards the
 # cache and the coordinator's first refresh repopulates from the supplier.
-_SNAPSHOT_SCHEMA_VERSION = 7
+_SNAPSHOT_SCHEMA_VERSION = 8
 
 
 def _snapshot_to_dict(
@@ -2327,6 +2329,8 @@ def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
         energy = DynamicRates(**energy_args)
     elif energy_kind == "tou":
         energy = TimeOfUseRates(**energy_args)
+    elif energy_kind == "tou_impact":
+        energy = ImpactRates(**energy_args)
     else:
         raise ValueError(f"unknown energy kind {energy_kind!r}")
     injection_data = data.get("injection")
@@ -2359,4 +2363,6 @@ def _energy_kind(energy: EnergyRates) -> str:
         return "dynamic"
     if isinstance(energy, TimeOfUseRates):
         return "tou"
+    if isinstance(energy, ImpactRates):
+        return "tou_impact"
     raise TypeError(f"unknown energy rates type {type(energy).__name__}")
