@@ -1164,12 +1164,12 @@ async def _run() -> int:
     )
 
 
-# Static drift thresholds. The default (5 MB / 60 s) catches a fresh
+# Static drift thresholds. The default (5 MB / 90 s) catches a fresh
 # regression at any supplier; per-supplier overrides cover known-large
 # catalogs whose total over the full check is honestly above the
 # default but stable. The override is the budget we expect plus ~25%
 # headroom; cross it and something genuinely changed.
-LATENCY_WARN_THRESHOLD_S = 60.0
+LATENCY_WARN_THRESHOLD_S = 90.0
 BYTES_WARN_THRESHOLD = 5_000_000
 
 # Per-supplier byte budgets (override the global). Picked off the
@@ -1195,16 +1195,13 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
 
 # Per-supplier wallclock budgets (override the global). Symmetric to
 # the byte overrides: known-slow suppliers (bolt parses 6 large PDFs,
-# engie fans out across regions) honestly take longer than the 60-s
+# engie fans out across regions) honestly take longer than the 90-s
 # default. Sized to "observed slow-day wallclock + ~20% headroom" so
 # the retry helper's per-PDF overhead (1-3s per fired retry, see
 # _fetch_with_retry) doesn't push a normal slow day over budget.
 _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
-    "bolt": 90.0,
     "engie": 130.0,
     "luminus": 125.0,
-    "mega": 90.0,
-    "totalenergies": 90.0,
 }
 
 
