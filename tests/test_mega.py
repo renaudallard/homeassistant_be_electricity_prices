@@ -56,7 +56,7 @@ def test_mega_is_registered() -> None:
     assert "mega_smart_flex" in contract_ids
     assert "mega_zen_fixed" in contract_ids
     assert "mega_dynamic" in contract_ids
-    assert len(contract_ids) == 11
+    assert len(contract_ids) == 12
 
 
 def test_listing_url_finder_picks_electricity_for_region() -> None:

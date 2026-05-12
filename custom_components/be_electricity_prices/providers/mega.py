@@ -40,8 +40,11 @@ month's PDF, so finding the right URL is a simple regex match.
 
 All thirteen residential electricity products are registered. Mega
 serves all three regions (Flanders, Wallonia, Brussels) for every
-product. The Tarif Social variant is omitted on purpose, same reasoning
-as Engie/Luminus (regulated CREG tariff, auto-assigned, no DSO breakdown).
+product except Off-peak Impact, which is Wallonia-only because it
+requires the CWaPE Tarif réseau IMPACT plus an SMR3 smart meter
+(both Wallonia-specific). The Tarif Social variant is omitted on
+purpose, same reasoning as Engie/Luminus (regulated CREG tariff,
+auto-assigned, no DSO breakdown).
 
 The Dynamic formula uses a different convention than Engie/Luminus:
 ``Day Ahead Epex Spot * 1.05 + 1.35 c€/kWh`` where the spot is already
@@ -93,6 +96,7 @@ from .base import (
     EnergyRates,
     ExtractorError,
     FixedRates,
+    ImpactRates,
     InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
@@ -110,12 +114,21 @@ _REGION_TO_CODE: dict[str, str] = {
 }
 
 
+_MEGA_ALL_REGIONS: frozenset[str] = frozenset(
+    {REGION_FLANDERS, REGION_WALLONIA, REGION_BRUSSELS}
+)
+
+
 @dataclass(frozen=True)
 class _ContractDef:
     contract_id: str
     label: str
     kind: TariffKind
     product_name: str  # the data-product-element value Mega uses on its site
+    # Regions the product is actually published in. Defaults to all
+    # three; Off-peak Impact is Wallonia-only because it requires the
+    # CWaPE IMPACT DSO tariff (Wallonia-specific).
+    regions: frozenset[str] = _MEGA_ALL_REGIONS
 
 
 _CONTRACTS: tuple[_ContractDef, ...] = (
@@ -135,6 +148,13 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     ),
     _ContractDef(
         "mega_offpeak_flex", "Mega Off-peak Flex", "variable", "Off-peak Flex"
+    ),
+    _ContractDef(
+        "mega_offpeak_impact_var",
+        "Mega Off-peak Impact",
+        "tou_impact",
+        "Off-peak Impact",
+        regions=frozenset({REGION_WALLONIA}),
     ),
     _ContractDef("mega_dynamic", "Mega Dynamic", "dynamic", "Dynamic"),
     _ContractDef("mega_cap", "Mega Cap", "variable", "Mega Cap"),
@@ -409,6 +429,30 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             yearly_fixed_fee=yearly_fee,
         )
 
+    if kind == "tou_impact":
+        pic = _extract_impact_tier(text, "PIC")
+        medium = _extract_impact_tier(text, "MEDIUM")
+        eco = _extract_impact_tier(text, "ECO")
+        if pic is None or medium is None or eco is None:
+            raise ExtractorError("could not parse Mega Off-peak Impact energy block")
+        formula_match = re.search(
+            r"La formule tarifaire est la suivante[^.]+?(?=\s*Cette formule)",
+            text,
+            re.S | re.I,
+        )
+        formula = (
+            re.sub(r"\s+", " ", formula_match.group(0)).strip()
+            if formula_match
+            else None
+        )
+        return ImpactRates(
+            pic=pic,
+            medium=medium,
+            eco=eco,
+            yearly_fixed_fee=yearly_fee,
+            formula=formula,
+        )
+
     mono = _extract_meter_value(text, "Compteur mono-horaire")
     peak = _extract_meter_value(text, "Tarif jour")
     offpeak = _extract_meter_value(text, "Tarif nuit")
@@ -430,6 +474,19 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         exclusive_night=excl_night,
         yearly_fixed_fee=yearly_fee,
     )
+
+
+def _extract_impact_tier(text: str, tier: str) -> float | None:
+    """Pull one ECO / MEDIUM / PIC rate from an Off-peak Impact card.
+
+    The energy block prints ``Tarif <TIER>\\n<consumption>\\n<injection>``;
+    we want the first number after the label. The cards in circulation
+    use bare ``PIC`` (not ``Tarif PIC``) on the last row, and lowercase
+    ``tarif`` in the footnote formula, so the regex is intentionally
+    permissive on the ``Tarif`` prefix.
+    """
+    match = re.search(rf"(?:Tarif\s+)?{tier}\s*\n\s*([\d.,]+)", text)
+    return to_float(match.group(1)) / 100.0 if match else None
 
 
 def _extract_meter_value(text: str, label: str) -> float | None:
@@ -514,11 +571,21 @@ def _extract_valid_until(text: str) -> date | None:
 
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     """Mega prints injection rates in the same energy block, second column."""
-    pattern = re.compile(
-        r"Compteur mono-horaire\s*\n\s*[\d.,]+\s*\n\s*([\d.,]+)",
-    )
-    match = pattern.search(text)
-    current = to_float(match.group(1)) / 100.0 if match else None
+    if kind == "tou_impact":
+        # Off-peak Impact cards lack the ``Compteur mono-horaire`` anchor;
+        # injection sits as the second number under any of the three tier
+        # labels (all three rows print the same value, so pick the first
+        # one we find).
+        inj_match = re.search(
+            r"(?:Tarif\s+)?(?:ECO|MEDIUM|PIC)\s*\n\s*[\d.,]+\s*\n\s*([\d.,]+)", text
+        )
+        current = to_float(inj_match.group(1)) / 100.0 if inj_match else None
+    else:
+        pattern = re.compile(
+            r"Compteur mono-horaire\s*\n\s*[\d.,]+\s*\n\s*([\d.,]+)",
+        )
+        match = pattern.search(text)
+        current = to_float(match.group(1)) / 100.0 if match else None
 
     factor: float | None = None
     base: float | None = None
@@ -770,7 +837,8 @@ EXTRACTOR = SupplierExtractor(
     id="mega",
     label="Mega",
     contracts=tuple(
-        Contract(id=c.contract_id, label=c.label, kind=c.kind) for c in _CONTRACTS
+        Contract(id=c.contract_id, label=c.label, kind=c.kind, regions=c.regions)
+        for c in _CONTRACTS
     ),
     fetch=fetch,
     fetch_for_month=fetch_for_month,

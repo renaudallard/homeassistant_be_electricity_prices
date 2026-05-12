@@ -85,11 +85,12 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
     # Bind the rate classes for isinstance-based validation in
     # _validate_energy. Class identity matches because every provider
     # imports from this same loaded module via ``from ..base import``.
-    global _RATE_FIXED, _RATE_VARIABLE, _RATE_DYNAMIC, _RATE_TOU
+    global _RATE_FIXED, _RATE_VARIABLE, _RATE_DYNAMIC, _RATE_TOU, _RATE_IMPACT
     _RATE_FIXED = base.FixedRates
     _RATE_VARIABLE = base.VariableRates
     _RATE_DYNAMIC = base.DynamicRates
     _RATE_TOU = base.TimeOfUseRates
+    _RATE_IMPACT = base.ImpactRates
     _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
     eneco = _load("be_pkg.providers.eneco", PKG / "providers" / "eneco.py")
     cociter = _load("be_pkg.providers.cociter", PKG / "providers" / "cociter.py")
@@ -144,12 +145,13 @@ _WALLONIA_DSO_KEYS: frozenset[str] = frozenset()
 # until startup so isinstance() in _validate_energy still type-checks
 # pre-load (it runs only after _load_providers, but mypy walks both
 # paths). Bound to the actual base.FixedRates / VariableRates /
-# DynamicRates / TimeOfUseRates classes once the providers package is
-# loaded.
+# DynamicRates / TimeOfUseRates / ImpactRates classes once the
+# providers package is loaded.
 _RATE_FIXED: type = object
 _RATE_VARIABLE: type = object
 _RATE_DYNAMIC: type = object
 _RATE_TOU: type = object
+_RATE_IMPACT: type = object
 
 
 # Per-supplier wallclock + bytes-received accounting. Populated via an
@@ -788,6 +790,8 @@ async def _check_mega_pairs(
     for contract in mega._CONTRACTS:
         cid = contract.contract_id
         for region_key in ("flanders", "wallonia", "brussels"):
+            if region_key not in contract.regions:
+                continue
             prefix = f"mega/{cid}/{region_key}"
             try:
                 snap = await _fetch_with_retry(
@@ -1015,6 +1019,27 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:  # 
                 f"{prefix}: TOU bands ordered peak >= transition >= offpeak",
                 peak >= transition >= offpeak,
                 detail=f"peak={peak}, transition={transition}, offpeak={offpeak}",
+            )
+    elif isinstance(energy, _RATE_IMPACT):
+        pic = getattr(energy, "pic", None)
+        medium = getattr(energy, "medium", None)
+        eco = getattr(energy, "eco", None)
+        for label, rate in (
+            ("pic", pic),
+            ("medium", medium),
+            ("eco", eco),
+        ):
+            _expect(
+                f"{prefix}: Impact {label} in [0.05, 0.50] EUR/kWh",
+                rate is not None and 0.05 <= rate <= 0.50,
+                detail=f"{label}={rate}",
+            )
+        # pic should be the most expensive band, eco the cheapest.
+        if pic is not None and medium is not None and eco is not None:
+            _expect(
+                f"{prefix}: Impact bands ordered pic >= medium >= eco",
+                pic >= medium >= eco,
+                detail=f"pic={pic}, medium={medium}, eco={eco}",
             )
     else:
         _record(
