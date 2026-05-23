@@ -155,8 +155,6 @@ async def fetch(
     if contract_id not in _CONTRACT_SLUGS:
         raise ExtractorError(f"unknown Eneco contract {contract_id!r}")
     listing = await _fetch_listing(session)
-    if listing is None:
-        raise ExtractorError("could not fetch Eneco listing page")
     url = _resolve_url(listing, contract_id)
     if url is None:
         raise ExtractorError(
@@ -226,8 +224,9 @@ async def probe(
     """
     if contract_id not in _CONTRACT_SLUGS:
         return None
-    listing = await _fetch_listing(session)
-    if listing is None:
+    try:
+        listing = await _fetch_listing(session)
+    except ExtractorError:
         return None
     return _resolve_url(listing, contract_id)
 
@@ -239,8 +238,9 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     Extract every ``BC_..._NL_ENECO_POWER_<NAME>.pdf`` and lower-case
     to match the registry's contract id (``power_fix``, etc.).
     """
-    listing = await _fetch_listing(session)
-    if listing is None:
+    try:
+        listing = await _fetch_listing(session)
+    except ExtractorError:
         return set()
     return {
         f"power_{name.lower()}"
@@ -248,11 +248,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     }
 
 
-async def _fetch_listing(session: aiohttp.ClientSession) -> str | None:
-    try:
-        return await fetch_text(session, _LISTING_URL)
-    except ExtractorError:
-        return None
+async def _fetch_listing(session: aiohttp.ClientSession) -> str:
+    return await fetch_text(session, _LISTING_URL)
 
 
 def _resolve_url(listing_html: str, contract_id: str) -> str | None:
