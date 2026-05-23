@@ -9,9 +9,6 @@
   <a href="https://github.com/renaudallard/homeassistant_be_electricity_prices/releases">
     <img src="https://img.shields.io/github/downloads/renaudallard/homeassistant_be_electricity_prices/total?style=flat-square&label=downloads" alt="GitHub release downloads"/>
   </a>
-  <a href="https://hacs.xyz">
-    <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fdata.hacs.xyz%2Fbe_electricity_prices%2Ftotal&style=flat-square&label=HACS%20installs" alt="HACS installs"/>
-  </a>
   <a href="https://github.com/renaudallard/homeassistant_be_electricity_prices/actions/workflows/validate.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/renaudallard/homeassistant_be_electricity_prices/validate.yml?style=flat-square&label=hacs%20%2F%20hassfest" alt="Validate"/>
   </a>
