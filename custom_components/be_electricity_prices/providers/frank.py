@@ -156,8 +156,11 @@ async def _sanity_query(
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(f"Sanity API network error: {err}") from err
     try:
-        return list(json.loads(body).get("result", []))
-    except (json.JSONDecodeError, AttributeError) as err:
+        result = json.loads(body).get("result", [])
+        if isinstance(result, dict):
+            return [result]
+        return list(result)
+    except (json.JSONDecodeError, AttributeError, TypeError) as err:
         raise ExtractorError(f"Sanity API response parse error: {err}") from err
 
 
@@ -264,10 +267,8 @@ async def probe(
         rows = await _sanity_query(session, q)
     except ExtractorError:
         return None
-    if rows and isinstance(rows, list) and rows[0]:
+    if rows and rows[0]:
         return str(rows[0].get("_createdAt", ""))
-    if isinstance(rows, dict):
-        return str(rows.get("_createdAt", ""))  # type: ignore[union-attr]
     return None
 
 
