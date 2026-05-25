@@ -29,11 +29,15 @@ from __future__ import annotations
 
 import pytest
 
+from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     SupplierSnapshot,
 )
-from custom_components.be_electricity_prices.providers.frank import parse_snapshot
+from custom_components.be_electricity_prices.providers.frank import (
+    _matches_suffix,
+    parse_snapshot,
+)
 from tests import fixture_text
 
 
@@ -175,3 +179,58 @@ def test_valid_until_is_end_of_april() -> None:
     assert snap.valid_until is not None
     assert snap.valid_until.month == 4
     assert snap.valid_until.year == 2026
+
+
+# ---- registration ---------------------------------------------------------------
+
+
+def test_frank_is_registered() -> None:
+    assert "frank" in EXTRACTORS
+    assert EXTRACTORS["frank"].label == "Frank Energie"
+    contract_ids = {c.id for c in EXTRACTORS["frank"].contracts}
+    assert contract_ids == {
+        "frank_dynamic",
+        "frank_dynamic_hv",
+        "frank_dynamic_korting",
+        "frank_dynamic_jn",
+        "frank_dynamic_slim",
+    }
+
+
+def test_all_contracts_are_dynamic_and_flanders_only() -> None:
+    for c in EXTRACTORS["frank"].contracts:
+        assert c.kind == "dynamic"
+        assert c.regions == frozenset({"flanders"})
+
+
+# ---- _matches_suffix -------------------------------------------------------------
+
+
+def test_matches_suffix_standard_accepts_month_name() -> None:
+    assert _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch Mei 2026.pdf", None
+    )
+
+
+def test_matches_suffix_standard_rejects_tier_suffix() -> None:
+    assert not _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch HV Mei 2026.pdf", None
+    )
+
+
+def test_matches_suffix_hv_accepts_hv() -> None:
+    assert _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch HV Mei 2026.pdf", "HV"
+    )
+
+
+def test_matches_suffix_hv_rejects_standard() -> None:
+    assert not _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch Mei 2026.pdf", "HV"
+    )
+
+
+def test_matches_suffix_rejects_variable_filename() -> None:
+    assert not _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Variabel Mei 2026.pdf", None
+    )
