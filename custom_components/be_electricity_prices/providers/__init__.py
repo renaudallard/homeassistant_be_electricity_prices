@@ -51,6 +51,7 @@ from .ebem import EXTRACTOR as _EBEM
 from .ecofix import EXTRACTOR as _ECOFIX
 from .ecopower import EXTRACTOR as _ECOPOWER
 from .eneco import EXTRACTOR as _ENECO
+from .frank import EXTRACTOR as _FRANK
 from .engie import EXTRACTOR as _ENGIE
 from .luminus import EXTRACTOR as _LUMINUS
 from .mega import EXTRACTOR as _MEGA
@@ -69,6 +70,7 @@ EXTRACTORS: dict[str, SupplierExtractor] = {
     _EBEM.id: _EBEM,
     _ECOFIX.id: _ECOFIX,
     _ECOPOWER.id: _ECOPOWER,
+    _FRANK.id: _FRANK,
     _OCTAPLUS.id: _OCTAPLUS,
 }
 
