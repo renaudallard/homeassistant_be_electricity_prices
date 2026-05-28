@@ -234,10 +234,26 @@ supplier's tariff card.
 
 ### Getting an ENTSO-E API key
 
-Required only for dynamic contracts. Register on the
-[ENTSO-E Transparency Platform](https://transparency.entsoe.eu/) and email
-`transparency@entsoe.eu` from your registration address with the subject
-`Restful API access`.
+Required only for dynamic contracts. The token is free but ENTSO-E does
+not auto-grant it — you have to request access explicitly:
+
+1. **Register** an account on the
+   [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/) and
+   confirm the verification email.
+2. **Email** `transparency@entsoe.eu` from that address with the
+   subject `Restful API access` and a one-line body asking to enable
+   API access for the account. Allow 1–3 business days for the
+   confirmation reply.
+3. Once granted, on the Transparency Platform open
+   **My Account Settings → Web API Security Token** and generate (or
+   copy) the token. Paste it into the integration's *ENTSO-E API key*
+   field — the config flow validates it against the real endpoint
+   before saving the entry.
+
+The token does not expire unless you regenerate it. If
+`transparency.entsoe.eu` later rejects it with 401, the
+`entsoe_auth_failed_<entry>` repair issue fires; paste a fresh token in
+the entry's options to clear it.
 
 ### Reconfiguring later
 
