@@ -6,8 +6,25 @@ body:
     attributes:
       value: |
         Thanks for taking the time to report. Please fill in every section
-        you can — missing supplier / DSO / contract / version info is the
+        you can - missing supplier / DSO / contract / version info is the
         most common reason a bug takes weeks instead of hours to fix.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: What is the issue about?
+      description: Helps route the report to the right area of the code.
+      options:
+        - Wrong price (current_price / today / tomorrow)
+        - Tomorrow's prices not showing
+        - current_year_cost wrong
+        - Capacity peak / capacity_cost wrong
+        - Injection price wrong
+        - Setup or options flow
+        - Stale data or repair issue
+        - Other
+    validations:
+      required: true
 
   - type: input
     id: ha_version
@@ -25,6 +42,13 @@ body:
       placeholder: e.g. 0.5.44
     validations:
       required: true
+
+  - type: input
+    id: when_started
+    attributes:
+      label: When did it start?
+      description: First version it broke under, or a date / event ("after upgrading to 0.5.49", "first time I noticed today"). Half of "broken" reports correlate with a recent supplier card change; a date narrows it.
+      placeholder: e.g. since 0.5.48, or "today around 14:00"
 
   - type: dropdown
     id: install_method
@@ -71,6 +95,16 @@ body:
       required: true
 
   - type: dropdown
+    id: dso_mode
+    attributes:
+      label: DSO tariff mode (Wallonia only)
+      description: Bi-horaire is the default day/night CWaPE split; Impact is the CWaPE 3-band (PIC / MEDIUM / ECO) hour-of-day grid. Leave blank for Flanders / Brussels.
+      options:
+        - Bi-horaire
+        - Impact (3-band)
+        - Not applicable / not sure
+
+  - type: dropdown
     id: supplier
     attributes:
       label: Supplier
@@ -86,6 +120,7 @@ body:
         - Ebem
         - Ecofix
         - Ecopower
+        - Frank Energie
         - Octa+
     validations:
       required: true
@@ -105,7 +140,21 @@ body:
       options:
         - Mono-horaire (single rate)
         - Bi-horaire (peak / off-peak)
+        - Dynamic (smart meter, hourly)
         - Exclusive night
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: solar_regime
+    attributes:
+      label: Solar regime
+      description: Required for any prosumer / injection / capacity bug. "Compensation" is the Walloon pre-2024 net-meter regime; "Injection" is the post-2024 (and Flemish digital-meter) per-kWh credit.
+      options:
+        - None (no solar)
+        - Compensation
+        - Injection
         - Not sure
     validations:
       required: true

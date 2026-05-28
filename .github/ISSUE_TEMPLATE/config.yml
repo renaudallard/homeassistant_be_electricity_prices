@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/renaudallard/homeassistant_be_electricity_prices/discussions
+    about: Not a bug - ask in Discussions instead.
