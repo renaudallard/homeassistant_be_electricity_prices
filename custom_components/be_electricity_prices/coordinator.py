@@ -1192,7 +1192,17 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         prices = await client.fetch_day_ahead(start, end)
         self._spot_cache = prices
         self._spot_cache_day = local_today
-        self._spot_cache_includes_tomorrow = want_tomorrow
+        # Flag what the response actually carries, not what we asked
+        # for: ENTSO-E publishes the day-ahead curve around 12-13 CET,
+        # so a tick that requests tomorrow before publication comes
+        # back with today only. Locking the flag to True on intent
+        # would block the next hourly tick from retrying and tomorrow's
+        # prices wouldn't surface until local midnight (reloading the
+        # entry was the only way out).
+        tomorrow = local_today + timedelta(days=1)
+        self._spot_cache_includes_tomorrow = any(
+            dt_util.as_local(h).date() == tomorrow for h in prices
+        )
         return prices
 
     async def _track_monthly_peak(self) -> None:

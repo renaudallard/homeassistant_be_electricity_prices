@@ -107,6 +107,76 @@ async def test_fetch_spot_prices_window_covers_local_day_on_dst_fallback(
     assert captured["end"] == datetime(2026, 10, 25, 23, 0, tzinfo=UTC)
 
 
+async def test_fetch_spot_prices_tomorrow_flag_follows_response_content(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """ENTSO-E publishes the day-ahead curve around 12-13 CET. An 11:00
+    tick that asks for tomorrow can come back with today only; the
+    cache flag must reflect what we GOT so the next hourly tick re-
+    fetches once publication lands -- otherwise tomorrow's prices stay
+    missing until local midnight and only an entry reload pulls them
+    in (GitHub issue #29)."""
+    freezer.move_to("2026-05-28 11:30:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    # 2026-05-28 00:00 CEST == 2026-05-27 22:00 UTC.
+    base = datetime(2026, 5, 27, 22, 0, tzinfo=UTC)
+    today_only = {base + timedelta(hours=h): 0.10 for h in range(24)}
+    today_plus_tomorrow = {base + timedelta(hours=h): 0.10 for h in range(48)}
+
+    async def _fake_pre(start: datetime, end: datetime) -> dict[datetime, float]:
+        return today_only
+
+    async def _fake_post(start: datetime, end: datetime) -> dict[datetime, float]:
+        return today_plus_tomorrow
+
+    # Pre-publication tick: response carries today only -> flag stays
+    # False so the next tick will retry.
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+    ) as mock_client_cls:
+        mock_client_cls.return_value.fetch_day_ahead = _fake_pre
+        await coord._fetch_spot_prices()
+    assert coord._spot_cache_includes_tomorrow is False
+
+    # The False flag forces the cache check to miss on the next call,
+    # mirroring the next hourly coordinator tick.
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+    ) as mock_client_cls:
+        mock_client_cls.return_value.fetch_day_ahead = _fake_post
+        await coord._fetch_spot_prices()
+    assert coord._spot_cache_includes_tomorrow is True
+
+    # Once True, the cache short-circuits and ENTSO-E is not re-hit.
+    fetch_calls = 0
+
+    async def _fake_should_not_run(*_a: object, **_kw: object) -> dict[datetime, float]:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+    ) as mock_client_cls:
+        mock_client_cls.return_value.fetch_day_ahead = _fake_should_not_run
+        result = await coord._fetch_spot_prices()
+    assert fetch_calls == 0
+    assert result == today_plus_tomorrow
+
+
 async def test_force_refresh_drops_caches_and_requests_update(
     hass: HomeAssistant,
 ) -> None:
