@@ -199,6 +199,8 @@ def test_basic_plus_shares_pdf_with_variable_but_distinct_energy() -> None:
 def test_dynamic_extracts_factor_and_base() -> None:
     snap = parse_snapshot("ebem_dynamic", _layout(_DYNAMIC), "test://d", "2026-05")
     assert isinstance(snap.energy, DynamicRates)
+    # Groen Dyn@mic bills on the 15-minute Belpex spot.
+    assert snap.energy.quarter_hourly is True
     # Card formula: (0,108 Belpex15' + 1,625) c€/kWh ex-VAT, 6% VAT applied.
     # factor = 0.108 * 1.06 * 10 = 1.1448
     # base   = 1.625 * 1.06 / 100 = 0.017225

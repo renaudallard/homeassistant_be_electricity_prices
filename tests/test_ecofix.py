@@ -81,6 +81,7 @@ def test_motion_online_energy_formula() -> None:
         "ecofix_motion_online", _layout(_MOTION_ONLINE), "flanders", "test://mo"
     )
     assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is True
     assert snap.energy.yearly_fixed_fee == pytest.approx(10.0)
     # PDF: (0.1010 x Belpex 15M) + 0,9  c€/kWh ex-VAT, 6% VAT applied.
     # factor_pdf * 1.06 * 10 = 0.1010 * 10.6 = 1.0706
@@ -186,6 +187,7 @@ def test_motion_online_wallonia_dsos() -> None:
 def test_motion_energy_formula() -> None:
     snap = parse_snapshot("ecofix_motion", _layout(_MOTION), "flanders", "test://m")
     assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is True
     assert snap.energy.yearly_fixed_fee == pytest.approx(60.0)
     # PDF: (0.1000 x Belpex 15M) + 1.1020  c€/kWh ex-VAT.
     # factor = 0.1000 * 1.06 * 10 = 1.0600

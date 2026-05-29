@@ -359,10 +359,14 @@ def _extract_energy(text: str, kind: TariffKind, yearly_fee: float) -> EnergyRat
         vat = vat_multiplier(
             text, re.compile(r"inclusief\s+(\d+)\s*%\s*BTW", re.IGNORECASE)
         )
+        # Motion / Motion Online bill on the 15-minute Belpex spot (the
+        # card's "Belpex 15M" formula), so keep the native 15-minute
+        # slots like Engie rather than the hourly mean.
         return DynamicRates(
             factor=factor_pdf * vat * 10.0,
             base=base_pdf_cents * vat / 100.0,
             yearly_fixed_fee=yearly_fee,
+            quarter_hourly=True,
         )
 
     # Variable (Flexy): formula on page 4, indicative monthly rate on page 1.

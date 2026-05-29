@@ -342,10 +342,14 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
     vat_multiplier = 1.0 + to_float(formula.group(4)) / 100.0
     # PDF formula yields c€/kWh from BELPEX in €/MWh; convert to EUR/kWh
     # against spot already in EUR/kWh: factor *= vat_mult * 10, base = base_c * vat_mult / 100.
+    # Cociter Dynamique bills on the quarter-hourly BELPEX spot (the
+    # card's "QUARTER HOURLY BELPEX" formula), so keep the native
+    # 15-minute slots like Engie rather than the hourly mean.
     return DynamicRates(
         factor=factor_pdf * vat_multiplier * 10.0,
         base=base_pre_vat_cents * vat_multiplier / 100.0,
         yearly_fixed_fee=yearly_fee,
+        quarter_hourly=True,
     )
 
 

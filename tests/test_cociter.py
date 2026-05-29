@@ -143,6 +143,8 @@ def test_dynamic_extracts_factor_and_base() -> None:
         "2026-04",
     )
     assert isinstance(snap.energy, DynamicRates)
+    # Cociter Dynamique bills on the quarter-hourly BELPEX spot.
+    assert snap.energy.quarter_hourly is True
     # PDF: (0.103 x QUARTER_HOURLY_BELPEX_eur_per_mwh + 3) x 1.06 c€/kWh
     # Literal pinning so a unit-conversion swap can't cancel the test.
     assert snap.energy.factor == pytest.approx(1.0918, rel=1e-4)

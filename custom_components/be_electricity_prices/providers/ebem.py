@@ -373,10 +373,14 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
             factor_pdf, base_pdf_cents, _vat_multiplier(text)
         )
         yearly_fee = _extract_yearly_fee_abonnement(text)
+        # Groen Dyn@mic bills on the 15-minute Belpex spot (the card's
+        # "Belpex 15" formula, SMR3 only), so keep the native 15-minute
+        # slots like Engie rather than the hourly mean.
         return DynamicRates(
             factor=factor,
             base=base,
             yearly_fixed_fee=yearly_fee,
+            quarter_hourly=True,
         )
 
     if contract.contract_id == "ebem_basic_plus":
