@@ -26,6 +26,9 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # Covers the ~1 h worst-case retry window below plus setup/fetch, well
+    # under the 6 h default so a hung run can't idle for hours.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -42,12 +45,17 @@ jobs:
           # itself still works against the version users actually run.
           pip install pypdf pdfplumber aiohttp homeassistant==2026.2.3
 
-      - name: Run live check (up to 5 attempts on extractor failure)
+      - name: Run live check (retries up to ~1 h on extractor failure)
         id: check
         run: |
           set +e
-          attempts=5
-          delays="10 30 60 120 300"
+          # Two-tier retry: the fast early gaps clear brief blips within
+          # ~9 min, then one ~50-min wait means an issue is only filed
+          # when a supplier is STILL broken ~1 h after first detection,
+          # not for a transient CDN timeout (issue #30). 7 attempts use
+          # all six gaps (the previous 5/4 layout left the last delay dead).
+          attempts=7
+          delays="10 30 60 120 300 3000"
           set -- $delays
           for i in $(seq 1 "$attempts"); do
             echo "::group::attempt $i"
