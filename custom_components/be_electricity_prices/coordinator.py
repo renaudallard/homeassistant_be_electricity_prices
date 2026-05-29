@@ -145,8 +145,10 @@ def supplier_device_info(coordinator: "BePricesCoordinator") -> DeviceInfo:
 def _energy_is_quarter_hourly(energy: EnergyRates) -> bool:
     """True when the energy model bills on the native 15-minute grid.
 
-    Only Engie's dynamic contract sets ``quarter_hourly`` today; every
-    other contract (static, TOU, hourly-billed dynamic) stays hourly.
+    Engie, Cociter, EBEM and Ecofix dynamic contracts set
+    ``quarter_hourly`` (their cards price on the 15-minute Belpex /
+    eSpot_15 spot); every other contract (static, TOU, hourly-billed
+    dynamic) stays hourly.
     """
     return isinstance(energy, DynamicRates) and energy.quarter_hourly
 
@@ -2333,9 +2335,12 @@ async def _compute_current_year_cost(
 # the new field. Loading a snapshot whose schema_version is below this
 # raises in _snapshot_from_dict; async_load_persistent then discards the
 # cache and the coordinator's first refresh repopulates from the supplier.
-# v9: DynamicRates gained ``quarter_hourly`` -- bump so a cached Engie
-# snapshot from a pre-15-min release is dropped and re-fetched with the
-# flag set, instead of lingering on the hourly default until its TTL.
+# v9: DynamicRates gained ``quarter_hourly``. Bump so a cached dynamic
+# snapshot from a pre-15-min release (Engie, Cociter, EBEM, Ecofix) is
+# dropped and re-fetched with the flag set, rather than lingering on the
+# hourly default until the snapshot next refreshes. The probe-based
+# suppliers (Cociter, EBEM, Ecofix) would otherwise keep the stale flag
+# for weeks, until their next monthly card changes the probe key.
 _SNAPSHOT_SCHEMA_VERSION = 9
 
 
