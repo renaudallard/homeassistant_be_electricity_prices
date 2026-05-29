@@ -81,6 +81,8 @@ from .const import (
     DSO_MODE_IMPACT,
     METER_MONO,
     REGION_FLANDERS,
+    RESOLUTION_HOURLY,
+    RESOLUTION_QUARTER,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
     STORAGE_VERSION,
@@ -92,6 +94,7 @@ from .pricing import (
     PriceBreakdown,
     compute_breakdown,
     is_offpeak,
+    slot_start,
     static_breakdown,
 )
 from .providers import (
@@ -137,6 +140,15 @@ def supplier_device_info(coordinator: "BePricesCoordinator") -> DeviceInfo:
         manufacturer=supplier_label,
         entry_type=None,
     )
+
+
+def _energy_is_quarter_hourly(energy: EnergyRates) -> bool:
+    """True when the energy model bills on the native 15-minute grid.
+
+    Only Engie's dynamic contract sets ``quarter_hourly`` today; every
+    other contract (static, TOU, hourly-billed dynamic) stays hourly.
+    """
+    return isinstance(energy, DynamicRates) and energy.quarter_hourly
 
 
 # Coordinator probes the supplier on every update tick (UPDATE_INTERVAL_MINUTES);
@@ -419,6 +431,12 @@ class CoordinatorData:
     """Snapshot the coordinator hands to entities."""
 
     hourly: dict[datetime, PriceBreakdown] = field(default_factory=dict)
+    # Grid resolution of the keys in ``hourly``: RESOLUTION_HOURLY for
+    # every static / hourly-billed contract, RESOLUTION_QUARTER for
+    # dynamic suppliers that bill per quarter-hour (Engie). Consumers use
+    # it to truncate "now" to the right slot and to size the
+    # cheapest-window service.
+    resolution: str = RESOLUTION_HOURLY
     snapshot_publication: str = ""
     snapshot_age_hours: float = 0.0
     snapshot_stale: bool = False
@@ -748,6 +766,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._sync_stale_issue(stale)
         return CoordinatorData(
             hourly=hourly,
+            resolution=(
+                RESOLUTION_QUARTER
+                if _energy_is_quarter_hourly(self._snapshot.energy)
+                else RESOLUTION_HOURLY
+            ),
             snapshot_publication=self._snapshot.publication_label,
             snapshot_age_hours=age,
             snapshot_stale=stale,
@@ -1189,7 +1212,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         end = dt_util.start_of_local_day(local_today + timedelta(days=days)).astimezone(
             UTC
         )
-        prices = await client.fetch_day_ahead(start, end)
+        # Keep the native 15-minute slots only for suppliers that bill on
+        # them (Engie Dynamic); everyone else gets the hourly aggregate.
+        snap = self._snapshot
+        quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
+        prices = await client.fetch_day_ahead(start, end, quarter_hourly=quarter_hourly)
         self._spot_cache = prices
         self._spot_cache_day = local_today
         # Flag what the response actually carries, not what we asked
@@ -1434,14 +1461,21 @@ def _compute_injection_price(
     if inj.factor is not None and inj.base is not None:
         if not spot_prices:
             return None
-        now_hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
-        spot = spot_prices.get(now_hour)
+        # Match the grid the contract bills on so an Engie injection price
+        # tracks the current quarter-hour, not the hourly mean.
+        resolution = (
+            RESOLUTION_QUARTER
+            if _energy_is_quarter_hourly(snapshot.energy)
+            else RESOLUTION_HOURLY
+        )
+        now_slot = slot_start(dt_util.utcnow(), resolution)
+        spot = spot_prices.get(now_slot)
         if spot is None:
             nearest = min(
                 spot_prices.keys(),
-                key=lambda h: abs((h - now_hour).total_seconds()),
+                key=lambda h: abs((h - now_slot).total_seconds()),
             )
-            if abs((nearest - now_hour).total_seconds()) > 3600:
+            if abs((nearest - now_slot).total_seconds()) > 3600:
                 return None
             spot = spot_prices[nearest]
         return inj.factor * spot + inj.base
@@ -2299,7 +2333,10 @@ async def _compute_current_year_cost(
 # the new field. Loading a snapshot whose schema_version is below this
 # raises in _snapshot_from_dict; async_load_persistent then discards the
 # cache and the coordinator's first refresh repopulates from the supplier.
-_SNAPSHOT_SCHEMA_VERSION = 8
+# v9: DynamicRates gained ``quarter_hourly`` -- bump so a cached Engie
+# snapshot from a pre-15-min release is dropped and re-fetched with the
+# flag set, instead of lingering on the hourly default until its TTL.
+_SNAPSHOT_SCHEMA_VERSION = 9
 
 
 def _snapshot_to_dict(

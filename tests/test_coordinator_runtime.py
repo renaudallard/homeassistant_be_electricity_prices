@@ -46,6 +46,7 @@ from custom_components.be_electricity_prices.coordinator import (
     evict_shared_caches,
 )
 from custom_components.be_electricity_prices.providers.base import (
+    DynamicRates,
     ExtractorError,
     SupplierSnapshot,
 )
@@ -90,7 +91,9 @@ async def test_fetch_spot_prices_window_covers_local_day_on_dst_fallback(
     coord = BePricesCoordinator(hass, entry)
     captured: dict[str, datetime] = {}
 
-    async def _fake_fetch(start: datetime, end: datetime) -> dict[datetime, float]:
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
         captured["start"] = start
         captured["end"] = end
         return {}
@@ -136,10 +139,14 @@ async def test_fetch_spot_prices_tomorrow_flag_follows_response_content(
     today_only = {base + timedelta(hours=h): 0.10 for h in range(24)}
     today_plus_tomorrow = {base + timedelta(hours=h): 0.10 for h in range(48)}
 
-    async def _fake_pre(start: datetime, end: datetime) -> dict[datetime, float]:
+    async def _fake_pre(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
         return today_only
 
-    async def _fake_post(start: datetime, end: datetime) -> dict[datetime, float]:
+    async def _fake_post(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
         return today_plus_tomorrow
 
     # Pre-publication tick: response carries today only -> flag stays
@@ -175,6 +182,58 @@ async def test_fetch_spot_prices_tomorrow_flag_follows_response_content(
         result = await coord._fetch_spot_prices()
     assert fetch_calls == 0
     assert result == today_plus_tomorrow
+
+
+async def test_fetch_spot_prices_uses_quarter_hourly_for_quarter_contract(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A dynamic snapshot flagged ``quarter_hourly`` routes the live
+    ENTSO-E fetch to the native 15-minute grid (Engie); a plain hourly
+    dynamic snapshot keeps the hourly aggregate."""
+    freezer.move_to("2026-05-28 09:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "engie",
+            "contract": "engie_dynamic",
+            "region": "flanders",
+            "dso": "fluvius",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    captured: dict[str, bool] = {}
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        captured["quarter_hourly"] = quarter_hourly
+        return {}
+
+    coord._snapshot = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True)
+    )
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+    ) as mock_client_cls:
+        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        await coord._fetch_spot_prices()
+    assert captured["quarter_hourly"] is True
+
+    # An hourly dynamic snapshot (the common case) keeps the aggregate.
+    coord._spot_cache = {}
+    coord._spot_cache_day = None
+    coord._snapshot = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=False)
+    )
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+    ) as mock_client_cls:
+        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        await coord._fetch_spot_prices()
+    assert captured["quarter_hourly"] is False
 
 
 async def test_force_refresh_drops_caches_and_requests_update(

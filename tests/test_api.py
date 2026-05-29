@@ -97,6 +97,45 @@ def test_quarter_hour_points_aggregate_to_hour_mean() -> None:
     assert parsed[h1] == pytest.approx(0.040)
 
 
+def test_quarter_hourly_keeps_native_slots() -> None:
+    """With quarter_hourly=True each PT15M point keeps its own
+    :00/:15/:30/:45 key instead of being averaged into the hour, so an
+    Engie-style per-quarter contract is priced on the real curve."""
+    points = (
+        "<Point><position>1</position><price.amount>10</price.amount></Point>"
+        "<Point><position>2</position><price.amount>20</price.amount></Point>"
+        "<Point><position>3</position><price.amount>30</price.amount></Point>"
+        "<Point><position>4</position><price.amount>40</price.amount></Point>"
+    )
+    parsed = parse_day_ahead_xml(_doc(points, resolution="PT15M"), quarter_hourly=True)
+    base = datetime(2026, 4, 29, 22, 0, tzinfo=UTC)
+    assert parsed[base] == pytest.approx(0.010)
+    assert parsed[base + timedelta(minutes=15)] == pytest.approx(0.020)
+    assert parsed[base + timedelta(minutes=30)] == pytest.approx(0.030)
+    assert parsed[base + timedelta(minutes=45)] == pytest.approx(0.040)
+    # Full 24h interval at quarter resolution = 96 keys, each on a
+    # :00/:15/:30/:45 boundary (positions past 4 carry forward 0.040).
+    assert len(parsed) == 96
+    assert all(k.minute in (0, 15, 30, 45) for k in parsed)
+
+
+def test_quarter_hourly_on_hourly_source_still_hourly() -> None:
+    """A PT60M document yields hourly keys even with quarter_hourly=True:
+    there are no sub-hour points to keep."""
+    points = "".join(
+        f"<Point><position>{i}</position><price.amount>{i * 10}</price.amount></Point>"
+        for i in range(1, 4)
+    )
+    parsed = parse_day_ahead_xml(_doc(points), quarter_hourly=True)
+    base = datetime(2026, 4, 29, 22, 0, tzinfo=UTC)
+    assert parsed[base] == pytest.approx(0.010)
+    assert parsed[base + timedelta(hours=1)] == pytest.approx(0.020)
+    assert parsed[base + timedelta(hours=2)] == pytest.approx(0.030)
+    # Every key sits on the hour; the 24h interval fills via carry-forward.
+    assert all(k.minute == 0 for k in parsed)
+    assert len(parsed) == 24
+
+
 def test_invalid_xml_raises_entsoe_error() -> None:
     with pytest.raises(EntsoeError):
         parse_day_ahead_xml("<<<not xml")

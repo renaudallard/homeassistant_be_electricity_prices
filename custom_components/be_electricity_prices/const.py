@@ -188,6 +188,15 @@ VREG_CAPACITY_FLOOR_KW: Final = 2.5
 ENTSOE_BASE_URL: Final = "https://web-api.tp.entsoe.eu/api"
 ENTSOE_BE_DOMAIN: Final = "10YBE----------2"
 
+# Spot-price grid resolution. ENTSO-E publishes the Belgian day-ahead
+# curve at 15-minute granularity since the SDAC 15-min MTU go-live
+# (2025-10-01). The integration aggregates to hourly by default and keeps
+# the native quarter-hour slots only for suppliers that actually bill per
+# quarter-hour (Engie Dynamic). Values match the ENTSO-E resolution
+# tokens so the spot client can reuse them.
+RESOLUTION_HOURLY: Final = "PT60M"
+RESOLUTION_QUARTER: Final = "PT15M"
+
 # Coordinator refreshes every hour for both static and dynamic contracts;
 # the dynamic branch piggybacks on this tick to refresh ENTSO-E spots.
 UPDATE_INTERVAL_MINUTES: Final = 60

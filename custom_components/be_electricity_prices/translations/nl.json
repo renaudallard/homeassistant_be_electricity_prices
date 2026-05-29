@@ -246,7 +246,7 @@
       "fields": {
         "duration_hours": {
           "name": "Duur",
-          "description": "Lengte van het venster in uren (afgerond naar het dichtstbijzijnde hele uur; de prijstabel is per uur)."
+          "description": "Lengte van het venster in hele uren. Bij een kwartiercontract kan het venster op elke kwartiergrens beginnen."
         },
         "entry_id": {
           "name": "Entry-ID",
@@ -254,7 +254,7 @@
         },
         "earliest_start": {
           "name": "Vroegste start",
-          "description": "Optioneel. Afgerond naar het begin van het uur (14:30 beschouwt nog steeds het 14:00-slot). Standaard: nu."
+          "description": "Optioneel. Afgerond naar het begin van het prijsslot (het hele uur, of het kwartier bij een kwartiercontract), dus 14:30 beschouwt nog steeds het 14:00-slot. Standaard: nu."
         },
         "latest_end": {
           "name": "Laatste einde",
@@ -268,7 +268,7 @@
       "fields": {
         "duration_hours": {
           "name": "Duur",
-          "description": "Lengte van het venster in uren (afgerond naar het dichtstbijzijnde hele uur; de prijstabel is per uur)."
+          "description": "Lengte van het venster in hele uren. Bij een kwartiercontract kan het venster op elke kwartiergrens beginnen."
         },
         "entry_id": {
           "name": "Entry-ID",
@@ -276,7 +276,7 @@
         },
         "earliest_start": {
           "name": "Vroegste start",
-          "description": "Optioneel. Afgerond naar het begin van het uur (14:30 beschouwt nog steeds het 14:00-slot). Standaard: nu."
+          "description": "Optioneel. Afgerond naar het begin van het prijsslot (het hele uur, of het kwartier bij een kwartiercontract), dus 14:30 beschouwt nog steeds het 14:00-slot. Standaard: nu."
         },
         "latest_end": {
           "name": "Laatste einde",
@@ -309,10 +309,10 @@
   },
   "exceptions": {
     "not_enough_hours": {
-      "message": "Slechts {available} uren beschikbaar in het gevraagde venster; {needed} nodig."
+      "message": "Slechts {available} prijsslots beschikbaar in het gevraagde venster; {needed} nodig."
     },
     "duration_too_small": {
-      "message": "duration_hours moet minstens 1 zijn (de prijstabel is op uurbasis)."
+      "message": "duration_hours moet minstens 1 zijn."
     },
     "no_loaded_entry": {
       "message": "Geen geladen Belgian Electricity Prices-entry."

@@ -32,6 +32,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from custom_components.be_electricity_prices import _find_window
+from custom_components.be_electricity_prices.const import RESOLUTION_QUARTER
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
 
 
@@ -95,7 +96,7 @@ def test_find_window_raises_when_too_few_hours() -> None:
     from homeassistant.exceptions import ServiceValidationError
 
     start = datetime(2026, 4, 30, 0, 0, tzinfo=UTC)
-    with pytest.raises(ServiceValidationError, match="only 2 hours available"):
+    with pytest.raises(ServiceValidationError, match="only 2 slots available"):
         _find_window(_hourly([0.10, 0.10], start), 4, start, None, minimize=True)
 
 
@@ -112,3 +113,56 @@ def test_find_window_truncates_earliest_to_top_of_hour() -> None:
         minimize=True,
     )
     assert result["average_eur_per_kwh"] == pytest.approx(0.05)
+
+
+def _quarter(
+    prices: list[float], start: datetime | None = None
+) -> dict[datetime, PriceBreakdown]:
+    """Build a contiguous 15-minute table (default start 2026-04-30 00:00 UTC)."""
+    if start is None:
+        start = datetime(2026, 4, 30, 0, 0, tzinfo=UTC)
+    return {
+        start + timedelta(minutes=15 * i): PriceBreakdown(
+            energy=p, network=0.0, taxes=0.0, all_in=p
+        )
+        for i, p in enumerate(prices)
+    }
+
+
+def test_find_window_quarter_hour_block() -> None:
+    # Eight 15-minute slots (two hours); duration_slots=4 is one hour.
+    # The cheapest contiguous hour is the last four slots (0.05 each).
+    prices = [0.20, 0.20, 0.20, 0.20, 0.05, 0.05, 0.05, 0.05]
+    start = datetime(2026, 4, 30, 0, 0, tzinfo=UTC)
+    result = _find_window(
+        _quarter(prices, start),
+        4,
+        start,
+        None,
+        minimize=True,
+        resolution=RESOLUTION_QUARTER,
+    )
+    assert result["duration_hours"] == 1
+    assert result["average_eur_per_kwh"] == pytest.approx(0.05)
+    assert len(result["hours"]) == 4
+    win_start = datetime.fromisoformat(result["start"])
+    win_end = datetime.fromisoformat(result["end"])
+    assert (win_end - win_start) == timedelta(hours=1)
+
+
+def test_find_window_quarter_hour_starts_on_quarter_boundary() -> None:
+    # Cheapest one-hour (4-slot) run is 00:45..01:45 (indices 3-6); the
+    # window must be allowed to start mid-hour, which an hourly grid
+    # could not express.
+    prices = [0.20, 0.20, 0.20, 0.01, 0.02, 0.03, 0.04, 0.50]
+    start = datetime(2026, 4, 30, 0, 0, tzinfo=UTC)
+    result = _find_window(
+        _quarter(prices, start),
+        4,
+        start,
+        None,
+        minimize=True,
+        resolution=RESOLUTION_QUARTER,
+    )
+    win_start = datetime.fromisoformat(result["start"]).astimezone(UTC)
+    assert win_start == start + timedelta(minutes=45)

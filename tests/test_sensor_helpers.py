@@ -33,9 +33,12 @@ import pytest
 from homeassistant.util import dt as dt_util
 
 from custom_components.be_electricity_prices.binary_sensor import _has_tomorrow
+from custom_components.be_electricity_prices.const import RESOLUTION_QUARTER
 from custom_components.be_electricity_prices.coordinator import CoordinatorData
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
 from custom_components.be_electricity_prices.sensor import (
+    _current,
+    _hourly_view,
     _split_today_tomorrow,
     _today_ranked,
     _tomorrow_avg,
@@ -194,6 +197,44 @@ def test_tomorrow_aggregations_pick_only_tomorrow_hours() -> None:
     assert _tomorrow_avg(data) == pytest.approx((1.00 + 1.10 + 1.20 + 1.30) / 4)
     assert _tomorrow_min(data) == pytest.approx(1.00)
     assert _tomorrow_max(data) == pytest.approx(1.30)
+
+
+def _quarter_today_data(prices: list[float]) -> CoordinatorData:
+    """Build a quarter-hourly CoordinatorData starting at today's midnight."""
+    today_midnight = _fixed_today_local()
+    hourly: dict[datetime, PriceBreakdown] = {}
+    for i, price in enumerate(prices):
+        local = today_midnight + timedelta(minutes=15 * i)
+        hourly[dt_util.as_utc(local)] = PriceBreakdown(
+            energy=price, network=0.0, taxes=0.0, all_in=price
+        )
+    return CoordinatorData(hourly=hourly, resolution=RESOLUTION_QUARTER)
+
+
+def test_current_picks_quarter_slot() -> None:
+    # Frozen at 12:00 local; the 12:00 quarter slot is index 48 (12h x 4).
+    # A unique price per slot pins exactly which one _current returns.
+    prices = [round(0.01 * i, 4) for i in range(96)]
+    bd = _current(_quarter_today_data(prices))
+    assert bd is not None
+    assert bd.all_in == pytest.approx(prices[48])
+
+
+def test_hourly_view_downsamples_quarter_to_hourly_mean() -> None:
+    # 96 quarter slots collapse to 24 hour keys, each the mean of its
+    # four quarters: hour 0 = mean(0, 1, 2, 3) = 1.5.
+    prices = [float(i) for i in range(96)]
+    view = _hourly_view(_quarter_today_data(prices))
+    assert len(view) == 24
+    assert view[min(view)].all_in == pytest.approx(1.5)
+
+
+def test_split_today_tomorrow_stays_hourly_for_quarter_contract() -> None:
+    # The bulky today/tomorrow attribute curve must stay hourly even on a
+    # 15-minute contract so it stays under HA's 16 KB attribute cap.
+    prices = [float(i) for i in range(96)]
+    today, _tomorrow = _split_today_tomorrow(_quarter_today_data(prices))
+    assert len(today) == 24
 
 
 def test_tomorrow_aggregations_return_none_before_publication() -> None:

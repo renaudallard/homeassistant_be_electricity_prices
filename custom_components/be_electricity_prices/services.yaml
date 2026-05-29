@@ -15,7 +15,7 @@ cheapest_window:
   fields:
     duration_hours:
       name: Duration
-      description: Window length in whole hours (price table is hourly).
+      description: Window length in whole hours. On a 15-minute (Engie Dynamic) contract the window can start on any quarter-hour boundary.
       required: true
       example: 3
       selector:
@@ -36,9 +36,10 @@ cheapest_window:
     earliest_start:
       name: Earliest start
       description: >-
-        Don't consider windows starting before this time. The price table is
-        hourly, so the value is truncated down to the hour (14:30 still
-        considers the 14:00 slot as a candidate start). Default = now.
+        Don't consider windows starting before this time. The value is
+        truncated down to its price slot (the hour, or the quarter on a
+        15-minute contract), so 14:30 still considers the 14:00 slot
+        (14:30 on a 15-minute contract). Default = now.
       example: "2026-04-30T20:00:00+02:00"
       selector:
         datetime:
@@ -111,7 +112,7 @@ most_expensive_window:
   fields:
     duration_hours:
       name: Duration
-      description: Window length in whole hours (price table is hourly).
+      description: Window length in whole hours. On a 15-minute (Engie Dynamic) contract the window can start on any quarter-hour boundary.
       required: true
       example: 3
       selector:
@@ -132,9 +133,10 @@ most_expensive_window:
     earliest_start:
       name: Earliest start
       description: >-
-        Don't consider windows starting before this time. The price table is
-        hourly, so the value is truncated down to the hour (14:30 still
-        considers the 14:00 slot as a candidate start). Default = now.
+        Don't consider windows starting before this time. The value is
+        truncated down to its price slot (the hour, or the quarter on a
+        15-minute contract), so 14:30 still considers the 14:00 slot
+        (14:30 on a 15-minute contract). Default = now.
       example: "2026-04-30T20:00:00+02:00"
       selector:
         datetime:

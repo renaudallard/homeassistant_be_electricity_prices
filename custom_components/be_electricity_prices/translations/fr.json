@@ -246,7 +246,7 @@
       "fields": {
         "duration_hours": {
           "name": "Duree",
-          "description": "Longueur de la plage en heures (arrondie a l'heure la plus proche; la table de prix est horaire)."
+          "description": "Longueur de la plage en heures entieres. Sur un contrat au quart d'heure, la plage peut commencer a n'importe quel quart d'heure."
         },
         "entry_id": {
           "name": "ID de l'entree",
@@ -254,7 +254,7 @@
         },
         "earliest_start": {
           "name": "Debut au plus tot",
-          "description": "Optionnel. Tronque au debut de l'heure (14:30 considere encore le creneau de 14:00). Par defaut: maintenant."
+          "description": "Optionnel. Tronque au debut de son creneau de prix (l'heure, ou le quart d'heure sur un contrat au quart d'heure), donc 14:30 considere encore le creneau de 14:00. Par defaut: maintenant."
         },
         "latest_end": {
           "name": "Fin au plus tard",
@@ -268,7 +268,7 @@
       "fields": {
         "duration_hours": {
           "name": "Duree",
-          "description": "Longueur de la plage en heures (arrondie a l'heure la plus proche; la table de prix est horaire)."
+          "description": "Longueur de la plage en heures entieres. Sur un contrat au quart d'heure, la plage peut commencer a n'importe quel quart d'heure."
         },
         "entry_id": {
           "name": "ID de l'entree",
@@ -276,7 +276,7 @@
         },
         "earliest_start": {
           "name": "Debut au plus tot",
-          "description": "Optionnel. Tronque au debut de l'heure (14:30 considere encore le creneau de 14:00). Par defaut: maintenant."
+          "description": "Optionnel. Tronque au debut de son creneau de prix (l'heure, ou le quart d'heure sur un contrat au quart d'heure), donc 14:30 considere encore le creneau de 14:00. Par defaut: maintenant."
         },
         "latest_end": {
           "name": "Fin au plus tard",
@@ -309,10 +309,10 @@
   },
   "exceptions": {
     "not_enough_hours": {
-      "message": "Seulement {available} heures sont disponibles dans la fenetre demandee; il en faut {needed}."
+      "message": "Seulement {available} creneaux sont disponibles dans la fenetre demandee; il en faut {needed}."
     },
     "duration_too_small": {
-      "message": "duration_hours doit valoir au moins 1 (le tableau de prix est horaire)."
+      "message": "duration_hours doit valoir au moins 1."
     },
     "no_loaded_entry": {
       "message": "Aucune entree Belgian Electricity Prices chargee."

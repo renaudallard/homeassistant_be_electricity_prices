@@ -49,11 +49,12 @@ from .const import (
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     REGION_FLANDERS,
+    RESOLUTION_HOURLY,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
 from .coordinator import BePricesCoordinator, CoordinatorData, supplier_device_info
-from .pricing import PriceBreakdown
+from .pricing import PriceBreakdown, slot_start
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -67,29 +68,30 @@ class BePriceSensorDescription(SensorEntityDescription):
 def _current(data: CoordinatorData) -> PriceBreakdown | None:
     if not data.hourly:
         return None
-    now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    now = slot_start(dt_util.utcnow(), data.resolution)
     if (exact := data.hourly.get(now)) is not None:
         return exact
-    nearest_hour = min(
+    nearest_slot = min(
         data.hourly.keys(),
         key=lambda h: abs((h - now).total_seconds()),
     )
-    # Bound the nearest-hour fallback so a stale spot cache doesn't
-    # silently surface yesterday's last hour as "now". An hour off is
+    # Bound the nearest-slot fallback so a stale spot cache doesn't
+    # silently surface yesterday's last slot as "now". An hour off is
     # tolerated for DST seams; anything beyond that means the price
     # table is stale relative to wall-clock and the sensor should go
     # unknown rather than mislead.
-    if abs((nearest_hour - now).total_seconds()) > 3600:
+    if abs((nearest_slot - now).total_seconds()) > 3600:
         return None
-    return data.hourly[nearest_hour]
+    return data.hourly[nearest_slot]
 
 
 def _next_hour(data: CoordinatorData) -> PriceBreakdown | None:
     if not data.hourly:
         return None
-    target = dt_util.utcnow().replace(minute=0, second=0, microsecond=0) + timedelta(
-        hours=1
-    )
+    # One hour ahead of the current slot. For a 15-minute contract this
+    # is the same quarter in the next hour, so the sensor keeps its "next
+    # hour" meaning rather than becoming "next 15 minutes".
+    target = slot_start(dt_util.utcnow(), data.resolution) + timedelta(hours=1)
     return data.hourly.get(target)
 
 
@@ -110,6 +112,37 @@ def _bucket(
 
 def _avg(values: list[float]) -> float:
     return sum(values) / len(values)
+
+
+def _avg_breakdown(bds: list[PriceBreakdown]) -> PriceBreakdown:
+    """Mean of each component across a list of breakdowns."""
+    n = len(bds)
+    return PriceBreakdown(
+        energy=sum(b.energy for b in bds) / n,
+        network=sum(b.network for b in bds) / n,
+        taxes=sum(b.taxes for b in bds) / n,
+        all_in=sum(b.all_in for b in bds) / n,
+    )
+
+
+def _hourly_view(data: CoordinatorData) -> dict[datetime, PriceBreakdown]:
+    """Hourly-resolution view of the price table.
+
+    Returns ``data.hourly`` unchanged for hourly contracts. For a
+    quarter-hourly contract it averages each hour's four slots into one
+    breakdown so the bulky ``today`` / ``tomorrow`` / ranked list
+    attributes stay hourly: a full 15-minute curve (~192 rows) would
+    blow past HA's 16 KB per-state-attribute recorder limit. The scalar
+    today/tomorrow min/max/avg sensors keep the native resolution; only
+    these list attributes are downsampled.
+    """
+    if data.resolution == RESOLUTION_HOURLY:
+        return data.hourly
+    buckets: dict[datetime, list[PriceBreakdown]] = {}
+    for slot, bd in data.hourly.items():
+        hour = slot.replace(minute=0, second=0, microsecond=0)
+        buckets.setdefault(hour, []).append(bd)
+    return {hour: _avg_breakdown(bds) for hour, bds in buckets.items()}
 
 
 def _today_avg(data: CoordinatorData) -> float | None:
@@ -153,10 +186,9 @@ def _today_ranked(
     keying on these attributes for "cheapest window" should treat the
     output as undefined when prices don't actually vary across the day.
     """
+    hourly = _hourly_view(data)
     today = dt_util.now().date()
-    pairs = [
-        (h, bd) for h, bd in data.hourly.items() if dt_util.as_local(h).date() == today
-    ]
+    pairs = [(h, bd) for h, bd in hourly.items() if dt_util.as_local(h).date() == today]
     if not pairs:
         return [], []
     # Secondary key on the hour breaks ties deterministically across
@@ -191,11 +223,12 @@ def _split_today_tomorrow(
     Both lists are returned in chronological order. Hours outside the
     today/tomorrow window (typically there are none) are dropped.
     """
+    hourly = _hourly_view(data)
     today = dt_util.now().date()
     tomorrow = today + timedelta(days=1)
     today_rows: list[dict[str, Any]] = []
     tomorrow_rows: list[dict[str, Any]] = []
-    for h, bd in sorted(data.hourly.items()):
+    for h, bd in sorted(hourly.items()):
         local = dt_util.as_local(h)
         row = {
             "start": local.isoformat(),

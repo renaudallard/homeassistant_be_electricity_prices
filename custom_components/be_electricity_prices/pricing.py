@@ -48,7 +48,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Final, Literal
 
-from .const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
+from .const import (
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+    RESOLUTION_QUARTER,
+)
 from .providers.base import (
     DsoOverlay,
     DynamicRates,
@@ -72,6 +77,30 @@ class PriceBreakdown:
     network: float
     taxes: float
     all_in: float
+
+
+def slots_per_hour(resolution: str) -> int:
+    """Price slots per clock hour for a grid resolution."""
+    return 4 if resolution == RESOLUTION_QUARTER else 1
+
+
+def slot_delta(resolution: str) -> timedelta:
+    """Width of one price slot."""
+    if resolution == RESOLUTION_QUARTER:
+        return timedelta(minutes=15)
+    return timedelta(hours=1)
+
+
+def slot_start(when: datetime, resolution: str) -> datetime:
+    """Truncate ``when`` down to the start of its price slot.
+
+    Hourly grids truncate to :00; quarter-hour grids to the :00 / :15 /
+    :30 / :45 boundary at or below ``when``.
+    """
+    when = when.replace(second=0, microsecond=0)
+    if resolution == RESOLUTION_QUARTER:
+        return when.replace(minute=(when.minute // 15) * 15)
+    return when.replace(minute=0)
 
 
 # Federal fixed-date holidays (month, day). Lifted to module scope so

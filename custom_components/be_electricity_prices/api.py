@@ -68,11 +68,15 @@ class EntsoeClient:
         self,
         period_start: datetime,
         period_end: datetime,
+        *,
+        quarter_hourly: bool = False,
     ) -> dict[datetime, float]:
         """Fetch BE day-ahead prices in EUR/kWh for the given UTC window.
 
-        Returns a mapping of hour-start (UTC) -> EUR/kWh.  ENTSO-E
-        publishes prices in EUR/MWh; we convert here.
+        Returns a mapping of slot-start (UTC) -> EUR/kWh.  ENTSO-E
+        publishes prices in EUR/MWh; we convert here.  Sub-hourly points
+        are aggregated to the hour by default; pass
+        ``quarter_hourly=True`` to keep the native 15-minute slots.
         """
         params = {
             "documentType": "A44",
@@ -104,28 +108,34 @@ class EntsoeClient:
         # the bidding zone moves to PT15M). Offload XML parsing to a
         # worker thread so the coordinator's update tick can't ever
         # stall HA's event loop.
-        return await asyncio.to_thread(parse_day_ahead_xml, payload)
+        return await asyncio.to_thread(parse_day_ahead_xml, payload, quarter_hourly)
 
 
-def parse_day_ahead_xml(xml: str) -> dict[datetime, float]:
-    """Parse an A44 publication document into hour-start -> EUR/kWh.
+def parse_day_ahead_xml(
+    xml: str, quarter_hourly: bool = False
+) -> dict[datetime, float]:
+    """Parse an A44 publication document into slot-start -> EUR/kWh.
 
-    Sub-hourly publications (PT15M, PT30M) are aggregated to hour-start
-    by averaging every sub-hour point that falls inside the same UTC
-    hour. Downstream (price table, sensors, cheapest_window service,
-    YTD billing) assumes hourly keys; flattening sub-hour slots here
-    keeps that contract intact when ENTSO-E moves a bidding zone to
-    15-minute publication.
+    By default sub-hourly publications (PT15M, PT30M) are aggregated to
+    hour-start by averaging every sub-hour point that falls inside the
+    same UTC hour, because most consumers (YTD billing, hourly-billed
+    suppliers) assume hourly keys.
+
+    Pass ``quarter_hourly=True`` to keep the native sub-hour slots: each
+    point is keyed by its own start instant instead of being folded into
+    the hour. Used for suppliers that bill per quarter-hour (Engie
+    Dynamic). A PT60M source still yields hourly keys either way.
     """
     try:
         root = ET.fromstring(xml)
     except ET.ParseError as err:
         raise EntsoeError(f"invalid XML: {err}") from err
 
-    # Per-hour accumulators: (sum, count) so we can take the mean at
-    # the end without holding every sub-hour point in memory.
-    hourly_sum: dict[datetime, float] = {}
-    hourly_count: dict[datetime, int] = {}
+    # Per-slot accumulators: (sum, count) so we can take the mean at the
+    # end without holding every sub-hour point in memory. The slot key is
+    # the hour (default) or the native sub-hour instant (quarter_hourly).
+    bucket_sum: dict[datetime, float] = {}
+    bucket_count: dict[datetime, int] = {}
 
     for ts in root.findall("ns:TimeSeries", _NS):
         period = ts.find("ns:Period", _NS)
@@ -192,12 +202,15 @@ def parse_day_ahead_xml(xml: str) -> dict[datetime, float]:
                 last = explicit[position]
             if last is None:
                 continue
-            slot_start = start + step * (position - 1)
-            hour_start = slot_start.replace(minute=0, second=0, microsecond=0)
-            hourly_sum[hour_start] = hourly_sum.get(hour_start, 0.0) + last
-            hourly_count[hour_start] = hourly_count.get(hour_start, 0) + 1
+            point_start = start + step * (position - 1)
+            if quarter_hourly:
+                key = point_start
+            else:
+                key = point_start.replace(minute=0, second=0, microsecond=0)
+            bucket_sum[key] = bucket_sum.get(key, 0.0) + last
+            bucket_count[key] = bucket_count.get(key, 0) + 1
 
-    return {hour: hourly_sum[hour] / hourly_count[hour] for hour in hourly_sum}
+    return {k: bucket_sum[k] / bucket_count[k] for k in bucket_sum}
 
 
 def _fmt(when: datetime) -> str:

@@ -246,7 +246,7 @@
       "fields": {
         "duration_hours": {
           "name": "Dauer",
-          "description": "Fensterlaenge in Stunden (auf die naechste volle Stunde gerundet; die Preistabelle ist stuendlich)."
+          "description": "Fensterlaenge in ganzen Stunden. Bei einem 15-Minuten-Vertrag kann das Fenster an jeder Viertelstundengrenze beginnen."
         },
         "entry_id": {
           "name": "Entry-ID",
@@ -254,7 +254,7 @@
         },
         "earliest_start": {
           "name": "Frueher Beginn",
-          "description": "Optional. Wird auf den Stundenbeginn abgerundet (14:30 beruecksichtigt weiterhin den 14:00-Slot). Standard: jetzt."
+          "description": "Optional. Wird auf den Beginn des Preis-Slots abgerundet (volle Stunde, oder Viertelstunde bei einem 15-Minuten-Vertrag), 14:30 beruecksichtigt also weiterhin den 14:00-Slot. Standard: jetzt."
         },
         "latest_end": {
           "name": "Spaetestes Ende",
@@ -268,7 +268,7 @@
       "fields": {
         "duration_hours": {
           "name": "Dauer",
-          "description": "Fensterlaenge in Stunden (auf die naechste volle Stunde gerundet; die Preistabelle ist stuendlich)."
+          "description": "Fensterlaenge in ganzen Stunden. Bei einem 15-Minuten-Vertrag kann das Fenster an jeder Viertelstundengrenze beginnen."
         },
         "entry_id": {
           "name": "Entry-ID",
@@ -276,7 +276,7 @@
         },
         "earliest_start": {
           "name": "Frueher Beginn",
-          "description": "Optional. Wird auf den Stundenbeginn abgerundet (14:30 beruecksichtigt weiterhin den 14:00-Slot). Standard: jetzt."
+          "description": "Optional. Wird auf den Beginn des Preis-Slots abgerundet (volle Stunde, oder Viertelstunde bei einem 15-Minuten-Vertrag), 14:30 beruecksichtigt also weiterhin den 14:00-Slot. Standard: jetzt."
         },
         "latest_end": {
           "name": "Spaetestes Ende",
@@ -309,10 +309,10 @@
   },
   "exceptions": {
     "not_enough_hours": {
-      "message": "Nur {available} Stunden sind im gewuenschten Fenster verfuegbar; benoetigt: {needed}."
+      "message": "Nur {available} Preis-Slots sind im gewuenschten Fenster verfuegbar; benoetigt: {needed}."
     },
     "duration_too_small": {
-      "message": "duration_hours muss mindestens 1 sein (die Preistabelle ist stuendlich)."
+      "message": "duration_hours muss mindestens 1 sein."
     },
     "no_loaded_entry": {
       "message": "Kein geladener Eintrag von Belgian Electricity Prices."

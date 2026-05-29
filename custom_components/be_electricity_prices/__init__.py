@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import voluptuous as vol
@@ -38,9 +38,11 @@ from homeassistant.core import (
     ServiceCall,
     ServiceResponse,
     SupportsResponse,
+    callback,
 )
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import dt as dt_util
@@ -52,10 +54,12 @@ from .const import (
     CONF_SUPPLIER,
     DOMAIN,
     PLATFORMS,
+    RESOLUTION_HOURLY,
+    RESOLUTION_QUARTER,
     STORAGE_VERSION,
 )
 from .coordinator import BePricesCoordinator, evict_shared_caches
-from .pricing import PriceBreakdown
+from .pricing import PriceBreakdown, slot_delta, slot_start, slots_per_hour
 
 type BePricesConfigEntry = ConfigEntry[BePricesCoordinator]
 
@@ -66,10 +70,11 @@ SERVICE_BACKFILL_STATISTICS = "backfill_statistics"
 
 WINDOW_SCHEMA = vol.Schema(
     {
-        # Whole hours only -- the price table is hourly. services.yaml
-        # advertises step=1, min=1, and _resolve_window_inputs rejects
-        # anything < 1 at runtime; keep the voluptuous bounds in sync
-        # so a YAML-only call hits the same rule.
+        # Whole hours only. services.yaml advertises step=1, min=1, and
+        # _resolve_window_inputs rejects anything < 1 at runtime; keep the
+        # voluptuous bounds in sync so a YAML-only call hits the same rule.
+        # On a 15-minute contract the duration is scaled to slots (x4) and
+        # the window may start on any quarter boundary.
         vol.Required("duration_hours"): vol.All(
             vol.Coerce(float), vol.Range(min=1.0, max=48.0)
         ),
@@ -137,6 +142,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Re-evaluate the price sensors at every slot boundary without
+    # re-fetching: current_price / next_hour_price read the wall clock
+    # live, so a push at :00 (and :15/:30/:45 for a 15-minute supplier)
+    # keeps them aligned to the slot the user is actually billed for. The
+    # coordinator's own 60-minute tick is not clock-aligned, so without
+    # this the current price could lag the slot boundary by most of an
+    # hour. Resolution is stable per supplier; a reconfigure reloads the
+    # entry and re-registers this with the right cadence.
+    coord_data = coordinator.data
+    quarter = coord_data is not None and coord_data.resolution == RESOLUTION_QUARTER
+    slot_minute = [0, 15, 30, 45] if quarter else 0
+
+    @callback
+    def _push_slot_boundary(_now: datetime) -> None:
+        coordinator.async_update_listeners()
+
+    entry.async_on_unload(
+        async_track_time_change(hass, _push_slot_boundary, minute=slot_minute, second=0)
+    )
 
     # One-shot backfill: only fires when the recorder has no
     # statistics for current_price at the Jan 1 anchor, so a normal
@@ -260,29 +285,34 @@ def _find_window(
     latest_utc: datetime | None,
     *,
     minimize: bool,
+    resolution: str = RESOLUTION_HOURLY,
 ) -> dict[str, Any]:
     """Pure helper: locate the cheapest (minimize=True) or most-expensive
-    contiguous ``duration_slots``-long window in the supplied hourly table.
+    contiguous ``duration_slots``-long window in the supplied price table.
+
+    ``duration_slots`` counts price slots, not hours: a 2-hour window is
+    2 slots on an hourly table and 8 on a 15-minute one. ``resolution``
+    sets the slot width used to anchor the earliest start and to compute
+    each slot's end.
 
     Bounds:
-      earliest_utc   only hours on/after this UTC time are considered
-                     (the hour bucket is found by truncating to :00).
-      latest_utc     if set, only hours whose end (h + 1h) is on/before
-                     this UTC time are considered.
+      earliest_utc   only slots on/after this UTC time are considered
+                     (truncated down to the slot boundary).
+      latest_utc     if set, only slots whose end (slot + width) is
+                     on/before this UTC time are considered.
 
     Raises ``ServiceValidationError`` (translation_key=``not_enough_hours``)
-    when fewer than ``duration_slots`` hours match.
+    when fewer than ``duration_slots`` slots match.
     """
-    hours = sorted(hourly.items())
-    earliest_anchor = earliest_utc.replace(minute=0, second=0, microsecond=0)
-    candidates = [(h, bd) for h, bd in hours if h >= earliest_anchor]
+    delta = slot_delta(resolution)
+    slots = sorted(hourly.items())
+    earliest_anchor = slot_start(earliest_utc, resolution)
+    candidates = [(h, bd) for h, bd in slots if h >= earliest_anchor]
     if latest_utc is not None:
-        candidates = [
-            (h, bd) for h, bd in candidates if h + timedelta(hours=1) <= latest_utc
-        ]
+        candidates = [(h, bd) for h, bd in candidates if h + delta <= latest_utc]
     if len(candidates) < duration_slots:
         raise ServiceValidationError(
-            f"only {len(candidates)} hours available in the requested window; "
+            f"only {len(candidates)} slots available in the requested window; "
             f"need {duration_slots}",
             translation_domain=DOMAIN,
             translation_key="not_enough_hours",
@@ -304,11 +334,11 @@ def _find_window(
             best_idx = i
 
     win_start_utc = candidates[best_idx][0]
-    win_end_utc = candidates[best_idx + duration_slots - 1][0] + timedelta(hours=1)
+    win_end_utc = candidates[best_idx + duration_slots - 1][0] + delta
     return {
         "start": dt_util.as_local(win_start_utc).isoformat(),
         "end": dt_util.as_local(win_end_utc).isoformat(),
-        "duration_hours": duration_slots,
+        "duration_hours": duration_slots // slots_per_hour(resolution),
         "average_eur_per_kwh": round(best_avg, 6),
         "hours": [
             {
@@ -343,19 +373,15 @@ def _no_loaded_entry_error(target_id: str | None) -> ServiceValidationError:
 
 def _resolve_window_inputs(
     call: ServiceCall,
-) -> tuple[dict[datetime, PriceBreakdown], int, datetime, datetime | None]:
+) -> tuple[dict[datetime, PriceBreakdown], int, datetime, datetime | None, str]:
     """Parse a window-finding ServiceCall into pure-helper arguments."""
     duration_hours = float(call.data["duration_hours"])
     if duration_hours < 1:
         raise ServiceValidationError(
-            "duration_hours must be at least 1 (price table is hourly)",
+            "duration_hours must be at least 1",
             translation_domain=DOMAIN,
             translation_key="duration_too_small",
         )
-    # The price table is hourly; round half-up so 1.5h becomes 2h windows
-    # rather than silently widening to 1h. The service schema now exposes
-    # whole-hour steps so callers shouldn't trip this branch from the UI.
-    duration_slots = int(duration_hours + 0.5)
 
     entries = call.hass.config_entries.async_loaded_entries(DOMAIN)
     target_id = call.data.get("entry_id")
@@ -378,6 +404,11 @@ def _resolve_window_inputs(
             translation_key="price_table_empty",
         )
 
+    # Round the requested hours half-up, then scale to the table's slot
+    # grid: a 2-hour window is 2 slots hourly, 8 slots on a 15-minute
+    # contract, which lets the window start on any quarter boundary.
+    duration_slots = int(duration_hours + 0.5) * slots_per_hour(data.resolution)
+
     earliest = call.data.get("earliest_start") or dt_util.utcnow()
     latest = call.data.get("latest_end")
     # Naive datetimes from YAML are interpreted as the user's HA time
@@ -386,7 +417,7 @@ def _resolve_window_inputs(
     # the requested wall-clock hour by 1-2 hours.
     earliest_utc = _to_utc(earliest)
     latest_utc = _to_utc(latest) if latest is not None else None
-    return data.hourly, duration_slots, earliest_utc, latest_utc
+    return data.hourly, duration_slots, earliest_utc, latest_utc, data.resolution
 
 
 def _to_utc(value: datetime) -> datetime:
@@ -408,14 +439,18 @@ def _to_utc(value: datetime) -> datetime:
 
 async def _async_cheapest_window_service(call: ServiceCall) -> ServiceResponse:
     """Find the cheapest contiguous N-hour window in the upcoming price table."""
-    hourly, slots, earliest, latest = _resolve_window_inputs(call)
-    return _find_window(hourly, slots, earliest, latest, minimize=True)
+    hourly, slots, earliest, latest, resolution = _resolve_window_inputs(call)
+    return _find_window(
+        hourly, slots, earliest, latest, minimize=True, resolution=resolution
+    )
 
 
 async def _async_most_expensive_window_service(call: ServiceCall) -> ServiceResponse:
     """Find the most-expensive contiguous N-hour window in the upcoming price table."""
-    hourly, slots, earliest, latest = _resolve_window_inputs(call)
-    return _find_window(hourly, slots, earliest, latest, minimize=False)
+    hourly, slots, earliest, latest, resolution = _resolve_window_inputs(call)
+    return _find_window(
+        hourly, slots, earliest, latest, minimize=False, resolution=resolution
+    )
 
 
 async def _async_backfill_service(call: ServiceCall) -> ServiceResponse:

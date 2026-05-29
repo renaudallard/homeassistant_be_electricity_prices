@@ -47,7 +47,7 @@ publication and how to parse it.
 
 - **Live tariff cards** — prices come straight from the supplier's published PDF; no EUR values live in this repo.
 - **Whole-bill view** — energy, transport, distribution, regional levies and VAT all add up to a single EUR/kWh sensor.
-- **Dynamic contracts** — `factor × spot + base` per hour, where `spot` is the Belgian day-ahead price from ENTSO-E.
+- **Dynamic contracts** — `factor × spot + base`, where `spot` is the Belgian day-ahead price from ENTSO-E. Priced per hour by default; suppliers that bill per quarter-hour (Engie Dynamic, after the SDAC 15-minute market switch of Oct 2025) keep the native 15-minute slots for the live price, next slot and cheapest-window service. Year-to-date billing stays hourly, since Home Assistant only retains hourly long-term statistics.
 - **Time-of-Use contracts** — Luminus SmartFlex and Engie Empower Flextime: 3 hour-of-day bands (peak / transition / offpeak) with the supplier's published rates per slot.
 - **Tarif Impact (Wallonia)** — opt-in CWaPE 3-band distribution pricing (PIC 17–22, MEDIUM 7–11 + 22–1, ECO 1–7 + 11–17), orthogonal to the supplier tariff.
 - **Flanders capacity tariff** — monthly peak tracked from any power sensor (W, kW, VA, or kVA — the unit is honoured) or a fixed value; billed against the configured Fluvius sub-area.
@@ -106,7 +106,10 @@ all_in = (energy + distribution + transport + levies) × (1 + VAT)
 
 Each component comes from the supplier's tariff card and the configured DSO.
 For dynamic contracts the energy term is `factor × spot + base`, where `spot`
-is the Belgian day-ahead price from the ENTSO-E Transparency Platform.
+is the Belgian day-ahead price from the ENTSO-E Transparency Platform —
+published at 15-minute resolution since the SDAC switch of Oct 2025. The
+integration aggregates it to hourly except for suppliers that bill per
+quarter-hour (Engie Dynamic), which keep the native 15-minute slots.
 
 VAT spreads uniformly across components, so `energy_component +
 network_component + taxes_component` always equals `current_price` to the cent.
@@ -295,7 +298,7 @@ opens a two-option menu:
   Multiple entries pointing at the same
   `(supplier, contract, region)` tuple share their fetched snapshot
   through an in-memory cache, so the same PDF is never polled twice.
-- **Spot prices** *(dynamic only)* — hourly via ENTSO-E; tomorrow's curve picked up after publication around midday CET. Historical hourly spots are backfilled lazily into a per-entry persistent cache so dynamic `current_year_cost` replays each past hour at its actual rate without re-fetching the same window every tick.
+- **Spot prices** *(dynamic only)* — fetched from ENTSO-E at hourly resolution, or at the native 15-minute resolution for suppliers that bill per quarter-hour (Engie); tomorrow's curve picked up after publication around 12:55 CET. Historical spots are backfilled lazily at hourly resolution into a per-entry persistent cache so dynamic `current_year_cost` replays each past hour at its actual rate without re-fetching the same window every tick.
 - **Monthly capacity peak** *(Flanders)* — tracked continuously, resets on the 1st of each local month.
 - **`current_year_cost`** — recomputed every coordinator tick from HA's
   recorder. The recorder's daily statistics are the source of truth for
@@ -338,7 +341,7 @@ upcoming price table. Both services share the same fields:
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `duration_hours` | _required_ | Window length in whole hours (1-48; the price table is hourly). |
+| `duration_hours` | _required_ | Window length in whole hours (1-48). On a 15-minute contract (Engie) the window aligns to quarter-hour boundaries. |
 | `entry_id` | first loaded | Optional config entry to target. |
 | `earliest_start` | now | Don't consider windows starting before this time. |
 | `latest_end` | end of the cached table | Don't consider windows ending after this time. |

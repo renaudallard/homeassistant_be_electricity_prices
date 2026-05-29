@@ -246,7 +246,7 @@
       "fields": {
         "duration_hours": {
           "name": "Duration",
-          "description": "Window length in hours (rounded to the nearest whole hour; the price table is hourly)."
+          "description": "Window length in whole hours. On a 15-minute contract the window may start on any quarter-hour boundary."
         },
         "entry_id": {
           "name": "Entry ID",
@@ -254,7 +254,7 @@
         },
         "earliest_start": {
           "name": "Earliest start",
-          "description": "Optional. Truncated down to the start of the hour (14:30 still considers the 14:00 slot). Defaults to now."
+          "description": "Optional. Truncated down to the start of its price slot (the hour, or the quarter on a 15-minute contract), so 14:30 still considers the 14:00 slot. Defaults to now."
         },
         "latest_end": {
           "name": "Latest end",
@@ -268,7 +268,7 @@
       "fields": {
         "duration_hours": {
           "name": "Duration",
-          "description": "Window length in hours (rounded to the nearest whole hour; the price table is hourly)."
+          "description": "Window length in whole hours. On a 15-minute contract the window may start on any quarter-hour boundary."
         },
         "entry_id": {
           "name": "Entry ID",
@@ -276,7 +276,7 @@
         },
         "earliest_start": {
           "name": "Earliest start",
-          "description": "Optional. Truncated down to the start of the hour (14:30 still considers the 14:00 slot). Defaults to now."
+          "description": "Optional. Truncated down to the start of its price slot (the hour, or the quarter on a 15-minute contract), so 14:30 still considers the 14:00 slot. Defaults to now."
         },
         "latest_end": {
           "name": "Latest end",
@@ -309,10 +309,10 @@
   },
   "exceptions": {
     "not_enough_hours": {
-      "message": "Only {available} hours are available in the requested window; need {needed}."
+      "message": "Only {available} price slots are available in the requested window; need {needed}."
     },
     "duration_too_small": {
-      "message": "duration_hours must be at least 1 (the price table is hourly)."
+      "message": "duration_hours must be at least 1."
     },
     "no_loaded_entry": {
       "message": "No loaded Belgian Electricity Prices entry."

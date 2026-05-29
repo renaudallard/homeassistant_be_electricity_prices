@@ -113,11 +113,22 @@ class VariableRates:
 
 @dataclass(frozen=True, kw_only=True)
 class DynamicRates:
-    """Dynamic (hourly) energy contract: factor x spot + base."""
+    """Dynamic energy contract: ``factor x spot + base`` per price slot.
+
+    ``quarter_hourly`` selects the spot grid the contract bills on. Most
+    Belgian dynamic suppliers (Bolt, Frank Energie by default) price per
+    clock hour, so the integration aggregates ENTSO-E's 15-minute
+    day-ahead curve to hourly. Engie Dynamic bills per quarter-hour
+    (``(B x eSpot_15) + A``); its extractor sets this True so the live
+    price table, current / next-slot sensors and the cheapest-window
+    service keep the native 15-minute slots. YTD billing stays hourly
+    regardless: Home Assistant only retains hourly long-term statistics.
+    """
 
     factor: float
     base: float
     yearly_fixed_fee: float = 0.0
+    quarter_hourly: bool = False
 
 
 WeekendRule = Literal["weekend_offpeak", "weekend_no_peak"]
