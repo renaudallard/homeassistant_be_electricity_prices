@@ -575,6 +575,27 @@ async def _check_ecopower(
             and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
             detail=str(a),
         )
+    # Injection (terugleververgoeding) coverage gate. Issue #31: the May
+    # 2026 card relabelled the injection row, the regex stopped matching,
+    # _extract_injection() returned None -- and nothing here asserted the
+    # injection was parsed, so the broken snapshot still passed green.
+    # Mirrors the gate _check_frank already has.
+    _expect(
+        f"{prefix}: injection rates present",
+        snap.injection is not None,
+        detail="injection is None",
+    )
+    # Sign / plausibility guard for the value the presence gate can't see:
+    # Ecopower's feed-in credit is stored positive (the card's cost-column
+    # negative is flipped), so a regressed sign lands below 0 and a misread
+    # row lands above the bound. Guarded on current because a future
+    # dynamic card may carry factor/base with current=None (InjectionRates).
+    if snap.injection is not None and snap.injection.current is not None:
+        _expect(
+            f"{prefix}: injection credit in [0, 0.15] EUR/kWh",
+            0.0 <= snap.injection.current <= 0.15,
+            detail=f"current={snap.injection.current}",
+        )
 
 
 async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) -> None:
