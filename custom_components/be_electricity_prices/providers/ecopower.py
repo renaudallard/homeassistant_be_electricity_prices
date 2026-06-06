@@ -401,12 +401,13 @@ _INJECTION_RE = re.compile(
 def _extract_injection(text: str) -> InjectionRates | None:
     """Parse the injection (terugleververgoeding) price.
 
-    Ecopower lists the feed-in value as a negative EUR/kWh figure
-    (``-0,0200 euro/kWh``) because it sits in the energy/cost column,
-    where a credit shows as a negative cost. The integration's
-    InjectionRates accepts negative ``current`` natively, so the
-    `injection_price` sensor will display a negative number for
-    Ecopower customers (correct: you pay to inject).
+    The terugleververgoeding is a feed-in credit the customer
+    *receives* ("de vergoeding die klanten ... krijgen voor hun
+    injectie"; Ecopower states the price is never negative). The card
+    prints it as a negative EUR/kWh figure (``-0,0200 euro/kWh``) only
+    because it sits in the energy/cost column, where a credit shows as
+    a negative cost. Negate it so ``current`` holds the compensation as
+    a positive number, matching every other supplier's injection sign.
     """
     match = _INJECTION_RE.search(text)
     if not match:
@@ -417,7 +418,8 @@ def _extract_injection(text: str) -> InjectionRates | None:
         if raw.startswith(variant):
             raw = "-" + raw[len(variant) :]
             break
-    return InjectionRates(current=to_float(raw))
+    # Flip the cost-column sign: a negative cost is a positive credit.
+    return InjectionRates(current=-to_float(raw))
 
 
 # ---- catalog page scraping ---------------------------------------------------

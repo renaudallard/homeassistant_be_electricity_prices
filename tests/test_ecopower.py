@@ -128,13 +128,14 @@ def test_april_card_taxes_are_htva_with_vat_06() -> None:
     assert t.brussels_renewables == 0.0
 
 
-def test_april_card_injection_is_negative_for_digital_meter() -> None:
-    """Ecopower CHARGES residential prosumers for grid use --
-    'Terugleververgoeding (digitale meter): -0,0200 euro/kWh'.
-    The negative sign must survive parsing."""
+def test_april_card_injection_is_positive_credit() -> None:
+    """The terugleververgoeding is a feed-in credit the customer
+    receives. The card prints it as a negative cost
+    ('Terugleververgoeding (digitale meter): -0,0200 euro/kWh'); the
+    parser negates that so ``current`` is the positive +0.02 credit."""
     snap = _april_snap()
     assert snap.injection is not None
-    assert snap.injection.current == pytest.approx(-0.02)
+    assert snap.injection.current == pytest.approx(0.02)
 
 
 def test_may_card_injection_label_is_matched() -> None:
@@ -145,7 +146,7 @@ def test_may_card_injection_label_is_matched() -> None:
     value is the card's printed figure (sign corrected separately)."""
     snap = _may_snap()
     assert snap.injection is not None
-    assert snap.injection.current == pytest.approx(-0.02)
+    assert snap.injection.current == pytest.approx(0.02)
 
 
 def test_april_card_publication_and_supplier_metadata() -> None:
