@@ -57,6 +57,14 @@ def _april_snap() -> SupplierSnapshot:
     )
 
 
+def _may_snap() -> SupplierSnapshot:
+    return parse_snapshot(
+        _text("ecopower_burgerstroom_may.pdf"),
+        "test://ecopower-may",
+        "mei 2026",
+    )
+
+
 def test_april_card_energy_is_groene_burgerstroom_resolved_rate() -> None:
     """The card prints '(50% vast aan 0,17 euro + 50% variabel aan
     0,08472117 euro)   0,1274 euro/kWh'. We use the resolved rate."""
@@ -125,6 +133,17 @@ def test_april_card_injection_is_negative_for_digital_meter() -> None:
     'Terugleververgoeding (digitale meter): -0,0200 euro/kWh'.
     The negative sign must survive parsing."""
     snap = _april_snap()
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(-0.02)
+
+
+def test_may_card_injection_label_is_matched() -> None:
+    """Issue #31: the May 2026 card renamed the injection row from
+    'Terugleververgoeding (digitale meter)' to
+    'Injectie Groene Burgerstroom (terugleververgoeding)', which the
+    old regex missed, so the injection price went unavailable. The
+    value is the card's printed figure (sign corrected separately)."""
+    snap = _may_snap()
     assert snap.injection is not None
     assert snap.injection.current == pytest.approx(-0.02)
 

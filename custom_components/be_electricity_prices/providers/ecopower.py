@@ -63,6 +63,7 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    SIGN_CHARS,
     archive_validity_check,
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
@@ -385,20 +386,24 @@ def _extract_taxes(text: str) -> TaxOverlay:
 
 
 _INJECTION_RE = re.compile(
-    # Accept ASCII hyphen plus en-dash, em-dash, and U+2212 minus so a
-    # PDF re-render that swaps the glyph doesn't silently flip the sign.
-    r"Terugleververgoeding[^\n]*digitale meter[^\n]*?"
-    r"([\-–—−]?\s*[\d,]+)\s*euro/kWh",
+    # The injection row was relabelled on the May 2026 card. Match both:
+    #   <= Apr 2026:  "Terugleververgoeding (digitale meter) 2 -0,0200 euro/kWh"
+    #   >= May 2026:  "Injectie Groene Burgerstroom (terugleververgoeding)2 -0,0200 euro/kWh"
+    # SIGN_CHARS covers every minus glyph (hyphen, figure/en/em dash, U+2212)
+    # a PDF re-render might swap in, so the sign never flips silently.
+    r"(?:Injectie\s+Groene\s+Burgerstroom\s*\(terugleververgoeding\)"
+    r"|Terugleververgoeding[^\n]*digitale\s+meter)"
+    rf"[^\n]*?([{SIGN_CHARS}]?\s*[\d,]+)\s*euro/kWh",
     re.IGNORECASE,
 )
 
 
 def _extract_injection(text: str) -> InjectionRates | None:
-    """Parse the digital-meter injection price.
+    """Parse the injection (terugleververgoeding) price.
 
-    Ecopower currently CHARGES residential prosumers for grid use --
-    the "terugleververgoeding" prints as a negative EUR/kWh value
-    (``-0,02 euro/kWh`` for April 2026). The integration's
+    Ecopower lists the feed-in value as a negative EUR/kWh figure
+    (``-0,0200 euro/kWh``) because it sits in the energy/cost column,
+    where a credit shows as a negative cost. The integration's
     InjectionRates accepts negative ``current`` natively, so the
     `injection_price` sensor will display a negative number for
     Ecopower customers (correct: you pay to inject).
@@ -408,7 +413,7 @@ def _extract_injection(text: str) -> InjectionRates | None:
         return None
     raw = match.group(1).replace(" ", "")
     # Normalise non-ASCII minus glyphs to '-' so to_float can parse them.
-    for variant in ("–", "—", "−"):
+    for variant in ("‒", "–", "—", "−"):
         if raw.startswith(variant):
             raw = "-" + raw[len(variant) :]
             break
