@@ -255,6 +255,15 @@ def parse_snapshot(
 
 _ENERGY_RE = re.compile(r"Groene burgerstroom[^\n]*?([\d,]+)\s*euro/kWh", re.IGNORECASE)
 
+# Mid-2026 cards moved the resolved rate onto the line *below* the
+# "Afname Groene burgerstroom (50% vast ... + 50% variabel ...)" label
+# instead of trailing it on the same line. Fall back to this when the
+# same-line form misses.
+_ENERGY_SPLIT_RE = re.compile(
+    r"Afname\s+Groene\s+burgerstroom[^\n]*\n\s*([\d,]+)\s*euro/kWh",
+    re.IGNORECASE,
+)
+
 
 def _extract_energy(text: str) -> EnergyRates:
     """Parse the "Groene burgerstroom" effective rate (HTVA, EUR/kWh).
@@ -266,7 +275,7 @@ def _extract_energy(text: str) -> EnergyRates:
     time, and (b) supporting Ecopower's variable cost without a live
     spot is exactly what ``VariableRates`` is for.
     """
-    match = _ENERGY_RE.search(text)
+    match = _ENERGY_RE.search(text) or _ENERGY_SPLIT_RE.search(text)
     if not match:
         raise ExtractorError("could not parse Ecopower 'Groene burgerstroom' rate")
     return VariableRates(current=to_float(match.group(1)))
@@ -397,6 +406,15 @@ _INJECTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Split-layout fallback: mid-2026 cards print the resolved injection
+# value on the formula line *below* the label rather than on the label
+# line. Anchor on the label, then take the value on the next line.
+_INJECTION_SPLIT_RE = re.compile(
+    r"Injectie\s+Groene\s+Burgerstroom\s*\(terugleververgoeding\)[^\n]*\n"
+    rf"[^\n]*?([{SIGN_CHARS}]?\s*[\d,]+)\s*euro/kWh",
+    re.IGNORECASE,
+)
+
 
 def _extract_injection(text: str) -> InjectionRates | None:
     """Parse the injection (terugleververgoeding) price.
@@ -409,7 +427,7 @@ def _extract_injection(text: str) -> InjectionRates | None:
     a negative cost. Negate it so ``current`` holds the compensation as
     a positive number, matching every other supplier's injection sign.
     """
-    match = _INJECTION_RE.search(text)
+    match = _INJECTION_RE.search(text) or _INJECTION_SPLIT_RE.search(text)
     if not match:
         return None
     raw = match.group(1).replace(" ", "")

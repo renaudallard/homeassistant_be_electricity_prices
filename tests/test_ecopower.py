@@ -138,6 +138,36 @@ def test_april_card_injection_is_positive_credit() -> None:
     assert snap.injection.current == pytest.approx(0.02)
 
 
+def _split_snap() -> SupplierSnapshot:
+    return parse_snapshot(
+        _text("ecopower_burgerstroom_jun_split.pdf"),
+        "test://ecopower-split",
+        "juni 2026",
+    )
+
+
+def test_split_layout_card_parses_energy_and_injection() -> None:
+    """Mid-2026 cards moved the resolved energy and injection rates onto
+    the line below their label (the 50/50-split layout, previewed on the
+    June estimation card). Both must still parse rather than raising:
+    energy 0,1378 euro/kWh and the +0,0329 injection credit."""
+    snap = _split_snap()
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current == pytest.approx(0.1378)
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(0.0329)
+    assert set(snap.dsos) == {
+        "fluvius_antwerpen",
+        "fluvius_halle_vilvoorde",
+        "fluvius_imewo",
+        "fluvius_intergem",
+        "fluvius_iveka",
+        "fluvius_limburg",
+        "fluvius_west",
+        "fluvius_zenne_dijle",
+    }
+
+
 def test_may_card_injection_label_is_matched() -> None:
     """Issue #31: the May 2026 card renamed the injection row from
     'Terugleververgoeding (digitale meter)' to
