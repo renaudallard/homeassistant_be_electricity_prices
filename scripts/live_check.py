@@ -535,67 +535,79 @@ async def _check_ecopower(
     session: aiohttp.ClientSession, ecopower: types.ModuleType
 ) -> None:
     expected_dso_keys = _FLUVIUS_KEYS
-    cid = "ecopower_burgerstroom"
-    prefix = f"ecopower/{cid}"
-    try:
-        snap = await _fetch_with_retry(
-            partial(ecopower.fetch, session, cid, "flanders")
-        )
-    except Exception as err:
-        _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
-        return
-    _expect(f"{prefix}: publication label", bool(snap.publication_label))
-    _expect(
-        f"{prefix}: all eight Fluvius DSOs present",
-        expected_dso_keys <= set(snap.dsos),
-        detail=f"missing: {sorted(expected_dso_keys - set(snap.dsos))}",
-    )
-    _expect(
-        f"{prefix}: federal excise > 0",
-        snap.taxes.federal_excise > 0,
-        detail=str(snap.taxes),
-    )
-    _expect(
-        f"{prefix}: flanders renewables > 0",
-        snap.taxes.flanders_renewables > 0,
-        detail=str(snap.taxes),
-    )
-    # Ecopower publishes HTVA values; vat_rate must be 0.06.
-    _expect(
-        f"{prefix}: vat_rate is 0.06",
-        snap.taxes.vat_rate == 0.06,
-        detail=str(snap.taxes),
-    )
-    _validate_energy(prefix, cid, snap.energy)
-    if "fluvius_antwerpen" in snap.dsos:
-        a = snap.dsos["fluvius_antwerpen"]
+    # Ecopower sells the static "Groene burgerstroom" and the dynamic
+    # "Dynamische burgerstroom"; both are Flanders-only HTVA cards with
+    # the same tax/DSO shape, so the assertions are shared.
+    for cid in ("ecopower_burgerstroom", "ecopower_dynamische_burgerstroom"):
+        prefix = f"ecopower/{cid}"
+        try:
+            snap = await _fetch_with_retry(
+                partial(ecopower.fetch, session, cid, "flanders")
+            )
+        except Exception as err:
+            _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+            continue
+        _expect(f"{prefix}: publication label", bool(snap.publication_label))
         _expect(
-            f"{prefix}: fluvius capacity tariff in [20, 200] EUR/kW/yr",
-            a.capacity_eur_per_kw_year is not None
-            and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
-            detail=str(a),
+            f"{prefix}: all eight Fluvius DSOs present",
+            expected_dso_keys <= set(snap.dsos),
+            detail=f"missing: {sorted(expected_dso_keys - set(snap.dsos))}",
         )
-    # Injection (terugleververgoeding) coverage gate. Issue #31: the May
-    # 2026 card relabelled the injection row, the regex stopped matching,
-    # _extract_injection() returned None -- and nothing here asserted the
-    # injection was parsed, so the broken snapshot still passed green.
-    # Mirrors the gate _check_frank already has.
-    _expect(
-        f"{prefix}: injection rates present",
-        snap.injection is not None,
-        detail="injection is None",
-    )
-    # Sign / plausibility guard for the value the presence gate can't see:
-    # Ecopower's feed-in credit is stored positive (the card's cost-column
-    # negative is flipped), so a regressed sign lands below 0 and a misread
-    # row lands above the bound. Guarded on current because a future
-    # dynamic card may carry factor/base with current=None (InjectionRates).
-    if snap.injection is not None and snap.injection.current is not None:
         _expect(
-            f"{prefix}: injection credit in [0, 0.15] EUR/kWh",
-            0.0 <= snap.injection.current <= 0.15,
-            detail=f"current={snap.injection.current}",
+            f"{prefix}: federal excise > 0",
+            snap.taxes.federal_excise > 0,
+            detail=str(snap.taxes),
         )
+        _expect(
+            f"{prefix}: flanders renewables > 0",
+            snap.taxes.flanders_renewables > 0,
+            detail=str(snap.taxes),
+        )
+        # Ecopower publishes HTVA values; vat_rate must be 0.06.
+        _expect(
+            f"{prefix}: vat_rate is 0.06",
+            snap.taxes.vat_rate == 0.06,
+            detail=str(snap.taxes),
+        )
+        _validate_energy(prefix, cid, snap.energy)
+        if "fluvius_antwerpen" in snap.dsos:
+            a = snap.dsos["fluvius_antwerpen"]
+            _expect(
+                f"{prefix}: fluvius capacity tariff in [20, 200] EUR/kW/yr",
+                a.capacity_eur_per_kw_year is not None
+                and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
+                detail=str(a),
+            )
+        # Injection (terugleververgoeding) coverage gate. Issue #31: the
+        # May 2026 card relabelled the injection row, the regex stopped
+        # matching, _extract_injection() returned None -- and nothing here
+        # asserted the injection was parsed, so the broken snapshot still
+        # passed green. Mirrors the gate _check_frank already has.
+        _expect(
+            f"{prefix}: injection rates present",
+            snap.injection is not None,
+            detail="injection is None",
+        )
+        if snap.injection is None:
+            continue
+        if snap.injection.current is not None:
+            # Static card: the feed-in credit is stored positive (the
+            # card's cost-column negative is flipped), so a regressed sign
+            # lands below 0 and a misread row lands above the bound.
+            _expect(
+                f"{prefix}: injection credit in [0, 0.15] EUR/kWh",
+                0.0 <= snap.injection.current <= 0.15,
+                detail=f"current={snap.injection.current}",
+            )
+        else:
+            # Dynamic card: injection is a factor*spot+base formula with
+            # no indicative current. Gate that both legs parsed, so a
+            # relabelled formula row can't slip through as a null.
+            _expect(
+                f"{prefix}: dynamic injection factor + base present",
+                snap.injection.factor is not None and snap.injection.base is not None,
+                detail=f"factor={snap.injection.factor}, base={snap.injection.base}",
+            )
 
 
 async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) -> None:
@@ -1007,7 +1019,7 @@ async def _check_catalogs(
         "cociter": {"cociter_variable", "cociter_dynamic"},
         "ebem": {c.contract_id for c in modules["ebem"]._CONTRACTS},
         "ecofix": {c.contract_id for c in modules["ecofix"]._CONTRACTS},
-        "ecopower": {"ecopower_burgerstroom"},
+        "ecopower": {"ecopower_burgerstroom", "ecopower_dbs"},
         "dats24": {"dats24_groen_variabel"},
         "frank": {t[0] for t in modules["frank"]._TIERS},
     }

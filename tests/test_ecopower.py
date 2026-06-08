@@ -35,11 +35,14 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.be_electricity_prices.providers.base import (
+    DynamicRates,
+    InjectionRates,
     SupplierSnapshot,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.ecopower import (
     fetch_for_month,
+    parse_dbs_snapshot,
     parse_snapshot,
 )
 from tests import fixture_text
@@ -186,6 +189,105 @@ def test_april_card_publication_and_supplier_metadata() -> None:
     assert snap.publication_label == "april 2026"
 
 
+# ---- Dynamische burgerstroom (dynamic) -----------------------------------------
+
+
+def _dbs_snap() -> SupplierSnapshot:
+    return parse_dbs_snapshot(
+        _text("ecopower_dynamische_burgerstroom_jan.pdf"),
+        "test://ecopower-dbs",
+        "2026-01",
+    )
+
+
+def test_dbs_card_energy_is_dynamic_formula_htva() -> None:
+    """The card prints 'elk kwartier 0,00102 × EPEX DA +0,004 euro/kWh'.
+    EPEX DA is in EUR/MWh, so the factor scales by 1000 to act on the
+    EUR/kWh spot (1,02). The base (0,004) and factor stay HTVA --
+    vat_rate=0.06 scales the energy to TVAC in the pricing engine."""
+    snap = _dbs_snap()
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.02)
+    assert snap.energy.base == pytest.approx(0.004)
+    assert snap.energy.quarter_hourly is True
+
+
+def test_dbs_card_subscription_fee_is_vat_inclusive_annual() -> None:
+    """Abonnementskost 5,00 euro/maand HTVA. yearly_fixed_fee holds the
+    actual annual euros (summed without rescaling), so it is the
+    VAT-inclusive 12-month total: 5 × 12 × 1.06 = 63.60."""
+    snap = _dbs_snap()
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(63.6)
+
+
+def test_dbs_card_injection_is_dynamic_formula() -> None:
+    """Injection 'Terugleververgoeding elk kwartier 0,00098 × EPEX DA -
+    0,015 euro/kWh' -> factor 0.98, base -0.015. The base is negative
+    (the credit drops below zero at low spot), and injection is stored
+    unscaled (residential injection is VAT-exempt)."""
+    snap = _dbs_snap()
+    assert isinstance(snap.injection, InjectionRates)
+    assert snap.injection.current is None
+    assert snap.injection.factor == pytest.approx(0.98)
+    assert snap.injection.base == pytest.approx(-0.015)
+
+
+def test_dbs_card_dsos_cover_all_eight_fluvius_subareas() -> None:
+    """The narrower dynamic card wraps 'Fluvius Midden-Vlaanderen' across
+    its data row; the label-stitch must keep all eight sub-areas."""
+    snap = _dbs_snap()
+    assert set(snap.dsos) == {
+        "fluvius_antwerpen",
+        "fluvius_halle_vilvoorde",
+        "fluvius_imewo",
+        "fluvius_intergem",
+        "fluvius_iveka",
+        "fluvius_limburg",
+        "fluvius_west",
+        "fluvius_zenne_dijle",
+    }
+
+
+def test_dbs_card_dso_row_columns_for_antwerpen() -> None:
+    """The dynamic row layout (databeheer | capacity | enkelvoudig |
+    uitsluitend-nacht | injectietarief) parses the same four columns the
+    gbs parser keeps; the trailing injection network tariff is ignored."""
+    snap = _dbs_snap()
+    a = snap.dsos["fluvius_antwerpen"]
+    assert a.data_management_per_year == pytest.approx(17.85)
+    assert a.capacity_eur_per_kw_year == pytest.approx(49.40)
+    assert a.distribution_single == pytest.approx(0.0505027)
+    assert a.distribution_exclusive_night == pytest.approx(0.0454058)
+    assert a.transport == 0.0
+
+
+def test_dbs_card_wrapped_midden_vlaanderen_row_parses() -> None:
+    """The stitched 'Fluvius Midden-Vlaanderen' row keeps its real rates
+    rather than dropping the sub-area or mis-aligning a neighbour's."""
+    snap = _dbs_snap()
+    mv = snap.dsos["fluvius_intergem"]
+    assert mv.distribution_single == pytest.approx(0.0498061)
+    assert mv.capacity_eur_per_kw_year == pytest.approx(50.12)
+
+
+def test_dbs_card_taxes_are_htva_with_vat_06() -> None:
+    snap = _dbs_snap()
+    t = snap.taxes
+    assert t.vat_rate == 0.06
+    assert t.federal_excise == pytest.approx(0.04748)
+    assert t.energy_contribution == pytest.approx(0.0019261)
+    # GSC + WKK = 0.0110 + 0.00392 = 0.01492.
+    assert t.flanders_renewables == pytest.approx(0.01492)
+
+
+def test_dbs_card_supplier_and_contract_metadata() -> None:
+    snap = _dbs_snap()
+    assert snap.supplier == "ecopower"
+    assert snap.contract == "ecopower_dynamische_burgerstroom"
+    assert snap.publication_label == "2026-01"
+
+
 # ---- fetch_for_month -----------------------------------------------------------
 
 
@@ -280,6 +382,50 @@ def test_fetch_for_month_unknown_contract_returns_none() -> None:
             "ecopower_zakelijk",
             "flanders",
             date(2026, 2, 1),
+        )
+    )
+    assert snap is None
+
+
+_DBS_LISTING_HTML = """
+<a href="https://cdn.example/202406_dbs_tariefkaart_ecopower.pdf">2024-06</a>
+<a href="https://cdn.example/202501b_dbs_tariefkaart.pdf">2025-01</a>
+<a href="https://cdn.example/202510_dbs_tariefkaart.pdf">2025-10</a>
+<a href="https://cdn.example/202601_dbs_tariefkaart.pdf">2026-01</a>
+"""
+
+
+def test_dbs_fetch_for_month_picks_card_in_effect() -> None:
+    """Dynamic cards don't rotate monthly. For Nov 2025 the card in
+    effect is the Oct 2025 one (202510), not the Jan 2026 card published
+    later, so a year-boundary rate change is billed to the right months."""
+    text = _text("ecopower_dynamische_burgerstroom_jan.pdf")
+    with patch(
+        "custom_components.be_electricity_prices.providers.ecopower.fetch_pdf_text_layout",
+        new=AsyncMock(return_value=text),
+    ):
+        snap = asyncio.run(
+            fetch_for_month(
+                _Session(_DBS_LISTING_HTML),  # type: ignore[arg-type]
+                "ecopower_dynamische_burgerstroom",
+                "flanders",
+                date(2025, 11, 1),
+            )
+        )
+    assert snap is not None
+    assert snap.contract == "ecopower_dynamische_burgerstroom"
+    assert snap.publication_label == "2025-10"
+
+
+def test_dbs_fetch_for_month_returns_none_before_first_card() -> None:
+    """Months before the earliest published dynamic card return None so
+    the coordinator falls back to the proxy snapshot."""
+    snap = asyncio.run(
+        fetch_for_month(
+            _Session(_DBS_LISTING_HTML),  # type: ignore[arg-type]
+            "ecopower_dynamische_burgerstroom",
+            "flanders",
+            date(2024, 1, 1),
         )
     )
     assert snap is None

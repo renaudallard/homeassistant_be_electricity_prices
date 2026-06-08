@@ -25,23 +25,39 @@
 
 """Ecopower (Flemish citizen cooperative) tariff extractor.
 
-Ecopower sells one residential electricity product, "Groene burgerstroom"
-(green citizen power), in Flanders only. The energy formula is half-fixed,
-half-indexed against the monthly RLP-weighted Belpex Day-Ahead average:
+Ecopower sells two residential electricity products in Flanders only:
 
-    energy = 0.5 * 0.17 + 0.5 * Belpex_DA  (EUR/kWh, HTVA)
+1. "Groene burgerstroom" (green citizen power) -- a half-fixed,
+   half-indexed tariff against the monthly RLP-weighted Belpex
+   Day-Ahead average:
 
-A new tariff card is published every month. The card lives at a CDN URL
-that rotates each month (``cdn.nimbu.io/.../<YYYYMM>_gbs_tariefkaart.pdf``);
-the public price page at ``ecopower.be/groene-stroom/prijs-nieuw`` lists
-the most recent four or so months. We scrape that page to find the
-latest definitive card (Ecopower also publishes a *next-month*
-"inschatting" / estimation card that we deliberately ignore until it's
-finalized).
+       energy = 0.5 * 0.17 + 0.5 * Belpex_DA  (EUR/kWh, HTVA)
 
-All amounts on the card are HTVA. Residential customers pay 6% VAT;
+   A new card is published every month at a CDN URL that rotates each
+   month (``cdn.nimbu.io/.../<YYYYMM>_gbs_tariefkaart.pdf``); the public
+   price page at ``ecopower.be/groene-stroom/prijs-nieuw`` lists the
+   most recent four or so months. We scrape that page to find the latest
+   definitive card (Ecopower also publishes a *next-month* "inschatting"
+   / estimation card that we deliberately ignore until it's finalized).
+
+2. "Dynamische burgerstroom" -- a quarter-hourly EPEX Day-Ahead dynamic
+   tariff (quarter-hourly since the SDAC 15-minute market switch of
+   2025-10-01). The card prints the consumer formula directly:
+
+       afname    = 1.02 * EPEX_DA + 4  EUR/MWh  (HTVA)
+       injectie  = 0.98 * EPEX_DA - 15 EUR/MWh  (VAT-exempt)
+
+   The dynamic card lives on the product page
+   ``ecopower.be/groene-stroom/dynamische-burgerstroom`` as
+   ``<YYYYMM>_dbs_tariefkaart.pdf``. Unlike the monthly gbs card, the
+   dynamic card is republished only when the formula, DSO or tax rates
+   change, so the latest card is the one in effect today.
+
+All amounts on both cards are HTVA. Residential customers pay 6% VAT;
 the snapshot's ``TaxOverlay.vat_rate=0.06`` instructs ``compute_breakdown``
 to scale up to TVAC, matching every other supplier's all-in number.
+Injection is VAT-exempt for residential customers, so its formula is
+stored unscaled.
 """
 
 from __future__ import annotations
@@ -69,12 +85,14 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    parse_sign,
     parse_valid_until,
     to_float,
 )
 from .base import (
     Contract,
     DsoOverlay,
+    DynamicRates,
     EnergyRates,
     ExtractorError,
     InjectionRates,
@@ -128,19 +146,37 @@ _DSO_LABELS: dict[str, str] = {
 _CONTRACT_ID = "ecopower_burgerstroom"
 _CONTRACT_LABEL = "Ecopower Groene Burgerstroom"
 
+_DBS_CONTRACT_ID = "ecopower_dynamische_burgerstroom"
+_DBS_CONTRACT_LABEL = "Ecopower Dynamische Burgerstroom"
+_DBS_PAGE = f"{_BASE_URL}/groene-stroom/dynamische-burgerstroom"
+
+# Dynamic card filenames look like 202601_dbs_tariefkaart.pdf, with older
+# variants carrying a letter suffix (202501b_dbs_tariefkaart.pdf) or a
+# trailing brand token (202406_dbs_tariefkaart_ecopower.pdf). The yyyymm
+# group captures the six leading digits; the optional letter is consumed
+# but not captured so month ordering stays numeric.
+_DBS_CARD_RE = re.compile(
+    r'(https?://[^"]+/(?P<yyyymm>20\d{4})[a-z]?_dbs_tariefkaart[^"]*\.pdf[^"]*)"',
+    re.IGNORECASE,
+)
+
 
 async def fetch(
     session: aiohttp.ClientSession,
     contract_id: str,
     region: str,
 ) -> SupplierSnapshot:
-    if contract_id != _CONTRACT_ID:
-        raise ExtractorError(f"unknown Ecopower contract {contract_id!r}")
     if region != REGION_FLANDERS:
         raise ExtractorError("Ecopower only sells residential electricity in Flanders")
-    pdf_url, label = await _resolve_latest_pdf(session)
-    text = await fetch_pdf_text_layout(session, pdf_url)
-    return parse_snapshot(text, pdf_url, label)
+    if contract_id == _CONTRACT_ID:
+        pdf_url, label = await _resolve_latest_pdf(session)
+        text = await fetch_pdf_text_layout(session, pdf_url)
+        return parse_snapshot(text, pdf_url, label)
+    if contract_id == _DBS_CONTRACT_ID:
+        pdf_url, label = await _resolve_latest_dbs_pdf(session)
+        text = await fetch_pdf_text_layout(session, pdf_url)
+        return parse_dbs_snapshot(text, pdf_url, label)
+    raise ExtractorError(f"unknown Ecopower contract {contract_id!r}")
 
 
 async def fetch_for_month(
@@ -157,6 +193,8 @@ async def fetch_for_month(
     month (Ecopower only retains ~4 months back), the URL 404s, or the
     PDF doesn't parse.
     """
+    if contract_id == _DBS_CONTRACT_ID:
+        return await _fetch_dbs_for_month(session, year_month)
     if contract_id != _CONTRACT_ID:
         return None
     target = f"{year_month.year:04d}{year_month.month:02d}"
@@ -198,9 +236,11 @@ async def probe(
     so a HEAD round-trip is enough to detect a publication. Falls back to
     None on transport / missing-header so the coordinator's TTL takes over.
     """
-    if contract_id != _CONTRACT_ID:
-        return None
-    return await head_freshness_key(session, _PRICE_PAGE)
+    if contract_id == _CONTRACT_ID:
+        return await head_freshness_key(session, _PRICE_PAGE)
+    if contract_id == _DBS_CONTRACT_ID:
+        return await head_freshness_key(session, _DBS_PAGE)
+    return None
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
@@ -250,6 +290,29 @@ def parse_snapshot(
     )
 
 
+def parse_dbs_snapshot(
+    text: str, source_url: str, publication_label: str
+) -> SupplierSnapshot:
+    """Pure parser for the Dynamische burgerstroom card, exposed for tests.
+
+    The tax block (GSC/WKK renewables, federal excise, energy
+    contribution, energy fund, 6% VAT) is identical in layout to the
+    gbs card, so ``_extract_taxes`` is reused as-is. Only the energy
+    (dynamic formula) and DSO row layouts differ.
+    """
+    return SupplierSnapshot(
+        supplier="ecopower",
+        contract=_DBS_CONTRACT_ID,
+        energy=_extract_dbs_energy(text),
+        dsos=_extract_dbs_dsos(text),
+        taxes=_extract_taxes(text),
+        source_url=source_url,
+        publication_label=publication_label,
+        valid_until=parse_valid_until(text),
+        injection=_extract_dbs_injection(text),
+    )
+
+
 # ---- energy ------------------------------------------------------------------
 
 
@@ -279,6 +342,67 @@ def _extract_energy(text: str) -> EnergyRates:
     if not match:
         raise ExtractorError("could not parse Ecopower 'Groene burgerstroom' rate")
     return VariableRates(current=to_float(match.group(1)))
+
+
+# ---- dynamic energy ----------------------------------------------------------
+
+# The dynamic card prints the consumer formula in EUR/kWh terms, with the
+# EPEX DA spot expressed in EUR/MWh:
+#   "Dynamische burgerstroom elk kwartier 0,00102 × EPEX DA +0,004 euro/kWh"
+# The '×' is U+00D7 but a re-render could swap it; accept the common
+# multiplication glyphs. SIGN_CHARS covers every minus/plus variant for the
+# additive base so a punctuation drift never flips the sign silently.
+_DBS_ENERGY_RE = re.compile(
+    r"Dynamische\s+burgerstroom\s+elk\s+kwartier\s+"
+    r"([\d,]+)\s*[×xX*]\s*EPEX\s*DA\s*"
+    rf"([{SIGN_CHARS}]?)\s*([\d,]+)\s*euro/kWh",
+    re.IGNORECASE,
+)
+
+_ABONNEMENT_RE = re.compile(r"Abonnementskost\s+([\d,]+)\s*euro/maand", re.IGNORECASE)
+
+
+def _extract_dbs_energy(text: str) -> DynamicRates:
+    """Parse the dynamic ``factor x spot + base`` consumption formula (HTVA).
+
+    The card multiplies the EPEX DA price in EUR/MWh, so ``factor`` is
+    scaled by 1000 to act on the spot price the pricing engine feeds in
+    EUR/kWh: ``0,00102 × MWh = 1.02 × kWh``. Values are HTVA;
+    ``vat_rate=0.06`` in the tax overlay scales the energy component to
+    TVAC in ``compute_breakdown`` (the same convention as the gbs card),
+    so they are NOT pre-scaled here.
+
+    The monthly subscription (``Abonnementskost``) maps to
+    ``yearly_fixed_fee``, which is consumed as the actual annual euros
+    without further VAT scaling, so the 6% residential VAT is baked in.
+    """
+    match = _DBS_ENERGY_RE.search(text)
+    if not match:
+        raise ExtractorError(
+            "could not parse Ecopower 'Dynamische burgerstroom' formula"
+        )
+    factor = to_float(match.group(1)) * 1000.0
+    base = parse_sign(match.group(2)) * to_float(match.group(3))
+    return DynamicRates(
+        factor=factor,
+        base=base,
+        yearly_fixed_fee=_extract_dbs_abonnement(text),
+        quarter_hourly=True,
+    )
+
+
+def _extract_dbs_abonnement(text: str) -> float:
+    """Yearly subscription fee in EUR, VAT-inclusive.
+
+    Printed HTVA as ``Abonnementskost 5,00 euro/maand``. yearly_fixed_fee
+    holds the actual euros the customer pays (it is summed without
+    rescaling in the YTD path), so multiply out the 12 months and the 6%
+    residential VAT here.
+    """
+    match = _ABONNEMENT_RE.search(text)
+    if not match:
+        raise ExtractorError("could not parse Ecopower Abonnementskost")
+    return to_float(match.group(1)) * 12.0 * 1.06
 
 
 # ---- DSOs --------------------------------------------------------------------
@@ -341,6 +465,52 @@ def _slice_between(text: str, start: str, end: str) -> str | None:
         return None
     e = text.find(end, s + len(start))
     return text[s + len(start) : e] if e >= 0 else text[s + len(start) :]
+
+
+# pdfplumber wraps the longest DSO label across its data row on the
+# narrower dynamic card -- "Fluvius Midden-" / "<numbers>" / "Vlaanderen"
+# on three lines. Stitch the two label fragments back together around the
+# rate row so the per-DSO row regex sees one line. [ \t] (not \s) keeps
+# the regex from swallowing the row's trailing newline.
+_DBS_WRAPPED_LABEL_RE = re.compile(r"(Fluvius\s+\S*-)\n((?:[\d,]+[ \t]*){4,})\n(\S+)")
+
+
+def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
+    """Read the digital-meter network tariffs from the dynamic card.
+
+    The dynamic card carries only digital (meetregime 3 / SMR3) meter
+    rows -- there's no analog block, since a dynamic contract requires a
+    smart meter. The row layout differs from the gbs card: the columns
+    are ``databeheer (EUR/yr) | capacity (EUR/kW/yr) | afname
+    enkelvoudig (EUR/kWh) | afname uitsluitend-nacht (EUR/kWh) |
+    [maximumtarief] | injectietarief``, with no separating dashes. We
+    read the first four numeric columns -- the same four the gbs parser
+    keeps -- and ignore the optional maximumtarief and the injection
+    network tariff, which ``DsoOverlay`` does not model.
+    """
+    section = _slice_between(text, "Nettarieven", "Heffingen")
+    if section is None:
+        raise ExtractorError("could not locate Ecopower dynamic net-tariff block")
+    section = _DBS_WRAPPED_LABEL_RE.sub(
+        lambda m: f"{m.group(1)}{m.group(3)} {m.group(2).strip()}", section
+    )
+    out: dict[str, DsoOverlay] = {}
+    for label, key in _DSO_LABELS.items():
+        row = re.search(
+            rf"^{re.escape(label)}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)",
+            section,
+            re.MULTILINE,
+        )
+        if not row:
+            continue
+        out[key] = DsoOverlay(
+            distribution_single=to_float(row.group(3)),
+            distribution_exclusive_night=to_float(row.group(4)),
+            transport=0.0,  # rolled into distribution on Ecopower's card
+            capacity_eur_per_kw_year=to_float(row.group(2)),
+            data_management_per_year=to_float(row.group(1)),
+        )
+    return out
 
 
 # ---- taxes -------------------------------------------------------------------
@@ -440,6 +610,34 @@ def _extract_injection(text: str) -> InjectionRates | None:
     return InjectionRates(current=-to_float(raw))
 
 
+# The dynamic card prints the injection formula like the consumption one:
+#   "Terugleververgoeding elk kwartier 0,00098 × EPEX DA - 0,015 euro/kWh"
+_DBS_INJECTION_RE = re.compile(
+    r"Terugleververgoeding\s+elk\s+kwartier\s+"
+    r"([\d,]+)\s*[×xX*]\s*EPEX\s*DA\s*"
+    rf"([{SIGN_CHARS}]?)\s*([\d,]+)\s*euro/kWh",
+    re.IGNORECASE,
+)
+
+
+def _extract_dbs_injection(text: str) -> InjectionRates | None:
+    """Parse the dynamic injection (terugleververgoeding) formula.
+
+    Like the consumption formula, the EPEX DA factor is in EUR/MWh, so
+    it is scaled by 1000 to act on the EUR/kWh spot
+    (``0,00098 × MWh = 0.98 × kWh``). The card's base is signed
+    (``- 0,015``); a negative base means the credit drops below zero at
+    low spot, which the pricing engine respects. Residential injection
+    is VAT-exempt, so no scaling is applied.
+    """
+    match = _DBS_INJECTION_RE.search(text)
+    if not match:
+        return None
+    factor = to_float(match.group(1)) * 1000.0
+    base = parse_sign(match.group(2)) * to_float(match.group(3))
+    return InjectionRates(factor=factor, base=base, formula=match.group(0).strip())
+
+
 # ---- catalog page scraping ---------------------------------------------------
 
 
@@ -471,9 +669,66 @@ async def _resolve_latest_pdf(
     return url, label
 
 
+async def _resolve_latest_dbs_pdf(
+    session: aiohttp.ClientSession,
+) -> tuple[str, str]:
+    """Find the latest Dynamische burgerstroom card on the product page.
+
+    The page lists the current dynamic card plus a few historical ones.
+    The dynamic formula is stable across months, so the highest YYYYMM
+    is the card billing today.
+    """
+    html = await fetch_text(session, _DBS_PAGE)
+    matches = sorted(
+        (m.group("yyyymm"), m.group(1)) for m in _DBS_CARD_RE.finditer(html)
+    )
+    if not matches:
+        raise ExtractorError(f"no Ecopower dbs tariefkaart link found on {_DBS_PAGE}")
+    yyyymm, url = matches[-1]
+    return url, f"{yyyymm[:4]}-{yyyymm[4:]}"
+
+
+async def _fetch_dbs_for_month(
+    session: aiohttp.ClientSession, year_month: date
+) -> SupplierSnapshot | None:
+    """Return the dynamic card in effect for ``year_month``.
+
+    Dynamic cards don't rotate monthly; Ecopower republishes one only
+    when the formula, DSO or tax rates change (typically at a year
+    boundary). Pick the most recent card whose YYYYMM prefix is not after
+    the requested month -- that's the card that was billing then. Falls
+    back to None (coordinator uses the proxy snapshot) when the page omits
+    the month or the PDF doesn't parse.
+    """
+    target = f"{year_month.year:04d}{year_month.month:02d}"
+    try:
+        html = await fetch_text(session, _DBS_PAGE)
+    except ExtractorError:
+        return None
+    eligible = sorted(
+        (m.group("yyyymm"), m.group(1))
+        for m in _DBS_CARD_RE.finditer(html)
+        if m.group("yyyymm") <= target
+    )
+    if not eligible:
+        return None
+    yyyymm, url = eligible[-1]
+    try:
+        text = await fetch_pdf_text_layout(session, url)
+    except ExtractorError:
+        return None
+    return parse_dbs_snapshot(text, url, f"{yyyymm[:4]}-{yyyymm[4:]}")
+
+
 # Re-export the layout extractor for fixture-based tests so they can
 # parse a local PDF without going through the network path.
-__all__ = ["EXTRACTOR", "extract_pdf_text_layout", "fetch", "parse_snapshot"]
+__all__ = [
+    "EXTRACTOR",
+    "extract_pdf_text_layout",
+    "fetch",
+    "parse_dbs_snapshot",
+    "parse_snapshot",
+]
 
 
 _ECOPOWER_REGIONS = frozenset({REGION_FLANDERS})
@@ -486,6 +741,12 @@ EXTRACTOR = SupplierExtractor(
             id=_CONTRACT_ID,
             label=_CONTRACT_LABEL,
             kind="variable",
+            regions=_ECOPOWER_REGIONS,
+        ),
+        Contract(
+            id=_DBS_CONTRACT_ID,
+            label=_DBS_CONTRACT_LABEL,
+            kind="dynamic",
             regions=_ECOPOWER_REGIONS,
         ),
     ),
