@@ -165,6 +165,11 @@ _DBS_CARD_RE = re.compile(
 # catalog drift detector diffs on this family-based vocabulary.
 _DBS_DISCOVER_ID = "ecopower_dbs"
 
+# The ids discover() emits for the registered products. The live-check
+# diffs the live catalogue against this baseline; deriving it here keeps
+# the CI baseline from drifting away from the scraper.
+DISCOVER_IDS: frozenset[str] = frozenset({_CONTRACT_ID, _DBS_DISCOVER_ID})
+
 
 async def fetch(
     session: aiohttp.ClientSession,

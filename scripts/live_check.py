@@ -1007,10 +1007,9 @@ async def _check_catalogs(
 ) -> None:
     """Run each supplier's ``discover()`` and surface any new product ids.
 
-    ``known_ids_for(module)`` extracts the registry's identifier set in
-    the same shape ``discover()`` returns. discover() that returns an
-    empty set is treated as "discovery not implemented" and skipped
-    (Engie, Luminus today).
+    ``known`` is each supplier's registered identifier set, derived from
+    the provider module in the same shape ``discover()`` returns, so the
+    CI baseline can't silently drift away from the code.
     """
     known: dict[str, set[str]] = {
         "mega": {c.product_name for c in modules["mega"]._CONTRACTS},
@@ -1020,11 +1019,11 @@ async def _check_catalogs(
         "eneco": set(modules["eneco"]._CONTRACT_SLUGS),
         "totalenergies": {c.slug for c in modules["totalenergies"]._CONTRACTS},
         "octaplus": {c.slug for c in modules["octaplus"]._CONTRACTS},
-        "cociter": {"cociter_variable", "cociter_dynamic"},
+        "cociter": set(modules["cociter"]._DISCOVER_FAMILIES.values()),
         "ebem": {c.contract_id for c in modules["ebem"]._CONTRACTS},
         "ecofix": {c.contract_id for c in modules["ecofix"]._CONTRACTS},
-        "ecopower": {"ecopower_burgerstroom", "ecopower_dbs"},
-        "dats24": {"dats24_groen_variabel"},
+        "ecopower": set(modules["ecopower"].DISCOVER_IDS),
+        "dats24": {modules["dats24"]._CONTRACT_ID},
         "frank": {t[0] for t in modules["frank"]._TIERS},
     }
     for name, mod in modules.items():
