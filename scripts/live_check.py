@@ -1041,10 +1041,18 @@ async def _check_catalogs(
             )
             continue
         if not discovered:
-            # discover() returned an empty set: either the module has
-            # no discovery surface (rare today; every supplier ships
-            # one) or the listing fetch transiently failed. Either way
-            # there is no signal we can act on, so skip silently.
+            # discover() returned an empty set: either a transient listing
+            # fetch failure or a discovery surface that changed shape.
+            # Catalog signals aren't retried and we can't open an issue on
+            # a transient blip, but a persistently empty result means all
+            # new-product coverage for this supplier is silently gone -- so
+            # log it on stderr (visible in the CI run log, no exit-code
+            # change) instead of skipping without a trace.
+            print(
+                f"warning: {name}/catalog: discover() returned no ids "
+                "(listing fetch failed or discovery surface changed)",
+                file=sys.stderr,
+            )
             continue
         new_ids = sorted(discovered - known.get(name, set()))
         _record(
