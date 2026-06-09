@@ -331,7 +331,9 @@ async def _fetch_with_retry(
 
 async def _check_eneco(session: aiohttp.ClientSession, eneco: types.ModuleType) -> None:
     expected_dso_keys = _WALLONIA_DSO_KEYS | _FLUVIUS_KEYS
-    for cid in ("power_fix", "power_flex", "power_dynamic"):
+    # Derive the contracts from the runtime registry so a product added
+    # to EXTRACTOR.contracts is validated here without editing this list.
+    for cid in (c.id for c in eneco.EXTRACTOR.contracts):
         prefix = f"eneco/{cid}"
         try:
             # Eneco's PDF carries every region; any one is fine.
@@ -537,8 +539,10 @@ async def _check_ecopower(
     expected_dso_keys = _FLUVIUS_KEYS
     # Ecopower sells the static "Groene burgerstroom" and the dynamic
     # "Dynamische burgerstroom"; both are Flanders-only HTVA cards with
-    # the same tax/DSO shape, so the assertions are shared.
-    for cid in ("ecopower_burgerstroom", "ecopower_dynamische_burgerstroom"):
+    # the same tax/DSO shape, so the assertions are shared. Derive the
+    # contracts from the runtime registry so a third product is validated
+    # here without editing this list.
+    for cid in (c.id for c in ecopower.EXTRACTOR.contracts):
         prefix = f"ecopower/{cid}"
         try:
             snap = await _fetch_with_retry(
