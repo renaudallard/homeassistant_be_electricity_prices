@@ -62,6 +62,7 @@ stored unscaled.
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date
 
@@ -101,6 +102,8 @@ from .base import (
     TaxOverlay,
     VariableRates,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 # Dutch month names for archive_validity_check; the helper indexes into
 # this tuple as month_names[year_month.month - 1].
@@ -259,37 +262,36 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     Ecopower sells two residential products, each keyed by its
     tariefkaart filename family: the static "Groene burgerstroom" (gbs)
     on the price page and the dynamic "Dynamische burgerstroom" (dbs) on
-    its own page. The dbs card lives on a separate page, so scrape both.
-    Any *other* ``..._tariefkaart.pdf`` family is surfaced verbatim as
-    ``ecopower_<family>`` so a future product (zakelijk, etc.) is caught
-    by the catalog drift detector. The whole gbs family is skipped here -
-    the bare card is already registered and ``gbs_inschatting`` is the
-    next-month preview the fetcher deliberately ignores - and dbs is
-    matched by its dedicated regex below.
+    its own page. Both pages are scraped and matched together, so a new
+    ``..._tariefkaart.pdf`` family on *either* page is surfaced verbatim
+    as ``ecopower_<family>`` for the catalog drift detector. The gbs
+    family is skipped here (the bare card is already registered and
+    ``gbs_inschatting`` is the next-month preview the fetcher ignores) and
+    dbs is matched by its dedicated regex.
+
+    A page that fails to fetch is logged rather than swallowed: otherwise
+    a partial failure would drop that page's family from a still-non-empty
+    result and slip past live_check's empty-result warning.
     """
-    try:
-        html = await fetch_text(session, _PRICE_PAGE)
-    except ExtractorError:
-        html = ""
+    bodies: list[str] = []
+    for page in (_PRICE_PAGE, _DBS_PAGE):
+        try:
+            bodies.append(await fetch_text(session, page))
+        except ExtractorError as err:
+            _LOGGER.warning("Ecopower discover: %s unreachable: %s", page, err)
+    combined = "\n".join(bodies)
     out: set[str] = set()
-    if _CARD_RE.search(html):
+    if _CARD_RE.search(combined):
         out.add(_CONTRACT_ID)
+    if _DBS_CARD_RE.search(combined):
+        out.add(_DBS_DISCOVER_ID)
     for other in re.findall(
-        r'/(20\d{4}_(?:[a-z_]+_)?tariefkaart[^"]*)\.pdf', html, re.IGNORECASE
+        r'/(20\d{4}[a-z]?_(?:[a-z_]+_)?tariefkaart[^"]*)\.pdf', combined, re.IGNORECASE
     ):
-        family = re.sub(r"^20\d{4}_", "", other)
+        family = re.sub(r"^20\d{4}[a-z]?_", "", other)
         family = re.sub(r"_tariefkaart.*$", "", family)
         if family and not family.startswith(("gbs", "dbs")):
             out.add(f"ecopower_{family}")
-    # The dynamic card lives on its own page, so the gbs price page never
-    # links it; scrape it separately so a new or changed dbs card is
-    # discoverable instead of being invisible to catalog drift.
-    try:
-        dbs_html = await fetch_text(session, _DBS_PAGE)
-    except ExtractorError:
-        dbs_html = ""
-    if _DBS_CARD_RE.search(dbs_html):
-        out.add(_DBS_DISCOVER_ID)
     return out
 
 

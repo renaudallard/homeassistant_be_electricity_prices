@@ -36,9 +36,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Any, cast
 
 import aiohttp
+import pytest
 
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.providers import cociter as cociter_mod
@@ -104,6 +106,30 @@ def _FakeSession(body: str, status: int = 200) -> aiohttp.ClientSession:
     ClientSession without type errors at the discover() boundary.
     """
     return cast(aiohttp.ClientSession, _FakeSessionImpl(body, status))
+
+
+class _UrlFakeSessionImpl:
+    """ClientSession stand-in that serves a different body per URL.
+
+    Maps a URL substring to a (body, status) pair; used by the suppliers
+    whose discover() scrapes more than one page (Ecopower).
+    """
+
+    def __init__(self, by_fragment: dict[str, tuple[str, int]]) -> None:
+        self._by_fragment = by_fragment
+
+    def get(self, url: str, *_args: Any, **_kwargs: Any) -> _FakeResponse:
+        for frag, (body, status) in self._by_fragment.items():
+            if frag in url:
+                return _FakeResponse(body, status)
+        return _FakeResponse("", 404)
+
+    def head(self, url: str, *_args: Any, **_kwargs: Any) -> _FakeResponse:
+        return self.get(url)
+
+
+def _UrlFakeSession(by_fragment: dict[str, tuple[str, int]]) -> aiohttp.ClientSession:
+    return cast(aiohttp.ClientSession, _UrlFakeSessionImpl(by_fragment))
 
 
 def _run(coro: Any) -> Any:
@@ -313,6 +339,54 @@ def test_ecopower_discover_finds_dynamic_card() -> None:
     session = _FakeSession(body)
     discovered = _run(ecopower_mod.discover(session))
     assert discovered == {ecopower_mod._CONTRACT_ID, ecopower_mod._DBS_DISCOVER_ID}
+
+
+def test_ecopower_discover_surfaces_new_family_on_dbs_page() -> None:
+    """A new family linked only from the dynamic page (not the gbs price
+    page) must still be surfaced: discover() matches every detector over
+    both page bodies, not just the gbs page."""
+    session = _UrlFakeSession(
+        {
+            ecopower_mod._PRICE_PAGE: (
+                '<a href="https://example/202601_gbs_tariefkaart.pdf">x</a>',
+                200,
+            ),
+            ecopower_mod._DBS_PAGE: (
+                '<a href="https://example/202601_dbs_tariefkaart.pdf">x</a>'
+                '<a href="https://example/202605_zakelijk_stroom_tariefkaart.pdf">y</a>',
+                200,
+            ),
+        }
+    )
+    discovered = _run(ecopower_mod.discover(session))
+    assert discovered == {
+        ecopower_mod._CONTRACT_ID,
+        ecopower_mod._DBS_DISCOVER_ID,
+        "ecopower_zakelijk_stroom",
+    }
+
+
+def test_ecopower_discover_logs_partial_page_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When one page fetches and the other fails, discover() returns the
+    reachable result but logs the failure - otherwise the missing family
+    would slip past live_check's empty-result warning (the result is still
+    non-empty)."""
+    session = _UrlFakeSession(
+        {
+            ecopower_mod._PRICE_PAGE: (
+                '<a href="https://example/202601_gbs_tariefkaart.pdf">x</a>',
+                200,
+            ),
+            ecopower_mod._DBS_PAGE: ("", 503),
+        }
+    )
+    with caplog.at_level(logging.WARNING):
+        discovered = _run(ecopower_mod.discover(session))
+    assert discovered == {ecopower_mod._CONTRACT_ID}
+    assert ecopower_mod._DBS_DISCOVER_ID not in discovered
+    assert ecopower_mod._DBS_PAGE in caplog.text
 
 
 def test_ecopower_discover_surfaces_genuinely_new_family() -> None:
