@@ -268,6 +268,20 @@ def test_ecopower_discover_skips_inschatting_preview() -> None:
     assert discovered == {ecopower_mod._CONTRACT_ID}
 
 
+def test_ecopower_discover_finds_dynamic_card() -> None:
+    """The dynamic "Dynamische burgerstroom" card lives on its own page,
+    not the gbs price page, so discover() must scrape that page too.
+    Otherwise the dbs family is invisible to the catalog drift detector -
+    the reason Ecopower's dynamic tariff was never flagged as new."""
+    body = (
+        _read("ecopower.html")
+        + '\n<a href="https://example/202601_dbs_tariefkaart.pdf">x</a>\n'
+    )
+    session = _FakeSession(body)
+    discovered = _run(ecopower_mod.discover(session))
+    assert discovered == {ecopower_mod._CONTRACT_ID, ecopower_mod._DBS_DISCOVER_ID}
+
+
 def test_ecopower_discover_surfaces_genuinely_new_family() -> None:
     body = (
         _read("ecopower.html")

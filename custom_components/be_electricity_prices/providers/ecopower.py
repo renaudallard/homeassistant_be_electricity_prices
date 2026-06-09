@@ -160,6 +160,11 @@ _DBS_CARD_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Identifier discover() emits for the dynamic card. Ecopower keys its
+# tariefkaart PDFs by filename family ("dbs"), not by contract id, so the
+# catalog drift detector diffs on this family-based vocabulary.
+_DBS_DISCOVER_ID = "ecopower_dbs"
+
 
 async def fetch(
     session: aiohttp.ClientSession,
@@ -244,32 +249,42 @@ async def probe(
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
-    """Return the set of contract ids visible at the public price page.
+    """Return the family ids visible across Ecopower's price pages.
 
-    Ecopower sells exactly one residential product. If they ever add a
-    second card family ("groene_zakelijk_stroom_tariefkaart" or any
-    ``..._tariefkaart.pdf`` other than ``gbs_``), live_check surfaces
-    it via the unrecognised filename returned verbatim.
+    Ecopower sells two residential products, each keyed by its
+    tariefkaart filename family: the static "Groene burgerstroom" (gbs)
+    on the price page and the dynamic "Dynamische burgerstroom" (dbs) on
+    its own page. The dbs card lives on a separate page, so scrape both.
+    Any *other* ``..._tariefkaart.pdf`` family is surfaced verbatim as
+    ``ecopower_<family>`` so a future product (zakelijk, etc.) is caught
+    by the catalog drift detector. The whole gbs family is skipped here -
+    the bare card is already registered and ``gbs_inschatting`` is the
+    next-month preview the fetcher deliberately ignores - and dbs is
+    matched by its dedicated regex below.
     """
     try:
         html = await fetch_text(session, _PRICE_PAGE)
     except ExtractorError:
-        return set()
+        html = ""
     out: set[str] = set()
     if _CARD_RE.search(html):
         out.add(_CONTRACT_ID)
-    # Surface any *other* tariefkaart-style filename so a future product
-    # (zakelijk, etc.) is caught by the catalog drift detector. Skip
-    # every variant in the `gbs` family - the bare definitive card is
-    # already registered and `gbs_inschatting` is the next-month preview
-    # the fetcher deliberately ignores.
     for other in re.findall(
         r'/(20\d{4}_(?:[a-z_]+_)?tariefkaart[^"]*)\.pdf', html, re.IGNORECASE
     ):
         family = re.sub(r"^20\d{4}_", "", other)
         family = re.sub(r"_tariefkaart.*$", "", family)
-        if family and not family.startswith("gbs"):
+        if family and not family.startswith(("gbs", "dbs")):
             out.add(f"ecopower_{family}")
+    # The dynamic card lives on its own page, so the gbs price page never
+    # links it; scrape it separately so a new or changed dbs card is
+    # discoverable instead of being invisible to catalog drift.
+    try:
+        dbs_html = await fetch_text(session, _DBS_PAGE)
+    except ExtractorError:
+        dbs_html = ""
+    if _DBS_CARD_RE.search(dbs_html):
+        out.add(_DBS_DISCOVER_ID)
     return out
 
 
