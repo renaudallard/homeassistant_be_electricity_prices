@@ -111,6 +111,11 @@ _TIERS: tuple[tuple[str, str, str | None], ...] = (
 _TIER_SUFFIX: dict[str, str | None] = {t[0]: t[2] for t in _TIERS}
 _VALID_IDS: frozenset[str] = frozenset(_TIER_SUFFIX)
 
+# discover() reverse maps: a filename suffix back to its contract id, and
+# the bare-month (suffixless) filename to the standard tier.
+_SUFFIX_TO_ID: dict[str, str] = {v: k for k, v in _TIER_SUFFIX.items() if v is not None}
+_DEFAULT_TIER_ID: str = next(t[0] for t in _TIERS if t[2] is None)
+
 _FLUVIUS_LABELS: dict[str, str] = {
     "Antwerpen": DSO_FLUVIUS_ANTWERPEN,
     "Halle-Vilvoorde": DSO_FLUVIUS_HALLE_VILVOORDE,
@@ -270,6 +275,41 @@ async def probe(
     if rows and rows[0]:
         return str(rows[0].get("_createdAt", ""))
     return None
+
+
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """Surface the dynamic tiers visible in Frank Energie's Sanity CMS.
+
+    Each tier publishes one PDF per month named
+    "... Elektriciteit Dynamisch[ <suffix>] <Month> <Year>". Map the word
+    after "Dynamisch" back to our contract id - a bare month name is the
+    standard tier - and surface an unrecognised suffix as
+    ``frank_dynamic_<suffix>`` so the catalog drift detector flags a new
+    tier instead of silently ignoring it.
+    """
+    q = (
+        '*[_type=="sanity.fileAsset"'
+        ' && originalFilename match "*Elektriciteit Dynamisch*"'
+        "]{originalFilename,_createdAt}"
+        " | order(_createdAt desc)[0..59]"
+    )
+    try:
+        rows = await _sanity_query(session, q)
+    except ExtractorError:
+        return set()
+    out: set[str] = set()
+    for row in rows:
+        m = re.search(r"Dynamisch\s+(\S+)", row.get("originalFilename", ""))
+        if not m:
+            continue
+        word = m.group(1)
+        if word.lower() in _NL_MONTHS_LOWER:
+            out.add(_DEFAULT_TIER_ID)
+        elif word in _SUFFIX_TO_ID:
+            out.add(_SUFFIX_TO_ID[word])
+        else:
+            out.add(f"frank_dynamic_{word.lower()}")
+    return out
 
 
 # ---- snapshot parser ---------------------------------------------------------

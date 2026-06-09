@@ -35,6 +35,7 @@ that grows the catalogue, fails fast.
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any, cast
 
 import aiohttp
@@ -46,6 +47,7 @@ from custom_components.be_electricity_prices.providers import ecofix as ecofix_m
 from custom_components.be_electricity_prices.providers import ecopower as ecopower_mod
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
 from custom_components.be_electricity_prices.providers import engie as engie_mod
+from custom_components.be_electricity_prices.providers import frank as frank_mod
 from custom_components.be_electricity_prices.providers import luminus as luminus_mod
 from custom_components.be_electricity_prices.providers import mega as mega_mod
 from custom_components.be_electricity_prices.providers import octaplus as octaplus_mod
@@ -255,6 +257,37 @@ def test_cociter_discover_surfaces_new_family() -> None:
     assert "RCNew_FAM" in discovered - known
 
 
+def _frank_cms_body(filenames: list[str]) -> str:
+    """Build a Sanity CMS JSON response body for the given filenames."""
+    return json.dumps({"result": [{"originalFilename": f} for f in filenames]})
+
+
+def test_frank_discover_matches_registry() -> None:
+    # Frank scrapes the Sanity CMS rather than an HTML listing; one PDF
+    # per tier maps back to its contract id (a bare month is the standard
+    # tier, the suffix words HV/VT/JN/SL the others).
+    session = _FakeSession(
+        _frank_cms_body(
+            [
+                f"Tariefkaart Elektriciteit Dynamisch{sfx} Januari 2026.pdf"
+                for sfx in ("", " HV", " VT", " JN", " SL")
+            ]
+        )
+    )
+    discovered = _run(frank_mod.discover(session))
+    expected = {t[0] for t in frank_mod._TIERS}
+    assert discovered == expected
+
+
+def test_frank_discover_surfaces_new_tier() -> None:
+    session = _FakeSession(
+        _frank_cms_body(["Tariefkaart Elektriciteit Dynamisch XL Januari 2026.pdf"])
+    )
+    discovered = _run(frank_mod.discover(session))
+    known = {t[0] for t in frank_mod._TIERS}
+    assert "frank_dynamic_xl" in discovered - known
+
+
 # ---- error handling ---------------------------------------------------------
 
 
@@ -308,3 +341,5 @@ def test_discover_returns_empty_on_http_error() -> None:
     assert _run(ecofix_mod.discover(session)) == set()
     # EBEM scrapes the listing page; an HTTP error must yield set().
     assert _run(ebem_mod.discover(session)) == set()
+    # Frank queries the Sanity CMS; a 5xx raises ExtractorError -> set().
+    assert _run(frank_mod.discover(session)) == set()
