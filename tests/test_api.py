@@ -33,6 +33,7 @@ import pytest
 
 from custom_components.be_electricity_prices.api import (
     EntsoeError,
+    _parse_iso_utc,
     parse_day_ahead_xml,
 )
 
@@ -148,6 +149,18 @@ def test_malformed_time_interval_raises_entsoe_error() -> None:
     doc = doc.replace("2026-04-29T22:00Z", "NOT-A-TIMESTAMP")
     with pytest.raises(EntsoeError):
         parse_day_ahead_xml(doc)
+
+
+def test_zoneless_timestamp_is_treated_as_utc() -> None:
+    # ENTSO-E timestamps carry a 'Z', but a zoneless one must be read as
+    # UTC (the publication document is UTC by spec), not as the HA host's
+    # local time -- otherwise astimezone would shift every slot.
+    assert _parse_iso_utc("2026-04-29T22:00Z") == datetime(
+        2026, 4, 29, 22, 0, tzinfo=UTC
+    )
+    assert _parse_iso_utc("2026-04-29T22:00") == datetime(
+        2026, 4, 29, 22, 0, tzinfo=UTC
+    )
 
 
 def test_unknown_resolution_skips_series_instead_of_aborting() -> None:

@@ -230,9 +230,16 @@ def _parse_iso_utc(text: str) -> datetime:
     # the coordinator's EntsoeError handler keeps serving cached spots
     # instead of the exception escaping uncategorised.
     try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(UTC)
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as err:
         raise EntsoeError(f"malformed timeInterval timestamp {text!r}: {err}") from err
+    # ENTSO-E A44 timestamps are UTC (they carry a 'Z'/offset), but if a
+    # document ever omits the zone, fromisoformat returns a naive value
+    # and astimezone would treat it as the HA host's local time. Treat a
+    # naive timestamp as UTC -- the publication document is UTC by spec.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _resolution_to_timedelta(resolution: str) -> timedelta | None:
