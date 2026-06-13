@@ -100,6 +100,9 @@ def test_dynamic_parses_smr3_formula() -> None:
     # the comment, the expected number in the assertion.
     assert snap.energy.factor == pytest.approx(1.14798)
     assert snap.energy.base == pytest.approx(0.0044202)
+    # Epex 15' indexation bills per quarter-hour, like Engie / Cociter /
+    # EBEM / Ecofix; the price table must keep the native 15-minute grid.
+    assert snap.energy.quarter_hourly is True
 
 
 def test_dynamic_extracts_injection_formula() -> None:

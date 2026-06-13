@@ -2341,7 +2341,11 @@ async def _compute_current_year_cost(
 # hourly default until the snapshot next refreshes. The probe-based
 # suppliers (Cociter, EBEM, Ecofix) would otherwise keep the stale flag
 # for weeks, until their next monthly card changes the probe key.
-_SNAPSHOT_SCHEMA_VERSION = 9
+# v10: OCTA+ Dynamic was missed by the v9 sweep; it indexes on the
+# 15-minute Epex spot and now sets ``quarter_hourly`` too. Bump so a
+# cached OCTA+ dynamic snapshot is dropped and re-fetched with the flag
+# set rather than lingering on the hourly default.
+_SNAPSHOT_SCHEMA_VERSION = 10
 
 
 def _snapshot_to_dict(

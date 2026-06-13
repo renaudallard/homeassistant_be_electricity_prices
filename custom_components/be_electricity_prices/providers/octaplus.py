@@ -274,6 +274,12 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             factor=factor_pdf * vat,
             base=base_pdf_eur_mwh / 1000.0 * vat,
             yearly_fixed_fee=yearly_fee,
+            # OCTA+ indexes on the 15-minute Epex spot ("Epex 15'"), so
+            # the contract bills per quarter-hour like Engie / Cociter /
+            # EBEM / Ecofix. Without this the live price table aggregates
+            # to hourly and the current / next-slot sensors and the
+            # cheapest-window service lose the native 15-minute grid.
+            quarter_hourly=True,
         )
 
     # Static / variable: the energy table prints values column-major
