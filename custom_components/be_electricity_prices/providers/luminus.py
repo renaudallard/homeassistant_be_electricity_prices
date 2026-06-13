@@ -363,8 +363,12 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     # at the footnote and captured it as the value, undercounting the
     # injection rate ~5x on dynamic_w/v fixtures. Skip an optional
     # digit-then-whitespace before the value capture.
+    # Use \s+ between every word: the SMR3 row wraps mid-phrase
+    # ("tarif de \nl'énergie injectée") so a hardcoded space made the
+    # regex skip the first (correct) occurrence and bind to a later
+    # fallback row, reporting the wrong rate when the two differ.
     indicative = re.search(
-        rf"Estimation annuelle du tarif\s+de l[\"'’©]énergie injectée"
+        rf"Estimation\s+annuelle\s+du\s+tarif\s+de\s+l[\"'’©]énergie\s+injectée"
         rf"[^0-9-]*(?:\d+\s+)?({_NUM})",
         text,
         re.S,
