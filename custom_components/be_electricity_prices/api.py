@@ -41,6 +41,7 @@ from datetime import UTC, datetime, timedelta
 # free; defusedxml is a HA core dependency so we get it without
 # bumping the manifest.
 from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
+from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
 
 import aiohttp
 
@@ -130,6 +131,12 @@ def parse_day_ahead_xml(
         root = ET.fromstring(xml)
     except ET.ParseError as err:
         raise EntsoeError(f"invalid XML: {err}") from err
+    except DefusedXmlException as err:
+        # defusedxml rejects entity expansion / external references with
+        # its own exceptions, which are NOT ParseError subclasses; wrap
+        # them so a hostile (TLS-MitM) payload surfaces as EntsoeError
+        # rather than an unhandled exception out of the coordinator tick.
+        raise EntsoeError(f"unsafe XML rejected: {err}") from err
 
     # Per-slot accumulators: (sum, count) so we can take the mean at the
     # end without holding every sub-hour point in memory. The slot key is
@@ -218,7 +225,14 @@ def _fmt(when: datetime) -> str:
 
 
 def _parse_iso_utc(text: str) -> datetime:
-    return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(UTC)
+    # A malformed timeInterval start/end would otherwise raise a bare
+    # ValueError out of parse_day_ahead_xml; wrap it as EntsoeError so
+    # the coordinator's EntsoeError handler keeps serving cached spots
+    # instead of the exception escaping uncategorised.
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(UTC)
+    except ValueError as err:
+        raise EntsoeError(f"malformed timeInterval timestamp {text!r}: {err}") from err
 
 
 def _resolution_to_timedelta(resolution: str) -> timedelta | None:

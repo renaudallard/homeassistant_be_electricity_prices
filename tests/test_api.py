@@ -141,6 +141,15 @@ def test_invalid_xml_raises_entsoe_error() -> None:
         parse_day_ahead_xml("<<<not xml")
 
 
+def test_malformed_time_interval_raises_entsoe_error() -> None:
+    # A bad timeInterval start/end must surface as EntsoeError (which the
+    # coordinator categorises and degrades on), not a bare ValueError.
+    doc = _doc("<Point><position>1</position><price.amount>50.0</price.amount></Point>")
+    doc = doc.replace("2026-04-29T22:00Z", "NOT-A-TIMESTAMP")
+    with pytest.raises(EntsoeError):
+        parse_day_ahead_xml(doc)
+
+
 def test_unknown_resolution_skips_series_instead_of_aborting() -> None:
     """A series at a resolution we don't bucket (e.g. PT5M) must be
     skipped silently so the rest of the document still parses. Aborting
