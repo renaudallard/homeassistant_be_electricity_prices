@@ -1126,16 +1126,25 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         return now - shared.fetched_at < ttl
 
     async def _ensure_historical_spots(self, start: date, end: date) -> None:
-        """Make sure ``self._historical_spots`` covers every UTC hour in
-        ``[start, end]``, fetching missing ranges from ENTSO-E.
+        """Make sure ``self._historical_spots`` covers every hour of the
+        local days in ``[start, end]``, fetching missing ranges from
+        ENTSO-E.
+
+        Day boundaries are anchored on local midnight (converted to UTC),
+        matching the recorder window (``_recorder_rows``) and the
+        persistence cut-off (``_save_persistent``). Anchoring on UTC
+        midnight instead would leave the first one or two hours of the
+        local year (local Jan 1 00:00 falls on Dec 31 UTC in Brussels)
+        unfetched, so the dynamic YTD would never credit them even though
+        the recorder reports consumption there.
 
         Walks the day axis once. A day is considered "present" when at
-        least 20 of its 24 UTC hours are already cached -- ENTSO-E
-        occasionally leaves gaps under the carry-forward rule and a
-        few missing hours per day shouldn't trigger a re-fetch every
-        coordinator tick. Failed fetches are logged and skipped; the
-        caller treats absent hours as "no data" for that hour rather
-        than tearing the YTD computation down.
+        least 20 of its 24 hours are already cached -- ENTSO-E
+        occasionally leaves gaps under the carry-forward rule (and DST
+        seam days have 23/25 hours), and a few missing hours per day
+        shouldn't trigger a re-fetch every coordinator tick. Failed
+        fetches are logged and skipped; the caller treats absent hours as
+        "no data" rather than tearing the YTD computation down.
         """
         api_key = self.entry.data.get(CONF_API_KEY)
         if not api_key:
@@ -1145,7 +1154,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         range_start: date | None = None
         cur = start
         while cur <= end:
-            day_start_utc = datetime.combine(cur, datetime.min.time(), tzinfo=UTC)
+            day_start_utc = dt_util.start_of_local_day(cur).astimezone(UTC)
             present = sum(
                 1
                 for h in range(24)
@@ -1169,10 +1178,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 # Week-sized chunks: trade off per-request latency
                 # against total round-trips for a 365-day backfill.
                 chunk_end = min(chunk_start + timedelta(days=7), r_end)
-                start_utc = datetime.combine(
-                    chunk_start, datetime.min.time(), tzinfo=UTC
-                )
-                end_utc = datetime.combine(chunk_end, datetime.min.time(), tzinfo=UTC)
+                # Local-midnight anchors (in UTC) so the fetched window
+                # lines up with the local-day grid the recorder and the
+                # present-check above use.
+                start_utc = dt_util.start_of_local_day(chunk_start).astimezone(UTC)
+                end_utc = dt_util.start_of_local_day(chunk_end).astimezone(UTC)
                 try:
                     prices = await client.fetch_day_ahead(start_utc, end_utc)
                 except (EntsoeError, EntsoeAuthError) as err:

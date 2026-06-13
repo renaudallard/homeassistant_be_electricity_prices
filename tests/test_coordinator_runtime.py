@@ -67,6 +67,48 @@ def _entry() -> MockConfigEntry:
     )
 
 
+async def test_ensure_historical_spots_anchors_on_local_day(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The dynamic YTD spot backfill must anchor day boundaries on local
+    midnight (in UTC), matching the recorder window. In winter Brussels
+    is UTC+1, so local Jan 1 00:00 == Dec 31 23:00 UTC; a UTC-midnight
+    anchor would skip that hour and never credit the first hour of the
+    local year. Verify the first fetch window starts at the local Jan 1
+    boundary."""
+    freezer.move_to("2026-01-10 12:00:00+01:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    captured: list[tuple[datetime, datetime]] = []
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        captured.append((start, end))
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+    ) as mock_client_cls:
+        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
+
+    assert captured
+    # Local Jan 1 00:00 CET = 2025-12-31 23:00 UTC, not 2026-01-01 00:00 UTC.
+    assert captured[0][0] == datetime(2025, 12, 31, 23, 0, tzinfo=UTC)
+
+
 async def test_fetch_spot_prices_window_covers_local_day_on_dst_fallback(
     hass: HomeAssistant, freezer: Any
 ) -> None:
