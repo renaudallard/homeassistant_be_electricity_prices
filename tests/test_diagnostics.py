@@ -90,6 +90,20 @@ async def test_diagnostics_redacts_api_key(hass: HomeAssistant) -> None:
     assert "THIS-IS-A-SECRET" not in str(dump)
 
 
+async def test_diagnostics_scrubs_api_key_from_last_error(hass: HomeAssistant) -> None:
+    from dataclasses import replace
+
+    secret = "TOKEN-IN-ERROR-TEXT"
+    entry = _entry_with_data(api_key=secret)
+    entry.add_to_hass(hass)
+    data = replace(_coordinator_data(), last_error=f"ENTSO-E error url=...{secret}...")
+    entry.runtime_data = SimpleNamespace(data=data)
+
+    dump = await async_get_config_entry_diagnostics(hass, entry)
+    assert secret not in str(dump)
+    assert "**REDACTED**" in dump["coordinator"]["last_error"]
+
+
 async def test_diagnostics_includes_snapshot_and_hourly(hass: HomeAssistant) -> None:
     entry = _entry_with_data()
     entry.add_to_hass(hass)

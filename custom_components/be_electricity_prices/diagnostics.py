@@ -57,6 +57,20 @@ from .coordinator import (
 TO_REDACT = {CONF_API_KEY}
 
 
+def _scrub_secret(text: str, secret: str | None) -> str:
+    """Mask ``secret`` anywhere it appears in a free-text field.
+
+    ``async_redact_data`` only masks known config keys; the ``last_error``
+    and ``shared_failure`` strings are free text built from upstream
+    exception messages. An ENTSO-E transport error string can, in narrow
+    cases, embed the request URL (and thus the securityToken), so scrub
+    the key out of those fields too as defence-in-depth before the dump
+    leaves the instance."""
+    if secret and text:
+        return text.replace(secret, "**REDACTED**")
+    return text
+
+
 async def _kwh_window(
     hass: HomeAssistant, entry: ConfigEntry, days: int, *, side: str
 ) -> float | None:
@@ -133,12 +147,13 @@ async def async_get_config_entry_diagnostics(
     # Sibling-coordinator negative-fetch markers for this supplier
     # tuple; lets a bug reporter see whether the integration backed
     # off and why, without having to grep logs.
+    api_key = entry.data.get(CONF_API_KEY)
     failed_marker = None
     if extractor_id and contract_id and region:
         rec = _shared_failed_fetches(hass).get((extractor_id, contract_id, region))
         if rec is not None:
             ts, msg = rec
-            failed_marker = {"at": ts.isoformat(), "error": msg}
+            failed_marker = {"at": ts.isoformat(), "error": _scrub_secret(msg, api_key)}
 
     return {
         "entry": {
@@ -155,7 +170,7 @@ async def async_get_config_entry_diagnostics(
                 if data.snapshot_valid_until
                 else None
             ),
-            "last_error": data.last_error,
+            "last_error": _scrub_secret(data.last_error, api_key),
             "monthly_peak_kw": data.monthly_peak_kw,
             "monthly_peak_month": (
                 data.monthly_peak_month.isoformat() if data.monthly_peak_month else None
