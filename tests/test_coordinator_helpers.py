@@ -56,12 +56,14 @@ from custom_components.be_electricity_prices.coordinator import (
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
     DynamicRates,
+    EnergyRates,
     FixedRates,
     InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
     TimeOfUseRates,
+    VariableRates,
 )
 from tests import make_snapshot
 
@@ -70,8 +72,10 @@ def _snapshot(
     prosumer: float | None,
     capacity: float | None,
     injection: InjectionRates | None = None,
+    energy: EnergyRates | None = None,
 ) -> SupplierSnapshot:
     return make_snapshot(
+        energy=energy,  # None -> make_snapshot's FixedRates default
         dsos={
             "ores": DsoOverlay(
                 distribution_single=0.10,
@@ -183,9 +187,12 @@ def test_injection_price_static_fallback_when_no_spot() -> None:
 
 
 def test_injection_price_uses_formula_when_spot_available(freezer: Any) -> None:
+    # Per-hour formula injection only applies on a DynamicRates contract
+    # (those are the only ones the coordinator fetches spots for).
     snap = _snapshot(
         prosumer=None,
         capacity=None,
+        energy=DynamicRates(factor=0.1, base=0.0),
         injection=InjectionRates(factor=0.97, base=-0.021, current=None),
     )
     entry = _entry(solar_regime="injection")
@@ -228,17 +235,36 @@ def test_historical_injection_rate_prefers_formula_over_current() -> None:
 
 
 def test_injection_price_dynamic_returns_none_without_spot() -> None:
-    """Dynamic-style injection (factor + base set) must surface None
-    when no spot is available -- falling back to the snapshot's static
-    `current` would be the wrong rate for a dynamic contract."""
+    """A DynamicRates contract's per-hour formula injection must surface
+    None when no spot is available -- falling back to the snapshot's
+    static `current` would be the wrong rate for a per-hour contract."""
     snap = _snapshot(
         prosumer=None,
         capacity=None,
+        energy=DynamicRates(factor=0.1, base=0.0),
         injection=InjectionRates(factor=0.97, base=-0.021, current=0.05),
     )
     entry = _entry(solar_regime="injection")
     # Spot cache empty -> sensor goes unknown rather than show 0.05.
     assert _compute_injection_price(snap, entry, {}) is None
+
+
+def test_injection_price_static_energy_monthly_injection_uses_current() -> None:
+    """A static-energy contract (Fixed/Variable) whose injection carries a
+    MONTHLY index formula (Ecofix Flexy's BELPEX-SPP-M) never receives a
+    per-hour spot, so the live sensor must show the realized monthly
+    `current` rather than going unknown forever -- matching the YTD credit
+    (_historical_injection_rate) for the same hour."""
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=VariableRates(current=0.16),
+        injection=InjectionRates(current=0.0432, factor=0.884, base=-0.005),
+    )
+    entry = _entry(solar_regime="injection")
+    # No spots are ever fetched for a variable contract; surface the
+    # monthly indicative, not None.
+    assert _compute_injection_price(snap, entry, {}) == pytest.approx(0.0432)
 
 
 def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:

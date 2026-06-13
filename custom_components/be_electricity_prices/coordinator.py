@@ -1469,13 +1469,22 @@ def _compute_injection_price(
     inj = snapshot.injection
     if inj is None:
         return None
-    # Formula-based injection (factor x spot + base): contract is
-    # dynamic, so the static "current" indicator is the wrong answer
-    # when ENTSO-E hasn't given us a spot yet. Return None so the
-    # injection_price sensor goes unknown until the next refresh
-    # picks up real spots, instead of fabricating a value from the
-    # supplier's monthly indicative.
-    if inj.factor is not None and inj.base is not None:
+    # Per-hour dynamic injection (factor x spot + base) applies only when
+    # the contract itself bills per hour (DynamicRates energy) -- those
+    # are the only contracts the coordinator fetches ENTSO-E spots for.
+    # For such a contract the monthly "current" indicator is the wrong
+    # answer until a spot arrives, so return None and let the sensor go
+    # unknown rather than fabricate a value. A static-energy contract
+    # (Fixed / Variable) whose injection carries a MONTHLY index formula
+    # (e.g. Ecofix Flexy's BELPEX-SPP-M) never receives a per-hour spot,
+    # and its printed ``current`` IS the realized monthly rate, so it
+    # falls through to that -- keeping the live sensor consistent with
+    # the YTD credit (_historical_injection_rate) for the same hour.
+    if (
+        isinstance(snapshot.energy, DynamicRates)
+        and inj.factor is not None
+        and inj.base is not None
+    ):
         if not spot_prices:
             return None
         # Match the grid the contract bills on so an Engie injection price
@@ -1496,7 +1505,8 @@ def _compute_injection_price(
                 return None
             spot = spot_prices[nearest]
         return inj.factor * spot + inj.base
-    # Static contracts: the supplier's printed monthly indicative.
+    # Static contracts (and static-energy contracts with a monthly-indexed
+    # injection formula): the supplier's printed monthly indicative.
     return inj.current
 
 
