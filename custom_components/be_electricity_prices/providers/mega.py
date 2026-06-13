@@ -280,14 +280,19 @@ async def fetch_for_month(
     """Fetch the Mega card for a specific ``(year, month)``.
 
     Mega's CDN keeps every monthly issue under a stable URL pattern:
-    ``Mega-FR-EL-B2C-<REGION>-<MMYYYY>-<Product>01<MM>.pdf``. The
-    product stem is stable across months; only ``<MMYYYY>`` and the
-    trailing ``01<MM>`` day-suffix rotate. Resolve the current URL
-    via the listing first to capture the product stem, then swap the
-    month placeholders.
+    ``Mega-FR-EL-B2C-<REGION>-<MMYYYY>-<Product><DD><MM>[-<Variant>].pdf``.
+    The month appears twice -- the ``<MMYYYY>`` segment and the ``<MM>``
+    half of the product's effective-date ``<DD><MM>`` suffix -- and both
+    must rotate while the effective day ``<DD>`` is preserved (most
+    products publish on the 1st, but some, e.g. Cosy, use another day).
+    The suffix can sit mid-token before a ``-Fixed`` / ``-Green`` /
+    ``-Fix`` variant, so the rewrite can't anchor on ``.pdf``. Resolve
+    the current URL via the listing first, then swap both month
+    placeholders.
 
-    Returns ``None`` when the URL 404s, the parse fails, or the
-    requested month falls outside the archived range.
+    Returns ``None`` when the URL 404s (or returns the CDN's HTML stub
+    for a non-archived effective day, which ``_is_pdf_payload`` rejects),
+    the parse fails, or the requested month falls outside the archive.
     """
     if contract_id not in _CONTRACTS_BY_ID:
         return None
@@ -302,20 +307,33 @@ async def fetch_for_month(
     current_url = _find_pdf_url(listing, contract.product_name, region_code)
     if current_url is None:
         return None
-    # Replace MMYYYY in the path and the trailing 01MM in the
-    # filename. The latter is anchored on the literal '.pdf' so a
-    # product blob containing '01' elsewhere doesn't get clobbered.
-    historical_mmyyyy = f"{year_month.month:02d}{year_month.year}"
-    new_url = re.sub(
-        r"-(?:\d{6})-(?=[^/]*\.pdf$)",
-        f"-{historical_mmyyyy}-",
-        current_url,
-    )
-    new_url = re.sub(
-        r"01\d{2}\.pdf$",
-        f"01{year_month.month:02d}.pdf",
-        new_url,
-    )
+    # Capture the current card's month from the -MMYYYY- segment so we
+    # can rewrite the matching <MM> half of the effective-date suffix
+    # without touching the year digits.
+    mmyyyy_re = re.compile(r"-(\d{2})\d{4}-(?=[^/]*\.pdf$)")
+    mmyyyy_match = mmyyyy_re.search(current_url)
+    if mmyyyy_match is None:
+        return None
+    current_mm = mmyyyy_match.group(1)
+    target_mm = f"{year_month.month:02d}"
+    historical_mmyyyy = f"{target_mm}{year_month.year}"
+    new_url = mmyyyy_re.sub(f"-{historical_mmyyyy}-", current_url, count=1)
+    # Rewrite the effective-date suffix's month, preserving the day, in
+    # the filename tail after the -MMYYYY- segment (so the year is never
+    # touched): Cap0106 -> Cap0105, Online0106-Fixed -> Online0105-Fixed,
+    # Cosy1306 -> Cosy1305. A product that published on a day that
+    # varies month to month resolves to the CDN's HTML stub, which the
+    # PDF magic-byte check rejects, so the YTD walk falls back to the
+    # proxy snapshot rather than mis-billing.
+    prefix, sep, tail = new_url.partition(f"-{historical_mmyyyy}-")
+    if sep:
+        tail = re.sub(
+            rf"(\d{{2}}){current_mm}(?=[-.])",
+            rf"\g<1>{target_mm}",
+            tail,
+            count=1,
+        )
+        new_url = prefix + sep + tail
     if new_url == current_url:
         return None
     try:

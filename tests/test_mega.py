@@ -28,7 +28,8 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import patch
+from datetime import date
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -75,6 +76,40 @@ def test_listing_url_finder_picks_electricity_for_region() -> None:
 def test_listing_url_finder_returns_none_for_unknown_product() -> None:
     listing = (FIXTURES / "mega_listing.html").read_text()
     assert _find_pdf_url(listing, "Bogus Product", "WL") is None
+
+
+def test_fetch_for_month_rewrites_effective_date_month_preserving_day() -> None:
+    # Smart Fixed publishes on day 22 with the effective-date suffix
+    # mid-token before -Fixed (Smart2204-Fixed), exactly the case the old
+    # `01<MM>.pdf$` rewrite missed. fetch_for_month must rotate both the
+    # -MMYYYY- segment and the suffix month to the requested month while
+    # preserving the publication day, so the historical URL resolves.
+    listing = (FIXTURES / "mega_listing.html").read_text()
+    captured: dict[str, str] = {}
+
+    async def _capture(_session: object, url: str, **_kw: object) -> str:
+        captured["url"] = url
+        raise ExtractorError("short-circuit before parse")
+
+    async def _run() -> None:
+        with (
+            patch.object(
+                mega_mod, "_fetch_listing_html", new=AsyncMock(return_value=listing)
+            ),
+            patch.object(mega_mod, "fetch_pdf_text", new=_capture),
+        ):
+            out = await mega_mod.fetch_for_month(
+                None,  # type: ignore[arg-type]
+                "mega_smart_fixed",
+                "wallonia",
+                date(2026, 3, 1),
+            )
+        assert out is None  # the patched fetch raised
+        # April 2204 (22 April) -> March 2203 (22 March): both months
+        # rotate, the day stays put, the year is untouched.
+        assert captured["url"].endswith("-032026-Smart2203-Fixed.pdf")
+
+    asyncio.run(_run())
 
 
 def test_dynamic_extracts_consumption_formula_tvac() -> None:
