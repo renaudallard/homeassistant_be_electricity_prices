@@ -1395,9 +1395,19 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         from .coordinator import _compute_current_year_cost
 
         current_extractor = get_extractor(current[CONF_SUPPLIER])
+        # Exclude dynamic sides from the archive engine: it bills each
+        # past hour at factor*spot+base and needs the historical spot
+        # cache, which _compute_current_year_cost only receives on the
+        # live coordinator path -- called without it here it returns the
+        # fees-only floor (zero energy), so a fixed-vs-dynamic compare
+        # would show the dynamic side missing its entire energy bill.
+        # The simple per-kwh model below prices both sides off the same
+        # current per-kwh rate and proration, so the delta stays honest.
         archive_capable = (
             current_extractor.fetch_for_month is not None
             and other_extractor.fetch_for_month is not None
+            and current_kind != "dynamic"
+            and other_kind != "dynamic"
         )
         if archive_capable and other_snap is not None and coord._snapshot is not None:
             try:
