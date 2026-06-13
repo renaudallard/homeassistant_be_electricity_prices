@@ -956,6 +956,67 @@ async def test_year_cost_tou_bills_per_hourly_slot(
     assert cost == pytest.approx(expected_all_in + 0.0 * fraction)
 
 
+async def test_year_cost_exclusive_night_uses_exclusive_night_rate(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An exclusive_night meter on a static contract must bill the YTD at
+    the dedicated exclusive-night energy + distribution rates (via the
+    hourly path), not the higher day/single rate the static per-day
+    branch would apply. The live current_price sensor already uses the
+    exclusive-night rate, so the year-cost must match it."""
+    from custom_components.be_electricity_prices import coordinator
+
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    snap = make_snapshot(
+        contract="test_excl",
+        energy=FixedRates(single=0.18, exclusive_night=0.12),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_exclusive_night=0.06,
+                transport=0.0145,
+            )
+        },
+        source_url="test://excl",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test_excl",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "exclusive_night",
+            "solar_regime": "none",
+            "consumption_kwh": "sensor.cons_total",
+        },
+    )
+    some_hour = dt_util.start_of_local_day(datetime(2026, 1, 6)) + timedelta(hours=3)
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.cons_total":
+            return {some_hour.astimezone(UTC): 1.0}
+        return {}
+
+    # exclusive-night all-in: energy 0.12 + (dist_excl 0.06 + transport
+    # 0.0145) + taxes (0.05 + 0.002) = 0.2465, well below the 0.3465 a
+    # mono meter on the same card would bill.
+    excl_all_in = 0.12 + 0.06 + 0.0145 + 0.05 + 0.002
+    mono_all_in = 0.18 + 0.10 + 0.0145 + 0.05 + 0.002
+    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+        )
+    assert cost == pytest.approx(excl_all_in)
+    assert excl_all_in < mono_all_in
+
+
 async def test_year_cost_tou_recognises_injection_only_wiring(
     hass: HomeAssistant, freezer: Any
 ) -> None:

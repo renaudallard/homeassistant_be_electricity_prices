@@ -82,6 +82,7 @@ from .const import (
     DOMAIN,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
+    METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     REGION_FLANDERS,
     RESOLUTION_HOURLY,
@@ -2219,13 +2220,18 @@ async def _compute_current_year_cost(
         return dyn_energy + fees
 
     # Per-hour billing is required when the supplier's energy rates
-    # vary by hour (TOU + Impact energy contracts) or when the DSO
-    # bills per Impact band (PIC / MEDIUM / ECO change with hour-of-
-    # day). All three go through the same hourly path; the static
-    # per-day branch can't represent any of them.
+    # vary by hour (TOU + Impact energy contracts), when the DSO bills
+    # per Impact band (PIC / MEDIUM / ECO change with hour-of-day), or
+    # for an exclusive_night meter (its energy + distribution use the
+    # dedicated exclusive-night rates, which the static per-day branch's
+    # single/peak/offpeak breakdowns don't carry -- so without this it
+    # would bill the YTD at the day rate while the live sensor uses the
+    # cheaper exclusive-night rate). All go through the same hourly path,
+    # which routes the meter through compute_breakdown.
     needs_hourly = (
         isinstance(snapshot.energy, (TimeOfUseRates, ImpactRates))
         or dso_mode == DSO_MODE_IMPACT
+        or meter == METER_EXCLUSIVE_NIGHT
     )
     if needs_hourly:
         hourly_energy = await _ytd_hourly_energy(
