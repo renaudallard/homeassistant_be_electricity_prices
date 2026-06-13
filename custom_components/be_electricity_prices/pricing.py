@@ -367,6 +367,22 @@ def network_eur_per_kwh(
     the off-peak rate when published, falling back to the single rate
     on DSOs that don't expose a split.
     """
+    if meter == "exclusive_night":
+        # Exclusive-night meters physically only register during DSO
+        # off-peak hours and DSOs publish a dedicated distribution
+        # rate for the circuit. This dedicated circuit bills at its own
+        # rate regardless of the main connection's Impact opt-in, so it
+        # is checked BEFORE the Impact band branch. Prefer the
+        # exclusive-night rate when the extractor parses it, fall back
+        # to the off-peak rate, then to the single rate -- each
+        # fall-back step is closer to the real bill than the day rate.
+        if dso.distribution_exclusive_night is not None:
+            dist = dso.distribution_exclusive_night
+        elif dso.distribution_offpeak is not None:
+            dist = dso.distribution_offpeak
+        else:
+            dist = dso.distribution_single
+        return dist + dso.transport
     if (
         dso_tariff_mode == "impact"
         and dso.distribution_pic is not None
@@ -390,20 +406,6 @@ def network_eur_per_kwh(
             dist = dso.distribution_medium
         else:
             dist = dso.distribution_eco
-        return dist + dso.transport
-    if meter == "exclusive_night":
-        # Exclusive-night meters physically only register during DSO
-        # off-peak hours and DSOs publish a dedicated distribution
-        # rate for the circuit. Prefer that rate when the extractor
-        # parses it, fall back to the off-peak rate, then to the
-        # single rate -- each fall-back step is closer to the real
-        # bill than the day rate the previous code applied.
-        if dso.distribution_exclusive_night is not None:
-            dist = dso.distribution_exclusive_night
-        elif dso.distribution_offpeak is not None:
-            dist = dso.distribution_offpeak
-        else:
-            dist = dso.distribution_single
         return dist + dso.transport
     if (
         dso_tariff_mode != "simple"

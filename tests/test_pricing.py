@@ -350,6 +350,24 @@ def test_network_impact_dispatches_by_band() -> None:
     assert pic == pytest.approx(0.115)  # 0.10 + 0.015 transport
     assert medium == pytest.approx(0.085)
     assert eco == pytest.approx(0.045)
+    # An exclusive-night meter bills its dedicated circuit rate even when
+    # the main connection opted into the Impact tariff -- the
+    # exclusive-night branch must take precedence over the Impact bands.
+    overlay_excl = DsoOverlay(
+        distribution_single=0.05,
+        distribution_offpeak=0.04,
+        distribution_exclusive_night=0.02,
+        transport=0.015,
+        distribution_pic=0.10,
+        distribution_medium=0.07,
+        distribution_eco=0.03,
+    )
+    excl = network_eur_per_kwh(
+        overlay_excl, datetime(2026, 4, 29, 18), "exclusive_night", "impact"
+    )
+    assert excl == pytest.approx(
+        0.035
+    )  # 0.02 exclusive-night + 0.015, not the pic band
 
 
 def test_network_impact_falls_back_when_dso_lacks_impact_rates() -> None:
