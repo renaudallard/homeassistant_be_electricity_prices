@@ -142,7 +142,14 @@ _FLUVIUS_LABELS: dict[str, str] = {
     "FLUVIUS ZENNE DIJLE": DSO_FLUVIUS_ZENNE_DIJLE,
 }
 
-_NUM = r"(\d{1,3}(?:[\.,]\d{1,4})?)"
+# A Belgian decimal number. Two forms: a thousands-grouped value using a
+# non-breaking / thin / narrow-no-break space (the separators to_float
+# strips, and the only ones Eneco's PDFs use for grouping -- columns are
+# separated by ordinary spaces, so grouping on those is unambiguous), or
+# an ungrouped run of digits. The previous (\d{1,3}...) capped the
+# integer part at three digits, so any value >= 1000 (e.g. a four-digit
+# yearly fee) was truncated to its first 1.xxx and mis-parsed.
+_NUM = r"(\d{1,3}(?:[\xa0\u2009\u202f]\d{3})+(?:,\d{1,4})?|\d+(?:[\.,]\d{1,4})?)"
 _WS = r"[\s\xa0]"
 
 
@@ -331,8 +338,14 @@ def _extract_fixed(text: str) -> FixedRates:
 
 
 def _extract_variable(text: str) -> VariableRates:
+    # The yearly fixed fee (VASTE VERGOEDING, €/jaar) prints as a
+    # standalone number on the line directly above the energy rate row
+    # that ends in "Geschatte jaarprijs". Anchor on those two stable
+    # tokens rather than counting a fixed number of header lines between
+    # them: a single extra header line on a future card used to break
+    # the rigid four-newline skip and take Power Flex offline.
     yearly_fee_match = re.search(
-        r"\(€/jaar\)\s+VERBRUIK[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*\n\s*" + _NUM,
+        r"\(€/jaar\)[\s\S]*?\n\s*" + _NUM + r"\s*\n[^\n]*Geschatte\s+jaarprijs",
         text,
         re.S,
     )

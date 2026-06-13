@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Coroutine
 from datetime import date
 from typing import Any, TypeVar
@@ -36,6 +37,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from tests import fixture_text
+from custom_components.be_electricity_prices.providers import eneco as eneco_mod
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     FixedRates,
@@ -161,6 +163,34 @@ def test_flex_extracts_current_monthly_rate() -> None:
     assert snap.energy.current == pytest.approx(0.1390)
     assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
     assert snap.energy.formula is not None and "BELPEX" in snap.energy.formula
+
+
+def test_flex_yearly_fee_survives_extra_header_line() -> None:
+    # The fee anchor keys off the (€/jaar) header and the "Geschatte
+    # jaarprijs" row, not a fixed newline count, so an extra header line
+    # the supplier might insert between them must not break parsing.
+    text = fixture_text("eneco_flex.pdf").replace(
+        "DAG NACHT", "DAG NACHT\nEXTRA HEADER LINE", 1
+    )
+    snap = parse_snapshot(text, "power_flex", "test://flex")
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+
+
+def test_num_parses_thousands_grouped_and_four_digit_values() -> None:
+    # _NUM previously capped the integer part at three digits, truncating
+    # any value >= 1000. A non-breaking-space-grouped fee and an
+    # ungrouped four-digit value must now parse to their full magnitude.
+    from custom_components.be_electricity_prices.providers._pdf import to_float
+
+    pattern = re.compile(eneco_mod._NUM)
+    # Grouping uses a non-breaking space (U+00A0); ordinary ASCII
+    # spaces stay column separators, so the two forms that must
+    # round-trip to the full value are NBSP-grouped and ungrouped.
+    for text, expected in (("1\u00a0200,00", 1200.0), ("1200,00", 1200.0)):
+        m = pattern.search(text)
+        assert m is not None
+        assert to_float(m.group(1)) == pytest.approx(expected)
 
 
 def test_dynamic_extracts_factor_and_base() -> None:
