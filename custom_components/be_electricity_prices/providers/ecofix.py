@@ -335,22 +335,36 @@ def _extract_fee_and_flanders_renewables(
     return fee, renewable_cents / 100.0
 
 
+def _dynamic_formula_match(text: str, label: str) -> re.Match[str] | None:
+    """Return the ``(factor x Belpex 15M) <sign> base`` formula that
+    follows ``label`` (``Afname`` for consumption, ``Injectie`` for
+    injection), within a short window so it can't reach across to the
+    other block. Anchoring each role on its own label rather than
+    indexing into a document-order ``findall`` keeps consumption and
+    injection from silently swapping if Ecofix ever reorders the two
+    blocks or prints another Belpex 15M formula earlier on the page.
+    """
+    return re.search(
+        rf"{label}[\s\S]{{0,200}}?\(([\d,]+)\s*x\s*Belpex\s*15M\)\s*"
+        rf"([{SIGN_CHARS}])\s*([\d,]+)",
+        text,
+    )
+
+
 def _extract_energy(text: str, kind: TariffKind, yearly_fee: float) -> EnergyRates:
     if kind == "dynamic":
         # Dynamic cards print the consumption formula on the line directly
         # after "Afname <indicative>" e.g.:
         #   Afname 11,74
         #   Prijsformule excl. BTW (0,1010 x Belpex 15M) + 0,9
-        # Two such formulas live on the page (consumption first,
-        # injection second); ``re.findall`` returns them in PDF order.
-        formulas = re.findall(
-            rf"\(([\d,]+)\s*x\s*Belpex\s*15M\)\s*([{SIGN_CHARS}])\s*([\d,]+)",
-            text,
-        )
-        if not formulas:
-            raise ExtractorError("Ecofix dynamic: Belpex 15M formula not found")
-        factor_pdf = to_float(formulas[0][0])
-        base_pdf_cents = parse_sign(formulas[0][1]) * to_float(formulas[0][2])
+        # The injection block carries the same shape under "Injectie", so
+        # anchor on the "Afname" label rather than taking the first
+        # formula in document order.
+        formula = _dynamic_formula_match(text, "Afname")
+        if formula is None:
+            raise ExtractorError("Ecofix dynamic: Afname Belpex 15M formula not found")
+        factor_pdf = to_float(formula.group(1))
+        base_pdf_cents = parse_sign(formula.group(2)) * to_float(formula.group(3))
         # PDF formula is c€/kWh ex-VAT against Belpex in €/MWh. The card
         # banner prints "Prijzen inclusief X% BTW"; read X to track future
         # VAT changes without a code update. Conversion to
@@ -417,15 +431,16 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     Cociter / OCTA+: factor scaled to per-EUR/kWh-spot.
     """
     if kind == "dynamic":
-        # Second Belpex 15M formula in document order.
-        formulas = re.findall(
-            rf"\(([\d,]+)\s*x\s*Belpex\s*15M\)\s*([{SIGN_CHARS}])\s*([\d,]+)",
-            text,
-        )
-        if len(formulas) < 2:
+        # Anchor on the "Injectie" label rather than taking the second
+        # Belpex 15M formula in document order, so a reordered card can't
+        # bind the consumption formula to the injection role.
+        inj_formula = _dynamic_formula_match(text, "Injectie")
+        if inj_formula is None:
             return None
-        factor_pdf = to_float(formulas[1][0])
-        base_pdf_cents = parse_sign(formulas[1][1]) * to_float(formulas[1][2])
+        factor_pdf = to_float(inj_formula.group(1))
+        base_pdf_cents = parse_sign(inj_formula.group(2)) * to_float(
+            inj_formula.group(3)
+        )
         # Injection indicative rate ("Injectie 4,83") sits next to the
         # formula; surfaced as ``current`` so consumers without a live
         # spot still get a plausible value.
@@ -436,8 +451,8 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
             factor=factor_pdf * 10.0,
             base=base_pdf_cents / 100.0,
             formula=(
-                f"({formulas[1][0]} x Belpex 15M) {formulas[1][1]} "
-                f"{formulas[1][2]} c€/kWh ex-VAT"
+                f"({inj_formula.group(1)} x Belpex 15M) {inj_formula.group(2)} "
+                f"{inj_formula.group(3)} c€/kWh ex-VAT"
             ),
         )
 
