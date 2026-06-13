@@ -408,6 +408,51 @@ async def test_cost_backfill_midyear_start_anchors_sum_at_jan1(
     assert all(states[i] < states[i + 1] for i in range(len(states) - 1))
 
 
+async def test_cost_backfill_multiyear_stays_in_end_year_without_sum_drop(
+    hass: HomeAssistant,
+) -> None:
+    # current_year_cost resets each Jan 1 and the recorder derives change
+    # as sum - prev_sum (ignoring last_reset for imported stats), so a
+    # multi-year request must backfill only the end year's cost -- never
+    # crossing a Jan 1 boundary that would drop the sum to ~0 and paint a
+    # large spurious negative cost on the Energy dashboard.
+    entry = _entry()
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_year_cost"])
+    entry.runtime_data = await _make_coordinator(entry)
+
+    captured: list[tuple[str, list[Any]]] = []
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        captured.append((metadata["statistic_id"], list(statistics)))
+
+    start = datetime(2024, 6, 1, 0, 0, tzinfo=BRUSSELS)
+    end = datetime(2026, 3, 1, 0, 0, tzinfo=BRUSSELS)
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_fake_import,
+        ),
+        patch(
+            "homeassistant.components.recorder.get_instance",
+            return_value=instance,
+        ),
+    ):
+        await bf.backfill_range(hass, entry, start, end)
+
+    cost_rows = next(rows for sid, rows in captured if sid == ids["current_year_cost"])
+    jan1_end_year = datetime(2026, 1, 1, tzinfo=BRUSSELS).astimezone(UTC)
+    assert cost_rows  # the end year is backfilled
+    # No row predates Jan 1 of the end year (earlier years aren't written).
+    assert all(r["start"] >= jan1_end_year for r in cost_rows)
+    # The sum never decreases -- no year-boundary drop -> no negative spike.
+    sums = [r["sum"] for r in cost_rows]
+    assert all(sums[i] <= sums[i + 1] for i in range(len(sums) - 1))
+
+
 async def test_backfill_range_without_runtime_data_raises(
     hass: HomeAssistant,
 ) -> None:

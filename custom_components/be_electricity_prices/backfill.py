@@ -429,13 +429,15 @@ async def _backfill_cost_sensor(
     same way as in the live path.
 
     ``current_year_cost`` is a cumulative ``TOTAL`` sensor that resets on
-    Jan 1, so ``hours`` should be anchored at the year start: the loop
-    accumulates from the first hour, resets the running totals at every
-    Jan 1 boundary the range crosses, and (when ``emit_from`` is set)
-    only writes rows on/after it. The caller passes the full Jan 1 ->
-    end range as ``hours`` and the requested window start as
-    ``emit_from`` so a mid-year backfill still carries the correct
-    year-to-date sum rather than restarting at zero.
+    Jan 1. ``hours`` MUST stay within a single calendar year, anchored at
+    that year's Jan 1: the loop accumulates monotonically from the first
+    hour and (when ``emit_from`` is set) only writes rows on/after it, so
+    a mid-year backfill still carries the correct year-to-date sum. The
+    sum must not be reset mid-series -- the recorder derives the Energy
+    dashboard's change as ``sum - prev_sum`` and ignores ``last_reset``
+    for imported statistics, so a drop back to ~0 would render as a large
+    spurious negative cost. The caller therefore anchors on Jan 1 of the
+    *end* year and never spans a year boundary here.
 
     Returns a per-statistic-id row count (one entry max). Skips
     silently when the sensor isn't registered (auto path firing
@@ -506,18 +508,8 @@ async def _backfill_cost_sensor(
     rows: list[Any] = []
     running_energy = 0.0
     running_fees = 0.0
-    accrual_year: int | None = None
     for utc_hour in hours:
         local = dt_util.as_local(utc_hour)
-        # current_year_cost is a TOTAL sensor whose last_reset is Jan 1
-        # local, so each calendar year is its own cumulative period.
-        # Reset the running totals at every year boundary the window
-        # crosses; without this a multi-year backfill produces a sum
-        # series that carries last year's total into this year.
-        if accrual_year != local.year:
-            accrual_year = local.year
-            running_energy = 0.0
-            running_fees = 0.0
         month_first = date(local.year, local.month, 1)
         snap_h = await _snap_for(month_first)
         spot = spots.get(utc_hour) if spots else None
@@ -619,20 +611,31 @@ async def backfill_range(
     if start_utc >= end_utc:
         return {"rows_written": 0, "sensors": {}, "range": [None, None]}
 
-    # The cost sensor is a cumulative TOTAL anchored on Jan 1, so it
-    # must accumulate from the year start even when the user asks for a
-    # mid-year window; the price sensors only need the requested range.
-    # Anchor on the local Jan 1 of the requested start's year and fetch
-    # spots over the wider range (a no-op for non-dynamic suppliers, and
-    # the same YTD window the live engine uses for dynamic ones).
+    # The cost sensor is a cumulative TOTAL that resets each Jan 1, and
+    # the recorder renders the Energy dashboard's cost change as
+    # (sum - prev_sum), ignoring last_reset for imported stats. So the
+    # cost series must stay within ONE calendar year: anchor it on Jan 1
+    # of the END year and accumulate forward from there. A mid-year start
+    # in the same year still gets the correct YTD because we accumulate
+    # from Jan 1 and only emit from the requested start; a multi-year
+    # request simply backfills the current (end) year's cost, never
+    # crossing a boundary that would drop the sum to ~0 and paint a
+    # spurious negative cost. The price (mean) sensors are unaffected by
+    # this and keep the full requested window.
     cost_anchor_utc = _floor_to_hour_utc(
-        dt_util.as_local(start_utc).replace(
+        dt_util.as_local(end_utc).replace(
             month=1, day=1, hour=0, minute=0, second=0, microsecond=0
         )
     )
-    spots = await _ensure_dynamic_spots(coordinator, cost_anchor_utc, end_utc)
+    # Fetch spots over the union of the price window and the cost window
+    # so the dynamic price rows AND the cost sensor's pre-start
+    # accumulation both have spots (a no-op for non-dynamic suppliers).
+    spots = await _ensure_dynamic_spots(
+        coordinator, min(start_utc, cost_anchor_utc), end_utc
+    )
     hours = _hour_iter(start_utc, end_utc)
     cost_hours = _hour_iter(cost_anchor_utc, end_utc)
+    cost_emit_from = max(start_utc, cost_anchor_utc)
 
     if clear:
         ids: list[str] = []
@@ -649,7 +652,7 @@ async def backfill_range(
     counts = await _backfill_price_sensors(hass, entry, coordinator, hours, spots)
     counts.update(
         await _backfill_cost_sensor(
-            hass, entry, coordinator, cost_hours, spots, emit_from=start_utc
+            hass, entry, coordinator, cost_hours, spots, emit_from=cost_emit_from
         )
     )
     total = sum(counts.values())

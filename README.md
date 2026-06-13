@@ -403,7 +403,7 @@ or to redo a narrower window:
 | Field | Default | Description |
 | --- | --- | --- |
 | `entry_id` | first loaded | Optional config entry to target. |
-| `start` | Jan 1 00:00 local | First hour to backfill. The price sensors are written only from this hour; `current_year_cost` is a cumulative series, so it is always accumulated from Jan 1 of the start's year and only the rows on/after `start` are written — a mid-year `start` still carries the correct year-to-date total. |
+| `start` | Jan 1 00:00 local | First hour to backfill. The price sensors are written from this hour. `current_year_cost` resets each Jan 1, so it is backfilled only for the **end year**, accumulated from that Jan 1 — a mid-year `start` still carries the correct year-to-date total, and a multi-year range backfills only the current year's running cost (avoiding a spurious negative jump at the year boundary). |
 | `end` | current hour | First hour NOT to backfill (exclusive); the in-progress hour is left to the live coordinator. |
 | `clear` | `false` | Delete the target series first. Use after a tariff change so old rows don't mislead. |
 
