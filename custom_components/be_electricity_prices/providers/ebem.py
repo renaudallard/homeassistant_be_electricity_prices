@@ -448,8 +448,13 @@ def _indicative_from_row(text: str, label: str) -> float:
     matches the value EBEM customers see on their bill more faithfully
     than recomputing against a placeholder spot.
     """
+    # Accept any sign between Belpex and the offset, matching the
+    # formula-row regexes above: some months EBEM prints the offset
+    # with a U+2212 minus / negative value, which a literal '+' here
+    # missed -- failing the whole snapshot on an otherwise valid card
+    # even though _extract_energy parsed the formula fine.
     match = re.search(
-        rf"{re.escape(label)}\s+[\d,.]+\s+Belpex\s*\+\s*[\d,.]+\s+"
+        rf"{re.escape(label)}\s+[\d,.]+\s+Belpex\s*[{SIGN_CHARS}]\s*[\d,.]+\s+"
         rf"[\d,.]+\s+([\d,.]+)\s+[\d,.]+\s+[\d,.]+",
         text,
     )
