@@ -400,9 +400,10 @@ def _extract_energy(text: str, kind: TariffKind, yearly_fee: float) -> EnergyRat
     offpeak = to_float(consumption.group(3)) / 100.0
     excl = to_float(consumption.group(4)) / 100.0
 
-    # Cross-check against the formula block; raises if the extracted
-    # formula does not match the displayed average within a 0.5 c€/kWh
-    # tolerance (a layout drift big enough to mis-bill).
+    # Surface the BELPEX-RLP-M indexation formula as a diagnostic string
+    # alongside the printed indicative rates. This is informational only
+    # (no cross-check against the rates is performed); a miss just leaves
+    # ``formula`` None.
     formula_match = re.search(
         rf"Enkelvoudige meter:\s*\(BELPEX-RLP-M\s*\*\s*([\d,]+)\)\s*"
         rf"([{SIGN_CHARS}])\s*([\d,]+)",

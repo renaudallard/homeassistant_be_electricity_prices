@@ -243,13 +243,13 @@ def _attributed(supplier: str) -> Iterator[None]:
         _CURRENT_SUPPLIER.reset(token)
 
 
-# Hard cap for a single supplier's whole check, well above the largest
-# per-supplier latency drift budget (90 s for bolt / engie). aiohttp's
-# session-level total=60 s only bounds individual requests, so a check
-# that issues many sequential requests can still drag for minutes if
-# one of them is slow but not stalled. wait_for cuts that off so a
-# single broken supplier can never block the gather() and starve the
-# rest of the run.
+# Hard cap for a single supplier's whole check, above the largest
+# per-supplier latency drift budget (200 s for bolt, see
+# _LATENCY_BUDGET_OVERRIDES). aiohttp's session-level total=60 s only
+# bounds individual requests, so a check that issues many sequential
+# requests can still drag for minutes if one of them is slow but not
+# stalled. wait_for cuts that off so a single broken supplier can never
+# block the gather() and starve the rest of the run.
 _SUPPLIER_HARD_TIMEOUT_S = 240.0
 
 
@@ -1155,16 +1155,18 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:  # 
 
 
 def _render_metrics(metrics: dict[str, dict[str, float]]) -> str:
-    """Per-supplier wallclock + bytes-received block for the report.
+    """Per-supplier fetch-time + bytes-received block for the report.
 
-    Empty when nothing was traced (e.g. the catalog-only report).
-    Emits a leading blank line so it slots cleanly between sections
-    without collapsing into an adjacent table.
+    The time column is the SUM of per-request durations (not true
+    wallclock): concurrent fetches add up even though they overlap in
+    real time. Empty when nothing was traced (e.g. the catalog-only
+    report). Emits a leading blank line so it slots cleanly between
+    sections without collapsing into an adjacent table.
     """
     if not metrics:
         return ""
     rows = ["", "## Per-supplier latency / size", ""]
-    rows.append("| Supplier | Fetches | Wallclock (s) | Bytes received |")
+    rows.append("| Supplier | Fetches | Fetch time (s) | Bytes received |")
     rows.append("| --- | ---: | ---: | ---: |")
     for supplier, m in sorted(metrics.items()):
         bytes_str = f"{int(m['bytes']):,}" if m["bytes"] else "-"

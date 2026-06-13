@@ -113,14 +113,16 @@ class DynamicRates:
     """Dynamic energy contract: ``factor x spot + base`` per price slot.
 
     ``quarter_hourly`` selects the spot grid the contract bills on. Some
-    Belgian dynamic suppliers (Frank Energie by default, Luminus) price
-    per clock hour, so the integration aggregates ENTSO-E's 15-minute
-    day-ahead curve to hourly. Engie, Cociter, EBEM and Ecofix bill per
-    quarter-hour (their cards multiply the 15-minute Belpex / eSpot_15
-    spot); those extractors set this True so the live price table,
-    current / next-slot sensors and the cheapest-window service keep the
-    native 15-minute slots. YTD billing stays hourly regardless: Home
-    Assistant only retains hourly long-term statistics.
+    Belgian dynamic suppliers (Frank Energie by default, Luminus, Mega,
+    TotalEnergies, Eneco) price per clock hour, so the integration
+    aggregates ENTSO-E's 15-minute day-ahead curve to hourly. Engie,
+    Cociter, EBEM, Ecofix, OCTA+ and Ecopower (Dynamische Burgerstroom)
+    bill per quarter-hour (their cards multiply the 15-minute Belpex /
+    eSpot_15 / Epex 15 / EPEX DA spot); those extractors set this True so
+    the live price table, current / next-slot sensors and the
+    cheapest-window service keep the native 15-minute slots. YTD billing
+    stays hourly regardless: Home Assistant only retains hourly long-term
+    statistics.
     """
 
     factor: float

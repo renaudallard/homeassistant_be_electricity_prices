@@ -149,10 +149,11 @@ def supplier_device_info(coordinator: "BePricesCoordinator") -> DeviceInfo:
 def _energy_is_quarter_hourly(energy: EnergyRates) -> bool:
     """True when the energy model bills on the native 15-minute grid.
 
-    Engie, Cociter, EBEM and Ecofix dynamic contracts set
-    ``quarter_hourly`` (their cards price on the 15-minute Belpex /
-    eSpot_15 spot); every other contract (static, TOU, hourly-billed
-    dynamic) stays hourly.
+    Engie, Cociter, EBEM, Ecofix, OCTA+ and Ecopower (Dynamische
+    Burgerstroom) dynamic contracts set ``quarter_hourly`` (their cards
+    price on the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot);
+    every other contract (static, TOU, hourly-billed dynamic such as
+    Eneco, Frank, Luminus, Mega, TotalEnergies) stays hourly.
     """
     return isinstance(energy, DynamicRates) and energy.quarter_hourly
 
