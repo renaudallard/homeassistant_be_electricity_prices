@@ -619,6 +619,32 @@ _INJECTION_FIXED_RE = re.compile(
     re.IGNORECASE,
 )
 
+_NL_MONTH_INDEX = {name: i + 1 for i, name in enumerate(_NL_MONTHS)}
+_MONTH_ALT = "|".join(_NL_MONTHS)
+_FIXED_NOTE_EXPIRY_RE = re.compile(rf"t\.e\.m\.\s+\d+\s+({_MONTH_ALT})", re.IGNORECASE)
+_CARD_MONTH_RE = re.compile(rf"Tariefkaart\s+({_MONTH_ALT})\s+\d{{4}}", re.IGNORECASE)
+
+
+def _fixed_note_in_effect(text: str) -> bool:
+    """Whether the ``... 100% vast`` injection note still applies to this
+    card's pricing month.
+
+    The note declares its own expiry (``OPGELET t.e.m. 30 juni ...``).
+    Honour the fixed value for cards up to that month, but ignore a stale
+    note carried onto a later month's card (e.g. a July card that already
+    prints the 50%-variable formula but still carries the old June note),
+    which would otherwise credit users the wrong fixed rate. Returns True
+    when staleness can't be established, so a card that doesn't print a
+    parseable month still trusts the note it shows.
+    """
+    note = _FIXED_NOTE_EXPIRY_RE.search(text)
+    card = _CARD_MONTH_RE.search(text)
+    if note is None or card is None:
+        return True
+    return (
+        _NL_MONTH_INDEX[card.group(1).lower()] <= _NL_MONTH_INDEX[note.group(1).lower()]
+    )
+
 
 def _extract_injection(text: str) -> InjectionRates | None:
     """Parse the injection (terugleververgoeding) price.
@@ -638,7 +664,7 @@ def _extract_injection(text: str) -> InjectionRates | None:
     # line credited users the variable value (e.g. 0,0329) instead of
     # the fixed 0,020 they actually receive this month.
     fixed = _INJECTION_FIXED_RE.search(text)
-    if fixed is not None:
+    if fixed is not None and _fixed_note_in_effect(text):
         return InjectionRates(current=abs(to_float(fixed.group(1))))
     match = _INJECTION_RE.search(text) or _INJECTION_SPLIT_RE.search(text)
     if not match:

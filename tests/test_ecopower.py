@@ -175,6 +175,22 @@ def test_split_layout_card_parses_energy_and_injection() -> None:
     }
 
 
+def test_stale_fixed_injection_note_is_ignored_on_a_later_card() -> None:
+    """The '100% vast' note declares its own expiry (t.e.m. 30 juni). If a
+    later month's card still carries the stale note while already printing
+    the variable formula, the note must NOT win -- the parser falls back
+    to the variable value. Relabel the June split card as a July card to
+    simulate the carried-over note."""
+    text = _text("ecopower_burgerstroom_jun_split.pdf").replace(
+        "Tariefkaart juni 2026", "Tariefkaart juli 2026"
+    )
+    snap = parse_snapshot(text, "test://ecopower-stale", "juli 2026")
+    assert snap.injection is not None
+    # July is past the note's 30 June expiry, so the variable-formula
+    # value (0,0329) is credited instead of the stale fixed 0,020.
+    assert snap.injection.current == pytest.approx(0.0329)
+
+
 def test_may_card_injection_label_is_matched() -> None:
     """Issue #31: the May 2026 card renamed the injection row from
     'Terugleververgoeding (digitale meter)' to
