@@ -1232,7 +1232,17 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                     )
                 except Exception:  # noqa: BLE001 - degrade to '-' for the dynamic side
                     pass
-        spot = spot_dict.get(now_hour)
+        # A borrowed coordinator cache for a quarter-hourly contract
+        # (Engie Dynamic / Ecopower DBS) is keyed by 15-minute slots, so
+        # an hour-aligned lookup would always read the :00 quarter's
+        # price for the whole hour. Try the current quarter first, then
+        # fall back to the hour key (the freshly-fetched path is hourly).
+        quarter_slot = now_utc.replace(
+            minute=(now_utc.minute // 15) * 15, second=0, microsecond=0
+        )
+        spot = spot_dict.get(quarter_slot)
+        if spot is None:
+            spot = spot_dict.get(now_hour)
 
         # Measured consumption / injection from the user's kWh sensors.
         # Injection is only relevant when a solar regime is configured;
