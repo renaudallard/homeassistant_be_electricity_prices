@@ -36,6 +36,8 @@ import pytest
 import re
 
 from custom_components.be_electricity_prices.providers._pdf import (
+    _MAX_PDF_BYTES,
+    _read_pdf_bytes,
     archive_validity_check,
     fetch_pdf_text,
     fetch_text,
@@ -302,3 +304,26 @@ def test_archive_validity_check_no_textual_fallback_when_month_names_none() -> N
     snap = _stub_snapshot(None)
     out = archive_validity_check(snap, "no validity here", date(2026, 5, 1))
     assert out is snap
+
+
+class _FakeResp:
+    def __init__(self, content_length: int | None, body: bytes) -> None:
+        self.content_length = content_length
+        self._body = body
+
+    async def read(self) -> bytes:
+        return self._body
+
+
+def test_read_pdf_bytes_rejects_oversize_declared_length() -> None:
+    resp = _FakeResp(_MAX_PDF_BYTES + 1, b"%PDF-fake")
+    with pytest.raises(ExtractorError, match="refusing PDF"):
+        asyncio.run(_read_pdf_bytes(resp, "https://x/big.pdf"))  # type: ignore[arg-type]
+
+
+def test_read_pdf_bytes_allows_normal_and_unknown_length() -> None:
+    within = _FakeResp(1024, b"%PDF-1.7 ok")
+    assert asyncio.run(_read_pdf_bytes(within, "u")) == b"%PDF-1.7 ok"  # type: ignore[arg-type]
+    # No Content-Length (streamed) still reads through.
+    unknown = _FakeResp(None, b"%PDF-stream")
+    assert asyncio.run(_read_pdf_bytes(unknown, "u")) == b"%PDF-stream"  # type: ignore[arg-type]

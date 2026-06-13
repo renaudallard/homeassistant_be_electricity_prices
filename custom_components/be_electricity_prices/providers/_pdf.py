@@ -57,6 +57,29 @@ def _read_version() -> str:
 USER_AGENT = f"Home Assistant be_electricity_prices/{_read_version()}"
 
 
+# 64 MiB: ~12x the largest real tariff card (Bolt's ~5 MiB PDFs), so it
+# never trips on a legitimate card while bounding what a broken or
+# hostile CDN can pull into the coordinator's memory in one fetch.
+_MAX_PDF_BYTES = 64 * 1024 * 1024
+
+
+async def _read_pdf_bytes(resp: aiohttp.ClientResponse, url: str) -> bytes:
+    """Read a (PDF) response body, rejecting an endpoint that declares a
+    Content-Length far larger than any real tariff card.
+
+    Reading the whole body keeps the magic-byte / parse path simple; the
+    guard only refuses payloads the server itself advertises as oversize
+    (a streamed response with no Content-Length still reads normally,
+    which is fine for the trusted supplier endpoints we fetch).
+    """
+    declared = resp.content_length
+    if declared is not None and declared > _MAX_PDF_BYTES:
+        raise ExtractorError(
+            f"refusing PDF at {url}: declared {declared} bytes (limit {_MAX_PDF_BYTES})"
+        )
+    return await resp.read()
+
+
 def _is_pdf_payload(payload: bytes) -> bool:
     """Return True if the bytes look like a PDF.
 
@@ -88,7 +111,7 @@ async def fetch_pdf_text(
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
-            payload = await resp.read()
+            payload = await _read_pdf_bytes(resp, url)
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
 
@@ -233,7 +256,7 @@ async def fetch_pdf_text_aligned(
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
-            payload = await resp.read()
+            payload = await _read_pdf_bytes(resp, url)
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
     if not _is_pdf_payload(payload):
@@ -262,7 +285,7 @@ async def fetch_pdf_text_layout(
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
-            payload = await resp.read()
+            payload = await _read_pdf_bytes(resp, url)
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(f"network error fetching {url}: {err}") from err
     if not _is_pdf_payload(payload):
@@ -304,7 +327,11 @@ async def head_freshness_key(
                 if value:
                     return value
             return None
-    except aiohttp.ClientError:
+    except (aiohttp.ClientError, TimeoutError):
+        # aiohttp's ClientTimeout fires asyncio.TimeoutError (==
+        # builtins.TimeoutError on 3.11+), which is NOT a ClientError;
+        # without this a slow HEAD would break the documented
+        # None-on-failure contract and bubble out of the probe path.
         return None
 
 
