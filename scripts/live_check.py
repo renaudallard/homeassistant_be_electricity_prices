@@ -322,15 +322,17 @@ async def _fetch_with_retry(
                 "network error fetching"
             )
             if not transient and msg.startswith("HTTP "):
-                # Retry only genuinely transient server-side statuses
-                # (5xx, plus 408 Request Timeout / 429 Too Many
-                # Requests). A stable 4xx (404/403/410) means the card
-                # moved or was withdrawn; retrying just burns two more
-                # request timeouts before recording the same failure.
+                # Retry transient server-side statuses: 5xx, 408 Request
+                # Timeout, 429 Too Many Requests, and 403 -- the
+                # Cloudflare-fronted suppliers this script scrapes
+                # intermittently return a 403 anti-bot challenge on an
+                # otherwise healthy resource that succeeds on retry. A
+                # 404/410 means the card was renamed or withdrawn and is
+                # left to fail fast.
                 head = msg[len("HTTP ") :].split(None, 1)[0]
                 if head.isdigit():
                     status = int(head)
-                    transient = status >= 500 or status in (408, 429)
+                    transient = status >= 500 or status in (403, 408, 429)
             if not transient or i == attempts - 1:
                 raise
             last_err = err
