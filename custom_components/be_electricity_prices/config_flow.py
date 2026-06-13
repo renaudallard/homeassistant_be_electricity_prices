@@ -1010,9 +1010,10 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         if user_input is not None:
             self._compare.update(user_input)
             return await self.async_step_compare_meter()
-        # Only show same-kind contracts (filter built into the schema)
-        # and exclude the user's current contract iff the picked supplier
-        # is the user's current one.
+        # The contract picker spans both static and dynamic kinds (the
+        # compare flow supports cross-kind quotes); exclude only the
+        # user's current contract, and iff the picked supplier is the
+        # user's current one.
         exclude = (
             current[CONF_CONTRACT]
             if self._compare[CONF_SUPPLIER] == current[CONF_SUPPLIER]
@@ -1057,7 +1058,12 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
         )
-        if other_kind in ("dynamic", "tou"):
+        # Dynamic, TOU and TOU-Impact contracts all require a smart
+        # meter, so don't offer mono/bi for them -- matching the install
+        # flow's _meter_schema, which gates the same three kinds. (Mega
+        # Off-peak Impact is "tou_impact"; omitting it here let the
+        # compare flow show an impossible mono/bi meter for it.)
+        if other_kind in ("dynamic", "tou", "tou_impact"):
             self._compare[CONF_METER] = METER_DYNAMIC
             return await self._after_compare_meter()
         current_meter = self.config_entry.data.get(CONF_METER, METER_MONO)
