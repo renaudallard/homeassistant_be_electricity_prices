@@ -265,7 +265,7 @@ def _extract_injection(text: str) -> InjectionRates | None:
     hardcoded.
     """
     formula = re.search(
-        rf"Le\s+prix\s+de\s+l['’’]\s*injection.*?"
+        rf"Le\s+prix\s+de\s+l['‘’ʼ]\s*injection.*?"
         rf"(?:Tout compteur[^\n]*|Compteur SMR3)\s*"
         rf"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
         rf"([{SIGN_CHARS}])\s*([\d,]+)\)",
@@ -306,9 +306,12 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
             raise ExtractorError(
                 "could not parse Cociter variable monohoraire indicative rate"
             )
+        # Accept any sign between BELIX and the base, mirroring the
+        # dynamic path, so a card flipping to a Unicode minus or a
+        # negative base still renders the diagnostic formula string.
         formula = re.search(
-            r"Compteur monohoraire\s*\(([\d,]+)\s*x\s*BELIX\s*\+\s*([\d,]+)\)"
-            r"\s*\+\s*(\d+)\s*%\s*TVA",
+            rf"Compteur monohoraire\s*\(([\d,]+)\s*x\s*BELIX\s*"
+            rf"([{SIGN_CHARS}])\s*([\d,]+)\)\s*\+\s*(\d+)\s*%\s*TVA",
             text,
         )
         return VariableRates(
@@ -318,8 +321,8 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
             exclusive_night=to_float(excl.group(1)) / 100.0 if excl else None,
             yearly_fixed_fee=yearly_fee,
             formula=(
-                f"({formula.group(1)} x BELIX + {formula.group(2)}) c€/kWh "
-                f"+ {formula.group(3)}% VAT"
+                f"({formula.group(1)} x BELIX {formula.group(2)} "
+                f"{formula.group(3)}) c€/kWh + {formula.group(4)}% VAT"
                 if formula
                 else None
             ),
