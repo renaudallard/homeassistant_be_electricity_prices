@@ -1324,14 +1324,19 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     "mega": 7_000_000,
 }
 
-# Per-supplier wallclock budgets (override the global). Symmetric to
-# the byte overrides: known-slow suppliers (bolt parses 6 large PDFs,
-# engie fans out across regions, mega fetches 33 region PDFs) honestly
-# take longer than the 90-s default. Sized to "observed slow-day
-# wallclock + ~20-25% headroom" so the retry helper's per-PDF overhead
-# (1-3s per fired retry, see _fetch_with_retry) doesn't push a normal
-# slow day over budget.
+# Per-supplier latency budgets (override the global). NOTE: elapsed_s
+# is the SUM of per-request durations (accumulated in _on_request_end),
+# not true wallclock -- so a supplier that fetches concurrently records
+# the sum of its parallel fetches even though they overlap in real
+# time. Sized to "observed slow-day summed fetch time + ~20-25%
+# headroom" so the retry helper's per-PDF overhead (1-3s per fired
+# retry, see _fetch_with_retry) doesn't push a normal slow day over
+# budget. bolt fetches its six ~5 MB PDFs concurrently (see _check_bolt),
+# so on a slow-CDN day (issue #13) the six 20-30 s fetches sum to ~180 s
+# even though real wallclock stays well under the 240 s hard cap and the
+# snapshot succeeds; budget it accordingly so it doesn't false-fire.
 _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
+    "bolt": 200.0,
     "engie": 130.0,
     "luminus": 125.0,
     "mega": 120.0,
