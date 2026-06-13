@@ -706,8 +706,13 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
+        # Horizontal whitespace only ([^\S\n] = whitespace minus newline)
+        # between the numbers so a greedy match can't span a blank line
+        # and pull the next row's (or a footnote's) leading number into
+        # this row -- that shifted every column right and billed
+        # transport at a stray value while dropping the real rate.
         row = re.search(
-            rf"^{re.escape(label)}\s+((?:[\d,.]+\s+){{8,}}[\d,.]+)",
+            rf"^{re.escape(label)}[^\S\n]+((?:[\d,.]+[^\S\n]+){{8,}}[\d,.]+)",
             text,
             re.MULTILINE | re.IGNORECASE,
         )
