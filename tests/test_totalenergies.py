@@ -130,6 +130,9 @@ def test_mycomfort_variable_flanders_handles_tarif_mensuel_label() -> None:
     assert snap.energy.current == pytest.approx(0.1562)
     assert snap.energy.peak == pytest.approx(0.1696)
     assert snap.energy.offpeak == pytest.approx(0.1447)
+    # Flanders also wraps the cotisation header; the value lives only in
+    # the 8th Fluvius column and must still reach the all-in price.
+    assert snap.taxes.energy_contribution == pytest.approx(0.002)
 
 
 def test_brussels_extracts_sibelga_row() -> None:
@@ -143,6 +146,10 @@ def test_brussels_extracts_sibelga_row() -> None:
     assert sibelga.distribution_offpeak == pytest.approx(0.0753)
     assert sibelga.transport == pytest.approx(0.0227)
     assert sibelga.data_management_per_year == pytest.approx(14.73)
+    # The Brussels card wraps the "Cotisation sur l'énergie" header, so
+    # the federal contribution only appears as the 7th SIBELGA column;
+    # it must still reach the all-in price (was silently dropped to 0).
+    assert snap.taxes.energy_contribution == pytest.approx(0.002)
 
 
 def test_wallonia_dso_carries_full_row() -> None:

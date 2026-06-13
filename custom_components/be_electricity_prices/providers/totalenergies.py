@@ -273,7 +273,9 @@ def parse_snapshot(
     injection = _extract_injection(text, contract.kind)
     publication_label = _extract_publication_month(text)
     federal_excise = _extract_federal_excise(text)
-    energy_contribution = _extract_energy_contribution(text)
+    energy_contribution = _extract_energy_contribution(
+        text
+    ) or _energy_contribution_from_table(text, region)
     region_connection_fee = (
         _extract_connection_fee(text) if region == REGION_WALLONIA else 0.0
     )
@@ -502,6 +504,39 @@ def _extract_federal_excise(text: str) -> float:
 def _extract_energy_contribution(text: str) -> float:
     match = re.search(r"Cotisation sur l[\"'’]\s*énergie\s+([\d.,]+)", text)
     return to_float(match.group(1)) / 100.0 if match else 0.0
+
+
+def _energy_contribution_from_table(text: str, region: str) -> float:
+    """Fallback: read the federal energy contribution from the DSO table.
+
+    The Wallonia card prints "Cotisation sur l'énergie <value>" on a
+    labelled line that _extract_energy_contribution catches. The
+    Brussels and Flanders cards wrap that header across two lines, so
+    the only machine-readable copy of the value is the cotisation
+    column of the DSO table: the 7th SIBELGA number on Brussels, the
+    8th of nine on each Flanders Fluvius row. It is a federal levy,
+    identical across rows, so any one row yields it. Returns 0.0 when
+    the layout doesn't expose it. Without this the Brussels / Flanders
+    all-in price silently drops the contribution (~0.20 c€/kWh).
+    """
+    if region == REGION_BRUSSELS:
+        match = re.search(
+            r"SIBELGA\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
+            r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
+            text,
+        )
+        return to_float(match.group(7)) / 100.0 if match else 0.0
+    if region == REGION_FLANDERS:
+        for label in _FLANDERS_LABELS:
+            match = re.search(
+                rf"{re.escape(label)}\s+"
+                rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
+                rf"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
+                text,
+            )
+            if match:
+                return to_float(match.group(8)) / 100.0
+    return 0.0
 
 
 def _extract_connection_fee(text: str) -> float:
