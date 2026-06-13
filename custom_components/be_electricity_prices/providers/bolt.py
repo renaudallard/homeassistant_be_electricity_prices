@@ -76,6 +76,7 @@ from ..const import (
 from homeassistant.util import dt as dt_util
 
 from ._pdf import (
+    archive_validity_check,
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
@@ -106,6 +107,24 @@ _RESA_REW_LOGGED = False
 _BASE_URL = "https://files.boltenergie.be/pricelists"
 _LISTING_URL = "https://www.boltenergie.be/fr/listes-des-prix"
 _VARIABLE_SUFFIX = "11"  # current variable-card version
+
+# Bolt's fix cards print "Carte Tarifaire Bolt Fixe <Month> <Year>" in
+# the header but never expose a parseable valid_until, so the archive
+# cross-check falls back to a textual month match on these names.
+_FR_MONTH_NAMES = (
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+)
 
 
 @dataclass(frozen=True)
@@ -280,7 +299,12 @@ async def fetch_for_month(
         snap = parse_snapshot(contract_id, text, region, url)
     except ExtractorError:
         return None
-    return snap
+    # The month is URL-keyed, but guard against the CDN ever serving a
+    # current card under a historical URL: Bolt cards carry no parseable
+    # valid_until, so cross-check the printed "<Month> <Year>" header
+    # against the requested month and fall back to the proxy snapshot on
+    # a mismatch rather than mis-billing a past month at current rates.
+    return archive_validity_check(snap, text, year_month, month_names=_FR_MONTH_NAMES)
 
 
 def parse_snapshot(

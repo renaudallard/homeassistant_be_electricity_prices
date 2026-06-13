@@ -28,6 +28,8 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -167,5 +169,37 @@ def test_unknown_contract_raises() -> None:
     async def _run() -> None:
         with pytest.raises(ExtractorError, match="unknown Bolt contract"):
             await EXTRACTORS["bolt"].fetch(None, "bogus", "wallonia")  # type: ignore[arg-type]
+
+    asyncio.run(_run())
+
+
+def test_fetch_for_month_rejects_mismatched_month() -> None:
+    # The fix card is URL-keyed by month but carries no parseable
+    # valid_until, so fetch_for_month cross-checks the printed
+    # "<Month> <Year>" header against the requested month. The April
+    # fixture is accepted for April and rejected for January, so a CDN
+    # serving the wrong month can't mis-bill a past month at its rates.
+    from custom_components.be_electricity_prices.providers import bolt
+
+    april_text = fixture_text("bolt_fix.pdf", layout=True)
+
+    async def _run() -> None:
+        with patch.object(
+            bolt, "fetch_pdf_text_layout", new=AsyncMock(return_value=april_text)
+        ):
+            accepted = await bolt.fetch_for_month(
+                None,  # type: ignore[arg-type]
+                "bolt_fix",
+                "wallonia",
+                date(2026, 4, 1),
+            )
+            assert accepted is not None
+            rejected = await bolt.fetch_for_month(
+                None,  # type: ignore[arg-type]
+                "bolt_fix",
+                "wallonia",
+                date(2026, 1, 1),
+            )
+            assert rejected is None
 
     asyncio.run(_run())
