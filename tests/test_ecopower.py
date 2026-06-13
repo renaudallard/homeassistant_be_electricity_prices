@@ -152,13 +152,17 @@ def _split_snap() -> SupplierSnapshot:
 def test_split_layout_card_parses_energy_and_injection() -> None:
     """Mid-2026 cards moved the resolved energy and injection rates onto
     the line below their label (the 50/50-split layout, previewed on the
-    June estimation card). Both must still parse rather than raising:
-    energy 0,1378 euro/kWh and the +0,0329 injection credit."""
+    June estimation card). Energy is the blended 50/50 rate (0,1378
+    euro/kWh). Injection is still 100% fixed until 30 June, and the card
+    says so explicitly ("OPGELET t.e.m. 30 juni is de terugleververgoeding
+    0,020 euro/kWh en 100% vast"); the parser must credit that fixed
+    0,020 rather than the 0,0329 variable-formula value printed on the
+    line below the label, which only applies once injection goes variable."""
     snap = _split_snap()
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.current == pytest.approx(0.1378)
     assert snap.injection is not None
-    assert snap.injection.current == pytest.approx(0.0329)
+    assert snap.injection.current == pytest.approx(0.020)
     assert set(snap.dsos) == {
         "fluvius_antwerpen",
         "fluvius_halle_vilvoorde",

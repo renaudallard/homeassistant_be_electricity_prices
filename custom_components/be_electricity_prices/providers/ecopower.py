@@ -607,6 +607,18 @@ _INJECTION_SPLIT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Authoritative current-month statement on the split-layout cards that
+# show a 50% fixed + 50% variable injection formula: an
+# "OPGELET t.e.m. <date> is de terugleververgoeding <value> euro/kWh en
+# 100% vast" note pins the actually-applied fixed credit. The formula
+# line below the label resolves the *variable* half, which only kicks in
+# once the note's date passes (Ecopower flips injection to 50% variable
+# from 1 July 2026), so this fixed value must win while it's printed.
+_INJECTION_FIXED_RE = re.compile(
+    r"terugleververgoeding\s+([\d,]+)\s*euro/kWh\s+en\s+100\s*%\s*vast",
+    re.IGNORECASE,
+)
+
 
 def _extract_injection(text: str) -> InjectionRates | None:
     """Parse the injection (terugleververgoeding) price.
@@ -619,6 +631,15 @@ def _extract_injection(text: str) -> InjectionRates | None:
     a negative cost. Negate it so ``current`` holds the compensation as
     a positive number, matching every other supplier's injection sign.
     """
+    # Prefer the explicit current-month fixed credit when the card
+    # prints the 100%-vast note: on split-layout cards the label line
+    # carries only the 50/50 formula and the line below resolves the
+    # variable half, which doesn't apply yet. Falling through to that
+    # line credited users the variable value (e.g. 0,0329) instead of
+    # the fixed 0,020 they actually receive this month.
+    fixed = _INJECTION_FIXED_RE.search(text)
+    if fixed is not None:
+        return InjectionRates(current=abs(to_float(fixed.group(1))))
     match = _INJECTION_RE.search(text) or _INJECTION_SPLIT_RE.search(text)
     if not match:
         return None
@@ -628,8 +649,11 @@ def _extract_injection(text: str) -> InjectionRates | None:
         if raw.startswith(variant):
             raw = "-" + raw[len(variant) :]
             break
-    # Flip the cost-column sign: a negative cost is a positive credit.
-    return InjectionRates(current=-to_float(raw))
+    # The credit is never negative (Ecopower states this); the card
+    # merely prints it in the energy/cost column as a negative figure.
+    # Take the magnitude so a card that ever prints it as a positive
+    # number isn't flipped into a debit.
+    return InjectionRates(current=abs(to_float(raw)))
 
 
 # The dynamic card prints the injection formula like the consumption one:
