@@ -413,7 +413,11 @@ def parse_snapshot(
 #     (HTVA but injection is VAT-exempt residential, so no scaling needed)
 _FORMULA_TAIL = (
     r"Day Ahead [Ee][Pp][Ee][Xx]\s*[Ss][Pp][Oo][Tt](?:\s*Belgium)?\s*\*\s*"
-    rf"([\d,]+)\s*([{SIGN_CHARS}])\s*([\d,]+)\s*c€/kWh"
+    # Accept dot or comma decimals for the factor and base: pypdf already
+    # extracts the energy table on these cards with dot decimals, so a
+    # re-render of the formula as "* 1.05 + 1.35" must not dead-end the
+    # Dynamic snapshot. to_float normalises either separator.
+    rf"([\d.,]+)\s*([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh"
 )
 _CONSUMPTION_FORMULA_RE = re.compile(
     r"formule tarifaire suivante[^*]+?" + _FORMULA_TAIL, re.S
