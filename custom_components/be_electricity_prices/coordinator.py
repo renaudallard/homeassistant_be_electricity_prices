@@ -26,9 +26,12 @@
 """Data coordinator for the Belgian Electricity Prices integration.
 
 Caches the latest supplier snapshot from disk so an offline boot can still
-serve last-known prices, while a daily refresh tries to update from the
-supplier source. Per the project's fail policy, if a refresh fails the
-coordinator keeps serving the cached snapshot and surfaces a repair issue.
+serve last-known prices. The coordinator ticks hourly
+(UPDATE_INTERVAL_MINUTES): each tick runs the supplier's cheap freshness
+probe and only re-fetches the full card when the probe key changes, while
+probe-less suppliers fall back to the SNAPSHOT_REFRESH_HOURS (24h) TTL. Per
+the project's fail policy, if a refresh fails the coordinator keeps serving
+the cached snapshot and surfaces a repair issue.
 """
 
 from __future__ import annotations
