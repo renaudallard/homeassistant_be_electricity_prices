@@ -318,9 +318,19 @@ async def _fetch_with_retry(
             return await factory()
         except Exception as err:
             msg = str(err)
-            transient = isinstance(err, TimeoutError) or (
-                msg.startswith("network error fetching") or msg.startswith("HTTP ")
+            transient = isinstance(err, TimeoutError) or msg.startswith(
+                "network error fetching"
             )
+            if not transient and msg.startswith("HTTP "):
+                # Retry only genuinely transient server-side statuses
+                # (5xx, plus 408 Request Timeout / 429 Too Many
+                # Requests). A stable 4xx (404/403/410) means the card
+                # moved or was withdrawn; retrying just burns two more
+                # request timeouts before recording the same failure.
+                head = msg[len("HTTP ") :].split(None, 1)[0]
+                if head.isdigit():
+                    status = int(head)
+                    transient = status >= 500 or status in (408, 429)
             if not transient or i == attempts - 1:
                 raise
             last_err = err
