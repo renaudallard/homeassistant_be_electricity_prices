@@ -1493,20 +1493,22 @@ def _historical_injection_rate(
 ) -> float | None:
     """Best-effort EUR/kWh injection rate for a *past* hour.
 
-    Static contracts publish a monthly indicative (``current``); use it.
-    Dynamic-injection contracts publish only ``factor*spot + base`` — if
-    the caller has the historical spot, compose; otherwise we don't have
-    enough to price the hour exactly, so leave it uncredited rather than
-    fabricating a rate from a different field. Symmetric across the TOU
-    and static YTD paths so both report the same number for the same
-    hour.
+    Mirrors the live ``_compute_injection_price`` priority: prefer the
+    spot-indexed formula ``factor*spot + base`` when both the formula and
+    a historical spot are available, falling back to the monthly
+    indicative ``current`` otherwise. Several dynamic-injection contracts
+    (Engie, OCTA+, TotalEnergies, Luminus, Mega) publish BOTH a ``current``
+    indicative and ``factor``/``base``; checking ``current`` first made the
+    YTD credit use the flat indicative while the live injection-price
+    sensor used the spot formula, so the two user-facing numbers diverged.
+    Static contracts have no spot, so they fall through to ``current``.
     """
     if injection is None:
         return None
-    if injection.current is not None:
-        return injection.current
     if injection.factor is not None and injection.base is not None and spot is not None:
         return injection.factor * spot + injection.base
+    if injection.current is not None:
+        return injection.current
     return None
 
 

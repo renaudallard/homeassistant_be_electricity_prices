@@ -45,6 +45,7 @@ from custom_components.be_electricity_prices.coordinator import (
     _compute_prosumer,
     _days_through,
     _energy_kind,
+    _historical_injection_rate,
     _monthly_snapshots,
     _read_kwh,
     _recorder_daily_kwh,
@@ -209,6 +210,21 @@ def test_injection_price_returns_none_when_no_data() -> None:
     snap = _snapshot(prosumer=None, capacity=None, injection=None)
     entry = _entry(solar_regime="injection")
     assert _compute_injection_price(snap, entry, {}) is None
+
+
+def test_historical_injection_rate_prefers_formula_over_current() -> None:
+    # Dynamic-injection cards (engie/octaplus/totalenergies/luminus/mega)
+    # publish BOTH a flat `current` indicative and factor/base. The YTD
+    # rate must use the spot formula when a spot is available, matching
+    # the live _compute_injection_price, instead of the flat indicative.
+    both = InjectionRates(current=0.045, factor=0.9, base=-0.01)
+    assert _historical_injection_rate(both, 0.10) == pytest.approx(0.9 * 0.10 - 0.01)
+    # No spot (static YTD path) -> fall back to the monthly indicative.
+    assert _historical_injection_rate(both, None) == pytest.approx(0.045)
+    # Pure static card (no formula) -> the indicative, with or without spot.
+    static = InjectionRates(current=0.0476)
+    assert _historical_injection_rate(static, 0.10) == pytest.approx(0.0476)
+    assert _historical_injection_rate(None, 0.10) is None
 
 
 def test_injection_price_dynamic_returns_none_without_spot() -> None:
