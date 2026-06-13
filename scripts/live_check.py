@@ -156,12 +156,12 @@ _RATE_TOU: type = object
 _RATE_IMPACT: type = object
 
 
-# Per-supplier wallclock + bytes-received accounting. Populated via an
-# aiohttp TraceConfig that tags every request with whichever supplier
-# is currently being checked (set by the _attributed() context
-# manager). Surfaces silent slowdowns and PDF-size jumps in the
-# report; both are leading indicators that a supplier reworked its
-# tariff publication.
+# Per-supplier fetch-time (summed per-request durations) + bytes-received
+# accounting. Populated via an aiohttp TraceConfig that tags every
+# request with whichever supplier is currently being checked (set by the
+# _attributed() context manager). Surfaces silent slowdowns and PDF-size
+# jumps in the report; both are leading indicators that a supplier
+# reworked its tariff publication.
 METRICS: dict[str, dict[str, float]] = {}
 _CURRENT_SUPPLIER: ContextVar[str | None] = ContextVar(
     "be_live_check_supplier", default=None
@@ -1362,7 +1362,7 @@ def _drift_warnings(metrics: dict[str, dict[str, float]]) -> list[str]:
         latency_budget = _latency_budget(supplier)
         if m["elapsed_s"] > latency_budget:
             warnings.append(
-                f"`{supplier}` wallclock {m['elapsed_s']:.1f}s "
+                f"`{supplier}` fetch time {m['elapsed_s']:.1f}s "
                 f"exceeds {latency_budget:.0f}s budget"
             )
         budget = _bytes_budget(supplier)

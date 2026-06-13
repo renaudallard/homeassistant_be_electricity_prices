@@ -363,9 +363,11 @@ def network_eur_per_kwh(
     publish a peak/offpeak split. ``meter`` decides whether the meter
     can register a peak/offpeak split: bi-hourly meters and digital
     (SMR3) meters can; mono meters cannot. ``exclusive_night`` meters
-    only run during DSO off-peak hours, so distribution is billed at
-    the off-peak rate when published, falling back to the single rate
-    on DSOs that don't expose a split.
+    only run during DSO off-peak hours and bill at the dedicated
+    exclusive-night distribution rate when published, falling back to
+    the off-peak rate, then to the single rate on DSOs that expose
+    neither. That circuit is resolved before the Impact band, so a
+    dedicated night meter bills at its own rate even under Impact mode.
     """
     if meter == "exclusive_night":
         # Exclusive-night meters physically only register during DSO
