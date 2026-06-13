@@ -413,6 +413,7 @@ async def _backfill_cost_sensor(
     coordinator: BePricesCoordinator,
     hours: list[datetime],
     spots: dict[datetime, float],
+    emit_from: datetime | None = None,
 ) -> dict[str, int]:
     """Write cumulative state/sum rows for ``current_year_cost`` over ``hours``.
 
@@ -426,6 +427,15 @@ async def _backfill_cost_sensor(
     the two converge at end-of-day, but the hourly variant gives a
     smoother in-day curve. Per-month tariff archives are honoured the
     same way as in the live path.
+
+    ``current_year_cost`` is a cumulative ``TOTAL`` sensor that resets on
+    Jan 1, so ``hours`` should be anchored at the year start: the loop
+    accumulates from the first hour, resets the running totals at every
+    Jan 1 boundary the range crosses, and (when ``emit_from`` is set)
+    only writes rows on/after it. The caller passes the full Jan 1 ->
+    end range as ``hours`` and the requested window start as
+    ``emit_from`` so a mid-year backfill still carries the correct
+    year-to-date sum rather than restarting at zero.
 
     Returns a per-statistic-id row count (one entry max). Skips
     silently when the sensor isn't registered (auto path firing
@@ -496,8 +506,18 @@ async def _backfill_cost_sensor(
     rows: list[Any] = []
     running_energy = 0.0
     running_fees = 0.0
+    accrual_year: int | None = None
     for utc_hour in hours:
         local = dt_util.as_local(utc_hour)
+        # current_year_cost is a TOTAL sensor whose last_reset is Jan 1
+        # local, so each calendar year is its own cumulative period.
+        # Reset the running totals at every year boundary the window
+        # crosses; without this a multi-year backfill produces a sum
+        # series that carries last year's total into this year.
+        if accrual_year != local.year:
+            accrual_year = local.year
+            running_energy = 0.0
+            running_fees = 0.0
         month_first = date(local.year, local.month, 1)
         snap_h = await _snap_for(month_first)
         spot = spots.get(utc_hour) if spots else None
@@ -550,7 +570,12 @@ async def _backfill_cost_sensor(
             max(running_energy, 0.0) if is_compensation else running_energy
         )
         state = round(displayed_energy + running_fees, 4)
-        rows.append(StatisticData(start=utc_hour, state=state, sum=state))
+        # Accumulate from Jan 1 (the caller anchors ``hours`` there) but
+        # only emit rows inside the requested window, so a mid-year
+        # ``start`` still carries the correct year-to-date sum instead of
+        # restarting from zero and clashing with the pre-existing series.
+        if emit_from is None or utc_hour >= emit_from:
+            rows.append(StatisticData(start=utc_hour, state=state, sum=state))
 
     if not rows:
         return {sid: 0}
@@ -594,8 +619,20 @@ async def backfill_range(
     if start_utc >= end_utc:
         return {"rows_written": 0, "sensors": {}, "range": [None, None]}
 
-    spots = await _ensure_dynamic_spots(coordinator, start_utc, end_utc)
+    # The cost sensor is a cumulative TOTAL anchored on Jan 1, so it
+    # must accumulate from the year start even when the user asks for a
+    # mid-year window; the price sensors only need the requested range.
+    # Anchor on the local Jan 1 of the requested start's year and fetch
+    # spots over the wider range (a no-op for non-dynamic suppliers, and
+    # the same YTD window the live engine uses for dynamic ones).
+    cost_anchor_utc = _floor_to_hour_utc(
+        dt_util.as_local(start_utc).replace(
+            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+    )
+    spots = await _ensure_dynamic_spots(coordinator, cost_anchor_utc, end_utc)
     hours = _hour_iter(start_utc, end_utc)
+    cost_hours = _hour_iter(cost_anchor_utc, end_utc)
 
     if clear:
         ids: list[str] = []
@@ -610,7 +647,11 @@ async def backfill_range(
             await _clear_all(hass, ids)
 
     counts = await _backfill_price_sensors(hass, entry, coordinator, hours, spots)
-    counts.update(await _backfill_cost_sensor(hass, entry, coordinator, hours, spots))
+    counts.update(
+        await _backfill_cost_sensor(
+            hass, entry, coordinator, cost_hours, spots, emit_from=start_utc
+        )
+    )
     total = sum(counts.values())
     _LOGGER.info(
         "backfill wrote %d statistic rows for %s over %s..%s",

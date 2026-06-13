@@ -361,6 +361,53 @@ async def test_cost_backfill_running_sum_is_monotonic_for_non_compensation(
     assert all(states[i] < states[i + 1] for i in range(len(states) - 1))
 
 
+async def test_cost_backfill_midyear_start_anchors_sum_at_jan1(
+    hass: HomeAssistant,
+) -> None:
+    # A mid-year start must still emit a year-to-date sum: the cost
+    # series accumulates silently from Jan 1 and only writes rows inside
+    # the requested window, so the first row carries the Jan 1 -> start
+    # accrual instead of restarting at ~0 and clashing with the existing
+    # cumulative series.
+    entry = _entry()
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_year_cost"])
+    entry.runtime_data = await _make_coordinator(entry)
+
+    captured: list[tuple[str, list[Any]]] = []
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        captured.append((metadata["statistic_id"], list(statistics)))
+
+    start = datetime(2026, 3, 1, 0, 0, tzinfo=BRUSSELS)
+    end = start + timedelta(hours=3)
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_fake_import,
+        ),
+        patch(
+            "homeassistant.components.recorder.get_instance",
+            return_value=instance,
+        ),
+    ):
+        await bf.backfill_range(hass, entry, start, end)
+
+    cost_rows = next(rows for sid, rows in captured if sid == ids["current_year_cost"])
+    # Only the three requested hours are written, not the whole Jan 1 ->
+    # March accumulation.
+    assert len(cost_rows) == 3
+    # 90 EUR/year of fees (72 fixed + 12 * 1.5 fund) over 365*24 hours is
+    # ~0.0103 EUR/h; Jan 1 -> March 1 is ~1416 h, so the first emitted
+    # row must already carry well over 10 EUR rather than a single hour.
+    assert cost_rows[0]["state"] > 10.0
+    states = [r["state"] for r in cost_rows]
+    assert all(states[i] < states[i + 1] for i in range(len(states) - 1))
+
+
 async def test_backfill_range_without_runtime_data_raises(
     hass: HomeAssistant,
 ) -> None:
