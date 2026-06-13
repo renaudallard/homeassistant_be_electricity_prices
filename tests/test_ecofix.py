@@ -40,6 +40,7 @@ from custom_components.be_electricity_prices.providers.base import (
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.ecofix import (
+    _dynamic_formula_match,
     discover,
     parse_snapshot,
 )
@@ -71,6 +72,18 @@ def test_ecofix_is_registered() -> None:
     # Ecofix to Brussels households where every fetch would fail.
     for contract in extractor.contracts:
         assert "brussels" not in contract.regions
+
+
+def test_afname_anchor_does_not_reach_injection_formula() -> None:
+    # The Afname match is tempered so it can't cross the Injectie label:
+    # if the consumption formula is reworded/absent, the Afname anchor
+    # must fail rather than bind the injection formula to consumption.
+    txt = _layout(_MOTION)
+    assert _dynamic_formula_match(txt, "Afname") is not None
+    broken = txt.replace("x Belpex 15M) + 1,1020", "x BelpexFOO) + 1,1020", 1)
+    # Consumption formula gone -> Afname anchor returns None (clean miss),
+    # NOT the injection block's formula further down the page.
+    assert _dynamic_formula_match(broken, "Afname") is None
 
 
 # ---- Motion Online (dynamic, low yearly fee) --------------------------------

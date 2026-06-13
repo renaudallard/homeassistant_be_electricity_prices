@@ -338,14 +338,16 @@ def _extract_fee_and_flanders_renewables(
 def _dynamic_formula_match(text: str, label: str) -> re.Match[str] | None:
     """Return the ``(factor x Belpex 15M) <sign> base`` formula that
     follows ``label`` (``Afname`` for consumption, ``Injectie`` for
-    injection), within a short window so it can't reach across to the
-    other block. Anchoring each role on its own label rather than
-    indexing into a document-order ``findall`` keeps consumption and
-    injection from silently swapping if Ecofix ever reorders the two
-    blocks or prints another Belpex 15M formula earlier on the page.
+    injection). Anchoring each role on its own label rather than indexing
+    into a document-order ``findall`` keeps consumption and injection from
+    silently swapping if Ecofix reorders the two blocks. The fill between
+    the label and its formula is tempered so it can't cross the
+    ``Injectie`` label -- otherwise a reworded/absent ``Afname`` formula
+    would let the Afname anchor reach forward and bind the injection
+    formula to consumption.
     """
     return re.search(
-        rf"{label}[\s\S]{{0,200}}?\(([\d,]+)\s*x\s*Belpex\s*15M\)\s*"
+        rf"{label}(?:(?![Ii]njectie)[\s\S]){{0,200}}?\(([\d,]+)\s*x\s*Belpex\s*15M\)\s*"
         rf"([{SIGN_CHARS}])\s*([\d,]+)",
         text,
     )
