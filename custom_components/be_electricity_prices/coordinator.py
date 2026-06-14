@@ -725,6 +725,20 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 if not self._spot_cache:
                     raise UpdateFailed(f"ENTSO-E: {err}") from err
                 spot_prices = dict(self._spot_cache)
+        elif _injection_needs_spot(self._snapshot, self.entry):
+            # Static-energy contract with a spot-indexed injection
+            # (Cociter Variable, EBEM Groen Variabel / B@sic+): the energy
+            # is priced without a spot, so a spot failure (missing key,
+            # ENTSO-E outage) must NOT tear the entry down -- only the
+            # injection credit goes unavailable. Fetch softly, falling
+            # back to the cached curve, then to no injection price.
+            try:
+                spot_prices = await self._fetch_spot_prices()
+            except (EntsoeError, EntsoeAuthError) as err:
+                _LOGGER.debug(
+                    "injection spot fetch failed (energy unaffected): %s", err
+                )
+                spot_prices = dict(self._spot_cache) if self._spot_cache else {}
 
         try:
             hourly = self._build_hourly(spot_prices)
@@ -749,10 +763,14 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self._snapshot, self.entry, spot_prices
         )
         # Dynamic contracts replay historical hourly spots to bill the
-        # YTD energy term. Backfill any missing hours in [Jan 1, today]
-        # before calling the engine; failures degrade to "no data" for
-        # those hours rather than tearing the tick down.
-        if isinstance(self._snapshot.energy, DynamicRates):
+        # YTD energy term; static-energy contracts with a spot-indexed
+        # injection replay them to credit the YTD injection. Backfill any
+        # missing hours in [Jan 1, today] before calling the engine;
+        # failures degrade to "no data" for those hours rather than
+        # tearing the tick down.
+        if isinstance(self._snapshot.energy, DynamicRates) or _injection_needs_spot(
+            self._snapshot, self.entry
+        ):
             today_local = dt_util.now().date()
             await self._ensure_historical_spots(
                 date(today_local.year, 1, 1), today_local
@@ -1452,6 +1470,31 @@ def _compute_capacity(
     return peak_kw * overlay.capacity_eur_per_kw_year / 12.0
 
 
+def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> bool:
+    """True when pricing this entry's injection requires an ENTSO-E spot
+    even though the ENERGY contract isn't dynamic.
+
+    The case is a static-energy card (Fixed / Variable / TOU) whose
+    injection is a per-hour spot formula (``factor``/``base``) with no
+    printed monthly indicative (``current is None``): Cociter Variable,
+    EBEM Groen Variabel / B@sic+. Those don't fetch ENTSO-E spots through
+    the DynamicRates energy path, so the coordinator must fetch spots for
+    them too (and the config flow must collect an API key) to credit the
+    injection. DynamicRates contracts already fetch spots via the energy
+    path and are excluded here. Only relevant on the injection regime.
+    """
+    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
+        return False
+    inj = snapshot.injection
+    return (
+        inj is not None
+        and inj.current is None
+        and inj.factor is not None
+        and inj.base is not None
+        and not isinstance(snapshot.energy, DynamicRates)
+    )
+
+
 def _compute_injection_price(
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
@@ -1469,21 +1512,21 @@ def _compute_injection_price(
     inj = snapshot.injection
     if inj is None:
         return None
-    # Per-hour dynamic injection (factor x spot + base) applies only when
-    # the contract itself bills per hour (DynamicRates energy) -- those
-    # are the only contracts the coordinator fetches ENTSO-E spots for.
-    # For such a contract the monthly "current" indicator is the wrong
-    # answer until a spot arrives, so return None and let the sensor go
-    # unknown rather than fabricate a value. A static-energy contract
-    # (Fixed / Variable) whose injection carries a MONTHLY index formula
-    # (e.g. Ecofix Flexy's BELPEX-SPP-M) never receives a per-hour spot,
-    # and its printed ``current`` IS the realized monthly rate, so it
-    # falls through to that -- keeping the live sensor consistent with
-    # the YTD credit (_historical_injection_rate) for the same hour.
+    # Per-hour spot-indexed injection (factor x spot + base) applies when
+    # either the energy contract itself bills per hour (DynamicRates) OR
+    # the injection is a spot formula with no monthly indicative
+    # (``current`` is None) -- e.g. Cociter Variable and EBEM Groen
+    # Variabel / B@sic+, whose variable-energy cards print an hourly
+    # BELPEX injection formula and no fixed credit. Both need a spot, so
+    # return None until one is available rather than fabricate a value. A
+    # static-energy contract whose injection carries a MONTHLY index
+    # formula but also a printed ``current`` (Ecofix Flexy's BELPEX-SPP-M)
+    # uses that realized monthly rate instead, keeping the live sensor
+    # consistent with the YTD credit for the same hour.
     if (
-        isinstance(snapshot.energy, DynamicRates)
-        and inj.factor is not None
+        inj.factor is not None
         and inj.base is not None
+        and (isinstance(snapshot.energy, DynamicRates) or inj.current is None)
     ):
         if not spot_prices:
             return None
@@ -2117,6 +2160,54 @@ async def _ytd_hourly_energy(
     return energy_cost
 
 
+async def _ytd_spot_injection_credit(
+    hass: HomeAssistant,
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    today: date,
+    historical_spots: dict[datetime, float] | None,
+) -> float:
+    """YTD solar-injection credit (EUR) for a contract whose injection is
+    a per-hour spot formula with no monthly indicative.
+
+    Sums per-hour injected kWh * (factor*spot + base) from the recorder's
+    hourly statistics and the persistent historical-spot cache, for
+    Cociter Variable / EBEM Groen Variabel / B@sic+ -- static-energy
+    cards that publish an hourly BELPEX injection formula but no fixed
+    credit. The static per-day YTD path can't price these (no spot per
+    day), so this isolated term replays the spots the same way the
+    dynamic energy path does, and the caller subtracts it from the bill.
+
+    Returns 0.0 (a no-op) unless the injection is exactly that shape
+    (``factor``/``base`` set, ``current is None``), spots are cached, and
+    an injection sensor is wired. Hours with no cached spot are skipped.
+    """
+    inj = snapshot.injection
+    if (
+        inj is None
+        or inj.factor is None
+        or inj.base is None
+        or inj.current is not None
+        or not historical_spots
+    ):
+        return 0.0
+    inj_ids = _hourly_injection_sensors(entry)
+    if not inj_ids:
+        return 0.0
+    jan1 = date(today.year, 1, 1)
+    per_hour: dict[datetime, float] = {}
+    for iid in inj_ids:
+        for k, v in (await _recorder_hourly_kwh(hass, iid, jan1, today)).items():
+            per_hour[k] = per_hour.get(k, 0.0) + v
+    credit = 0.0
+    for utc_hour, kwh in per_hour.items():
+        spot = historical_spots.get(utc_hour)
+        if spot is None:
+            continue
+        credit += kwh * (inj.factor * spot + inj.base)
+    return credit
+
+
 async def _compute_current_year_cost(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -2355,6 +2446,16 @@ async def _compute_current_year_cost(
         # injection past consumption is forfeited (by most Walloon
         # suppliers).
         energy_cost = max(energy_cost, 0.0)
+
+    if regime == SOLAR_REGIME_INJECTION:
+        # Spot-indexed injection on a static-energy contract (Cociter
+        # Variable, EBEM Groen Variabel / B@sic+): the daily loop above
+        # credited nothing for it (its injection has no monthly
+        # indicative), so subtract the per-hour spot-replayed credit
+        # here. A no-op (0.0) for every other contract.
+        energy_cost -= await _ytd_spot_injection_credit(
+            hass, snapshot, entry, today, historical_spots
+        )
 
     return energy_cost + fees
 

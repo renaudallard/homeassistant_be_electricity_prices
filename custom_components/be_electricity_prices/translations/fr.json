@@ -43,6 +43,13 @@
           "api_key": "Cle API ENTSO-E"
         }
       },
+      "injection_api_key": {
+        "title": "Cle API ENTSO-E (injection)",
+        "description": "Facultatif. Ce contrat indexe l'injection sur le prix spot day-ahead et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; le prix d'injection restera indisponible.",
+        "data": {
+          "api_key": "Cle API ENTSO-E"
+        }
+      },
       "capacity": {
         "title": "Tarif capacitaire (Flandre)",
         "description": "Choisissez un capteur exposant le pic mensuel en kW ou une valeur fixe.",
@@ -163,6 +170,13 @@
       "api_key": {
         "title": "Cle API ENTSO-E",
         "description": "Necessaire pour les contrats dynamiques. Cle gratuite sur transparency.entsoe.eu.",
+        "data": {
+          "api_key": "Cle API ENTSO-E"
+        }
+      },
+      "injection_api_key": {
+        "title": "Cle API ENTSO-E (injection)",
+        "description": "Facultatif. Ce contrat indexe l'injection sur le prix spot day-ahead et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; le prix d'injection restera indisponible.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }

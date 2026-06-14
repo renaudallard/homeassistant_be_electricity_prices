@@ -66,6 +66,14 @@ class Contract:
     # extractors override per-contract for products that 404 outside their
     # home region (e.g. TotalEnergies Impact is Wallonia-only).
     regions: frozenset[str] = field(default_factory=lambda: _ALL_REGIONS)
+    # True when this (non-dynamic) product's injection is a per-hour spot
+    # formula with no printed monthly indicative (Cociter Variable, EBEM
+    # Groen Variabel / B@sic+). Pricing the injection then needs an
+    # ENTSO-E spot even though the energy is variable, so the config flow
+    # offers the API-key step on the injection regime. Dynamic contracts
+    # already collect the key via their energy formula and leave this
+    # False.
+    spot_indexed_injection: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)

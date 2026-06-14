@@ -492,6 +492,9 @@ EXTRACTOR = SupplierExtractor(
             label="Cociter Tarif Variable",
             kind="variable",
             regions=_COCITER_REGIONS,
+            # Variable energy, but the injection is an hourly BELPEX
+            # formula with no fixed indicative -> needs an ENTSO-E spot.
+            spot_indexed_injection=True,
         ),
         Contract(
             id="cociter_dynamic",

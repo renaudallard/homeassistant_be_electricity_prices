@@ -46,6 +46,8 @@ from custom_components.be_electricity_prices.coordinator import (
     _days_through,
     _energy_kind,
     _historical_injection_rate,
+    _injection_needs_spot,
+    _ytd_spot_injection_credit,
     _monthly_snapshots,
     _read_kwh,
     _recorder_daily_kwh,
@@ -265,6 +267,127 @@ def test_injection_price_static_energy_monthly_injection_uses_current() -> None:
     # No spots are ever fetched for a variable contract; surface the
     # monthly indicative, not None.
     assert _compute_injection_price(snap, entry, {}) == pytest.approx(0.0432)
+
+
+def test_injection_price_spot_indexed_static_uses_formula(freezer: Any) -> None:
+    """A static-energy contract whose injection is an hourly spot formula
+    with NO monthly indicative (Cociter Variable, EBEM Variabel/B@sic+)
+    must price the injection from the spot when one is available, and go
+    unknown when it isn't -- not fall back to a non-existent current."""
+    from homeassistant.util import dt as dt_util
+
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=VariableRates(current=0.16),
+        injection=InjectionRates(factor=0.97, base=-0.021, current=None),
+    )
+    entry = _entry(solar_regime="injection")
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    now_hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    assert _compute_injection_price(snap, entry, {now_hour: 0.10}) == pytest.approx(
+        0.97 * 0.10 - 0.021
+    )
+    # No spot -> unknown (there is no monthly indicative to fall back to).
+    assert _compute_injection_price(snap, entry, {}) is None
+
+
+def test_injection_needs_spot_only_for_static_spot_indexed_injection() -> None:
+    inj_regime = _entry(solar_regime="injection")
+    none_regime = _entry(solar_regime="none")
+    spot_inj = InjectionRates(factor=0.9, base=-0.01, current=None)
+    monthly_inj = InjectionRates(factor=0.9, base=-0.01, current=0.04)
+    # Static energy + spot-indexed injection (current None) on injection
+    # regime -> needs a spot.
+    snap = _snapshot(prosumer=None, capacity=None, energy=VariableRates(current=0.16))
+    assert _injection_needs_spot(
+        _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=VariableRates(current=0.16),
+            injection=spot_inj,
+        ),
+        inj_regime,
+    )
+    # Monthly-indexed (current set) -> no extra spot needed.
+    assert not _injection_needs_spot(
+        _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=VariableRates(current=0.16),
+            injection=monthly_inj,
+        ),
+        inj_regime,
+    )
+    # Dynamic energy already fetches spots via the energy path -> excluded.
+    assert not _injection_needs_spot(
+        _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=DynamicRates(factor=0.1, base=0.0),
+            injection=spot_inj,
+        ),
+        inj_regime,
+    )
+    # Not on the injection regime -> never.
+    assert not _injection_needs_spot(
+        _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=VariableRates(current=0.16),
+            injection=spot_inj,
+        ),
+        none_regime,
+    )
+    assert snap is not None  # silence unused in some linters
+
+
+async def test_ytd_spot_injection_credit_replays_hourly_spots(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The isolated YTD credit sums per-hour injected kWh * (factor*spot +
+    base) for a spot-indexed-injection contract; hours without a cached
+    spot are skipped, and a contract with a monthly indicative is a
+    no-op (handled by the daily path instead)."""
+    from custom_components.be_electricity_prices import coordinator
+
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    today = dt_util.now().date()
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=VariableRates(current=0.16),
+        injection=InjectionRates(factor=0.9, base=-0.01, current=None),
+    )
+    entry = _entry(solar_regime="injection", injection_kwh="sensor.inj_total")
+    h1 = dt_util.start_of_local_day(datetime(2026, 1, 6)).astimezone(UTC) + timedelta(
+        hours=11
+    )
+    h2 = h1 + timedelta(hours=1)
+    spots = {h1: 0.10, h2: 0.20}  # h3 below has no spot -> skipped
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.inj_total":
+            return {h1: 2.0, h2: 1.0, h2 + timedelta(hours=1): 5.0}
+        return {}
+
+    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+        credit = await _ytd_spot_injection_credit(hass, snap, entry, today, spots)
+    # 2*(0.9*0.10-0.01) + 1*(0.9*0.20-0.01); the 5 kWh hour has no spot.
+    assert credit == pytest.approx(2 * (0.9 * 0.10 - 0.01) + 1 * (0.9 * 0.20 - 0.01))
+    # Monthly-indicative injection -> no-op here (the daily path credits it).
+    monthly = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=VariableRates(current=0.16),
+        injection=InjectionRates(factor=0.9, base=-0.01, current=0.04),
+    )
+    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+        assert (
+            await _ytd_spot_injection_credit(hass, monthly, entry, today, spots) == 0.0
+        )
 
 
 def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:

@@ -655,6 +655,11 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             regions=_EBEM_REGIONS,
+            # The variable (elek) cards price injection off an hourly
+            # BelpexRLP0 formula with no fixed indicative, so the
+            # injection needs an ENTSO-E spot; the dynamic card already
+            # collects the key via its energy formula.
+            spot_indexed_injection=c.kind == "variable",
         )
         for c in _CONTRACTS
     ),

@@ -98,6 +98,7 @@ from .const import (
     CONF_SUPPLIER,
     DSO_MODE_BI_HORAIRE,
     DSO_TARIFF_MODES,
+    SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
     SOLAR_REGIMES,
     VREG_CAPACITY_FLOOR_KW,
@@ -110,7 +111,7 @@ from .const import (
     REGION_WALLONIA,
     REGIONS,
 )
-from .providers import all_extractors, get as get_extractor
+from .providers import ExtractorError, all_extractors, get as get_extractor
 from .providers.base import Contract
 
 
@@ -154,6 +155,23 @@ def _contract_kind(supplier_id: str, contract_id: str) -> str:
         if c.id == contract_id:
             return c.kind
     return ""
+
+
+def _contract_has_spot_injection(
+    supplier_id: str | None, contract_id: str | None
+) -> bool:
+    """True when the chosen contract's injection is a per-hour spot
+    formula needing an ENTSO-E key even though the energy isn't dynamic
+    (Cociter Variable, EBEM Groen Variabel / B@sic+). Resolved from the
+    registry's ``Contract.spot_indexed_injection`` flag.
+    """
+    if not supplier_id or not contract_id:
+        return False
+    try:
+        contracts = get_extractor(supplier_id).contracts
+    except ExtractorError:
+        return False
+    return any(c.id == contract_id and c.spot_indexed_injection for c in contracts)
 
 
 def _compare_supplier_options(region: str, current_kind: str) -> list[SelectOptionDict]:
@@ -795,9 +813,60 @@ class _WizardStepsMixin:
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            return await self.async_step_meters()
+            return await self._after_solar()
         return self.async_show_form(
             step_id="solar", data_schema=_solar_schema(self._data)
+        )
+
+    def _needs_injection_api_key(self) -> bool:
+        """An ENTSO-E key is offered after the solar step when the chosen
+        contract prices injection off the spot (Cociter Variable, EBEM
+        Variabel / B@sic+) and the user picked the injection regime,
+        unless a key was already collected (dynamic energy)."""
+        return (
+            self._data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
+            and not self._data.get(CONF_API_KEY)
+            and _contract_has_spot_injection(
+                self._data.get(CONF_SUPPLIER), self._data.get(CONF_CONTRACT)
+            )
+        )
+
+    async def _after_solar(self) -> ConfigFlowResult:
+        if self._needs_injection_api_key():
+            return await self.async_step_injection_api_key()
+        return await self.async_step_meters()
+
+    async def async_step_injection_api_key(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Optional ENTSO-E key for spot-indexed injection.
+
+        Unlike the dynamic-energy ``api_key`` step this one is skippable:
+        the energy is priced without a spot, so leaving it blank just
+        leaves the injection price unavailable until a key is added via
+        Reconfigure. A typed key is validated against the live endpoint.
+        """
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            key = (user_input.get(CONF_API_KEY) or "").strip()
+            if not key:
+                self._data.pop(CONF_API_KEY, None)
+                return await self.async_step_meters()
+            err = await _validate_entsoe_key(self.hass, key)
+            if err is None:
+                self._data[CONF_API_KEY] = key
+                return await self.async_step_meters()
+            errors[CONF_API_KEY] = err
+        return self.async_show_form(
+            step_id="injection_api_key",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_API_KEY, default=self._data.get(CONF_API_KEY, "")
+                    ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+                }
+            ),
+            errors=errors,
         )
 
     async def async_step_meters(

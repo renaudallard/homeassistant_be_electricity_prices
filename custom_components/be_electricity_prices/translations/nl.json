@@ -43,6 +43,13 @@
           "api_key": "ENTSO-E API-sleutel"
         }
       },
+      "injection_api_key": {
+        "title": "ENTSO-E API-sleutel (injectie)",
+        "description": "Optioneel. Dit contract indexeert de injectie op de day-ahead spotprijs en heeft daarvoor een gratis ENTSO-E-sleutel van transparency.entsoe.eu nodig. Laat leeg om over te slaan; de injectieprijs blijft dan onbeschikbaar.",
+        "data": {
+          "api_key": "ENTSO-E API-sleutel"
+        }
+      },
       "capacity": {
         "title": "Capaciteitstarief (Vlaanderen)",
         "description": "Kies een sensor met je maandpiek in kW of een vaste waarde.",
@@ -163,6 +170,13 @@
       "api_key": {
         "title": "ENTSO-E API-sleutel",
         "description": "Vereist voor dynamische contracten. Gratis aan te vragen op transparency.entsoe.eu.",
+        "data": {
+          "api_key": "ENTSO-E API-sleutel"
+        }
+      },
+      "injection_api_key": {
+        "title": "ENTSO-E API-sleutel (injectie)",
+        "description": "Optioneel. Dit contract indexeert de injectie op de day-ahead spotprijs en heeft daarvoor een gratis ENTSO-E-sleutel van transparency.entsoe.eu nodig. Laat leeg om over te slaan; de injectieprijs blijft dan onbeschikbaar.",
         "data": {
           "api_key": "ENTSO-E API-sleutel"
         }

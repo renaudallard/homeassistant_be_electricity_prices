@@ -143,7 +143,7 @@ All sensors share one device per config entry.
 | `capacity_cost` | Region = Flanders | Current monthly capacity cost in EUR (`peak_kw × DSO_capacity_rate / 12`). |
 | `monthly_peak_kw` | Region = Flanders | Running monthly peak power in kW (resets the 1st). State class is `MEASUREMENT` (mandated by HA for the POWER device class), so the long-term-statistics graph defaults to the **mean** aggregation. To see the true monthly peaks, switch the statistic-graph card to **Max** under Developer Tools → Statistics. A diagnostic **Reset monthly peak** button on the device page drops the rolling max so the next tick rebuilds it (use after a misconfigured sensor inflated the peak). |
 | `prosumer_cost` | Compensation regime + `solar_kva > 0` | Monthly DSO compensation fee in EUR (`solar_kva × DSO_prosumer_rate / 12`). Only valid for Walloon installations certified before 2024-01-01; ends 2030-12-31. |
-| `injection_price` | Injection regime | EUR/kWh paid for energy fed back to the grid. Dynamic contracts get `factor × spot + base` from the supplier's PDF using the live ENTSO-E spot; static contracts get the supplier's printed monthly indicative. Plug into HA Energy's *Solar production* → *I receive variable compensation based on a tariff* slot. Can go negative at low spot (you pay to inject). |
+| `injection_price` | Injection regime | EUR/kWh paid for energy fed back to the grid. Dynamic contracts get `factor × spot + base` from the supplier's PDF using the live ENTSO-E spot. A few variable contracts whose injection is itself spot-indexed (Cociter Variable, EBEM Groen Variabel / B@sic+) also use `factor × spot + base` and need an ENTSO-E key to show a value. Other static contracts get the supplier's printed monthly indicative. Plug into HA Energy's *Solar production* → *I receive variable compensation based on a tariff* slot. Can go negative at low spot (you pay to inject). |
 
 ## Installation
 
@@ -182,9 +182,13 @@ supplier's tariff card.
    Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
    requires a smart meter; Simple and Bi-horaire follow the existing
    meter convention.
-6. **ENTSO-E API key** *(dynamic contract only)* — validated against the
-   real ENTSO-E endpoint at submission; bad keys are rejected before the
-   entry is saved.
+6. **ENTSO-E API key** *(dynamic contracts; also offered on the injection
+   regime for variable contracts whose injection is itself spot-indexed —
+   Cociter Variable, EBEM Groen Variabel / B@sic+)* — validated against
+   the real ENTSO-E endpoint at submission; bad keys are rejected before
+   the entry is saved. For the injection case it is optional and
+   skippable: leave it blank to finish setup, and the injection price
+   simply stays unavailable until you add a key via Reconfigure.
 7. **Capacity tariff peak source** *(Flanders only)* — either a power sensor
    reporting your live draw (W, kW, VA, or kVA; the unit is honoured so a
    Riemann-source sensor in W is not misread as kW), or a fixed kW value

@@ -43,6 +43,13 @@
           "api_key": "ENTSO-E API-Schluessel"
         }
       },
+      "injection_api_key": {
+        "title": "ENTSO-E API-Schluessel (Einspeisung)",
+        "description": "Optional. Dieser Vertrag indexiert die Einspeisung am Day-Ahead-Spotpreis und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; der Einspeisepreis bleibt dann nicht verfuegbar.",
+        "data": {
+          "api_key": "ENTSO-E API-Schluessel"
+        }
+      },
       "capacity": {
         "title": "Kapazitaetstarif (Flandern)",
         "description": "Sensor mit der monatlichen Spitzenleistung in kW oder festen Wert waehlen.",
@@ -163,6 +170,13 @@
       "api_key": {
         "title": "ENTSO-E API-Schluessel",
         "description": "Erforderlich fuer dynamische Vertraege. Kostenlos bei transparency.entsoe.eu anfordern.",
+        "data": {
+          "api_key": "ENTSO-E API-Schluessel"
+        }
+      },
+      "injection_api_key": {
+        "title": "ENTSO-E API-Schluessel (Einspeisung)",
+        "description": "Optional. Dieser Vertrag indexiert die Einspeisung am Day-Ahead-Spotpreis und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; der Einspeisepreis bleibt dann nicht verfuegbar.",
         "data": {
           "api_key": "ENTSO-E API-Schluessel"
         }

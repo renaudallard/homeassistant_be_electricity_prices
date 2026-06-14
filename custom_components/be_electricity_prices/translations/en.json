@@ -43,6 +43,13 @@
           "api_key": "ENTSO-E API key"
         }
       },
+      "injection_api_key": {
+        "title": "ENTSO-E API key (injection)",
+        "description": "Optional. This contract prices solar injection off the day-ahead spot, which needs a free ENTSO-E key from transparency.entsoe.eu. Leave blank to skip; the injection price stays unavailable until you add a key.",
+        "data": {
+          "api_key": "ENTSO-E API key"
+        }
+      },
       "capacity": {
         "title": "Capacity tariff (Flanders)",
         "description": "Pick a sensor that exposes your monthly peak in kW or use a fixed value.",
@@ -163,6 +170,13 @@
       "api_key": {
         "title": "ENTSO-E API key",
         "description": "Required for dynamic contracts. Request one for free at transparency.entsoe.eu.",
+        "data": {
+          "api_key": "ENTSO-E API key"
+        }
+      },
+      "injection_api_key": {
+        "title": "ENTSO-E API key (injection)",
+        "description": "Optional. This contract prices solar injection off the day-ahead spot, which needs a free ENTSO-E key from transparency.entsoe.eu. Leave blank to skip; the injection price stays unavailable until you add a key.",
         "data": {
           "api_key": "ENTSO-E API key"
         }

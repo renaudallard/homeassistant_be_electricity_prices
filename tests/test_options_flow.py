@@ -229,6 +229,87 @@ async def test_options_flow_dynamic_branch_asks_api_key(
     assert entry.data["dso_tariff_mode"] == "impact"
 
 
+async def _walk_to_solar_cociter_variable(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> ConfigFlowResult:
+    """Drive the edit flow to the solar step for Cociter Variable
+    (Wallonia, variable energy, spot-indexed injection)."""
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "cociter", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "cociter_variable"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "mono"}
+    )
+    assert result["step_id"] == "dso_tariff_mode"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
+    )
+    assert result["step_id"] == "solar"
+    return result
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_spot_injection_offers_optional_api_key(
+    hass: HomeAssistant,
+) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    result = await _walk_to_solar_cociter_variable(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 2.0, "solar_regime": "injection"}
+    )
+    # Variable energy + spot-indexed injection on the injection regime ->
+    # the optional ENTSO-E key step appears (no key collected earlier).
+    assert result["step_id"] == "injection_api_key"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_key": "inj-key-789"}
+    )
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["api_key"] == "inj-key-789"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_spot_injection_api_key_is_skippable(
+    hass: HomeAssistant,
+) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    result = await _walk_to_solar_cociter_variable(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 2.0, "solar_regime": "injection"}
+    )
+    assert result["step_id"] == "injection_api_key"
+    # Submit blank -> skip; setup completes without a key.
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert not entry.data.get("api_key")
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_spot_injection_skipped_when_not_injection_regime(
+    hass: HomeAssistant,
+) -> None:
+    # Same contract on the 'none' regime must NOT ask for a key.
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    result = await _walk_to_solar_cociter_variable(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    assert result["step_id"] == "meters"
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_flanders_branch_asks_capacity(
     hass: HomeAssistant,
