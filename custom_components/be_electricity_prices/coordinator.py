@@ -727,9 +727,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 spot_prices = dict(self._spot_cache)
         elif _injection_needs_spot(self._snapshot, self.entry):
             # Static-energy contract with a spot-indexed injection
-            # (Cociter Variable, EBEM Groen Variabel / B@sic+): the energy
-            # is priced without a spot, so a spot failure (missing key,
-            # ENTSO-E outage) must NOT tear the entry down -- only the
+            # (Cociter Variable): the energy is priced without a spot, so
+            # a spot failure (missing key, ENTSO-E outage) must NOT tear
+            # the entry down -- only the
             # injection credit goes unavailable. Fetch softly, falling
             # back to the cached curve, then to no injection price.
             try:
@@ -1476,11 +1476,11 @@ def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> boo
 
     The case is a static-energy card (Fixed / Variable / TOU) whose
     injection is a per-hour spot formula (``factor``/``base``) with no
-    printed monthly indicative (``current is None``): Cociter Variable,
-    EBEM Groen Variabel / B@sic+. Those don't fetch ENTSO-E spots through
-    the DynamicRates energy path, so the coordinator must fetch spots for
-    them too (and the config flow must collect an API key) to credit the
-    injection. DynamicRates contracts already fetch spots via the energy
+    printed monthly indicative (``current is None``): Cociter Variable.
+    Such a card doesn't fetch ENTSO-E spots through the DynamicRates
+    energy path, so the coordinator must fetch spots for it too (and the
+    config flow must collect an API key) to credit the injection.
+    DynamicRates contracts already fetch spots via the energy
     path and are excluded here. Only relevant on the injection regime.
     """
     if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
@@ -2172,9 +2172,9 @@ async def _ytd_spot_injection_credit(
 
     Sums per-hour injected kWh * (factor*spot + base) from the recorder's
     hourly statistics and the persistent historical-spot cache, for
-    Cociter Variable / EBEM Groen Variabel / B@sic+ -- static-energy
-    cards that publish an hourly BELPEX injection formula but no fixed
-    credit. The static per-day YTD path can't price these (no spot per
+    Cociter Variable -- a static-energy card that publishes an hourly
+    BELPEX injection formula but no fixed credit. The static per-day YTD
+    path can't price these (no spot per
     day), so this isolated term replays the spots the same way the
     dynamic energy path does, and the caller subtracts it from the bill.
 
@@ -2457,9 +2457,9 @@ async def _compute_current_year_cost(
 
     if regime == SOLAR_REGIME_INJECTION:
         # Spot-indexed injection on a static-energy contract (Cociter
-        # Variable, EBEM Groen Variabel / B@sic+): the daily loop above
-        # credited nothing for it (its injection has no monthly
-        # indicative), so subtract the per-hour spot-replayed credit
+        # Variable): the daily loop above credited nothing for it (its
+        # injection has no monthly indicative), so subtract the per-hour
+        # spot-replayed credit
         # here. A no-op (0.0) for every other contract.
         energy_cost -= await _ytd_spot_injection_credit(
             hass, snapshot, entry, today, historical_spots

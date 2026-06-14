@@ -162,8 +162,8 @@ def _contract_has_spot_injection(
 ) -> bool:
     """True when the chosen contract's injection is a per-hour spot
     formula needing an ENTSO-E key even though the energy isn't dynamic
-    (Cociter Variable, EBEM Groen Variabel / B@sic+). Resolved from the
-    registry's ``Contract.spot_indexed_injection`` flag.
+    (Cociter Variable). Resolved from the registry's
+    ``Contract.spot_indexed_injection`` flag.
     """
     if not supplier_id or not contract_id:
         return False
@@ -820,9 +820,9 @@ class _WizardStepsMixin:
 
     def _needs_injection_api_key(self) -> bool:
         """An ENTSO-E key is offered after the solar step when the chosen
-        contract prices injection off the spot (Cociter Variable, EBEM
-        Variabel / B@sic+) and the user picked the injection regime,
-        unless a key was already collected (dynamic energy)."""
+        contract prices injection off the spot (Cociter Variable) and the
+        user picked the injection regime, unless a key was already
+        collected (dynamic energy)."""
         return (
             self._data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
             and not self._data.get(CONF_API_KEY)
