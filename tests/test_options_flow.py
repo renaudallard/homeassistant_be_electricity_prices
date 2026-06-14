@@ -557,6 +557,70 @@ async def test_compare_branch_static_to_dynamic_prompts_for_api_key(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_branch_spot_injection_target_prompts_for_api_key(
+    hass: HomeAssistant,
+) -> None:
+    """On the injection regime, comparing a non-spot static contract
+    against a spot-indexed-injection target (Cociter Variable) needs an
+    ENTSO-E spot for the target's feed-in credit. When the user's entry
+    has no api_key, the compare flow detours through compare_api_key
+    after the meter step instead of dropping the credit silently."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        VariableRates,
+    )
+
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+        },
+        title="Eneco injection",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    other_snap = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.925, base=-0.0125),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    fake = replace(EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap))
+    with patch.dict(EXTRACTORS, {"cociter": fake}):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_variable"}
+        )
+        # Variable contract shows the meter step; the api-key gate fires
+        # after it because the target's injection is spot-indexed.
+        assert result["step_id"] == "compare_meter"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        assert result["step_id"] == "compare_api_key"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_result_renders_when_coordinator_not_ready(
     hass: HomeAssistant,
 ) -> None:
@@ -811,9 +875,12 @@ async def test_compare_injection_regime_credits_injection_price(
     object.__setattr__(
         current_snap, "injection", InjectionRates(current=0.05)
     )  # 5 c€/kWh credited
+    # Target is a non-spot fixed contract so its injection is the printed
+    # monthly indicative; Cociter Variable is spot-indexed and would
+    # instead detour through the api-key gate (tested separately).
     other_snap = make_snapshot(
-        supplier="cociter",
-        contract="cociter_variable",
+        supplier="mega",
+        contract="mega_online_fixed",
         energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
         dsos=current_snap.dsos,
         taxes=current_snap.taxes,
@@ -839,7 +906,13 @@ async def test_compare_injection_regime_credits_injection_price(
         "custom_components.be_electricity_prices.coordinator._recorder_daily_kwh",
         new=_fake_recorder_daily_kwh,
     ):
-        ph = await _drive_compare(hass, entry, other_snap=other_snap)
+        ph = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+        )
     # Both suppliers price energy the same; alternative credits 0.10
     # vs current 0.05. Difference = (0.10 - 0.05) * 4000 = 200 EUR
     # cheaper for the alternative.

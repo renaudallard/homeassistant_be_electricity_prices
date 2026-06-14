@@ -1152,26 +1152,32 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         )
 
     async def _after_compare_meter(self) -> ConfigFlowResult:
-        """Hand off to compare_result, prompting for an ENTSO-E key
-        first if the alternative is a dynamic contract and the user's
-        current entry doesn't already carry one (i.e. they're on a
-        static contract today and we have no spot data to price the
-        dynamic side)."""
+        """Hand off to compare_result, prompting for an ENTSO-E key first
+        when the alternative needs spot data the user's current entry
+        doesn't already carry: a dynamic contract, or (on the injection
+        regime) a spot-indexed-injection target like Cociter Variable
+        whose feed-in credit is priced off the hourly day-ahead."""
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
         )
-        if other_kind == "dynamic" and not self.config_entry.data.get(CONF_API_KEY):
+        needs_spot = other_kind == "dynamic" or (
+            self.config_entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
+            and _contract_has_spot_injection(
+                self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+            )
+        )
+        if needs_spot and not self.config_entry.data.get(CONF_API_KEY):
             return await self.async_step_compare_api_key()
         return await self.async_step_compare_result()
 
     async def async_step_compare_api_key(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Static-vs-dynamic compare needs an ENTSO-E key for the
-        dynamic side's hour rate. Borrow the user's existing key when
-        their entry already has one (handled in _after_compare_meter);
-        otherwise prompt and validate against the live endpoint
-        before reaching the result page."""
+        """Compare against a dynamic (or spot-indexed-injection) target
+        needs an ENTSO-E key for the spot rate. Borrow the user's existing
+        key when their entry already has one (handled in
+        _after_compare_meter); otherwise prompt and validate against the
+        live endpoint before reaching the result page."""
         errors: dict[str, str] = {}
         if user_input is not None:
             err = await _validate_entsoe_key(self.hass, user_input[CONF_API_KEY])
@@ -1285,7 +1291,16 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
         )
-        need_spot = "dynamic" in (current_kind, other_kind)
+        # A spot-indexed-injection side (Cociter Variable) prices its
+        # feed-in credit off the hourly day-ahead even though its energy
+        # kind is "variable", so it needs spots just like a dynamic side.
+        compare_spot_injection = regime == SOLAR_REGIME_INJECTION and (
+            _contract_has_spot_injection(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+            or _contract_has_spot_injection(
+                self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+            )
+        )
+        need_spot = "dynamic" in (current_kind, other_kind) or compare_spot_injection
         if need_spot and not spot_dict:
             api_key = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
             if api_key:
@@ -1500,6 +1515,15 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             # per-hour feed-in credit the live YTD applies; spots are the
             # Belgian day-ahead, supplier-independent, so the same cache
             # prices both sides. A no-op for monthly-indicative contracts.
+            if compare_spot_injection and not coord._historical_spots:
+                # The user's own entry isn't spot-needing, so the live
+                # coordinator never backfilled its cache. Fill it now with
+                # the key typed in compare_api_key (or the entry's own), or
+                # the credit silently drops and the YTD overstates the
+                # spot-indexed target's cost.
+                borrowed = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
+                if borrowed:
+                    await coord._ensure_historical_spots(jan1, today_local, borrowed)
             hist_spots = coord._historical_spots
             try:
                 current_ytd_val = await _compute_current_year_cost(

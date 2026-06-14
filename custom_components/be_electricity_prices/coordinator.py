@@ -1144,10 +1144,16 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return shared.probe_key == probe_key
         return now - shared.fetched_at < ttl
 
-    async def _ensure_historical_spots(self, start: date, end: date) -> None:
+    async def _ensure_historical_spots(
+        self, start: date, end: date, api_key: str | None = None
+    ) -> None:
         """Make sure ``self._historical_spots`` covers every hour of the
         local days in ``[start, end]``, fetching missing ranges from
         ENTSO-E.
+
+        ``api_key`` overrides the entry's key, letting the compare flow
+        backfill spots for a spot-indexed target with a key the user typed
+        in the compare step even when their own entry carries none.
 
         Day boundaries are anchored on local midnight (converted to UTC),
         matching the recorder window (``_recorder_rows``) and the
@@ -1165,7 +1171,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         fetches are logged and skipped; the caller treats absent hours as
         "no data" rather than tearing the YTD computation down.
         """
-        api_key = self.entry.data.get(CONF_API_KEY)
+        api_key = api_key or self.entry.data.get(CONF_API_KEY)
         if not api_key:
             return
         # Collect contiguous date ranges where the cache is sparse.
