@@ -110,14 +110,14 @@
       },
       "compare": {
         "title": "Comparer un autre fournisseur",
-        "description": "Choisissez un fournisseur a comparer. La region, le GRD, le type de compteur, le pic et les parametres solaires restent identiques a votre entree actuelle, donc la comparaison est juste. Seuls les fournisseurs offrant un contrat du meme type que le votre (statique vs dynamique) apparaissent ici.",
+        "description": "Choisissez un fournisseur a comparer. La region, le GRD, le pic et les parametres solaires restent identiques a votre entree actuelle. Les fournisseurs statiques et dynamiques sont listes, vous pouvez donc comparer entre types de contrat; pour un contrat statique vous pouvez changer le type de compteur a une etape ulterieure.",
         "data": {
           "supplier": "Fournisseur"
         }
       },
       "compare_contract": {
         "title": "Comparer un autre fournisseur",
-        "description": "Choisissez un contrat de {supplier}. Seuls les contrats du meme type que le votre sont listes.",
+        "description": "Choisissez un contrat de {supplier}. Les contrats statiques et dynamiques sont listes, vous pouvez donc comparer entre types de contrat.",
         "data": {
           "contract": "Contrat"
         }

@@ -110,14 +110,14 @@
       },
       "compare": {
         "title": "Andere leverancier vergelijken",
-        "description": "Kies een leverancier om mee te vergelijken. Regio, DNB, metertype, piek en zonneparameters blijven dezelfde als bij je huidige ingang, zodat de vergelijking eerlijk is. Enkel leveranciers met een contract van hetzelfde type als het jouwe (statisch vs dynamisch) verschijnen hier.",
+        "description": "Kies een leverancier om mee te vergelijken. Regio, DNB, piek en zonneparameters blijven dezelfde als bij je huidige ingang. Zowel statische als dynamische leveranciers worden getoond, zodat je over contracttypes heen kan vergelijken; voor een statisch contract kan je het metertype in een latere stap aanpassen.",
         "data": {
           "supplier": "Leverancier"
         }
       },
       "compare_contract": {
         "title": "Andere leverancier vergelijken",
-        "description": "Kies een contract van {supplier}. Enkel contracten van hetzelfde type als het jouwe worden getoond.",
+        "description": "Kies een contract van {supplier}. Zowel statische als dynamische contracten worden getoond, zodat je over contracttypes heen kan vergelijken.",
         "data": {
           "contract": "Contract"
         }

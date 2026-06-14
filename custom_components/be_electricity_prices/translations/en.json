@@ -110,14 +110,14 @@
       },
       "compare": {
         "title": "Compare another supplier",
-        "description": "Pick a supplier to quote against. Region, DSO, meter type, peak and solar settings stay the same as your current entry, so the comparison is apples-to-apples. Only suppliers offering a contract of the same kind as yours (static vs dynamic) appear here.",
+        "description": "Pick a supplier to quote against. Region, DSO, peak and solar settings stay the same as your current entry. Both static and dynamic suppliers are listed, so you can quote across contract kinds; for a static contract you can change the meter type on a later step.",
         "data": {
           "supplier": "Supplier"
         }
       },
       "compare_contract": {
         "title": "Compare another supplier",
-        "description": "Pick a contract from {supplier}. Only contracts of the same kind as yours are listed.",
+        "description": "Pick a contract from {supplier}. Both static and dynamic contracts are listed, so you can quote across contract kinds.",
         "data": {
           "contract": "Contract"
         }

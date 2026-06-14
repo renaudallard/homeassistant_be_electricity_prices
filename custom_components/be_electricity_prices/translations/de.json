@@ -110,14 +110,14 @@
       },
       "compare": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Lieferanten zum Vergleich waehlen. Region, Netzbetreiber, Zaehlerart, Spitze und Solar-Einstellungen bleiben gleich wie beim aktuellen Eintrag, damit der Vergleich fair ist. Es erscheinen nur Lieferanten mit einem Vertrag derselben Art wie Ihrer (statisch vs dynamisch).",
+        "description": "Lieferanten zum Vergleich waehlen. Region, Netzbetreiber, Spitze und Solar-Einstellungen bleiben gleich wie beim aktuellen Eintrag. Statische und dynamische Lieferanten werden aufgelistet, sodass Sie ueber Vertragsarten hinweg vergleichen koennen; bei einem statischen Vertrag koennen Sie die Zaehlerart in einem spaeteren Schritt aendern.",
         "data": {
           "supplier": "Lieferant"
         }
       },
       "compare_contract": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Vertrag von {supplier} waehlen. Es werden nur Vertraege derselben Art wie Ihrer aufgelistet.",
+        "description": "Vertrag von {supplier} waehlen. Statische und dynamische Vertraege werden aufgelistet, sodass Sie ueber Vertragsarten hinweg vergleichen koennen.",
         "data": {
           "contract": "Vertrag"
         }
