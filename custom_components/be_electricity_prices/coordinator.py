@@ -2358,6 +2358,14 @@ async def _compute_current_year_cost(
         )
         if hourly_energy is None:
             return fees
+        if regime == SOLAR_REGIME_INJECTION:
+            # _ytd_hourly_energy here runs without historical spots, so a
+            # spot-indexed injection (Cociter Variable) credited nothing
+            # above. Apply the same per-hour spot-replayed credit the
+            # daily path uses; a no-op for monthly-indicative injection.
+            hourly_energy -= await _ytd_spot_injection_credit(
+                hass, snapshot, entry, today, historical_spots
+            )
         return hourly_energy + fees
 
     daily_kwh = await _resolve_daily_kwh(hass, entry, today)

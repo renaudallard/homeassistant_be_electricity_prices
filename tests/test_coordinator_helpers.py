@@ -1277,6 +1277,68 @@ async def test_year_cost_dynamic_replays_historical_spots(
     assert cost == pytest.approx(0.20 + 0.10 + 0.0145 + 0.052)
 
 
+async def test_year_cost_spot_injection_credited_on_needs_hourly_path(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A spot-indexed-injection contract (Cociter Variable) that also
+    takes the needs_hourly path -- here via DSO Impact mode -- must still
+    get its per-hour spot-replayed injection credit, not silently drop it
+    as the daily-only credit would."""
+    from custom_components.be_electricity_prices import coordinator
+
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    snap = make_snapshot(
+        contract="cociter_variable",
+        energy=VariableRates(current=0.16),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                distribution_pic=0.10,
+                distribution_medium=0.07,
+                distribution_eco=0.03,
+            )
+        },
+        injection=InjectionRates(factor=0.9, base=-0.01, current=None),
+        source_url="test://cv",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "dso_tariff_mode": "impact",  # -> needs_hourly path
+            "solar_regime": "injection",
+            "injection_kwh": "sensor.inj_total",
+        },
+    )
+    inj_hour = dt_util.start_of_local_day(datetime(2026, 1, 6)).astimezone(
+        UTC
+    ) + timedelta(hours=13)
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return {inj_hour: 4.0} if entity_id == "sensor.inj_total" else {}
+
+    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots={inj_hour: 0.10},
+        )
+    # No consumption; pure injection credit 4 * (0.9*0.10 - 0.01) = 0.32,
+    # so the YTD is -0.32 (a net credit). Without the needs_hourly fix it
+    # would be 0.0 (credit dropped).
+    assert cost == pytest.approx(-(4.0 * (0.9 * 0.10 - 0.01)))
+
+
 async def test_year_cost_dynamic_falls_back_to_fees_when_no_spots(
     hass: HomeAssistant, freezer: Any
 ) -> None:
