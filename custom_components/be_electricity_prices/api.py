@@ -25,8 +25,9 @@
 
 """ENTSO-E day-ahead price client (Belgian bidding zone).
 
-Uses ``aiohttp`` (provided by Home Assistant) and stdlib XML parsing
-to keep ``requirements`` empty in ``manifest.json``.
+Uses ``aiohttp`` (provided by Home Assistant) for HTTP and ``defusedxml``
+for safe XML parsing; ``defusedxml`` is declared in ``manifest.json``
+requirements.
 """
 
 from __future__ import annotations
@@ -38,8 +39,7 @@ from datetime import UTC, datetime, timedelta
 # defusedxml's ElementTree disables entity expansion / external-entity
 # loading on the stdlib parser. The ENTSO-E endpoint is HTTPS-trusted,
 # but a bare xml.etree parse leaves a TLS-MitM-exposed XXE surface for
-# free; defusedxml is a HA core dependency so we get it without
-# bumping the manifest.
+# free; defusedxml is declared in manifest.json requirements.
 from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
 
