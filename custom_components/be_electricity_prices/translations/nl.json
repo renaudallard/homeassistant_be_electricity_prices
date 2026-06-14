@@ -83,7 +83,7 @@
     "abort": {
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Ga terug en kies een andere combinatie.",
       "already_configured": "Een andere ingang bevraagt al dezelfde combinatie (leverancier, contract, regio, DNB). Bewerk die ingang of kies een andere combinatie.",
-      "compare_no_alternative": "Geen andere geschikte leverancier beschikbaar in jouw regio voor dit type contract.",
+      "compare_no_alternative": "Geen andere leverancier of contract beschikbaar in jouw regio om mee te vergelijken.",
       "compare_done": "Vergelijking voltooid - geen wijzigingen opgeslagen."
     },
     "error": {

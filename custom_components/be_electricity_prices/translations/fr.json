@@ -83,7 +83,7 @@
     "abort": {
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d'electricite residentielle dans la region selectionnee. Revenez en arriere et choisissez une autre combinaison.",
       "already_configured": "Une autre entree interroge deja le meme tuple (fournisseur, contrat, region, GRD). Modifiez cette entree ou choisissez une autre combinaison.",
-      "compare_no_alternative": "Aucun autre fournisseur compatible disponible dans votre region pour ce type de contrat.",
+      "compare_no_alternative": "Aucun autre fournisseur ou contrat disponible dans votre region a comparer.",
       "compare_done": "Comparaison terminee - aucune modification enregistree."
     },
     "error": {
