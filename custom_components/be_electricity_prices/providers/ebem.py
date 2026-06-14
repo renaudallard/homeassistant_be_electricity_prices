@@ -501,11 +501,16 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | No
         )
         formula_label = "Belpex15'"
     else:
-        # Both 'Variabel' and 'B@sic+' use the same SPP0-weighted monthly
-        # formula. The variable card prints the row twice (once per
-        # product); the first match is enough -- they're identical.
+        # Both 'Variabel' and 'B@sic+' use the same SPP0-weighted MONTHLY
+        # formula. The card prints the realized monthly indicative right
+        # after the formula (e.g. "... Belpex - 1,25 1,3354 4,3252", where
+        # 1,3354 = factor*last_month_SPP0 + base and 4,3252 is the VNR
+        # yearly forecast). Capture that indicative: EBEM settles
+        # injection at this monthly rate, not at the hourly spot, so it is
+        # the value to surface (mirrors Ecofix Flexy's BELPEX-SPP-M).
         match = re.search(
-            rf"Injectie alle uren\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
+            rf"Injectie alle uren\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)"
+            rf"(?:\s+([\d,.]+))?",
             text,
         )
         formula_label = "BelpexSPP0"
@@ -513,8 +518,14 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | No
         return None
     factor_pdf = to_float(match.group(1))
     base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
+    # Dynamic (Belpex 15') has no monthly indicative -- it is priced from
+    # the live/historical spot via the energy path. The variable cards do
+    # print one; surface it as the monthly settled rate.
+    current = None
+    if contract.contract_id != "ebem_dynamic" and match.group(4):
+        current = to_float(match.group(4)) / 100.0
     return InjectionRates(
-        current=None,
+        current=current,
         factor=factor_pdf * 10.0,
         base=base_pdf_cents / 100.0,
         formula=f"({factor_pdf} {formula_label} {match.group(2)} {match.group(3)}) c€/kWh ex-VAT",
@@ -655,11 +666,6 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             regions=_EBEM_REGIONS,
-            # The variable (elek) cards price injection off an hourly
-            # BelpexRLP0 formula with no fixed indicative, so the
-            # injection needs an ENTSO-E spot; the dynamic card already
-            # collects the key via its energy formula.
-            spot_indexed_injection=c.kind == "variable",
         )
         for c in _CONTRACTS
     ),

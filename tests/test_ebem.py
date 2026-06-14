@@ -153,7 +153,11 @@ def test_variable_extracts_injection_formula() -> None:
     # Card: 0,0925 BelpexSPP0 - 1,25 c€/kWh ex-VAT (injection is VAT-exempt).
     assert inj.factor == pytest.approx(0.925, rel=1e-4)
     assert inj.base == pytest.approx(-0.0125, rel=1e-4)
-    assert inj.current is None
+    # The SPP0 index is MONTHLY: the card prints the realized monthly
+    # indicative (0,0925 * last-month SPP0 27,95 - 1,25 = 1,3354 c/kWh),
+    # which EBEM settles injection at -- surfaced as `current`, not priced
+    # off the hourly spot.
+    assert inj.current == pytest.approx(0.013354, rel=1e-4)
     assert inj.formula is not None
     assert "BelpexSPP0" in inj.formula
 
