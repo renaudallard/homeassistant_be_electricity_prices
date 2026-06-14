@@ -1515,14 +1515,14 @@ def _compute_injection_price(
     # Per-hour spot-indexed injection (factor x spot + base) applies when
     # either the energy contract itself bills per hour (DynamicRates) OR
     # the injection is a spot formula with no monthly indicative
-    # (``current`` is None) -- e.g. Cociter Variable and EBEM Groen
-    # Variabel / B@sic+, whose variable-energy cards print an hourly
-    # BELPEX injection formula and no fixed credit. Both need a spot, so
-    # return None until one is available rather than fabricate a value. A
-    # static-energy contract whose injection carries a MONTHLY index
-    # formula but also a printed ``current`` (Ecofix Flexy's BELPEX-SPP-M)
-    # uses that realized monthly rate instead, keeping the live sensor
-    # consistent with the YTD credit for the same hour.
+    # (``current`` is None) -- e.g. Cociter Variable, whose static-energy
+    # card prices injection off the hourly BELPEX with no fixed credit. It
+    # needs a spot, so return None until one is available rather than
+    # fabricate a value. A static-energy contract whose injection carries
+    # a MONTHLY index but also a printed ``current`` (Ecofix Flexy's
+    # BELPEX-SPP-M, EBEM Groen Variabel / B@sic+'s SPP0) uses that
+    # realized monthly rate instead, keeping the live sensor consistent
+    # with the YTD credit for the same hour.
     if (
         inj.factor is not None
         and inj.base is not None
