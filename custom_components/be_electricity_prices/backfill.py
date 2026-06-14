@@ -78,6 +78,7 @@ from .coordinator import (
     _historical_injection_rate,
     _hourly_consumption_sensors,
     _hourly_injection_sensors,
+    _injection_needs_spot,
     _recorder_hourly_kwh,
     _snapshot_for_month,
 )
@@ -260,18 +261,30 @@ async def _clear_all(hass: HomeAssistant, statistic_ids: list[str]) -> None:
 
 
 async def _ensure_dynamic_spots(
-    coordinator: BePricesCoordinator, start: datetime, end: datetime
+    coordinator: BePricesCoordinator,
+    entry: ConfigEntry,
+    start: datetime,
+    end: datetime,
 ) -> dict[datetime, float]:
     """Make sure ``coordinator._historical_spots`` covers [start, end] for a
     dynamic supplier, then return the spot dict.
 
     Reuses the coordinator's existing ENTSO-E backfill helper so the
     bulk-fetch logic (week-sized chunks, partial-day tolerance, negative
-    cache) stays in one place. Returns an empty dict for non-dynamic
-    suppliers; callers should not look up spots in that case.
+    cache) stays in one place. Returns an empty dict when no spot is
+    needed (static energy with a monthly or no injection); callers should
+    not look up spots in that case. A static-energy contract whose
+    injection is itself spot-indexed (Cociter Variable) still needs spots
+    so its feed-in credit lands in the backfilled cost and price rows,
+    matching the live coordinator's gate; otherwise the backfill would
+    drop that credit and leave a sum-chain step at the backfill->live
+    seam.
     """
     snap = coordinator._snapshot
-    if snap is None or not isinstance(snap.energy, DynamicRates):
+    if snap is None or (
+        not isinstance(snap.energy, DynamicRates)
+        and not _injection_needs_spot(snap, entry)
+    ):
         return {}
     await coordinator._ensure_historical_spots(start.date(), end.date())
     return coordinator._historical_spots
@@ -631,7 +644,7 @@ async def backfill_range(
     # so the dynamic price rows AND the cost sensor's pre-start
     # accumulation both have spots (a no-op for non-dynamic suppliers).
     spots = await _ensure_dynamic_spots(
-        coordinator, min(start_utc, cost_anchor_utc), end_utc
+        coordinator, entry, min(start_utc, cost_anchor_utc), end_utc
     )
     hours = _hour_iter(start_utc, end_utc)
     cost_hours = _hour_iter(cost_anchor_utc, end_utc)

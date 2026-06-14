@@ -462,3 +462,67 @@ async def test_backfill_range_without_runtime_data_raises(
     # crash mid-way through statistic writes.
     with pytest.raises(RuntimeError, match="no live coordinator"):
         await bf.backfill_range(hass, entry)
+
+
+# ---- _ensure_dynamic_spots gate -----------------------------------------------
+
+
+async def test_ensure_dynamic_spots_fetches_for_spot_indexed_injection() -> None:
+    """A static-energy card whose injection is spot-indexed (Cociter
+    Variable shape) must still trigger a spot backfill on the injection
+    regime, so the feed-in credit lands in the backfilled cost and price
+    rows instead of dropping at the backfill->live seam."""
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        VariableRates,
+    )
+
+    snap = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.925, base=-0.0125),
+    )
+    cache = {datetime(2026, 1, 1, tzinfo=UTC): 0.05}
+    coordinator = SimpleNamespace(
+        _snapshot=snap,
+        _historical_spots=cache,
+        _ensure_historical_spots=AsyncMock(),
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable",
+            "region": "flanders",
+            "dso": "fluvius",
+            "meter": "mono",
+            "solar_regime": "injection",
+        },
+        title="Cociter Variable",
+    )
+    spots = await bf._ensure_dynamic_spots(
+        coordinator,
+        entry,
+        datetime(2026, 1, 1, tzinfo=UTC),
+        datetime(2026, 6, 1, tzinfo=UTC),
+    )
+    coordinator._ensure_historical_spots.assert_awaited_once()
+    assert spots == cache
+
+
+async def test_ensure_dynamic_spots_empty_for_static_non_spot_contract() -> None:
+    """Static energy with no spot-indexed injection needs no spot fetch."""
+    coordinator = SimpleNamespace(
+        _snapshot=_fixed_snapshot(),
+        _historical_spots={},
+        _ensure_historical_spots=AsyncMock(),
+    )
+    spots = await bf._ensure_dynamic_spots(
+        coordinator,
+        _entry(),
+        datetime(2026, 1, 1, tzinfo=UTC),
+        datetime(2026, 6, 1, tzinfo=UTC),
+    )
+    assert spots == {}
+    coordinator._ensure_historical_spots.assert_not_awaited()
