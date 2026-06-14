@@ -448,8 +448,9 @@ the supplier's published `exclusive_night` rate. Configure it as a
 
 Energy is billed at the supplier's `exclusive_night` rate; distribution
 uses the DSO's published exclusive-night rate when the extractor
-parses it (Bolt, Cociter, DATS 24, Ecopower, Eneco, Engie Brussels,
-Luminus, Mega, OCTA+, TotalEnergies), falling back to the DSO's
+parses it (Bolt, Cociter, DATS 24, EBEM, Ecofix, Ecopower, Eneco,
+Engie, Frank, Luminus, Mega, OCTA+, TotalEnergies), falling back to the
+DSO's
 off-peak rate for the few rows where the column position isn't yet
 mapped — both better approximations than the day rate. The primary
 entry keeps your day-circuit consumption on mono / bi / dynamic; YTD
