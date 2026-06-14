@@ -621,6 +621,70 @@ async def test_compare_branch_spot_injection_target_prompts_for_api_key(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_branch_spot_injection_current_prompts_for_api_key(
+    hass: HomeAssistant,
+) -> None:
+    """The gate must be symmetric: when the user's OWN entry is a keyless
+    spot-indexed-injection contract (Cociter Variable on the injection
+    regime) and they compare against a plain static target, the flow must
+    still prompt for a key so the current side's feed-in credit is valued,
+    not silently dropped (which would bias the quote toward switching)."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+        },
+        title="Cociter Variable injection (no key)",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("cociter", "cociter_variable", 0.17)
+    )
+    other_snap = make_snapshot(
+        supplier="mega",
+        contract="mega_online_fixed",
+        energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
+        injection=InjectionRates(current=0.05),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    fake = replace(EXTRACTORS["mega"], fetch=AsyncMock(return_value=other_snap))
+    with patch.dict(EXTRACTORS, {"mega": fake}):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "mega"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "mega_online_fixed"}
+        )
+        assert result["step_id"] == "compare_meter"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        # The target is a plain static contract, but the CURRENT entry is
+        # spot-indexed Cociter Variable with no saved key -> still prompt.
+        assert result["step_id"] == "compare_api_key"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_result_renders_when_coordinator_not_ready(
     hass: HomeAssistant,
 ) -> None:

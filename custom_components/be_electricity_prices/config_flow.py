@@ -1153,20 +1153,29 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
 
     async def _after_compare_meter(self) -> ConfigFlowResult:
         """Hand off to compare_result, prompting for an ENTSO-E key first
-        when the alternative needs spot data the user's current entry
-        doesn't already carry: a dynamic contract, or (on the injection
-        regime) a spot-indexed-injection target like Cociter Variable
-        whose feed-in credit is priced off the hourly day-ahead."""
+        when either side needs spot data the user's current entry doesn't
+        already carry: a dynamic target, or (on the injection regime) a
+        spot-indexed-injection contract on EITHER side -- the target like
+        Cociter Variable, or the user's own keyless Cociter Variable entry
+        -- whose feed-in credit is priced off the hourly day-ahead. Keep
+        this symmetric with the compare_spot_injection check in
+        _build_compare_placeholders, which values both sides."""
+        current = self.config_entry.data
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
         )
         needs_spot = other_kind == "dynamic" or (
-            self.config_entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
-            and _contract_has_spot_injection(
-                self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+            current.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
+            and (
+                _contract_has_spot_injection(
+                    self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+                )
+                or _contract_has_spot_injection(
+                    current[CONF_SUPPLIER], current[CONF_CONTRACT]
+                )
             )
         )
-        if needs_spot and not self.config_entry.data.get(CONF_API_KEY):
+        if needs_spot and not current.get(CONF_API_KEY):
             return await self.async_step_compare_api_key()
         return await self.async_step_compare_result()
 
