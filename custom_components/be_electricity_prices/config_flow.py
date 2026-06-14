@@ -1495,6 +1495,12 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             and other_kind != "dynamic"
         )
         if archive_capable and other_snap is not None and coord._snapshot is not None:
+            # Replay the coordinator's historical spot cache so a
+            # spot-indexed injection (Cociter Variable) gets the same
+            # per-hour feed-in credit the live YTD applies; spots are the
+            # Belgian day-ahead, supplier-independent, so the same cache
+            # prices both sides. A no-op for monthly-indicative contracts.
+            hist_spots = coord._historical_spots
             try:
                 current_ytd_val = await _compute_current_year_cost(
                     self.hass,
@@ -1502,6 +1508,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                     current_extractor,
                     coord._snapshot,
                     self.config_entry,
+                    historical_spots=hist_spots,
                 )
                 compare_ytd_val = await _compute_current_year_cost(
                     self.hass,
@@ -1511,6 +1518,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                     self.config_entry,
                     contract_override=self._compare[CONF_CONTRACT],
                     meter_override=meter,
+                    historical_spots=hist_spots,
                 )
             except Exception:  # noqa: BLE001 - degrade to '-'
                 current_ytd_val = None
