@@ -501,13 +501,21 @@ async def test_ensure_dynamic_spots_fetches_for_spot_indexed_injection() -> None
         },
         title="Cociter Variable",
     )
+    # end lands on a local-day boundary: 2026-03-31 23:00 UTC is
+    # 2026-04-01 01:00 in Brussels (CEST). The spot fetch must use the
+    # LOCAL date (2026-04-01) so the final UTC hour is covered, not the
+    # UTC date (2026-03-31) which would leave it unfetched.
     spots = await bf._ensure_dynamic_spots(
         coordinator,
         entry,
         datetime(2026, 1, 1, tzinfo=UTC),
-        datetime(2026, 6, 1, tzinfo=UTC),
+        datetime(2026, 3, 31, 23, 0, tzinfo=UTC),
     )
     coordinator._ensure_historical_spots.assert_awaited_once()
+    assert coordinator._ensure_historical_spots.await_args.args == (
+        date(2026, 1, 1),
+        date(2026, 4, 1),
+    )
     assert spots == cache
 
 

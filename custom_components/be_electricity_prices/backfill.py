@@ -286,7 +286,15 @@ async def _ensure_dynamic_spots(
         and not _injection_needs_spot(snap, entry)
     ):
         return {}
-    await coordinator._ensure_historical_spots(start.date(), end.date())
+    # _ensure_historical_spots anchors each fetched day on LOCAL midnight,
+    # so feed it LOCAL dates: passing the UTC date of end (which lands on
+    # the previous local day when the backfill runs in the 00:00-01:59
+    # local window) would leave the final UTC hour _hour_iter requests
+    # unfetched, re-introducing a one-hour sum step at the seam. Matches
+    # the live coordinator, which fetches through dt_util.now().date().
+    await coordinator._ensure_historical_spots(
+        dt_util.as_local(start).date(), dt_util.as_local(end).date()
+    )
     return coordinator._historical_spots
 
 
