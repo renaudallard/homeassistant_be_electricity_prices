@@ -477,8 +477,10 @@ A daily GitHub Actions workflow
 runs two phases against the live supplier endpoints:
 
 - **Extractor phase** — every (contract, region) tuple is fetched and
-  parsed; retries up to five times with exponential backoff. Persistent
-  failures open or update a GitHub issue titled
+  parsed; each fetch retries transient network errors up to three times,
+  and the CI workflow re-runs the whole check up to seven times with
+  escalating backoff. Persistent failures open or update a GitHub issue
+  titled
   `[live-check] supplier extractor broken …`.
 - **Catalog phase** — each supplier's `discover()` is run against its
   public listing page; any product visible at the supplier but missing
