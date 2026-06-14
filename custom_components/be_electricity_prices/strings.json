@@ -131,7 +131,7 @@
       },
       "compare_api_key": {
         "title": "Compare another supplier",
-        "description": "The supplier you picked offers a dynamic contract priced against ENTSO-E day-ahead spots. Paste an ENTSO-E API token so the quote can fetch the current hour's spot for the dynamic side. The token is used only for the quote and is not saved.",
+        "description": "The option you picked needs ENTSO-E day-ahead spot prices to quote: either a dynamic contract, or a contract whose solar injection is priced off the hourly spot (Cociter Variable on the injection regime). Paste an ENTSO-E API token so the quote can fetch the current hour's spot. The token is used only for the quote and is not saved.",
         "data": {
           "api_key": "[%key:component::be_electricity_prices::config::step::api_key::data::api_key%]"
         }
