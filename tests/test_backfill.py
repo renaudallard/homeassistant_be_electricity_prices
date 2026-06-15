@@ -506,7 +506,7 @@ async def test_ensure_dynamic_spots_fetches_for_spot_indexed_injection() -> None
     # LOCAL date (2026-04-01) so the final UTC hour is covered, not the
     # UTC date (2026-03-31) which would leave it unfetched.
     spots = await bf._ensure_dynamic_spots(
-        coordinator,
+        coordinator,  # type: ignore[arg-type]
         entry,
         datetime(2026, 1, 1, tzinfo=UTC),
         datetime(2026, 3, 31, 23, 0, tzinfo=UTC),
@@ -527,7 +527,7 @@ async def test_ensure_dynamic_spots_empty_for_static_non_spot_contract() -> None
         _ensure_historical_spots=AsyncMock(),
     )
     spots = await bf._ensure_dynamic_spots(
-        coordinator,
+        coordinator,  # type: ignore[arg-type]
         _entry(),
         datetime(2026, 1, 1, tzinfo=UTC),
         datetime(2026, 6, 1, tzinfo=UTC),
