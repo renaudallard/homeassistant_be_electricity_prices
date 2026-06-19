@@ -350,6 +350,10 @@
       "title": "Impossible d'analyser la carte tarifaire de {supplier} ({contract})",
       "description": "L'extracteur du fournisseur a leve une erreur : {error}. L'integration sert encore les derniers prix correctement analyses, mais ils ne correspondent peut-etre plus a ce qui est facture. Cela signifie generalement que le fournisseur a change la mise en page de son PDF ou de sa page HTML; ouvrez un ticket sur GitHub avec le fournisseur et le contrat pour que l'extracteur soit mis a jour."
     },
+    "extractor_unreachable": {
+      "title": "Impossible de joindre le fournisseur pour {supplier} ({contract})",
+      "description": "L'integration n'a pas pu telecharger la carte tarifaire apres plusieurs tentatives : {error}. Elle sert encore les derniers prix correctement analyses. Il s'agit generalement d'un probleme reseau ou CDN temporaire qui se resout au prochain rafraichissement; utilisez le service be_electricity_prices.refresh ou verifiez votre reseau si cela persiste."
+    },
     "entsoe_auth_failed": {
       "title": "ENTSO-E a refuse la cle API pour {supplier} ({contract})",
       "description": "transparency.entsoe.eu a renvoye 401 pour la cle configuree : {error}. Modifiez les options de l'entree et remplacez la cle par un nouveau jeton via votre compte transparency.entsoe.eu (My Account Settings -> Web API Security Token). En attendant, les capteurs de prix dynamiques resteront inconnus."

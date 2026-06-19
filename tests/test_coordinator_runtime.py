@@ -828,13 +828,13 @@ async def test_sync_extractor_failed_issue_creates_and_clears(
     issue_id = f"extractor_failed_{entry.entry_id}"
     registry = ir.async_get(hass)
 
-    coord._sync_extractor_failed_issue("could not parse Eneco fixed energy block")
+    coord._sync_extractor_issue("could not parse Eneco fixed energy block")
     issue = registry.async_get_issue(DOMAIN, issue_id)
     assert issue is not None
     assert issue.translation_key == "extractor_failed"
     assert "Eneco fixed" in (issue.translation_placeholders or {}).get("error", "")
 
-    coord._sync_extractor_failed_issue(None)
+    coord._sync_extractor_issue(None)
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
@@ -907,7 +907,7 @@ async def test_successful_tick_clears_stuck_extractor_failed_issue(
     issue_id = f"extractor_failed_{entry.entry_id}"
     registry = ir.async_get(hass)
 
-    coord._sync_extractor_failed_issue("regex drift in tax block")
+    coord._sync_extractor_issue("regex drift in tax block")
     assert registry.async_get_issue(DOMAIN, issue_id) is not None
 
     # Drop a static snapshot in place; mock _maybe_refresh_snapshot so
@@ -943,7 +943,7 @@ async def test_failing_fetch_keeps_extractor_failed_issue(
 
     async def _fail_fetch() -> None:
         coord._last_error = "extractor: layout drift"
-        coord._sync_extractor_failed_issue(coord._last_error)
+        coord._sync_extractor_issue(coord._last_error)
 
     coord._maybe_refresh_snapshot = _fail_fetch  # type: ignore[method-assign]
     coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
@@ -956,14 +956,15 @@ async def test_failing_fetch_keeps_extractor_failed_issue(
 async def test_transient_failure_defers_extractor_issue_until_threshold(
     hass: HomeAssistant,
 ) -> None:
-    """A lone failing fetch must NOT raise the extractor_failed repair
-    issue: a single transient CDN timeout is almost always recovered on
-    the next tick, so alarming the user (and telling them the supplier
-    changed its layout) on the first failure is a false positive. The
-    issue is raised only once the failure survives
-    _EXTRACTOR_ISSUE_THRESHOLD consecutive fetch attempts, and clears the
-    moment a fetch succeeds. _force_refresh bypasses the 5-min negative
-    cache so the test can drive consecutive attempts back to back."""
+    """A lone transient fetch failure (network timeout) must NOT raise any
+    repair issue: a single CDN timeout is almost always recovered on the
+    next tick, so alarming the user on the first failure is a false
+    positive. Once the failure survives _EXTRACTOR_ISSUE_THRESHOLD
+    consecutive attempts it raises the softer extractor_unreachable card
+    (never the actionable extractor_failed one, which is reserved for parse
+    drift), and it clears the moment a fetch succeeds. _force_refresh
+    bypasses the 5-min negative cache so the test can drive consecutive
+    attempts back to back."""
     from custom_components.be_electricity_prices.coordinator import (
         _EXTRACTOR_ISSUE_THRESHOLD,
         _shared_failed_fetches,
@@ -972,7 +973,8 @@ async def test_transient_failure_defers_extractor_issue_until_threshold(
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    issue_id = f"extractor_failed_{entry.entry_id}"
+    unreachable_id = f"extractor_unreachable_{entry.entry_id}"
+    failed_id = f"extractor_failed_{entry.entry_id}"
     registry = ir.async_get(hass)
     key = coord._shared_key()
 
@@ -993,46 +995,93 @@ async def test_transient_failure_defers_extractor_issue_until_threshold(
         for _ in range(_EXTRACTOR_ISSUE_THRESHOLD - 1):
             coord._force_refresh = True
             await coord._maybe_refresh_snapshot()
-        assert registry.async_get_issue(DOMAIN, issue_id) is None
+        assert registry.async_get_issue(DOMAIN, unreachable_id) is None
         assert coord._last_error.startswith("network error fetching")
         assert _shared_failed_fetches(hass)[key][2] == _EXTRACTOR_ISSUE_THRESHOLD - 1
 
-        # The threshold-th consecutive failure raises the issue.
+        # The threshold-th consecutive failure raises the transient card,
+        # never the actionable "layout changed" one.
         coord._force_refresh = True
         await coord._maybe_refresh_snapshot()
         assert _shared_failed_fetches(hass)[key][2] == _EXTRACTOR_ISSUE_THRESHOLD
-        assert registry.async_get_issue(DOMAIN, issue_id) is not None
+        assert registry.async_get_issue(DOMAIN, unreachable_id) is not None
+        assert registry.async_get_issue(DOMAIN, failed_id) is None
 
         # A subsequent success clears the issue and resets the counter.
         fail = False
         coord._force_refresh = True
         await coord._maybe_refresh_snapshot()
     assert key not in _shared_failed_fetches(hass)
-    assert registry.async_get_issue(DOMAIN, issue_id) is None
+    assert registry.async_get_issue(DOMAIN, unreachable_id) is None
+
+
+async def test_actionable_failure_raises_extractor_failed_immediately(
+    hass: HomeAssistant,
+) -> None:
+    """A parse / layout failure won't self-heal, so it must raise the
+    actionable extractor_failed card on the very first failure instead of
+    waiting for the transient threshold, and must not raise the softer
+    extractor_unreachable card."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    failed_id = f"extractor_failed_{entry.entry_id}"
+    unreachable_id = f"extractor_unreachable_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        raise ExtractorError("could not parse Eneco fixed energy block")
+
+    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+
+    assert registry.async_get_issue(DOMAIN, failed_id) is not None
+    assert registry.async_get_issue(DOMAIN, unreachable_id) is None
 
 
 async def test_async_remove_entry_clears_all_repair_issues(
     hass: HomeAssistant,
 ) -> None:
-    """All three issue kinds (snapshot_stale, extractor_failed,
-    entsoe_auth_failed) embed the entry id, so async_remove_entry
-    must clear each of them or they'd linger forever."""
+    """All four issue kinds (snapshot_stale, extractor_failed,
+    extractor_unreachable, entsoe_auth_failed) embed the entry id, so
+    async_remove_entry must clear each of them or they'd linger forever."""
     from custom_components.be_electricity_prices import async_remove_entry
 
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     coord._sync_stale_issue(True)
-    coord._sync_extractor_failed_issue("boom")
+    coord._sync_extractor_issue("boom")
     coord._sync_entsoe_auth_issue(True, "401")
+    # extractor_unreachable is mutually exclusive with extractor_failed via
+    # _sync_extractor_issue, so raise it straight through the registry to
+    # assert async_remove_entry clears that id too.
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        f"extractor_unreachable_{entry.entry_id}",
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="extractor_unreachable",
+    )
 
+    kinds = (
+        "snapshot_stale",
+        "extractor_failed",
+        "extractor_unreachable",
+        "entsoe_auth_failed",
+    )
     registry = ir.async_get(hass)
-    for kind in ("snapshot_stale", "extractor_failed", "entsoe_auth_failed"):
+    for kind in kinds:
         assert registry.async_get_issue(DOMAIN, f"{kind}_{entry.entry_id}") is not None
 
     await async_remove_entry(hass, entry)
 
-    for kind in ("snapshot_stale", "extractor_failed", "entsoe_auth_failed"):
+    for kind in kinds:
         assert registry.async_get_issue(DOMAIN, f"{kind}_{entry.entry_id}") is None
 
 

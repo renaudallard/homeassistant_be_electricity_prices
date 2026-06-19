@@ -91,7 +91,9 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
     _RATE_DYNAMIC = base.DynamicRates
     _RATE_TOU = base.TimeOfUseRates
     _RATE_IMPACT = base.ImpactRates
-    _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
+    pdf = _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
+    global _is_transient_fetch_error
+    _is_transient_fetch_error = pdf.is_transient_fetch_error
     eneco = _load("be_pkg.providers.eneco", PKG / "providers" / "eneco.py")
     cociter = _load("be_pkg.providers.cociter", PKG / "providers" / "cociter.py")
     dats24 = _load("be_pkg.providers.dats24", PKG / "providers" / "dats24.py")
@@ -154,6 +156,13 @@ _RATE_VARIABLE: type = object
 _RATE_DYNAMIC: type = object
 _RATE_TOU: type = object
 _RATE_IMPACT: type = object
+
+
+# Bound by _load_providers to providers/_pdf.is_transient_fetch_error so
+# _fetch_with_retry shares the coordinator's transient/permanent split
+# rather than duplicating it. Placeholder until the providers package loads.
+def _is_transient_fetch_error(_message: str) -> bool:
+    return False
 
 
 # Per-supplier fetch-time (summed per-request durations) + bytes-received
@@ -317,22 +326,14 @@ async def _fetch_with_retry(
         try:
             return await factory()
         except Exception as err:
-            msg = str(err)
-            transient = isinstance(err, TimeoutError) or msg.startswith(
-                "network error fetching"
+            # Same transient classification the coordinator uses: a bare
+            # timeout, a wrapped "network error fetching", or a 5xx / 408 /
+            # 429 / 403 status. A 404 / 410 (card renamed or withdrawn) is
+            # not transient and fails fast. The string predicate is shared
+            # from providers/_pdf.py so the two paths can't drift apart.
+            transient = isinstance(err, TimeoutError) or _is_transient_fetch_error(
+                str(err)
             )
-            if not transient and msg.startswith("HTTP "):
-                # Retry transient server-side statuses: 5xx, 408 Request
-                # Timeout, 429 Too Many Requests, and 403 -- the
-                # Cloudflare-fronted suppliers this script scrapes
-                # intermittently return a 403 anti-bot challenge on an
-                # otherwise healthy resource that succeeds on retry. A
-                # 404/410 means the card was renamed or withdrawn and is
-                # left to fail fast.
-                head = msg[len("HTTP ") :].split(None, 1)[0]
-                if head.isdigit():
-                    status = int(head)
-                    transient = status >= 500 or status in (403, 408, 429)
             if not transient or i == attempts - 1:
                 raise
             last_err = err

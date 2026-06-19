@@ -350,6 +350,10 @@
       "title": "Tarifkarte fuer {supplier} ({contract}) konnte nicht ausgewertet werden",
       "description": "Der Lieferanten-Extractor lieferte einen Fehler: {error}. Die Integration verwendet weiterhin die zuletzt erfolgreich ausgewerteten Preise, diese stimmen aber moeglicherweise nicht mehr mit der Abrechnung ueberein. Meist hat der Lieferant das Layout seiner Tarif-PDF oder HTML-Seite geaendert; oeffnen Sie ein Issue auf GitHub mit Lieferant und Vertrag, damit der Extractor aktualisiert werden kann."
     },
+    "extractor_unreachable": {
+      "title": "Lieferant fuer {supplier} ({contract}) nicht erreichbar",
+      "description": "Die Integration konnte die Tarifkarte nach mehreren Versuchen nicht herunterladen: {error}. Sie verwendet weiterhin die zuletzt erfolgreich ausgewerteten Preise. Das ist meist ein voruebergehendes Netzwerk- oder CDN-Problem, das sich beim naechsten Aktualisieren von selbst loest; nutzen Sie den Dienst be_electricity_prices.refresh oder pruefen Sie Ihr Netzwerk, falls es weiter auftritt."
+    },
     "entsoe_auth_failed": {
       "title": "ENTSO-E hat den API-Schluessel fuer {supplier} ({contract}) abgelehnt",
       "description": "transparency.entsoe.eu antwortete mit 401 fuer den konfigurierten Schluessel: {error}. Bearbeiten Sie die Optionen des Eintrags und ersetzen Sie den Schluessel durch einen neuen aus Ihrem Konto auf transparency.entsoe.eu (My Account Settings -> Web API Security Token). Bis dahin bleiben die dynamischen Preissensoren unbekannt."

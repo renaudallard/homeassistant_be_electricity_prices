@@ -350,6 +350,10 @@
       "title": "Tariefkaart voor {supplier} ({contract}) kon niet ontleed worden",
       "description": "De leveranciers-extractor gaf een fout: {error}. De integratie blijft de laatst goed ontledede prijzen tonen, maar die komen mogelijk niet meer overeen met de werkelijke factuur. Meestal heeft de leverancier de layout van zijn tariefkaart aangepast; open een issue op GitHub met leverancier en contract zodat de extractor bijgewerkt kan worden."
     },
+    "extractor_unreachable": {
+      "title": "Kan de leverancier voor {supplier} ({contract}) niet bereiken",
+      "description": "De integratie kon de tariefkaart na meerdere pogingen niet downloaden: {error}. Ze blijft de laatst goed ontledede prijzen tonen. Dit is meestal een tijdelijk netwerk- of CDN-probleem dat bij de volgende vernieuwing vanzelf verdwijnt; gebruik de service be_electricity_prices.refresh of controleer je netwerk als het blijft gebeuren."
+    },
     "entsoe_auth_failed": {
       "title": "ENTSO-E weigerde de API-sleutel voor {supplier} ({contract})",
       "description": "transparency.entsoe.eu antwoordde 401 op de geconfigureerde sleutel: {error}. Bewerk de opties van deze entry en vervang de sleutel door een nieuwe op transparency.entsoe.eu (My Account Settings -> Web API Security Token). Tot dan zullen de dynamische prijssensoren onbekend zijn."

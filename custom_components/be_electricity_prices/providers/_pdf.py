@@ -57,6 +57,30 @@ def _read_version() -> str:
 USER_AGENT = f"Home Assistant be_electricity_prices/{_read_version()}"
 
 
+def is_transient_fetch_error(message: str) -> bool:
+    """Whether an ExtractorError message describes a transient fetch
+    failure a later refresh is likely to recover, rather than a permanent
+    one (parse error, 404, non-PDF payload) that needs a code fix.
+
+    The fetch helpers in this module wrap aiohttp surface errors with two
+    stable prefixes: ``network error fetching`` (timeout / reset / DNS)
+    and ``HTTP <status>``. A bare ``network error`` is always transient.
+    Among HTTP statuses, 5xx plus 408 / 429 / 403 are transient (the
+    Cloudflare-fronted suppliers intermittently answer an otherwise
+    healthy resource with a 403 anti-bot challenge or a 429 that succeeds
+    on retry); 404 / 410 mean the card was renamed or withdrawn and must
+    fail fast.
+    """
+    if message.startswith("network error fetching"):
+        return True
+    if message.startswith("HTTP "):
+        head = message[len("HTTP ") :].split(None, 1)[0]
+        if head.isdigit():
+            status = int(head)
+            return status >= 500 or status in (403, 408, 429)
+    return False
+
+
 # 64 MiB: ~12x the largest real tariff card (Bolt's ~5 MiB PDFs), so it
 # never trips on a legitimate card while bounding what a broken or
 # hostile CDN can pull into the coordinator's memory in one fetch.

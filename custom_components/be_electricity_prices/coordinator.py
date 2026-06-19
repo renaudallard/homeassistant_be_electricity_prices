@@ -107,6 +107,7 @@ from .providers import (
     SupplierSnapshot,
     get as get_extractor,
 )
+from .providers._pdf import is_transient_fetch_error
 from .providers.base import (
     DsoOverlay,
     EnergyRates,
@@ -722,7 +723,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # clear immediately undoes that legitimate alert.
         self._sync_entsoe_auth_issue(False)
         if not self._last_error:
-            self._sync_extractor_failed_issue(None)
+            self._sync_extractor_issue(None)
         if isinstance(self._snapshot.energy, DynamicRates):
             try:
                 spot_prices = await self._fetch_spot_prices()
@@ -848,31 +849,50 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         else:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
-    def _sync_extractor_failed_issue(self, message: str | None) -> None:
-        """Raise or clear the 'supplier extractor failed' repair issue.
+    def _sync_extractor_issue(
+        self, message: str | None, *, transient: bool = False
+    ) -> None:
+        """Raise or clear the supplier-extractor repair issue.
 
-        ``message`` is the extractor's error string (re-raised by the
-        provider when the supplier's tariff card layout drifted, the
-        URL 404'd, or aiohttp timed out). ``None`` means the most
-        recent fetch succeeded and any prior issue should be cleared.
+        Two mutually-exclusive flavours share this Repairs slot:
+
+        - actionable (``transient=False``): a parse error, 404 or non-PDF
+          payload that will not self-heal. Surfaces the ``extractor_failed``
+          card whose advice is "the supplier changed its layout, open a
+          GitHub issue".
+        - transient (``transient=True``): a network timeout / reset / 5xx /
+          anti-bot 403 that a later refresh usually recovers. Surfaces the
+          softer ``extractor_unreachable`` card.
+
+        Whichever flavour is raised clears the other so the user never sees
+        both at once. ``message`` ``None`` means the latest fetch succeeded
+        and clears both.
         """
-        issue_id = f"extractor_failed_{self.entry.entry_id}"
-        if message:
-            ir.async_create_issue(
-                self.hass,
-                DOMAIN,
-                issue_id,
-                is_fixable=False,
-                severity=ir.IssueSeverity.WARNING,
-                translation_key="extractor_failed",
-                translation_placeholders={
-                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
-                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
-                    "error": message,
-                },
-            )
-        else:
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        failed_id = f"extractor_failed_{self.entry.entry_id}"
+        unreachable_id = f"extractor_unreachable_{self.entry.entry_id}"
+        if not message:
+            ir.async_delete_issue(self.hass, DOMAIN, failed_id)
+            ir.async_delete_issue(self.hass, DOMAIN, unreachable_id)
+            return
+        raise_id, clear_id, translation_key = (
+            (unreachable_id, failed_id, "extractor_unreachable")
+            if transient
+            else (failed_id, unreachable_id, "extractor_failed")
+        )
+        ir.async_delete_issue(self.hass, DOMAIN, clear_id)
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            raise_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=translation_key,
+            translation_placeholders={
+                "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
+                "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
+                "error": message,
+            },
+        )
 
     def _sync_entsoe_auth_issue(self, active: bool, message: str = "") -> None:
         """Raise or clear the 'ENTSO-E rejected the API key' issue.
@@ -1105,7 +1125,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._snapshot_probe_key = probe_key
                 self._last_error = ""
                 self._force_refresh = False
-                self._sync_extractor_failed_issue(None)
+                self._sync_extractor_issue(None)
             except Exception as err:  # noqa: BLE001 - re-raised below for non-extractor types
                 # Any extractor failure (including unexpected aiohttp /
                 # parser exceptions) must populate the negative cache so
@@ -1120,8 +1140,19 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 if _tuple_generation(self.hass, key) == gen_at_entry:
                     failed[key] = (dt_util.utcnow(), str(err), fail_count)
                 self._last_error = str(err)
-                if fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
-                    self._sync_extractor_failed_issue(str(err))
+                # A transient network failure (timeout / reset / 5xx /
+                # anti-bot 403) usually recovers on the next tick, so defer
+                # its softer "could not reach the supplier" card until it
+                # has crossed the threshold. A parse error / 404 / non-PDF
+                # payload won't self-heal, so raise the actionable
+                # "extractor failed" card on the first failure.
+                transient = isinstance(
+                    err, asyncio.TimeoutError
+                ) or is_transient_fetch_error(str(err))
+                if not transient:
+                    self._sync_extractor_issue(str(err), transient=False)
+                elif fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
+                    self._sync_extractor_issue(str(err), transient=True)
                 _LOGGER.warning(
                     "snapshot refresh failed for %s/%s: %s; keeping cached"
                     " (consecutive failure %d)",

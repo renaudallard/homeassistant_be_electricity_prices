@@ -59,7 +59,7 @@ publication and how to parse it.
 - **ENTSO-E key validated at setup** — the config flow hits the real endpoint with the entered token and rejects bad keys before the entry is saved.
 - **Translated UI** — English, French, Dutch and German.
 - **One-off supplier comparison** — the OptionsFlow has a *Compare another supplier* path that quotes a different supplier and contract against your current region / DSO / peak / solar settings. **Static and dynamic contracts can be quoted against each other** ("should I switch from fixed to dynamic?"); the flow prompts for an ENTSO-E key when a side needs spot data (a dynamic contract, or a spot-indexed-injection target like Cociter Variable on the injection regime) and you don't already have one saved. The annual estimate uses your **measured rolling-year consumption** (and, for solar users, injection) read from the same kWh sensors that feed `current_year_cost`, with a sensible 3500 kWh fallback when no sensor is wired. The result page also shows a **year-to-date what-if**: the actual kWh you've used since 1 January re-priced at each supplier's current rate, with two-row unicode bar charts so the difference reads at a glance. The meter type is overridable for static contracts (compare *what if I were on bi-hourly billing under supplier X*). Solar regimes are honoured: compensation nets consumption against injection, injection regime credits each supplier's own injection price. No second entry, no extra polling, nothing saved.
-- **Self-healing** — last-known prices keep serving on outage. Three repair issues surface under **Settings → System → Repairs**: snapshot older than 7 days, supplier extractor parse failure, and ENTSO-E rejecting the API key. Each auto-clears on the next successful refresh.
+- **Self-healing** — last-known prices keep serving on outage. Four repair issues surface under **Settings → System → Repairs**: snapshot older than 7 days, a supplier extractor parse failure (layout drift), the supplier being unreachable after repeated fetch failures, and ENTSO-E rejecting the API key. A single transient fetch timeout no longer raises an issue; each auto-clears on the next successful refresh.
 - **Catalog drift detection** — the daily live-check diffs each supplier's public catalog against the registry and opens a GitHub issue when a new product appears, plus per-supplier wallclock + bytes-received telemetry to flag silent slowdowns and PDF size jumps.
 
 ## Supported providers
@@ -320,15 +320,20 @@ opens a two-option menu:
 
 If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
-attributes on `sensor.<...>_current_price`. Three repair issues surface
+attributes on `sensor.<...>_current_price`. Four repair issues surface
 under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; each auto-clears on the next successful refresh:
 
 - **`snapshot_stale_<entry>`** — the cached snapshot is older than **7
   days**.
-- **`extractor_failed_<entry>`** — the supplier extractor raised an
-  error (typically a layout drift on the supplier's PDF/HTML); cached
-  prices keep serving.
+- **`extractor_failed_<entry>`** — the supplier extractor could not parse
+  the tariff card (typically a layout drift on the supplier's PDF/HTML).
+  Raised on the first failure, since a parse error will not self-heal;
+  cached prices keep serving.
+- **`extractor_unreachable_<entry>`** — the tariff card could not be
+  downloaded (network timeout, reset or a transient server error). Raised
+  only after several consecutive failed refreshes, since a single CDN
+  hiccup usually clears on the next tick; cached prices keep serving.
 - **`entsoe_auth_failed_<entry>`** *(dynamic contracts only)* — ENTSO-E
   returned 401 for the configured API key. Edit the entry's options
   and replace the key with a fresh token from

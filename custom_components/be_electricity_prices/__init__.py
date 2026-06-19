@@ -231,7 +231,12 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
     persistent snapshot Store is also deleted so the JSON blob the
     coordinator writes under ``.storage/`` doesn't outlive the entry.
     """
-    for issue_kind in ("snapshot_stale", "extractor_failed", "entsoe_auth_failed"):
+    for issue_kind in (
+        "snapshot_stale",
+        "extractor_failed",
+        "extractor_unreachable",
+        "entsoe_auth_failed",
+    ):
         issue_registry.async_delete_issue(
             hass, DOMAIN, f"{issue_kind}_{entry.entry_id}"
         )
