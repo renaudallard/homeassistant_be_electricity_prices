@@ -507,6 +507,7 @@ async def test_force_refresh_not_defeated_by_sibling_failure_marker(
         _shared_failed_fetches(hass)[coord_a._shared_key()] = (
             dt_util.utcnow(),
             "transient sibling failure",
+            1,
         )
         # Step 3: A's next refresh tick must NOT short-circuit on the
         # sibling marker; it must call extractor.fetch.
@@ -952,6 +953,64 @@ async def test_failing_fetch_keeps_extractor_failed_issue(
     assert registry.async_get_issue(DOMAIN, issue_id) is not None
 
 
+async def test_transient_failure_defers_extractor_issue_until_threshold(
+    hass: HomeAssistant,
+) -> None:
+    """A lone failing fetch must NOT raise the extractor_failed repair
+    issue: a single transient CDN timeout is almost always recovered on
+    the next tick, so alarming the user (and telling them the supplier
+    changed its layout) on the first failure is a false positive. The
+    issue is raised only once the failure survives
+    _EXTRACTOR_ISSUE_THRESHOLD consecutive fetch attempts, and clears the
+    moment a fetch succeeds. _force_refresh bypasses the 5-min negative
+    cache so the test can drive consecutive attempts back to back."""
+    from custom_components.be_electricity_prices.coordinator import (
+        _EXTRACTOR_ISSUE_THRESHOLD,
+        _shared_failed_fetches,
+    )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"extractor_failed_{entry.entry_id}"
+    registry = ir.async_get(hass)
+    key = coord._shared_key()
+
+    fail = True
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        if fail:
+            raise ExtractorError("network error fetching https://x.pdf: ")
+        return _fake_snapshot()
+
+    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        # Every attempt up to (threshold - 1) records the error but must
+        # not raise the user-facing repair issue yet.
+        for _ in range(_EXTRACTOR_ISSUE_THRESHOLD - 1):
+            coord._force_refresh = True
+            await coord._maybe_refresh_snapshot()
+        assert registry.async_get_issue(DOMAIN, issue_id) is None
+        assert coord._last_error.startswith("network error fetching")
+        assert _shared_failed_fetches(hass)[key][2] == _EXTRACTOR_ISSUE_THRESHOLD - 1
+
+        # The threshold-th consecutive failure raises the issue.
+        coord._force_refresh = True
+        await coord._maybe_refresh_snapshot()
+        assert _shared_failed_fetches(hass)[key][2] == _EXTRACTOR_ISSUE_THRESHOLD
+        assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+        # A subsequent success clears the issue and resets the counter.
+        fail = False
+        coord._force_refresh = True
+        await coord._maybe_refresh_snapshot()
+    assert key not in _shared_failed_fetches(hass)
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
 async def test_async_remove_entry_clears_all_repair_issues(
     hass: HomeAssistant,
 ) -> None:
@@ -994,8 +1053,8 @@ async def test_evict_shared_caches_drops_rows_for_tuple(hass: HomeAssistant) -> 
     _shared_snapshots(hass)[key_other] = _SharedSnapshot(
         snapshot=snap, fetched_at=fetched_at, probe_key="theirs"
     )
-    _shared_failed_fetches(hass)[key_us] = (fetched_at, "ours-error")
-    _shared_failed_fetches(hass)[key_other] = (fetched_at, "theirs-error")
+    _shared_failed_fetches(hass)[key_us] = (fetched_at, "ours-error", 1)
+    _shared_failed_fetches(hass)[key_other] = (fetched_at, "theirs-error", 1)
     monthly = _monthly_snapshots(hass)
     monthly[("eneco", "power_fix", "wallonia", "2026-01")] = snap
     monthly[("bolt", "bolt_fix", "wallonia", "2026-01")] = snap

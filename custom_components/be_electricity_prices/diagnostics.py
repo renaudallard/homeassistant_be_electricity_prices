@@ -152,8 +152,12 @@ async def async_get_config_entry_diagnostics(
     if extractor_id and contract_id and region:
         rec = _shared_failed_fetches(hass).get((extractor_id, contract_id, region))
         if rec is not None:
-            ts, msg = rec
-            failed_marker = {"at": ts.isoformat(), "error": _scrub_secret(msg, api_key)}
+            ts, msg, count = rec
+            failed_marker = {
+                "at": ts.isoformat(),
+                "error": _scrub_secret(msg, api_key),
+                "consecutive": count,
+            }
 
     return {
         "entry": {

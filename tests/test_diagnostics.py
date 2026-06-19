@@ -162,6 +162,7 @@ async def test_diagnostics_includes_consumption_and_monthly_labels(
     _shared_failed_fetches(hass)[("eneco", "power_dynamic", "wallonia")] = (
         datetime(2026, 5, 4, 10, 0, tzinfo=UTC),
         "transient HTTP 503 from supplier",
+        1,
     )
 
     async def _fake_recorder_daily_kwh(

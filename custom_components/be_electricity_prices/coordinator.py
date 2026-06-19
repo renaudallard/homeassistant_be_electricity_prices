@@ -181,6 +181,16 @@ _SHARED_LOCKS_KEY = "snapshot_locks"
 _SHARED_FAILED_FETCHES_KEY = "snapshot_failed_fetches"
 _SHARED_FAILURE_TTL = timedelta(minutes=5)
 
+# A single failed fetch is almost always a transient CDN timeout that the
+# next hourly tick recovers. Raising the user-facing "extractor failed"
+# repair issue on the very first failure produced false alarms that wrongly
+# told the user the supplier had changed its tariff layout. Only raise the
+# issue once a failure has survived this many consecutive fetch attempts.
+# The shared negative-fetch row carries the running count and it resets the
+# moment a fetch succeeds; the 7-day snapshot_stale issue stays the backstop
+# for a breakage that outlives every threshold.
+_EXTRACTOR_ISSUE_THRESHOLD = 2
+
 # Per-(supplier, contract, region, YYYY-MM) cache of historical snapshots
 # the time-correct yearly-cost flow uses to bill each past month at its
 # own rate. ``None`` is a negative cache so a probe-less supplier or a
@@ -219,13 +229,17 @@ def _shared_snapshots(
 
 def _shared_failed_fetches(
     hass: HomeAssistant,
-) -> dict[tuple[str, str, str], tuple[datetime, str]]:
-    """Per-key (timestamp, last-error-message) of recent fetch failures.
+) -> dict[tuple[str, str, str], tuple[datetime, str, int]]:
+    """Per-key (timestamp, last-error-message, consecutive-count) of recent
+    fetch failures.
 
     Storing the error message alongside the timestamp lets a sibling
     coordinator that hits the negative-cache short-circuit surface the
     real failure reason in its UpdateFailed instead of an opaque
-    'cold start'.
+    'cold start'. The third field counts consecutive failures on the key so
+    the coordinator can defer the 'extractor failed' repair issue past a lone
+    transient timeout (see _EXTRACTOR_ISSUE_THRESHOLD); it resets whenever a
+    fetch succeeds and the row is popped.
     """
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     return bucket.setdefault(_SHARED_FAILED_FETCHES_KEY, {})  # type: ignore[no-any-return]
@@ -1096,16 +1110,25 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 # Any extractor failure (including unexpected aiohttp /
                 # parser exceptions) must populate the negative cache so
                 # sibling coordinators back off instead of refiring the
-                # same broken request on the next tick.
+                # same broken request on the next tick. The third tuple
+                # field counts consecutive failures on this key so a lone
+                # transient timeout doesn't immediately raise a repair
+                # issue; the count rides the shared row and resets the
+                # moment a fetch succeeds (failed.pop above).
+                prev = failed.get(key)
+                fail_count = (prev[2] if prev is not None else 0) + 1
                 if _tuple_generation(self.hass, key) == gen_at_entry:
-                    failed[key] = (dt_util.utcnow(), str(err))
+                    failed[key] = (dt_util.utcnow(), str(err), fail_count)
                 self._last_error = str(err)
-                self._sync_extractor_failed_issue(str(err))
+                if fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
+                    self._sync_extractor_failed_issue(str(err))
                 _LOGGER.warning(
-                    "snapshot refresh failed for %s/%s: %s; keeping cached",
+                    "snapshot refresh failed for %s/%s: %s; keeping cached"
+                    " (consecutive failure %d)",
                     self.entry.data.get(CONF_SUPPLIER),
                     self.entry.data.get(CONF_CONTRACT),
                     err,
+                    fail_count,
                 )
                 if not isinstance(err, (ExtractorError, asyncio.TimeoutError)):
                     raise
