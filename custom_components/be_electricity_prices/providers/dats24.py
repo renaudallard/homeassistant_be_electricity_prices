@@ -393,7 +393,13 @@ def _extract_injection(text: str) -> InjectionRates | None:
         rf"\(BE_spotSPP\s*x\s*([\d,.]+)\s*([{SIGN_CHARS}])\s*([\d,.]+)\)",
         text,
     )
-    indicative = re.search(r"Teruglevering2?\s*\(c€/kWh\)\s+([\d,.]+)", text)
+    # The monthly indicative can go negative when BE_spotSPP is low
+    # (teruglevering = BE_spotSPP x factor - base), so capture an optional
+    # leading sign, same as the formula path - otherwise a negative
+    # indicative fails to match and the credit is silently dropped.
+    indicative = re.search(
+        rf"Teruglevering2?\s*\(c€/kWh\)\s+([{SIGN_CHARS}]?)\s*([\d,.]+)", text
+    )
     if not formula and not indicative:
         return None
     factor: float | None = None
@@ -403,7 +409,11 @@ def _extract_injection(text: str) -> InjectionRates | None:
         factor = to_float(formula.group(1)) * 10.0
         base = parse_sign(formula.group(2)) * to_float(formula.group(3)) / 100.0
         formula_text = formula.group(0)
-    current = to_float(indicative.group(1)) / 100.0 if indicative else None
+    current = (
+        parse_sign(indicative.group(1)) * to_float(indicative.group(2)) / 100.0
+        if indicative
+        else None
+    )
     return InjectionRates(
         current=current,
         factor=factor,

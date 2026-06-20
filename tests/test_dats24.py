@@ -133,6 +133,27 @@ def test_injection_formula_handles_plus_operator() -> None:
     assert inj.base == pytest.approx(0.005)
 
 
+def test_injection_indicative_handles_negative_value() -> None:
+    """When BE_spotSPP is low the monthly indicative teruglevering goes
+    negative. The regex must capture the leading sign; previously a
+    negative value failed to match and the credit was silently dropped."""
+    from custom_components.be_electricity_prices.providers.dats24 import (
+        _extract_injection,
+    )
+
+    inj = _extract_injection("Teruglevering2 (c€/kWh) -0,34\n")
+    assert inj is not None
+    assert inj.current == pytest.approx(-0.0034)
+    # A Unicode-minus glyph must work too.
+    inj_uni = _extract_injection("Teruglevering2 (c€/kWh) −0,34\n")
+    assert inj_uni is not None
+    assert inj_uni.current == pytest.approx(-0.0034)
+    # Positive values without a sign still parse.
+    inj_pos = _extract_injection("Teruglevering2 (c€/kWh) 3,26\n")
+    assert inj_pos is not None
+    assert inj_pos.current == pytest.approx(0.0326)
+
+
 def test_april_card_flanders_dsos_cover_all_eight_fluvius() -> None:
     snap = _snap("flanders")
     assert set(snap.dsos) == {
