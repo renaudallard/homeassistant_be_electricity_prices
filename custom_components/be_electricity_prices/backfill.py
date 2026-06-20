@@ -526,6 +526,14 @@ async def _backfill_cost_sensor(
             )
         return month_cache[month_first]
 
+    # UTC-hour count per local day so the static fee accrues smoothly per
+    # hour yet each local day sums to exactly annual/days_in_year, even on
+    # the DST seam days (23 or 25 UTC hours).
+    hours_per_local_date: dict[date, int] = {}
+    for h in hours:
+        d = dt_util.as_local(h).date()
+        hours_per_local_date[d] = hours_per_local_date.get(d, 0) + 1
+
     rows: list[Any] = []
     running_energy = 0.0
     running_fees = 0.0
@@ -558,16 +566,21 @@ async def _backfill_cost_sensor(
                 else:
                     running_energy += cons * bd.all_in
 
-        # Fee accrual: matches the live ytd per-day fee proration when
-        # summed over a full day (annual / days_in_year vs. annual /
-        # hours_in_year * 24). The hourly variant keeps the YTD line
-        # growing smoothly between live ticks.
+        # Fee accrual: spread each local day's annual/days_in_year share
+        # evenly over that day's actual UTC hours, so the YTD line grows
+        # smoothly yet every day (including the 23/25-hour DST seam days)
+        # totals exactly annual/days_in_year, matching the live YTD per-day
+        # proration (annual * days_in_ytd / days_in_year). A flat
+        # annual/(days_in_year*24) rate accrued 23 or 25 hours' worth on
+        # the seam days, drifting from the live sensor at the seam.
         days_in_year = 366 if calendar.isleap(local.year) else 365
         annual_static = (
             getattr(snap_h.energy, "yearly_fixed_fee", 0.0)
             + snap_h.taxes.energy_fund_eur_per_month * 12.0
         )
-        running_fees += annual_static / (days_in_year * 24)
+        running_fees += (
+            annual_static / days_in_year / hours_per_local_date[local.date()]
+        )
 
         if is_compensation and kva > 0.0:
             overlay = snap_h.dsos.get(dso)
