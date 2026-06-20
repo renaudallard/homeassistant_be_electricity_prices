@@ -589,7 +589,12 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
 
     factor: float | None = None
     base: float | None = None
-    if formula:
+    # Only Power Dynamic indexes injection on the hourly spot (Belpex-H);
+    # Fix/Flex settle on the monthly Belpex-injectie, whose coefficients
+    # must NOT be surfaced as spot factor/base -- the pricing engine would
+    # apply them to the hourly spot if the Maandprijs ever stopped
+    # printing. Fix/Flex surface only the monthly indicative (current).
+    if formula and contract_id == "power_dynamic":
         factor_pdf = to_float(formula.group(1))
         base_pdf_cents = parse_sign(formula.group(2)) * to_float(formula.group(3))
         # PDF formula yields c/kWh (no VAT) from BELPEX in EUR/MWh; spot is

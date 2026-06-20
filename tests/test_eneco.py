@@ -235,10 +235,12 @@ def test_fix_extracts_injection_rates() -> None:
     snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
     inj = snap.injection
     assert inj is not None
-    # Power Fix prints "Maandprijs 4,76 c/kWh" + formula "0,08 X BELPEX -2,65".
+    # Power Fix prints "Maandprijs 4,76 c/kWh" + a MONTHLY Belpex-injectie
+    # formula. Surface only the monthly indicative; the monthly
+    # coefficients must not be exposed as hourly-spot factor/base.
     assert inj.current == pytest.approx(0.0476)
-    assert inj.factor == pytest.approx(0.8)  # 0.08 * 10
-    assert inj.base == pytest.approx(-0.0265)  # -2.65 / 100
+    assert inj.factor is None
+    assert inj.base is None
     assert inj.formula is not None and "BELPEX" in inj.formula
 
 
