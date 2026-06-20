@@ -358,17 +358,21 @@ def _extract_publication_month(text: str) -> str:
 
 
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
-    # Some Luminus cards print a single-digit footnote ref right after
-    # the unit ("(c€/kWh)2 9,37"). The previous `[^0-9-]*` skip stopped
-    # at the footnote and captured it as the value, undercounting the
-    # injection rate ~5x on dynamic_w/v fixtures. Skip an optional
-    # digit-then-whitespace before the value capture.
-    # Use \s+ between every word: the SMR3 row wraps mid-phrase
-    # ("tarif de \nl'énergie injectée") so a hardcoded space made the
-    # regex skip the first (correct) occurrence and bind to a later
-    # fallback row, reporting the wrong rate when the two differ.
+    # Anchor on the applicable "Tarif de l'énergie injectée" row, not the
+    # "Estimation annuelle du tarif de l'énergie injectée" forecast
+    # printed just below it (footnote: a 12-month estimate, not the rate
+    # in force). The two share the "de l'énergie injectée" tail, but only
+    # the applicable row capitalises "Tarif" (the estimate has lowercase
+    # "tarif" after "du"), so a case-sensitive "Tarif" binds to the
+    # applicable rate. Mirrors the consumption side, which deliberately
+    # takes the current month over the annual estimate.
+    #
+    # Some cards print a footnote digit right after the unit
+    # ("(c€/kWh)2 3,81"); skip an optional digit-then-whitespace before
+    # the value. Use \s+ between every word: the row wraps mid-phrase
+    # ("Tarif de l'énergie \ninjectée").
     indicative = re.search(
-        rf"Estimation\s+annuelle\s+du\s+tarif\s+de\s+l[\"'’©]énergie\s+injectée"
+        rf"Tarif\s+de\s+l[\"'’©]énergie\s+injectée"
         rf"[^0-9-]*(?:\d+\s+)?({_NUM})",
         text,
         re.S,

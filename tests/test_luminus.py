@@ -230,6 +230,27 @@ def test_smartflex_parses_as_time_of_use() -> None:
     assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
 
 
+def test_injection_uses_applicable_rate_not_annual_estimate() -> None:
+    # Cards print two injection rows: the applicable "Tarif de l'énergie
+    # injectée" (3,81 / 3,96 c/kWh) and an "Estimation annuelle du tarif
+    # de l'énergie injectée" 12-month forecast (4,38 / 4,44). Credit the
+    # applicable rate, not the forecast.
+    comfy = _comfy_w()
+    assert comfy.injection is not None
+    assert comfy.injection.current == pytest.approx(0.0381)
+    comfyflex = _comfyflex_v()
+    assert comfyflex.injection is not None
+    assert comfyflex.injection.current == pytest.approx(0.0396)
+    # May card: the annual estimate (3,68) is *below* the applicable rate
+    # (3,81), so the old behaviour under-credited; confirm we still pick
+    # the applicable row regardless of which is larger.
+    may = parse_snapshot(
+        "luminus_comfy", fixture_text("luminus_comfy_w_may.pdf"), "wallonia"
+    )
+    assert may.injection is not None
+    assert may.injection.current == pytest.approx(0.0381)
+
+
 def test_brussels_is_unsupported() -> None:
     async def _run() -> None:
         with pytest.raises(ExtractorError, match="not available in region"):
