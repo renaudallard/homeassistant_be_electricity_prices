@@ -93,11 +93,13 @@ def test_april_card_dsos_cover_all_eight_fluvius_subareas() -> None:
 
 def test_april_card_extracts_distribution_and_capacity_for_antwerpen() -> None:
     """Spot-check Fluvius Antwerpen against the printed values:
-    databeheer 17.85, capacity 49.40 EUR/kW/yr, distribution 0.0505027."""
+    databeheer 17.85, capacity 49.40 EUR/kW/yr HTVA, distribution
+    0.0505027. The capacity tariff bypasses the pricing VAT factor, so
+    it carries the 6% residential VAT baked in (49.40 * 1.06)."""
     snap = _april_snap()
     a = snap.dsos["fluvius_antwerpen"]
     assert a.distribution_single == pytest.approx(0.0505027)
-    assert a.capacity_eur_per_kw_year == pytest.approx(49.40)
+    assert a.capacity_eur_per_kw_year == pytest.approx(49.40 * 1.06)
     assert a.data_management_per_year == pytest.approx(17.85)
     # Ecopower rolls Elia transport into the network distribution; the
     # card has no separate transport line, so ``transport`` stays 0
@@ -112,7 +114,10 @@ def test_april_card_extracts_imewo_with_optional_max_column() -> None:
     the distribution rate."""
     snap = _april_snap()
     assert snap.dsos["fluvius_imewo"].distribution_single == pytest.approx(0.0522864)
-    assert snap.dsos["fluvius_imewo"].capacity_eur_per_kw_year == pytest.approx(54.20)
+    # 54.20 EUR/kW/yr HTVA + 6% residential VAT baked in.
+    assert snap.dsos["fluvius_imewo"].capacity_eur_per_kw_year == pytest.approx(
+        54.20 * 1.06
+    )
 
 
 def test_april_card_taxes_are_htva_with_vat_06() -> None:
@@ -276,7 +281,8 @@ def test_dbs_card_dso_row_columns_for_antwerpen() -> None:
     snap = _dbs_snap()
     a = snap.dsos["fluvius_antwerpen"]
     assert a.data_management_per_year == pytest.approx(17.85)
-    assert a.capacity_eur_per_kw_year == pytest.approx(49.40)
+    # 49.40 EUR/kW/yr HTVA + 6% residential VAT baked in.
+    assert a.capacity_eur_per_kw_year == pytest.approx(49.40 * 1.06)
     assert a.distribution_single == pytest.approx(0.0505027)
     assert a.distribution_exclusive_night == pytest.approx(0.0454058)
     assert a.transport == 0.0
@@ -288,7 +294,8 @@ def test_dbs_card_wrapped_midden_vlaanderen_row_parses() -> None:
     snap = _dbs_snap()
     mv = snap.dsos["fluvius_intergem"]
     assert mv.distribution_single == pytest.approx(0.0498061)
-    assert mv.capacity_eur_per_kw_year == pytest.approx(50.12)
+    # 50.12 EUR/kW/yr HTVA + 6% residential VAT baked in.
+    assert mv.capacity_eur_per_kw_year == pytest.approx(50.12 * 1.06)
 
 
 def test_dbs_card_taxes_are_htva_with_vat_06() -> None:

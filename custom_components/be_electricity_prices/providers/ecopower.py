@@ -463,7 +463,12 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         if not row:
             continue
         databeheer = to_float(row.group(1))
-        capacity = to_float(row.group(2))
+        # Ecopower's card is HTVA. Per-kWh distribution flows through the
+        # pricing engine's VAT factor, but the capacity tariff is billed
+        # as a fixed euro amount that bypasses it (see _compute_capacity),
+        # so bake the 6% residential VAT in here, mirroring
+        # _extract_dbs_abonnement.
+        capacity = to_float(row.group(2)) * 1.06
         single = to_float(row.group(3))
         # Group 4 is the exclusive-night meter rate (separate circuit
         # for an electric water heater / night-storage heater). It
@@ -529,7 +534,9 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=to_float(row.group(3)),
             distribution_exclusive_night=to_float(row.group(4)),
             transport=0.0,  # rolled into distribution on Ecopower's card
-            capacity_eur_per_kw_year=to_float(row.group(2)),
+            # HTVA card; capacity bypasses pricing's VAT factor, so bake
+            # the 6% residential VAT in here (same as the gbs parser).
+            capacity_eur_per_kw_year=to_float(row.group(2)) * 1.06,
             data_management_per_year=to_float(row.group(1)),
         )
     return out
