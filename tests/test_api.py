@@ -28,14 +28,44 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock
 
+import aiohttp
 import pytest
 
 from custom_components.be_electricity_prices.api import (
+    EntsoeClient,
     EntsoeError,
     _parse_iso_utc,
     parse_day_ahead_xml,
 )
+
+
+async def test_client_error_redacts_security_token() -> None:
+    """aiohttp client errors stringify with the request URL, which carries
+    securityToken=<api_key>. The wrapped EntsoeError must not leak it: it
+    reaches the current_price last_error attribute, the Repairs card and
+    the HA log."""
+
+    class _RaisingCM:
+        async def __aenter__(self) -> None:
+            raise aiohttp.ClientError(
+                "Cannot connect to host web-api.tp.entsoe.eu "
+                "?securityToken=SECRET_KEY_123&documentType=A44"
+            )
+
+        async def __aexit__(self, *_: object) -> bool:
+            return False
+
+    session = MagicMock()
+    session.get = MagicMock(return_value=_RaisingCM())
+    client = EntsoeClient("SECRET_KEY_123", session)
+    now = datetime(2026, 4, 30, tzinfo=UTC)
+    with pytest.raises(EntsoeError) as excinfo:
+        await client.fetch_day_ahead(now, now + timedelta(days=1))
+    msg = str(excinfo.value)
+    assert "SECRET_KEY_123" not in msg
+    assert "securityToken=***" in msg
 
 
 def _doc(points_xml: str, resolution: str = "PT60M") -> str:

@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 from datetime import UTC, datetime, timedelta
 
 # defusedxml's ElementTree disables entity expansion / external-entity
@@ -48,6 +49,9 @@ import aiohttp
 from .const import ENTSOE_BASE_URL, ENTSOE_BE_DOMAIN
 
 _NS = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
+
+# Strip the credential from any error text that may surface to the user.
+_TOKEN_RE = re.compile(r"(securityToken=)[^&\s'\"]+")
 
 
 class EntsoeAuthError(Exception):
@@ -64,6 +68,20 @@ class EntsoeClient:
     def __init__(self, api_key: str, session: aiohttp.ClientSession) -> None:
         self._api_key = api_key
         self._session = session
+
+    def _redact(self, text: str) -> str:
+        """Strip the security token from error text.
+
+        aiohttp client errors stringify with the full request URL, which
+        carries ``securityToken=<api_key>``. The resulting EntsoeError
+        message reaches user-visible surfaces (the current_price
+        last_error attribute, the snapshot_stale Repairs card, the HA
+        log), so scrub the credential before it is raised. Diagnostics
+        scrubs the same field separately.
+        """
+        if self._api_key:
+            text = text.replace(self._api_key, "***")
+        return _TOKEN_RE.sub(r"\1***", text)
 
     async def fetch_day_ahead(
         self,
@@ -95,7 +113,9 @@ class EntsoeClient:
                     raise EntsoeAuthError("ENTSO-E rejected the API key")
                 if resp.status >= 400:
                     body = await resp.text()
-                    raise EntsoeError(f"ENTSO-E HTTP {resp.status}: {body[:200]}")
+                    raise EntsoeError(
+                        self._redact(f"ENTSO-E HTTP {resp.status}: {body[:200]}")
+                    )
                 payload = await resp.text()
         except (aiohttp.ClientError, TimeoutError) as err:
             # aiohttp.ClientTimeout fires asyncio.TimeoutError, which is
@@ -103,7 +123,7 @@ class EntsoeClient:
             # alternative, a slow ENTSO-E response would bubble a bare
             # TimeoutError through the wizard and the coordinator
             # categorisation paths.
-            raise EntsoeError(str(err)) from err
+            raise EntsoeError(self._redact(str(err))) from err
 
         # ENTSO-E's A44 doc is small today (~100 KB hourly, larger if
         # the bidding zone moves to PT15M). Offload XML parsing to a
