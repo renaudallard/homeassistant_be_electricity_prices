@@ -152,6 +152,10 @@ def test_flanders_dso_includes_transport_in_distribution() -> None:
     antwerpen = snap.dsos["fluvius_antwerpen"]
     assert antwerpen.transport == 0.0
     assert antwerpen.distribution_single == pytest.approx(0.0535)
+    # Dedicated exclusive-night circuit rate (group 4), lower than the
+    # normal digital distribution so a night meter isn't billed the day rate.
+    assert antwerpen.distribution_exclusive_night == pytest.approx(0.0481)
+    assert antwerpen.distribution_exclusive_night < antwerpen.distribution_single
     assert antwerpen.capacity_eur_per_kw_year == pytest.approx(52.37)
 
 

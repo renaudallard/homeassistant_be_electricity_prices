@@ -590,9 +590,14 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
         data_mgmt = to_float(match.group(1))
         capacity = to_float(match.group(2))
         dist_normal = to_float(match.group(3))
+        dist_excl = to_float(match.group(4))
         prosumer = to_float(match.group(8))
         out[key] = DsoOverlay(
             distribution_single=dist_normal / 100.0,
+            # Group 4 is the dedicated exclusive-night meter rate, lower
+            # than the normal digital distribution; bill a night circuit
+            # at it instead of falling back to the day rate.
+            distribution_exclusive_night=dist_excl / 100.0,
             transport=0.0,
             data_management_per_year=data_mgmt,
             capacity_eur_per_kw_year=capacity,
