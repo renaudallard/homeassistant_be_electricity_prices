@@ -34,11 +34,28 @@ import aiohttp
 import pytest
 
 from custom_components.be_electricity_prices.api import (
+    EntsoeAuthError,
     EntsoeClient,
     EntsoeError,
     _parse_iso_utc,
     parse_day_ahead_xml,
 )
+
+
+def test_acknowledgement_document_raises_auth_error() -> None:
+    """A rejected or quota-exhausted token returns HTTP 200 + an
+    Acknowledgement_MarketDocument. The parser must surface it as an auth
+    error so the dynamic table isn't silently blanked."""
+    ack = """<?xml version="1.0" encoding="UTF-8"?>
+<Acknowledgement_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-1:acknowledgementdocument:7:0">
+  <Reason>
+    <code>999</code>
+    <text>No matching data found</text>
+  </Reason>
+</Acknowledgement_MarketDocument>
+"""
+    with pytest.raises(EntsoeAuthError, match="No matching data found"):
+        parse_day_ahead_xml(ack)
 
 
 async def test_client_error_redacts_security_token() -> None:

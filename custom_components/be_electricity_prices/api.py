@@ -158,6 +158,20 @@ def parse_day_ahead_xml(
         # rather than an unhandled exception out of the coordinator tick.
         raise EntsoeError(f"unsafe XML rejected: {err}") from err
 
+    # ENTSO-E answers a rejected or quota-exhausted token with HTTP 200 +
+    # an Acknowledgement_MarketDocument (no TimeSeries) rather than a 401.
+    # Returning {} here would silently blank the dynamic price table with
+    # no Repairs guidance. The runtime always requests a window that
+    # includes today, and the BE zone always publishes today's curve, so a
+    # document carrying zero matching data really means the request was
+    # refused. Surface it as an auth error so the coordinator raises the
+    # "rotate your token" Repairs card.
+    if _local_name(root.tag) == "Acknowledgement_MarketDocument":
+        raise EntsoeAuthError(
+            f"ENTSO-E returned no data ({_ack_reason(root)}); the API key "
+            "may be invalid or its daily quota exhausted"
+        )
+
     # Per-slot accumulators: (sum, count) so we can take the mean at the
     # end without holding every sub-hour point in memory. The slot key is
     # the hour (default) or the native sub-hour instant (quarter_hourly).
@@ -238,6 +252,28 @@ def parse_day_ahead_xml(
             bucket_count[key] = bucket_count.get(key, 0) + 1
 
     return {k: bucket_sum[k] / bucket_count[k] for k in bucket_sum}
+
+
+def _local_name(tag: str) -> str:
+    """Strip the ``{namespace}`` prefix ElementTree prepends to a tag."""
+    return tag.rsplit("}", 1)[-1]
+
+
+def _ack_reason(root: object) -> str:
+    """Best-effort ``code text`` from an Acknowledgement's Reason block."""
+    for el in root.iter():  # type: ignore[attr-defined]
+        if _local_name(el.tag) != "Reason":
+            continue
+        code = ""
+        text = ""
+        for child in el:
+            name = _local_name(child.tag)
+            if name == "code":
+                code = (child.text or "").strip()
+            elif name == "text":
+                text = (child.text or "").strip()
+        return f"{code} {text}".strip() or "no reason given"
+    return "no reason given"
 
 
 def _fmt(when: datetime) -> str:
