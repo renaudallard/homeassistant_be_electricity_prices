@@ -111,8 +111,10 @@ def test_fix_extracts_all_fluvius_sub_areas() -> None:
     # dedicated exclusive-night meter circuit rate, distinct from the
     # day rate.
     assert antwerpen.distribution_exclusive_night == pytest.approx(0.0481)
-    # Transport is the (national) Elia rate, propagated from the Wallonia rows.
-    assert antwerpen.transport == pytest.approx(0.0274)
+    # The Flemish Afnametarief already bundles Elia transmission, so the
+    # Fluvius overlay carries no separate transport (the Walloon
+    # "Transport-kosten" column does not apply here).
+    assert antwerpen.transport == 0.0
     assert antwerpen.data_management_per_year == pytest.approx(18.92)
     assert antwerpen.capacity_eur_per_kw_year == pytest.approx(52.37)
 

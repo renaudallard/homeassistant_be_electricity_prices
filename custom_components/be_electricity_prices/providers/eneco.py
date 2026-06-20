@@ -404,7 +404,6 @@ def _extract_dynamic(text: str) -> DynamicRates:
 
 def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
-    transport = _extract_transport(text)
     for pdf_label, key in _WALLONIA_LABELS.items():
         if key in out:
             continue
@@ -412,7 +411,7 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         if row is not None:
             out[key] = row
     for pdf_label, key in _FLUVIUS_LABELS.items():
-        row = _find_fluvius_row(text, pdf_label, transport)
+        row = _find_fluvius_row(text, pdf_label)
         if row is not None:
             out[key] = row
     return out
@@ -457,11 +456,15 @@ def _find_wallonia_row(text: str, label: str) -> DsoOverlay | None:
     )
 
 
-def _find_fluvius_row(text: str, label: str, transport: float) -> DsoOverlay | None:
+def _find_fluvius_row(text: str, label: str) -> DsoOverlay | None:
     """Fluvius digital-meter rows: 5 numbers + 2 placeholder dashes.
 
     Layout: Normaal | Uitsl. nacht | SMR1 (€/jaar) | SMR3 (€/jaar) |
             Capaciteitstarief (€/kW/jaar) | -- | --
+
+    The Flemish Afnametarief already bundles Elia transmission, so
+    transport is 0 here - same convention as the Engie and Luminus
+    Flanders rows. The Wallonia "Transport-kosten" column does not apply.
     """
     escaped = re.escape(label)
     # Anchor on the digital-meter Fluvius section so we don't accidentally
@@ -481,27 +484,10 @@ def _find_fluvius_row(text: str, label: str, transport: float) -> DsoOverlay | N
         distribution_peak=None,
         distribution_offpeak=None,
         distribution_exclusive_night=to_float(digital_match.group(2)) / 100.0,
-        transport=transport,
+        transport=0.0,
         data_management_per_year=to_float(digital_match.group(4)),
         capacity_eur_per_kw_year=to_float(digital_match.group(5)),
     )
-
-
-def _extract_transport(text: str) -> float:
-    """Pull the (national) Elia transport rate from the first Wallonia row.
-
-    The Fluvius rows omit transport from their layout, but it is the same
-    regulated value across all DSOs.
-    """
-    aieg = _find_wallonia_row(text, "AIEG")
-    if aieg is not None:
-        return aieg.transport
-    # Fallback: any Wallonia row.
-    for label in _WALLONIA_LABELS:
-        row = _find_wallonia_row(text, label)
-        if row is not None:
-            return row.transport
-    return 0.0
 
 
 def _extract_taxes(text: str) -> TaxOverlay:
