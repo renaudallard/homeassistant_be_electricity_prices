@@ -738,7 +738,8 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():
         match = re.search(
-            rf"{re.escape(label)}\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)",
+            rf"{re.escape(label)}\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)"
+            rf"(?:\s*\n\s*([\d.,]+))?",
             text,
             re.IGNORECASE,
         )
@@ -746,8 +747,13 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
             continue
         capacity = to_float(match.group(1))
         dist_normal = to_float(match.group(2))
+        # Static cards print a third digital column, the exclusive-night
+        # distribution rate (lower than normal); dynamic cards stop at
+        # two, so capture it optionally and only set it when present.
+        excl = match.group(3)
         out[key] = DsoOverlay(
             distribution_single=dist_normal / 100.0,
+            distribution_exclusive_night=to_float(excl) / 100.0 if excl else None,
             transport=0.0,
             data_management_per_year=data_mgmt,
             capacity_eur_per_kw_year=capacity,

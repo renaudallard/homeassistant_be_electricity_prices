@@ -206,6 +206,20 @@ def test_flanders_dynamic_smaller_dso_table_with_external_data_fee() -> None:
     assert antwerpen.distribution_single == pytest.approx(0.053533)
     assert antwerpen.transport == 0.0  # Rolled into distribution.
     assert antwerpen.data_management_per_year == pytest.approx(18.92)
+    # Dynamic cards print only the two digital columns, no exclusive-night.
+    assert antwerpen.distribution_exclusive_night is None
+
+
+def test_flanders_static_carries_exclusive_night_distribution() -> None:
+    # Static cards print a third digital column, the exclusive-night
+    # distribution rate (lower than the normal digital rate).
+    snap = parse_snapshot(
+        "mega_smart_fixed", fixture_text("mega_smart_fixed_v.pdf"), "flanders"
+    )
+    antwerpen = snap.dsos["fluvius_antwerpen"]
+    assert antwerpen.distribution_single == pytest.approx(0.053533)
+    assert antwerpen.distribution_exclusive_night == pytest.approx(0.048130)
+    assert antwerpen.distribution_exclusive_night < antwerpen.distribution_single
 
 
 def test_taxes_split_correctly_per_region() -> None:
