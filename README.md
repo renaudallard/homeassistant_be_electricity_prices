@@ -85,6 +85,18 @@ Adding another supplier is a self-contained PR: drop a new module under
 register it in [`providers/__init__.py`](./custom_components/be_electricity_prices/providers/__init__.py),
 and ship a fixture-based unit test. The Eneco module is the reference.
 
+**Why isn't a business-only supplier like Yuso listed?** The integration models
+Belgian *residential* all-in tariffs only. Business (B2B) suppliers cannot be
+added even when they publish dynamic tariff cards, because those cards price the
+energy commodity alone (platform fee plus green/CHP certificates, ex-VAT) while
+the network tariffs and taxes are billed separately by the grid operator.
+Assembling an all-in price for a professional connection then needs per-site
+facts that no public card lists: the connection tier and contracted or measured
+peak power, the annual consumption band and any sector exemption, the reactive
+power / power factor, and any individually negotiated terms. Those inputs cannot
+be fetched or guessed, so a residential-only integration cannot represent a B2B
+contract.
+
 ### How often the integration polls
 
 The coordinator ticks once an hour. On each tick it runs the supplier's
