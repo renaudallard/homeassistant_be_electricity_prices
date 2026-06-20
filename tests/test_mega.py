@@ -218,8 +218,9 @@ def test_flanders_static_carries_exclusive_night_distribution() -> None:
     )
     antwerpen = snap.dsos["fluvius_antwerpen"]
     assert antwerpen.distribution_single == pytest.approx(0.053533)
-    assert antwerpen.distribution_exclusive_night == pytest.approx(0.048130)
-    assert antwerpen.distribution_exclusive_night < antwerpen.distribution_single
+    excl = antwerpen.distribution_exclusive_night
+    assert excl == pytest.approx(0.048130)
+    assert excl is not None and excl < antwerpen.distribution_single
 
 
 def test_taxes_split_correctly_per_region() -> None:

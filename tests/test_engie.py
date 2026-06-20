@@ -140,8 +140,9 @@ def test_dynamic_flanders_dso_includes_transport_in_distribution() -> None:
     assert antwerpen.transport == 0.0
     assert antwerpen.distribution_single == pytest.approx(0.0535329)
     # "tarif-kWh exclusif nuit" column, lower than the single rate.
-    assert antwerpen.distribution_exclusive_night == pytest.approx(0.0481301)
-    assert antwerpen.distribution_exclusive_night < antwerpen.distribution_single
+    excl = antwerpen.distribution_exclusive_night
+    assert excl == pytest.approx(0.0481301)
+    assert excl is not None and excl < antwerpen.distribution_single
     assert antwerpen.capacity_eur_per_kw_year == pytest.approx(52.3679)
 
 
