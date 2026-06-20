@@ -150,16 +150,31 @@ def test_variable_extracts_injection_formula() -> None:
     snap = parse_snapshot("ebem_variable", _layout(_VARIABLE), "test://v", "2026-05")
     inj = snap.injection
     assert inj is not None
-    # Card: 0,0925 BelpexSPP0 - 1,25 c€/kWh ex-VAT (injection is VAT-exempt).
-    assert inj.factor == pytest.approx(0.925, rel=1e-4)
-    assert inj.base == pytest.approx(-0.0125, rel=1e-4)
     # The SPP0 index is MONTHLY: the card prints the realized monthly
     # indicative (0,0925 * last-month SPP0 27,95 - 1,25 = 1,3354 c/kWh),
-    # which EBEM settles injection at -- surfaced as `current`, not priced
-    # off the hourly spot.
+    # which EBEM settles injection at -- surfaced as `current`. The
+    # factor/base are NOT spot coefficients (they weight the monthly SPP0
+    # average), so they must stay None or the engine would apply them to
+    # the hourly spot.
     assert inj.current == pytest.approx(0.013354, rel=1e-4)
+    assert inj.factor is None
+    assert inj.base is None
     assert inj.formula is not None
     assert "BelpexSPP0" in inj.formula
+
+
+def test_variable_injection_missing_indicative_raises() -> None:
+    """When the monthly indicative is absent the SPP0 coefficients can't
+    be priced (they weight the monthly average, not the hourly spot), so
+    fail loud instead of emitting a spot-shaped credit."""
+    from custom_components.be_electricity_prices.providers.ebem import (
+        _CONTRACTS_BY_ID,
+        _extract_injection,
+    )
+
+    text = "Injectie alle uren 0,0925 Belpex - 1,25\n"
+    with pytest.raises(ExtractorError, match="indicative"):
+        _extract_injection(text, _CONTRACTS_BY_ID["ebem_variable"])
 
 
 # ---- Groen B@sic+ -----------------------------------------------------------

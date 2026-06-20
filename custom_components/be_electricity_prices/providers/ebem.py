@@ -494,41 +494,54 @@ def _extract_yearly_fee_abonnement(text: str) -> float:
 def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | None:
     """Parse the injection formula. Belgian residential injection is VAT-exempt."""
     if contract.contract_id == "ebem_dynamic":
+        # Belpex 15' is a true hourly-spot formula priced from the
+        # live/historical spot via the energy path; surface factor/base.
         match = re.search(
             rf"injectie alle uren\s+([\d,.]+)\s+Belpex\s*15\s*[’']?\s*"
             rf"([{SIGN_CHARS}])\s*([\d,.]+)",
             text,
         )
-        formula_label = "Belpex15'"
-    else:
-        # Both 'Variabel' and 'B@sic+' use the same SPP0-weighted MONTHLY
-        # formula. The card prints the realized monthly indicative right
-        # after the formula (e.g. "... Belpex - 1,25 1,3354 4,3252", where
-        # 1,3354 = factor*last_month_SPP0 + base and 4,3252 is the VNR
-        # yearly forecast). Capture that indicative: EBEM settles
-        # injection at this monthly rate, not at the hourly spot, so it is
-        # the value to surface (mirrors Ecofix Flexy's BELPEX-SPP-M).
-        match = re.search(
-            rf"Injectie alle uren\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)"
-            rf"(?:\s+([\d,.]+))?",
-            text,
+        if not match:
+            return None
+        factor_pdf = to_float(match.group(1))
+        base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
+        return InjectionRates(
+            current=None,
+            factor=factor_pdf * 10.0,
+            base=base_pdf_cents / 100.0,
+            formula=(
+                f"({factor_pdf} Belpex15' {match.group(2)} {match.group(3)}) "
+                "c€/kWh ex-VAT"
+            ),
         )
-        formula_label = "BelpexSPP0"
+
+    # Both 'Variabel' and 'B@sic+' settle injection at a MONTHLY rate: the
+    # factor/base weight the monthly Belpex-SPP0 average, not the hourly
+    # spot. The card prints the realized monthly indicative right after the
+    # formula (e.g. "... Belpex - 1,25 1,3354 4,3252", where 1,3354 =
+    # factor*last_month_SPP0 + base and 4,3252 is the VNR yearly forecast).
+    # Surface only that indicative as ``current``; emitting factor/base
+    # would make the pricing engine apply monthly coefficients to the
+    # hourly spot (mirrors Ecofix Flexy's BELPEX-SPP-M).
+    match = re.search(
+        rf"Injectie alle uren\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)"
+        rf"(?:\s+([\d,.]+))?",
+        text,
+    )
     if not match:
         return None
-    factor_pdf = to_float(match.group(1))
-    base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
-    # Dynamic (Belpex 15') has no monthly indicative -- it is priced from
-    # the live/historical spot via the energy path. The variable cards do
-    # print one; surface it as the monthly settled rate.
-    current = None
-    if contract.contract_id != "ebem_dynamic" and match.group(4):
-        current = to_float(match.group(4)) / 100.0
+    if not match.group(4):
+        # The monthly indicative is the only value we can price; a card
+        # that stops printing it is a layout drift, not a fee-free
+        # contract. Fail loud rather than emit a spot-shaped credit the
+        # pipeline cannot price for this non-dynamic contract.
+        raise ExtractorError("EBEM variable injection: monthly indicative missing")
     return InjectionRates(
-        current=current,
-        factor=factor_pdf * 10.0,
-        base=base_pdf_cents / 100.0,
-        formula=f"({factor_pdf} {formula_label} {match.group(2)} {match.group(3)}) c€/kWh ex-VAT",
+        current=to_float(match.group(4)) / 100.0,
+        formula=(
+            f"({to_float(match.group(1))} BelpexSPP0 {match.group(2)} "
+            f"{match.group(3)}) c€/kWh ex-VAT"
+        ),
     )
 
 
