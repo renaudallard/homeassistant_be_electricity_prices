@@ -979,6 +979,52 @@ async def test_static_contract_clears_stuck_entsoe_auth_issue(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_update_data_fetches_spots_for_spot_indexed_injection(
+    hass: HomeAssistant,
+) -> None:
+    """Shape-c (Cociter Variable): a static-energy contract whose injection
+    is a per-hour spot formula must trigger the historical-spot fetch from
+    the live tick, or the YTD injection credit silently drops to zero."""
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        VariableRates,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "api_key": "TESTKEY",
+        },
+        title="Cociter Variable injection",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.97, base=-0.021),
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator._compute_current_year_cost",
+        AsyncMock(return_value=0.0),
+    ):
+        await coord._async_update_data()
+
+    coord._ensure_historical_spots.assert_awaited()
+
+
 async def test_successful_tick_clears_stuck_extractor_failed_issue(
     hass: HomeAssistant,
 ) -> None:
