@@ -1052,6 +1052,19 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 # tick that passes the TTL check resets the TTL clock
                 # and the supplier is never re-fetched.
                 self._snapshot_fetched_at = now
+                # A successful probe also confirms the supplier is
+                # reachable again, so clear any stale failure left by an
+                # earlier transient fetch error. This path never
+                # re-fetches, so without it a single-entry install (no
+                # sibling to trigger _adopt_shared) would keep the "could
+                # not reach the supplier" Repairs card and _last_error
+                # until the published card changed. Emptying _last_error
+                # lets the caller's top-level clear drop the extractor
+                # issue; pop the negative-cache row so siblings stop
+                # backing off. Gated on probe_key is not None: a failed /
+                # absent probe is not proof of recovery.
+                self._last_error = ""
+                _shared_failed_fetches(self.hass).pop(key, None)
             # Populate the shared cache when this tick is the first to
             # verify a disk-loaded snapshot after restart. Without this
             # every sibling on the same tuple would re-run its own

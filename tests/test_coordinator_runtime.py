@@ -583,6 +583,49 @@ async def test_probe_match_skips_fetch(hass: HomeAssistant) -> None:
     assert coord._snapshot_probe_key == "key-stable"
 
 
+async def test_probe_confirmed_recovery_clears_stale_failure(
+    hass: HomeAssistant,
+) -> None:
+    """A probe-confirmed-fresh tick must clear a stale _last_error and the
+    negative-cache marker left by an earlier transient fetch failure. The
+    probe path never re-fetches, so on a single-entry install (no sibling
+    to trigger _adopt_shared) the extractor Repairs card would otherwise
+    linger until the supplier published a new card."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        return _fake_snapshot()
+
+    async def _fake_probe(*_args: object, **_kwargs: object) -> str | None:
+        return "key-stable"
+
+    extractor = type(
+        "E",
+        (),
+        {"fetch": staticmethod(_fake_fetch), "probe": staticmethod(_fake_probe)},
+    )
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()  # fetch, stores probe_key
+        # Drop the shared snapshot so the next tick can't take the
+        # _adopt_shared shortcut (which already clears state); this forces
+        # the _self_is_fresh path, the one that used to leave the failure
+        # stuck. Mirrors a single-entry install after a reload eviction.
+        key = coord._shared_key()
+        _shared_snapshots(hass).pop(key, None)
+        # Simulate a transient failure that left the card + marker up.
+        coord._last_error = "TimeoutError"
+        _shared_failed_fetches(hass)[key] = (dt_util.utcnow(), "TimeoutError", 3)
+        await coord._maybe_refresh_snapshot()  # probe unchanged -> recovers
+
+    assert coord._last_error == ""
+    assert key not in _shared_failed_fetches(hass)
+
+
 async def test_probe_mismatch_triggers_fetch(hass: HomeAssistant) -> None:
     """When extractor.probe returns a different key, the coordinator
     must refetch even if the snapshot is still within TTL."""
