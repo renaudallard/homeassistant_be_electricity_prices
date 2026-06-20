@@ -621,6 +621,88 @@ async def test_compare_branch_spot_injection_target_prompts_for_api_key(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_does_not_mutate_live_historical_spots(
+    hass: HomeAssistant,
+) -> None:
+    """Quoting a spot-indexed-injection target with a borrowed key must
+    not leave the borrowed historical spots on the live coordinator (the
+    next tick would persist them), since the user's own entry never
+    needed them."""
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        VariableRates,
+    )
+
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+        },
+        title="Eneco injection",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.18))
+    coord._historical_spots = {}
+    entry.runtime_data = coord
+    other_snap = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.925, base=-0.0125),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+
+    async def _fake_ensure(start: Any, end: Any, api_key: Any = None) -> None:
+        # Simulate a fetch populating the (temporary) cache.
+        coord._historical_spots[datetime(2026, 1, 1, tzinfo=UTC)] = 0.05
+
+    fake = replace(EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap))
+    with (
+        patch.dict(EXTRACTORS, {"cociter": fake}),
+        patch.object(coord, "_ensure_historical_spots", _fake_ensure),
+        patch(
+            "custom_components.be_electricity_prices.coordinator._compute_current_year_cost",
+            AsyncMock(return_value=123.0),
+        ),
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_variable"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        assert result["step_id"] == "compare_api_key"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"api_key": "TESTKEY"}
+        )
+        assert result["step_id"] == "compare_result"
+
+    # The throwaway quote borrowed spots into a local dict; the live
+    # coordinator cache must be left empty so the next tick won't persist
+    # them into the user's store.
+    assert coord._historical_spots == {}
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_branch_spot_injection_current_prompts_for_api_key(
     hass: HomeAssistant,
 ) -> None:

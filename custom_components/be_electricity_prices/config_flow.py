@@ -1524,16 +1524,27 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             # per-hour feed-in credit the live YTD applies; spots are the
             # Belgian day-ahead, supplier-independent, so the same cache
             # prices both sides. A no-op for monthly-indicative contracts.
-            if compare_spot_injection and not coord._historical_spots:
+            hist_spots = coord._historical_spots
+            if compare_spot_injection and not hist_spots:
                 # The user's own entry isn't spot-needing, so the live
-                # coordinator never backfilled its cache. Fill it now with
-                # the key typed in compare_api_key (or the entry's own), or
-                # the credit silently drops and the YTD overstates the
-                # spot-indexed target's cost.
+                # coordinator never backfilled its cache. Fetch into a
+                # LOCAL dict for this throwaway quote with the key typed in
+                # compare_api_key (or the entry's own); without it the
+                # credit silently drops and the YTD overstates the
+                # spot-indexed target's cost. Save/restore the coordinator
+                # cache so a read-only comparison doesn't mutate (and have
+                # the next tick persist) live coordinator state.
                 borrowed = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
                 if borrowed:
-                    await coord._ensure_historical_spots(jan1, today_local, borrowed)
-            hist_spots = coord._historical_spots
+                    saved = coord._historical_spots
+                    coord._historical_spots = {}
+                    try:
+                        await coord._ensure_historical_spots(
+                            jan1, today_local, borrowed
+                        )
+                        hist_spots = coord._historical_spots
+                    finally:
+                        coord._historical_spots = saved
             try:
                 current_ytd_val = await _compute_current_year_cost(
                     self.hass,
