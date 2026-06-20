@@ -117,6 +117,24 @@ def test_dynamic_extracts_injection_formula() -> None:
     assert snap.injection.base == pytest.approx(-0.01389)
 
 
+def test_dynamic_consumption_formula_skips_injection_on_reorder() -> None:
+    """Consumption and injection share the 'Epex 15' shape. Even if a
+    future card prints the injection paragraph first, the consumption
+    picker must not bind the injection formula as the consumption rate."""
+    from custom_components.be_electricity_prices.providers.octaplus import (
+        _dynamic_consumption_formula,
+    )
+
+    text = (
+        "Le prix de votre injection est indexe sur Epex 15' * 1 - 13,89\n"
+        "La formule tarifaire HTVA est la suivante: Epex 15' * 1,083 + 4,17\n"
+    )
+    match = _dynamic_consumption_formula(text)
+    assert match is not None
+    assert match.group(1) == "1,083"  # consumption factor, not injection "1"
+    assert match.group(3) == "4,17"
+
+
 def test_federal_taxes_use_first_tier() -> None:
     # OCTA+ tax page renders each character as its own pdfplumber word
     # ("5 ,0 3 2 9 0 ,2 0 4 2"); the aligned helper's gap-aware merge

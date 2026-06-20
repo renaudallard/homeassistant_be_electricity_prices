@@ -248,19 +248,44 @@ def _vat_multiplier(text: str) -> float:
     return vat_multiplier(text, r"Tarifs\s+(\d+(?:[.,]\d+)?)\s*%\s*TVAC")
 
 
+_EPEX_FORMULA = (
+    rf"Epex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)"
+)
+_INJECTION_LEAD = r"Le\s+prix\s+de\s+votre\s+injection"
+
+
+def _dynamic_consumption_formula(text: str) -> re.Match[str] | None:
+    """First 'Epex 15' formula that is not the injection one.
+
+    The consumption and injection formulas share the same shape; the
+    injection one sits in the "Le prix de votre injection" section. Find
+    that formula's offset and skip it, so a card that reorders the two
+    paragraphs can't silently bind the injection formula as the
+    consumption rate.
+    """
+    inj_start: int | None = None
+    marker = re.search(_INJECTION_LEAD, text, re.S)
+    if marker is not None:
+        inj_m = re.search(_EPEX_FORMULA, text[marker.start() :])
+        if inj_m is not None:
+            inj_start = marker.start() + inj_m.start()
+    for m in re.finditer(_EPEX_FORMULA, text):
+        if m.start() == inj_start:
+            continue
+        return m
+    return None
+
+
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     yearly_fee = _extract_yearly_fee(text)
     if kind == "dynamic":
         # Dynamic cards bury the consumption formula in prose, e.g.:
         #   "La formule tarifaire HTVA (en €/MWh) est la suivante:
         #    Epex 15' * 1,083 + 4,17"
-        # The first Epex 15' formula on the card is the consumption one;
-        # the injection formula appears later, after "Le prix de votre
-        # injection est indexé". Match the first occurrence.
-        formula = re.search(
-            rf"Epex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)",
-            text,
-        )
+        # The injection formula has the same shape but lives in the
+        # "Le prix de votre injection" section; pick the first formula
+        # that is not that one.
+        formula = _dynamic_consumption_formula(text)
         if not formula:
             raise ExtractorError("could not parse OCTA+ dynamic formula")
         factor_pdf = to_float(formula.group(1))
@@ -346,8 +371,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # "Le prix de votre injection est indexé ..."
         # so we anchor on that lead-in to skip the consumption formula.
         inj = re.search(
-            rf"Le\s+prix\s+de\s+votre\s+injection.*?"
-            rf"Epex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)",
+            rf"{_INJECTION_LEAD}.*?{_EPEX_FORMULA}",
             text,
             re.S,
         )
