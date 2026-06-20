@@ -183,6 +183,18 @@ def test_dynamic_extracts_injection_formula() -> None:
     assert inj.base == pytest.approx(-0.021)
 
 
+def test_injection_missing_formula_raises() -> None:
+    """Both Cociter products always publish an injection formula, so a
+    parse miss must fail loud (keeping last-good data) rather than
+    silently zeroing the solar credit."""
+    from custom_components.be_electricity_prices.providers.cociter import (
+        _extract_injection,
+    )
+
+    with pytest.raises(ExtractorError, match="injection"):
+        _extract_injection("Tarief zonder injectieformule\n")
+
+
 def test_unknown_contract_raises() -> None:
     async def _run() -> None:
         with pytest.raises(ExtractorError, match="unknown Cociter contract"):

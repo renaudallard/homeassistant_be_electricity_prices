@@ -246,12 +246,18 @@ def parse_snapshot(
     )
 
 
-def _extract_injection(text: str) -> InjectionRates | None:
+def _extract_injection(text: str) -> InjectionRates:
     """Parse Cociter's injection formula.
 
     The variable PDF prints ``(0,097 x BELPEX – 2,1)`` (hourly, hTVA).
     The dynamic PDF prints ``(0,097 x QUARTER HOURLY BELPEX – 2,1)``.
     Injection is VAT-exempt for residential.
+
+    Both Cociter products always publish an injection formula, so a miss
+    is a layout drift, not a fee-free contract; raise rather than return
+    None (which the coordinator would treat as a zero credit), the same
+    way the taxes parser fails loud. This keeps last-good data and
+    surfaces the breakage in the logs and live-check.
 
     The dynamic card carries two Compteur SMR3 formulas (consumption
     first, injection later); anchor the regex on the ``Le prix de
@@ -282,7 +288,7 @@ def _extract_injection(text: str) -> InjectionRates | None:
             text,
         )
     if not formula:
-        return None
+        raise ExtractorError("could not parse Cociter injection formula")
     factor_pdf = to_float(formula.group(1))
     base_pdf_cents = parse_sign(formula.group(2)) * to_float(formula.group(3))
     return InjectionRates(
