@@ -674,9 +674,14 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
             continue
         capacity = to_float(row.group(1))
         dist_normal = to_float(row.group(2))
+        dist_excl = to_float(row.group(3))
         data_qh = to_float(row.group(4))
         out[key] = DsoOverlay(
             distribution_single=dist_normal / 100.0,
+            # Group 3 is the "tarif-kWh exclusif nuit" column, lower than
+            # the single rate; bill a dedicated night meter at it instead
+            # of falling back to the day rate.
+            distribution_exclusive_night=dist_excl / 100.0,
             transport=0.0,
             data_management_per_year=data_qh,
             capacity_eur_per_kw_year=capacity,
