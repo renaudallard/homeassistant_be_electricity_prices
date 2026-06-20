@@ -30,6 +30,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from homeassistant.exceptions import ServiceValidationError
 
 from custom_components.be_electricity_prices import _find_window
 from custom_components.be_electricity_prices.const import RESOLUTION_QUARTER
@@ -70,6 +71,30 @@ def test_find_window_picks_most_expensive_3h_block() -> None:
     assert result["average_eur_per_kwh"] == pytest.approx(
         (0.14 + 0.16 + 0.18) / 3, rel=1e-6
     )
+
+
+def test_find_window_does_not_span_a_gap() -> None:
+    # 06:00 is missing. The two cheapest slots (05:00, 07:00) are not
+    # adjacent, so a 2h window must not pair them across the gap; the
+    # cheapest contiguous 2h is 04:00-06:00.
+    start = datetime(2026, 4, 30, 0, 0, tzinfo=UTC)
+    table = _hourly([0.20, 0.20, 0.20, 0.20, 0.20, 0.01, 0.99, 0.01], start)
+    del table[start + timedelta(hours=6)]
+    result = _find_window(table, 2, start, None, minimize=True)
+    hours = [datetime.fromisoformat(h["hour"]) for h in result["hours"]]
+    assert hours[1] - hours[0] == timedelta(hours=1)  # contiguous, not gap-spanning
+    assert result["average_eur_per_kwh"] == pytest.approx((0.20 + 0.01) / 2, rel=1e-6)
+
+
+def test_find_window_raises_when_no_contiguous_run() -> None:
+    # Every other slot missing: plenty of slots exist but no contiguous
+    # pair, so a 2h request can't be satisfied.
+    start = datetime(2026, 4, 30, 0, 0, tzinfo=UTC)
+    table = _hourly([0.10, 0.10, 0.10, 0.10, 0.10], start)
+    for h in (1, 3):
+        del table[start + timedelta(hours=h)]
+    with pytest.raises(ServiceValidationError, match="contiguous"):
+        _find_window(table, 2, start, None, minimize=True)
 
 
 def test_find_window_respects_earliest_start() -> None:

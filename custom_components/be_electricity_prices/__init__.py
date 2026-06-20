@@ -327,16 +327,48 @@ def _find_window(
             },
         )
 
-    best_idx = 0
+    best_idx: int | None = None
     best_avg = float("inf") if minimize else float("-inf")
     for i in range(len(candidates) - duration_slots + 1):
+        # Only consider strictly time-contiguous runs: a gap in the price
+        # table (an hour ENTSO-E omitted) would otherwise let the window
+        # span more wall-clock than its duration and drop the gap hour
+        # from the average. With sorted, slot-aligned entries, endpoints
+        # exactly delta*(n-1) apart means there is no interior gap.
+        if candidates[i + duration_slots - 1][0] - candidates[i][0] != delta * (
+            duration_slots - 1
+        ):
+            continue
         avg = (
             sum(bd.all_in for _, bd in candidates[i : i + duration_slots])
             / duration_slots
         )
-        if (minimize and avg < best_avg) or (not minimize and avg > best_avg):
+        if (
+            best_idx is None
+            or (minimize and avg < best_avg)
+            or (not minimize and avg > best_avg)
+        ):
             best_avg = avg
             best_idx = i
+
+    if best_idx is None:
+        # Slots exist but none form a contiguous run of the needed length
+        # (a gappy dynamic table). Report the longest contiguous run.
+        longest = 1
+        run = 1
+        for prev, cur in zip(candidates, candidates[1:]):
+            run = run + 1 if cur[0] - prev[0] == delta else 1
+            longest = max(longest, run)
+        raise ServiceValidationError(
+            f"only {longest} contiguous slots available in the requested "
+            f"window; need {duration_slots}",
+            translation_domain=DOMAIN,
+            translation_key="not_enough_hours",
+            translation_placeholders={
+                "available": str(longest),
+                "needed": str(duration_slots),
+            },
+        )
 
     win_start_utc = candidates[best_idx][0]
     win_end_utc = candidates[best_idx + duration_slots - 1][0] + delta
