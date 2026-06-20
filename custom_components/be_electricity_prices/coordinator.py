@@ -1662,42 +1662,6 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
     return kva * overlay.prosumer_eur_per_kva_year / 12.0
 
 
-def _read_kwh(hass: HomeAssistant, entity_id: str | None) -> float | None:
-    """Read a cumulative kWh sensor's state. Returns None if unset, missing,
-    unavailable, or non-numeric -- the caller treats any None as "no
-    current_year_cost computable yet" (signals the sensor to expose ``None``).
-
-    Honours the source unit so a meter sensor reporting in Wh / MWh
-    isn't read as raw kWh and bill the user 1000x too much (or too
-    little). Same defence-in-depth as the capacity peak path; the
-    OptionsFlow already restricts the picker to device_class=energy
-    sensors but a pre-existing entry can still hold a Wh-unit choice.
-    Refuses non-energy units rather than guess.
-    """
-    if not entity_id:
-        return None
-    state = hass.states.get(entity_id)
-    if state is None or state.state in ("", "unknown", "unavailable"):
-        return None
-    try:
-        value = float(state.state)
-    except (TypeError, ValueError):
-        return None
-    unit = (state.attributes.get("unit_of_measurement") or "").strip()
-    if unit in ("", "kWh"):
-        return value
-    if unit == "Wh":
-        return value / 1000.0
-    if unit == "MWh":
-        return value * 1000.0
-    _LOGGER.warning(
-        "kWh sensor %s reports in %r; expected kWh / Wh / MWh, ignoring",
-        entity_id,
-        unit,
-    )
-    return None
-
-
 async def _recorder_rows(
     hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
 ) -> list[Any]:
@@ -1714,6 +1678,13 @@ async def _recorder_rows(
     sample. Reading ``sum`` directly would yield the all-time running
     total -- summing those would multiply the bill by however many
     years of statistics the meter has accumulated.
+
+    Requests the ``change`` in kWh via ``units={"energy": "kWh"}`` so a
+    meter sensor that stores its statistics in Wh or MWh is normalised by
+    HA's EnergyConverter rather than read as raw kWh, which would bill the
+    user 1000x too much (Wh) or too little (MWh). The OptionsFlow picker
+    restricts the choice to device_class=energy but not the unit, so a
+    Wh / MWh sensor is a legitimate, reachable selection.
 
     Pass the date directly: HA's start_of_local_day treats a naive
     datetime as UTC, which round-trips correctly only for tz east of
@@ -1750,7 +1721,7 @@ async def _recorder_rows(
             end_dt,
             {entity_id},
             period,
-            None,
+            {"energy": "kWh"},
             {"change"},
         )
     except Exception:  # noqa: BLE001 - recorder may surface anything

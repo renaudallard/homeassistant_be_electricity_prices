@@ -49,7 +49,6 @@ from custom_components.be_electricity_prices.coordinator import (
     _injection_needs_spot,
     _ytd_spot_injection_credit,
     _monthly_snapshots,
-    _read_kwh,
     _recorder_daily_kwh,
     _snapshot_for_month,
     _snapshot_from_dict,
@@ -459,6 +458,27 @@ async def test_recorder_daily_kwh_returns_per_day_sums(
         date(2026, 1, 2): 11.0,
         date(2026, 1, 3): 9.5,
     }
+
+
+async def test_recorder_requests_change_normalised_to_kwh(
+    hass: HomeAssistant,
+) -> None:
+    """The recorder must be asked for the change in kWh so a Wh / MWh
+    meter sensor is normalised by HA's EnergyConverter rather than read
+    as raw kWh and bill the user 1000x off."""
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with patch(
+        "homeassistant.components.recorder.get_instance",
+        return_value=instance,
+    ):
+        await _recorder_daily_kwh(
+            hass, "sensor.day_cons", date(2026, 1, 1), date(2026, 1, 3)
+        )
+    # statistics_during_period is positional: (..., period, units, types).
+    call = instance.async_add_executor_job.call_args
+    assert call.args[-2] == {"energy": "kWh"}
+    assert call.args[-1] == {"change"}
 
 
 async def test_recorder_daily_kwh_uses_change_not_sum(
@@ -1412,37 +1432,3 @@ def test_snapshot_round_trip_for_tou_contract() -> None:
     assert restored.energy.peak == pytest.approx(0.30)
     assert restored.energy.transition == pytest.approx(0.20)
     assert restored.energy.offpeak == pytest.approx(0.10)
-
-
-def test_read_kwh_passes_native_kwh_unchanged(hass: HomeAssistant) -> None:
-    hass.states.async_set(
-        "sensor.house_total_kwh", "1234.5", {"unit_of_measurement": "kWh"}
-    )
-    assert _read_kwh(hass, "sensor.house_total_kwh") == pytest.approx(1234.5)
-
-
-def test_read_kwh_treats_missing_unit_as_kwh(hass: HomeAssistant) -> None:
-    """Pre-existing entries that picked a sensor with no
-    unit_of_measurement (rare, but exists) keep working."""
-    hass.states.async_set("sensor.house_unitless", "42", {})
-    assert _read_kwh(hass, "sensor.house_unitless") == pytest.approx(42.0)
-
-
-def test_read_kwh_scales_wh_to_kwh(hass: HomeAssistant) -> None:
-    """A meter exporting Wh would otherwise read 1 234 500 as kWh and
-    inflate current_year_cost by 1000x."""
-    hass.states.async_set("sensor.house_wh", "1234500", {"unit_of_measurement": "Wh"})
-    assert _read_kwh(hass, "sensor.house_wh") == pytest.approx(1234.5)
-
-
-def test_read_kwh_scales_mwh_to_kwh(hass: HomeAssistant) -> None:
-    hass.states.async_set("sensor.house_mwh", "1.2345", {"unit_of_measurement": "MWh"})
-    assert _read_kwh(hass, "sensor.house_mwh") == pytest.approx(1234.5)
-
-
-def test_read_kwh_rejects_non_energy_unit(hass: HomeAssistant) -> None:
-    """A user that mistakenly picked a power sensor (W) for the
-    cumulative kWh slot must NOT have its instantaneous reading folded
-    into the year cost."""
-    hass.states.async_set("sensor.house_w", "1500", {"unit_of_measurement": "W"})
-    assert _read_kwh(hass, "sensor.house_w") is None
