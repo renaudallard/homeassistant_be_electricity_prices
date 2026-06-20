@@ -1432,12 +1432,23 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         start_utc = local_midnight.astimezone(UTC).replace(
             minute=0, second=0, microsecond=0
         )
-        for offset in range(48):
-            utc = start_utc + timedelta(hours=offset)
+        # End at the start of the day after tomorrow (local) rather than a
+        # fixed 48 UTC hours: the fall-back Sunday has 25 local hours, so
+        # a fixed range(48) leaves only 23 UTC slots for tomorrow and
+        # drops its last local hour. This bound covers today + tomorrow in
+        # full (47 slots on spring-forward, 49 on fall-back, 48 otherwise).
+        end_utc = (
+            dt_util.start_of_local_day(local_midnight.date() + timedelta(days=2))
+            .astimezone(UTC)
+            .replace(minute=0, second=0, microsecond=0)
+        )
+        utc = start_utc
+        while utc < end_utc:
             local = dt_util.as_local(utc)
             hourly[utc] = compute_breakdown(
                 snap, dso, region, local, None, meter, dso_mode
             )
+            utc += timedelta(hours=1)
         return hourly
 
     def _snapshot_age_hours(self) -> float:

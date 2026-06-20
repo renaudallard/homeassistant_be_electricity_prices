@@ -109,6 +109,52 @@ async def test_ensure_historical_spots_anchors_on_local_day(
     assert captured[0][0] == datetime(2025, 12, 31, 23, 0, tzinfo=UTC)
 
 
+async def test_build_hourly_covers_both_days_across_dst_seams(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The static price table must cover today + tomorrow in full on both
+    DST seams. Fall-back Sunday has 25 local hours today, so a fixed
+    48-slot walk left only 23 UTC slots for tomorrow and dropped its
+    23:00; spring-forward has 23 local hours today. Assert the local-hour
+    distribution directly (invariant I11)."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot()
+
+    # Fall-back: today (Oct 25) has 25 local hours, tomorrow (Oct 26) 24.
+    freezer.move_to("2026-10-25 12:00:00+01:00")
+    hourly = coord._build_hourly({})
+    today = sorted(
+        dt_util.as_local(k)
+        for k in hourly
+        if dt_util.as_local(k).date() == date(2026, 10, 25)
+    )
+    tomorrow = sorted(
+        dt_util.as_local(k).hour
+        for k in hourly
+        if dt_util.as_local(k).date() == date(2026, 10, 26)
+    )
+    assert len(today) == 25
+    assert tomorrow == list(range(24))  # all 24 incl the previously-dropped 23:00
+
+    # Spring-forward: today (Mar 29) has 23 local hours, tomorrow 24.
+    freezer.move_to("2026-03-29 12:00:00+02:00")
+    hourly = coord._build_hourly({})
+    today = sorted(
+        dt_util.as_local(k)
+        for k in hourly
+        if dt_util.as_local(k).date() == date(2026, 3, 29)
+    )
+    tomorrow = sorted(
+        dt_util.as_local(k).hour
+        for k in hourly
+        if dt_util.as_local(k).date() == date(2026, 3, 30)
+    )
+    assert len(today) == 23
+    assert tomorrow == list(range(24))
+
+
 async def test_fetch_spot_prices_window_covers_local_day_on_dst_fallback(
     hass: HomeAssistant, freezer: Any
 ) -> None:
