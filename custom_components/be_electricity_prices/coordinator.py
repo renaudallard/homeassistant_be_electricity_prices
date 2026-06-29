@@ -2409,6 +2409,14 @@ async def _compute_current_year_cost(
     AND no snapshot to show fees against. In every other case the
     function returns a number, falling back to the fees-only floor
     rather than exposing ``unknown`` to the user.
+
+    The whole year is recomputed from scratch on every coordinator tick
+    by design: today's cost grows each hour, and prior days are NOT safely
+    immutable between ticks (a late ENTSO-E spot fill or a backfill
+    correction changes a past day's rate). Memoizing prior-day totals
+    would risk serving a stale YTD; the full replay is O(hours-in-year)
+    pure arithmetic (~100 ms by December), which is negligible at the
+    hourly update cadence, so keep it simple.
     """
     today = dt_util.now().date()
     # contract / meter overrides let the OptionsFlow's compare path run
