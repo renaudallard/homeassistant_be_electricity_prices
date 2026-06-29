@@ -112,12 +112,29 @@ def test_belgian_holidays_2026() -> None:
     assert not is_belgian_holiday(date(2026, 9, 27))  # French Community holiday — same
 
 
-def test_offpeak_treats_weekday_holiday_as_offpeak() -> None:
-    # May 1, 2026 is a Friday. Without the holiday rule it would be peak
-    # at noon; with it, it's off-peak (matching bi-hourly billing).
-    assert is_offpeak(datetime(2026, 5, 1, 12, 0))
-    # Christmas Day 2026 is a Friday — same.
-    assert is_offpeak(datetime(2026, 12, 25, 14, 0))
+def test_offpeak_weekday_holiday_is_region_specific() -> None:
+    # May 1, 2026 is a Friday (Labour Day) at noon. Flanders bills weekday
+    # holidays at the DAY rate (the meter clock ignores holidays); Brussels
+    # folds them into off-peak (the historical Brussels exception).
+    holiday_noon = datetime(2026, 5, 1, 12, 0)
+    assert not is_offpeak(holiday_noon, "flanders")
+    assert is_offpeak(holiday_noon, "brussels")
+    # Christmas 2026 (Friday) at 14h - same split.
+    assert not is_offpeak(datetime(2026, 12, 25, 14, 0), "flanders")
+    assert is_offpeak(datetime(2026, 12, 25, 14, 0), "brussels")
+
+
+def test_offpeak_wallonia_2026_uniform_daily_schedule() -> None:
+    # From 2026-01-01 the Walloon bi-horaire is one schedule every day
+    # (weekends and holidays included): off-peak 22-7 AND 11-17, peak
+    # otherwise.
+    assert is_offpeak(datetime(2026, 4, 29, 3, 0), "wallonia")  # night
+    assert is_offpeak(datetime(2026, 4, 29, 12, 0), "wallonia")  # 11-17 window
+    assert not is_offpeak(datetime(2026, 4, 29, 9, 0), "wallonia")  # 7-11 peak
+    assert not is_offpeak(datetime(2026, 4, 29, 18, 0), "wallonia")  # 17-22 peak
+    # Saturday follows the same slots - no all-weekend off-peak.
+    assert not is_offpeak(datetime(2026, 5, 2, 9, 0), "wallonia")
+    assert is_offpeak(datetime(2026, 5, 2, 12, 0), "wallonia")
 
 
 # Wednesday 2026-04-29 is a non-holiday weekday for the boundary tests.

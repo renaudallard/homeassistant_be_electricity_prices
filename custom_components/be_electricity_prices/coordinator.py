@@ -1881,7 +1881,7 @@ async def _recorder_hourly_kwh(
 
 
 async def _recorder_daily_band_ratio(
-    hass: HomeAssistant, entity_id: str, start: date, end: date
+    hass: HomeAssistant, entity_id: str, start: date, end: date, region: str
 ) -> dict[date, tuple[float, float]]:
     """Per-day (day_ratio, night_ratio) for ``entity_id``.
 
@@ -1901,7 +1901,7 @@ async def _recorder_daily_band_ratio(
             continue
         local = dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC))
         bucket = local.date()
-        if is_offpeak(local):
+        if is_offpeak(local, region):
             per_day_night[bucket] = per_day_night.get(bucket, 0.0) + float(delta)
         else:
             per_day_day[bucket] = per_day_day.get(bucket, 0.0) + float(delta)
@@ -1913,7 +1913,7 @@ async def _recorder_daily_band_ratio(
         if total > 0:
             out[day] = (d / total, n / total)
         else:
-            out[day] = _default_band_ratio_for(day)
+            out[day] = _default_band_ratio_for(day, region)
     return out
 
 
@@ -1947,6 +1947,7 @@ async def _resolve_daily_kwh(
     or when either side has a partial register wiring.
     """
     meter = entry.data.get(CONF_METER, METER_MONO)
+    region = entry.data.get(CONF_REGION, "")
     jan1 = date(today.year, 1, 1)
     out: dict[date, list[float]] = {}
 
@@ -1980,9 +1981,11 @@ async def _resolve_daily_kwh(
             return True  # nothing wired on this side; contributes zero
         per_day = await _recorder_daily_kwh(hass, total_id, jan1, today)
         if meter in ("bi", "dynamic"):
-            ratios = await _recorder_daily_band_ratio(hass, total_id, jan1, today)
+            ratios = await _recorder_daily_band_ratio(
+                hass, total_id, jan1, today, region
+            )
             for day, total in per_day.items():
-                d_ratio, n_ratio = ratios.get(day, _default_band_ratio_for(day))
+                d_ratio, n_ratio = ratios.get(day, _default_band_ratio_for(day, region))
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[slot_day] += total * d_ratio
                 row[slot_night] += total * n_ratio
@@ -2024,16 +2027,16 @@ def _days_through(start: date, end: date) -> list[date]:
     return days
 
 
-def _default_band_ratio_for(day: date) -> tuple[float, float]:
+def _default_band_ratio_for(day: date, region: str) -> tuple[float, float]:
     """Time-weighted (day_ratio, night_ratio) fallback for a day with no
     hourly recorder stats yet.
 
     Assumes uniform consumption across the day's 24 hours (the most
-    neutral guess without a usage profile). Weekends and federal
-    holidays are entirely offpeak under the Belgian bi-hourly schedule;
-    weekdays split 15h peak / 9h offpeak. Replaces a previous hardcoded
-    (1.0, 0.0) default that systematically pushed totals into the peak
-    band when hourly stats lagged daily stats."""
+    neutral guess without a usage profile) and uses the region's
+    bi-horaire schedule (so a Wallonia day picks up the 11-17 off-peak
+    window, a Flanders weekday holiday stays peak). Replaces a previous
+    hardcoded (1.0, 0.0) default that systematically pushed totals into
+    the peak band when hourly stats lagged daily stats."""
     # Construct each local clock hour directly instead of advancing an
     # aware datetime by a fixed UTC timedelta: the latter shifts by one
     # hour on each DST transition, mislabelling one hour twice a year.
@@ -2048,7 +2051,7 @@ def _default_band_ratio_for(day: date) -> tuple[float, float]:
             hour,
             tzinfo=dt_util.DEFAULT_TIME_ZONE,
         )
-        if not is_offpeak(when):
+        if not is_offpeak(when, region):
             peak_hours += 1
     if peak_hours == 0:
         return (0.0, 1.0)

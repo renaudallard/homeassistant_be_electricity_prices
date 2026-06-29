@@ -149,10 +149,25 @@ def is_belgian_holiday(d: date) -> bool:
     return False
 
 
-def is_offpeak(when: datetime) -> bool:
-    """Belgian bi-hourly convention: weekdays 22:00-07:00, weekends,
-    and federal public holidays."""
-    if when.weekday() >= 5 or is_belgian_holiday(when.date()):
+def is_offpeak(when: datetime, region: str = REGION_FLANDERS) -> bool:
+    """Classic bi-hourly (tweevoudig / bi-horaire) off-peak hour, by region.
+
+    The night/weekend schedule and the public-holiday treatment differ by
+    region, and Wallonia changed on 2026-01-01:
+
+      Flanders (Fluvius): off-peak Mon-Fri 22:00-07:00 and all weekend.
+        Weekday public holidays bill at the DAY rate - the meter's tariff
+        clock switches on weekday/weekend only, not on holidays.
+      Brussels (Sibelga): off-peak 22:00-07:00, all weekend AND weekday
+        public holidays (the historical Brussels exception; unchanged).
+      Wallonia (from 2026-01-01): one uniform schedule every day including
+        weekends and holidays - off-peak 22:00-07:00 and 11:00-17:00.
+    """
+    if region == REGION_WALLONIA:
+        return when.hour < 7 or when.hour >= 22 or 11 <= when.hour < 17
+    if when.weekday() >= 5:
+        return True
+    if region == REGION_BRUSSELS and is_belgian_holiday(when.date()):
         return True
     return when.hour < 7 or when.hour >= 22
 
@@ -199,19 +214,21 @@ def _routed_rate(
     energy: FixedRates | VariableRates,
     when: datetime,
     meter: MeterType,
+    region: str,
     *,
     bi_capable: bool,
 ) -> float:
     """Meter-routing shared by the Fixed and Variable energy branches.
 
     Exclusive-night meters take the dedicated rate when published; a
-    bi-hourly-capable meter takes the peak/off-peak split when published;
-    otherwise the single/current ``base`` rate applies.
+    bi-hourly-capable meter takes the peak/off-peak split (on the region's
+    bi-horaire schedule) when published; otherwise the single/current
+    ``base`` rate applies.
     """
     if meter == "exclusive_night" and energy.exclusive_night is not None:
         return energy.exclusive_night
     if bi_capable and energy.peak is not None and energy.offpeak is not None:
-        return energy.offpeak if is_offpeak(when) else energy.peak
+        return energy.offpeak if is_offpeak(when, region) else energy.peak
     return base
 
 
@@ -220,6 +237,7 @@ def energy_eur_per_kwh(
     when: datetime,
     spot_eur_per_kwh: float | None,
     meter: MeterType = "mono",
+    region: str = REGION_FLANDERS,
 ) -> float:
     """Return the energy component in EUR/kWh for the given hour.
 
@@ -232,9 +250,13 @@ def energy_eur_per_kwh(
     """
     bi_capable = meter in ("bi", "dynamic")
     if isinstance(energy, FixedRates):
-        return _routed_rate(energy.single, energy, when, meter, bi_capable=bi_capable)
+        return _routed_rate(
+            energy.single, energy, when, meter, region, bi_capable=bi_capable
+        )
     if isinstance(energy, VariableRates):
-        return _routed_rate(energy.current, energy, when, meter, bi_capable=bi_capable)
+        return _routed_rate(
+            energy.current, energy, when, meter, region, bi_capable=bi_capable
+        )
     if isinstance(energy, DynamicRates):
         if spot_eur_per_kwh is None:
             raise ValueError("dynamic tariff needs a spot price")
@@ -388,6 +410,7 @@ def network_eur_per_kwh(
     when: datetime,
     meter: MeterType = "mono",
     dso_tariff_mode: DsoTariffMode = "bi_horaire",
+    region: str = REGION_FLANDERS,
 ) -> float:
     """Distribution + transport (EUR/kWh) for the given hour.
 
@@ -451,7 +474,11 @@ def network_eur_per_kwh(
         and dso.distribution_peak is not None
         and dso.distribution_offpeak is not None
     ):
-        dist = dso.distribution_offpeak if is_offpeak(when) else dso.distribution_peak
+        dist = (
+            dso.distribution_offpeak
+            if is_offpeak(when, region)
+            else dso.distribution_peak
+        )
     else:
         dist = dso.distribution_single
     return dist + dso.transport
@@ -495,8 +522,8 @@ def compute_breakdown(
             f"{snapshot.supplier}/{snapshot.contract}; "
             f"available: {sorted(snapshot.dsos)}"
         )
-    energy = energy_eur_per_kwh(snapshot.energy, when, spot_eur_per_kwh, meter)
-    network = network_eur_per_kwh(overlay, when, meter, dso_tariff_mode)
+    energy = energy_eur_per_kwh(snapshot.energy, when, spot_eur_per_kwh, meter, region)
+    network = network_eur_per_kwh(overlay, when, meter, dso_tariff_mode, region)
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
     vat_factor = 1.0 + snapshot.taxes.vat_rate
     # Apply VAT to each component first, then sum, so the invariant
