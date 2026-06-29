@@ -785,8 +785,10 @@ class _WizardStepsMixin:
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            err = await _validate_entsoe_key(self.hass, user_input[CONF_API_KEY])
+            key = user_input[CONF_API_KEY].strip()
+            err = await _validate_entsoe_key(self.hass, key)
             if err is None:
+                user_input[CONF_API_KEY] = key
                 self._data.update(user_input)
                 return await self._after_api_key()
             errors[CONF_API_KEY] = err
@@ -1189,9 +1191,10 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         live endpoint before reaching the result page."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            err = await _validate_entsoe_key(self.hass, user_input[CONF_API_KEY])
+            key = user_input[CONF_API_KEY].strip()
+            err = await _validate_entsoe_key(self.hass, key)
             if err is None:
-                self._compare[CONF_API_KEY] = user_input[CONF_API_KEY]
+                self._compare[CONF_API_KEY] = key
                 return await self.async_step_compare_result()
             errors[CONF_API_KEY] = err
         return self.async_show_form(
