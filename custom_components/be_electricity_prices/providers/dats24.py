@@ -373,52 +373,42 @@ def _extract_taxes(text: str, region: str) -> TaxOverlay:
 # ---- injection ---------------------------------------------------------------
 
 
-def _extract_injection(text: str) -> InjectionRates | None:
-    """Parse the teruglevering formula and indicative value.
+def _extract_injection(text: str) -> InjectionRates:
+    """Parse the teruglevering monthly indicative (formula kept for diagnostics).
 
-    The card prints both:
-      formula:    (BE_spotSPP x 0,0766 - 1,11)         c€/kWh, VAT-exempt
-      indicative: Teruglevering2 (c€/kWh) 3,26 ...
+    DATS 24 "Groen Variabel" settles injection on BE_spotSPP, a MONTHLY
+    synthetic-profile index, not the hourly day-ahead spot. The card prints
+    the realized monthly indicative right after the formula:
+      formula:    (BE_spotSPP x 0,0766 - 1,11)   c€/kWh, VAT-exempt
+      indicative: Teruglevering2 (c€/kWh) 3,26
 
-    BE_spotSPP is in EUR/MWh on the card; for our model where spot is
-    in EUR/kWh, factor scales by 1000 / 100 = 10:
-      factor = 0.0766 * 10 = 0.766
-      base   = -0.0111 EUR/kWh
+    Surface only the indicative as ``current``. Emitting factor/base would
+    make the pricing engine apply the monthly coefficient to the hourly
+    spot; mirrors EBEM Groen Variabel / B@sic+ and Ecofix Flexy's
+    BELPEX-SPP-M, which surface the realized monthly rate only.
 
     Some users have a single-rate meter, others bi-hourly: the card
     publishes one shared teruglevering value across all three meter
     types, so a single InjectionRates entry covers everyone.
     """
-    formula = re.search(
-        rf"\(BE_spotSPP\s*x\s*([\d,.]+)\s*([{SIGN_CHARS}])\s*([\d,.]+)\)",
-        text,
-    )
-    # The monthly indicative can go negative when BE_spotSPP is low
-    # (teruglevering = BE_spotSPP x factor - base), so capture an optional
-    # leading sign, same as the formula path - otherwise a negative
-    # indicative fails to match and the credit is silently dropped.
+    # The monthly indicative can go negative when BE_spotSPP is low, so
+    # capture an optional leading sign - otherwise a negative indicative
+    # fails to match and the credit is silently dropped.
     indicative = re.search(
         rf"Teruglevering2?\s*\(c€/kWh\)\s+([{SIGN_CHARS}]?)\s*([\d,.]+)", text
     )
-    if not formula and not indicative:
-        return None
-    factor: float | None = None
-    base: float | None = None
-    formula_text = ""
-    if formula:
-        factor = to_float(formula.group(1)) * 10.0
-        base = parse_sign(formula.group(2)) * to_float(formula.group(3)) / 100.0
-        formula_text = formula.group(0)
-    current = (
-        parse_sign(indicative.group(1)) * to_float(indicative.group(2)) / 100.0
-        if indicative
-        else None
+    if not indicative:
+        # The card always prints the monthly indicative; a miss is a layout
+        # drift, not a fee-free contract. Fail loud rather than emit a
+        # spot-shaped credit the pipeline cannot price for this variable card.
+        raise ExtractorError("DATS 24 injection: monthly indicative missing")
+    formula = re.search(
+        rf"\(BE_spotSPP\s*x\s*[\d,.]+\s*[{SIGN_CHARS}]\s*[\d,.]+\)",
+        text,
     )
     return InjectionRates(
-        current=current,
-        factor=factor,
-        base=base,
-        formula=formula_text,
+        current=parse_sign(indicative.group(1)) * to_float(indicative.group(2)) / 100.0,
+        formula=formula.group(0) if formula else "",
     )
 
 

@@ -103,34 +103,33 @@ def test_april_card_taxes_are_tvac() -> None:
     assert wa.energy_fund_eur_per_month == 0.0
 
 
-def test_april_card_injection_carries_formula_and_indicative() -> None:
-    """The card prints both the BE_spotSPP-indexed formula and the
-    indicative current value. Both surface, with factor / base in
-    EUR/kWh-against-EUR/kWh-spot units."""
+def test_april_card_injection_surfaces_monthly_indicative_only() -> None:
+    """BE_spotSPP is a MONTHLY index, so the card's realized monthly
+    indicative is surfaced as ``current``; factor / base stay None so the
+    pricing engine never applies the monthly coefficient to the hourly
+    spot. The formula text is retained for diagnostics."""
     snap = _snap("flanders")
     inj = snap.injection
     assert inj is not None
     assert inj.current == pytest.approx(0.0326)
-    # 0.0766 c€/kWh per €/MWh -> 0.766 EUR/kWh per EUR/kWh.
-    assert inj.factor == pytest.approx(0.766)
-    # -1.11 c€/kWh -> -0.0111 EUR/kWh.
-    assert inj.base == pytest.approx(-0.0111)
+    assert inj.factor is None
+    assert inj.base is None
+    assert "BE_spotSPP" in (inj.formula or "")
 
 
-def test_injection_formula_handles_plus_operator() -> None:
-    """A future card with '(BE_spotSPP x 0,0766 + 0,5)' must parse with
-    a positive base, not silently lose the formula. Previously the
-    regex hard-coded '-' and any other operator dropped factor/base to
-    None."""
+def test_injection_formula_text_retained_for_any_operator() -> None:
+    """The diagnostic formula text is captured verbatim whatever the
+    operator; the monthly indicative drives the price either way."""
     from custom_components.be_electricity_prices.providers.dats24 import (
         _extract_injection,
     )
 
     text = "Teruglevering2 (c€/kWh) 3,26\nFormula: (BE_spotSPP x 0,0766 + 0,5) c€/kWh\n"
     inj = _extract_injection(text)
-    assert inj is not None
-    assert inj.factor == pytest.approx(0.766)
-    assert inj.base == pytest.approx(0.005)
+    assert inj.current == pytest.approx(0.0326)
+    assert inj.factor is None
+    assert inj.base is None
+    assert "+ 0,5" in (inj.formula or "")
 
 
 def test_injection_indicative_handles_negative_value() -> None:
