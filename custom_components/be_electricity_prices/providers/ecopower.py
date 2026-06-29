@@ -462,12 +462,14 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         )
         if not row:
             continue
-        databeheer = to_float(row.group(1))
         # Ecopower's card is HTVA. Per-kWh distribution flows through the
-        # pricing engine's VAT factor, but the capacity tariff is billed
-        # as a fixed euro amount that bypasses it (see _compute_capacity),
-        # so bake the 6% residential VAT in here, mirroring
-        # _extract_dbs_abonnement.
+        # pricing engine's VAT factor, but the capacity and data-management
+        # tariffs are billed as fixed euro amounts that bypass it (the YTD
+        # and backfill paths sum them as flat annual fees), so bake the 6%
+        # residential VAT into both here, mirroring _extract_dbs_abonnement.
+        # The same Fluvius databeheer fee prints 17,85 HTVA here vs 18,92
+        # TVAC on the other suppliers' cards (17,85 x 1,06 = 18,92).
+        databeheer = to_float(row.group(1)) * 1.06
         capacity = to_float(row.group(2)) * 1.06
         single = to_float(row.group(3))
         # Group 4 is the exclusive-night meter rate (separate circuit
@@ -539,10 +541,11 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=to_float(row.group(3)),
             distribution_exclusive_night=to_float(row.group(4)),
             transport=0.0,  # rolled into distribution on Ecopower's card
-            # HTVA card; capacity bypasses pricing's VAT factor, so bake
-            # the 6% residential VAT in here (same as the gbs parser).
+            # HTVA card; capacity and databeheer are flat euro fees that
+            # bypass pricing's VAT factor, so bake the 6% residential VAT
+            # into both here (same as the gbs parser).
             capacity_eur_per_kw_year=to_float(row.group(2)) * 1.06,
-            data_management_per_year=to_float(row.group(1)),
+            data_management_per_year=to_float(row.group(1)) * 1.06,
         )
     if not out:
         # Section header matched but no DSO row did - fail loud rather than

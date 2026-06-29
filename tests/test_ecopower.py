@@ -103,13 +103,15 @@ def test_april_card_dsos_cover_all_eight_fluvius_subareas() -> None:
 def test_april_card_extracts_distribution_and_capacity_for_antwerpen() -> None:
     """Spot-check Fluvius Antwerpen against the printed values:
     databeheer 17.85, capacity 49.40 EUR/kW/yr HTVA, distribution
-    0.0505027. The capacity tariff bypasses the pricing VAT factor, so
-    it carries the 6% residential VAT baked in (49.40 * 1.06)."""
+    0.0505027. Both the capacity and databeheer tariffs are flat euro
+    fees that bypass the pricing VAT factor, so they carry the 6%
+    residential VAT baked in (49.40 * 1.06; 17.85 * 1.06 = 18.92, the
+    same Fluvius fee the other suppliers print TVAC)."""
     snap = _april_snap()
     a = snap.dsos["fluvius_antwerpen"]
     assert a.distribution_single == pytest.approx(0.0505027)
     assert a.capacity_eur_per_kw_year == pytest.approx(49.40 * 1.06)
-    assert a.data_management_per_year == pytest.approx(17.85)
+    assert a.data_management_per_year == pytest.approx(17.85 * 1.06)
     # Ecopower rolls Elia transport into the network distribution; the
     # card has no separate transport line, so ``transport`` stays 0
     # rather than being silently double-counted via a guess.
@@ -289,7 +291,8 @@ def test_dbs_card_dso_row_columns_for_antwerpen() -> None:
     gbs parser keeps; the trailing injection network tariff is ignored."""
     snap = _dbs_snap()
     a = snap.dsos["fluvius_antwerpen"]
-    assert a.data_management_per_year == pytest.approx(17.85)
+    # 17.85 HTVA + 6% residential VAT baked in (= 18.92 TVAC).
+    assert a.data_management_per_year == pytest.approx(17.85 * 1.06)
     # 49.40 EUR/kW/yr HTVA + 6% residential VAT baked in.
     assert a.capacity_eur_per_kw_year == pytest.approx(49.40 * 1.06)
     assert a.distribution_single == pytest.approx(0.0505027)
