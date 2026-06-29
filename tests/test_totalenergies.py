@@ -103,6 +103,16 @@ def test_dynamic_injection_formula_uses_distinct_anchor() -> None:
     assert inj.base == pytest.approx(-0.013)
 
 
+def test_missing_federal_excise_is_fatal() -> None:
+    # The federal excise is mandatory with no fallback; a miss must raise
+    # rather than silently undercount the bill by ~5 c€/kWh.
+    text = fixture_text("totalenergies_dynamic_w.pdf", layout=True).replace(
+        "Consommation entre 0 et 3.000 kWh", "XXX"
+    )
+    with pytest.raises(ExtractorError, match="federal excise"):
+        parse_snapshot("totalenergies_mydynamic", text, "wallonia")
+
+
 def test_dynamic_injection_missing_formula_fails_loud() -> None:
     # A dynamic card whose injection block prints the indicative but not
     # the BELPEXH formula must not silently price feed-in at the flat

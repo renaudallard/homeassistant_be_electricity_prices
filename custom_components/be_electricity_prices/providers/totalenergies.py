@@ -276,6 +276,11 @@ def parse_snapshot(
     energy_contribution = _extract_energy_contribution(
         text
     ) or _energy_contribution_from_table(text, region)
+    if energy_contribution == 0.0:
+        # Mandatory federal levy; neither the labelled line nor the DSO
+        # table fallback matched, so the card drifted. Fail loud rather
+        # than silently dropping the contribution.
+        raise ExtractorError("TotalEnergies: federal energy contribution not found")
     region_connection_fee = (
         _extract_connection_fee(text) if region == REGION_WALLONIA else 0.0
     )
@@ -501,12 +506,21 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
 
 
 def _extract_federal_excise(text: str) -> float:
-    """First excise tier (0-3000 kWh)."""
+    """First excise tier (0-3000 kWh).
+
+    Mandatory on every Belgian residential card with no fallback; a miss
+    is a layout drift that would silently undercount the bill by ~5
+    c€/kWh. Raise rather than default to 0.
+    """
     match = re.search(
         r"Consommation entre 0 et 3\.000 kWh\s+([\d.,]+)",
         text,
     )
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if match is None:
+        raise ExtractorError(
+            "TotalEnergies: federal excise (0-3.000 kWh tier) not found"
+        )
+    return to_float(match.group(1)) / 100.0
 
 
 def _extract_energy_contribution(text: str) -> float:
@@ -548,8 +562,12 @@ def _energy_contribution_from_table(text: str, region: str) -> float:
 
 
 def _extract_connection_fee(text: str) -> float:
+    # Called only for Wallonia, where the raccordement is mandatory; raise
+    # on a miss rather than silently zero it.
     match = re.search(r"Redevance de raccordement\s+([\d.,]+)", text)
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if match is None:
+        raise ExtractorError("TotalEnergies: Wallonia connection fee not found")
+    return to_float(match.group(1)) / 100.0
 
 
 def _extract_energy_fund(text: str) -> float:
