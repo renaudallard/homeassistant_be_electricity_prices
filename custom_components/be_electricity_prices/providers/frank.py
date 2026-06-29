@@ -428,14 +428,18 @@ def _extract_taxes(text: str) -> TaxOverlay:
         raise ExtractorError("could not parse Frank Energie tax block")
     gsc = _GSC_RE.search(text)
     wkk = _WKK_RE.search(text)
+    if not gsc or not wkk:
+        # Frank is Flanders-only, so GSC + WKK are mandatory renewables
+        # levies on every card; a miss is a layout drift that would
+        # silently under-bill. Fail loud, matching the federal block above.
+        raise ExtractorError("could not parse Frank Energie GSC/WKK levies")
     fund = _FUND_RE.search(text)
     # All values on the card are VAT-inclusive (6% BTW).
     return TaxOverlay(
         federal_excise=to_float(excise.group(1)) / 100.0,
         energy_contribution=to_float(contrib.group(1)) / 100.0,
         flanders_renewables=(
-            (to_float(gsc.group(1)) / 100.0 if gsc else 0.0)
-            + (to_float(wkk.group(1)) / 100.0 if wkk else 0.0)
+            to_float(gsc.group(1)) / 100.0 + to_float(wkk.group(1)) / 100.0
         ),
         energy_fund_eur_per_month=(to_float(fund.group(1)) if fund else 0.0),
         vat_rate=0.0,

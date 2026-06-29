@@ -32,6 +32,7 @@ import pytest
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
+    ExtractorError,
     SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.frank import (
@@ -148,6 +149,14 @@ def test_dot_decimal_render_matches_comma() -> None:
     assert dot.taxes.federal_excise == pytest.approx(comma.taxes.federal_excise)
     assert dot.energy.factor == pytest.approx(comma.energy.factor)
     assert dot.energy.base == pytest.approx(comma.energy.base)
+
+
+def test_missing_gsc_wkk_is_fatal() -> None:
+    # Frank is Flanders-only, so GSC + WKK are mandatory; a miss must
+    # raise rather than silently zero the renewables levy.
+    text = _text().replace("GSC", "XXX").replace("WKK", "YYY")
+    with pytest.raises(ExtractorError, match="GSC/WKK"):
+        parse_snapshot(text, "test://frank-apr", "frank_dynamic", "april 2026")
 
 
 def test_taxes_flanders_renewables_gsc_plus_wkk() -> None:
