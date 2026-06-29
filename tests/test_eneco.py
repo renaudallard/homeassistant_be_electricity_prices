@@ -131,6 +131,16 @@ def test_fix_fluvius_sub_areas_have_distinct_rates() -> None:
     assert len(set(rates.values())) > 1
 
 
+def test_missing_connection_fee_is_fatal() -> None:
+    # The Walloon connection fee is a mandatory all-in component with no
+    # live_check gate; a regex miss must fail loud, not silently zero it.
+    text = fixture_text("eneco_fix.pdf").replace(
+        "Aansluitingsvergoeding elektriciteit", "REMOVED"
+    )
+    with pytest.raises(eneco_mod.ExtractorError, match="connection fee"):
+        parse_snapshot(text, "power_fix", "test://fix")
+
+
 def test_fix_extracts_taxes() -> None:
     snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
     assert snap.taxes.federal_excise == pytest.approx(0.050329)

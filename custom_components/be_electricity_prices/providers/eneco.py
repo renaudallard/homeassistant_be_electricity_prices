@@ -129,8 +129,9 @@ _WALLONIA_LABELS: dict[str, str] = {
 # Flanders Fluvius digital-meter sub-areas (column layout: Normaal,
 # Uitsluitend nacht, SMR1 databeheer, SMR3 databeheer, capaciteitstarief,
 # then two `-` placeholders). Each sub-area has its own distribution and
-# capacity rates. Transport is not in the row; the Wallonia rows carry the
-# (national) Elia transport value, which we propagate.
+# capacity rates. Transport is not in the row and is set to 0 for Flanders:
+# the Flemish Afnametarief already bundles Elia transmission (see
+# _find_fluvius_row); the Wallonia Transport-kosten column does not apply.
 _FLUVIUS_LABELS: dict[str, str] = {
     "FLUVIUS HALLE VILVOORDE": DSO_FLUVIUS_HALLE_VILVOORDE,
     "FLUVIUS ANTWERPEN": DSO_FLUVIUS_ANTWERPEN,
@@ -503,13 +504,17 @@ def _extract_taxes(text: str) -> TaxOverlay:
     excise = to_float(tier_match.group(1)) / 100.0
     contribution = to_float(tier_match.group(2)) / 100.0
 
+    # Anchor on the "(€cent/kWh)" unit token (like the connection fee
+    # below) rather than the first number after the label: the sibling
+    # rows already carry "(2)(4)" footnote markers, so a lazy {_NUM}
+    # would capture a footnote digit if these rows ever gain one too.
     wkk = re.search(
-        rf"Bijdrage groene stroom en WKK{_WS}+Vlaanderen.{{0,80}}?{_NUM}",
+        rf"Bijdrage groene stroom en WKK.+?\(€cent/kWh\){_WS}*\n?{_WS}*{_NUM}",
         text,
         re.S,
     )
     wallonia_renewables = re.search(
-        rf"Bijdrage groene stroom Wallonië.{{0,80}}?{_NUM}",
+        rf"Bijdrage groene stroom Wallonië.+?\(€cent/kWh\){_WS}*\n?{_WS}*{_NUM}",
         text,
         re.S,
     )
@@ -519,6 +524,14 @@ def _extract_taxes(text: str) -> TaxOverlay:
         text,
         re.S,
     )
+    if not connection:
+        # The Walloon connection fee row is on every Eneco card and is a
+        # mandatory all-in component for Walloon customers; unlike the
+        # renewables (gated in live_check) nothing else catches it, so a
+        # silent 0.0 would under-bill. Fail loud, matching the excise tier.
+        raise ExtractorError(
+            "could not parse Eneco Walloon connection fee (Aansluitingsvergoeding)"
+        )
     fund = re.search(
         rf"Standaard tarief{_WS}*\n{_WS}*\(domicilieadres\){_WS}+{_NUM}",
         text,
@@ -532,9 +545,7 @@ def _extract_taxes(text: str) -> TaxOverlay:
             if wallonia_renewables
             else 0.0
         ),
-        region_connection_fee=(
-            to_float(connection.group(1)) / 100.0 if connection else 0.0
-        ),
+        region_connection_fee=to_float(connection.group(1)) / 100.0,
         energy_fund_eur_per_month=to_float(fund.group(1)) if fund else 0.0,
         vat_rate=0.0,
     )
