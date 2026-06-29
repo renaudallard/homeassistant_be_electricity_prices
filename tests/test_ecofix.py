@@ -41,6 +41,7 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.providers.ecofix import (
     _dynamic_formula_match,
+    _extract_flanders_dsos,
     _extract_publication,
     discover,
     parse_snapshot,
@@ -176,6 +177,26 @@ def test_motion_online_flanders_dsos() -> None:
     # Analog-meter prosumer rate is attached even when the user has a
     # digital meter; the integration filters by meter type downstream.
     assert iveka.prosumer_eur_per_kva_year == pytest.approx(67.79)
+
+
+def test_flanders_data_management_column_follows_metering_regime() -> None:
+    # The Fluvius row carries two data-management columns: per-kwartier
+    # (quarter-hourly, billed to dynamic contracts) and monthly/yearly
+    # (billed to Flexy). They are equal on today's cards, so craft a row
+    # where they diverge and assert each kind reads its own column.
+    text = (
+        "Vlaams gewest Digitale meter\n"
+        "Fluvius Antwerpen 52,3679 5,35329 4,81301 11,11 22,22\n"
+        "Vlaams gewest Analoge meter\n"
+        "Fluvius Antwerpen 52,3679 5,35329 4,81301 11,11 33,33\n"
+        "Ecofix Gas & Power\n"
+    )
+    dynamic = _extract_flanders_dsos(text, "dynamic")
+    variable = _extract_flanders_dsos(text, "variable")
+    assert next(iter(dynamic.values())).data_management_per_year == pytest.approx(11.11)
+    assert next(iter(variable.values())).data_management_per_year == pytest.approx(
+        22.22
+    )
 
 
 def test_motion_online_wallonia_dsos() -> None:

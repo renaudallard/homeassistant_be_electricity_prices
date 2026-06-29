@@ -235,7 +235,7 @@ def parse_snapshot(
     )
 
     if region == REGION_FLANDERS:
-        dsos = _extract_flanders_dsos(text)
+        dsos = _extract_flanders_dsos(text, contract.kind)
     elif region == REGION_WALLONIA:
         dsos = _extract_wallonia_dsos(text)
     else:
@@ -598,7 +598,7 @@ _FLANDERS_LABELS: dict[str, str] = {
 }
 
 
-def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
+def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]:
     """Read the Flanders Fluvius rows.
 
     pdfplumber places each digital-meter row on a single line:
@@ -608,6 +608,10 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     data-mgmt monthly/yearly (€/jaar). A handful of Fluvius West /
     Zenne-Dijle rows are line-broken between label and numbers; ``\\s+``
     matches the newline.
+
+    ``kind`` selects the data-management column: dynamic contracts meter
+    quarter-hourly (the per-kwartier column), Flexy meters monthly (the
+    monthly/yearly column).
 
     A second analog-meter table appears below; its 5th column is the
     prosumer rate in €/jaar, which we attach as
@@ -647,7 +651,13 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
         capacity = to_float(row.group(1))
         kwh_total = to_float(row.group(2)) / 100.0
         kwh_excl_night = to_float(row.group(3)) / 100.0
-        data_mgmt_year = to_float(row.group(5))
+        # The row carries two data-management columns: group 4 is the
+        # per-kwartier (quarter-hourly) regime, group 5 the monthly/yearly
+        # one. Bill the column matching the metering regime: dynamic
+        # contracts read quarter-hourly (group 4), Flexy reads monthly
+        # (group 5). They are equal today, so a single column was masking
+        # the mismatch until Fluvius diverges the two regimes.
+        data_mgmt_year = to_float(row.group(4 if kind == "dynamic" else 5))
         out[key] = DsoOverlay(
             distribution_single=kwh_total,
             distribution_exclusive_night=kwh_excl_night,
