@@ -569,7 +569,11 @@ def text_mentions_month(
     retrospective references buried in footers and comparison tables
     further down.
     """
-    haystack = fold_accents(text)
+    # Collapse whitespace runs so a month name and its year that PDF
+    # extraction split across a newline or padded with extra spaces
+    # ("mei\n2026", "mei  2026") still match the single-space needle. The
+    # numeric / ISO needles carry no spaces, so they are unaffected.
+    haystack = re.sub(r"\s+", " ", fold_accents(text))
     needles = tuple(
         fold_accents(n)
         for n in (

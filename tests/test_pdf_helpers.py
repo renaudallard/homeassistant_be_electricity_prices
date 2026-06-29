@@ -42,6 +42,7 @@ from custom_components.be_electricity_prices.providers._pdf import (
     fetch_pdf_text,
     fetch_text,
     parse_valid_until,
+    text_mentions_month,
     vat_multiplier,
 )
 from custom_components.be_electricity_prices.providers.base import (
@@ -327,3 +328,27 @@ def test_read_pdf_bytes_allows_normal_and_unknown_length() -> None:
     # No Content-Length (streamed) still reads through.
     unknown = _FakeResp(None, b"%PDF-stream")
     assert asyncio.run(_read_pdf_bytes(unknown, "u")) == b"%PDF-stream"  # type: ignore[arg-type]
+
+
+def test_text_mentions_month_tolerates_split_whitespace() -> None:
+    months = (
+        "januari",
+        "februari",
+        "maart",
+        "april",
+        "mei",
+        "juni",
+        "juli",
+        "augustus",
+        "september",
+        "oktober",
+        "november",
+        "december",
+    )
+    # PDF extraction split the month and year across a newline / extra spaces.
+    assert text_mentions_month("Tariefkaart mei\n2026 ...", date(2026, 5, 1), months)
+    assert text_mentions_month("Tariefkaart mei   2026 ...", date(2026, 5, 1), months)
+    # A different month must still not match.
+    assert not text_mentions_month(
+        "Tariefkaart juni 2026 ...", date(2026, 5, 1), months
+    )
