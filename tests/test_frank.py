@@ -147,6 +147,8 @@ def test_dot_decimal_render_matches_comma() -> None:
     )
     assert dot.taxes.energy_contribution == pytest.approx(comma.taxes.energy_contribution)
     assert dot.taxes.federal_excise == pytest.approx(comma.taxes.federal_excise)
+    assert isinstance(dot.energy, DynamicRates)
+    assert isinstance(comma.energy, DynamicRates)
     assert dot.energy.factor == pytest.approx(comma.energy.factor)
     assert dot.energy.base == pytest.approx(comma.energy.base)
 
