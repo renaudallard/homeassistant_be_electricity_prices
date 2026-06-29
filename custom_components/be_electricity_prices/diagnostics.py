@@ -77,9 +77,11 @@ async def _kwh_window(
     """Sum of kWh for ``side`` (``consumption`` or ``injection``) over
     the last ``days`` days from the entry's configured sensors.
 
-    Returns ``None`` when no sensor is wired or the recorder has no
-    data; the diagnostics blob renders that as a missing field rather
-    than zero so a bug-report reader can tell the difference."""
+    Returns ``None`` only when no sensor is wired for ``side`` (rendered
+    as a missing field). A wired sensor returns its summed kWh, including
+    ``0.0`` when the recorder has no rows or the window genuinely totals
+    zero, so a bug-report reader can tell an unconfigured sensor apart
+    from a wired one that reads zero."""
     if side == "injection":
         day_id = entry.data.get(CONF_DAY_INJECTION_KWH)
         night_id = entry.data.get(CONF_NIGHT_INJECTION_KWH)
@@ -93,12 +95,10 @@ async def _kwh_window(
     if day_id and night_id:
         d = await _recorder_daily_kwh(hass, day_id, start, today)
         n = await _recorder_daily_kwh(hass, night_id, start, today)
-        total = sum(d.values()) + sum(n.values())
-        return total if total > 0 else None
+        return sum(d.values()) + sum(n.values())
     if total_id:
         d = await _recorder_daily_kwh(hass, total_id, start, today)
-        total = sum(d.values())
-        return total if total > 0 else None
+        return sum(d.values())
     return None
 
 

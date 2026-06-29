@@ -190,6 +190,39 @@ async def test_diagnostics_includes_consumption_and_monthly_labels(
     assert dump["shared_failure"]["error"] == "transient HTTP 503 from supplier"
 
 
+async def test_diagnostics_wired_zero_kwh_reports_zero_not_missing(
+    hass: HomeAssistant,
+) -> None:
+    # A wired consumption sensor whose window totals zero must report 0.0,
+    # not None, so the dump distinguishes an unconfigured sensor (missing)
+    # from a wired one that reads zero.
+    from unittest.mock import patch
+
+    entry = _entry_with_data()
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(data=_coordinator_data())
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "consumption_kwh": "sensor.meter"}
+    )
+
+    async def _empty_recorder(
+        _hass: HomeAssistant, entity_id: str, start: object, end: object
+    ) -> dict[object, float]:
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.diagnostics._recorder_daily_kwh",
+        new=_empty_recorder,
+    ):
+        dump = await async_get_config_entry_diagnostics(hass, entry)
+
+    # Wired sensor, zero rows -> 0.0 (not None).
+    assert dump["consumption"]["rolling_year_kwh"] == 0.0
+    assert dump["consumption"]["ytd_kwh"] == 0.0
+    # No injection sensor wired -> still None.
+    assert dump["injection"]["rolling_year_kwh"] is None
+
+
 async def test_diagnostics_returns_placeholder_when_runtime_data_undefined(
     hass: HomeAssistant,
 ) -> None:
