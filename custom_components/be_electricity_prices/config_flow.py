@@ -1339,6 +1339,13 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         spot = spot_dict.get(quarter_slot)
         if spot is None:
             spot = spot_dict.get(now_hour)
+        # For the ANNUAL estimate a dynamic contract's all-in is
+        # factor*spot + base, linear in spot, so the time-averaged yearly
+        # bill equals the breakdown at the MEAN spot over the fetched
+        # day-ahead window. Use that instead of the instantaneous spot so
+        # the estimate doesn't reflect whichever minute the dialog opened
+        # (Belgian day-ahead swings from negative to >0.30 EUR/kWh intraday).
+        avg_spot = sum(spot_dict.values()) / len(spot_dict) if spot_dict else spot
 
         # Measured consumption / injection from the user's kWh sensors.
         # Injection is only relevant when a solar regime is configured;
@@ -1404,7 +1411,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 dso,
                 region,
                 dt_util.as_local(now_utc),
-                spot,
+                avg_spot,
                 meter,
                 dso_mode,
             )
@@ -1431,7 +1438,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                     dso,
                     region,
                     dt_util.as_local(now_utc),
-                    spot,
+                    avg_spot,
                     meter,
                     dso_mode,
                 )
@@ -1639,8 +1646,10 @@ def _tou_weighted_per_kwh(
     TOU-aware time-weighted average when the snapshot's energy rate
     splits by hour-of-day.
 
-    For Fixed / Variable / Dynamic the live breakdown at ``when_now``
-    is the right number. For TOU contracts (Luminus SmartFlex, Engie
+    For Fixed / Variable the breakdown is spot-independent. For Dynamic
+    the breakdown is linear in ``spot``, so the caller passes the MEAN
+    spot over the fetched day window (not the instantaneous one) to get a
+    time-averaged annual figure. For TOU contracts (Luminus SmartFlex, Engie
     Empower Flextime) and Impact contracts (Mega Off-peak Impact)
     ``compute_breakdown`` returns one of three slot rates depending on
     the hour the user opens the dialog -- biased. Compute breakdowns
