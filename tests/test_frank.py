@@ -136,6 +136,20 @@ def test_taxes_energy_contribution() -> None:
     assert snap.taxes.energy_contribution == pytest.approx(0.2042 / 100.0)
 
 
+def test_dot_decimal_render_matches_comma() -> None:
+    # A dot-decimal PDF re-render must extract identical values, not
+    # truncate a mandatory tax row / the VAT multiplier to the integer
+    # part as the comma-only regex did.
+    comma = _snap()
+    dot = parse_snapshot(
+        _text().replace(",", "."), "test://frank-apr", "frank_dynamic", "april 2026"
+    )
+    assert dot.taxes.energy_contribution == pytest.approx(comma.taxes.energy_contribution)
+    assert dot.taxes.federal_excise == pytest.approx(comma.taxes.federal_excise)
+    assert dot.energy.factor == pytest.approx(comma.energy.factor)
+    assert dot.energy.base == pytest.approx(comma.energy.base)
+
+
 def test_taxes_flanders_renewables_gsc_plus_wkk() -> None:
     """GSC 1,166 + WKK 0,371 = 1,537 EURct/kWh."""
     snap = _snap()
