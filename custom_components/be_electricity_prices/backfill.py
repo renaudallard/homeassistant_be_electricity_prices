@@ -82,7 +82,7 @@ from .coordinator import (
     _recorder_hourly_kwh,
     _snapshot_for_month,
 )
-from .pricing import compute_breakdown
+from .pricing import compute_breakdown, yearly_fixed_fee_for_meter
 from .providers import DynamicRates, get as get_extractor
 from .providers.base import SupplierSnapshot
 
@@ -575,7 +575,7 @@ async def _backfill_cost_sensor(
         # the seam days, drifting from the live sensor at the seam.
         days_in_year = 366 if calendar.isleap(local.year) else 365
         annual_static = (
-            getattr(snap_h.energy, "yearly_fixed_fee", 0.0)
+            yearly_fixed_fee_for_meter(snap_h.energy, meter)
             + snap_h.taxes.energy_fund_eur_per_month * 12.0
         )
         running_fees += (

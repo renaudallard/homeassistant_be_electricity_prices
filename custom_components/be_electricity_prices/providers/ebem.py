@@ -431,6 +431,7 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
         offpeak=_indicative_from_row(text, "Dubbele teller dal"),
         exclusive_night=_indicative_from_row(text, "Exclusief nacht"),
         yearly_fixed_fee=yearly_fee,
+        yearly_fixed_fee_exclusive_night=_extract_excl_night_fee_variable(text),
         formula=(
             f"mono ({parsed['mono'][0]} BelpexRLP0 + {parsed['mono'][1]}) "
             f"· peak ({parsed['peak'][0]} + {parsed['peak'][1]}) "
@@ -482,6 +483,22 @@ def _extract_yearly_fee_variable(text: str) -> float:
     if not match:
         raise ExtractorError("EBEM Groen Variabel: 'Vaste vergoeding' row not found")
     return to_float(match.group(1))
+
+
+def _extract_excl_night_fee_variable(text: str) -> float | None:
+    """``Vaste vergoeding exclusief nacht 33,06 €/jaar 35,04 €/jaar``.
+
+    A dedicated yearly fixed fee for an exclusive-night meter circuit,
+    billed instead of the standard 'Vaste vergoeding' on an
+    exclusive-night config entry. Stores the incl-VAT (second) column.
+    Returns None when the card doesn't print it, so the standard fee
+    applies.
+    """
+    match = re.search(
+        r"Vaste vergoeding\s+exclusief\s+nacht\s+[\d,.]+\s*€/jaar\s+([\d,.]+)\s*€/jaar",
+        text,
+    )
+    return to_float(match.group(1)) if match else None
 
 
 def _extract_yearly_fee_abonnement(text: str) -> float:

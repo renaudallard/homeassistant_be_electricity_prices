@@ -40,6 +40,7 @@ from custom_components.be_electricity_prices.pricing import (
     network_eur_per_kwh,
     taxes_eur_per_kwh,
     tou_slot,
+    yearly_fixed_fee_for_meter,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
@@ -570,3 +571,21 @@ def test_exclusive_night_distribution_falls_back_to_offpeak_rate() -> None:
         overlay_mono, datetime(2026, 4, 29, 12, 0), "exclusive_night"
     )
     assert network_mono == pytest.approx(0.05 + 0.015)
+
+
+def test_yearly_fixed_fee_selects_exclusive_night_when_published() -> None:
+    energy = VariableRates(
+        current=0.16, yearly_fixed_fee=85.0, yearly_fixed_fee_exclusive_night=35.04
+    )
+    # Exclusive-night meter gets the dedicated fee; every other meter gets
+    # the standard one.
+    assert yearly_fixed_fee_for_meter(energy, "exclusive_night") == pytest.approx(35.04)
+    assert yearly_fixed_fee_for_meter(energy, "mono") == pytest.approx(85.0)
+    assert yearly_fixed_fee_for_meter(energy, "bi") == pytest.approx(85.0)
+
+
+def test_yearly_fixed_fee_falls_back_when_no_dedicated_exclusive_night() -> None:
+    # No dedicated fee published -> the standard fee applies to all meters.
+    energy = FixedRates(single=0.20, yearly_fixed_fee=70.0)
+    assert yearly_fixed_fee_for_meter(energy, "exclusive_night") == pytest.approx(70.0)
+    assert yearly_fixed_fee_for_meter(energy, "mono") == pytest.approx(70.0)

@@ -272,6 +272,23 @@ def static_energy_eur_per_kwh(energy: EnergyRates, band: StaticBand) -> float | 
     return None
 
 
+def yearly_fixed_fee_for_meter(energy: EnergyRates, meter: MeterType) -> float:
+    """Supplier yearly fixed fee in EUR for the configured meter.
+
+    Exclusive-night circuits are configured as a separate entry; when the
+    card prints a dedicated 'exclusief nacht' fixed fee (EBEM Groen
+    Variabel) bill that on the exclusive-night meter instead of the
+    standard one. Every other meter, and any contract without a dedicated
+    fee, uses the standard ``yearly_fixed_fee``.
+    """
+    standard: float = getattr(energy, "yearly_fixed_fee", 0.0)
+    if meter == "exclusive_night":
+        excl = getattr(energy, "yearly_fixed_fee_exclusive_night", None)
+        if excl is not None:
+            return float(excl)
+    return standard
+
+
 def static_breakdown(
     snapshot: SupplierSnapshot,
     dso_key: str,

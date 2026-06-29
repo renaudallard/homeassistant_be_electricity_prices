@@ -100,6 +100,10 @@ def test_variable_extracts_energy_for_each_meter_type() -> None:
     assert snap.energy.exclusive_night == pytest.approx(0.113359, rel=1e-4)
     # Yearly fee: 85,00 €/jaar incl-VAT (the registry stores incl-VAT).
     assert snap.energy.yearly_fixed_fee == pytest.approx(85.0)
+    # The card also prints a dedicated exclusive-night fixed fee
+    # (35,04 €/jaar incl-VAT) billed instead of the standard one on an
+    # exclusive-night meter.
+    assert snap.energy.yearly_fixed_fee_exclusive_night == pytest.approx(35.04)
     assert snap.energy.formula is not None
     assert "BelpexRLP0" in snap.energy.formula
 

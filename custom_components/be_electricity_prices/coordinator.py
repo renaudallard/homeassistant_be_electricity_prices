@@ -100,6 +100,7 @@ from .pricing import (
     is_offpeak,
     slot_start,
     static_breakdown,
+    yearly_fixed_fee_for_meter,
 )
 from .providers import (
     DynamicRates,
@@ -821,8 +822,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             capacity_cost_eur=capacity_cost,
             prosumer_cost_eur=prosumer_cost,
             injection_price_eur_per_kwh=injection_price,
-            yearly_fixed_fee_eur=getattr(
-                self._snapshot.energy, "yearly_fixed_fee", 0.0
+            yearly_fixed_fee_eur=yearly_fixed_fee_for_meter(
+                self._snapshot.energy,
+                self.entry.data.get(CONF_METER, METER_MONO),
             ),
             energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
             current_year_cost_eur=current_year_cost,
@@ -2041,7 +2043,9 @@ async def _ytd_static_fees(
         hass, session, extractor, snapshot, entry, today, contract=contract
     ):
         annual = (
-            getattr(snap_m.energy, "yearly_fixed_fee", 0.0)
+            yearly_fixed_fee_for_meter(
+                snap_m.energy, entry.data.get(CONF_METER, METER_MONO)
+            )
             + snap_m.taxes.energy_fund_eur_per_month * 12.0
         )
         total += annual * (days_in_ytd / days_in_year)

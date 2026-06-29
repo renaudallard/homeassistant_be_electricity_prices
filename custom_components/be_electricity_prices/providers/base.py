@@ -90,6 +90,11 @@ class FixedRates:
     offpeak: float | None = None
     exclusive_night: float | None = None
     yearly_fixed_fee: float = 0.0
+    # Dedicated yearly fixed fee for an exclusive-night meter circuit,
+    # billed instead of ``yearly_fixed_fee`` on an exclusive-night config
+    # entry when the card prints a separate one. None -> the standard fee
+    # applies to every meter type.
+    yearly_fixed_fee_exclusive_night: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -112,6 +117,10 @@ class VariableRates:
     offpeak: float | None = None
     exclusive_night: float | None = None
     yearly_fixed_fee: float = 0.0
+    # Dedicated yearly fixed fee for an exclusive-night meter circuit (EBEM
+    # Groen Variabel prints one), billed instead of ``yearly_fixed_fee`` on
+    # an exclusive-night config entry. None -> the standard fee applies.
+    yearly_fixed_fee_exclusive_night: float | None = None
     formula: str | None = None
 
 
