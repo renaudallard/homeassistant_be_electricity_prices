@@ -2144,6 +2144,14 @@ async def _ytd_hourly_energy(
     instead of falling all the way back to the fees-only floor. TOU
     callers pass ``None`` and every hour gets billed at the slot rate.
 
+    Quarter-hourly dynamic contracts (Engie, Cociter, EBEM, Ecofix,
+    OCTA+, Ecopower DBS) bill the live price on 15-minute slots, but the
+    recorder only retains hourly long-term statistics, so this YTD replay
+    aggregates consumption / injection to the clock hour and prices each
+    hour at its hourly spot. When intra-hour load correlates with the
+    intra-hour price the YTD total is a close approximation, not a
+    bit-exact reconciliation with the live 15-minute sensor.
+
     Solar handling is uniform across both paths:
       - ``compensation``: per-hour ``(cons - inj) * all_in``, summed
         and clamped at zero (Walloon meter forfeits surplus).
