@@ -251,6 +251,14 @@ def test_publication_scan_skips_colliding_version_token() -> None:
     assert valid == date(2026, 5, 31)
 
 
+def test_missing_wallonia_connection_fee_is_fatal() -> None:
+    # The Walloon connection fee is mandatory; a miss must raise rather
+    # than silently zero it.
+    text = _layout(_FLEXY).replace("Aansluitingsvergoeding", "XXX")
+    with pytest.raises(ExtractorError, match="connection fee"):
+        parse_snapshot("ecofix_flexy", text, "wallonia", "test://f")
+
+
 def test_flexy_injection_surfaces_monthly_indicative_only() -> None:
     # BELPEX-SPP-M is a MONTHLY index, so the realized monthly indicative
     # ("Maandprijs") is surfaced as current; factor/base stay None so the

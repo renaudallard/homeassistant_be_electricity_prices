@@ -532,8 +532,12 @@ def _extract_federal_taxes(text: str) -> tuple[float, float]:
 
 
 def _extract_wallonia_connection_fee(text: str) -> float:
+    # Called only for Wallonia, where the raccordement is mandatory; raise
+    # on a miss rather than silently zero it (matching the federal block).
     match = re.search(r"Aansluitingsvergoeding\s+([\d,]+)", text)
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if match is None:
+        raise ExtractorError("Ecofix: Wallonia connection fee not found")
+    return to_float(match.group(1)) / 100.0
 
 
 def _extract_wallonia_renewables(text: str) -> float:
