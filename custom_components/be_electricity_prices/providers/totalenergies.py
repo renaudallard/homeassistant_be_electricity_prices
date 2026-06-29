@@ -290,13 +290,13 @@ def parse_snapshot(
     wallonia_renewables = 0.0
     brussels_renewables = 0.0
     if region == REGION_FLANDERS:
-        flanders_renewables = _extract_renewables(text, "Flandre")
+        flanders_renewables = _extract_renewables(text)
         dsos = _extract_flanders_dsos(text)
     elif region == REGION_WALLONIA:
-        wallonia_renewables = _extract_renewables(text, "Wallonie")
+        wallonia_renewables = _extract_renewables(text)
         dsos = _extract_wallonia_dsos(text)
     else:
-        brussels_renewables = _extract_renewables(text, "Bruxelles")
+        brussels_renewables = _extract_renewables(text)
         dsos = _extract_brussels_dsos(text)
 
     return SupplierSnapshot(
@@ -579,13 +579,12 @@ def _extract_energy_fund(text: str) -> float:
     return to_float(match.group(1)) if match else 0.0
 
 
-def _extract_renewables(text: str, region_label: str) -> float:
+def _extract_renewables(text: str) -> float:
     """The renewables value is the second number on the fee+renewables line.
 
-    Each PDF is region-specific so the label is informational only - we
-    just pick the value next to the yearly fee.
+    Each PDF is region-specific, so we just pick the value next to the
+    yearly fee; the caller's region is not needed to disambiguate.
     """
-    del region_label
     _, renewables = _extract_fee_and_renewables(text)
     return renewables
 
