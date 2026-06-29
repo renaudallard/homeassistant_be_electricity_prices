@@ -294,6 +294,21 @@ def test_energy_fixed_bihourly_picks_offpeak() -> None:
     assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 12), None, "bi") == 0.22
 
 
+def test_energy_fixed_on_smart_meter_bills_bihourly_split() -> None:
+    # A smart (dynamic) meter registers peak/offpeak, so a fixed contract
+    # on one bills the bi-hourly split when the card publishes it - it does
+    # NOT degrade to the single rate (the module docstring used to say it
+    # did). Same routing as a bi-hourly meter.
+    e = FixedRates(single=0.20, peak=0.22, offpeak=0.18)
+    assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 23), None, "dynamic") == 0.18
+    assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 12), None, "dynamic") == 0.22
+    # With no published split, it falls back to the single rate.
+    single = FixedRates(single=0.20)
+    assert (
+        energy_eur_per_kwh(single, datetime(2026, 4, 29, 12), None, "dynamic") == 0.20
+    )
+
+
 def test_energy_variable_uses_current() -> None:
     e = VariableRates(current=0.139)
     assert energy_eur_per_kwh(e, datetime(2026, 4, 29, 12), None) == 0.139

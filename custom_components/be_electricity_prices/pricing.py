@@ -36,10 +36,11 @@ Meter types follow the Belgian convention:
                   time and full weekends.
   - ``dynamic`` - smart meter (digitale meter) capable of hourly readings.
                   For dynamic contracts, energy is computed as
-                  ``factor x spot + base`` per hour. For fixed or variable
-                  contracts on a smart meter, billing degrades to the
-                  single rate (smart metering does not by itself imply
-                  time-of-use pricing).
+                  ``factor x spot + base`` per hour. A smart meter also
+                  registers peak/offpeak, so a fixed or variable contract
+                  on one bills the bi-hourly split when the card publishes
+                  it, falling back to the single rate only when it does
+                  not (same routing as a bi-hourly meter).
 """
 
 from __future__ import annotations
