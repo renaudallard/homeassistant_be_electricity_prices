@@ -56,6 +56,14 @@ def test_missing_wallonia_levies_are_fatal() -> None:
         parse_snapshot(text, "test://dats24", "wallonia")
 
 
+def test_missing_yearly_fee_is_fatal() -> None:
+    # The yearly standing charge is mandatory on every DATS 24 card; a
+    # miss must raise rather than silently bill a zero base fee.
+    text = _text().replace("VASTE VERGOEDING", "XXX")
+    with pytest.raises(ExtractorError, match="yearly fixed fee"):
+        parse_snapshot(text, "test://dats24", "flanders")
+
+
 def test_april_card_publication_metadata() -> None:
     snap = _snap("flanders")
     assert snap.supplier == "dats24"

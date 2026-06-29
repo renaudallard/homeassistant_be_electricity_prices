@@ -209,7 +209,12 @@ def _extract_energy(text: str) -> EnergyRates:
     offpeak_c = to_float(match.group(3))
     excl_c = to_float(match.group(4))
     fee_match = re.search(r"VASTE VERGOEDING\s*\(€/jaar\)\s+([\d,.]+)", text)
-    yearly_fee = to_float(fee_match.group(1)) if fee_match else 0.0
+    if fee_match is None:
+        # The yearly standing charge is mandatory on every DATS 24 card;
+        # a miss is a layout drift, not a fee-free contract. Raise like
+        # the afname row above rather than silently dropping the base fee.
+        raise ExtractorError("could not parse DATS 24 yearly fixed fee")
+    yearly_fee = to_float(fee_match.group(1))
     return VariableRates(
         current=single_c / 100.0,
         peak=peak_c / 100.0,
