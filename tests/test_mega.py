@@ -194,6 +194,36 @@ def test_wallonia_dso_carries_prosumer_rate_from_separate_table() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.03)
 
 
+def test_supplier_pv_forfait_extracted_where_card_prints_it() -> None:
+    # Compensation-regime cards print a supplier-side "Forfait panneaux
+    # solaires (EUR/kVA par mois) 7.63" that is billed on top of the DSO
+    # prosumer column. 7,63/month annualises to 91,56 EUR/kVA/an (TVAC, so
+    # not VAT-scaled). pypdf splits the label/value differently per card.
+    for contract, fixture, region in (
+        ("mega_smart_fixed", "mega_smart_fixed_w.pdf", "wallonia"),
+        ("mega_smart_fixed", "mega_smart_fixed_v.pdf", "flanders"),
+        ("mega_smart_flex", "mega_smart_flex_w.pdf", "wallonia"),
+        ("mega_offpeak_impact_var", "mega_offpeak_impact_w.pdf", "wallonia"),
+        ("mega_dynamic", "mega_dynamic_w.pdf", "wallonia"),
+    ):
+        snap = parse_snapshot(contract, fixture_text(fixture), region)
+        assert snap.supplier_prosumer_eur_per_kva_year == pytest.approx(91.56)
+
+
+def test_supplier_pv_forfait_absent_on_brussels_and_flanders_dynamic() -> None:
+    # Brussels cards and the Flanders Dynamic card carry no compensation
+    # regime and omit the forfait line; that absence is legitimate, not a
+    # drift, so the field stays None rather than raising.
+    brussels = parse_snapshot(
+        "mega_smart_fixed", fixture_text("mega_smart_fixed_b.pdf"), "brussels"
+    )
+    assert brussels.supplier_prosumer_eur_per_kva_year is None
+    flanders_dynamic = parse_snapshot(
+        "mega_dynamic", fixture_text("mega_dynamic_v.pdf"), "flanders"
+    )
+    assert flanders_dynamic.supplier_prosumer_eur_per_kva_year is None
+
+
 def test_flanders_dynamic_smaller_dso_table_with_external_data_fee() -> None:
     # Dynamic V cards list only 2 columns per Fluvius row (digital meter
     # only). The Tarif de gestion des données fee is broken out in a

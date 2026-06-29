@@ -400,7 +400,42 @@ def parse_snapshot(
         publication_label=publication_label,
         valid_until=parse_valid_until(text) or _extract_valid_until(text),
         injection=injection,
+        supplier_prosumer_eur_per_kva_year=_extract_supplier_prosumer(
+            text, region, contract.kind
+        ),
     )
+
+
+def _extract_supplier_prosumer(text: str, region: str, kind: str) -> float | None:
+    """Mega's supplier-side compensation-regime PV forfait.
+
+    Cards for prosumers on the compensation regime print a
+    "Forfait panneaux solaires (EUR/kVA par mois)" line; 7,63 EUR/kVA
+    per month annualises to 91,56 EUR/kVA/an. The figure is TVA 6%
+    incl, so it must NOT be VAT-scaled (it is summed raw on top of the
+    DSO "Tarif prosumer" column by _compute_prosumer, exactly like the
+    Cociter Variable forfait).
+
+    pypdf splits the label and value three ways across the card family
+    (value after the label, before it, or with the label line-wrapped),
+    so anchor on the "Forfait panneaux" lead-in and take the first
+    decimal in the row rather than matching a fixed layout.
+
+    Brussels cards and the Flanders Dynamic card carry no compensation
+    regime and omit the line, so a miss there is legitimate. Everywhere
+    else (all Wallonia cards and the Flanders non-dynamic cards) the
+    forfait is mandatory, so a miss is a layout drift; raise rather than
+    silently drop it, the same way the injection and tax parsers do.
+    """
+    anchor = re.search(r"Forfait\s+panneaux", text)
+    if anchor is not None:
+        window = text[anchor.start() : anchor.start() + 200]
+        value = re.search(r"(\d+[.,]\d+)", window)
+        if value is not None:
+            return to_float(value.group(1)) * 12.0
+    if region == REGION_BRUSSELS or (region == REGION_FLANDERS and kind == "dynamic"):
+        return None
+    raise ExtractorError("could not parse Mega PV compensation-regime forfait")
 
 
 # ---- energy block -------------------------------------------------------------
