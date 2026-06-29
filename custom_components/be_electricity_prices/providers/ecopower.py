@@ -483,6 +483,11 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             capacity_eur_per_kw_year=capacity,
             data_management_per_year=databeheer,
         )
+    if not out:
+        # The section header matched but no DSO row did - a column-layout
+        # drift. Returning {} would let the backfill path silently skip
+        # whole months (it swallows the resulting KeyError); fail loud.
+        raise ExtractorError("Ecopower: no DSO rows parsed from the digital block")
     return out
 
 
@@ -539,6 +544,10 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
             capacity_eur_per_kw_year=to_float(row.group(2)) * 1.06,
             data_management_per_year=to_float(row.group(1)),
         )
+    if not out:
+        # Section header matched but no DSO row did - fail loud rather than
+        # return an empty overlay set the backfill path silently skips.
+        raise ExtractorError("Ecopower: no DSO rows parsed from the dynamic block")
     return out
 
 

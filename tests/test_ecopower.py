@@ -36,6 +36,7 @@ import pytest
 
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
+    ExtractorError,
     InjectionRates,
     SupplierSnapshot,
     VariableRates,
@@ -58,6 +59,14 @@ def _april_snap() -> SupplierSnapshot:
         "test://ecopower-apr",
         "april 2026",
     )
+
+
+def test_empty_dso_overlay_is_fatal() -> None:
+    # Section header present but no DSO row parses (label drift) -> raise,
+    # so the backfill path can't silently skip the month.
+    text = _text("ecopower_burgerstroom_apr.pdf").replace("Fluvius", "XXX")
+    with pytest.raises(ExtractorError, match="no DSO rows"):
+        parse_snapshot(text, "test://ecopower-apr", "april 2026")
 
 
 def _may_snap() -> SupplierSnapshot:
