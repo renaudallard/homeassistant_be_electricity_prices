@@ -426,7 +426,7 @@ def _extract_energy(text: str, kind: TariffKind, yearly_fee: float) -> EnergyRat
     )
 
 
-def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
+def _extract_injection(text: str, kind: TariffKind) -> InjectionRates:
     """Parse the injection formula + indicative rate.
 
     Belgian residential injection is VAT-exempt, so the formula is
@@ -439,7 +439,13 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # bind the consumption formula to the injection role.
         inj_formula = _dynamic_formula_match(text, "Injectie")
         if inj_formula is None:
-            return None
+            # Every Ecofix dynamic card prints the injection Belpex 15M
+            # formula; a miss is a layout drift. Raise rather than return
+            # None (which the pipeline treats as a zero credit), and do
+            # not fall back to the indicative alone, which would freeze
+            # this spot-indexed injection at a flat rate. Matches the
+            # Flexy branch and the dynamic consumption raise.
+            raise ExtractorError("Ecofix dynamic injection: Belpex 15M formula missing")
         factor_pdf = to_float(inj_formula.group(1))
         base_pdf_cents = parse_sign(inj_formula.group(2)) * to_float(
             inj_formula.group(3)

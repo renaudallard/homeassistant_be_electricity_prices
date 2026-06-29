@@ -42,6 +42,7 @@ from custom_components.be_electricity_prices.providers.base import (
 from custom_components.be_electricity_prices.providers.ecofix import (
     _dynamic_formula_match,
     _extract_flanders_dsos,
+    _extract_injection,
     _extract_publication,
     discover,
     parse_snapshot,
@@ -177,6 +178,15 @@ def test_motion_online_flanders_dsos() -> None:
     # Analog-meter prosumer rate is attached even when the user has a
     # digital meter; the integration filters by meter type downstream.
     assert iveka.prosumer_eur_per_kva_year == pytest.approx(67.79)
+
+
+def test_dynamic_injection_missing_formula_is_fatal() -> None:
+    # The injection Belpex 15M formula is mandatory on every dynamic card;
+    # a miss must raise rather than silently zeroing the spot-indexed
+    # feed-in credit (this was the only injection path that returned None).
+    text = _layout(_MOTION).replace("Injectie", "XXX")
+    with pytest.raises(ExtractorError, match="Belpex 15M formula missing"):
+        _extract_injection(text, "dynamic")
 
 
 def test_flanders_data_management_column_follows_metering_regime() -> None:
