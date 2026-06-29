@@ -100,6 +100,15 @@ def test_missing_federal_tax_tier_raises() -> None:
         _extract_taxes(text, "wallonia")
 
 
+def test_missing_bihourly_rates_raises() -> None:
+    # OCTA+ always prints the bi-hourly table; a missing Heures pleines /
+    # Heures creuses row is a drift that must fail loud rather than
+    # silently billing a bi-hourly user the single (mono) rate.
+    text = _text("octaplus_fixed_w.pdf").replace("Heures pleines", "XXX")
+    with pytest.raises(ExtractorError, match="bi-hourly rates"):
+        parse_snapshot("octaplus_fixed", text, "wallonia")
+
+
 def test_fixed_flanders_extracts_meter_rates() -> None:
     snap = parse_snapshot("octaplus_fixed", _text("octaplus_fixed_v.pdf"), "flanders")
     assert isinstance(snap.energy, FixedRates)

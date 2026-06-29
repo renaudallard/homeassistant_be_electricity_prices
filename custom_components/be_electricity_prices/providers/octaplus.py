@@ -319,6 +319,13 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     excl = _meter_value(text, r"Compteur exclusif nuit")
     if mono is None:
         raise ExtractorError(f"could not parse OCTA+ {kind} energy block")
+    # OCTA+ cards always print the bi-hourly table, so a missing Heures
+    # pleines / Heures creuses row is a layout drift, not a mono-only
+    # card. Without this a drift would silently bill a bi-hourly user the
+    # single rate. (Compteur exclusif nuit is a separate optional circuit,
+    # so it stays nullable.)
+    if peak is None or offpeak is None:
+        raise ExtractorError(f"could not parse OCTA+ {kind} bi-hourly rates")
     if kind == "fixed":
         return FixedRates(
             single=mono,
