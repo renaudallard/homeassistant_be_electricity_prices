@@ -248,6 +248,23 @@ def test_taxes_split_correctly_per_region() -> None:
     assert b.taxes.wallonia_renewables == 0.0
 
 
+def test_missing_wallonia_connection_fee_is_fatal() -> None:
+    # The Wallonia raccordement is mandatory; a miss must raise rather
+    # than silently zero it.
+    text = fixture_text("mega_dynamic_w.pdf").replace(
+        "Redevance de raccordement", "XXX"
+    )
+    with pytest.raises(ExtractorError, match="connection fee"):
+        parse_snapshot("mega_dynamic", text, "wallonia")
+
+
+def test_missing_flanders_renewables_is_fatal() -> None:
+    # Both renewables components gone means the block drifted; raise.
+    text = fixture_text("mega_smart_fixed_v.pdf").replace("Cotisation", "XXX")
+    with pytest.raises(ExtractorError, match="renewables"):
+        parse_snapshot("mega_smart_fixed", text, "flanders")
+
+
 def test_smart_flex_is_a_variable_contract() -> None:
     snap = parse_snapshot(
         "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"

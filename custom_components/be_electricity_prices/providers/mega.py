@@ -662,13 +662,23 @@ def _extract_energy_contribution(text: str) -> float:
 
 
 def _extract_connection_fee(text: str) -> float:
-    """Wallonia raccordement (`Redevance de raccordement 0,075` c€/kWh)."""
+    """Wallonia raccordement (`Redevance de raccordement 0,075` c€/kWh).
+
+    Called only for Wallonia, where it is a mandatory charge; raise on a
+    miss rather than silently zero it (matching the federal block).
+    """
     match = re.search(r"Redevance de raccordement\s*\n\s*([\d.,]+)", text)
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if match is None:
+        raise ExtractorError("Mega: Wallonia connection fee (raccordement) not found")
+    return to_float(match.group(1)) / 100.0
 
 
 def _extract_flanders_renewables(text: str) -> float:
-    """Flanders splits renewables between green energy and cogeneration."""
+    """Flanders splits renewables between green energy and cogeneration.
+
+    Both are mandatory Flemish levies; a miss is a layout drift, so raise
+    rather than silently dropping ~3 c€/kWh of renewables.
+    """
     green = re.search(
         r"Cotisation Verte\s*\(c€/kWh\).{0,400}?Flandre\s*\n\s*([\d.,]+)",
         text,
@@ -680,6 +690,11 @@ def _extract_flanders_renewables(text: str) -> float:
         text,
         re.S,
     )
+    if green is None and cogen is None:
+        # Both absent means the whole renewables block went missing - a
+        # layout drift that would silently zero ~3 c€/kWh. Raise. A card
+        # that prints only one of the two components is still valid.
+        raise ExtractorError("Mega: Flanders renewables (Cotisation Verte) not found")
     total = 0.0
     if green:
         total += to_float(green.group(1))
@@ -689,13 +704,21 @@ def _extract_flanders_renewables(text: str) -> float:
 
 
 def _extract_renewables(text: str, region_label: str) -> float:
-    """Wallonie / Bruxelles - single 'Cotisation Verte' line."""
+    """Wallonie / Bruxelles - single 'Cotisation Verte' line.
+
+    Called only for the matching region, where the green-energy levy is
+    mandatory; raise on a miss rather than silently zero it.
+    """
     match = re.search(
         rf"Cotisation Verte\s*\(c€/kWh\).{{0,400}}?{region_label}\s*\n\s*([\d.,]+)",
         text,
         re.S,
     )
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if match is None:
+        raise ExtractorError(
+            f"Mega: {region_label} renewables (Cotisation Verte) not found"
+        )
+    return to_float(match.group(1)) / 100.0
 
 
 # ---- DSO row parsers ----------------------------------------------------------
