@@ -94,8 +94,9 @@ backfill_statistics:
         Destructive: deletes EVERY existing row of the target
         statistic series, not just the requested range, and the
         re-import only repopulates the requested range. Use ONLY when
-        re-running a full year (default range = Jan 1 to now). For a
-        narrower window, leave this off: the import upserts on
+        re-running a full year (default range = Jan 1 to now); a window
+        that starts after Jan 1 of the end year is rejected with clear
+        on. For a narrower window, leave this off: the import upserts on
         (statistic_id, hour) so a re-run already overwrites the
         requested hours without touching anything outside the range.
       default: false

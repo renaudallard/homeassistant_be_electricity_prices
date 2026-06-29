@@ -409,6 +409,24 @@ async def test_cost_backfill_midyear_start_anchors_sum_at_jan1(
     assert all(states[i] < states[i + 1] for i in range(len(states) - 1))
 
 
+async def test_backfill_range_rejects_clear_with_midyear_window(
+    hass: HomeAssistant,
+) -> None:
+    # clear=True wipes the WHOLE series; a window starting after Jan 1
+    # would leave the cleared Jan 1 -> start rows gone for good. The
+    # combination must be refused rather than silently destroy data.
+    entry = _entry()
+    entry.add_to_hass(hass)
+    _register_sensors(hass, entry, ["current_year_cost"])
+    entry.runtime_data = await _make_coordinator(entry)
+
+    start = datetime(2026, 3, 1, 0, 0, tzinfo=BRUSSELS)
+    end = start + timedelta(hours=3)
+    with patch.object(bf, "BePricesCoordinator", SimpleNamespace):
+        with pytest.raises(ServiceValidationError, match="starts after 1 January"):
+            await bf.backfill_range(hass, entry, start, end, clear=True)
+
+
 async def test_cost_backfill_multiyear_stays_in_end_year_without_sum_drop(
     hass: HomeAssistant,
 ) -> None:

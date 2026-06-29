@@ -316,7 +316,7 @@
         },
         "clear": {
           "name": "Clear ENTIRE series before re-import",
-          "description": "Destructive: deletes every existing row of the target series (not just the requested range), then the re-import repopulates only the requested range. Use ONLY for a full-year re-run. For narrower windows, leave this off: the import upserts on (statistic_id, hour) and already overwrites the requested hours without touching anything outside the range."
+          "description": "Destructive: deletes every existing row of the target series (not just the requested range), then the re-import repopulates only the requested range. Use ONLY for a full-year re-run; a window that starts after Jan 1 of the end year is rejected with clear on. For narrower windows, leave this off: the import upserts on (statistic_id, hour) and already overwrites the requested hours without touching anything outside the range."
         }
       }
     }
