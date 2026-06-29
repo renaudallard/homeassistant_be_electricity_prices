@@ -339,6 +339,9 @@
     },
     "price_table_empty": {
       "message": "Le tableau de prix est vide; rafraichissez l'entree d'abord."
+    },
+    "snapshot_not_loaded": {
+      "message": "L'instantane du fournisseur n'est pas encore charge; rafraichissez l'entree d'abord."
     }
   },
   "issues": {

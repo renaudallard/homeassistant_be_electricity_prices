@@ -339,6 +339,9 @@
     },
     "price_table_empty": {
       "message": "The price table is empty; refresh the entry first."
+    },
+    "snapshot_not_loaded": {
+      "message": "The supplier snapshot is not loaded yet; refresh the entry first."
     }
   },
   "issues": {

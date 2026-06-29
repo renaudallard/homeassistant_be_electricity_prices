@@ -506,6 +506,23 @@ async def _async_backfill_service(call: ServiceCall) -> ServiceResponse:
         entries = [e for e in entries if e.entry_id == target_id]
     if not entries:
         raise _no_loaded_entry_error(target_id)
+    # Validate the live state here so a call during a reload window or
+    # before the first snapshot surfaces a localized ServiceValidationError,
+    # matching the window services, rather than the raw RuntimeError that
+    # backfill_range would otherwise raise.
+    coordinator = getattr(entries[0], "runtime_data", None)
+    if not isinstance(coordinator, BePricesCoordinator):
+        raise ServiceValidationError(
+            "entry is reloading; try again in a moment",
+            translation_domain=DOMAIN,
+            translation_key="entry_reloading",
+        )
+    if coordinator._snapshot is None:
+        raise ServiceValidationError(
+            "supplier snapshot not loaded; refresh the entry first",
+            translation_domain=DOMAIN,
+            translation_key="snapshot_not_loaded",
+        )
     return await backfill_range(
         call.hass,
         entries[0],

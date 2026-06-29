@@ -35,6 +35,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -462,6 +463,39 @@ async def test_backfill_range_without_runtime_data_raises(
     # crash mid-way through statistic writes.
     with pytest.raises(RuntimeError, match="no live coordinator"):
         await bf.backfill_range(hass, entry)
+
+
+async def test_backfill_service_during_reload_raises_validation() -> None:
+    """The backfill_statistics service must surface a localized
+    ServiceValidationError, not the raw RuntimeError backfill_range raises,
+    when called while the entry is reloading (runtime_data not a coordinator)."""
+    import custom_components.be_electricity_prices as pkg
+
+    entry = SimpleNamespace(entry_id="x", runtime_data=None)
+    hass = SimpleNamespace(
+        config_entries=SimpleNamespace(async_loaded_entries=lambda _domain: [entry])
+    )
+    call = SimpleNamespace(hass=hass, data={})
+    with pytest.raises(ServiceValidationError, match="reloading"):
+        await pkg._async_backfill_service(call)  # type: ignore[arg-type]
+
+
+async def test_backfill_service_without_snapshot_raises_validation() -> None:
+    """A coordinator that exists but has no snapshot yet (pre-first-refresh)
+    also surfaces a localized ServiceValidationError."""
+    import custom_components.be_electricity_prices as pkg
+
+    coord = SimpleNamespace(_snapshot=None)
+    entry = SimpleNamespace(entry_id="x", runtime_data=coord)
+    hass = SimpleNamespace(
+        config_entries=SimpleNamespace(async_loaded_entries=lambda _domain: [entry])
+    )
+    call = SimpleNamespace(hass=hass, data={})
+    with (
+        patch.object(pkg, "BePricesCoordinator", SimpleNamespace),
+        pytest.raises(ServiceValidationError, match="snapshot"),
+    ):
+        await pkg._async_backfill_service(call)  # type: ignore[arg-type]
 
 
 # ---- _ensure_dynamic_spots gate -----------------------------------------------

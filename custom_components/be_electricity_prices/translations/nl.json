@@ -339,6 +339,9 @@
     },
     "price_table_empty": {
       "message": "De prijstabel is leeg; vernieuw de entry eerst."
+    },
+    "snapshot_not_loaded": {
+      "message": "De leveranciersmomentopname is nog niet geladen; vernieuw de entry eerst."
     }
   },
   "issues": {

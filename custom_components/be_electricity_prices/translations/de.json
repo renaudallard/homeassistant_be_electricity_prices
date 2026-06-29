@@ -339,6 +339,9 @@
     },
     "price_table_empty": {
       "message": "Die Preistabelle ist leer; aktualisieren Sie den Eintrag zuerst."
+    },
+    "snapshot_not_loaded": {
+      "message": "Der Lieferanten-Snapshot ist noch nicht geladen; aktualisieren Sie den Eintrag zuerst."
     }
   },
   "issues": {
