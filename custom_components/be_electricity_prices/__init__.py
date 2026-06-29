@@ -376,6 +376,10 @@ def _find_window(
         "start": dt_util.as_local(win_start_utc).isoformat(),
         "end": dt_util.as_local(win_end_utc).isoformat(),
         "duration_hours": duration_slots // slots_per_hour(resolution),
+        # Each "hours" row is one price slot, which is an hour on most
+        # contracts but a quarter-hour on a 15-minute (Engie Dynamic)
+        # contract; expose the resolution so a consumer can tell.
+        "resolution": resolution,
         "average_eur_per_kwh": round(best_avg, 6),
         "hours": [
             {
