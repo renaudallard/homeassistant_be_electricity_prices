@@ -435,12 +435,15 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
 
 
 def _extract_wallonia_renewables(text: str) -> float:
-    # Some cards (Smart Variable) put the value several lines below the
-    # "Coûts énergie verte" header; anchor instead on "Région wallonne",
-    # whose first numeric neighbour is always the green-energy rate.
-    # Called only for Wallonia, where the ~3.1 c€/kWh surcharge is
-    # mandatory; raise on a miss rather than silently zero it.
-    match = re.search(r"Région\s+wallonne[^\d]*?([\d.,]+)", text, re.S)
+    # The green-energy rate sits within a few dozen chars of the "Région
+    # wallonne" header: on the "Coûts énergie verte" line on most cards,
+    # or on its own line just above that header on Smart Variable. Anchor
+    # on "Région wallonne" and take its first numeric neighbour, but bound
+    # the non-digit run so a layout drift can't silently grab a far-away
+    # digit (it then misses and raises below). [^\d] already crosses
+    # newlines, so the old re.S flag was inert. Called only for Wallonia,
+    # where the ~3.1 c€/kWh surcharge is mandatory; raise on a miss.
+    match = re.search(r"Région\s+wallonne[^\d]{0,80}?([\d.,]+)", text)
     if match is None:
         raise ExtractorError("OCTA+: Wallonia green-energy surcharge not found")
     return to_float(match.group(1)) / 100.0
