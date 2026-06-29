@@ -456,7 +456,15 @@ async def _check_dats24(
                 snap.taxes.wallonia_renewables > 0,
                 detail=str(snap.taxes),
             )
-        _validate_snapshot(prefix, cid, snap)
+        # DATS 24's teruglevering is reserved to Flemish digital-meter
+        # customers, so the Wallonia card pays no feed-in; the Flanders
+        # card is monthly-indexed (current only, no spot factor/base).
+        _validate_snapshot(
+            prefix,
+            cid,
+            snap,
+            injection_shape="monthly" if region == "flanders" else "none",
+        )
 
 
 async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) -> None:
@@ -1048,18 +1056,35 @@ async def _check_catalogs(
         )
 
 
-def _validate_injection(prefix: str, snap: object) -> None:
-    """Gate that injection parsed for every supplier (issue #31).
+def _validate_injection(prefix: str, snap: object, shape: str = "present") -> None:
+    """Gate that injection parsed AND kept the right shape (issues #31, F53).
 
     The coordinator drops the feed-in credit entirely when ``injection``
     is None, so a relabelled injection row silently zeroes a solar user's
-    credit and used to pass CI green for all but two suppliers. Assert
-    presence plus a sane magnitude. Monthly indicatives can settle
-    slightly negative (a producer pays to inject at very low spot), so the
-    lower bound allows a small negative floor; the upper bound catches a
-    column-index misread.
+    credit and used to pass CI green for all but two suppliers. ``shape``
+    additionally pins the expected shape so a 0.6.7-class regression
+    (monthly-indexed card flipping to a spot factor/base, applied to the
+    hourly spot) fails loud instead of shipping green:
+
+      * ``"none"``    - the region/contract pays no feed-in (DATS 24 in
+        Wallonia); injection must be absent.
+      * ``"monthly"`` - a realized monthly indicative; ``current`` set and
+        ``factor``/``base`` must be None.
+      * ``"spot"``    - a per-hour spot formula; ``factor``/``base`` set.
+      * ``"present"`` - present, shape unconstrained (default).
+
+    Monthly indicatives can settle slightly negative (a producer pays to
+    inject at very low spot), so the magnitude lower bound allows a small
+    negative floor; the upper bound catches a column-index misread.
     """
     injection = getattr(snap, "injection", None)
+    if shape == "none":
+        _expect(
+            f"{prefix}: injection absent (region/contract pays no feed-in)",
+            injection is None,
+            detail=f"injection={injection}",
+        )
+        return
     _expect(
         f"{prefix}: injection rates present",
         injection is not None,
@@ -1068,15 +1093,27 @@ def _validate_injection(prefix: str, snap: object) -> None:
     if injection is None:
         return
     current = getattr(injection, "current", None)
+    factor = getattr(injection, "factor", None)
+    base = getattr(injection, "base", None)
+    if shape == "monthly":
+        _expect(
+            f"{prefix}: monthly-indexed injection (current set, no spot factor/base)",
+            current is not None and factor is None and base is None,
+            detail=f"current={current}, factor={factor}, base={base}",
+        )
+    elif shape == "spot":
+        _expect(
+            f"{prefix}: spot-indexed injection (factor + base present)",
+            factor is not None and base is not None,
+            detail=f"factor={factor}, base={base}",
+        )
     if current is not None:
         _expect(
             f"{prefix}: injection credit in [-0.10, 0.20] EUR/kWh",
             -0.10 <= current <= 0.20,
             detail=f"current={current}",
         )
-    else:
-        factor = getattr(injection, "factor", None)
-        base = getattr(injection, "base", None)
+    elif shape == "present":
         _expect(
             f"{prefix}: dynamic injection factor + base present",
             factor is not None and base is not None,
@@ -1084,12 +1121,29 @@ def _validate_injection(prefix: str, snap: object) -> None:
         )
 
 
-def _validate_snapshot(prefix: str, contract_id: str, snap: object) -> None:
-    """Validate the energy rates and the injection coverage of one fetched
-    snapshot. Called by every ``_check_*`` after its supplier-specific
-    DSO / tax assertions."""
+# Expected injection shape per contract id (see _validate_injection). Monthly-
+# indexed cards must keep ``current`` only; spot/dynamic cards carry
+# factor+base. Anything not listed is gated on presence only.
+_INJECTION_SHAPE: dict[str, str] = {
+    "power_fix": "monthly",
+    "power_flex": "monthly",
+    "ebem_variable": "monthly",
+    "ebem_basic_plus": "monthly",
+    "ecofix_flexy": "monthly",
+}
+
+
+def _validate_snapshot(
+    prefix: str, contract_id: str, snap: object, *, injection_shape: str | None = None
+) -> None:
+    """Validate the energy rates and the injection coverage/shape of one
+    fetched snapshot. Called by every ``_check_*`` after its
+    supplier-specific DSO / tax assertions. ``injection_shape`` overrides
+    the per-contract default (used for region-dependent cases like
+    DATS 24, whose Wallonia card pays no feed-in)."""
     _validate_energy(prefix, contract_id, getattr(snap, "energy", None))
-    _validate_injection(prefix, snap)
+    shape = injection_shape or _INJECTION_SHAPE.get(contract_id, "present")
+    _validate_injection(prefix, snap, shape)
 
 
 def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:  # noqa: ARG001 - contract_id reserved for richer validation
