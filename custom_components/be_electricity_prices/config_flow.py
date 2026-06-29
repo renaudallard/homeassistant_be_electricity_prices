@@ -1275,13 +1275,17 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         dso = current[CONF_DSO]
         # Comparison may override the meter type for static contracts;
         # falls back to the current entry's setting.
+        # The comparison may override the meter for the TARGET only (a
+        # dynamic/TOU target forces METER_DYNAMIC). The user's current side
+        # must keep its real meter, else a mono user's current bill gets
+        # quoted at bi-horaire / dynamic rates and biases the decision.
         meter = self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
+        current_meter = current.get(CONF_METER, METER_MONO)
         dso_mode = current.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
         peak_kw = max(coord._peak_kw or 0.0, VREG_CAPACITY_FLOOR_KW)
         regime = current.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
 
         now_utc = dt_util.utcnow()
-        now_hour = now_utc.replace(minute=0, second=0, microsecond=0)
         today_local = dt_util.now().date()
         jan1 = today_local.replace(month=1, day=1)
         year_ago = today_local - timedelta(days=365)
@@ -1328,24 +1332,13 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                     )
                 except Exception:  # noqa: BLE001 - degrade to '-' for the dynamic side
                     pass
-        # A borrowed coordinator cache for a quarter-hourly contract
-        # (Engie Dynamic / Ecopower DBS) is keyed by 15-minute slots, so
-        # an hour-aligned lookup would always read the :00 quarter's
-        # price for the whole hour. Try the current quarter first, then
-        # fall back to the hour key (the freshly-fetched path is hourly).
-        quarter_slot = now_utc.replace(
-            minute=(now_utc.minute // 15) * 15, second=0, microsecond=0
-        )
-        spot = spot_dict.get(quarter_slot)
-        if spot is None:
-            spot = spot_dict.get(now_hour)
         # For the ANNUAL estimate a dynamic contract's all-in is
         # factor*spot + base, linear in spot, so the time-averaged yearly
         # bill equals the breakdown at the MEAN spot over the fetched
-        # day-ahead window. Use that instead of the instantaneous spot so
+        # day-ahead window. Use that rather than an instantaneous spot so
         # the estimate doesn't reflect whichever minute the dialog opened
         # (Belgian day-ahead swings from negative to >0.30 EUR/kWh intraday).
-        avg_spot = sum(spot_dict.values()) / len(spot_dict) if spot_dict else spot
+        avg_spot = sum(spot_dict.values()) / len(spot_dict) if spot_dict else None
 
         # Measured consumption / injection from the user's kWh sensors.
         # Injection is only relevant when a solar regime is configured;
@@ -1412,7 +1405,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 region,
                 dt_util.as_local(now_utc),
                 avg_spot,
-                meter,
+                current_meter,
                 dso_mode,
             )
 
@@ -1468,12 +1461,12 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         if current_per_kwh is not None:
             placeholders["current_per_kwh"] = f"{current_per_kwh:.4f}"
             placeholders["current_annual"] = (
-                f"{_annual_bill(coord._snapshot, self.config_entry, peak_kw, current_per_kwh, annual_kwh, rolling_inj_kwh, current_inj_price):.2f}"
+                f"{_annual_bill(coord._snapshot, self.config_entry, peak_kw, current_per_kwh, annual_kwh, rolling_inj_kwh, current_inj_price, meter=current_meter):.2f}"
             )
         if other_per_kwh is not None and other_snap is not None:
             placeholders["compare_per_kwh"] = f"{other_per_kwh:.4f}"
             placeholders["compare_annual"] = (
-                f"{_annual_bill(other_snap, self.config_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price):.2f}"
+                f"{_annual_bill(other_snap, self.config_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, meter=meter):.2f}"
             )
         if (
             current_per_kwh is not None
@@ -1489,6 +1482,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 annual_kwh,
                 rolling_inj_kwh,
                 compare_inj_price,
+                meter=meter,
             ) - _annual_bill(
                 coord._snapshot,
                 self.config_entry,
@@ -1497,6 +1491,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 annual_kwh,
                 rolling_inj_kwh,
                 current_inj_price,
+                meter=current_meter,
             )
             placeholders["delta_annual"] = f"{'+' if delta >= 0 else ''}{delta:.2f}"
 
@@ -1608,6 +1603,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 ytd_inj_kwh,
                 current_inj_price,
                 fee_proration=fee_proration,
+                meter=current_meter,
             )
             compare_ytd = _annual_bill(
                 other_snap,
@@ -1618,6 +1614,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 ytd_inj_kwh,
                 compare_inj_price,
                 fee_proration=fee_proration,
+                meter=meter,
             )
             placeholders["current_ytd"] = f"{current_ytd:.2f}"
             placeholders["compare_ytd"] = f"{compare_ytd:.2f}"
@@ -1816,6 +1813,7 @@ def _annual_bill(
     injection_kwh: float = 0.0,
     injection_price: float | None = None,
     fee_proration: float = 1.0,
+    meter: Any = METER_MONO,
 ) -> float:
     """Estimated EUR bill for ``snapshot`` over the period that produced
     ``consumption_kwh`` and ``injection_kwh``.
@@ -1835,7 +1833,7 @@ def _annual_bill(
       subtracted from the cost and can drive the bill negative when
       injection income exceeds consumption + fees.
     """
-    fees = _annual_fees(snapshot, entry, peak_kw) * fee_proration
+    fees = _annual_fees(snapshot, entry, peak_kw, meter) * fee_proration
     regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     if regime == "compensation":
         billable = max(consumption_kwh - injection_kwh, 0.0)
@@ -1845,14 +1843,19 @@ def _annual_bill(
     return fees + per_kwh * consumption_kwh
 
 
-def _annual_fees(snapshot: Any, entry: ConfigEntry, peak_kw: float) -> float:
+def _annual_fees(
+    snapshot: Any, entry: ConfigEntry, peak_kw: float, meter: Any
+) -> float:
     """Just the EUR/year fee components (no per-kWh term).
 
     Pulled out so the YTD comparison can pro-rate fees by the elapsed
-    fraction of the year without re-computing the per-kWh part."""
+    fraction of the year without re-computing the per-kWh part. ``meter``
+    selects the supplier yearly fixed fee, so an exclusive-night meter
+    gets its dedicated fee (EBEM) rather than the standard one."""
     from .coordinator import _compute_capacity, _compute_prosumer
+    from .pricing import yearly_fixed_fee_for_meter
 
-    yearly_fixed = float(getattr(snapshot.energy, "yearly_fixed_fee", 0.0) or 0.0)
+    yearly_fixed = float(yearly_fixed_fee_for_meter(snapshot.energy, meter) or 0.0)
     energy_fund = 12.0 * float(snapshot.taxes.energy_fund_eur_per_month or 0.0)
     capacity = 0.0
     if entry.data.get(CONF_REGION) == REGION_FLANDERS:
