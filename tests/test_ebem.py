@@ -41,6 +41,7 @@ from custom_components.be_electricity_prices.providers.base import (
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.ebem import (
+    _extract_validity,
     discover,
     fetch_for_month,
     parse_snapshot,
@@ -53,6 +54,14 @@ _DYNAMIC = "ebem_dynamic_2026-05.pdf"
 
 def _layout(name: str) -> str:
     return fixture_text(name, layout=True)
+
+
+def test_validity_scans_past_colliding_version_token() -> None:
+    # The dynamic card header carries a colliding "VERSIE 2026" token; the
+    # validity parser must skip it and bind to the real month line.
+    assert _extract_validity("EBEM Dynamic VERSIE 2026\nmei 2026\n") == date(
+        2026, 5, 31
+    )
 
 
 # ---- registry ---------------------------------------------------------------

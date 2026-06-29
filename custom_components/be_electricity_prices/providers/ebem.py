@@ -318,15 +318,19 @@ def _extract_validity(text: str) -> date | None:
     # Accept both lowercase ("mei 2026") and title case ("Mei 2026"); the
     # dictionary lookup below already lowercases. Anchoring on lowercase
     # only would silently miss a future card that drifts to title case.
-    match = re.search(r"\b([A-Za-z]+)\s+(20\d{2})\b", text[:600])
-    if not match:
-        return None
-    month_name = match.group(1).lower()
-    if month_name not in _DUTCH_MONTHS:
-        return None
-    year = int(match.group(2))
-    month = _DUTCH_MONTHS[month_name]
-    return date(year, month, calendar.monthrange(year, month)[1])
+    # Scan for the first word+year token that is actually a month instead
+    # of aborting on the first one: the dynamic card's header window
+    # carries a colliding "VERSIE 2026" token, and today only its position
+    # after the month keeps the parse working. A None here silently skips
+    # the past-month CDN-substitution cross-check in fetch_for_month.
+    for match in re.finditer(r"\b([A-Za-z]+)\s+(20\d{2})\b", text[:600]):
+        month_name = match.group(1).lower()
+        if month_name not in _DUTCH_MONTHS:
+            continue
+        year = int(match.group(2))
+        month = _DUTCH_MONTHS[month_name]
+        return date(year, month, calendar.monthrange(year, month)[1])
+    return None
 
 
 # ---- energy + injection -----------------------------------------------------
