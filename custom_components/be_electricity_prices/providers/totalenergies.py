@@ -389,13 +389,16 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         )
 
     # Static / variable: the consumption row is 4 space-separated values
-    # (mono / jour / nuit / excl_nuit). The layout drifts per contract:
-    # asterisk count after "Consommation" varies (0-3); for static the
-    # values follow directly, for variable a "Tarif mensuel" label sits
-    # between. One regex covers all cases.
+    # (mono / jour / nuit / excl_nuit) on a single line. The layout drifts
+    # per contract: asterisk count after "Consommation" varies (0-3); for
+    # static the values follow directly, for variable a "Tarif mensuel"
+    # label sits between. One regex covers all cases. The four values are
+    # separated by [ \t]+ (never a newline) and the row ends at the line
+    # break: a 3-column card must miss and fail loud here rather than
+    # spanning the newline to grab the yearly fee as exclusive_night.
     consumption_match = re.search(
-        r"Consommation\*{0,5}\s*\n(?:\s*Tarif\s+(?:annuel|mensuel)\s*\n)?\s*"
-        r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
+        r"Consommation\*{0,5}\s*\n(?:\s*Tarif\s+(?:annuel|mensuel)\s*\n)?[ \t]*"
+        r"([\d.,]+)[ \t]+([\d.,]+)[ \t]+([\d.,]+)[ \t]+([\d.,]+)[ \t]*(?:\n|$)",
         text,
     )
     if not consumption_match:

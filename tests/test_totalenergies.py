@@ -137,6 +137,19 @@ def test_mycomfort_fixed_wallonia_extracts_bihourly_rates() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(90.0)
 
 
+def test_three_column_consumption_card_fails_loud() -> None:
+    # A 3-column static card prints only mono / jour / nuit. The old
+    # 4-value regex used \s+ between groups, so it spanned the line break
+    # and grabbed the 90,00 yearly fee as the exclusive-night rate
+    # (0.90 EUR/kWh) with no error. The row must now end at the line
+    # break: too few columns must miss and fail loud here.
+    text = fixture_text("totalenergies_mycomfort_fixed_w.pdf", layout=True).replace(
+        "17,32 17,13", "17,32\n90,00"
+    )
+    with pytest.raises(ExtractorError, match="consumption block"):
+        parse_snapshot("totalenergies_mycomfort_fixed", text, "wallonia")
+
+
 def test_mycomfort_variable_flanders_handles_tarif_mensuel_label() -> None:
     # Variable cards put "Tarif mensuel" BETWEEN the "Consommation**"
     # label and the actual values; static cards put it AFTER the values.
