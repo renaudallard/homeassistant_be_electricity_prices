@@ -679,33 +679,22 @@ def _extract_connection_fee(text: str) -> float:
 
 
 def _extract_flanders_renewables(text: str) -> float:
-    """Flanders splits renewables between green energy and cogeneration.
+    """Flanders green-energy + cogeneration surcharge.
 
-    Both are mandatory Flemish levies; a miss is a layout drift, so raise
-    rather than silently dropping ~3 c€/kWh of renewables.
+    Mega's card combines both into a single "Cotisation Verte (c€/kWh) /
+    Certificat vert et Cogénération" line, so the one value already
+    includes cogeneration (a separate cogénération row never appears).
+    Called only for Flanders, where the surcharge is mandatory; raise on a
+    miss rather than silently zero it.
     """
-    green = re.search(
+    match = re.search(
         r"Cotisation Verte\s*\(c€/kWh\).{0,400}?Flandre\s*\n\s*([\d.,]+)",
         text,
         re.S,
     )
-    cogen = re.search(
-        r"Cotisation\s+(?:Cog[ée]n[ée]ration|cog[ée]n[ée]ration)\s*\(c€/kWh\)"
-        r".{0,400}?Flandre\s*\n\s*([\d.,]+)",
-        text,
-        re.S,
-    )
-    if green is None and cogen is None:
-        # Both absent means the whole renewables block went missing - a
-        # layout drift that would silently zero ~3 c€/kWh. Raise. A card
-        # that prints only one of the two components is still valid.
-        raise ExtractorError("Mega: Flanders renewables (Cotisation Verte) not found")
-    total = 0.0
-    if green:
-        total += to_float(green.group(1))
-    if cogen:
-        total += to_float(cogen.group(1))
-    return total / 100.0
+    if match is None:
+        raise ExtractorError("Mega: Flanders green-energy surcharge not found")
+    return to_float(match.group(1)) / 100.0
 
 
 def _extract_renewables(text: str, region_label: str) -> float:

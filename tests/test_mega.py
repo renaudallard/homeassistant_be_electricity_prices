@@ -272,9 +272,10 @@ def test_missing_wallonia_connection_fee_is_fatal() -> None:
 
 
 def test_missing_flanders_renewables_is_fatal() -> None:
-    # Both renewables components gone means the block drifted; raise.
+    # The combined green-energy / cogeneration line gone means the block
+    # drifted; raise rather than silently zero the surcharge.
     text = fixture_text("mega_smart_fixed_v.pdf").replace("Cotisation", "XXX")
-    with pytest.raises(ExtractorError, match="renewables"):
+    with pytest.raises(ExtractorError, match="green-energy"):
         parse_snapshot("mega_smart_fixed", text, "flanders")
 
 

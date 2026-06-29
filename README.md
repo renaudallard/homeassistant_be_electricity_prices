@@ -134,7 +134,7 @@ All sensors share one device per config entry.
 
 | Sensor | Description |
 | --- | --- |
-| `current_price` | All-in EUR/kWh **now**. Attributes: `today` and `tomorrow` (chronological lists of `{start, energy, network, taxes, all_in}`), snapshot age, last fetch error, `cheapest_4h_today` and `most_expensive_4h_today` (chronologically sorted, disjoint lists of `{start, price}`). On flat-tariff days where every hour rounds to the same all-in price (typical for fixed contracts), the cheapest list always comes back as the first 4 hours of the day and the most-expensive as the last 4 — automations keying on these for "cheapest window" should treat the output as undefined when the day's prices don't actually vary. |
+| `current_price` | All-in EUR/kWh **now**. Attributes: `today` and `tomorrow` (chronological lists of `{start, energy, network, taxes, all_in}`), `snapshot_publication` (the card's publication month), `snapshot_age_hours`, `snapshot_stale`, `last_error`, `cheapest_4h_today` and `most_expensive_4h_today` (chronologically sorted, disjoint lists of `{start, price}`). On flat-tariff days where every hour rounds to the same all-in price (typical for fixed contracts), the cheapest list always comes back as the first 4 hours of the day and the most-expensive as the last 4 — automations keying on these for "cheapest window" should treat the output as undefined when the day's prices don't actually vary. |
 | `next_hour_price` | All-in EUR/kWh for the next hour. |
 | `today_average` | Daily average all-in EUR/kWh. |
 | `today_min` / `today_max` | Daily extremes. |
