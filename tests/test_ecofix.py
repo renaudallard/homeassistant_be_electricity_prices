@@ -242,14 +242,17 @@ def test_flexy_is_variable_with_indicative_monthly_rate() -> None:
     assert snap.energy.formula is not None and "BELPEX-RLP-M" in snap.energy.formula
 
 
-def test_flexy_injection_has_formula_and_indicative() -> None:
+def test_flexy_injection_surfaces_monthly_indicative_only() -> None:
+    # BELPEX-SPP-M is a MONTHLY index, so the realized monthly indicative
+    # ("Maandprijs") is surfaced as current; factor/base stay None so the
+    # engine never applies the monthly coefficient to the hourly spot. The
+    # formula text is retained for diagnostics.
     snap = parse_snapshot("ecofix_flexy", _layout(_FLEXY), "wallonia", "test://f")
     inj = snap.injection
     assert inj is not None
     assert inj.current == pytest.approx(0.0432)
-    # PDF: (BELPEX-SPP-M * 0.0884) - 0.5000  c€/kWh ex-VAT.
-    assert inj.factor == pytest.approx(0.884, rel=1e-4)
-    assert inj.base == pytest.approx(-0.005, rel=1e-4)
+    assert inj.factor is None
+    assert inj.base is None
     assert inj.formula is not None and "BELPEX-SPP-M" in inj.formula
 
 

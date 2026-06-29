@@ -459,36 +459,29 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
             ),
         )
 
-    # Flexy variable: "Injectie ... Maandprijs: 4,32 4,32 4,32 /"
+    # Flexy variable: injection settles on BELPEX-SPP-M, a MONTHLY index,
+    # so surface only the realized monthly indicative ("Maandprijs"); the
+    # formula is kept as diagnostic text. Emitting factor/base would make
+    # the pricing engine apply the monthly coefficient to the hourly spot
+    # (mirrors EBEM Groen Variabel / B@sic+ and DATS24 Groen Variabel).
     current_block = re.search(
         r"Injectie[\s\S]+?Maandprijs:\s+([\d,]+)",
         text,
     )
+    if not current_block:
+        # Every Flexy card prints the monthly indicative; a miss is a
+        # layout drift, not a fee-free contract. Fail loud rather than
+        # emit a spot-shaped credit the pipeline cannot price.
+        raise ExtractorError("Ecofix Flexy injection: monthly indicative missing")
     formula_match = re.search(
-        rf"Injectie:\s*\(BELPEX-SPP-M\s*\*\s*([\d,]+)\)\s*"
-        rf"([{SIGN_CHARS}])\s*([\d,]+)",
+        rf"Injectie:\s*\(BELPEX-SPP-M\s*\*\s*[\d,]+\)\s*"
+        rf"[{SIGN_CHARS}]\s*[\d,]+",
         text,
     )
-    if not current_block and not formula_match:
-        return None
-    current = (
-        to_float(current_block.group(1)) / 100.0 if current_block is not None else None
+    return InjectionRates(
+        current=to_float(current_block.group(1)) / 100.0,
+        formula=formula_match.group(0) if formula_match else None,
     )
-    factor: float | None = None
-    base: float | None = None
-    formula: str | None = None
-    if formula_match:
-        factor_pdf = to_float(formula_match.group(1))
-        base_pdf_cents = parse_sign(formula_match.group(2)) * to_float(
-            formula_match.group(3)
-        )
-        factor = factor_pdf * 10.0
-        base = base_pdf_cents / 100.0
-        formula = (
-            f"(BELPEX-SPP-M * {formula_match.group(1)}) "
-            f"{formula_match.group(2)} {formula_match.group(3)} c€/kWh ex-VAT"
-        )
-    return InjectionRates(current=current, factor=factor, base=base, formula=formula)
 
 
 # ---- publication / validity --------------------------------------------------
