@@ -155,6 +155,13 @@ def test_dot_decimal_render_matches_comma() -> None:
     assert dot.energy.base == pytest.approx(comma.energy.base)
 
 
+def test_missing_monthly_fee_is_fatal() -> None:
+    # The Abonnementskost standing charge is mandatory; a miss must raise.
+    text = _text().replace("Abonnementskost", "XXX")
+    with pytest.raises(ExtractorError, match="monthly fixed fee"):
+        parse_snapshot(text, "test://frank-apr", "frank_dynamic", "april 2026")
+
+
 def test_missing_gsc_wkk_is_fatal() -> None:
     # Frank is Flanders-only, so GSC + WKK are mandatory; a miss must
     # raise rather than silently zero the renewables levy.

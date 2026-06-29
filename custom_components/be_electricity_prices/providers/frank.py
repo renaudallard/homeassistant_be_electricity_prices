@@ -371,7 +371,12 @@ def _extract_dynamic(text: str) -> DynamicRates:
     base = base_pre_vat_cents * vat_mult / 100.0
 
     fee_match = _MONTHLY_FEE_RE.search(text)
-    yearly_fee = to_float(fee_match.group(1)) * 12.0 if fee_match else 0.0
+    if fee_match is None:
+        # The monthly standing charge (~35 EUR/yr) is mandatory; the
+        # adjacent tax block already fails loud, so do the same here
+        # rather than silently bill a zero standing charge on drift.
+        raise ExtractorError("Frank Energie: monthly fixed fee row not found")
+    yearly_fee = to_float(fee_match.group(1)) * 12.0
 
     return DynamicRates(
         factor=factor,
