@@ -1715,7 +1715,7 @@ def _tou_weighted_per_kwh(
     # Slot weights = hours-per-week the slot is active, derived from
     # the published TOU rules and a 5-weekday / 2-weekend split.
     if snapshot.energy.weekend_rule == "weekend_no_peak":
-        # Engie Empower Flextime: weekend is transition (07-01) +
+        # Engie Empower Flextime: weekend is transition (07-11 + 17-01) +
         # offpeak (01-07 + 11-17). Weekday rule applies on weekdays.
         wp, wt, wo = 45.0, 69.0, 54.0
     else:

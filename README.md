@@ -355,8 +355,8 @@ inspecting attributes; each auto-clears on the next successful refresh:
 
 Drops the cached supplier snapshot **and** the ENTSO-E spot cache for every
 loaded entry, then re-fetches both immediately. Handy after a tariff card
-update or to clear a transient fetch error without waiting for the next 24 h
-tick. No fields.
+update or to clear a transient fetch error without waiting for the next
+hourly tick. No fields.
 
 ### `be_electricity_prices.cheapest_window` / `most_expensive_window` services
 

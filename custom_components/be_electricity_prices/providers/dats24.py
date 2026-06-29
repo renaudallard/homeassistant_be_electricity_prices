@@ -143,7 +143,7 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 
     DATS 24's rate card is published from a stable URL; the catalog
     "drift" we want to detect is the endpoint disappearing or
-    splitting into multiple variants. A 200 + PDF magic bytes is
+    splitting into multiple variants. A 200 from a HEAD probe is
     enough -- if they ever add a second contract type ("vast", "tou",
     etc.) this check stays green and we'd notice via a separate
     extractor failure rather than a false-positive new-product alert.

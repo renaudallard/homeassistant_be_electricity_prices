@@ -233,9 +233,10 @@ async def _fetch_pdf_text(
     except ExtractorError as primary_err:
         # Fixed cards may not be published yet on the 1st of the month;
         # fall back to the previous month so the user keeps seeing
-        # plausible prices instead of UpdateFailed. The fallback PDF
-        # carries last month's `valid_until`, so the
-        # ``tomorrow_prices_available`` sensor still reflects staleness.
+        # plausible prices instead of UpdateFailed. Bolt cards expose no
+        # parseable valid_until, so the fallback can't signal staleness
+        # through it; the warning logged below is the only trace that
+        # last month's card is being served.
         if contract.folder != "fix":
             raise
         # Same Brussels-local anchor as ``_document_url``: the
