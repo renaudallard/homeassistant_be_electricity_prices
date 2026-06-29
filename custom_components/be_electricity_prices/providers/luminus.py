@@ -401,7 +401,12 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
             formula = match.group(0)
 
     if current is None and factor is None:
-        return None
+        # Both Luminus card families always publish injection: the
+        # applicable indicative on fixed/variable/TOU cards, the spot
+        # formula on dynamic. A miss is a layout drift, not a fee-free
+        # contract; fail loud rather than silently crediting an injection
+        # user nothing, mirroring the consumption helpers that raise.
+        raise ExtractorError("Luminus: could not parse injection rate")
     return InjectionRates(current=current, factor=factor, base=base, formula=formula)
 
 

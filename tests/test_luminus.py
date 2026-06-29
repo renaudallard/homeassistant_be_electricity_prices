@@ -116,6 +116,15 @@ def test_dynamic_extracts_injection_formula_with_negative_base() -> None:
     assert inj.base == pytest.approx(-0.012737)
 
 
+def test_missing_injection_row_fails_loud() -> None:
+    # Every Luminus card publishes an injection rate; a non-dynamic card
+    # whose injection row went missing is a layout drift, not a fee-free
+    # contract, so it must raise rather than silently credit nothing.
+    text = fixture_text("luminus_comfy_w.pdf").replace("injectée", "verwijderd")
+    with pytest.raises(ExtractorError, match="injection"):
+        parse_snapshot("luminus_comfy", text, "wallonia")
+
+
 def test_comfy_wallonia_fixed_rates_and_dso() -> None:
     snap = _comfy_w()
     assert isinstance(snap.energy, FixedRates)
