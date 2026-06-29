@@ -145,7 +145,9 @@ def test_dot_decimal_render_matches_comma() -> None:
     dot = parse_snapshot(
         _text().replace(",", "."), "test://frank-apr", "frank_dynamic", "april 2026"
     )
-    assert dot.taxes.energy_contribution == pytest.approx(comma.taxes.energy_contribution)
+    assert dot.taxes.energy_contribution == pytest.approx(
+        comma.taxes.energy_contribution
+    )
     assert dot.taxes.federal_excise == pytest.approx(comma.taxes.federal_excise)
     assert isinstance(dot.energy, DynamicRates)
     assert isinstance(comma.energy, DynamicRates)

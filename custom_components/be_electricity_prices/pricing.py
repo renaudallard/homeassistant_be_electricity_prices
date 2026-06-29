@@ -232,13 +232,9 @@ def energy_eur_per_kwh(
     """
     bi_capable = meter in ("bi", "dynamic")
     if isinstance(energy, FixedRates):
-        return _routed_rate(
-            energy.single, energy, when, meter, bi_capable=bi_capable
-        )
+        return _routed_rate(energy.single, energy, when, meter, bi_capable=bi_capable)
     if isinstance(energy, VariableRates):
-        return _routed_rate(
-            energy.current, energy, when, meter, bi_capable=bi_capable
-        )
+        return _routed_rate(energy.current, energy, when, meter, bi_capable=bi_capable)
     if isinstance(energy, DynamicRates):
         if spot_eur_per_kwh is None:
             raise ValueError("dynamic tariff needs a spot price")
