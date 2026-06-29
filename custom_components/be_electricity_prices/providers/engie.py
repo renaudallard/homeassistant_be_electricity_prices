@@ -787,6 +787,25 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=data_mgmt,
             prosumer_eur_per_kva_year=prosumer,
         )
+
+    # The card lists ~7 ORES sub-areas (Brab. Wal., Est, Hainaut, ...),
+    # numerically identical today; the loop above maps only the
+    # "ORES (Brab. Wal.)" row into the single ORES key. Assert the other
+    # sub-areas match it so a future sub-area tariff split is caught here
+    # rather than silently billing every ORES customer at the Brab. Wal.
+    # rate (mirrors the Ecofix ORES guard).
+    ores_rows = re.findall(
+        r"^ORES\s*\([^)]+\)[^\S\n]+((?:[\d,.]+[^\S\n]+){8,}[\d,.]+)",
+        text,
+        re.MULTILINE | re.IGNORECASE,
+    )
+    first = ores_rows[0].split() if ores_rows else None
+    for other in ores_rows[1:]:
+        if other.split() != first:
+            raise ExtractorError(
+                "Engie: ORES sub-area tariffs diverged from the first ORES "
+                "row; a sub-area split needs an explicit DSO key"
+            )
     return out
 
 

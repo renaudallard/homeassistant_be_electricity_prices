@@ -139,6 +139,18 @@ def test_dynamic_extracts_consumption_formula() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(100.7)
 
 
+def test_wallonia_ores_subarea_divergence_is_fatal() -> None:
+    # The ~7 ORES sub-areas are numerically identical today and collapse
+    # to one ORES key. If a future card diverges a sub-area, the parser
+    # must raise rather than silently bill every ORES customer the first
+    # sub-area's rates.
+    wal = fixture_text("engie_dynamic_w.pdf").replace(
+        "ORES (Est) 11,98", "ORES (Est) 99,98"
+    )
+    with pytest.raises(ExtractorError, match="ORES sub-area"):
+        parse_snapshot("engie_dynamic", {REGION_WALLONIA: wal})
+
+
 def test_dynamic_missing_vat_phrase_is_fatal() -> None:
     # The Dynamic formula is printed pre-VAT and scaled by the parsed VAT
     # multiplier; a reworded VAT header must raise rather than silently
