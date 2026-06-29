@@ -476,13 +476,21 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
             rf"([{SIGN_CHARS}])\s*([\d.,]+)",
             text,
         )
-        if match is not None:
-            f_pdf = to_float(match.group(1))
-            b_cents = parse_sign(match.group(2)) * to_float(match.group(3))
-            # Injection is VAT-exempt residential.
-            factor = f_pdf * 10.0
-            base = b_cents / 100.0
-            formula = match.group(0)
+        if match is None:
+            # A dynamic contract must price injection off the live spot via
+            # factor*BELPEXH + base. Without the formula the snapshot would
+            # silently fall back to the flat monthly indicative for every
+            # hour - fail loud like the consumption side rather than ship a
+            # wrong-shaped credit.
+            raise ExtractorError(
+                "TotalEnergies dynamic injection: BELPEXH formula not found"
+            )
+        f_pdf = to_float(match.group(1))
+        b_cents = parse_sign(match.group(2)) * to_float(match.group(3))
+        # Injection is VAT-exempt residential.
+        factor = f_pdf * 10.0
+        base = b_cents / 100.0
+        formula = match.group(0)
 
     if current is None and factor is None:
         return None

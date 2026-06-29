@@ -40,6 +40,7 @@ from custom_components.be_electricity_prices.providers.base import (
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.totalenergies import (
+    _extract_injection,
     parse_snapshot,
 )
 
@@ -100,6 +101,15 @@ def test_dynamic_injection_formula_uses_distinct_anchor() -> None:
     # PDF: 0.1 * BELPEXH - 1.3 (HTVA, residential injection is VAT-exempt).
     assert inj.factor == pytest.approx(1.0)
     assert inj.base == pytest.approx(-0.013)
+
+
+def test_dynamic_injection_missing_formula_fails_loud() -> None:
+    # A dynamic card whose injection block prints the indicative but not
+    # the BELPEXH formula must not silently price feed-in at the flat
+    # monthly rate every hour - it must raise.
+    text = "Injection**\nIndicatif\n9.15\n"
+    with pytest.raises(ExtractorError, match="BELPEXH formula not found"):
+        _extract_injection(text, "dynamic")
 
 
 def test_mycomfort_fixed_wallonia_extracts_bihourly_rates() -> None:
