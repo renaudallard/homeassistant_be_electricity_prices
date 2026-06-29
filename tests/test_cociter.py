@@ -89,6 +89,18 @@ def test_variable_extracts_dso_overlay() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.03)
 
 
+def test_variable_extracts_supplier_prosumer_forfait() -> None:
+    # The variable card also bills a supplier-side compensation-regime PV
+    # forfait (37,10 EUR/kVA/an TVAC) on top of the DSO prosumer tariff.
+    snap = parse_snapshot(
+        fixture_text("cociter_var_2604.pdf"),
+        "cociter_variable",
+        "test://var",
+        "2026-04",
+    )
+    assert snap.supplier_prosumer_eur_per_kva_year == pytest.approx(37.10)
+
+
 def test_dynamic_has_no_prosumer_rate() -> None:
     # Dynamic SMR3 contract has no compensation regime - the row swaps the
     # prosumer column for three Tarif Impact columns.
@@ -99,6 +111,8 @@ def test_dynamic_has_no_prosumer_rate() -> None:
         "2026-04",
     )
     assert snap.dsos["aieg"].prosumer_eur_per_kva_year is None
+    # Dynamic dispenses with the compensation regime -> no supplier forfait.
+    assert snap.supplier_prosumer_eur_per_kva_year is None
 
 
 def test_dso_extraction_keys_off_header_not_column_count() -> None:

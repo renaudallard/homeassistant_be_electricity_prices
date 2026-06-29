@@ -299,6 +299,12 @@ class SupplierSnapshot:
     source_url: str
     publication_label: str = ""
     injection: InjectionRates | None = None
+    # Supplier-side compensation-regime prosumer forfait in EUR per kVA of
+    # inverter capacity per year, billed ON TOP OF the DSO prosumer tariff
+    # (DsoOverlay.prosumer_eur_per_kva_year). Cociter Variable publishes one
+    # ("Forfait panneaux photovoltaiques ... en regime de compensation");
+    # most cards don't, so it stays None. Already TVAC - never VAT-scaled.
+    supplier_prosumer_eur_per_kva_year: float | None = None
     # Last calendar day the published rates apply to (typically the last
     # day of the supplier's pricing month). ``None`` when the extractor
     # couldn't parse a validity period from the card. Consumers that

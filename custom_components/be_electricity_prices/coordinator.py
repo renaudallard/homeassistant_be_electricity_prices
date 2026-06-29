@@ -1686,9 +1686,15 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
     if kva <= 0.0:
         return 0.0
     overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
-    if overlay is None or overlay.prosumer_eur_per_kva_year is None:
-        return 0.0
-    return kva * overlay.prosumer_eur_per_kva_year / 12.0
+    dso_rate = (
+        overlay.prosumer_eur_per_kva_year
+        if overlay is not None and overlay.prosumer_eur_per_kva_year is not None
+        else 0.0
+    )
+    # Supplier-side compensation forfait (Cociter Variable) is billed on
+    # top of the DSO tariff; it is already TVAC, so it is summed raw.
+    supplier_rate = snapshot.supplier_prosumer_eur_per_kva_year or 0.0
+    return kva * (dso_rate + supplier_rate) / 12.0
 
 
 async def _recorder_rows(
@@ -2070,9 +2076,15 @@ async def _ytd_prosumer(
         hass, session, extractor, snapshot, entry, today, contract=contract
     ):
         overlay = snap_m.dsos.get(dso)
-        if overlay is None or overlay.prosumer_eur_per_kva_year is None:
+        dso_rate = (
+            overlay.prosumer_eur_per_kva_year
+            if overlay is not None and overlay.prosumer_eur_per_kva_year is not None
+            else 0.0
+        )
+        supplier_rate = snap_m.supplier_prosumer_eur_per_kva_year or 0.0
+        if dso_rate == 0.0 and supplier_rate == 0.0:
             continue
-        monthly_fee = kva * overlay.prosumer_eur_per_kva_year / 12.0
+        monthly_fee = kva * (dso_rate + supplier_rate) / 12.0
         total += monthly_fee * (days_in_ytd / days_in_full_month)
     return total
 
@@ -2554,7 +2566,10 @@ async def _compute_current_year_cost(
 # 15-minute Epex spot and now sets ``quarter_hourly`` too. Bump so a
 # cached OCTA+ dynamic snapshot is dropped and re-fetched with the flag
 # set rather than lingering on the hourly default.
-_SNAPSHOT_SCHEMA_VERSION = 10
+# v11: snapshots gained supplier_prosumer_eur_per_kva_year (Cociter's
+# compensation-regime PV forfait). Bump so a cached Cociter Variable
+# snapshot is re-fetched with the forfait parsed instead of None.
+_SNAPSHOT_SCHEMA_VERSION = 11
 
 
 def _snapshot_to_dict(
@@ -2574,6 +2589,7 @@ def _snapshot_to_dict(
         "publication_label": snap.publication_label,
         "valid_until": snap.valid_until.isoformat() if snap.valid_until else None,
         "injection": snap.injection.__dict__ if snap.injection else None,
+        "supplier_prosumer_eur_per_kva_year": snap.supplier_prosumer_eur_per_kva_year,
     }
 
 
@@ -2616,6 +2632,9 @@ def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
         publication_label=data.get("publication_label", ""),
         valid_until=valid_until,
         injection=InjectionRates(**injection_data) if injection_data else None,
+        supplier_prosumer_eur_per_kva_year=data.get(
+            "supplier_prosumer_eur_per_kva_year"
+        ),
     )
 
 

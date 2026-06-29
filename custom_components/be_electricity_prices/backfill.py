@@ -584,8 +584,14 @@ async def _backfill_cost_sensor(
 
         if is_compensation and kva > 0.0:
             overlay = snap_h.dsos.get(dso)
-            if overlay is not None and overlay.prosumer_eur_per_kva_year is not None:
-                monthly_fee = kva * overlay.prosumer_eur_per_kva_year / 12.0
+            dso_rate = (
+                overlay.prosumer_eur_per_kva_year
+                if overlay is not None and overlay.prosumer_eur_per_kva_year is not None
+                else 0.0
+            )
+            supplier_rate = snap_h.supplier_prosumer_eur_per_kva_year or 0.0
+            if dso_rate or supplier_rate:
+                monthly_fee = kva * (dso_rate + supplier_rate) / 12.0
                 running_fees += monthly_fee / _hours_in_month(month_first)
 
         # Compensation regime clamps the YTD energy term at zero

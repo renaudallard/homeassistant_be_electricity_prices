@@ -110,6 +110,34 @@ def test_prosumer_compensation_regime_monthly_cost() -> None:
     assert cost == pytest.approx(5.0 * 85.0 / 12.0)
 
 
+def test_prosumer_adds_supplier_forfait_on_top_of_dso() -> None:
+    # Cociter Variable bills the DSO prosumer tariff AND a supplier-side
+    # compensation forfait (37,10 EUR/kVA/an); both apply per kVA per year.
+    snap = make_snapshot(
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                prosumer_eur_per_kva_year=81.03,
+            )
+        },
+        supplier_prosumer_eur_per_kva_year=37.10,
+    )
+    cost = _compute_prosumer(snap, _entry(solar_kva=5.0))
+    assert cost == pytest.approx(5.0 * (81.03 + 37.10) / 12.0)
+
+
+def test_prosumer_supplier_forfait_billed_without_dso_rate() -> None:
+    # The supplier forfait stands alone even when the DSO publishes no
+    # prosumer tariff for the configured area.
+    snap = make_snapshot(
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        supplier_prosumer_eur_per_kva_year=37.10,
+    )
+    cost = _compute_prosumer(snap, _entry(solar_kva=5.0))
+    assert cost == pytest.approx(5.0 * 37.10 / 12.0)
+
+
 def test_prosumer_no_rate_in_dso_overlay_returns_zero() -> None:
     # Flemish digital meter / Cociter SMR3: no compensation regime.
     cost = _compute_prosumer(

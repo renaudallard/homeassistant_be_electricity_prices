@@ -243,7 +243,33 @@ def parse_snapshot(
         publication_label=publication_label,
         valid_until=parse_valid_until(text),
         injection=_extract_injection(text),
+        supplier_prosumer_eur_per_kva_year=_extract_supplier_prosumer(
+            text, contract_id
+        ),
     )
+
+
+def _extract_supplier_prosumer(text: str, contract_id: str) -> float | None:
+    """Cociter Variable's supplier-side compensation-regime PV forfait.
+
+    The variable card bills, on top of the DSO "Tarif prosumer" column, a
+    supplier forfait "Forfait panneaux photovoltaiques (en regime de
+    compensation)" defined in footnote (6) as "37,10 EUR/kVA/an TVAC". The
+    dynamic SMR3 card dispenses with the compensation regime, so it carries
+    no such forfait.
+
+    The value is already TVAC and must NOT be VAT-scaled. Anchor on the
+    "EUR/kVA/an TVAC" footnote wording, which is unique to this forfait (the
+    DSO prosumer column header is the bare "(EUR/kVA/an)"). Every Cociter
+    variable card prints it, so a miss is a layout drift; raise rather than
+    silently drop it, the same way the injection and tax parsers fail loud.
+    """
+    if contract_id != "cociter_variable":
+        return None
+    match = re.search(r"([\d,]+)\s*€/kVA/an\s*TVAC", text)
+    if not match:
+        raise ExtractorError("could not parse Cociter compensation-regime PV forfait")
+    return to_float(match.group(1))
 
 
 def _extract_injection(text: str) -> InjectionRates:

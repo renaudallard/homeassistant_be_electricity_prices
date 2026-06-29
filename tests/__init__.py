@@ -87,6 +87,7 @@ def make_snapshot(
     publication_label: str = "",
     injection: InjectionRates | None = None,
     valid_until: date | None = None,
+    supplier_prosumer_eur_per_kva_year: float | None = None,
 ) -> SupplierSnapshot:
     """SupplierSnapshot with sensible defaults for tests.
 
@@ -110,6 +111,7 @@ def make_snapshot(
         publication_label=publication_label,
         injection=injection,
         valid_until=valid_until,
+        supplier_prosumer_eur_per_kva_year=supplier_prosumer_eur_per_kva_year,
     )
 
 
