@@ -139,6 +139,18 @@ def test_dynamic_extracts_consumption_formula() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(100.7)
 
 
+def test_dynamic_missing_vat_phrase_is_fatal() -> None:
+    # The Dynamic formula is printed pre-VAT and scaled by the parsed VAT
+    # multiplier; a reworded VAT header must raise rather than silently
+    # fall back to 6%.
+    texts = {
+        region: text.replace("de tva comprise", "XXX")
+        for region, text in _dynamic_three_regions().items()
+    }
+    with pytest.raises(ExtractorError, match="VAT multiplier"):
+        parse_snapshot("engie_dynamic", texts)
+
+
 def test_dynamic_extracts_injection_formula() -> None:
     snap = parse_snapshot("engie_dynamic", _dynamic_three_regions())
     inj = snap.injection

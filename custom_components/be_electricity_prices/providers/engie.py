@@ -400,10 +400,17 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
 # ---- energy + tax block -------------------------------------------------------
 
 
+_VAT_RE = re.compile(r"(\d+)\s*%\s*de\s*tva\s*comprise", re.IGNORECASE)
+
+
 def _vat_multiplier(text: str) -> float:
-    return vat_multiplier(
-        text, re.compile(r"(\d+)\s*%\s*de\s*tva\s*comprise", re.IGNORECASE)
-    )
+    # The Dynamic formula is printed pre-VAT and scaled by this multiplier
+    # (the only caller), so the phrase is mandatory: a reworded header
+    # would otherwise fall back to vat_multiplier's 6% default silently
+    # and mask a VAT-rate or wording change. Fail loud instead.
+    if _VAT_RE.search(text) is None:
+        raise ExtractorError("could not parse Engie dynamic VAT multiplier")
+    return vat_multiplier(text, _VAT_RE)
 
 
 # Engie's formula prints either "Formule de prix hors TVA -1,3135 + (0,1095 x
