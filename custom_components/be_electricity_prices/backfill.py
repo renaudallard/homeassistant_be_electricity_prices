@@ -207,12 +207,20 @@ def _normalize_window(
 async def _existing_stat_window(
     hass: HomeAssistant, statistic_id: str, anchor: datetime
 ) -> bool:
-    """Return True when at least one statistic row exists at ``anchor``.
+    """Return True when at least one statistic row exists in a short
+    window from ``anchor``.
 
     Used by :func:`backfill_if_missing` to derive the "is the recorder
     already populated" signal directly from the recorder, so we never
     need to persist a separate "backfill done" flag that would go
     stale across DB resets or supplier changes.
+
+    Probes a 2-day window rather than the single anchor hour: a dynamic
+    contract whose Jan 1 00:00 spot is genuinely missing skips that hour
+    during backfill, so a single-hour probe would read empty and re-run
+    the whole-year backfill on every restart. A short window still reads
+    empty after a real DB reset (self-healing preserved) but tolerates a
+    legitimately-absent leading hour.
     """
     try:
         from homeassistant.components.recorder import (  # type: ignore[attr-defined]
@@ -228,7 +236,7 @@ async def _existing_stat_window(
             statistics_during_period,
             hass,
             anchor,
-            anchor + timedelta(hours=1),
+            anchor + timedelta(days=2),
             {statistic_id},
             "hour",
             None,

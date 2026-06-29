@@ -168,6 +168,28 @@ async def test_existing_stat_window_false_when_recorder_returns_empty(
     assert present is False
 
 
+async def test_existing_stat_window_probes_a_multiday_window(
+    hass: HomeAssistant,
+) -> None:
+    # The probe spans more than the single anchor hour so a dynamic
+    # contract whose Jan 1 00:00 spot is genuinely missing (that hour
+    # skipped during backfill) is not re-backfilled in full on every
+    # restart.
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with patch(
+        "homeassistant.components.recorder.get_instance",
+        return_value=instance,
+    ):
+        await bf._existing_stat_window(
+            hass, "sensor.x", datetime(2026, 1, 1, tzinfo=UTC)
+        )
+    # statistics_during_period args: (func, hass, start, end, ids, ...).
+    call_args = instance.async_add_executor_job.call_args.args
+    start, end = call_args[2], call_args[3]
+    assert end - start >= timedelta(days=1)
+
+
 async def test_existing_stat_window_swallows_recorder_exceptions(
     hass: HomeAssistant,
 ) -> None:
