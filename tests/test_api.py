@@ -167,6 +167,44 @@ def test_quarter_hourly_keeps_native_slots() -> None:
     assert all(k.minute in (0, 15, 30, 45) for k in parsed)
 
 
+_DUAL_RESOLUTION_DOC = """<?xml version="1.0" encoding="UTF-8"?>
+<Publication_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3">
+  <TimeSeries>
+    <Period>
+      <timeInterval><start>2026-04-29T22:00Z</start><end>2026-04-29T23:00Z</end></timeInterval>
+      <resolution>PT60M</resolution>
+      <Point><position>1</position><price.amount>100</price.amount></Point>
+    </Period>
+  </TimeSeries>
+  <TimeSeries>
+    <Period>
+      <timeInterval><start>2026-04-29T22:00Z</start><end>2026-04-29T23:00Z</end></timeInterval>
+      <resolution>PT15M</resolution>
+      <Point><position>1</position><price.amount>10</price.amount></Point>
+      <Point><position>2</position><price.amount>20</price.amount></Point>
+      <Point><position>3</position><price.amount>30</price.amount></Point>
+      <Point><position>4</position><price.amount>40</price.amount></Point>
+    </Period>
+  </TimeSeries>
+</Publication_MarketDocument>
+"""
+
+
+def test_dual_resolution_series_do_not_blend() -> None:
+    """ENTSO-E returns both a PT60M and a PT15M series for the same period
+    in 15-minute day-ahead zones (Belgium). The two resolutions must not
+    be averaged together: hourly mode takes the hourly product, quarter
+    mode takes the native 15-minute slot."""
+    h = datetime(2026, 4, 29, 22, 0, tzinfo=UTC)
+    # Hourly mode -> the PT60M product (0.100), not the blend
+    # (100 + 10 + 20 + 30 + 40) / 5 = 40 -> 0.040.
+    assert parse_day_ahead_xml(_DUAL_RESOLUTION_DOC)[h] == pytest.approx(0.100)
+    # Quarter mode -> the PT15M :00 slot (0.010), not (100 + 10) / 2 = 55.
+    assert parse_day_ahead_xml(_DUAL_RESOLUTION_DOC, quarter_hourly=True)[
+        h
+    ] == pytest.approx(0.010)
+
+
 def test_quarter_hourly_on_hourly_source_still_hourly() -> None:
     """A PT60M document yields hourly keys even with quarter_hourly=True:
     there are no sub-hour points to keep."""

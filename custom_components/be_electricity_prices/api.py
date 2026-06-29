@@ -175,8 +175,15 @@ def parse_day_ahead_xml(
     # Per-slot accumulators: (sum, count) so we can take the mean at the
     # end without holding every sub-hour point in memory. The slot key is
     # the hour (default) or the native sub-hour instant (quarter_hourly).
-    bucket_sum: dict[datetime, float] = {}
-    bucket_count: dict[datetime, int] = {}
+    # Bucket per resolution step so two overlapping TimeSeries of
+    # different resolution are never blended into an unweighted mean.
+    # ENTSO-E returns BOTH a PT60M and a PT15M series for the same
+    # delivery period in 15-minute day-ahead zones (Belgium; entsoe-py
+    # #204), and averaging "1 hourly point + 4 quarter points" mis-prices
+    # every hour. Within one resolution, duplicate points still average
+    # (a corrected re-publication). Keyed by the resolution step seconds.
+    sums: dict[float, dict[datetime, float]] = {}
+    counts: dict[float, dict[datetime, int]] = {}
 
     for ts in root.findall("ns:TimeSeries", _NS):
         period = ts.find("ns:Period", _NS)
@@ -197,6 +204,9 @@ def parse_day_ahead_xml(
             # (e.g. PT5M) instead of aborting the whole document; other
             # series in the same publication may still be hourly.
             continue
+        step_s = step.total_seconds()
+        bucket_sum = sums.setdefault(step_s, {})
+        bucket_count = counts.setdefault(step_s, {})
         # IEC 62325-451-3 / A44 lets a publication document omit any
         # Point whose price is unchanged from the previous position
         # ("carry forward" semantics). Collect only the explicit points
@@ -251,7 +261,17 @@ def parse_day_ahead_xml(
             bucket_sum[key] = bucket_sum.get(key, 0.0) + last
             bucket_count[key] = bucket_count.get(key, 0) + 1
 
-    return {k: bucket_sum[k] / bucket_count[k] for k in bucket_sum}
+    # Prefer the native resolution for the requested grid: the hourly
+    # product (largest step) in hourly mode, the 15-minute series
+    # (smallest step) in quarter mode. Other resolutions only fill keys
+    # the preferred one does not cover, so overlapping series never blend.
+    result: dict[datetime, float] = {}
+    for step_s in sorted(sums, reverse=not quarter_hourly):
+        bucket_sum = sums[step_s]
+        bucket_count = counts[step_s]
+        for key, summed in bucket_sum.items():
+            result.setdefault(key, summed / bucket_count[key])
+    return result
 
 
 def _local_name(tag: str) -> str:
