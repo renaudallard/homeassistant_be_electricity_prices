@@ -390,7 +390,7 @@ def _extract_dynamic(text: str) -> DynamicRates:
 _INJECTION_RE = re.compile(
     r"[Tt]e?rugleveringsvergoeding[:\s]*"
     rf"\({_NUM}\s*x\s*BELPEX\s*per\s*uur\*?\s*"
-    rf"([{SIGN_CHARS}]?)\s*{_NUM}\)",
+    rf"([{SIGN_CHARS}])\s*{_NUM}\)",
     re.IGNORECASE,
 )
 
@@ -404,8 +404,10 @@ def _extract_injection(text: str) -> InjectionRates:
         # silently crediting a solar user 0 EUR/kWh.
         raise ExtractorError("Frank Energie: injection formula row not found")
     factor_pdf = to_float(m.group(1))
-    sign_char = m.group(2)
-    sign = parse_sign(sign_char) if sign_char.strip() else -1.0
+    # The sign between BELPEX and the base is mandatory in the regex
+    # (matching the energy formula), so a sign-less or reworded formula
+    # misses and raises above rather than silently defaulting to minus.
+    sign = parse_sign(m.group(2))
     base_cents = sign * to_float(m.group(3))
     # Injection is VAT-exempt: no vat_mult scaling.
     # factor_pdf * BELPEX_EUR_MWh in EURct/kWh => factor = factor_pdf * 10
