@@ -41,6 +41,7 @@ from custom_components.be_electricity_prices.providers._pdf import (
     archive_validity_check,
     fetch_pdf_text,
     fetch_text,
+    parse_sign,
     parse_valid_until,
     text_mentions_month,
     vat_multiplier,
@@ -352,3 +353,11 @@ def test_text_mentions_month_tolerates_split_whitespace() -> None:
     assert not text_mentions_month(
         "Tariefkaart juni 2026 ...", date(2026, 5, 1), months
     )
+
+
+def test_parse_sign_covers_canonical_hyphens() -> None:
+    # PDF typesetters emit U+2010 / U+2011 for a minus; both must read as
+    # negative so a hyphen re-render can't drop a formula's sign.
+    for neg in ("-", "‐", "‑", "‒", "–", "—", "−"):
+        assert parse_sign(neg) == -1.0
+    assert parse_sign("+") == 1.0

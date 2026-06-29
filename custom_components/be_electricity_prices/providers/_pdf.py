@@ -462,8 +462,8 @@ def to_float(text: str) -> float:
 # figure-dash, en-dash, em-dash, and U+2212 mathematical minus are
 # all encountered in the wild; supplier PDFs flip silently between
 # them on re-renders.
-_NEGATIVE_SIGNS = ("-", "‒", "–", "—", "−")
-SIGN_CHARS = r"+\-‒–—−"
+_NEGATIVE_SIGNS = ("-", "‐", "‑", "‒", "–", "—", "−")
+SIGN_CHARS = r"+\-‐‑‒–—−"
 """Drop into a regex character class: ``[`` + SIGN_CHARS + ``]``."""
 
 
