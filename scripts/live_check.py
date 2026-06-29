@@ -377,7 +377,7 @@ async def _check_eneco(session: aiohttp.ClientSession, eneco: types.ModuleType) 
             snap.taxes.wallonia_renewables > 0,
             detail=str(snap.taxes),
         )
-        _validate_energy(prefix, cid, snap.energy)
+        _validate_snapshot(prefix, cid, snap)
         # Pick one Fluvius row to bounds-check the digital meter parser.
         if "fluvius_antwerpen" in snap.dsos:
             antwerpen = snap.dsos["fluvius_antwerpen"]
@@ -418,7 +418,7 @@ async def _check_cociter(
             snap.taxes.wallonia_renewables > 0,
             detail=str(snap.taxes),
         )
-        _validate_energy(prefix, cid, snap.energy)
+        _validate_snapshot(prefix, cid, snap)
 
 
 async def _check_dats24(
@@ -456,7 +456,7 @@ async def _check_dats24(
                 snap.taxes.wallonia_renewables > 0,
                 detail=str(snap.taxes),
             )
-        _validate_energy(prefix, cid, snap.energy)
+        _validate_snapshot(prefix, cid, snap)
 
 
 async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) -> None:
@@ -496,7 +496,7 @@ async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) ->
             snap.taxes.energy_contribution > 0,
             detail=str(snap.taxes),
         )
-        _validate_energy(prefix, cid, snap.energy)
+        _validate_snapshot(prefix, cid, snap)
 
 
 async def _check_ecofix(
@@ -543,7 +543,7 @@ async def _check_ecofix(
                 snap.taxes.energy_contribution > 0,
                 detail=str(snap.taxes),
             )
-            _validate_energy(prefix, cid, snap.energy)
+            _validate_snapshot(prefix, cid, snap)
 
 
 async def _check_ecopower(
@@ -586,7 +586,7 @@ async def _check_ecopower(
             snap.taxes.vat_rate == 0.06,
             detail=str(snap.taxes),
         )
-        _validate_energy(prefix, cid, snap.energy)
+        _validate_snapshot(prefix, cid, snap)
         if "fluvius_antwerpen" in snap.dsos:
             a = snap.dsos["fluvius_antwerpen"]
             _expect(
@@ -594,36 +594,6 @@ async def _check_ecopower(
                 a.capacity_eur_per_kw_year is not None
                 and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
                 detail=str(a),
-            )
-        # Injection (terugleververgoeding) coverage gate. Issue #31: the
-        # May 2026 card relabelled the injection row, the regex stopped
-        # matching, _extract_injection() returned None -- and nothing here
-        # asserted the injection was parsed, so the broken snapshot still
-        # passed green. Mirrors the gate _check_frank already has.
-        _expect(
-            f"{prefix}: injection rates present",
-            snap.injection is not None,
-            detail="injection is None",
-        )
-        if snap.injection is None:
-            continue
-        if snap.injection.current is not None:
-            # Static card: the feed-in credit is stored positive (the
-            # card's cost-column negative is flipped), so a regressed sign
-            # lands below 0 and a misread row lands above the bound.
-            _expect(
-                f"{prefix}: injection credit in [0, 0.15] EUR/kWh",
-                0.0 <= snap.injection.current <= 0.15,
-                detail=f"current={snap.injection.current}",
-            )
-        else:
-            # Dynamic card: injection is a factor*spot+base formula with
-            # no indicative current. Gate that both legs parsed, so a
-            # relabelled formula row can't slip through as a null.
-            _expect(
-                f"{prefix}: dynamic injection factor + base present",
-                snap.injection.factor is not None and snap.injection.base is not None,
-                detail=f"factor={snap.injection.factor}, base={snap.injection.base}",
             )
 
 
@@ -657,7 +627,7 @@ async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) 
         snap.taxes.vat_rate == 0.0,
         detail=str(snap.taxes),
     )
-    _validate_energy(prefix, cid, snap.energy)
+    _validate_snapshot(prefix, cid, snap)
     if "fluvius_antwerpen" in snap.dsos:
         a = snap.dsos["fluvius_antwerpen"]
         _expect(
@@ -666,11 +636,6 @@ async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) 
             and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
             detail=str(a),
         )
-    _expect(
-        f"{prefix}: injection rates present",
-        snap.injection is not None,
-        detail="injection is None",
-    )
 
 
 async def _check_luminus(
@@ -716,7 +681,7 @@ async def _check_luminus(
                 snap.taxes.energy_contribution > 0,
                 detail=str(snap.taxes),
             )
-            _validate_energy(prefix, cid, snap.energy)
+            _validate_snapshot(prefix, cid, snap)
 
 
 async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) -> None:
@@ -784,7 +749,7 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
                 bool(snap.publication_label),
                 detail=f"label={snap.publication_label!r}",
             )
-            _validate_energy(prefix, cid, snap.energy)
+            _validate_snapshot(prefix, cid, snap)
 
 
 async def _check_totalenergies(
@@ -835,7 +800,7 @@ async def _check_totalenergies(
                 bool(snap.publication_label),
                 detail=f"label={snap.publication_label!r}",
             )
-            _validate_energy(prefix, cid, snap.energy)
+            _validate_snapshot(prefix, cid, snap)
 
 
 async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) -> None:
@@ -918,7 +883,7 @@ async def _check_mega_pairs(
                 bool(snap.publication_label),
                 detail=f"label={snap.publication_label!r}",
             )
-            _validate_energy(prefix, cid, snap.energy)
+            _validate_snapshot(prefix, cid, snap)
 
 
 async def _check_octaplus(
@@ -964,7 +929,7 @@ async def _check_octaplus(
                 snap.taxes.energy_contribution > 0,
                 detail=str(snap.taxes),
             )
-            _validate_energy(prefix, cid, snap.energy)
+            _validate_snapshot(prefix, cid, snap)
 
 
 async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) -> None:
@@ -1012,7 +977,7 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
                 snap.taxes.federal_excise > 0,
                 detail=str(snap.taxes),
             )
-            _validate_energy(prefix, cid, snap.energy)
+            _validate_snapshot(prefix, cid, snap)
 
 
 async def _check_catalogs(
@@ -1074,6 +1039,50 @@ async def _check_catalogs(
             detail=", ".join(new_ids) if new_ids else "",
             kind="catalog",
         )
+
+
+def _validate_injection(prefix: str, snap: object) -> None:
+    """Gate that injection parsed for every supplier (issue #31).
+
+    The coordinator drops the feed-in credit entirely when ``injection``
+    is None, so a relabelled injection row silently zeroes a solar user's
+    credit and used to pass CI green for all but two suppliers. Assert
+    presence plus a sane magnitude. Monthly indicatives can settle
+    slightly negative (a producer pays to inject at very low spot), so the
+    lower bound allows a small negative floor; the upper bound catches a
+    column-index misread.
+    """
+    injection = getattr(snap, "injection", None)
+    _expect(
+        f"{prefix}: injection rates present",
+        injection is not None,
+        detail="injection is None",
+    )
+    if injection is None:
+        return
+    current = getattr(injection, "current", None)
+    if current is not None:
+        _expect(
+            f"{prefix}: injection credit in [-0.10, 0.20] EUR/kWh",
+            -0.10 <= current <= 0.20,
+            detail=f"current={current}",
+        )
+    else:
+        factor = getattr(injection, "factor", None)
+        base = getattr(injection, "base", None)
+        _expect(
+            f"{prefix}: dynamic injection factor + base present",
+            factor is not None and base is not None,
+            detail=f"factor={factor}, base={base}",
+        )
+
+
+def _validate_snapshot(prefix: str, contract_id: str, snap: object) -> None:
+    """Validate the energy rates and the injection coverage of one fetched
+    snapshot. Called by every ``_check_*`` after its supplier-specific
+    DSO / tax assertions."""
+    _validate_energy(prefix, contract_id, getattr(snap, "energy", None))
+    _validate_injection(prefix, snap)
 
 
 def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:  # noqa: ARG001 - contract_id reserved for richer validation
