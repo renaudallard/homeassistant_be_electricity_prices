@@ -1023,13 +1023,20 @@ async def _check_catalogs(
             # fetch failure or a discovery surface that changed shape.
             # Catalog signals aren't retried and we can't open an issue on
             # a transient blip, but a persistently empty result means all
-            # new-product coverage for this supplier is silently gone -- so
-            # log it on stderr (visible in the CI run log, no exit-code
-            # change) instead of skipping without a trace.
+            # new-product coverage for this supplier is silently gone. Log
+            # it on stderr AND record a tracked (non-failing) catalog Check
+            # so the emptiness shows up in the structured results and the
+            # run history, not only buried in the CI log.
             print(
                 f"warning: {name}/catalog: discover() returned no ids "
                 "(listing fetch failed or discovery surface changed)",
                 file=sys.stderr,
+            )
+            _record(
+                f"{name}/catalog: discover() returned no ids",
+                True,
+                "listing fetch failed or discovery surface changed",
+                kind="catalog",
             )
             continue
         new_ids = sorted(discovered - known.get(name, set()))
@@ -1369,6 +1376,13 @@ def _drift_warnings(metrics: dict[str, dict[str, float]]) -> list[str]:
     """Static-threshold drift signals: latency or byte budgets blown."""
     warnings: list[str] = []
     for supplier, m in sorted(metrics.items()):
+        if supplier == "_catalog":
+            # The catalog pass aggregates every supplier's discovery
+            # listing fetch under one synthetic bucket, so its bytes and
+            # wallclock blow any single-supplier budget by design. It is
+            # not a per-supplier regression signal; skip it rather than
+            # auto-open a spurious drift issue.
+            continue
         latency_budget = _latency_budget(supplier)
         if m["elapsed_s"] > latency_budget:
             warnings.append(
