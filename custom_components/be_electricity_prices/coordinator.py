@@ -211,6 +211,14 @@ _MONTHLY_SNAPSHOTS_KEY = "monthly_snapshot_cache"
 _MONTHLY_FAILED_FETCHES_KEY = "monthly_snapshot_failed_fetches"
 _MONTHLY_FAILURE_TTL = timedelta(minutes=30)
 
+# Some past days genuinely have < 20 of 24 hourly day-ahead points at
+# ENTSO-E (source gaps). Without a marker, _ensure_historical_spots
+# re-pulls a whole week-chunk for such a day on every hourly tick for
+# the rest of the year. Record the last attempt per stable past day and
+# skip it for this long; 12 h re-attempts twice a day in case the data
+# lands late, without hammering the rate-limited endpoint hourly.
+_SHORT_SPOT_DAY_TTL = timedelta(hours=12)
+
 
 @dataclass
 class _SharedSnapshot:
@@ -569,6 +577,10 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # replay dynamic energy costs in current_year_cost. Persisted
         # to Store so a fresh restart doesn't lose the YTD window.
         self._historical_spots: dict[datetime, float] = {}
+        # Stable past days whose last spot fetch still came back short of
+        # 20 hours, with the attempt time, so we don't re-fetch them every
+        # tick (see _SHORT_SPOT_DAY_TTL).
+        self._short_spot_days: dict[date, datetime] = {}
         self._peak_kw: float = 0.0
         self._peak_month: date | None = None
         self._last_error: str = ""
@@ -1243,6 +1255,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         api_key = api_key or self.entry.data.get(CONF_API_KEY)
         if not api_key:
             return
+        now = dt_util.utcnow()
+        # Days older than this are stable enough that a short fetch means
+        # a genuine source gap, not data still being published; only those
+        # get the "attempted, still short" skip marker. Today and yesterday
+        # are always re-fetched so their hours fill in promptly.
+        stable_before = dt_util.now().date() - timedelta(days=1)
         # Collect contiguous date ranges where the cache is sparse.
         missing_ranges: list[tuple[date, date]] = []
         range_start: date | None = None
@@ -1254,7 +1272,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 for h in range(24)
                 if (day_start_utc + timedelta(hours=h)) in self._historical_spots
             )
-            if present < 20:
+            last_attempt = self._short_spot_days.get(cur)
+            recently_short = (
+                present < 20
+                and last_attempt is not None
+                and now - last_attempt < _SHORT_SPOT_DAY_TTL
+            )
+            if present < 20 and not recently_short:
                 if range_start is None:
                     range_start = cur
             elif range_start is not None:
@@ -1289,6 +1313,22 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     chunk_start = chunk_end
                     continue
                 self._historical_spots.update(prices)
+                # Mark stable past days that are STILL short after this
+                # fetch so the next ticks skip them until the TTL expires;
+                # clear the marker for any day that is now complete.
+                day = chunk_start
+                while day < chunk_end:
+                    ds_utc = dt_util.start_of_local_day(day).astimezone(UTC)
+                    got = sum(
+                        1
+                        for h in range(24)
+                        if (ds_utc + timedelta(hours=h)) in self._historical_spots
+                    )
+                    if got < 20 and day < stable_before:
+                        self._short_spot_days[day] = now
+                    else:
+                        self._short_spot_days.pop(day, None)
+                    day += timedelta(days=1)
                 chunk_start = chunk_end
 
     async def _fetch_spot_prices(self) -> dict[datetime, float]:

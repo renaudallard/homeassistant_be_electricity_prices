@@ -109,6 +109,47 @@ async def test_ensure_historical_spots_anchors_on_local_day(
     assert captured[0][0] == datetime(2025, 12, 31, 23, 0, tzinfo=UTC)
 
 
+async def test_ensure_historical_spots_skips_permanently_short_day(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A stable past day that ENTSO-E only ever returns < 20 hours for
+    must not be re-fetched on every tick: after one short fetch it is
+    marked and skipped until the TTL expires."""
+    freezer.move_to("2026-06-29 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    calls: list[tuple[datetime, datetime]] = []
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        calls.append((start, end))
+        # Only five hours come back -> the day stays short (< 20).
+        return {start + timedelta(hours=h): 0.05 for h in range(5)}
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+    ) as mock_client_cls:
+        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
+        first = len(calls)
+        assert date(2026, 1, 1) in coord._short_spot_days
+        # Second call within the TTL must not re-fetch the short day.
+        await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
+        assert len(calls) == first
+
+
 async def test_build_hourly_covers_both_days_across_dst_seams(
     hass: HomeAssistant, freezer: Any
 ) -> None:
