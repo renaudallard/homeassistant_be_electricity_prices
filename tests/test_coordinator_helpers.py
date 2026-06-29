@@ -214,6 +214,34 @@ def test_injection_price_uses_formula_when_spot_available(freezer: Any) -> None:
     )
 
 
+def test_injection_price_quarter_hourly_rejects_spot_over_one_slot_away(
+    freezer: Any,
+) -> None:
+    """On a quarter-hourly contract the substitute spot must be within one
+    15-minute slot. A fixed 1 h window let the injection display use a spot
+    up to four slots away; the window now scales to the billing grid."""
+    from homeassistant.util import dt as dt_util
+
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=DynamicRates(factor=0.1, base=0.0, quarter_hourly=True),
+        injection=InjectionRates(factor=0.97, base=-0.021, current=None),
+    )
+    entry = _entry(solar_regime="injection")
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    now_slot = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    # A spot 30 min (two slots) away is rejected -> sensor unknown.
+    assert (
+        _compute_injection_price(snap, entry, {now_slot + timedelta(minutes=30): 0.10})
+        is None
+    )
+    # The exact slot is still used.
+    assert _compute_injection_price(snap, entry, {now_slot: 0.10}) == pytest.approx(
+        0.97 * 0.10 - 0.021
+    )
+
+
 def test_injection_price_returns_none_when_no_data() -> None:
     snap = _snapshot(prosumer=None, capacity=None, injection=None)
     entry = _entry(solar_regime="injection")

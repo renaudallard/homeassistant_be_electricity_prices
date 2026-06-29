@@ -1628,7 +1628,12 @@ def _compute_injection_price(
                 spot_prices.keys(),
                 key=lambda h: abs((h - now_slot).total_seconds()),
             )
-            if abs((nearest - now_slot).total_seconds()) > 3600:
+            # Accept a substitute spot only within one billing slot of
+            # "now" (15 min on a quarter-hourly contract, 1 h otherwise).
+            # A fixed 1 h window let a quarter-hourly injection price use a
+            # spot up to four slots away.
+            max_gap = 900.0 if resolution == RESOLUTION_QUARTER else 3600.0
+            if abs((nearest - now_slot).total_seconds()) > max_gap:
                 return None
             spot = spot_prices[nearest]
         return inj.factor * spot + inj.base
