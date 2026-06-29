@@ -1421,6 +1421,13 @@ _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     "engie": 130.0,
     "luminus": 125.0,
     "mega": 120.0,
+    # TotalEnergies and OCTA+ fetch every (contract, region) PDF
+    # sequentially (25 and 21 fetches), so their summed elapsed_s blows
+    # the 90 s default on a slow day even though each fetch is small and
+    # the snapshot succeeds. Budget like the other multi-fetch suppliers,
+    # well under the 240 s hard cap.
+    "totalenergies": 150.0,
+    "octaplus": 130.0,
 }
 
 
