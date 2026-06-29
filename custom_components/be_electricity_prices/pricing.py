@@ -194,6 +194,27 @@ def tou_slot(when: datetime, weekend_rule: str = "weekend_offpeak") -> TouSlot:
     return "transition"  # 11-17 + 22-1
 
 
+def _routed_rate(
+    base: float,
+    energy: FixedRates | VariableRates,
+    when: datetime,
+    meter: MeterType,
+    *,
+    bi_capable: bool,
+) -> float:
+    """Meter-routing shared by the Fixed and Variable energy branches.
+
+    Exclusive-night meters take the dedicated rate when published; a
+    bi-hourly-capable meter takes the peak/off-peak split when published;
+    otherwise the single/current ``base`` rate applies.
+    """
+    if meter == "exclusive_night" and energy.exclusive_night is not None:
+        return energy.exclusive_night
+    if bi_capable and energy.peak is not None and energy.offpeak is not None:
+        return energy.offpeak if is_offpeak(when) else energy.peak
+    return base
+
+
 def energy_eur_per_kwh(
     energy: EnergyRates,
     when: datetime,
@@ -211,17 +232,13 @@ def energy_eur_per_kwh(
     """
     bi_capable = meter in ("bi", "dynamic")
     if isinstance(energy, FixedRates):
-        if meter == "exclusive_night" and energy.exclusive_night is not None:
-            return energy.exclusive_night
-        if bi_capable and energy.peak is not None and energy.offpeak is not None:
-            return energy.offpeak if is_offpeak(when) else energy.peak
-        return energy.single
+        return _routed_rate(
+            energy.single, energy, when, meter, bi_capable=bi_capable
+        )
     if isinstance(energy, VariableRates):
-        if meter == "exclusive_night" and energy.exclusive_night is not None:
-            return energy.exclusive_night
-        if bi_capable and energy.peak is not None and energy.offpeak is not None:
-            return energy.offpeak if is_offpeak(when) else energy.peak
-        return energy.current
+        return _routed_rate(
+            energy.current, energy, when, meter, bi_capable=bi_capable
+        )
     if isinstance(energy, DynamicRates):
         if spot_eur_per_kwh is None:
             raise ValueError("dynamic tariff needs a spot price")
