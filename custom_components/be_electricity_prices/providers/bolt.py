@@ -390,7 +390,8 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     # Bolt's 'Prix mensuel' line is the current month's price for all
     # contract kinds. Static cards have only this; variable cards also
     # show 'Prix annuel estimé' which we ignore. Layout: two adjacent
-    # numbers (mono+jour) then exclusive-night somewhere nearby.
+    # numbers, mono then Exclusif nuit (group 2 below is the
+    # exclusive-night rate, not a day/peak rate).
     match = re.search(r"Prix mensuel\s+([\d.,]+)\s+([\d.,]+)\b", text)
     if not match:
         raise ExtractorError(f"could not parse Bolt {kind} consumption block")
@@ -579,9 +580,12 @@ _FLANDERS_LABELS: dict[str, str] = {
 def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     """Read Fluvius rows. Each has 8 numbers in this order:
 
-      data_mgmt_classic | capacity_digital | dist_normal_digital |
+      data_mgmt_digital | capacity_digital | dist_normal_digital |
       dist_excl_digital | terme_fixe_classic | dist_normal_classic |
       dist_excl_classic | prosumer
+
+    We bill the digital (SMR3) block - columns 1-4 plus the prosumer
+    column - and ignore the trailing classic columns.
 
     pdfplumber sometimes splits the row vertically (one number per line);
     ``\\s+`` matches any whitespace incl newlines, so a single regex
