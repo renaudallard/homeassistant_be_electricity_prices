@@ -399,7 +399,9 @@ async def _backfill_price_sensors(
             elif key == "taxes_component":
                 value = bd.taxes
             elif key == _INJECTION_PRICE_SENSOR_KEY:
-                inj_rate = _historical_injection_rate(snap_h.injection, spot)
+                inj_rate = _historical_injection_rate(
+                    snap_h.injection, spot, energy=snap_h.energy, when=local
+                )
                 if inj_rate is None:
                     continue
                 value = inj_rate
@@ -560,7 +562,9 @@ async def _backfill_cost_sensor(
                     running_energy += (cons - inj) * bd.all_in
                 elif regime == SOLAR_REGIME_INJECTION:
                     running_energy += cons * bd.all_in
-                    inj_rate = _historical_injection_rate(snap_h.injection, spot)
+                    inj_rate = _historical_injection_rate(
+                        snap_h.injection, spot, energy=snap_h.energy, when=local
+                    )
                     if inj_rate is not None:
                         running_energy -= inj * inj_rate
                 else:

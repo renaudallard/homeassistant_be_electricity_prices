@@ -90,6 +90,35 @@ def test_empower_flextime_extracts_tou_triplet() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(90.0)
 
 
+def test_empower_flextime_injection_varies_by_slot() -> None:
+    # Issue #34: the Flextime feed-in tariff has three per-slot rates
+    # (Injection(3) columns 4/5/6), not the single non-flextime rate. The
+    # extractor must surface the triplet so injection tracks the slot the
+    # way consumption does.
+    snap = parse_snapshot(
+        "engie_empower_flextime",
+        {REGION_WALLONIA: fixture_text("engie_empower_flextime_w.pdf")},
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert inj.peak == pytest.approx(0.08417)
+    assert inj.transition == pytest.approx(0.04834)
+    assert inj.offpeak == pytest.approx(0.01465)
+
+
+def test_empower_variable_injection_is_single_rate() -> None:
+    # The non-Flextime Empower variants keep a single injection rate
+    # (column 1); the per-slot triplet must stay None for them.
+    snap = parse_snapshot(
+        "engie_empower_variable",
+        {REGION_WALLONIA: fixture_text("engie_empower_flextime_w.pdf")},
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert inj.peak is None
+    assert inj.current == pytest.approx(0.04918)
+
+
 def test_empower_flextime_dsos_match_wallonia_set() -> None:
     snap = parse_snapshot(
         "engie_empower_flextime",

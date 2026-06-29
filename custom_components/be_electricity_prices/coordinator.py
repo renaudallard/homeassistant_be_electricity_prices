@@ -100,6 +100,7 @@ from .pricing import (
     is_offpeak,
     slot_start,
     static_breakdown,
+    tou_slot,
     yearly_fixed_fee_for_meter,
 )
 from .providers import (
@@ -1621,6 +1622,28 @@ def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> boo
     )
 
 
+def _tou_injection_rate(
+    inj: InjectionRates, energy: EnergyRates, when: datetime
+) -> float | None:
+    """Per-slot injection rate for a time-of-use contract whose feed-in
+    tariff varies by slot (Engie Empower Flextime).
+
+    Returns ``None`` when the contract isn't TOU or its injection is a
+    single rate (``peak`` unset), so the caller falls back to the normal
+    current / factor+base path. Uses the energy contract's own
+    ``weekend_rule`` so injection and consumption agree on the slot for a
+    given hour.
+    """
+    if not isinstance(energy, TimeOfUseRates) or inj.peak is None:
+        return None
+    slot = tou_slot(when, energy.weekend_rule)
+    if slot == "peak":
+        return inj.peak
+    if slot == "transition":
+        return inj.transition
+    return inj.offpeak
+
+
 def _compute_injection_price(
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
@@ -1629,15 +1652,19 @@ def _compute_injection_price(
     """Current-hour injection price in EUR/kWh for HA Energy's price entity.
 
     Only returned when the user is on the injection regime AND the supplier's
-    snapshot has injection data. Prefers the formula+spot when a spot is
-    available (dynamic contracts), otherwise falls back to the snapshot's
-    static "current" indicative (Eneco Fix/Flex monthly value).
+    snapshot has injection data. Prefers a per-slot TOU rate (Engie Empower
+    Flextime), then the formula+spot when a spot is available (dynamic
+    contracts), otherwise falls back to the snapshot's static "current"
+    indicative (Eneco Fix/Flex monthly value).
     """
     if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
         return None
     inj = snapshot.injection
     if inj is None:
         return None
+    tou_rate = _tou_injection_rate(inj, snapshot.energy, dt_util.now())
+    if tou_rate is not None:
+        return tou_rate
     # Per-hour spot-indexed injection (factor x spot + base) applies when
     # either the energy contract itself bills per hour (DynamicRates) OR
     # the injection is a spot formula with no monthly indicative
@@ -1685,22 +1712,32 @@ def _compute_injection_price(
 
 
 def _historical_injection_rate(
-    injection: InjectionRates | None, spot: float | None = None
+    injection: InjectionRates | None,
+    spot: float | None = None,
+    *,
+    energy: EnergyRates | None = None,
+    when: datetime | None = None,
 ) -> float | None:
     """Best-effort EUR/kWh injection rate for a *past* hour.
 
-    Mirrors the live ``_compute_injection_price`` priority: prefer the
-    spot-indexed formula ``factor*spot + base`` when both the formula and
-    a historical spot are available, falling back to the monthly
-    indicative ``current`` otherwise. Several dynamic-injection contracts
-    (Engie, OCTA+, TotalEnergies, Luminus, Mega) publish BOTH a ``current``
-    indicative and ``factor``/``base``; checking ``current`` first made the
-    YTD credit use the flat indicative while the live injection-price
-    sensor used the spot formula, so the two user-facing numbers diverged.
-    Static contracts have no spot, so they fall through to ``current``.
+    Mirrors the live ``_compute_injection_price`` priority: a per-slot TOU
+    rate first (Engie Empower Flextime, when ``energy`` + ``when`` are
+    given), then the spot-indexed formula ``factor*spot + base`` when both
+    the formula and a historical spot are available, falling back to the
+    monthly indicative ``current`` otherwise. Several dynamic-injection
+    contracts (Engie, OCTA+, TotalEnergies, Luminus, Mega) publish BOTH a
+    ``current`` indicative and ``factor``/``base``; checking ``current``
+    first made the YTD credit use the flat indicative while the live
+    injection-price sensor used the spot formula, so the two user-facing
+    numbers diverged. Static contracts have no spot, so they fall through
+    to ``current``.
     """
     if injection is None:
         return None
+    if energy is not None and when is not None:
+        tou_rate = _tou_injection_rate(injection, energy, when)
+        if tou_rate is not None:
+            return tou_rate
     if injection.factor is not None and injection.base is not None and spot is not None:
         return injection.factor * spot + injection.base
     if injection.current is not None:
@@ -2272,7 +2309,9 @@ async def _ytd_hourly_energy(
             d_cost = (kwh_cons - kwh_inj) * bd.all_in
         elif regime == SOLAR_REGIME_INJECTION:
             d_cost = kwh_cons * bd.all_in
-            inj_rate = _historical_injection_rate(snap_h.injection, spot)
+            inj_rate = _historical_injection_rate(
+                snap_h.injection, spot, energy=snap_h.energy, when=local
+            )
             if inj_rate is not None:
                 d_cost -= kwh_inj * inj_rate
         else:
@@ -2621,7 +2660,10 @@ async def _compute_current_year_cost(
 # v11: snapshots gained supplier_prosumer_eur_per_kva_year (Cociter's
 # compensation-regime PV forfait). Bump so a cached Cociter Variable
 # snapshot is re-fetched with the forfait parsed instead of None.
-_SNAPSHOT_SCHEMA_VERSION = 11
+# v12: InjectionRates gained per-slot peak/transition/offpeak (Engie
+# Empower Flextime's per-slot feed-in tariff). Bump so a cached Flextime
+# snapshot is re-fetched with the triplet instead of the flat single rate.
+_SNAPSHOT_SCHEMA_VERSION = 12
 
 
 def _snapshot_to_dict(

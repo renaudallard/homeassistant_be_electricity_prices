@@ -232,6 +232,17 @@ class InjectionRates:
     factor: float | None = None
     base: float | None = None
     formula: str | None = None
+    # Per-slot injection for a time-of-use contract whose feed-in tariff
+    # varies by slot (Engie Empower Flextime publishes a peak / transition
+    # / super-off-peak triplet, monthly-realized like its consumption
+    # rates). When ``peak`` is set, the pricing engine selects the slot
+    # with the same ``tou_slot()`` rule as the consumption side and uses
+    # the matching rate; ``current`` stays the single-meter fallback.
+    # None for the (vast) majority of contracts whose injection is one
+    # rate across all hours.
+    peak: float | None = None
+    transition: float | None = None
+    offpeak: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

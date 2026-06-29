@@ -350,7 +350,7 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
     # read them from any one PDF.
     any_text = next(iter(region_texts.values()))
     energy = _extract_energy(any_text, contract.kind)
-    injection = _extract_injection(any_text)
+    injection = _extract_injection(any_text, contract.kind)
     publication_label = _extract_publication_month(any_text)
     federal_excise = _extract_federal_excise(any_text)
     energy_contribution = _extract_energy_contribution(any_text)
@@ -540,10 +540,32 @@ def _extract_publication_month(text: str) -> str:
     return match.group(1) if match else ""
 
 
-def _extract_injection(text: str) -> InjectionRates | None:
-    indicative = re.search(r"Injection\(3\)\s+([\d,.]+)", text)
+def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
+    # The first "Injection(3)" row is the applicable rate (a second row is
+    # the annual estimate). Its columns mirror the consumption row:
+    #   normal | bi-pleines | bi-creuses | flextime pleines |
+    #   flextime creuses | flextime super-creuses | ...
+    row = re.search(r"Injection\(3\)\s+([^\n]+)", text)
+    nums = (
+        [to_float(t) for t in row.group(1).split() if re.fullmatch(r"[\d,.]+", t)]
+        if row
+        else []
+    )
+    current = nums[0] / 100.0 if nums else None
+
+    peak: float | None = None
+    transition: float | None = None
+    offpeak: float | None = None
+    if kind == "tou" and len(nums) >= 6:
+        # Empower Flextime: the feed-in tariff varies by slot, so surface
+        # the per-slot triplet (columns 4-6) the pricing engine selects via
+        # tou_slot(). Columns 1-3 are the single / bi-horaire rates the
+        # non-Flextime variants use; they're identical to each other here.
+        peak = nums[3] / 100.0
+        transition = nums[4] / 100.0
+        offpeak = nums[5] / 100.0
+
     formulas = list(_FORMULA_RE.finditer(text))
-    current = to_float(indicative.group(1)) / 100.0 if indicative else None
     factor: float | None = None
     base: float | None = None
     formula: str | None = None
@@ -560,9 +582,17 @@ def _extract_injection(text: str) -> InjectionRates | None:
         factor = factor_pdf * 10.0
         base = base_pdf_cents / 100.0
         formula = injection_match.group(0)
-    if current is None and factor is None:
+    if current is None and factor is None and peak is None:
         return None
-    return InjectionRates(current=current, factor=factor, base=base, formula=formula)
+    return InjectionRates(
+        current=current,
+        factor=factor,
+        base=base,
+        formula=formula,
+        peak=peak,
+        transition=transition,
+        offpeak=offpeak,
+    )
 
 
 def _extract_consumption_renewables(text: str) -> float:

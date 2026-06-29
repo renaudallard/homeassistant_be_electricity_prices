@@ -291,6 +291,36 @@ def test_historical_injection_rate_prefers_formula_over_current() -> None:
     assert _historical_injection_rate(None, 0.10) is None
 
 
+def test_historical_injection_rate_picks_tou_slot() -> None:
+    # Issue #34: Engie Empower Flextime's feed-in tariff varies by slot.
+    # With the energy + hour given, the per-slot rate is selected with the
+    # same tou_slot() rule as consumption; without them it falls back to
+    # the single ``current``.
+    energy = TimeOfUseRates(
+        peak=0.20, transition=0.15, offpeak=0.10, weekend_rule="weekend_no_peak"
+    )
+    inj = InjectionRates(current=0.05, peak=0.084, transition=0.048, offpeak=0.015)
+    wed = date(2026, 4, 29)  # a weekday
+    peak_h = datetime.combine(wed, datetime.min.time()).replace(hour=9)
+    trans_h = datetime.combine(wed, datetime.min.time()).replace(hour=13)
+    off_h = datetime.combine(wed, datetime.min.time()).replace(hour=3)
+    assert _historical_injection_rate(inj, energy=energy, when=peak_h) == pytest.approx(
+        0.084
+    )
+    assert _historical_injection_rate(
+        inj, energy=energy, when=trans_h
+    ) == pytest.approx(0.048)
+    assert _historical_injection_rate(inj, energy=energy, when=off_h) == pytest.approx(
+        0.015
+    )
+    # No energy/when context -> single-rate fallback.
+    assert _historical_injection_rate(inj) == pytest.approx(0.05)
+    # A non-TOU contract ignores the per-slot fields entirely.
+    assert _historical_injection_rate(
+        inj, energy=FixedRates(single=0.20), when=peak_h
+    ) == pytest.approx(0.05)
+
+
 def test_injection_price_dynamic_returns_none_without_spot() -> None:
     """A DynamicRates contract's per-hour formula injection must surface
     None when no spot is available -- falling back to the snapshot's
