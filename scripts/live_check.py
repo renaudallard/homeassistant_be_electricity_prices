@@ -1130,6 +1130,12 @@ _INJECTION_SHAPE: dict[str, str] = {
     "ebem_variable": "monthly",
     "ebem_basic_plus": "monthly",
     "ecofix_flexy": "monthly",
+    # Cociter Variable's injection is itself spot-indexed (factor x BELPEX
+    # + base, current None at parse time). Pinning it to "spot" asserts
+    # factor+base unconditionally; the "present" default only checks them
+    # while current happens to be None, so a regression that set current
+    # would slip the shape check.
+    "cociter_variable": "spot",
 }
 
 
