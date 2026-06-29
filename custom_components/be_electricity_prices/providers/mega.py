@@ -562,7 +562,8 @@ _FR_MONTH_NAMES = (
 
 def _extract_publication_month(text: str) -> str:
     # Smart Fixed cards prefix the version + month ("V2 avril 2026").
-    match = re.search(r"V(\d+\s+[a-zé]+\s+\d{4})", text)
+    # Include û so August ("août") keeps its version prefix.
+    match = re.search(r"V(\d+\s+[a-zéû]+\s+\d{4})", text)
     if match:
         return match.group(1)
     # Smart Flex and Dynamic cards drop the version prefix and only print

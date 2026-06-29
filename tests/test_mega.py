@@ -248,6 +248,13 @@ def test_taxes_split_correctly_per_region() -> None:
     assert b.taxes.wallonia_renewables == 0.0
 
 
+def test_publication_month_keeps_version_for_august() -> None:
+    # "août" contains û, which the version-month token class must include
+    # so an August Smart Fixed card keeps its version number ("2 août
+    # 2026") instead of falling back to the month-only label.
+    assert mega_mod._extract_publication_month("Prix V2 août 2026 ...") == "2 août 2026"
+
+
 def test_missing_wallonia_connection_fee_is_fatal() -> None:
     # The Wallonia raccordement is mandatory; a miss must raise rather
     # than silently zero it.
