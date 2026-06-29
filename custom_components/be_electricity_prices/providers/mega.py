@@ -38,7 +38,7 @@ suffix, the extractor scrapes the public listing page at
 ``data-product-element="<Product Name>"`` anchor pointing at that
 month's PDF, so finding the right URL is a simple regex match.
 
-All thirteen residential electricity products are registered. Mega
+All twelve residential electricity products are registered. Mega
 serves all three regions (Flanders, Wallonia, Brussels) for every
 product except Off-peak Impact, which is Wallonia-only because it
 requires the CWaPE Tarif réseau IMPACT plus an SMR3 smart meter
