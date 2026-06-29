@@ -200,9 +200,22 @@ def extract_pdf_text_layout(payload: bytes) -> str:
         import pdfplumber
 
         with pdfplumber.open(BytesIO(payload)) as pdf:
-            return "\n".join(
-                (page.dedupe_chars().extract_text() or "") for page in pdf.pages
+            pages = pdf.pages
+            text = "\n".join(
+                (page.dedupe_chars().extract_text() or "") for page in pages
             )
+            if pages and not text.strip():
+                # A PDF with pages but no decodable text would otherwise
+                # return "" and let every downstream regex miss silently
+                # (only mandatory fields fail loud; nullable ones zero).
+                # Fail loud here, matching the pypdf path's all-pages
+                # guard.
+                raise ExtractorError(
+                    "PDF layout parse error: pages present but no text decoded"
+                )
+            return text
+    except ExtractorError:
+        raise
     except Exception as err:  # noqa: BLE001 - rewrap pdfplumber surface as ExtractorError
         raise ExtractorError(f"PDF layout parse error: {err}") from err
 
@@ -259,7 +272,17 @@ def extract_pdf_text_aligned(
                         prev_x1 = x1
                     lines.append(" ".join(parts))
                 out.append("\n".join(lines))
-        return "\f".join(out)
+        result = "\f".join(out)
+        if out and not result.strip():
+            # Pages present but no words decoded: fail loud rather than
+            # return blank text that every downstream regex misses
+            # silently (matches the layout helper and pypdf path).
+            raise ExtractorError(
+                "PDF aligned parse error: pages present but no text decoded"
+            )
+        return result
+    except ExtractorError:
+        raise
     except Exception as err:  # noqa: BLE001 - rewrap pdfplumber surface as ExtractorError
         raise ExtractorError(f"PDF aligned parse error: {err}") from err
 

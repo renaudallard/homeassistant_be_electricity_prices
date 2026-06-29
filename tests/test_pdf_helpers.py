@@ -39,6 +39,8 @@ from custom_components.be_electricity_prices.providers._pdf import (
     _MAX_PDF_BYTES,
     _read_pdf_bytes,
     archive_validity_check,
+    extract_pdf_text_aligned,
+    extract_pdf_text_layout,
     fetch_pdf_text,
     fetch_text,
     parse_sign,
@@ -329,6 +331,27 @@ def test_read_pdf_bytes_allows_normal_and_unknown_length() -> None:
     # No Content-Length (streamed) still reads through.
     unknown = _FakeResp(None, b"%PDF-stream")
     assert asyncio.run(_read_pdf_bytes(unknown, "u")) == b"%PDF-stream"  # type: ignore[arg-type]
+
+
+_BLANK_PDF = (
+    b"%PDF-1.4\n"
+    b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+    b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+    b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\n"
+    b"xref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n"
+    b"0000000052 00000 n \n0000000101 00000 n \n"
+    b"trailer<</Size 4/Root 1 0 R>>\nstartxref\n164\n%%EOF"
+)
+
+
+def test_pdfplumber_extractors_fail_loud_on_textless_pdf() -> None:
+    # A valid PDF with a page but no decodable text must raise rather than
+    # return "" and let every downstream regex miss silently (only
+    # mandatory fields fail loud; nullable ones would zero).
+    with pytest.raises(ExtractorError, match="no text decoded"):
+        extract_pdf_text_layout(_BLANK_PDF)
+    with pytest.raises(ExtractorError, match="no text decoded"):
+        extract_pdf_text_aligned(_BLANK_PDF)
 
 
 def test_text_mentions_month_tolerates_split_whitespace() -> None:
