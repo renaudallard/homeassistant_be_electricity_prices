@@ -1189,3 +1189,30 @@ async def test_compare_branch_aborts_when_no_alternative(
         )
         assert result["type"] == data_entry_flow.FlowResultType.ABORT
         assert result["reason"] == "compare_no_alternative"
+
+
+def test_annual_fees_include_data_management() -> None:
+    # The digital-meter data-management fee (databeheer) is a fixed
+    # EUR/year DSO charge that must be billed alongside the supplier
+    # subscription (re-audit F22).
+    from custom_components.be_electricity_prices.config_flow import _annual_fees
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        FixedRates,
+    )
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.20, yearly_fixed_fee=70.0),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                data_management_per_year=15.0,
+            )
+        },
+    )
+    # _make_entry is Wallonia / mono / no solar -> only the yearly fee and
+    # the databeheer fee contribute.
+    fees = _annual_fees(snap, _make_entry(), 0.0, "mono")
+    assert fees == pytest.approx(70.0 + 15.0)

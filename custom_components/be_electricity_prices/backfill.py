@@ -578,9 +578,12 @@ async def _backfill_cost_sensor(
         # annual/(days_in_year*24) rate accrued 23 or 25 hours' worth on
         # the seam days, drifting from the live sensor at the seam.
         days_in_year = 366 if calendar.isleap(local.year) else 365
+        overlay_h = snap_h.dsos.get(dso)
         annual_static = (
             yearly_fixed_fee_for_meter(snap_h.energy, meter)
             + snap_h.taxes.energy_fund_eur_per_month * 12.0
+            # Digital-meter data-management fee, a fixed EUR/year DSO charge.
+            + (overlay_h.data_management_per_year if overlay_h is not None else 0.0)
         )
         running_fees += (
             annual_static / days_in_year / hours_per_local_date[local.date()]

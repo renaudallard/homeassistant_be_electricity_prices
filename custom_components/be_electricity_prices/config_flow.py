@@ -1861,7 +1861,10 @@ def _annual_fees(
     if entry.data.get(CONF_REGION) == REGION_FLANDERS:
         capacity = 12.0 * _compute_capacity(snapshot, entry, peak_kw)
     prosumer = 12.0 * _compute_prosumer(snapshot, entry)
-    return yearly_fixed + energy_fund + capacity + prosumer
+    # Digital-meter data-management fee, a fixed EUR/year DSO charge.
+    overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
+    data_mgmt = float(overlay.data_management_per_year) if overlay is not None else 0.0
+    return yearly_fixed + energy_fund + capacity + prosumer + data_mgmt
 
 
 async def _read_total_kwh(
