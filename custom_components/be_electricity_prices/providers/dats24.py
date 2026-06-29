@@ -338,6 +338,11 @@ def _extract_taxes(text: str, region: str) -> TaxOverlay:
     if region == REGION_FLANDERS:
         gsc_match = re.search(r"Vlaams Gewest:\s*GSC\s*\(c€/kWh\)\s+([\d,.]+)", text)
         wkc_match = re.search(r"WKC\s*\(c€/kWh\)\s+([\d,.]+)", text)
+        if gsc_match is None and wkc_match is None:
+            # Both renewables components gone means the block drifted; a
+            # silent 0.0 would under-bill. Fail loud, matching the federal
+            # tier above. A card printing only one component stays valid.
+            raise ExtractorError("DATS 24: Flanders GSC/WKC renewables not found")
         flanders_renewables = (
             to_float(gsc_match.group(1)) / 100.0 if gsc_match else 0.0
         ) + (to_float(wkc_match.group(1)) / 100.0 if wkc_match else 0.0)
@@ -347,7 +352,6 @@ def _extract_taxes(text: str, region: str) -> TaxOverlay:
         energy_fund_per_month = to_float(fund_match.group(1)) if fund_match else 0.0
     elif region == REGION_WALLONIA:
         cv_match = re.search(r"Waals Gewest:\s*CV\s*\(c€/kWh\)\s+([\d,.]+)", text)
-        wallonia_renewables = to_float(cv_match.group(1)) / 100.0 if cv_match else 0.0
         # The layout-aware PDF text emits the row as
         # "Aansluitingsvergoeding Wallonië<footnote-digit> 0,07500 c€/kWh"
         # on one line; tolerate the footnote digit.
@@ -355,9 +359,12 @@ def _extract_taxes(text: str, region: str) -> TaxOverlay:
             r"Aansluitingsvergoeding\s+Walloni[eë]\d*\s+([\d,.]+)\s*c€/kWh",
             text,
         )
-        connection_fee = (
-            to_float(connection_match.group(1)) / 100.0 if connection_match else 0.0
-        )
+        if cv_match is None or connection_match is None:
+            # CV (green certificates) and the Walloon connection fee are
+            # mandatory; raise rather than silently zero a c€/kWh charge.
+            raise ExtractorError("DATS 24: Wallonia CV / connection fee not found")
+        wallonia_renewables = to_float(cv_match.group(1)) / 100.0
+        connection_fee = to_float(connection_match.group(1)) / 100.0
 
     return TaxOverlay(
         federal_excise=to_float(excise_match.group(1)) / 100.0,

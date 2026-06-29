@@ -32,6 +32,7 @@ from datetime import date
 import pytest
 
 from custom_components.be_electricity_prices.providers.base import (
+    ExtractorError,
     SupplierSnapshot,
     VariableRates,
 )
@@ -45,6 +46,14 @@ def _text() -> str:
 
 def _snap(region: str) -> SupplierSnapshot:
     return parse_snapshot(_text(), "test://dats24", region)
+
+
+def test_missing_wallonia_levies_are_fatal() -> None:
+    # CV and the Walloon connection fee are mandatory c€/kWh charges; a
+    # miss must raise rather than silently zero them.
+    text = _text().replace("Waals Gewest: CV", "XXX")
+    with pytest.raises(ExtractorError, match="Wallonia"):
+        parse_snapshot(text, "test://dats24", "wallonia")
 
 
 def test_april_card_publication_metadata() -> None:
