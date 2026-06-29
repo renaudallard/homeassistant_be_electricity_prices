@@ -521,9 +521,15 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | No
             rf"injectie alle uren\s+([\d,.]+)\s+Belpex\s*15\s*[’']?\s*"
             rf"([{SIGN_CHARS}])\s*([\d,.]+)",
             text,
+            re.IGNORECASE,
         )
         if not match:
-            return None
+            # The injection row is on every EBEM card; a miss (e.g. a
+            # capitalization re-render) would silently zero a prosumer's
+            # feed-in credit. Fail loud rather than return None.
+            raise ExtractorError(
+                "EBEM dynamic injection: 'injectie alle uren' row not found"
+            )
         factor_pdf = to_float(match.group(1))
         base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
         return InjectionRates(
@@ -548,9 +554,15 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | No
         rf"Injectie alle uren\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)"
         rf"(?:\s+([\d,.]+))?",
         text,
+        re.IGNORECASE,
     )
     if not match:
-        return None
+        # Every variable/B@sic+ card prints this row; a miss is a layout
+        # drift, not a fee-free contract. Fail loud rather than silently
+        # zeroing the feed-in credit.
+        raise ExtractorError(
+            "EBEM variable injection: 'Injectie alle uren' row not found"
+        )
     if not match.group(4):
         # The monthly indicative is the only value we can price; a card
         # that stops printing it is a layout drift, not a fee-free

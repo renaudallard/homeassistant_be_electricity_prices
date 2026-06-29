@@ -190,6 +190,20 @@ def test_variable_injection_missing_indicative_raises() -> None:
         _extract_injection(text, _CONTRACTS_BY_ID["ebem_variable"])
 
 
+def test_missing_injection_row_is_fatal() -> None:
+    # A fully-absent injection row (e.g. a capitalization re-render) must
+    # raise rather than return None and silently zero the feed-in credit.
+    from custom_components.be_electricity_prices.providers.ebem import (
+        _CONTRACTS_BY_ID,
+        _extract_injection,
+    )
+
+    with pytest.raises(ExtractorError, match="not found"):
+        _extract_injection("no injection here", _CONTRACTS_BY_ID["ebem_variable"])
+    with pytest.raises(ExtractorError, match="not found"):
+        _extract_injection("no injection here", _CONTRACTS_BY_ID["ebem_dynamic"])
+
+
 # ---- Groen B@sic+ -----------------------------------------------------------
 
 
