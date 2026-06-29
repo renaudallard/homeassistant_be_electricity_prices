@@ -368,6 +368,7 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
             rf"(?<!injectie\s)\balle uren\s+([\d,.]+)\s+Belpex\s*15\s*[’']?\s*"
             rf"([{SIGN_CHARS}])\s*([\d,.]+)",
             text,
+            re.IGNORECASE,
         )
         if not match:
             raise ExtractorError("EBEM Dyn@mic: consumption formula not found")
