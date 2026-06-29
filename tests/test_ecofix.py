@@ -41,6 +41,7 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.providers.ecofix import (
     _dynamic_formula_match,
+    _extract_publication,
     discover,
     parse_snapshot,
 )
@@ -240,6 +241,14 @@ def test_flexy_is_variable_with_indicative_monthly_rate() -> None:
     assert snap.energy.exclusive_night == pytest.approx(0.1181)
     assert snap.energy.yearly_fixed_fee == pytest.approx(60.0)
     assert snap.energy.formula is not None and "BELPEX-RLP-M" in snap.energy.formula
+
+
+def test_publication_scan_skips_colliding_version_token() -> None:
+    # The product name prints on the line above the month; a future
+    # "Versie 2026" header token must not shadow the real month line.
+    label, valid = _extract_publication("Ecofix Motion Online Versie 2026\nMei 2026\n")
+    assert label == "2026-05"
+    assert valid == date(2026, 5, 31)
 
 
 def test_flexy_injection_surfaces_monthly_indicative_only() -> None:

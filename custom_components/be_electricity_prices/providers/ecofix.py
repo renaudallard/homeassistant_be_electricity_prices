@@ -496,16 +496,20 @@ def _extract_publication(text: str) -> tuple[str, date | None]:
     the Dutch month name + year directly. ``valid_until`` is the last
     day of that month so the binary sensor reflects monthly rotation.
     """
-    match = re.search(r"\b([A-Z][a-z]+)\s+(20\d{2})\b", text[:1000])
-    if not match:
-        return "", None
-    month_name = match.group(1).lower()
-    if month_name not in _DUTCH_MONTHS:
-        return "", None
-    year = int(match.group(2))
-    month = _DUTCH_MONTHS[month_name]
-    last_day = calendar.monthrange(year, month)[1]
-    return f"{year}-{month:02d}", date(year, month, last_day)
+    # Scan for the first word+year token that is actually a month, rather
+    # than aborting on the first capitalised-word+year token: the header
+    # prints the product name on the line above the month, so a future
+    # edition / version marker ("... Versie 2026") would otherwise shadow
+    # the month line and silently drop validity.
+    for match in re.finditer(r"\b([A-Za-z]+)\s+(20\d{2})\b", text[:1000]):
+        month_name = match.group(1).lower()
+        if month_name not in _DUTCH_MONTHS:
+            continue
+        year = int(match.group(2))
+        month = _DUTCH_MONTHS[month_name]
+        last_day = calendar.monthrange(year, month)[1]
+        return f"{year}-{month:02d}", date(year, month, last_day)
+    return "", None
 
 
 # ---- taxes ------------------------------------------------------------------
