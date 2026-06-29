@@ -41,7 +41,10 @@ from custom_components.be_electricity_prices.providers.base import (
     FixedRates,
     VariableRates,
 )
-from custom_components.be_electricity_prices.providers.octaplus import parse_snapshot
+from custom_components.be_electricity_prices.providers.octaplus import (
+    _extract_taxes,
+    parse_snapshot,
+)
 from tests import FIXTURES
 
 
@@ -68,6 +71,22 @@ def test_fixed_wallonia_extracts_meter_rates() -> None:
     assert snap.energy.offpeak == pytest.approx(0.1377)
     assert snap.energy.exclusive_night == pytest.approx(0.1485)
     assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+    # Injection is the second number on the 'Compteur monohoraire' line; a
+    # column-index regression that grabbed the consumption rate instead
+    # would over-credit feed-in ~3.4x. Pin it as a flat current rate (no
+    # spot factor on a fixed card).
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(0.0472)
+    assert snap.injection.factor is None
+    assert snap.injection.base is None
+
+
+def test_missing_federal_tax_tier_raises() -> None:
+    # The federal excise + energy contribution are mandatory; a layout
+    # drift on the tier row must fail loud, not silently zero them.
+    text = "Consommation entre 0 a 3 000 kWh 5,0329 0,2042\n"
+    with pytest.raises(ExtractorError, match="federal tax tier"):
+        _extract_taxes(text, "wallonia")
 
 
 def test_fixed_flanders_extracts_meter_rates() -> None:

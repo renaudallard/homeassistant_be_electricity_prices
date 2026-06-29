@@ -401,8 +401,6 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
     Wallonia adds a one-line connection fee (``Redevance raccordement
     Wallonie (c€/kWh) 0,075``).
     """
-    federal_excise = 0.0
-    energy_contribution = 0.0
     # Anchor on the kWh range; the leading "Consommation" word can be
     # mangled on Flanders cards where the federal column shares its row
     # bucket with the Fonds Energie sidebar (e.g. "CCCConsommaaaation").
@@ -410,9 +408,13 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
         r"0\s*&\s*3\.000\s*kWh\s+([\d.,]+)\s+([\d.,]+)",
         text,
     )
-    if tier1:
-        federal_excise = to_float(tier1.group(1)) / 100.0
-        energy_contribution = to_float(tier1.group(2)) / 100.0
+    if tier1 is None:
+        # Mandatory federal charges; a miss is a layout drift that would
+        # silently under-price every kWh. Fail loud (matching
+        # _extract_yearly_fee) rather than default to 0.
+        raise ExtractorError("OCTA+: federal tax tier (0-3.000 kWh) not found")
+    federal_excise = to_float(tier1.group(1)) / 100.0
+    energy_contribution = to_float(tier1.group(2)) / 100.0
 
     region_connection_fee = 0.0
     if region == REGION_WALLONIA:
