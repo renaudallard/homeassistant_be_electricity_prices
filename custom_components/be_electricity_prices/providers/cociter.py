@@ -327,7 +327,12 @@ def _extract_injection(text: str) -> InjectionRates:
 
 def _extract_energy(text: str, contract_id: str) -> EnergyRates:
     yearly_fee_match = re.search(r"(\d+,\d+)\s*€/an\s*\n?\s*TVAC", text)
-    yearly_fee = to_float(yearly_fee_match.group(1)) if yearly_fee_match else 0.0
+    if yearly_fee_match is None:
+        # The abonnement (53,00 EUR/an TVAC) is on every Cociter card; a
+        # miss silently drops the standing charge, so fail loud like the
+        # injection / tax / forfait parsers rather than default to 0.
+        raise ExtractorError("Cociter: yearly fixed fee (abonnement) row not found")
+    yearly_fee = to_float(yearly_fee_match.group(1))
 
     if contract_id == "cociter_variable":
         mono = re.search(r"Compteur monohoraire[^\n]*?(\d+,\d+)\s*c€/kWh", text)
@@ -440,8 +445,14 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
 
 
 def _extract_transport(text: str) -> float:
+    # The ELIA transport row (~2.7-3.2 c€/kWh, ~20% of the all-in) is on
+    # every Cociter card and feeds straight into network cost; a regex
+    # miss silently dropping it would under-bill every kWh. Fail loud,
+    # matching the renewables / tax parsers.
     match = re.search(r"Tarifs de transport TVAC[^\n]*?([\d,]+)", text)
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if match is None:
+        raise ExtractorError("Cociter: ELIA transport tariff row not found")
+    return to_float(match.group(1)) / 100.0
 
 
 def _extract_taxes(text: str) -> TaxOverlay:

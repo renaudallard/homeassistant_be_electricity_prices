@@ -133,6 +133,26 @@ def test_dso_extraction_keys_off_header_not_column_count() -> None:
     assert overlay.distribution_single == pytest.approx(0.1087)
 
 
+def test_missing_transport_or_abonnement_is_fatal() -> None:
+    # The ELIA transport row and the abonnement are mandatory on every
+    # card; a regex miss must raise rather than silently zero them.
+    raw = fixture_text("cociter_var_2604.pdf")
+    with pytest.raises(ExtractorError, match="transport"):
+        parse_snapshot(
+            raw.replace("Tarifs de transport", "XXX"),
+            "cociter_variable",
+            "test://var",
+            "2026-04",
+        )
+    with pytest.raises(ExtractorError, match="abonnement"):
+        parse_snapshot(
+            raw.replace("€/an", "XXX"),
+            "cociter_variable",
+            "test://var",
+            "2026-04",
+        )
+
+
 def test_variable_extracts_taxes() -> None:
     snap = parse_snapshot(
         fixture_text("cociter_var_2604.pdf"),
