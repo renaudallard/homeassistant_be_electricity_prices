@@ -175,6 +175,9 @@ def test_brussels_extracts_sibelga() -> None:
     sibelga = snap.dsos["sibelga"]
     assert sibelga.distribution_single == pytest.approx(0.0996)
     assert sibelga.distribution_offpeak == pytest.approx(0.0753)
+    # The exclusive-night column is now wired (was dropped, falling back
+    # to off-peak); 7,53 c€/kWh on this card.
+    assert sibelga.distribution_exclusive_night == pytest.approx(0.0753)
     assert sibelga.transport == pytest.approx(0.0227)
 
 

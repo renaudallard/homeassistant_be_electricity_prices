@@ -740,6 +740,7 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     mono = to_float(match.group(1))
     peak = to_float(match.group(2))
     offpeak = to_float(match.group(3))
+    excl_night = to_float(match.group(4))
     transport = to_float(match.group(5))
     terme_fixe = to_float(match.group(6))
     return {
@@ -747,6 +748,10 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=mono / 100.0,
             distribution_peak=peak / 100.0,
             distribution_offpeak=offpeak / 100.0,
+            # The excl_nuit column was parsed but dropped, so an
+            # exclusive-night Brussels meter fell back to off-peak -
+            # correct only while the two columns happen to be equal.
+            distribution_exclusive_night=excl_night / 100.0,
             transport=transport / 100.0,
             data_management_per_year=terme_fixe,
         )
