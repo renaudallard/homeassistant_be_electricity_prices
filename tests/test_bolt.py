@@ -75,6 +75,22 @@ def test_fix_extracts_consumption_rates() -> None:
     assert snap.energy.exclusive_night == pytest.approx(0.1671)
 
 
+def test_injection_is_flat_monthly_indicative() -> None:
+    # Bolt's feed-in is a flat monthly indicative printed under the
+    # "Injection" header ("Prix mensuel 5,31 ..."), the same on fix and
+    # variable cards. It is anchored on that header, not a positional
+    # "Prix mensuel" match, and carries no spot factor/base.
+    for cid, fixture in (
+        ("bolt_fix", "bolt_fix.pdf"),
+        ("bolt_variable", "bolt_variable.pdf"),
+    ):
+        snap = parse_snapshot(cid, fixture_text(fixture, layout=True), "wallonia")
+        assert snap.injection is not None
+        assert snap.injection.current == pytest.approx(0.0531)
+        assert snap.injection.factor is None
+        assert snap.injection.base is None
+
+
 def test_variable_missing_bihourly_rates_fails_loud() -> None:
     # Variable cards always publish distinct Jour/Nuit rates; if the
     # bi-horaire block drifts, raise rather than silently bill at mono.

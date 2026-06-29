@@ -321,7 +321,7 @@ def parse_snapshot(
     text = text.replace(" ", "\n")
 
     energy = _extract_energy(text, contract.kind)
-    injection = _extract_injection(text, contract.kind)
+    injection = _extract_injection(text)
     publication_label = _extract_publication_month(text)
     federal_excise, energy_contribution, region_connection_fee = _extract_taxes(
         text, region
@@ -458,14 +458,18 @@ def _extract_publication_month(text: str) -> str:
     return match.group(1) if match else ""
 
 
-def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
-    # Injection block: "Prix mensuel 5,31 4,03" appearing AFTER the
-    # consumption block (the second 'Prix mensuel' in the document).
-    matches = list(re.finditer(r"Prix mensuel\s+([\d.,]+)\s+([\d.,]+)\b", text))
-    if len(matches) < 2:
+def _extract_injection(text: str) -> InjectionRates | None:
+    # Injection is a flat monthly indicative ("Prix mensuel 5,31 4,03")
+    # in the block that follows the "Injection" header, on both fix and
+    # variable cards (the consumption "Prix mensuel" sits above it).
+    # Anchor on the header rather than counting "Prix mensuel"
+    # occurrences, so a third consumption-side row can't shift the match.
+    # factor/base stay None: Bolt's feed-in is a printed indicative, not a
+    # spot formula.
+    m = re.search(r"Injection\b.*?Prix mensuel\s+([\d.,]+)\s+[\d.,]+", text, re.S)
+    if not m:
         return None
-    inj = matches[1]
-    current = to_float(inj.group(1)) / 100.0
+    current = to_float(m.group(1)) / 100.0
     return InjectionRates(current=current, factor=None, base=None, formula=None)
 
 
