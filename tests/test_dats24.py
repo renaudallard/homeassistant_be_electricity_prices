@@ -134,11 +134,24 @@ def test_injection_formula_text_retained_for_any_operator() -> None:
     )
 
     text = "Teruglevering2 (c€/kWh) 3,26\nFormula: (BE_spotSPP x 0,0766 + 0,5) c€/kWh\n"
-    inj = _extract_injection(text)
+    inj = _extract_injection(text, "flanders")
+    assert inj is not None
     assert inj.current == pytest.approx(0.0326)
     assert inj.factor is None
     assert inj.base is None
     assert "+ 0,5" in (inj.formula or "")
+
+
+def test_injection_is_flanders_only() -> None:
+    # The card reserves the teruglevering tariff to Flemish digital-meter
+    # customers; a Walloon prosumer must not accrue a feed-in credit.
+    from custom_components.be_electricity_prices.providers.dats24 import (
+        _extract_injection,
+    )
+
+    assert _extract_injection("Teruglevering2 (c€/kWh) 3,26\n", "wallonia") is None
+    assert _snap("wallonia").injection is None
+    assert _snap("flanders").injection is not None
 
 
 def test_injection_indicative_handles_negative_value() -> None:
@@ -149,15 +162,15 @@ def test_injection_indicative_handles_negative_value() -> None:
         _extract_injection,
     )
 
-    inj = _extract_injection("Teruglevering2 (c€/kWh) -0,34\n")
+    inj = _extract_injection("Teruglevering2 (c€/kWh) -0,34\n", "flanders")
     assert inj is not None
     assert inj.current == pytest.approx(-0.0034)
     # A Unicode-minus glyph must work too.
-    inj_uni = _extract_injection("Teruglevering2 (c€/kWh) −0,34\n")
+    inj_uni = _extract_injection("Teruglevering2 (c€/kWh) −0,34\n", "flanders")
     assert inj_uni is not None
     assert inj_uni.current == pytest.approx(-0.0034)
     # Positive values without a sign still parse.
-    inj_pos = _extract_injection("Teruglevering2 (c€/kWh) 3,26\n")
+    inj_pos = _extract_injection("Teruglevering2 (c€/kWh) 3,26\n", "flanders")
     assert inj_pos is not None
     assert inj_pos.current == pytest.approx(0.0326)
 

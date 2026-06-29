@@ -173,7 +173,7 @@ def parse_snapshot(text: str, source_url: str, region: str) -> SupplierSnapshot:
         source_url=source_url,
         publication_label=_extract_publication(text),
         valid_until=parse_valid_until(text),
-        injection=_extract_injection(text),
+        injection=_extract_injection(text, region),
     )
 
 
@@ -380,7 +380,7 @@ def _extract_taxes(text: str, region: str) -> TaxOverlay:
 # ---- injection ---------------------------------------------------------------
 
 
-def _extract_injection(text: str) -> InjectionRates:
+def _extract_injection(text: str, region: str) -> InjectionRates | None:
     """Parse the teruglevering monthly indicative (formula kept for diagnostics).
 
     DATS 24 "Groen Variabel" settles injection on BE_spotSPP, a MONTHLY
@@ -394,10 +394,17 @@ def _extract_injection(text: str) -> InjectionRates:
     spot; mirrors EBEM Groen Variabel / B@sic+ and Ecofix Flexy's
     BELPEX-SPP-M, which surface the realized monthly rate only.
 
+    Returns ``None`` in Wallonia: the card footnote reserves the
+    teruglevering tariff to Flemish customers with a digital meter, so a
+    Walloon prosumer is not paid a feed-in credit and the same card's
+    indicative must not be surfaced for them.
+
     Some users have a single-rate meter, others bi-hourly: the card
     publishes one shared teruglevering value across all three meter
     types, so a single InjectionRates entry covers everyone.
     """
+    if region == REGION_WALLONIA:
+        return None
     # The monthly indicative can go negative when BE_spotSPP is low, so
     # capture an optional leading sign - otherwise a negative indicative
     # fails to match and the credit is silently dropped.
