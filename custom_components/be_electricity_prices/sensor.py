@@ -409,6 +409,14 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
     """A single all-in electricity price sensor."""
 
     _attr_has_entity_name = True
+    # The current_price sensor carries the full today / tomorrow price
+    # arrays and the ranked-window lists, which change every hour. Keep
+    # them out of the recorder (HA stores state attributes by default) so
+    # they don't bloat the long-term database; they are live display
+    # helpers, not history.
+    _unrecorded_attributes = frozenset(
+        {"today", "tomorrow", "cheapest_4h_today", "most_expensive_4h_today"}
+    )
     entity_description: BePriceSensorDescription
 
     def __init__(

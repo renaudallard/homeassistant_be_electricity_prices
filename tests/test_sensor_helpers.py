@@ -242,3 +242,12 @@ def test_tomorrow_aggregations_return_none_before_publication() -> None:
     assert _tomorrow_avg(data) is None
     assert _tomorrow_min(data) is None
     assert _tomorrow_max(data) is None
+
+
+def test_current_price_bulk_attributes_are_unrecorded() -> None:
+    """The hourly today / tomorrow arrays and ranked windows must stay out
+    of the recorder so they don't bloat the long-term database."""
+    from custom_components.be_electricity_prices.sensor import BePriceSensor
+
+    for key in ("today", "tomorrow", "cheapest_4h_today", "most_expensive_4h_today"):
+        assert key in BePriceSensor._unrecorded_attributes
