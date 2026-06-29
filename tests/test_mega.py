@@ -255,6 +255,12 @@ def test_publication_month_keeps_version_for_august() -> None:
     assert mega_mod._extract_publication_month("Prix V2 août 2026 ...") == "2 août 2026"
 
 
+def test_missing_yearly_fee_is_fatal() -> None:
+    # The Redevance fixe standing charge is mandatory; a miss must raise.
+    with pytest.raises(ExtractorError, match="Redevance fixe"):
+        mega_mod._extract_yearly_fee("no fee row here")
+
+
 def test_missing_wallonia_connection_fee_is_fatal() -> None:
     # The Wallonia raccordement is mandatory; a miss must raise rather
     # than silently zero it.

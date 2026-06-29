@@ -541,7 +541,11 @@ def _extract_yearly_fee(text: str) -> float:
     # ('Redevance fixe\n(€/an)\n42.4'); fixed cards keep them together
     # ('Redevance fixe (€/an)\n111.3'). Accept either layout.
     match = re.search(r"Redevance fixe\s*\n?\s*\(€/an\)\s*\n?\s*([\d.,]+)", text)
-    return to_float(match.group(1)) if match else 0.0
+    if match is None:
+        # The standing charge (42-111 EUR/yr) is on every card; raise on a
+        # miss rather than silently drop it, matching every other Mega line.
+        raise ExtractorError("Mega: yearly fixed fee (Redevance fixe) not found")
+    return to_float(match.group(1))
 
 
 _FR_MONTH_NAMES = (
