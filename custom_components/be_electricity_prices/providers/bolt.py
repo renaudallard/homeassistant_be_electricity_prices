@@ -418,8 +418,18 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         if span
         else []
     )
-    peak = to_float(pairs[-1][0]) / 100.0 if pairs else mono
-    offpeak = to_float(pairs[-1][1]) / 100.0 if pairs else mono
+    if pairs:
+        peak = to_float(pairs[-1][0]) / 100.0
+        offpeak = to_float(pairs[-1][1]) / 100.0
+    elif kind == "fixed":
+        # Bolt fixed cards are mono == peak == offpeak and sometimes omit
+        # the bi-horaire row entirely; the single rate is the right value.
+        peak = offpeak = mono
+    else:
+        # Variable cards always publish distinct Jour / Nuit rates; a miss
+        # is a layout drift, not a mono contract. Fail loud rather than
+        # silently bill a bi-hourly user at the mono rate.
+        raise ExtractorError(f"could not parse Bolt {kind} bi-hourly Jour/Nuit rates")
 
     if kind == "fixed":
         return FixedRates(

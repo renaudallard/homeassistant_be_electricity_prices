@@ -75,6 +75,14 @@ def test_fix_extracts_consumption_rates() -> None:
     assert snap.energy.exclusive_night == pytest.approx(0.1671)
 
 
+def test_variable_missing_bihourly_rates_fails_loud() -> None:
+    # Variable cards always publish distinct Jour/Nuit rates; if the
+    # bi-horaire block drifts, raise rather than silently bill at mono.
+    text = fixture_text("bolt_variable.pdf", layout=True).replace("Jour", "XXX")
+    with pytest.raises(ExtractorError, match="bi-hourly"):
+        parse_snapshot("bolt_variable", text, "wallonia")
+
+
 def test_variable_uses_current_monthly_not_annual_estimate() -> None:
     # The bihoraire block lists the annual estimate first
     # (15,20 / 15,20) then the current monthly (14,56 / 12,09). Anchor
