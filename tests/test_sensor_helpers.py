@@ -220,6 +220,30 @@ def test_current_picks_quarter_slot() -> None:
     assert bd.all_in == pytest.approx(prices[48])
 
 
+def test_current_quarter_rejects_slot_more_than_one_quarter_stale() -> None:
+    # On a quarter-hourly contract the nearest-slot fallback must not
+    # surface a slot more than 15 min from now; a fixed 1 h window let an
+    # up-to-45-min-stale slot pass as current.
+    midnight = _fixed_today_local()
+    bd = PriceBreakdown(energy=0.2, network=0.0, taxes=0.0, all_in=0.2)
+    far = dt_util.as_utc(midnight + timedelta(hours=12, minutes=45))  # 45 min off
+    stale = CoordinatorData(hourly={far: bd}, resolution=RESOLUTION_QUARTER)
+    assert _current(stale) is None
+    near = dt_util.as_utc(midnight + timedelta(hours=11, minutes=45))  # 15 min off
+    fresh = CoordinatorData(hourly={near: bd}, resolution=RESOLUTION_QUARTER)
+    assert _current(fresh) is not None
+
+
+def test_current_hourly_still_tolerates_within_the_hour() -> None:
+    # The 1 h tolerance (DST seam) stays for hourly contracts: a slot
+    # 45 min from now is still surfaced.
+    midnight = _fixed_today_local()
+    bd = PriceBreakdown(energy=0.2, network=0.0, taxes=0.0, all_in=0.2)
+    slot = dt_util.as_utc(midnight + timedelta(hours=12, minutes=45))
+    data = CoordinatorData(hourly={slot: bd})  # default resolution is hourly
+    assert _current(data) is not None
+
+
 def test_hourly_view_downsamples_quarter_to_hourly_mean() -> None:
     # 96 quarter slots collapse to 24 hour keys, each the mean of its
     # four quarters: hour 0 = mean(0, 1, 2, 3) = 1.5.

@@ -76,11 +76,13 @@ def _current(data: CoordinatorData) -> PriceBreakdown | None:
         key=lambda h: abs((h - now).total_seconds()),
     )
     # Bound the nearest-slot fallback so a stale spot cache doesn't
-    # silently surface yesterday's last slot as "now". An hour off is
-    # tolerated for DST seams; anything beyond that means the price
-    # table is stale relative to wall-clock and the sensor should go
-    # unknown rather than mislead.
-    if abs((nearest_slot - now).total_seconds()) > 3600:
+    # silently surface yesterday's last slot as "now". Accept a substitute
+    # only within one billing slot of "now" (15 min on a quarter-hourly
+    # contract, 1 h otherwise -- the latter also absorbs the DST seam),
+    # mirroring the live-injection path. A fixed 1 h window let a
+    # quarter-hourly sensor surface an up-to-45-min-stale slot as current.
+    max_gap = 3600.0 if data.resolution == RESOLUTION_HOURLY else 900.0
+    if abs((nearest_slot - now).total_seconds()) > max_gap:
         return None
     return data.hourly[nearest_slot]
 
