@@ -677,22 +677,11 @@ def parse_valid_until(text: str) -> date | None:
     )
     bare_month_re = re.compile(rf"\b({name_alt})\s+(20\d{{2}})\b")
 
-    # Build the set of windows to scan: every occurrence of a validity
-    # keyword + the next ~200 chars (a fixed span; adjacent windows can
-    # overlap). Candidates are pooled across all windows and the latest is
-    # taken below, which is what a "du X au Y" range needs. A stray later
-    # date sitting within ~200 chars of a keyword would also win, but no
-    # published card has exhibited that.
-    windows: list[str] = []
-    for keyword in _VALID_KEYWORDS:
-        start = 0
-        while True:
-            idx = lower.find(keyword, start)
-            if idx < 0:
-                break
-            windows.append(lower[idx : idx + 200])
-            start = idx + len(keyword)
-
+    # Scan every validity-keyword window (keyword + next ~200 chars).
+    # Candidates are pooled across all windows and the latest is taken
+    # below, which is what a "du X au Y" range needs. A stray later date
+    # within a window would also win, but no published card has shown that.
+    windows = _validity_windows(lower)
     if not windows:
         return None
 
