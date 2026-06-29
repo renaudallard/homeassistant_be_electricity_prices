@@ -408,18 +408,14 @@ def _no_loaded_entry_error(target_id: str | None) -> ServiceValidationError:
     )
 
 
-def _resolve_window_inputs(
-    call: ServiceCall,
-) -> tuple[dict[datetime, PriceBreakdown], int, datetime, datetime | None, str]:
-    """Parse a window-finding ServiceCall into pure-helper arguments."""
-    duration_hours = float(call.data["duration_hours"])
-    if duration_hours < 1:
-        raise ServiceValidationError(
-            "duration_hours must be at least 1",
-            translation_domain=DOMAIN,
-            translation_key="duration_too_small",
-        )
+def _resolve_target_coordinator(call: ServiceCall) -> BePricesCoordinator:
+    """Resolve the target entry's live coordinator for a service call.
 
+    Honours an optional ``entry_id`` (defaults to the sole loaded entry),
+    raising a localized ServiceValidationError when no entry matches or
+    the entry is mid-reload. Callers layer their own readiness checks
+    (price table populated, snapshot loaded) on top.
+    """
     entries = call.hass.config_entries.async_loaded_entries(DOMAIN)
     target_id = call.data.get("entry_id")
     if target_id is not None:
@@ -433,6 +429,22 @@ def _resolve_window_inputs(
             translation_domain=DOMAIN,
             translation_key="entry_reloading",
         )
+    return coordinator
+
+
+def _resolve_window_inputs(
+    call: ServiceCall,
+) -> tuple[dict[datetime, PriceBreakdown], int, datetime, datetime | None, str]:
+    """Parse a window-finding ServiceCall into pure-helper arguments."""
+    duration_hours = float(call.data["duration_hours"])
+    if duration_hours < 1:
+        raise ServiceValidationError(
+            "duration_hours must be at least 1",
+            translation_domain=DOMAIN,
+            translation_key="duration_too_small",
+        )
+
+    coordinator = _resolve_target_coordinator(call)
     data = coordinator.data
     if data is None or not data.hourly:
         raise ServiceValidationError(
@@ -500,23 +512,11 @@ async def _async_backfill_service(call: ServiceCall) -> ServiceResponse:
     upserts on (statistic_id, start) so a re-run silently overwrites
     the requested hours.
     """
-    entries = call.hass.config_entries.async_loaded_entries(DOMAIN)
-    target_id = call.data.get("entry_id")
-    if target_id is not None:
-        entries = [e for e in entries if e.entry_id == target_id]
-    if not entries:
-        raise _no_loaded_entry_error(target_id)
     # Validate the live state here so a call during a reload window or
     # before the first snapshot surfaces a localized ServiceValidationError,
     # matching the window services, rather than the raw RuntimeError that
     # backfill_range would otherwise raise.
-    coordinator = getattr(entries[0], "runtime_data", None)
-    if not isinstance(coordinator, BePricesCoordinator):
-        raise ServiceValidationError(
-            "entry is reloading; try again in a moment",
-            translation_domain=DOMAIN,
-            translation_key="entry_reloading",
-        )
+    coordinator = _resolve_target_coordinator(call)
     if coordinator._snapshot is None:
         raise ServiceValidationError(
             "supplier snapshot not loaded; refresh the entry first",
@@ -525,7 +525,7 @@ async def _async_backfill_service(call: ServiceCall) -> ServiceResponse:
         )
     return await backfill_range(
         call.hass,
-        entries[0],
+        coordinator.entry,
         call.data.get("start"),
         call.data.get("end"),
         clear=bool(call.data.get("clear", False)),
