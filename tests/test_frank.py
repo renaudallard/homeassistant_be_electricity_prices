@@ -170,6 +170,14 @@ def test_missing_gsc_wkk_is_fatal() -> None:
         parse_snapshot(text, "test://frank-apr", "frank_dynamic", "april 2026")
 
 
+def test_missing_injection_is_fatal() -> None:
+    # Every Frank dynamic card prints the terugleveringsvergoeding; a
+    # miss must raise rather than silently zero the solar feed-in credit.
+    text = _text().replace("rugleveringsvergoeding", "XXX")
+    with pytest.raises(ExtractorError, match="injection formula"):
+        parse_snapshot(text, "test://frank-apr", "frank_dynamic", "april 2026")
+
+
 def test_taxes_flanders_renewables_gsc_plus_wkk() -> None:
     """GSC 1,166 + WKK 0,371 = 1,537 EURct/kWh."""
     snap = _snap()

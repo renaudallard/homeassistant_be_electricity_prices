@@ -395,10 +395,14 @@ _INJECTION_RE = re.compile(
 )
 
 
-def _extract_injection(text: str) -> InjectionRates | None:
+def _extract_injection(text: str) -> InjectionRates:
     m = _INJECTION_RE.search(text)
     if not m:
-        return None
+        # Every Frank dynamic card prints a terugleveringsvergoeding
+        # formula; a miss is a layout drift, not a fee-free contract.
+        # Raise like the monthly-fee and GSC/WKK rows rather than
+        # silently crediting a solar user 0 EUR/kWh.
+        raise ExtractorError("Frank Energie: injection formula row not found")
     factor_pdf = to_float(m.group(1))
     sign_char = m.group(2)
     sign = parse_sign(sign_char) if sign_char.strip() else -1.0
