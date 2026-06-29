@@ -118,15 +118,20 @@ def _is_pdf_payload(payload: bytes) -> bool:
     return False
 
 
-async def fetch_pdf_text(
+async def _fetch_validated_pdf_bytes(
     session: aiohttp.ClientSession, url: str, *, timeout: int = 30
-) -> str:
-    """Download ``url`` and return the concatenated extracted text."""
-    # Catch TimeoutError alongside ClientError in every fetch helper:
-    # aiohttp's ClientTimeout fires asyncio.TimeoutError (==
-    # builtins.TimeoutError on 3.11+), which is NOT a subclass of
-    # ClientError, so a slow supplier endpoint would otherwise bubble a
-    # bare TimeoutError out of discover/fetch and crash the live-check.
+) -> bytes:
+    """Download ``url`` and return its bytes once validated as a PDF.
+
+    Shared by the three ``fetch_pdf_text*`` variants. Catches TimeoutError
+    alongside ClientError: aiohttp's ClientTimeout fires
+    asyncio.TimeoutError (== builtins.TimeoutError on 3.11+), which is NOT
+    a ClientError subclass, so a slow supplier endpoint would otherwise
+    bubble a bare TimeoutError out of discover/fetch and crash the
+    live-check. The ``network error fetching`` prefix is load-bearing -
+    :func:`is_transient_fetch_error` keys on it to decide whether to retry
+    - so keep it in this one place.
+    """
     try:
         async with session.get(
             url,
@@ -144,10 +149,17 @@ async def fetch_pdf_text(
         # disguised as success). Engie's API returns octet-stream
         # for valid PDFs, so checking the magic bytes is more
         # reliable than the Content-Type header.
-        snippet = payload[:80]
         raise ExtractorError(
-            f"expected a PDF at {url}, payload starts with {snippet!r}"
+            f"expected a PDF at {url}, payload starts with {payload[:80]!r}"
         )
+    return payload
+
+
+async def fetch_pdf_text(
+    session: aiohttp.ClientSession, url: str, *, timeout: int = 30
+) -> str:
+    """Download ``url`` and return the concatenated extracted text."""
+    payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
     # pypdf does pure-Python parsing; offload to a worker thread so a
     # multi-page tariff card never stalls Home Assistant's event loop.
     return await asyncio.to_thread(extract_pdf_text, payload)
@@ -295,21 +307,7 @@ async def fetch_pdf_text_aligned(
     timeout: int = 30,
 ) -> str:
     """Word-coordinate aligned variant of :func:`fetch_pdf_text`."""
-    try:
-        async with session.get(
-            url,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=timeout),
-        ) as resp:
-            if resp.status >= 400:
-                raise ExtractorError(f"HTTP {resp.status} fetching {url}")
-            payload = await _read_pdf_bytes(resp, url)
-    except (aiohttp.ClientError, TimeoutError) as err:
-        raise ExtractorError(f"network error fetching {url}: {err}") from err
-    if not _is_pdf_payload(payload):
-        raise ExtractorError(
-            f"expected a PDF at {url}, payload starts with {payload[:80]!r}"
-        )
+    payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
     return await asyncio.to_thread(
         extract_pdf_text_aligned, payload, 3, x_join_threshold
     )
@@ -324,21 +322,7 @@ async def fetch_pdf_text_layout(
     pages disguised as success). We treat those as fetch failures so the
     parser never tries to read a PDF that isn't.
     """
-    try:
-        async with session.get(
-            url,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=timeout),
-        ) as resp:
-            if resp.status >= 400:
-                raise ExtractorError(f"HTTP {resp.status} fetching {url}")
-            payload = await _read_pdf_bytes(resp, url)
-    except (aiohttp.ClientError, TimeoutError) as err:
-        raise ExtractorError(f"network error fetching {url}: {err}") from err
-    if not _is_pdf_payload(payload):
-        raise ExtractorError(
-            f"expected a PDF at {url}, payload starts with {payload[:80]!r}"
-        )
+    payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
     return await asyncio.to_thread(extract_pdf_text_layout, payload)
 
 
