@@ -576,7 +576,11 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     factor: float | None = None
     base: float | None = None
     formula: str | None = None
-    if len(formulas) >= 2:
+    # Only Dynamic cards carry a spot injection formula (the second
+    # BELPEX formula on the card). Gate on kind so a future indexed or
+    # variable card that happens to print a price formula can't flip the
+    # injection taxonomy to a spot factor/base shape.
+    if kind == "dynamic" and len(formulas) >= 2:
         injection_match = formulas[1]
         # Groups: (base_sign, base_magnitude, factor_sign, factor_magnitude).
         base_pdf_cents = parse_sign(injection_match.group(1)) * to_float(
