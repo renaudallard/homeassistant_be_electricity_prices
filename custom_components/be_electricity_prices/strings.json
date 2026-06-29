@@ -175,10 +175,10 @@
         }
       },
       "injection_api_key": {
-        "title": "ENTSO-E API key (injection)",
-        "description": "Optional. This contract prices solar injection off the day-ahead spot, which needs a free ENTSO-E key from transparency.entsoe.eu. Leave blank to skip; the injection price stays unavailable until you add a key.",
+        "title": "[%key:component::be_electricity_prices::config::step::injection_api_key::title%]",
+        "description": "[%key:component::be_electricity_prices::config::step::injection_api_key::description%]",
         "data": {
-          "api_key": "ENTSO-E API key"
+          "api_key": "[%key:component::be_electricity_prices::config::step::injection_api_key::data::api_key%]"
         }
       },
       "capacity": {
