@@ -343,14 +343,17 @@ def _extract_taxes(text: str, region: str) -> TaxOverlay:
     if region == REGION_FLANDERS:
         gsc_match = re.search(r"Vlaams Gewest:\s*GSC\s*\(c€/kWh\)\s+([\d,.]+)", text)
         wkc_match = re.search(r"WKC\s*\(c€/kWh\)\s+([\d,.]+)", text)
-        if gsc_match is None and wkc_match is None:
-            # Both renewables components gone means the block drifted; a
-            # silent 0.0 would under-bill. Fail loud, matching the federal
-            # tier above. A card printing only one component stays valid.
+        if gsc_match is None or wkc_match is None:
+            # GSC and WKC are both mandatory Flemish certificate costs,
+            # always printed together; a single miss is a layout drift, not
+            # a one-component card. The GSC regex needs the fragile "Vlaams
+            # Gewest:" prefix and is the dominant half (1,183 vs 0,378), so
+            # raise on either miss, matching the sibling Frank provider,
+            # rather than silently substituting 0 for the missing half.
             raise ExtractorError("DATS 24: Flanders GSC/WKC renewables not found")
         flanders_renewables = (
-            to_float(gsc_match.group(1)) / 100.0 if gsc_match else 0.0
-        ) + (to_float(wkc_match.group(1)) / 100.0 if wkc_match else 0.0)
+            to_float(gsc_match.group(1)) / 100.0 + to_float(wkc_match.group(1)) / 100.0
+        )
         fund_match = re.search(
             r"Hoofdverblijf\s*\(domicilie\)\s+([\d,.]+)\s*€/maand", text
         )

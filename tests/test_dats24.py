@@ -56,6 +56,15 @@ def test_missing_wallonia_levies_are_fatal() -> None:
         parse_snapshot(text, "test://dats24", "wallonia")
 
 
+def test_missing_single_flanders_renewable_is_fatal() -> None:
+    # GSC and WKC are both mandatory and always printed together; a single
+    # miss (here the dominant GSC half) must raise rather than silently
+    # substituting 0 and under-billing ~1.2 c€/kWh.
+    text = _text().replace("Vlaams Gewest: GSC", "XXX")
+    with pytest.raises(ExtractorError, match="GSC/WKC"):
+        parse_snapshot(text, "test://dats24", "flanders")
+
+
 def test_missing_yearly_fee_is_fatal() -> None:
     # The yearly standing charge is mandatory on every DATS 24 card; a
     # miss must raise rather than silently bill a zero base fee.
