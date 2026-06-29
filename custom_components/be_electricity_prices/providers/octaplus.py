@@ -431,8 +431,12 @@ def _extract_wallonia_renewables(text: str) -> float:
     # Some cards (Smart Variable) put the value several lines below the
     # "Coûts énergie verte" header; anchor instead on "Région wallonne",
     # whose first numeric neighbour is always the green-energy rate.
+    # Called only for Wallonia, where the ~3.1 c€/kWh surcharge is
+    # mandatory; raise on a miss rather than silently zero it.
     match = re.search(r"Région\s+wallonne[^\d]*?([\d.,]+)", text, re.S)
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    if match is None:
+        raise ExtractorError("OCTA+: Wallonia green-energy surcharge not found")
+    return to_float(match.group(1)) / 100.0
 
 
 def _extract_flanders_renewables(text: str) -> float:
@@ -441,6 +445,11 @@ def _extract_flanders_renewables(text: str) -> float:
     """
     green = re.search(r"Coûts énergie verte\s+(\d+(?:[.,]\d+)?)", text)
     cogen = re.search(r"Coûts cogénération\s+(\d+(?:[.,]\d+)?)", text)
+    if green is None and cogen is None:
+        # Called only for Flanders, where the green-energy / cogeneration
+        # surcharge is mandatory; both gone means the block drifted, so
+        # raise rather than silently zero ~1.6 c€/kWh.
+        raise ExtractorError("OCTA+: Flanders green-energy surcharge not found")
     total = 0.0
     if green:
         total += to_float(green.group(1))

@@ -42,7 +42,9 @@ from custom_components.be_electricity_prices.providers.base import (
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.octaplus import (
+    _extract_flanders_renewables,
     _extract_taxes,
+    _extract_wallonia_renewables,
     parse_snapshot,
 )
 from tests import FIXTURES
@@ -79,6 +81,15 @@ def test_fixed_wallonia_extracts_meter_rates() -> None:
     assert snap.injection.current == pytest.approx(0.0472)
     assert snap.injection.factor is None
     assert snap.injection.base is None
+
+
+def test_missing_regional_renewables_raises() -> None:
+    # The regional green-energy surcharge is mandatory for its region; a
+    # miss must raise rather than silently zero ~1.6-3.1 c€/kWh.
+    with pytest.raises(ExtractorError, match="Wallonia green-energy"):
+        _extract_wallonia_renewables("no green energy row")
+    with pytest.raises(ExtractorError, match="Flanders green-energy"):
+        _extract_flanders_renewables("no green energy row")
 
 
 def test_missing_federal_tax_tier_raises() -> None:
