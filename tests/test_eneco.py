@@ -51,6 +51,16 @@ from custom_components.be_electricity_prices.providers.eneco import (
 _T = TypeVar("_T")
 
 
+def test_power_dynamic_offered_in_flanders_only() -> None:
+    # The Dynamic card is "voor Vlaanderen" and needs a Flemish SMR3
+    # digital meter; Fix and Flex cover both regions. Dynamic must not be
+    # offered to Wallonia users.
+    regions = {c.id: set(c.regions) for c in eneco_mod.EXTRACTOR.contracts}
+    assert regions["power_dynamic"] == {"flanders"}
+    assert "wallonia" in regions["power_fix"]
+    assert "wallonia" in regions["power_flex"]
+
+
 def test_fix_extracts_energy_block() -> None:
     snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
     assert isinstance(snap.energy, FixedRates)

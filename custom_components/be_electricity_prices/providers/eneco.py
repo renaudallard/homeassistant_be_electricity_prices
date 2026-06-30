@@ -644,10 +644,15 @@ EXTRACTOR = SupplierExtractor(
             regions=_ENECO_REGIONS,
         ),
         Contract(
+            # Power Dynamic is sold in Flanders only: its card reads
+            # "voor Vlaanderen" / "in Vlaanderen" and requires a Flemish
+            # SMR3 digital meter, unlike Fix/Flex which cover both regions
+            # ("voor Vlaanderen en Wallonie"). The Walloon DSO rows on the
+            # card are vestigial reference, so don't offer it in Wallonia.
             id="power_dynamic",
             label="Eneco Zon & Wind Dynamisch",
             kind="dynamic",
-            regions=_ENECO_REGIONS,
+            regions=frozenset({REGION_FLANDERS}),
         ),
     ),
     fetch=fetch,

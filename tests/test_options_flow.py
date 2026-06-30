@@ -162,10 +162,10 @@ async def test_options_flow_invalid_api_key_keeps_user_on_form(
 
     result = await _enter_edit_branch(hass, entry)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+        result["flow_id"], {"supplier": "engie", "region": "wallonia"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"contract": "power_dynamic"}
+        result["flow_id"], {"contract": "engie_dynamic"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"dso": "ores"}
@@ -194,10 +194,10 @@ async def test_options_flow_dynamic_branch_asks_api_key(
 
     result = await _enter_edit_branch(hass, entry)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+        result["flow_id"], {"supplier": "engie", "region": "wallonia"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"contract": "power_dynamic"}
+        result["flow_id"], {"contract": "engie_dynamic"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"dso": "ores"}
