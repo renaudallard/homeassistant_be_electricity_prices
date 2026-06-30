@@ -53,6 +53,7 @@ from custom_components.be_electricity_prices.coordinator import (
     _snapshot_for_month,
     _snapshot_from_dict,
     _snapshot_to_dict,
+    _ytd_static_fees,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
@@ -1518,3 +1519,47 @@ def test_snapshot_round_trip_for_tou_contract() -> None:
     assert restored.energy.peak == pytest.approx(0.30)
     assert restored.energy.transition == pytest.approx(0.20)
     assert restored.energy.offpeak == pytest.approx(0.10)
+
+
+async def test_ytd_static_fees_honours_meter_override(hass: HomeAssistant) -> None:
+    # The compare flow can override the meter; the YTD fixed fee must then
+    # be billed at the override meter, not the entry meter, so an
+    # exclusive-night override picks the exclusive-night yearly fee.
+    snap = make_snapshot(
+        energy=VariableRates(
+            current=0.16,
+            yearly_fixed_fee=85.0,
+            yearly_fixed_fee_exclusive_night=35.04,
+        ),
+        dsos={},
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={"meter": "mono", "dso": ""})
+
+    async def _fake_walk(*_a: Any, **_k: Any):
+        # One full-year month-equivalent: days_in_ytd == days_in_year, so
+        # the fee accrues in full.
+        yield snap, None, 365, 365
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator._walk_ytd_months",
+        new=_fake_walk,
+    ):
+        fee_entry = await _ytd_static_fees(
+            hass,
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            snap,
+            entry,
+            date(2026, 12, 31),
+        )
+        fee_override = await _ytd_static_fees(
+            hass,
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            snap,
+            entry,
+            date(2026, 12, 31),
+            meter="exclusive_night",
+        )
+    assert fee_entry == pytest.approx(85.0)
+    assert fee_override == pytest.approx(35.04)

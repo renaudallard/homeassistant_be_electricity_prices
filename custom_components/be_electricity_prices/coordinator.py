@@ -2108,9 +2108,14 @@ async def _ytd_static_fees(
     today: date,
     *,
     contract: str | None = None,
+    meter: MeterType | None = None,
 ) -> float:
     """Pro-rated YTD total of yearly_fixed_fee + 12*energy_fund using each
     month's archived snapshot.
+
+    ``meter`` defaults to the entry's meter; the compare flow passes a
+    meter override so the fixed fee is billed at the same meter the energy
+    is billed at (e.g. an exclusive-night override).
 
     Uses the uniform days_in_year proration but reads the rate from the
     archived snapshot for each past month, so a supplier indexation
@@ -2125,7 +2130,7 @@ async def _ytd_static_fees(
         overlay = snap_m.dsos.get(entry.data.get(CONF_DSO, ""))
         annual = (
             yearly_fixed_fee_for_meter(
-                snap_m.energy, entry.data.get(CONF_METER, METER_MONO)
+                snap_m.energy, meter or entry.data.get(CONF_METER, METER_MONO)
             )
             + snap_m.taxes.energy_fund_eur_per_month * 12.0
             # Digital-meter data-management fee (databeheer / terme fixe
@@ -2480,7 +2485,7 @@ async def _compute_current_year_cost(
     jan1 = date(today.year, 1, 1)
 
     static_fees = await _ytd_static_fees(
-        hass, session, extractor, snapshot, entry, today, contract=contract
+        hass, session, extractor, snapshot, entry, today, contract=contract, meter=meter
     )
     prosumer_ytd = await _ytd_prosumer(
         hass, session, extractor, snapshot, entry, today, contract=contract
