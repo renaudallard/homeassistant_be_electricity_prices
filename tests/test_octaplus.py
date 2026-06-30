@@ -174,6 +174,24 @@ def test_dynamic_consumption_formula_skips_injection_on_reorder() -> None:
     assert match.group(3) == "4,17"
 
 
+def test_supplier_pv_forfait_extracted_and_absent_on_dynamic() -> None:
+    # Fixed/variable cards print "+ 4,77 EUR/kVA par mois" (the Forfait
+    # panneaux solaires for the compensation regime); 4,77 * 12 = 57,24
+    # EUR/kVA/an, TVAC, billed on top of the DSO prosumer column. The SMR3
+    # dynamic product drops the compensation regime and omits it.
+    for cid, fixture, region in (
+        ("octaplus_fixed", "octaplus_fixed_w.pdf", "wallonia"),
+        ("octaplus_fixed", "octaplus_fixed_v.pdf", "flanders"),
+        ("octaplus_smartvariable", "octaplus_smartvariable_w.pdf", "wallonia"),
+    ):
+        snap = parse_snapshot(cid, _text(fixture), region)
+        assert snap.supplier_prosumer_eur_per_kva_year == pytest.approx(57.24)
+    dyn = parse_snapshot(
+        "octaplus_dynamic", _text("octaplus_dynamic_w.pdf"), "wallonia"
+    )
+    assert dyn.supplier_prosumer_eur_per_kva_year is None
+
+
 def test_federal_taxes_use_first_tier() -> None:
     # OCTA+ tax page renders each character as its own pdfplumber word
     # ("5 ,0 3 2 9 0 ,2 0 4 2"); the aligned helper's gap-aware merge

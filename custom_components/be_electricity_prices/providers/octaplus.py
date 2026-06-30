@@ -222,7 +222,35 @@ def parse_snapshot(
         publication_label=publication_label,
         valid_until=parse_valid_until(text),
         injection=injection,
+        supplier_prosumer_eur_per_kva_year=_extract_supplier_prosumer(
+            text, contract.kind
+        ),
     )
+
+
+def _extract_supplier_prosumer(text: str, kind: TariffKind) -> float | None:
+    """OCTA+ supplier-side compensation-regime PV forfait.
+
+    Fixed and variable cards print "+ 4,77 EUR/kVA par mois" (the "Forfait
+    panneaux solaires", applicable only under the compensation regime). It
+    is TVAC (the card header is 6% TVAC; the unrelated AMR fallback is the
+    "1,50 EUR/kVA HTVA par mois"), so it must NOT be VAT-scaled. It is
+    billed on top of the DSO prosumer column by _compute_prosumer, exactly
+    like the Cociter Variable and Mega forfaits. The card value is per
+    MONTH, so annualise it (*12) to match supplier_prosumer_eur_per_kva_year
+    (the coordinator divides by 12). The SMR3 dynamic product drops the
+    compensation regime and omits the line; everywhere else it is
+    mandatory, so a miss is a layout drift and we raise.
+    """
+    if kind == "dynamic":
+        return None
+    # Anchor on "<value> EUR/kVA par mois" without the "HTVA" the AMR
+    # fallback carries, so a single regex picks the 4,77 forfait and never
+    # the 1,50 AMR rate.
+    match = re.search(r"([\d.,]+)\s*€/kVA\s+par\s+mois", text)
+    if match is None:
+        raise ExtractorError("OCTA+: supplier PV compensation forfait not found")
+    return to_float(match.group(1)) * 12.0
 
 
 # ---- energy block -------------------------------------------------------------
