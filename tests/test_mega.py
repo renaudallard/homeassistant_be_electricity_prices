@@ -179,7 +179,9 @@ def test_smart_fixed_brussels_extracts_sibelga_row() -> None:
     assert sibelga.distribution_peak == pytest.approx(0.0996)
     assert sibelga.distribution_offpeak == pytest.approx(0.0753)
     assert sibelga.transport == pytest.approx(0.0227)
-    assert sibelga.data_management_per_year == pytest.approx(14.73)
+    # Metering fee 14.73 + Sibelga <=13kVA fixed term 50.0744 (both billed
+    # to a residential Brussels connection; no separate capacity charge).
+    assert sibelga.data_management_per_year == pytest.approx(14.73 + 50.0744)
 
 
 def test_wallonia_dso_carries_prosumer_rate_from_separate_table() -> None:

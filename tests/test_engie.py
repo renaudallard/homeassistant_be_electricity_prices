@@ -218,7 +218,9 @@ def test_dynamic_brussels_extracts_sibelga() -> None:
     assert sibelga.distribution_peak == pytest.approx(0.0996)
     assert sibelga.distribution_offpeak == pytest.approx(0.0753)
     assert sibelga.transport == pytest.approx(0.0227)
-    assert sibelga.data_management_per_year == pytest.approx(14.73)
+    # Metering fee 14.73 + Sibelga <=13kVA power term 50.07 (both billed to
+    # a residential Brussels connection; no separate capacity charge).
+    assert sibelga.data_management_per_year == pytest.approx(14.73 + 50.07)
 
 
 def test_dynamic_extracts_taxes_for_every_region() -> None:

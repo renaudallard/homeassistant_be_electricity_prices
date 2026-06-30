@@ -901,6 +901,12 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     excl_night = to_float(match.group(4))
     transport = to_float(match.group(5))
     mesure = to_float(match.group(6))
+    # A residential <=13kVA Brussels connection is billed both the metering
+    # fee (mesure_comptage) and the Sibelga fixed term for <=13kVA. Brussels
+    # has no separate capacity charge (capacity is Flanders-only), so fold
+    # both flat annual euros into data_management_per_year. The >13kVA term
+    # (group 8) is for larger connections and is not billed here.
+    fixed_term_le13 = to_float(match.group(7))
     return {
         DSO_SIBELGA: DsoOverlay(
             distribution_single=mono / 100.0,
@@ -908,7 +914,7 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_offpeak=offpeak / 100.0,
             distribution_exclusive_night=excl_night / 100.0,
             transport=transport / 100.0,
-            data_management_per_year=mesure,
+            data_management_per_year=mesure + fixed_term_le13,
         )
     }
 
