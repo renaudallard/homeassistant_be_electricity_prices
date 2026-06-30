@@ -1444,18 +1444,16 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         # coordinator's existing helper, which returns None when the
         # snapshot has no injection data or the user isn't on the
         # injection regime.
-        from .coordinator import _compute_injection_price
-
         current_inj_price: float | None = None
         compare_inj_price: float | None = None
         if regime == "injection":
             if coord._snapshot is not None:
-                current_inj_price = _compute_injection_price(
-                    coord._snapshot, self.config_entry, spot_dict
+                current_inj_price = _compare_injection_credit(
+                    coord._snapshot, self.config_entry, spot_dict, avg_spot
                 )
             if other_snap is not None:
-                compare_inj_price = _compute_injection_price(
-                    other_snap, self.config_entry, spot_dict
+                compare_inj_price = _compare_injection_credit(
+                    other_snap, self.config_entry, spot_dict, avg_spot
                 )
 
         if current_per_kwh is not None:
@@ -1630,6 +1628,36 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         return placeholders
 
 
+def _compare_injection_credit(
+    snapshot: Any,
+    entry: Any,
+    spot_dict: dict[datetime, float],
+    avg_spot: float | None,
+) -> float | None:
+    """Injection credit (EUR/kWh) for the compare flow's annual estimate.
+
+    A spot-indexed injection (Cociter Variable, or any dynamic-energy
+    contract) is priced off the window MEAN spot, consistent with the
+    energy term (which also uses ``avg_spot``); pricing it off the live
+    current slot would make the solar credit and the energy cost reflect
+    different instants. Monthly-indexed and TOU injection are
+    spot-independent (or use the realized monthly value), so delegate
+    those to the live helper.
+    """
+    from .coordinator import _compute_injection_price
+    from .providers.base import DynamicRates
+
+    inj = getattr(snapshot, "injection", None)
+    if (
+        inj is not None
+        and inj.factor is not None
+        and inj.base is not None
+        and (isinstance(snapshot.energy, DynamicRates) or inj.current is None)
+    ):
+        return inj.factor * avg_spot + inj.base if avg_spot is not None else None
+    return _compute_injection_price(snapshot, entry, spot_dict)
+
+
 def _tou_weighted_per_kwh(
     snapshot: Any,
     dso: str,
@@ -1657,14 +1685,37 @@ def _tou_weighted_per_kwh(
     Returns ``None`` on compute failure so the caller can render '-'
     on the result page rather than tear the flow down.
     """
-    from .pricing import compute_breakdown, is_belgian_holiday
+    from .pricing import compute_breakdown, is_belgian_holiday, is_offpeak
     from .providers.base import ImpactRates, TimeOfUseRates
 
     try:
         bd = compute_breakdown(snapshot, dso, region, when_now, spot, meter, dso_mode)
     except Exception:  # noqa: BLE001
         return None
-    if not isinstance(snapshot.energy, (TimeOfUseRates, ImpactRates)):
+    # The all-in is time-of-day dependent not only for TOU/Impact energy
+    # but also when the meter routes a bi-horaire peak/offpeak split
+    # (Fixed/Variable on a bi-hourly or dynamic meter) or when the DSO
+    # tariff mode is Impact (network varies by CWaPE band). Returning the
+    # single dialog-open-time rate for those biased the annual estimate by
+    # whichever slot the user happened to be in.
+    overlay = snapshot.dsos.get(dso)
+    bi_split = meter in ("bi", "dynamic") and (
+        (
+            getattr(snapshot.energy, "peak", None) is not None
+            and getattr(snapshot.energy, "offpeak", None) is not None
+        )
+        or (
+            overlay is not None
+            and getattr(overlay, "distribution_peak", None) is not None
+            and getattr(overlay, "distribution_offpeak", None) is not None
+        )
+    )
+    impact_network = dso_mode == "impact"
+    if (
+        not isinstance(snapshot.energy, (TimeOfUseRates, ImpactRates))
+        and not bi_split
+        and not impact_network
+    ):
         return bd.all_in
     # Pick a recent non-holiday weekday so each slot lookup hits the
     # weekday rule. Walk back from today's local date.
@@ -1674,7 +1725,7 @@ def _tou_weighted_per_kwh(
             break
         weekday -= timedelta(days=1)
     base = datetime.combine(weekday, time(), tzinfo=when_now.tzinfo)
-    if isinstance(snapshot.energy, ImpactRates):
+    if isinstance(snapshot.energy, ImpactRates) or impact_network:
         # CWaPE Impact bands (every day, no weekend exception):
         #   pic    17-22                (35h/week)
         #   medium 07-11 + 22-01        (49h/week)
@@ -1694,6 +1745,38 @@ def _tou_weighted_per_kwh(
         wp, wm, we = 35.0, 49.0, 84.0
         total = wp + wm + we
         return (bd_pic.all_in * wp + bd_med.all_in * wm + bd_eco.all_in * we) / total
+    if not isinstance(snapshot.energy, TimeOfUseRates):
+        # Fixed/Variable on a bi-hourly/dynamic meter: weight the peak and
+        # off-peak all-in by the region's bi-horaire hour split (uniform
+        # consumption across a representative week, region-aware via
+        # is_offpeak so the Wallonia 11-17 off-peak window and the Brussels
+        # holiday rule are honoured). Any peak/off-peak hour is a valid
+        # sample since the rate is constant within each band.
+        peak_when: datetime | None = None
+        off_when: datetime | None = None
+        peak_hours = 0
+        for day_offset in range(7):
+            for hour in range(24):
+                when = base + timedelta(days=day_offset, hours=hour)
+                if is_offpeak(when, region):
+                    off_when = off_when or when
+                else:
+                    peak_hours += 1
+                    peak_when = peak_when or when
+        if peak_when is None or off_when is None:
+            return bd.all_in
+        try:
+            bd_peak = compute_breakdown(
+                snapshot, dso, region, peak_when, spot, meter, dso_mode
+            )
+            bd_off = compute_breakdown(
+                snapshot, dso, region, off_when, spot, meter, dso_mode
+            )
+        except Exception:  # noqa: BLE001
+            return bd.all_in
+        return (
+            bd_peak.all_in * peak_hours + bd_off.all_in * (168 - peak_hours)
+        ) / 168.0
     # CWaPE weekday TOU windows (shared across products):
     #   peak       07-11 + 17-22
     #   transition 11-17 + 22-01

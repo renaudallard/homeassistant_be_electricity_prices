@@ -1166,6 +1166,74 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     assert abs((avg - constants) - expected_energy) < 0.001
 
 
+def test_compare_bihourly_meter_weights_peak_offpeak() -> None:
+    # A Fixed/Variable contract compared on a bi-hourly meter must time-
+    # weight peak vs off-peak, not return whichever slot the dialog opened
+    # in, so the per-kWh is independent of when_now.
+    from custom_components.be_electricity_prices.config_flow import (
+        _tou_weighted_per_kwh,
+    )
+    from custom_components.be_electricity_prices.providers.base import FixedRates
+
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.20, peak=0.30, offpeak=0.10, yearly_fixed_fee=60.0),
+    )
+    at_peak = _tou_weighted_per_kwh(
+        snap,
+        "ores",
+        "wallonia",
+        datetime(2026, 4, 29, 9, 0, tzinfo=UTC),
+        None,
+        "bi",
+        "",
+    )
+    at_offpeak = _tou_weighted_per_kwh(
+        snap,
+        "ores",
+        "wallonia",
+        datetime(2026, 4, 29, 3, 0, tzinfo=UTC),
+        None,
+        "bi",
+        "",
+    )
+    assert at_peak is not None and at_offpeak is not None
+    # Time-invariant: the weighted average does not depend on the slot the
+    # dialog opened in (the bug returned the single-instant rate).
+    assert at_peak == pytest.approx(at_offpeak)
+    # Strictly between the pure-offpeak (~0.267) and pure-peak (~0.467)
+    # instant all-in, i.e. a genuine weighted average.
+    assert 0.267 < at_peak < 0.467
+
+
+def test_compare_spot_indexed_injection_uses_mean_spot() -> None:
+    # A spot-indexed injection credit must be priced off the window mean
+    # (consistent with the energy term), not the live current slot.
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.config_flow import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        VariableRates,
+    )
+
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=VariableRates(current=0.20),
+        injection=InjectionRates(current=None, factor=0.97, base=-0.021, formula="x"),
+    )
+    entry = SimpleNamespace(data={"solar_regime": "injection"})
+    # The live helper would pick a current-slot spot from spot_dict (0.20);
+    # the compare must use avg_spot (0.08) instead.
+    spot_dict = {datetime(2026, 4, 29, h, 0, tzinfo=UTC): 0.20 for h in range(24)}
+    credit = _compare_injection_credit(snap, entry, spot_dict, avg_spot=0.08)
+    assert credit == pytest.approx(0.97 * 0.08 - 0.021)
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_branch_aborts_when_no_alternative(
     hass: HomeAssistant,
