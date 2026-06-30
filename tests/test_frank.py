@@ -209,6 +209,60 @@ def test_injection_base() -> None:
     assert snap.injection.base == pytest.approx(-1.150 / 100.0)
 
 
+@pytest.mark.parametrize(
+    ("contract_id", "fixture", "factor", "base", "fee", "inj_base"),
+    [
+        (
+            "frank_dynamic_hv",
+            "frank_dynamic_hv_jun.pdf",
+            1.0812,
+            0.0053,
+            102.0,
+            -0.0115,
+        ),
+        (
+            "frank_dynamic_korting",
+            "frank_dynamic_korting_jun.pdf",
+            1.13208,
+            0.0159,
+            35.04,
+            -0.0115,
+        ),
+        ("frank_dynamic_jn", "frank_dynamic_jn_jun.pdf", 1.113, 0.01272, 27.96, -0.02),
+        (
+            "frank_dynamic_slim",
+            "frank_dynamic_slim_may.pdf",
+            1.13208,
+            0.0159,
+            35.04,
+            -0.0115,
+        ),
+    ],
+)
+def test_non_default_tiers_extract_energy_and_injection(
+    contract_id: str,
+    fixture: str,
+    factor: float,
+    base: float,
+    fee: float,
+    inj_base: float,
+) -> None:
+    # The five Frank tiers share one PDF layout, but only the default tier
+    # had a fixture. Pin the other four tiers' energy + injection so a
+    # tier-specific card regression is caught. The JN tier notably carries
+    # a different injection base (-0,02 vs -0,0115 on the rest).
+    snap = parse_snapshot(
+        fixture_text(fixture, layout=True), "test://frank", contract_id, "test"
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(factor)
+    assert snap.energy.base == pytest.approx(base)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(fee)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(1.0)
+    assert snap.injection.base == pytest.approx(inj_base)
+
+
 def test_supplier_and_contract_metadata() -> None:
     snap = _snap()
     assert snap.supplier == "frank"
