@@ -150,22 +150,45 @@ def test_three_column_consumption_card_fails_loud() -> None:
         parse_snapshot("totalenergies_mycomfort_fixed", text, "wallonia")
 
 
-def test_mycomfort_variable_flanders_handles_tarif_mensuel_label() -> None:
-    # Variable cards put "Tarif mensuel" BETWEEN the "Consommation**"
-    # label and the actual values; static cards put it AFTER the values.
-    # The parser must accept both layouts.
+def test_mycomfort_variable_uses_realized_monthly_indicative() -> None:
+    # Variable cards index monthly: the "Consommation" table row is the
+    # Vlaamse-Nutsregulator annual ESTIMATE, while the price actually
+    # billed is the realized monthly indicative ("prix mensuels ...
+    # BELPEX_M_RLP"). Use the realized block (13,53 / 14,65 / 12,55 /
+    # 12,39), not the estimate (15,62 / 16,96 / 14,47 / 14,29).
     snap = parse_snapshot(
         "totalenergies_mycomfort",
         fixture_text("totalenergies_mycomfort_v.pdf", layout=True),
         "flanders",
     )
     assert isinstance(snap.energy, VariableRates)
-    assert snap.energy.current == pytest.approx(0.1562)
-    assert snap.energy.peak == pytest.approx(0.1696)
-    assert snap.energy.offpeak == pytest.approx(0.1447)
+    assert snap.energy.current == pytest.approx(0.1353)
+    assert snap.energy.peak == pytest.approx(0.1465)
+    assert snap.energy.offpeak == pytest.approx(0.1255)
+    assert snap.energy.exclusive_night == pytest.approx(0.1239)
     # Flanders also wraps the cotisation header; the value lives only in
     # the 8th Fluvius column and must still reach the all-in price.
     assert snap.taxes.energy_contribution == pytest.approx(0.002)
+
+
+def test_non_dynamic_injection_uses_realized_monthly_indicative() -> None:
+    # Non-dynamic injection is monthly-indexed: use the realized monthly
+    # indicative (1,12 c€/kWh) printed in the "prix mensuels de
+    # l'injection" block, not the V-test annual estimate in the table.
+    # Holds for both variable and fixed cards; factor/base stay None.
+    for cid, fixture, region in (
+        ("totalenergies_mycomfort", "totalenergies_mycomfort_v.pdf", "flanders"),
+        (
+            "totalenergies_mycomfort_fixed",
+            "totalenergies_mycomfort_fixed_w.pdf",
+            "wallonia",
+        ),
+    ):
+        snap = parse_snapshot(cid, fixture_text(fixture, layout=True), region)
+        assert snap.injection is not None
+        assert snap.injection.current == pytest.approx(0.0112)
+        assert snap.injection.factor is None
+        assert snap.injection.base is None
 
 
 def test_brussels_extracts_sibelga_row() -> None:
