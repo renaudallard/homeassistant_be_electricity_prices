@@ -191,6 +191,30 @@ def test_non_dynamic_injection_uses_realized_monthly_indicative() -> None:
         assert snap.injection.base is None
 
 
+def test_impact_parses_as_flat_supplier_energy_with_impact_dso_bands() -> None:
+    # TE Impact is a 3-band CWaPE tariff: the supplier energy is flat
+    # (Heures PIC/MEDIUM/ECO all equal), the band variation is DSO-side
+    # (Tarif IMPACT distribution). It used to fail to parse as a standard
+    # variable card; it must now parse with a flat supplier energy and the
+    # CWaPE Impact distribution bands (used under dso_tariff_mode=impact).
+    snap = parse_snapshot(
+        "totalenergies_impact",
+        fixture_text("totalenergies_impact_w.pdf", layout=True),
+        "wallonia",
+    )
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current == pytest.approx(0.139)
+    # Flat supplier energy: the band split is DSO-side, not supplier-side.
+    assert snap.energy.peak is None
+    assert snap.energy.offpeak is None
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(0.0147)
+    dso = next(iter(snap.dsos.values()))
+    assert dso.distribution_pic is not None
+    assert dso.distribution_medium is not None
+    assert dso.distribution_eco is not None
+
+
 def test_brussels_extracts_sibelga_row() -> None:
     snap = parse_snapshot(
         "totalenergies_mydynamic",

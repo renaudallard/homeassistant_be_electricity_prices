@@ -388,14 +388,33 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             yearly_fixed_fee=yearly_fee,
         )
 
-    # Static / variable: the consumption row is 4 space-separated values
-    # (mono / jour / nuit / excl_nuit) on a single line. The layout drifts
-    # per contract: asterisk count after "Consommation" varies (0-3); for
-    # static the values follow directly, for variable a "Tarif mensuel"
-    # label sits between. One regex covers all cases. The four values are
-    # separated by [ \t]+ (never a newline) and the row ends at the line
-    # break: a 3-column card must miss and fail loud here rather than
-    # spanning the newline to grab the yearly fee as exclusive_night.
+    # Variable cards index monthly: the price actually billed is the
+    # realized monthly indicative ("prix mensuels calcules sur base de la
+    # derniere valeur connue du BELPEX_M_RLP"), not the Vlaamse-Nutsregulator
+    # annual ESTIMATE in the table below. The realized block also carries
+    # the flat supplier energy of the 3-band Impact card (printed as Heures
+    # PIC/MEDIUM/ECO), which the standard 4-column table layout does not
+    # expose. Prefer it; fall back to the table estimate only when absent.
+    if kind == "variable":
+        realized = _realized_monthly_consumption(text)
+        if realized is not None:
+            return VariableRates(
+                current=realized[0],
+                peak=realized[1],
+                offpeak=realized[2],
+                exclusive_night=realized[3],
+                yearly_fixed_fee=yearly_fee,
+            )
+
+    # Static / variable table row: 4 space-separated values (mono / jour /
+    # nuit / excl_nuit) on a single line. The layout drifts per contract:
+    # asterisk count after "Consommation" varies (0-3); for static the
+    # values follow directly, for variable a "Tarif mensuel" label sits
+    # between. The four values are separated by [ \t]+ (never a newline)
+    # and the row ends at the line break: a 3-column card must miss and
+    # fail loud here rather than spanning the newline to grab the yearly
+    # fee as exclusive_night. For fixed this is the actual fixed price; for
+    # a variable card without a realized block it is the V-test fallback.
     consumption_match = re.search(
         r"Consommation\*{0,5}\s*\n(?:\s*Tarif\s+(?:annuel|mensuel)\s*\n)?[ \t]*"
         r"([\d.,]+)[ \t]+([\d.,]+)[ \t]+([\d.,]+)[ \t]+([\d.,]+)[ \t]*(?:\n|$)",
@@ -413,20 +432,6 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             peak=peak,
             offpeak=offpeak,
             exclusive_night=excl_night,
-            yearly_fixed_fee=yearly_fee,
-        )
-    # Variable cards index monthly: the table row above is the Vlaamse
-    # Nutsregulator ANNUAL ESTIMATE, while the price actually billed is the
-    # realized monthly indicative ("prix mensuels calcules sur base de la
-    # derniere valeur connue du BELPEX_M_RLP"). Prefer the realized block;
-    # fall back to the table estimate only when a card omits it.
-    realized = _realized_monthly_consumption(text)
-    if realized is not None:
-        return VariableRates(
-            current=realized[0],
-            peak=realized[1],
-            offpeak=realized[2],
-            exclusive_night=realized[3],
             yearly_fixed_fee=yearly_fee,
         )
     return VariableRates(
@@ -488,12 +493,15 @@ _MONTHLY_BLOCK_RE = re.compile(r"prix mensuels[\s\S]{0,420}")
 
 def _realized_monthly_consumption(
     text: str,
-) -> tuple[float, float, float, float | None] | None:
+) -> tuple[float, float | None, float | None, float | None] | None:
     """Realized monthly consumption rates (single/peak/offpeak/excl_night).
 
     In the block the consumption column is printed first and the injection
     column second, so the consumption value is the first match of each
-    meter label. Returns None when the block is absent.
+    meter label. The Impact card prints a single flat supplier rate under
+    Heures PIC/MEDIUM/ECO (the band split is DSO-side), so when the
+    standard bi-hourly labels are absent the PIC value is the single rate.
+    Returns None when the block is absent.
     """
     block = _MONTHLY_BLOCK_RE.search(text)
     if block is None:
@@ -508,9 +516,13 @@ def _realized_monthly_consumption(
     peak = first(r"Heures Pleines")
     offpeak = first(r"Heures Creuses")
     excl_night = first(r"Compteur Excl\.?\s*Nuit")
-    if mono is None or peak is None or offpeak is None:
-        return None
-    return mono, peak, offpeak, excl_night
+    if mono is not None and peak is not None and offpeak is not None:
+        return mono, peak, offpeak, excl_night
+    # Impact card: flat supplier energy printed as Heures PIC/MEDIUM/ECO.
+    pic = first(r"Heures PIC")
+    if pic is not None:
+        return pic, None, None, None
+    return None
 
 
 def _realized_monthly_injection(text: str) -> float | None:
@@ -523,7 +535,12 @@ def _realized_monthly_injection(text: str) -> float | None:
     block = _MONTHLY_BLOCK_RE.search(text)
     if block is None:
         return None
-    vals = re.findall(r"Compteur Simple\s*:\s*([\d.,]+)", block.group(0))
+    # Injection is the last "Compteur Simple" value (standard cards) or the
+    # last "Heures PIC" value (Impact cards); both are the second/injection
+    # column on the line, uniform across meters/bands.
+    vals = re.findall(r"Compteur Simple\s*:\s*([\d.,]+)", block.group(0)) or re.findall(
+        r"Heures PIC\s*:\s*([\d.,]+)", block.group(0)
+    )
     if not vals:
         return None
     return to_float(vals[-1]) / 100.0
