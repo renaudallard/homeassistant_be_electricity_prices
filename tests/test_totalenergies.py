@@ -178,7 +178,10 @@ def test_brussels_extracts_sibelga_row() -> None:
     assert sibelga.distribution_single == pytest.approx(0.0996)
     assert sibelga.distribution_offpeak == pytest.approx(0.0753)
     assert sibelga.transport == pytest.approx(0.0227)
-    assert sibelga.data_management_per_year == pytest.approx(14.73)
+    # Metering fee 14.73 + Sibelga <=13kVA power term 50.07 (printed on a
+    # separate "Terme de puissance" line; both billed to a residential
+    # Brussels connection, no separate capacity charge).
+    assert sibelga.data_management_per_year == pytest.approx(14.73 + 50.07)
     # The Brussels card wraps the "Cotisation sur l'énergie" header, so
     # the federal contribution only appears as the 7th SIBELGA column;
     # it must still reach the all-in price (was silently dropped to 0).
