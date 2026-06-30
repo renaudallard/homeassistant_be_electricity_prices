@@ -259,5 +259,14 @@ def test_may_card_uses_dot_decimal_separator() -> None:
     assert snap.energy.offpeak == pytest.approx(0.0960)
     assert snap.energy.exclusive_night == pytest.approx(0.0960)
     assert snap.energy.yearly_fixed_fee == pytest.approx(38.50)
-    # DSOs and taxes also parse without comma-dependent regexes.
+    # DSOs parse without comma-dependent regexes (8 Flemish Fluvius rows).
+    # Taxes are intentionally not value-asserted here: this hand-built
+    # dot-decimal fixture left the excise row as a stray "000,005 c€/kWh"
+    # (it is non-contiguous in the compressed stream so it can't be
+    # patched, the real May card is gone, and June reverted to commas, so
+    # the fixture can't be faithfully regenerated). Tax extraction is
+    # value-asserted on the April fixture, and dot-decimal numeric parsing
+    # is already proven by the energy asserts above, so the artifact has
+    # no functional or coverage impact - do not "fix" it by asserting the
+    # stray value.
     assert len(snap.dsos) == 8
