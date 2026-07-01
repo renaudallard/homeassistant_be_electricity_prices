@@ -219,6 +219,9 @@ def test_basic_plus_is_variable_with_single_rate() -> None:
     assert snap.energy.exclusive_night is None
     # Yearly fee: 70 €/jaar incl-VAT (the 'Abonnement' row).
     assert snap.energy.yearly_fixed_fee == pytest.approx(70.0)
+    # Single energy rate, but an exclusive-night meter still bills the card's
+    # dedicated night fixed fee (35,04) rather than the 70 abonnement.
+    assert snap.energy.yearly_fixed_fee_exclusive_night == pytest.approx(35.04)
 
 
 def test_basic_plus_shares_pdf_with_variable_but_distinct_energy() -> None:

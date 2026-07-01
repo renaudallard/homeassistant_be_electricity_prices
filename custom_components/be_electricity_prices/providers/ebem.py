@@ -397,10 +397,14 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
             raise ExtractorError("EBEM B@sic+: 'Verbruik alle uren' formula not found")
         factor_pdf = to_float(match.group(1))
         base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
-        # B@sic+ has no peak / off-peak / excl-night split.
+        # B@sic+ has one energy rate for all hours (no peak / off-peak /
+        # excl-night energy split), but an exclusive-night meter still bills
+        # the shared card's dedicated night fixed fee, not the standard
+        # abonnement, so surface it like the Variabel sibling does.
         return VariableRates(
             current=_indicative_from_row(text, "Verbruik alle uren"),
             yearly_fixed_fee=_extract_yearly_fee_abonnement(text),
+            yearly_fixed_fee_exclusive_night=_extract_excl_night_fee_variable(text),
             formula=f"({factor_pdf} BelpexRLP0 + {base_pdf_cents}) c€/kWh ex-VAT",
         )
 
