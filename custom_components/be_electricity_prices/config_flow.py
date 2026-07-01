@@ -1628,6 +1628,19 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         return placeholders
 
 
+def _tou_slot_weights(weekend_rule: str) -> tuple[float, float, float]:
+    """Hours-per-week each CWaPE TOU slot (peak, transition, offpeak) is
+    active, from the published rules and a 5-weekday / 2-weekend split.
+
+    Engie Empower Flextime keeps the weekday transition/offpeak windows on
+    weekends (``weekend_no_peak``); Luminus SmartFlex makes weekends fully
+    off-peak (``weekend_offpeak``, the default).
+    """
+    if weekend_rule == "weekend_no_peak":
+        return 45.0, 69.0, 54.0
+    return 45.0, 45.0, 78.0
+
+
 def _compare_injection_credit(
     snapshot: Any,
     entry: Any,
@@ -1636,23 +1649,38 @@ def _compare_injection_credit(
 ) -> float | None:
     """Injection credit (EUR/kWh) for the compare flow's annual estimate.
 
-    A spot-indexed injection (Cociter Variable, or any dynamic-energy
+    A per-slot TOU injection (Engie Empower Flextime) is time-averaged over
+    the published slot durations, mirroring how the consumption side is
+    weighted in ``_tou_weighted_per_kwh``; delegating to the live helper
+    would return the dialog-open slot rate and bias the credit. A
+    spot-indexed injection (Cociter Variable, or any dynamic-energy
     contract) is priced off the window MEAN spot, consistent with the
     energy term (which also uses ``avg_spot``); pricing it off the live
     current slot would make the solar credit and the energy cost reflect
-    different instants. Monthly-indexed and TOU injection are
-    spot-independent (or use the realized monthly value), so delegate
-    those to the live helper.
+    different instants. Monthly-indexed injection is spot-independent (uses
+    the realized monthly value), so delegate that to the live helper.
     """
     from .coordinator import _compute_injection_price
-    from .providers.base import DynamicRates
+    from .providers.base import DynamicRates, TimeOfUseRates
 
     inj = getattr(snapshot, "injection", None)
+    energy = getattr(snapshot, "energy", None)
+    if (
+        inj is not None
+        and isinstance(energy, TimeOfUseRates)
+        and inj.peak is not None
+        and inj.transition is not None
+        and inj.offpeak is not None
+    ):
+        wp, wt, wo = _tou_slot_weights(energy.weekend_rule)
+        return float(
+            (inj.peak * wp + inj.transition * wt + inj.offpeak * wo) / (wp + wt + wo)
+        )
     if (
         inj is not None
         and inj.factor is not None
         and inj.base is not None
-        and (isinstance(snapshot.energy, DynamicRates) or inj.current is None)
+        and (isinstance(energy, DynamicRates) or inj.current is None)
     ):
         return inj.factor * avg_spot + inj.base if avg_spot is not None else None
     return _compute_injection_price(snapshot, entry, spot_dict)
@@ -1795,16 +1823,9 @@ def _tou_weighted_per_kwh(
         )
     except Exception:  # noqa: BLE001
         return bd.all_in  # fall back to live slot rate
-    # Slot weights = hours-per-week the slot is active, derived from
-    # the published TOU rules and a 5-weekday / 2-weekend split.
-    if snapshot.energy.weekend_rule == "weekend_no_peak":
-        # Engie Empower Flextime: weekend is transition (07-11 + 17-01) +
-        # offpeak (01-07 + 11-17). Weekday rule applies on weekdays.
-        wp, wt, wo = 45.0, 69.0, 54.0
-    else:
-        # weekend_offpeak (Luminus SmartFlex, default): weekends are
-        # entirely off-peak.
-        wp, wt, wo = 45.0, 45.0, 78.0
+    # Slot weights = hours-per-week the slot is active, shared with the
+    # injection credit so consumption and feed-in agree on the split.
+    wp, wt, wo = _tou_slot_weights(snapshot.energy.weekend_rule)
     total = wp + wt + wo
     return (bd_peak.all_in * wp + bd_trans.all_in * wt + bd_offpeak.all_in * wo) / total
 

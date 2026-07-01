@@ -1234,6 +1234,37 @@ def test_compare_spot_indexed_injection_uses_mean_spot() -> None:
     assert credit == pytest.approx(0.97 * 0.08 - 0.021)
 
 
+def test_compare_tou_injection_uses_weighted_average_across_slots() -> None:
+    # A per-slot TOU injection credit (Engie Empower Flextime) must be
+    # time-averaged over the published slot durations, not returned as the
+    # live current-slot rate the way the live helper would.
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.config_flow import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        TimeOfUseRates,
+    )
+
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=TimeOfUseRates(
+            peak=0.20, transition=0.16, offpeak=0.12, weekend_rule="weekend_no_peak"
+        ),
+        injection=InjectionRates(peak=0.06, transition=0.04, offpeak=0.02),
+    )
+    entry = SimpleNamespace(data={"solar_regime": "injection"})
+    # weekend_no_peak weights: peak 45h, transition 69h, offpeak 54h per week.
+    expected = (0.06 * 45.0 + 0.04 * 69.0 + 0.02 * 54.0) / (45.0 + 69.0 + 54.0)
+    credit = _compare_injection_credit(snap, entry, {}, avg_spot=None)
+    assert credit == pytest.approx(expected)
+    # The credit reflects the weighted mix, never a single slot rate.
+    assert credit not in (0.06, 0.04, 0.02)
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_branch_aborts_when_no_alternative(
     hass: HomeAssistant,
