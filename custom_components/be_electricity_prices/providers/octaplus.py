@@ -80,6 +80,7 @@ from .base import (
     EnergyRates,
     ExtractorError,
     FixedRates,
+    ImpactRates,
     InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
@@ -102,10 +103,22 @@ class _ContractDef:
     label: str
     kind: TariffKind
     slug: str  # OCTA+'s product slug in the URL
+    # None means "every region OCTA+ serves"; the Impact comptage variant
+    # is Wallonia-only (CWaPE Impact bands), so it overrides this.
+    regions: frozenset[str] | None = None
 
 
 _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef("octaplus_fixed", "OCTA+ Fixed", "fixed", "FIXED"),
+    # Impact comptage (SMR3) reuses the Fixed card but prices the three
+    # CWaPE bands; Wallonia-only, the Flanders Fixed card omits the block.
+    _ContractDef(
+        "octaplus_fixed_impact",
+        "OCTA+ Fixed Impact",
+        "tou_impact",
+        "FIXED",
+        regions=frozenset({REGION_WALLONIA}),
+    ),
     _ContractDef("octaplus_ecofixed", "OCTA+ Eco Fixed", "fixed", "ECOFIXED"),
     _ContractDef(
         "octaplus_smartvariable",
@@ -334,6 +347,17 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             # cheapest-window service lose the native 15-minute grid.
             quarter_hourly=True,
         )
+
+    if kind == "tou_impact":
+        # OCTA+ Impact comptage (SMR3) prints three CWaPE-band supplier rates
+        # on the Fixed card (Impact Eco / Medium / Pic, c€/kWh); they follow
+        # the same PIC/MEDIUM/ECO windows as the DSO's Impact distribution.
+        pic = _meter_value(text, r"Impact Pic")
+        medium = _meter_value(text, r"Impact Medium")
+        eco = _meter_value(text, r"Impact Eco")
+        if pic is None or medium is None or eco is None:
+            raise ExtractorError("could not parse OCTA+ Impact energy block")
+        return ImpactRates(pic=pic, medium=medium, eco=eco, yearly_fixed_fee=yearly_fee)
 
     # Static / variable: the energy table prints values column-major
     # so the aligned helper gives clean rows like:
@@ -638,7 +662,7 @@ EXTRACTOR = SupplierExtractor(
             id=c.contract_id,
             label=c.label,
             kind=c.kind,
-            regions=_OCTAPLUS_REGIONS,
+            regions=c.regions or _OCTAPLUS_REGIONS,
         )
         for c in _CONTRACTS
     ),

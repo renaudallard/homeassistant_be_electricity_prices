@@ -62,7 +62,14 @@ def test_octaplus_is_registered() -> None:
     contract_ids = {c.id for c in EXTRACTORS["octaplus"].contracts}
     assert "octaplus_fixed" in contract_ids
     assert "octaplus_dynamic" in contract_ids
-    assert len(contract_ids) == 7
+    assert "octaplus_fixed_impact" in contract_ids
+    assert len(contract_ids) == 8
+    # Impact comptage is a Walloon CWaPE concept; the Flanders Fixed card
+    # carries no Impact block, so the variant must not be offered there.
+    impact = next(
+        c for c in EXTRACTORS["octaplus"].contracts if c.id == "octaplus_fixed_impact"
+    )
+    assert impact.regions == frozenset({"wallonia"})
 
 
 def test_fixed_wallonia_extracts_meter_rates() -> None:
@@ -81,6 +88,28 @@ def test_fixed_wallonia_extracts_meter_rates() -> None:
     assert snap.injection.current == pytest.approx(0.0472)
     assert snap.injection.factor is None
     assert snap.injection.base is None
+
+
+def test_fixed_impact_extracts_three_cwape_bands() -> None:
+    # Impact comptage prices the three CWaPE bands (Eco / Medium / Pic) as
+    # the supplier energy, pairing with the DSO's Impact distribution bands.
+    from custom_components.be_electricity_prices.providers.base import ImpactRates
+
+    snap = parse_snapshot(
+        "octaplus_fixed_impact", _text("octaplus_fixed_w.pdf"), "wallonia"
+    )
+    assert isinstance(snap.energy, ImpactRates)
+    assert snap.energy.eco == pytest.approx(0.1284)
+    assert snap.energy.medium == pytest.approx(0.1683)
+    assert snap.energy.pic == pytest.approx(0.1972)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+    # Injection is the same flat feed-in credit as the standard Fixed card.
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(0.0472)
+    # The Walloon DSO carries the matching Impact distribution bands.
+    ores = snap.dsos["ores"]
+    assert ores.distribution_pic is not None
+    assert ores.distribution_eco is not None
 
 
 def test_missing_regional_renewables_raises() -> None:
