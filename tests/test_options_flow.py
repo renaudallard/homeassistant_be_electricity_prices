@@ -1296,6 +1296,24 @@ def test_compare_bihourly_meter_weights_peak_offpeak() -> None:
     assert 0.267 < at_peak < 0.467
 
 
+def test_solar_schema_offers_compensation_only_in_wallonia() -> None:
+    # Compensation is a Walloon-only regime; offering it in Flanders/Brussels
+    # would let a user double-count the capacity tariff with the prosumer fee.
+    from custom_components.be_electricity_prices.config_flow import _solar_schema
+    from custom_components.be_electricity_prices.const import CONF_SOLAR_REGIME
+
+    def _regimes(region: str) -> list[str]:
+        schema = _solar_schema({"region": region})
+        for key, sel in schema.schema.items():
+            if getattr(key, "schema", key) == CONF_SOLAR_REGIME:
+                return list(sel.config["options"])
+        raise AssertionError("solar_regime key missing from schema")
+
+    assert "compensation" in _regimes("wallonia")
+    assert "compensation" not in _regimes("flanders")
+    assert "compensation" not in _regimes("brussels")
+
+
 def test_compare_spot_indexed_injection_uses_mean_spot() -> None:
     # A spot-indexed injection credit must be priced off the window mean
     # (consistent with the energy term), not the live current slot.

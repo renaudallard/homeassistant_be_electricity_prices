@@ -87,6 +87,7 @@ from .const import (
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     REGION_FLANDERS,
+    REGION_WALLONIA,
     RESOLUTION_HOURLY,
     RESOLUTION_QUARTER,
     SOLAR_REGIME_COMPENSATION,
@@ -1772,6 +1773,13 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
     """
     if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_COMPENSATION:
         return 0.0
+    # Compensation is Walloon-only: a Flanders PV owner is either on net-
+    # metering (no capacity tariff, but that regime is not modelled here) or
+    # on a digital meter paying the capaciteitstarief. Billing the prosumer
+    # fee in Flanders on top of the always-billed capacity tariff would
+    # double-count grid-recovery, so gate it to Wallonia.
+    if entry.data.get(CONF_REGION) != REGION_WALLONIA:
+        return 0.0
     try:
         kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
     except (TypeError, ValueError):
@@ -2171,6 +2179,10 @@ async def _ytd_prosumer(
     snapshot's DSO overlay, so a CWaPE indexation that lands mid-year is
     honoured for the months it applies to."""
     if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_COMPENSATION:
+        return 0.0
+    # Compensation is Walloon-only (see _compute_prosumer): gate it so a
+    # Flanders entry never bills prosumer on top of the capacity tariff.
+    if entry.data.get(CONF_REGION) != REGION_WALLONIA:
         return 0.0
     try:
         kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))

@@ -71,6 +71,7 @@ from .const import (
     DOMAIN,
     DSO_MODE_BI_HORAIRE,
     METER_MONO,
+    REGION_WALLONIA,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
@@ -581,7 +582,10 @@ async def _backfill_cost_sensor(
             annual_static / days_in_year / hours_per_local_date[local.date()]
         )
 
-        if is_compensation and kva > 0.0:
+        # Compensation is Walloon-only (see coordinator._compute_prosumer):
+        # gate the prosumer accrual to Wallonia so a Flanders entry never
+        # backfills prosumer on top of the capacity tariff.
+        if is_compensation and kva > 0.0 and region == REGION_WALLONIA:
             overlay = snap_h.dsos.get(dso)
             dso_rate = (
                 overlay.prosumer_eur_per_kva_year

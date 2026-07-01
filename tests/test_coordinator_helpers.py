@@ -91,9 +91,16 @@ def _snapshot(
 
 
 def _entry(**data: object) -> MockConfigEntry:
-    # Default to compensation regime so tests focus on math; override
-    # with solar_regime= when testing the gating logic.
-    base = {"dso": "ores", "solar_kva": 0.0, "solar_regime": "compensation"}
+    # Default to a Walloon compensation entry (ores is a Walloon DSO) so
+    # tests focus on math; compensation is Walloon-only, so the region must
+    # be set for _compute_prosumer to bill. Override with region= /
+    # solar_regime= when testing the gating logic.
+    base = {
+        "region": "wallonia",
+        "dso": "ores",
+        "solar_kva": 0.0,
+        "solar_regime": "compensation",
+    }
     base.update(data)
     return MockConfigEntry(domain=DOMAIN, data=base)
 
@@ -109,6 +116,18 @@ def test_prosumer_compensation_regime_monthly_cost() -> None:
         _entry(solar_kva=5.0),
     )
     assert cost == pytest.approx(5.0 * 85.0 / 12.0)
+
+
+def test_prosumer_compensation_is_walloon_only() -> None:
+    # Compensation is Walloon-only. A Flanders compensation entry must not
+    # bill the prosumer fee on top of the always-billed capaciteitstarief
+    # (that would double-count grid-recovery); it returns 0 regardless of the
+    # (now unbilled) Flanders prosumer rate on the overlay.
+    snap = _snapshot(prosumer=85.0, capacity=52.37)
+    walloon = _compute_prosumer(snap, _entry(solar_kva=5.0, region="wallonia"))
+    flemish = _compute_prosumer(snap, _entry(solar_kva=5.0, region="flanders"))
+    assert walloon == pytest.approx(5.0 * 85.0 / 12.0)
+    assert flemish == 0.0
 
 
 def test_prosumer_adds_supplier_forfait_on_top_of_dso() -> None:

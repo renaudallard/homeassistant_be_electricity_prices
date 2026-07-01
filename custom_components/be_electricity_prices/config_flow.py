@@ -102,6 +102,7 @@ from .const import (
     DSO_MODE_BI_HORAIRE,
     DSO_TARIFF_MODES,
     SOLAR_REGIME_INJECTION,
+    SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_NONE,
     SOLAR_REGIMES,
     VREG_CAPACITY_FLOOR_KW,
@@ -709,6 +710,18 @@ async def _apply_energy_manager_capacity_default(
 
 
 def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
+    # The compensation ("terugdraaiende teller" / net-metering) regime is
+    # Walloon-only: that meter pays the prosumer tariff and no capacity
+    # tariff, so offering it in Flanders would double-count the Flanders
+    # capaciteitstarief. Outside Wallonia only "none" / "injection" apply.
+    regimes = [
+        r
+        for r in SOLAR_REGIMES
+        if r != SOLAR_REGIME_COMPENSATION
+        or defaults.get(CONF_REGION) == REGION_WALLONIA
+    ]
+    stored = defaults.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
+    default_regime = stored if stored in regimes else SOLAR_REGIME_NONE
     return vol.Schema(
         {
             vol.Optional(
@@ -721,10 +734,10 @@ def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
             ),
             vol.Required(
                 CONF_SOLAR_REGIME,
-                default=defaults.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE),
+                default=default_regime,
             ): SelectSelector(
                 SelectSelectorConfig(
-                    options=list(SOLAR_REGIMES),
+                    options=regimes,
                     mode=SelectSelectorMode.LIST,
                     translation_key="solar_regime",
                 )
