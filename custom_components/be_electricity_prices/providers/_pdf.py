@@ -507,7 +507,9 @@ def parse_brussels_osp(text: str) -> dict[str, float] | None:
     shared tier ids, or None when the block is absent (a card that omits it,
     or a non-Brussels card).
     """
-    block = re.search(r"Obligations de Service.*?(?=\n\s*\(\d\)|\Z)", text, re.S)
+    # Case-insensitive: Bolt prints "Obligations de service publique" (lower
+    # 's'), the others "Obligations de Service Public".
+    block = re.search(r"Obligations de Service.*?(?=\n\s*\(\d\)|\Z)", text, re.S | re.I)
     if block is None:
         return None
     out: dict[str, float] = {}

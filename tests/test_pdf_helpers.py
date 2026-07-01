@@ -402,6 +402,10 @@ def test_parse_brussels_osp_across_extractor_formats() -> None:
         ("mega_smart_fixed_b.pdf", False),
         ("engie_dynamic_b.pdf", False),
         ("totalenergies_dynamic_b.pdf", True),
+        # Bolt prints a lowercase "Obligations de service publique" header,
+        # so the block regex must be case-insensitive.
+        ("bolt_fix.pdf", True),
+        ("bolt_variable.pdf", True),
     ):
         assert parse_brussels_osp(fixture_text(name, layout=layout)) == expected
     # A card without the OSP block (non-Brussels) yields None.
