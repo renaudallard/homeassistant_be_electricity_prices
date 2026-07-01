@@ -1592,6 +1592,11 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             and other_snap is not None
             and coord._snapshot is not None
         ):
+            # The YTD what-if mirrors the live current_year_cost sensor and
+            # the archive YTD path, both of which bill the Flanders capacity
+            # tariff as a separate sensor, so exclude it here to keep the
+            # three figures consistent (the full annual estimate above keeps
+            # it).
             current_ytd = _annual_bill(
                 coord._snapshot,
                 self.config_entry,
@@ -1602,6 +1607,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 current_inj_price,
                 fee_proration=fee_proration,
                 meter=current_meter,
+                include_capacity=False,
             )
             compare_ytd = _annual_bill(
                 other_snap,
@@ -1613,6 +1619,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 compare_inj_price,
                 fee_proration=fee_proration,
                 meter=meter,
+                include_capacity=False,
             )
             placeholders["current_ytd"] = f"{current_ytd:.2f}"
             placeholders["compare_ytd"] = f"{compare_ytd:.2f}"
@@ -1918,12 +1925,15 @@ def _annual_bill(
     injection_price: float | None = None,
     fee_proration: float = 1.0,
     meter: Any = METER_MONO,
+    include_capacity: bool = True,
 ) -> float:
     """Estimated EUR bill for ``snapshot`` over the period that produced
     ``consumption_kwh`` and ``injection_kwh``.
 
     ``fee_proration`` scales the EUR/year fee components (1.0 for a
-    full year, ``days_elapsed/days_in_year`` for YTD).
+    full year, ``days_elapsed/days_in_year`` for YTD). ``include_capacity``
+    is forwarded to :func:`_annual_fees` (off for the YTD what-if so it
+    matches the live ``current_year_cost`` sensor).
 
     Solar handling honours the entry's configured regime:
 
@@ -1937,7 +1947,9 @@ def _annual_bill(
       subtracted from the cost and can drive the bill negative when
       injection income exceeds consumption + fees.
     """
-    fees = _annual_fees(snapshot, entry, peak_kw, meter) * fee_proration
+    fees = (
+        _annual_fees(snapshot, entry, peak_kw, meter, include_capacity) * fee_proration
+    )
     regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     if regime == "compensation":
         billable = max(consumption_kwh - injection_kwh, 0.0)
@@ -1948,21 +1960,30 @@ def _annual_bill(
 
 
 def _annual_fees(
-    snapshot: Any, entry: ConfigEntry, peak_kw: float, meter: Any
+    snapshot: Any,
+    entry: ConfigEntry,
+    peak_kw: float,
+    meter: Any,
+    include_capacity: bool = True,
 ) -> float:
     """Just the EUR/year fee components (no per-kWh term).
 
     Pulled out so the YTD comparison can pro-rate fees by the elapsed
     fraction of the year without re-computing the per-kWh part. ``meter``
     selects the supplier yearly fixed fee, so an exclusive-night meter
-    gets its dedicated fee (EBEM) rather than the standard one."""
+    gets its dedicated fee (EBEM) rather than the standard one.
+
+    ``include_capacity`` excludes the Flanders capacity tariff so the YTD
+    what-if matches the live ``current_year_cost`` sensor and the archive
+    YTD path, both of which bill capacity as a separate sensor. The full
+    annual estimate keeps it (the default)."""
     from .coordinator import _compute_capacity, _compute_prosumer
     from .pricing import yearly_fixed_fee_for_meter
 
     yearly_fixed = float(yearly_fixed_fee_for_meter(snapshot.energy, meter) or 0.0)
     energy_fund = 12.0 * float(snapshot.taxes.energy_fund_eur_per_month or 0.0)
     capacity = 0.0
-    if entry.data.get(CONF_REGION) == REGION_FLANDERS:
+    if include_capacity and entry.data.get(CONF_REGION) == REGION_FLANDERS:
         capacity = 12.0 * _compute_capacity(snapshot, entry, peak_kw)
     prosumer = 12.0 * _compute_prosumer(snapshot, entry)
     # Digital-meter data-management fee, a fixed EUR/year DSO charge.

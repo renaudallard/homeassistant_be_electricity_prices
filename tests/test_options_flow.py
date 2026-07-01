@@ -1315,3 +1315,42 @@ def test_annual_fees_include_data_management() -> None:
     # the databeheer fee contribute.
     fees = _annual_fees(snap, _make_entry(), 0.0, "mono")
     assert fees == pytest.approx(70.0 + 15.0)
+
+
+def test_annual_fees_exclude_capacity_for_ytd() -> None:
+    # The YTD what-if excludes the Flanders capacity tariff (billed as a
+    # separate sensor by current_year_cost); the full annual estimate keeps
+    # it. include_capacity toggles just that term.
+    from custom_components.be_electricity_prices.config_flow import _annual_fees
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        FixedRates,
+    )
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.20, yearly_fixed_fee=70.0),
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                capacity_eur_per_kw_year=40.0,
+            )
+        },
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+        },
+    )
+    with_cap = _annual_fees(snap, entry, 5.0, "mono", include_capacity=True)
+    without_cap = _annual_fees(snap, entry, 5.0, "mono", include_capacity=False)
+    # 5 kW * 40 EUR/kW/yr = 200 EUR/yr of capacity present only in the full
+    # annual figure.
+    assert with_cap - without_cap == pytest.approx(200.0)
+    assert without_cap == pytest.approx(70.0)
