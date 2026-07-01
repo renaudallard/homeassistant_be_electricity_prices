@@ -787,6 +787,21 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     )
     if data_match:
         data_mgmt = to_float(data_match.group(1))
+    # Compensation-regime cards also print a Fluvius "Tarif Prosumer"
+    # (EUR/kW/an) table whose per-DSO rate is billed on top of any supplier
+    # forfait by _compute_prosumer. The distribution table below uses the same
+    # "label then value" layout, so scope the match to the "Tarif Prosumer"
+    # block (bounded by its footnote) to avoid picking up a distribution rate.
+    # Dynamic cards carry no compensation regime and omit the table, so a miss
+    # is legitimate.
+    prosumer_by_key: dict[str, float] = {}
+    prosumer_block = re.search(r"Tarif Prosumer\b.*?(?=\*\s*Le\b|\Z)", text, re.S)
+    if prosumer_block:
+        block = prosumer_block.group(0)
+        for label, key in _FLANDERS_LABELS.items():
+            pmatch = re.search(rf"{re.escape(label)}\s*\n\s*(\d+[.,]\d+)", block)
+            if pmatch:
+                prosumer_by_key[key] = to_float(pmatch.group(1))
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():
         match = re.search(
@@ -809,6 +824,7 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
             transport=0.0,
             data_management_per_year=data_mgmt,
             capacity_eur_per_kw_year=capacity,
+            prosumer_eur_per_kva_year=prosumer_by_key.get(key),
         )
     return out
 

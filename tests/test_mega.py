@@ -255,6 +255,28 @@ def test_flanders_static_carries_exclusive_night_distribution() -> None:
     assert excl is not None and excl < antwerpen.distribution_single
 
 
+def test_flanders_static_carries_fluvius_prosumer_rate() -> None:
+    # Compensation-regime Flanders cards print a Fluvius "Tarif Prosumer"
+    # (EUR/kW/an) table; the per-DSO rate must be billed on top of the
+    # supplier forfait, so it has to land on the DSO overlay.
+    snap = parse_snapshot(
+        "mega_smart_fixed", fixture_text("mega_smart_fixed_v.pdf"), "flanders"
+    )
+    assert snap.dsos["fluvius_antwerpen"].prosumer_eur_per_kva_year == pytest.approx(
+        54.63
+    )
+    assert snap.dsos["fluvius_west"].prosumer_eur_per_kva_year == pytest.approx(69.59)
+
+
+def test_flanders_dynamic_has_no_prosumer_rate() -> None:
+    # The Flanders Dynamic card carries no compensation regime, so the
+    # prosumer table is absent and the DSO overlay must leave the field unset.
+    snap = parse_snapshot(
+        "mega_dynamic", fixture_text("mega_dynamic_v.pdf"), "flanders"
+    )
+    assert snap.dsos["fluvius_antwerpen"].prosumer_eur_per_kva_year is None
+
+
 def test_taxes_split_correctly_per_region() -> None:
     w = parse_snapshot("mega_dynamic", fixture_text("mega_dynamic_w.pdf"), "wallonia")
     v = parse_snapshot(
