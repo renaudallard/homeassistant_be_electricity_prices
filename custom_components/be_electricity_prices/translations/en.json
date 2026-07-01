@@ -36,6 +36,13 @@
           "dso_tariff_mode": "DSO billing mode"
         }
       },
+      "connection_power": {
+        "title": "Connection power (Brussels)",
+        "description": "Your contractual connection power in kVA. Brussels bills a Brugel 'Obligations de Service Public' fee scaled by it. Residential connections are 13 kVA or less.",
+        "data": {
+          "connection_kva_tier": "Connection power"
+        }
+      },
       "api_key": {
         "title": "ENTSO-E API key",
         "description": "Required for dynamic contracts. Request one for free at transparency.entsoe.eu.",
@@ -167,6 +174,13 @@
           "dso_tariff_mode": "DSO billing mode"
         }
       },
+      "connection_power": {
+        "title": "Connection power (Brussels)",
+        "description": "Your contractual connection power in kVA. Brussels bills a Brugel 'Obligations de Service Public' fee scaled by it. Residential connections are 13 kVA or less.",
+        "data": {
+          "connection_kva_tier": "Connection power"
+        }
+      },
       "api_key": {
         "title": "ENTSO-E API key",
         "description": "Required for dynamic contracts. Request one for free at transparency.entsoe.eu.",
@@ -239,6 +253,14 @@
         "simple": "Simple (one rate, all hours)",
         "bi_horaire": "Bi-hourly (peak/off-peak)",
         "impact": "Tarif Impact (3 bands by hour of day)"
+      }
+    },
+    "connection_kva_tier": {
+      "options": {
+        "le1_44": "1.44 kVA or less (no OSP fee)",
+        "le6": "Over 1.44 up to 6 kVA",
+        "le9_6": "Over 6 up to 9.6 kVA",
+        "le13": "Over 9.6 up to 13 kVA"
       }
     },
     "solar_regime": {

@@ -484,6 +484,40 @@ def parse_sign(char: str) -> float:
     return -1.0 if char in _NEGATIVE_SIGNS else 1.0
 
 
+# Residential connection-power upper bounds (kVA) mapped to the OSP tier keys
+# shared with const.CONNECTION_KVA_TIER_*. Kept as literals so this low-level
+# helper stays decoupled from the config module; the keys must match.
+_OSP_BOUND_TO_TIER: dict[float, str] = {
+    1.44: "le1_44",
+    6.0: "le6",
+    9.6: "le9_6",
+    13.0: "le13",
+}
+
+
+def parse_brussels_osp(text: str) -> dict[str, float] | None:
+    """Parse the Brussels Brugel OSP annual-fee table off a Sibelga card.
+
+    Every Brussels card that prints the "Obligations de Service Public"
+    block lists one flat EUR/year fee per connection-power tier. The three
+    supplier extractors render it three different ways (label above vs.
+    beside the value; ``et``/``Entre``/``<=`` phrasings), but each tier row
+    always ends ``<upper-bound> kVA <value>``, so anchor on the value-bearing
+    ``kVA`` token. Returns the four residential tiers (<=13 kVA) keyed by the
+    shared tier ids, or None when the block is absent (a card that omits it,
+    or a non-Brussels card).
+    """
+    block = re.search(r"Obligations de Service.*?(?=\n\s*\(\d\)|\Z)", text, re.S)
+    if block is None:
+        return None
+    out: dict[str, float] = {}
+    for match in re.finditer(r"([\d.,]+)\s*kVA[\s\n]+([\d.,]+)", block.group(0)):
+        tier = _OSP_BOUND_TO_TIER.get(round(to_float(match.group(1)), 2))
+        if tier is not None:
+            out[tier] = to_float(match.group(2))
+    return out or None
+
+
 # Month names recognised in publication strings, mapped to their 1-12
 # index. Each language's full name + a few common abbreviations Belgian
 # tariff cards use. The lookup key is lowercase, accent-stripped not

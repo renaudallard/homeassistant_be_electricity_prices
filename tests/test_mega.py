@@ -182,6 +182,13 @@ def test_smart_fixed_brussels_extracts_sibelga_row() -> None:
     # Metering fee 14.73 + Sibelga <=13kVA fixed term 50.0744 (both billed
     # to a residential Brussels connection; no separate capacity charge).
     assert sibelga.data_management_per_year == pytest.approx(14.73 + 50.0744)
+    # Brugel OSP fee tiers, billed per the configured connection power.
+    assert sibelga.brussels_osp_by_tier == {
+        "le1_44": pytest.approx(0.0),
+        "le6": pytest.approx(13.36),
+        "le9_6": pytest.approx(21.37),
+        "le13": pytest.approx(26.71),
+    }
 
 
 def test_wallonia_dso_carries_prosumer_rate_from_separate_table() -> None:

@@ -77,6 +77,7 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    parse_brussels_osp,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -823,6 +824,7 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_exclusive_night=excl_night / 100.0,
             transport=transport / 100.0,
             data_management_per_year=mesure + fixed_term,
+            brussels_osp_by_tier=parse_brussels_osp(text),
         )
     }
 

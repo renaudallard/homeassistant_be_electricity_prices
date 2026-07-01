@@ -138,6 +138,23 @@ CONF_CAPACITY_MODE: Final = "capacity_mode"
 CONF_CAPACITY_PEAK_SENSOR: Final = "capacity_peak_sensor"
 CONF_CAPACITY_FIXED_KW: Final = "capacity_fixed_kw"
 
+# Brussels contractual connection power (kVA), used only to pick the Brugel
+# OSP (Obligations de Service Public) annual-fee tier off the Sibelga card.
+# Residential connections are <=13 kVA, so only the four residential tiers
+# are offered; the key is matched against the parsed OSP table.
+CONF_CONNECTION_KVA_TIER: Final = "connection_kva_tier"
+CONNECTION_KVA_TIER_LE1_44: Final = "le1_44"
+CONNECTION_KVA_TIER_LE6: Final = "le6"
+CONNECTION_KVA_TIER_LE9_6: Final = "le9_6"
+CONNECTION_KVA_TIER_LE13: Final = "le13"
+CONNECTION_KVA_TIERS: Final = (
+    CONNECTION_KVA_TIER_LE1_44,
+    CONNECTION_KVA_TIER_LE6,
+    CONNECTION_KVA_TIER_LE9_6,
+    CONNECTION_KVA_TIER_LE13,
+)
+DEFAULT_CONNECTION_KVA_TIER: Final = CONNECTION_KVA_TIER_LE6
+
 # Cumulative kWh meter sensors (HA entity_ids) for the current_year_cost sensor.
 # Two ways to feed the sensor:
 #   1) Direct day/night registers off the meter (4 entity_ids below).

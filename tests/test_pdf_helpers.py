@@ -384,3 +384,25 @@ def test_parse_sign_covers_canonical_hyphens() -> None:
     for neg in ("-", "‐", "‑", "‒", "–", "—", "−"):
         assert parse_sign(neg) == -1.0
     assert parse_sign("+") == 1.0
+
+
+def test_parse_brussels_osp_across_extractor_formats() -> None:
+    # The three Brussels providers render the OSP table three different ways
+    # (label above vs. beside the value; et/Entre/<= phrasings) under their
+    # own extractors, but the shared parser must return the same four
+    # residential tiers for each.
+    from custom_components.be_electricity_prices.providers._pdf import (
+        parse_brussels_osp,
+    )
+
+    from tests import fixture_text
+
+    expected = {"le1_44": 0.0, "le6": 13.36, "le9_6": 21.37, "le13": 26.71}
+    for name, layout in (
+        ("mega_smart_fixed_b.pdf", False),
+        ("engie_dynamic_b.pdf", False),
+        ("totalenergies_dynamic_b.pdf", True),
+    ):
+        assert parse_brussels_osp(fixture_text(name, layout=layout)) == expected
+    # A card without the OSP block (non-Brussels) yields None.
+    assert parse_brussels_osp(fixture_text("mega_smart_fixed_w.pdf")) is None

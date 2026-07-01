@@ -82,6 +82,7 @@ from .const import (
     CONF_CAPACITY_FIXED_KW,
     CONF_CAPACITY_MODE,
     CONF_CAPACITY_PEAK_SENSOR,
+    CONF_CONNECTION_KVA_TIER,
     CONF_CONSUMPTION_KWH,
     CONF_CONTRACT,
     CONF_DAY_CONSUMPTION_KWH,
@@ -96,6 +97,8 @@ from .const import (
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
+    CONNECTION_KVA_TIERS,
+    DEFAULT_CONNECTION_KVA_TIER,
     DSO_MODE_BI_HORAIRE,
     DSO_TARIFF_MODES,
     SOLAR_REGIME_INJECTION,
@@ -107,6 +110,7 @@ from .const import (
     METER_DYNAMIC,
     METER_MONO,
     METER_TYPES,
+    REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
     REGIONS,
@@ -269,6 +273,22 @@ def _dso_tariff_mode_schema(defaults: dict[str, Any]) -> vol.Schema:
                     options=list(DSO_TARIFF_MODES),
                     mode=SelectSelectorMode.LIST,
                     translation_key="dso_tariff_mode",
+                )
+            ),
+        }
+    )
+
+
+def _connection_power_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Brussels-only step: which connection-power tier for the Brugel OSP fee?"""
+    current = defaults.get(CONF_CONNECTION_KVA_TIER) or DEFAULT_CONNECTION_KVA_TIER
+    return vol.Schema(
+        {
+            vol.Required(CONF_CONNECTION_KVA_TIER, default=current): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(CONNECTION_KVA_TIERS),
+                    mode=SelectSelectorMode.LIST,
+                    translation_key="connection_kva_tier",
                 )
             ),
         }
@@ -902,6 +922,25 @@ class _WizardStepsMixin:
             return await self.async_step_dso_tariff_mode()
         return await self._after_dso_tariff_mode()
 
+    async def async_step_connection_power(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_solar()
+        return self.async_show_form(
+            step_id="connection_power",
+            data_schema=_connection_power_schema(self._data),
+        )
+
+    async def _before_solar(self) -> ConfigFlowResult:
+        # Brussels connections pay a Brugel OSP fee scaled by contractual
+        # connection power, so ask the tier before the solar step. Other
+        # regions have no such fee and go straight to solar.
+        if self._data[CONF_REGION] == REGION_BRUSSELS:
+            return await self.async_step_connection_power()
+        return await self.async_step_solar()
+
     async def _after_dso_tariff_mode(self) -> ConfigFlowResult:
         if (
             _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
@@ -910,12 +949,12 @@ class _WizardStepsMixin:
             return await self.async_step_api_key()
         if self._data[CONF_REGION] == REGION_FLANDERS:
             return await self.async_step_capacity()
-        return await self.async_step_solar()
+        return await self._before_solar()
 
     async def _after_api_key(self) -> ConfigFlowResult:
         if self._data[CONF_REGION] == REGION_FLANDERS:
             return await self.async_step_capacity()
-        return await self.async_step_solar()
+        return await self._before_solar()
 
     def _finalize(self) -> ConfigFlowResult:
         raise NotImplementedError
@@ -2006,7 +2045,11 @@ def _annual_fees(
     what-if matches the live ``current_year_cost`` sensor and the archive
     YTD path, both of which bill capacity as a separate sensor. The full
     annual estimate keeps it (the default)."""
-    from .coordinator import _compute_capacity, _compute_prosumer
+    from .coordinator import (
+        _brussels_osp_fee,
+        _compute_capacity,
+        _compute_prosumer,
+    )
     from .pricing import yearly_fixed_fee_for_meter
 
     yearly_fixed = float(yearly_fixed_fee_for_meter(snapshot.energy, meter) or 0.0)
@@ -2018,7 +2061,9 @@ def _annual_fees(
     # Digital-meter data-management fee, a fixed EUR/year DSO charge.
     overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
     data_mgmt = float(overlay.data_management_per_year) if overlay is not None else 0.0
-    return yearly_fixed + energy_fund + capacity + prosumer + data_mgmt
+    # Brussels Brugel OSP fee for the configured connection-power tier.
+    osp = _brussels_osp_fee(overlay, entry)
+    return yearly_fixed + energy_fund + capacity + prosumer + data_mgmt + osp
 
 
 async def _read_total_kwh(

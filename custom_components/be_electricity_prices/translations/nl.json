@@ -36,6 +36,13 @@
           "dso_tariff_mode": "Distributiemodus"
         }
       },
+      "connection_power": {
+        "title": "Aansluitvermogen (Brussel)",
+        "description": "Uw contractueel aansluitvermogen in kVA. Brussel rekent een Brugel-bijdrage voor openbaredienstverplichtingen aan die hiermee schaalt. Residentiele aansluitingen zijn 13 kVA of minder.",
+        "data": {
+          "connection_kva_tier": "Aansluitvermogen"
+        }
+      },
       "api_key": {
         "title": "ENTSO-E API-sleutel",
         "description": "Vereist voor dynamische contracten. Gratis aan te vragen op transparency.entsoe.eu.",
@@ -167,6 +174,13 @@
           "dso_tariff_mode": "Distributiemodus"
         }
       },
+      "connection_power": {
+        "title": "Aansluitvermogen (Brussel)",
+        "description": "Uw contractueel aansluitvermogen in kVA. Brussel rekent een Brugel-bijdrage voor openbaredienstverplichtingen aan die hiermee schaalt. Residentiele aansluitingen zijn 13 kVA of minder.",
+        "data": {
+          "connection_kva_tier": "Aansluitvermogen"
+        }
+      },
       "api_key": {
         "title": "ENTSO-E API-sleutel",
         "description": "Vereist voor dynamische contracten. Gratis aan te vragen op transparency.entsoe.eu.",
@@ -231,6 +245,14 @@
         "simple": "Enkel (een tarief, alle uren)",
         "bi_horaire": "Bi-uurlijks (dag / nacht)",
         "impact": "Tarif Impact (3 tijdvakken)"
+      }
+    },
+    "connection_kva_tier": {
+      "options": {
+        "le1_44": "1,44 kVA of minder (geen OSP-bijdrage)",
+        "le6": "Meer dan 1,44 tot 6 kVA",
+        "le9_6": "Meer dan 6 tot 9,6 kVA",
+        "le13": "Meer dan 9,6 tot 13 kVA"
       }
     },
     "meter": {

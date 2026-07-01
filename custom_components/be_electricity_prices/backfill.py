@@ -76,6 +76,7 @@ from .const import (
 )
 from .coordinator import (
     BePricesCoordinator,
+    _brussels_osp_fee,
     _historical_injection_rate,
     _hourly_consumption_sensors,
     _hourly_injection_sensors,
@@ -573,6 +574,8 @@ async def _backfill_cost_sensor(
             + snap_h.taxes.energy_fund_eur_per_month * 12.0
             # Digital-meter data-management fee, a fixed EUR/year DSO charge.
             + (overlay_h.data_management_per_year if overlay_h is not None else 0.0)
+            # Brussels Brugel OSP fee for the configured connection tier.
+            + _brussels_osp_fee(overlay_h, entry)
         )
         running_fees += (
             annual_static / days_in_year / hours_per_local_date[local.date()]

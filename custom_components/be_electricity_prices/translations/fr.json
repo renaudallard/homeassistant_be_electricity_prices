@@ -36,6 +36,13 @@
           "dso_tariff_mode": "Mode de facturation GRD"
         }
       },
+      "connection_power": {
+        "title": "Puissance de raccordement (Bruxelles)",
+        "description": "Votre puissance de raccordement contractuelle en kVA. Bruxelles facture une redevance Brugel 'Obligations de Service Public' proportionnelle a celle-ci. Les raccordements residentiels font 13 kVA ou moins.",
+        "data": {
+          "connection_kva_tier": "Puissance de raccordement"
+        }
+      },
       "api_key": {
         "title": "Cle API ENTSO-E",
         "description": "Necessaire pour les contrats dynamiques. Cle gratuite sur transparency.entsoe.eu.",
@@ -167,6 +174,13 @@
           "dso_tariff_mode": "Mode de facturation GRD"
         }
       },
+      "connection_power": {
+        "title": "Puissance de raccordement (Bruxelles)",
+        "description": "Votre puissance de raccordement contractuelle en kVA. Bruxelles facture une redevance Brugel 'Obligations de Service Public' proportionnelle a celle-ci. Les raccordements residentiels font 13 kVA ou moins.",
+        "data": {
+          "connection_kva_tier": "Puissance de raccordement"
+        }
+      },
       "api_key": {
         "title": "Cle API ENTSO-E",
         "description": "Necessaire pour les contrats dynamiques. Cle gratuite sur transparency.entsoe.eu.",
@@ -239,6 +253,14 @@
         "simple": "Simple (un tarif, toutes les heures)",
         "bi_horaire": "Bi-horaire (jour / nuit)",
         "impact": "Tarif Impact (3 plages horaires)"
+      }
+    },
+    "connection_kva_tier": {
+      "options": {
+        "le1_44": "1,44 kVA ou moins (pas de redevance OSP)",
+        "le6": "Plus de 1,44 jusqu'a 6 kVA",
+        "le9_6": "Plus de 6 jusqu'a 9,6 kVA",
+        "le13": "Plus de 9,6 jusqu'a 13 kVA"
       }
     },
     "solar_regime": {

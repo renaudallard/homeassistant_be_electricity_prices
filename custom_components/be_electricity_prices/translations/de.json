@@ -36,6 +36,13 @@
           "dso_tariff_mode": "Verteilungs-Modus"
         }
       },
+      "connection_power": {
+        "title": "Anschlussleistung (Brüssel)",
+        "description": "Ihre vertragliche Anschlussleistung in kVA. Brüssel berechnet eine danach gestaffelte Brugel-Abgabe für gemeinwirtschaftliche Verpflichtungen. Wohnanschlüsse haben 13 kVA oder weniger.",
+        "data": {
+          "connection_kva_tier": "Anschlussleistung"
+        }
+      },
       "api_key": {
         "title": "ENTSO-E API-Schluessel",
         "description": "Erforderlich fuer dynamische Vertraege. Kostenlos bei transparency.entsoe.eu anfordern.",
@@ -167,6 +174,13 @@
           "dso_tariff_mode": "Verteilungs-Modus"
         }
       },
+      "connection_power": {
+        "title": "Anschlussleistung (Brüssel)",
+        "description": "Ihre vertragliche Anschlussleistung in kVA. Brüssel berechnet eine danach gestaffelte Brugel-Abgabe für gemeinwirtschaftliche Verpflichtungen. Wohnanschlüsse haben 13 kVA oder weniger.",
+        "data": {
+          "connection_kva_tier": "Anschlussleistung"
+        }
+      },
       "api_key": {
         "title": "ENTSO-E API-Schluessel",
         "description": "Erforderlich fuer dynamische Vertraege. Kostenlos bei transparency.entsoe.eu anfordern.",
@@ -239,6 +253,14 @@
         "simple": "Eintarif (eine Rate, alle Stunden)",
         "bi_horaire": "Doppeltarif (Tag / Nacht)",
         "impact": "Tarif Impact (3 Tageszeit-Bereiche)"
+      }
+    },
+    "connection_kva_tier": {
+      "options": {
+        "le1_44": "1,44 kVA oder weniger (keine OSP-Abgabe)",
+        "le6": "Über 1,44 bis 6 kVA",
+        "le9_6": "Über 6 bis 9,6 kVA",
+        "le13": "Über 9,6 bis 13 kVA"
       }
     },
     "solar_regime": {

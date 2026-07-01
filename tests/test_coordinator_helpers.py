@@ -1563,3 +1563,31 @@ async def test_ytd_static_fees_honours_meter_override(hass: HomeAssistant) -> No
         )
     assert fee_entry == pytest.approx(85.0)
     assert fee_override == pytest.approx(35.04)
+
+
+def test_brussels_osp_fee_selects_configured_tier() -> None:
+    from custom_components.be_electricity_prices.coordinator import _brussels_osp_fee
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    overlay = DsoOverlay(
+        distribution_single=0.10,
+        transport=0.02,
+        brussels_osp_by_tier={
+            "le1_44": 0.0,
+            "le6": 13.36,
+            "le9_6": 21.37,
+            "le13": 26.71,
+        },
+    )
+
+    def _entry(tier: str | None = None) -> MockConfigEntry:
+        return MockConfigEntry(
+            domain=DOMAIN, data={"connection_kva_tier": tier} if tier else {}
+        )
+
+    assert _brussels_osp_fee(overlay, _entry("le9_6")) == pytest.approx(21.37)
+    # Existing entries without the field bill the default 1.44-6.00 kVA tier.
+    assert _brussels_osp_fee(overlay, _entry()) == pytest.approx(13.36)
+    # An overlay with no OSP table (non-Brussels) bills nothing.
+    plain = DsoOverlay(distribution_single=0.1, transport=0.0)
+    assert _brussels_osp_fee(plain, _entry("le13")) == 0.0

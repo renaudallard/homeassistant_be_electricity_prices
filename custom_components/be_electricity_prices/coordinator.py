@@ -65,6 +65,7 @@ from .const import (
     CONF_CAPACITY_FIXED_KW,
     CONF_CAPACITY_MODE,
     CONF_CAPACITY_PEAK_SENSOR,
+    CONF_CONNECTION_KVA_TIER,
     CONF_CONSUMPTION_KWH,
     CONF_CONTRACT,
     CONF_DAY_CONSUMPTION_KWH,
@@ -79,6 +80,7 @@ from .const import (
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
+    DEFAULT_CONNECTION_KVA_TIER,
     DOMAIN,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
@@ -1597,6 +1599,18 @@ def _compute_capacity(
     return peak_kw * overlay.capacity_eur_per_kw_year / 12.0
 
 
+def _brussels_osp_fee(overlay: DsoOverlay | None, entry: ConfigEntry) -> float:
+    """Brussels Brugel OSP annual fee (EUR/year) for the configured tier.
+
+    The fee is a flat Sibelga charge scaled by contractual connection power;
+    the user picks the tier in the config flow (default 1.44-6.00 kVA).
+    Returns 0 outside Brussels or when the card omits the OSP table."""
+    if overlay is None or overlay.brussels_osp_by_tier is None:
+        return 0.0
+    tier = entry.data.get(CONF_CONNECTION_KVA_TIER, DEFAULT_CONNECTION_KVA_TIER)
+    return overlay.brussels_osp_by_tier.get(tier, 0.0)
+
+
 def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> bool:
     """True when pricing this entry's injection requires an ENTSO-E spot
     even though the ENERGY contract isn't dynamic.
@@ -2136,6 +2150,8 @@ async def _ytd_static_fees(
             # Digital-meter data-management fee (databeheer / terme fixe
             # reseau): a fixed EUR/year DSO charge billed per connection.
             + (overlay.data_management_per_year if overlay is not None else 0.0)
+            # Brussels Brugel OSP fee for the configured connection tier.
+            + _brussels_osp_fee(overlay, entry)
         )
         total += annual * (days_in_ytd / days_in_year)
     return total

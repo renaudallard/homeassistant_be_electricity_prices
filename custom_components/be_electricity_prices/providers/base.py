@@ -261,6 +261,11 @@ class DsoOverlay:
     transport: float
     data_management_per_year: float = 0.0
     capacity_eur_per_kw_year: float | None = None
+    # Brussels Brugel OSP (Obligations de Service Public) annual fee keyed by
+    # residential connection-power tier (le1_44 / le6 / le9_6 / le13). Only
+    # the Sibelga overlay carries it; the user's configured tier selects the
+    # billed value. None outside Brussels or when the card omits the table.
+    brussels_osp_by_tier: dict[str, float] | None = None
     # Prosumer (compensation-regime) tariff in EUR per kVA of solar inverter
     # capacity per year. Wallonia DSOs publish this; Flanders digital meters
     # don't (post-2024 SMR3 connections), so it stays None there. Valid in

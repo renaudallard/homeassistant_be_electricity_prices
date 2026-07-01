@@ -365,6 +365,54 @@ async def test_options_flow_flanders_branch_asks_capacity(
     assert entry.data["solar_regime"] == "injection"
 
 
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_brussels_branch_asks_connection_power(
+    hass: HomeAssistant,
+) -> None:
+    # A Brussels connection pays a Brugel OSP fee scaled by connection power,
+    # so the flow must ask the tier between the meter and solar steps.
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "mega",
+            "contract": "mega_smart_fixed",
+            "region": "brussels",
+            "dso": "sibelga",
+            "meter": "mono",
+        },
+        title="Mega - Smart Fixed (Brussels)",
+    )
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "mega", "region": "brussels"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "mega_smart_fixed"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "sibelga"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "mono"}
+    )
+    # Brussels has no Wallonia tariff-mode / Flanders capacity step; the
+    # connection-power step comes straight after the meter step.
+    assert result["step_id"] == "connection_power"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"connection_kva_tier": "le9_6"}
+    )
+    assert result["step_id"] == "solar"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["connection_kva_tier"] == "le9_6"
+
+
 # ---- compare-another-supplier branch ---------------------------------------
 
 
