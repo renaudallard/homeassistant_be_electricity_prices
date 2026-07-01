@@ -69,6 +69,15 @@ def test_empty_dso_overlay_is_fatal() -> None:
         parse_snapshot(text, "test://ecopower-apr", "april 2026")
 
 
+def test_missing_gsc_or_wkk_surcharge_is_fatal() -> None:
+    # GSC/WKK are the mandatory Flanders renewable surcharge; a relabel must
+    # fail loud rather than silently zeroing a per-kWh charge.
+    for label in ("Kost GSC", "Kost WKK"):
+        text = _text("ecopower_burgerstroom_apr.pdf").replace(label, "XXX")
+        with pytest.raises(ExtractorError, match="GSC/WKK"):
+            parse_snapshot(text, "test://ecopower-apr", "april 2026")
+
+
 def _may_snap() -> SupplierSnapshot:
     return parse_snapshot(
         _text("ecopower_burgerstroom_may.pdf"),

@@ -588,12 +588,17 @@ def _extract_taxes(text: str) -> TaxOverlay:
     fund_match = _FUND_RE.search(text)
     if not federal_match or not contrib_match:
         raise ExtractorError("could not parse Ecopower federal tax block")
+    # GSC and WKK are the Flanders renewable surcharge and are printed on
+    # every card, so a miss is a label drift, not an optional row. Treating
+    # them as optional (silently zero) would let a relabel drop a mandatory
+    # per-kWh charge without failing, so require them like the federal rows.
+    if not gsc_match or not wkk_match:
+        raise ExtractorError("could not parse Ecopower GSC/WKK renewable surcharge")
     return TaxOverlay(
         federal_excise=to_float(federal_match.group(1)),
         energy_contribution=to_float(contrib_match.group(1)),
         flanders_renewables=(
-            (to_float(gsc_match.group(1)) if gsc_match else 0.0)
-            + (to_float(wkk_match.group(1)) if wkk_match else 0.0)
+            to_float(gsc_match.group(1)) + to_float(wkk_match.group(1))
         ),
         energy_fund_eur_per_month=(
             to_float(fund_match.group(1)) if fund_match else 0.0
