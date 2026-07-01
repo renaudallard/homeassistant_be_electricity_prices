@@ -330,3 +330,22 @@ def test_matches_suffix_rejects_variable_filename() -> None:
     assert not _matches_suffix(
         "Frank Energie Tariefkaart Elektriciteit Variabel Mei 2026.pdf", None
     )
+
+
+def test_matches_suffix_slim_accepts_both_sl_and_full_word() -> None:
+    # Frank alternates the Slim tier token monthly: "Dynamisch SL Juli 2026"
+    # vs "Dynamisch Slim Juni 2026". Both must match the SL tier or the tier
+    # silently fails to fetch in the full-word months.
+    assert _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch SL Juli 2026.pdf", "SL"
+    )
+    assert _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch Slim Juni 2026.pdf", "SL"
+    )
+    # The full word must not leak into an unrelated tier or the standard tier.
+    assert not _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch Slim Juni 2026.pdf", "HV"
+    )
+    assert not _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch Slim Juni 2026.pdf", None
+    )

@@ -116,6 +116,11 @@ _VALID_IDS: frozenset[str] = frozenset(_TIER_SUFFIX)
 _SUFFIX_TO_ID: dict[str, str] = {v: k for k, v in _TIER_SUFFIX.items() if v is not None}
 _DEFAULT_TIER_ID: str = next(t[0] for t in _TIERS if t[2] is None)
 
+# Frank alternates the Slim tier's filename token between the abbreviation
+# "SL" and the full word "Slim" from one month to the next (both are live in
+# the CMS), so treat them as aliases when matching a card to its tier.
+_SUFFIX_ALIASES: dict[str, tuple[str, ...]] = {"SL": ("SL", "Slim")}
+
 _FLUVIUS_LABELS: dict[str, str] = {
     "Antwerpen": DSO_FLUVIUS_ANTWERPEN,
     "Halle-Vilvoorde": DSO_FLUVIUS_HALLE_VILVOORDE,
@@ -141,7 +146,7 @@ def _matches_suffix(filename: str, suffix: str | None) -> bool:
     word = m.group(1)
     if suffix is None:
         return word.lower() in _NL_MONTHS_LOWER
-    return word == suffix
+    return word in _SUFFIX_ALIASES.get(suffix, (suffix,))
 
 
 async def _sanity_query(
