@@ -106,26 +106,6 @@ _INJECTION_PRICE_SENSOR_KEY = "injection_price"
 _COST_SENSOR_KEY = "current_year_cost"
 
 
-def _hours_in_month(month_first: date) -> int:
-    """Local-time hours between this 1st-of-month and the next.
-
-    Brussels March has 743 hours and October 745: ``days * 24`` would
-    misallocate the prosumer monthly fee on DST seam months by ~1/744
-    each. Anchoring on local midnight and routing through UTC absorbs
-    the DST offset; subtracting two zoneinfo-aware datetimes directly
-    returns the *wall-clock* span (always 31 days = 744h here) and
-    silently re-introduces the bug.
-    """
-    if month_first.month == 12:
-        next_first = date(month_first.year + 1, 1, 1)
-    else:
-        next_first = date(month_first.year, month_first.month + 1, 1)
-    span = dt_util.start_of_local_day(next_first).astimezone(UTC) - (
-        dt_util.start_of_local_day(month_first).astimezone(UTC)
-    )
-    return round(span.total_seconds() / 3600)
-
-
 def _solar_kva(entry: ConfigEntry) -> float:
     try:
         kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
@@ -608,7 +588,22 @@ async def _backfill_cost_sensor(
             supplier_rate = snap_h.supplier_prosumer_eur_per_kva_year or 0.0
             if dso_rate or supplier_rate:
                 monthly_fee = kva * (dso_rate + supplier_rate) / 12.0
-                running_fees += monthly_fee / _hours_in_month(month_first)
+                # Prorate the monthly prosumer fee per local day, the same way
+                # the static fee above is spread, so both reach a full daily
+                # share on the current in-progress day and the backfill meets
+                # the live _ytd_prosumer (days_in_ytd / days_in_full_month)
+                # proration at the seam instead of trailing it by a partial
+                # day. Dividing by that day's actual UTC-hour count makes each
+                # day (including the 23/25-hour DST seam days) sum to exactly
+                # monthly_fee / days_in_full_month.
+                days_in_full_month = calendar.monthrange(
+                    month_first.year, month_first.month
+                )[1]
+                running_fees += (
+                    monthly_fee
+                    / days_in_full_month
+                    / hours_per_local_date[local.date()]
+                )
 
         # Compensation regime clamps the YTD energy term at zero
         # (Walloon meter forfeits surplus injection past
