@@ -277,6 +277,26 @@ def _extract_yearly_fee(text: str) -> float:
     return to_float(match.group(1))
 
 
+def _extract_excl_night_fee(text: str) -> float | None:
+    """Yearly fixed fee for an exclusive-night circuit.
+
+    Static / variable cards print the Redevance fixe row with three columns
+    (mono | bi | exclusif nuit), e.g. "65,00 65,00 -". The "-" means the
+    exclusive-night circuit carries no separate abonnement (0) - it is billed
+    once on the main connection - so a second exclusive-night entry must bill
+    0, not the standard fee. Returns None when the row has no third column
+    (dynamic cards print a single value and don't offer exclusive-night), so
+    the standard fee applies.
+    """
+    match = re.search(
+        rf"Redevance fixe\s*\(€/an\)\s+{_NUM}\s+{_NUM}\s+({_NUM}|-)", text
+    )
+    if match is None:
+        return None
+    col = match.group(1)
+    return 0.0 if col == "-" else to_float(col)
+
+
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     fee = _extract_yearly_fee(text)
     if kind == "tou":
@@ -335,6 +355,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     offpeak = to_float(energy_match.group(3)) / 100.0
     excl_night = to_float(energy_match.group(4)) / 100.0
 
+    excl_night_fee = _extract_excl_night_fee(text)
     if kind == "fixed":
         return FixedRates(
             single=mono,
@@ -342,6 +363,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             offpeak=offpeak,
             exclusive_night=excl_night,
             yearly_fixed_fee=fee,
+            yearly_fixed_fee_exclusive_night=excl_night_fee,
         )
     return VariableRates(
         current=mono,
@@ -349,6 +371,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         offpeak=offpeak,
         exclusive_night=excl_night,
         yearly_fixed_fee=fee,
+        yearly_fixed_fee_exclusive_night=excl_night_fee,
     )
 
 

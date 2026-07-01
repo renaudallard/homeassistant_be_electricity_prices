@@ -134,6 +134,17 @@ def test_comfy_wallonia_fixed_rates_and_dso() -> None:
     assert snap.energy.offpeak == pytest.approx(0.1771)
     assert snap.energy.exclusive_night == pytest.approx(0.1771)
     assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+    # The Redevance fixe row prints "65,00 65,00 -": the exclusive-night
+    # circuit carries no separate abonnement, so its yearly fee is 0, not the
+    # standard 65 (billed once on the main connection).
+    from custom_components.be_electricity_prices.pricing import (
+        yearly_fixed_fee_for_meter,
+    )
+
+    assert snap.energy.yearly_fixed_fee_exclusive_night == pytest.approx(0.0)
+    assert yearly_fixed_fee_for_meter(snap.energy, "exclusive_night") == pytest.approx(
+        0.0
+    )
     # All five Wallonia DSOs and a sanity-check on the AIEG row.
     assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
     aieg = snap.dsos["aieg"]
