@@ -176,8 +176,8 @@ def test_tou_slot_weekend_offpeak_default() -> None:
 
 
 def test_tou_slot_holiday_treated_as_weekend_default_rule() -> None:
-    # May 1, 2026 is a Friday (weekday 4) but is Labour Day. Under
-    # weekend_offpeak rule (SmartFlex), holiday afternoon collapses to
+    # May 1, 2026 is a Friday (weekday 4) but is Labour Day. Under the
+    # generic weekend_offpeak rule, holiday afternoon collapses to
     # offpeak just like a weekend.
     assert tou_slot(datetime(2026, 5, 1, 9, 0)) == "offpeak"
     assert tou_slot(datetime(2026, 5, 1, 19, 0)) == "offpeak"
@@ -192,7 +192,7 @@ def test_tou_slot_holiday_treated_as_weekend_no_peak_rule() -> None:
 
 
 def test_tou_slot_weekend_offpeak_at_hour_boundaries() -> None:
-    """SmartFlex weekend_offpeak rule maps every weekend hour to
+    """The generic weekend_offpeak rule maps every weekend hour to
     offpeak. Probe both Saturday and Sunday at the weekday boundaries
     (07:00, 11:00, 17:00, 22:00, 01:00) so a regression that flipped
     `<` to `<=` (or vice versa) on either edge surfaces here."""
@@ -233,6 +233,44 @@ def test_tou_slot_weekend_no_peak_at_hour_boundaries() -> None:
                 tou_slot(datetime(day.year, day.month, day.day, hour, 0), rule)
                 == expected
             ), f"weekend_no_peak {day} {hour:02d}:00"
+
+
+def test_tou_slot_smartflex_seasonal_midday_is_seasonal() -> None:
+    # SmartFlex super-creuses (offpeak) applies 11-17 only in spring/summer;
+    # in autumn/winter that midday window is creuses (transition).
+    rule = "smartflex_seasonal"
+    assert tou_slot(datetime(2026, 7, 1, 13, 0), rule) == "offpeak"  # summer
+    assert tou_slot(datetime(2026, 1, 15, 13, 0), rule) == "transition"  # winter
+
+
+def test_tou_slot_smartflex_seasonal_overnight_always_creuses() -> None:
+    # 22-07 is always creuses (transition) both seasons; a regression that
+    # billed it offpeak would under-price the whole EV/heat-pump window.
+    rule = "smartflex_seasonal"
+    for month in (1, 7):  # winter + summer
+        for hour in (0, 1, 3, 6, 22, 23):
+            assert tou_slot(datetime(2026, month, 20, hour, 0), rule) == "transition", (
+                f"smartflex overnight {month:02d} {hour:02d}:00"
+            )
+
+
+def test_tou_slot_smartflex_seasonal_peak_and_weekends() -> None:
+    rule = "smartflex_seasonal"
+    # Peak 07-11 + 17-22 both seasons.
+    for month in (1, 7):
+        for hour in (7, 10, 17, 21):
+            assert tou_slot(datetime(2026, month, 15, hour, 0), rule) == "peak"
+    # No weekend exception: a summer Saturday midday is still super-creuses.
+    assert tou_slot(datetime(2026, 7, 4, 13, 0), rule) == "offpeak"  # Sat
+
+
+def test_tou_slot_smartflex_seasonal_season_boundaries() -> None:
+    # Season runs 21/03 (inclusive) to 20/09 (inclusive).
+    rule = "smartflex_seasonal"
+    assert tou_slot(datetime(2026, 3, 21, 13, 0), rule) == "offpeak"
+    assert tou_slot(datetime(2026, 3, 20, 13, 0), rule) == "transition"
+    assert tou_slot(datetime(2026, 9, 20, 13, 0), rule) == "offpeak"
+    assert tou_slot(datetime(2026, 9, 21, 13, 0), rule) == "transition"
 
 
 def test_dso_impact_band_does_not_observe_holidays() -> None:

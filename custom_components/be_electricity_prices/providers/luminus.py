@@ -293,19 +293,18 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         peak = to_float(tou_match.group(1)) / 100.0
         transition = to_float(tou_match.group(2)) / 100.0
         offpeak = to_float(tou_match.group(3)) / 100.0
-        # Known limitation: SmartFlex's three bands (pleines / creuses /
-        # super-creuses) use SEASONAL windows -- super-creuses is 11h-17h
-        # in spring/summer (21/03-20/09) but 22h-7h in autumn/winter. The
-        # pricing engine applies one fixed, non-seasonal TOU schedule
-        # (pricing.tou_slot), so the midday band in particular is priced
-        # at the wrong rate for part of the year. Modelling the seasonal
-        # schedule needs a SmartFlex-specific slot map in the engine; until
-        # then the three rates are surfaced on the fixed schedule.
+        # SmartFlex's three bands (pleines / creuses / super-creuses) use
+        # SEASONAL windows: peak (pleines) is 07-11 + 17-22 all year, the
+        # cheapest super-creuses band applies 11-17 only in spring/summer
+        # (21/03-20/09), and 22-07 is always creuses. The weekend_rule
+        # "smartflex_seasonal" tells pricing.tou_slot to bill those windows
+        # (the "free Sundays" first-year promo is not modelled).
         return TimeOfUseRates(
             peak=peak,
             transition=transition,
             offpeak=offpeak,
             yearly_fixed_fee=fee,
+            weekend_rule="smartflex_seasonal",
         )
 
     if kind == "dynamic":

@@ -147,7 +147,7 @@ class DynamicRates:
     quarter_hourly: bool = False
 
 
-WeekendRule = Literal["weekend_offpeak", "weekend_no_peak"]
+WeekendRule = Literal["weekend_offpeak", "weekend_no_peak", "smartflex_seasonal"]
 
 
 @dataclass(frozen=True, kw_only=True)

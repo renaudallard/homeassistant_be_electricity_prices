@@ -176,6 +176,11 @@ def is_offpeak(when: datetime, region: str = REGION_FLANDERS) -> bool:
 TouSlot = Literal["peak", "transition", "offpeak"]
 
 
+def _is_smartflex_summer(d: date) -> bool:
+    """SmartFlex's spring/summer season: 21 March to 20 September inclusive."""
+    return (3, 21) <= (d.month, d.day) <= (9, 20)
+
+
 def tou_slot(when: datetime, weekend_rule: str = "weekend_offpeak") -> TouSlot:
     """Map a local datetime to its Belgian TOU slot.
 
@@ -189,13 +194,26 @@ def tou_slot(when: datetime, weekend_rule: str = "weekend_offpeak") -> TouSlot:
     plus public holidays (TGEPRESC for Engie, equivalent CWaPE
     document for Luminus). Weekend rule depends on the contract:
 
-      weekend_offpeak  Luminus SmartFlex — Sat/Sun + holidays all
-        off-peak.
+      weekend_offpeak  Sat/Sun + holidays all off-peak (generic CWaPE
+        default).
       weekend_no_peak  Engie Empower Flextime — never peak;
         transition 07:00-11:00 + 17:00-01:00,
         offpeak    01:00-07:00 + 11:00-17:00.
+      smartflex_seasonal  Luminus SmartFlex — seasonal bands applied
+        every day (the card lists no weekend exception; the "free
+        Sundays" promo is a first-year discount, out of scope):
+        peak 07:00-11:00 + 17:00-22:00 both seasons; the 11:00-17:00
+        midday window is super-creuses (offpeak) only in spring/summer
+        (21/03-20/09) and creuses (transition) otherwise; 22:00-07:00
+        is always creuses (transition).
     """
     h = when.hour
+    if weekend_rule == "smartflex_seasonal":
+        if 7 <= h < 11 or 17 <= h < 22:
+            return "peak"
+        if 11 <= h < 17:
+            return "offpeak" if _is_smartflex_summer(when.date()) else "transition"
+        return "transition"
     if when.weekday() >= 5 or is_belgian_holiday(when.date()):
         if weekend_rule == "weekend_no_peak":
             if 7 <= h < 11 or h >= 17 or h < 1:

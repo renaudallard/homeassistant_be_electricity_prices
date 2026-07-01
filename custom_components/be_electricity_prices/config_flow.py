@@ -1812,6 +1812,35 @@ def _tou_weighted_per_kwh(
         return (
             bd_peak.all_in * peak_hours + bd_off.all_in * (168 - peak_hours)
         ) / 168.0
+    if snapshot.energy.weekend_rule == "smartflex_seasonal":
+        # SmartFlex bills seasonal bands every day and its network side
+        # varies on the independent bi-horaire schedule, so a three-sample
+        # weighting can't capture the mix. Average the all-in over a summer
+        # and a winter representative day (24 h each, uniform consumption)
+        # and blend by season length (21/03-20/09 is 184 days, the rest 181).
+        acc = 0.0
+        wsum = 0.0
+        for probe, days in (
+            (date(when_now.year, 7, 1), 184.0),
+            (date(when_now.year, 1, 15), 181.0),
+        ):
+            day0 = datetime.combine(probe, time(), tzinfo=when_now.tzinfo)
+            for hour in range(24):
+                try:
+                    bd_h = compute_breakdown(
+                        snapshot,
+                        dso,
+                        region,
+                        day0 + timedelta(hours=hour),
+                        spot,
+                        meter,
+                        dso_mode,
+                    )
+                except Exception:  # noqa: BLE001
+                    return bd.all_in
+                acc += bd_h.all_in * days
+                wsum += days
+        return acc / wsum
     # CWaPE weekday TOU windows (shared across products):
     #   peak       07-11 + 17-22
     #   transition 11-17 + 22-01

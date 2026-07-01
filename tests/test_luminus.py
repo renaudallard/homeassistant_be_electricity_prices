@@ -238,6 +238,8 @@ def test_smartflex_parses_as_time_of_use() -> None:
     assert snap.energy.transition == pytest.approx(0.1329)
     assert snap.energy.offpeak == pytest.approx(0.0672)
     assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+    # SmartFlex bills seasonal windows, not the generic CWaPE schedule.
+    assert snap.energy.weekend_rule == "smartflex_seasonal"
     # peak > transition > offpeak — correct slot ordering in EUR/kWh.
     assert snap.energy.peak > snap.energy.transition > snap.energy.offpeak
     # All five Wallonia DSOs present (no schema change for the network side).
