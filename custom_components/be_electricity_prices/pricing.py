@@ -236,17 +236,25 @@ def _routed_rate(
     region: str,
     *,
     bi_capable: bool,
+    dso_tariff_mode: DsoTariffMode = "bi_horaire",
 ) -> float:
     """Meter-routing shared by the Fixed and Variable energy branches.
 
     Exclusive-night meters take the dedicated rate when published; a
-    bi-hourly-capable meter takes the peak/off-peak split (on the region's
-    bi-horaire schedule) when published; otherwise the single/current
-    ``base`` rate applies.
+    bi-hourly-capable meter takes the peak/off-peak split when published;
+    otherwise the single/current ``base`` rate applies.
+
+    Under Impact comptage the SMR3 meter registers consumption in the CWaPE
+    bands, so a bi-hourly energy rate follows those bands rather than the
+    plain bi-horaire schedule: the ECO band bills the off-peak rate and the
+    MEDIUM/PIC bands the peak rate (per the supplier cards' Impact footnote).
+    This keeps the energy side aligned with the Impact-banded distribution.
     """
     if meter == "exclusive_night" and energy.exclusive_night is not None:
         return energy.exclusive_night
     if bi_capable and energy.peak is not None and energy.offpeak is not None:
+        if dso_tariff_mode == "impact":
+            return energy.offpeak if dso_impact_band(when) == "eco" else energy.peak
         return energy.offpeak if is_offpeak(when, region) else energy.peak
     return base
 
@@ -257,6 +265,7 @@ def energy_eur_per_kwh(
     spot_eur_per_kwh: float | None,
     meter: MeterType = "mono",
     region: str = REGION_FLANDERS,
+    dso_tariff_mode: DsoTariffMode = "bi_horaire",
 ) -> float:
     """Return the energy component in EUR/kWh for the given hour.
 
@@ -265,16 +274,29 @@ def energy_eur_per_kwh(
     the split. ``meter == "exclusive_night"`` routes through the
     supplier's ``exclusive_night`` rate when published; the meter
     physically only registers during DSO off-peak hours, so we don't
-    need to gate by ``is_offpeak(when)`` here.
+    need to gate by ``is_offpeak(when)`` here. ``dso_tariff_mode`` lets a
+    bi-hourly rate follow the CWaPE Impact bands under Impact comptage.
     """
     bi_capable = meter in ("bi", "dynamic")
     if isinstance(energy, FixedRates):
         return _routed_rate(
-            energy.single, energy, when, meter, region, bi_capable=bi_capable
+            energy.single,
+            energy,
+            when,
+            meter,
+            region,
+            bi_capable=bi_capable,
+            dso_tariff_mode=dso_tariff_mode,
         )
     if isinstance(energy, VariableRates):
         return _routed_rate(
-            energy.current, energy, when, meter, region, bi_capable=bi_capable
+            energy.current,
+            energy,
+            when,
+            meter,
+            region,
+            bi_capable=bi_capable,
+            dso_tariff_mode=dso_tariff_mode,
         )
     if isinstance(energy, DynamicRates):
         if spot_eur_per_kwh is None:
@@ -541,7 +563,9 @@ def compute_breakdown(
             f"{snapshot.supplier}/{snapshot.contract}; "
             f"available: {sorted(snapshot.dsos)}"
         )
-    energy = energy_eur_per_kwh(snapshot.energy, when, spot_eur_per_kwh, meter, region)
+    energy = energy_eur_per_kwh(
+        snapshot.energy, when, spot_eur_per_kwh, meter, region, dso_tariff_mode
+    )
     network = network_eur_per_kwh(overlay, when, meter, dso_tariff_mode, region)
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
     vat_factor = 1.0 + snapshot.taxes.vat_rate

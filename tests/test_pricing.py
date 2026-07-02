@@ -281,6 +281,30 @@ def test_dso_impact_band_does_not_observe_holidays() -> None:
     assert dso_impact_band(datetime(2026, 12, 25, 18, 0)) == "pic"
 
 
+def test_bihourly_energy_follows_impact_bands_under_impact_mode() -> None:
+    # Under Impact comptage a bi-hourly energy rate must follow the CWaPE
+    # bands (ECO -> off-peak rate, MEDIUM/PIC -> peak rate), not the plain
+    # bi-horaire schedule, so energy stays aligned with the Impact-banded
+    # distribution. The 22:00-01:00 window is MEDIUM (day) under Impact but
+    # night under bi-horaire.
+    e = FixedRates(single=0.2055, peak=0.2055, offpeak=0.1699)
+    night_medium = datetime(2026, 4, 15, 23, 30)  # 22-01 MEDIUM / bi-horaire night
+    eco_midday = datetime(2026, 4, 15, 13, 30)  # 11-17 ECO
+    assert (
+        energy_eur_per_kwh(e, night_medium, None, "bi", "wallonia", "impact") == 0.2055
+    )
+    assert (
+        energy_eur_per_kwh(e, night_medium, None, "bi", "wallonia", "bi_horaire")
+        == 0.1699
+    )
+    assert energy_eur_per_kwh(e, eco_midday, None, "bi", "wallonia", "impact") == 0.1699
+    # A mono meter can't register bands, so Impact mode leaves it on the
+    # single rate.
+    assert energy_eur_per_kwh(e, night_medium, None, "mono", "wallonia", "impact") == (
+        0.2055
+    )
+
+
 def test_tou_slot_weekend_no_peak_rule() -> None:
     # Engie Empower Flextime weekend rule:
     #   transition: 7-11 + 17-1 (so 17-22, 22-23, 0-1)
