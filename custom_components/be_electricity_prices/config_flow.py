@@ -1745,6 +1745,47 @@ def _compare_injection_credit(
     return _compute_injection_price(snapshot, entry, spot_dict)
 
 
+def _period_avg_all_in(
+    snapshot: Any,
+    dso: str,
+    region: str,
+    start: datetime,
+    num_days: int,
+    spot: float | None,
+    meter: Any,
+    dso_mode: Any,
+) -> float | None:
+    """Mean all-in EUR/kWh over ``num_days`` from ``start`` under uniform
+    hourly consumption.
+
+    Sampling every hour lets each hour carry its true energy slot AND network
+    band, so the TOU energy windows and the bi-horaire network bands - which
+    don't align, and both differ on weekends - are each weighted correctly.
+    A three-sample-per-slot weighting instead assigns one network band to a
+    whole energy slot and mis-prices it. Returns None on any compute failure.
+    """
+    from .pricing import compute_breakdown
+
+    total = 0.0
+    count = 0
+    for hour in range(num_days * 24):
+        try:
+            bd = compute_breakdown(
+                snapshot,
+                dso,
+                region,
+                start + timedelta(hours=hour),
+                spot,
+                meter,
+                dso_mode,
+            )
+        except Exception:  # noqa: BLE001
+            return None
+        total += bd.all_in
+        count += 1
+    return total / count if count else None
+
+
 def _tou_weighted_per_kwh(
     snapshot: Any,
     dso: str,
@@ -1864,58 +1905,52 @@ def _tou_weighted_per_kwh(
         return (
             bd_peak.all_in * peak_hours + bd_off.all_in * (168 - peak_hours)
         ) / 168.0
+
+    # Weekday holidays bill under the weekend rule, so a single week that
+    # happens to contain one would skew the slot mix. Walk back to a
+    # holiday-free Mon-Sun week (matches the prior clean-week assumption).
+    def _holiday_free_week(anchor: date) -> date:
+        mon = anchor - timedelta(days=anchor.weekday())
+        for _ in range(12):
+            if not any(is_belgian_holiday(mon + timedelta(days=d)) for d in range(7)):
+                return mon
+            mon -= timedelta(days=7)
+        return mon
+
     if snapshot.energy.weekend_rule == "smartflex_seasonal":
-        # SmartFlex bills seasonal bands every day and its network side
-        # varies on the independent bi-horaire schedule, so a three-sample
-        # weighting can't capture the mix. Average the all-in over a summer
-        # and a winter representative day (24 h each, uniform consumption)
-        # and blend by season length (21/03-20/09 is 184 days, the rest 181).
+        # SmartFlex bills seasonal bands, so blend a summer and a winter
+        # representative WEEK by season length (21/03-20/09 = 184 days, the
+        # rest 181). A full week captures both the seasonal energy bands and
+        # any weekday/weekend network split.
         acc = 0.0
         wsum = 0.0
         for probe, days in (
             (date(when_now.year, 7, 1), 184.0),
             (date(when_now.year, 1, 15), 181.0),
         ):
-            day0 = datetime.combine(probe, time(), tzinfo=when_now.tzinfo)
-            for hour in range(24):
-                try:
-                    bd_h = compute_breakdown(
-                        snapshot,
-                        dso,
-                        region,
-                        day0 + timedelta(hours=hour),
-                        spot,
-                        meter,
-                        dso_mode,
-                    )
-                except Exception:  # noqa: BLE001
-                    return bd.all_in
-                acc += bd_h.all_in * days
-                wsum += days
+            season_monday = datetime.combine(
+                _holiday_free_week(probe), time(), tzinfo=when_now.tzinfo
+            )
+            avg = _period_avg_all_in(
+                snapshot, dso, region, season_monday, 7, spot, meter, dso_mode
+            )
+            if avg is None:
+                return bd.all_in
+            acc += avg * days
+            wsum += days
         return acc / wsum
-    # CWaPE weekday TOU windows (shared across products):
-    #   peak       07-11 + 17-22
-    #   transition 11-17 + 22-01
-    #   offpeak    01-07
-    # Pick one hour comfortably inside each window so the slot lookup
-    # is unambiguous regardless of off-by-one boundary handling.
-    try:
-        bd_peak = compute_breakdown(
-            snapshot, dso, region, base.replace(hour=9), spot, meter, dso_mode
-        )
-        bd_trans = compute_breakdown(
-            snapshot, dso, region, base.replace(hour=13), spot, meter, dso_mode
-        )
-        bd_offpeak = compute_breakdown(
-            snapshot, dso, region, base.replace(hour=3), spot, meter, dso_mode
-        )
-    except Exception:  # noqa: BLE001
-        return bd.all_in  # fall back to live slot rate
-    # Slot weights = hours-per-week the slot is active, shared with the
-    # injection credit so consumption and feed-in agree on the split.
-    wp, wt, wo = _tou_slot_weights(snapshot.energy.weekend_rule)
-    total = wp + wt + wo
-    return (bd_peak.all_in * wp + bd_trans.all_in * wt + bd_offpeak.all_in * wo) / total
+    # A TOU energy slot spans hours with different bi-horaire network bands
+    # (and the weekend rule shifts hours between energy slots), so weighting
+    # one sample per slot mis-prices the network. Average a full
+    # representative week (Mon-Sun) so each hour carries its true energy slot
+    # and network band.
+    week_start = datetime.combine(
+        _holiday_free_week(when_now.date()), time(), tzinfo=when_now.tzinfo
+    )
+    week_avg = _period_avg_all_in(
+        snapshot, dso, region, week_start, 7, spot, meter, dso_mode
+    )
+    return week_avg if week_avg is not None else bd.all_in
 
 
 def _populate_charts(

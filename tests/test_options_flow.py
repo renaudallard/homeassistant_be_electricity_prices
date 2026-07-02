@@ -1214,6 +1214,55 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     assert abs((avg - constants) - expected_energy) < 0.001
 
 
+def test_compare_tou_weights_bihoraire_network_over_full_week() -> None:
+    # For a TOU contract on a bi-horaire DSO network, the annual estimate
+    # must stay independent of the dialog-open hour and blend the network
+    # bands across the week (the energy TOU slots and the bi-horaire network
+    # bands don't align, so a single sample per energy slot mis-prices the
+    # network).
+    from custom_components.be_electricity_prices.config_flow import (
+        _tou_weighted_per_kwh,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        TimeOfUseRates,
+    )
+
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        supplier="engie",
+        contract="engie_empower_flextime",
+        energy=TimeOfUseRates(
+            peak=0.30, transition=0.20, offpeak=0.10, weekend_rule="weekend_no_peak"
+        ),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.14,
+                distribution_offpeak=0.06,
+                transport=0.0145,
+            )
+        },
+    )
+    at_night = datetime(2026, 4, 29, 3, 0, tzinfo=UTC)
+    at_peak = datetime(2026, 4, 29, 18, 0, tzinfo=UTC)
+    a = _tou_weighted_per_kwh(
+        snap, "ores", "wallonia", at_night, None, "dynamic", "bi_horaire"
+    )
+    b = _tou_weighted_per_kwh(
+        snap, "ores", "wallonia", at_peak, None, "dynamic", "bi_horaire"
+    )
+    assert a is not None and b is not None
+    assert a == pytest.approx(b)  # independent of the dialog-open hour
+    # The network band is blended, not pinned to one sample: the result sits
+    # strictly between the all-offpeak and all-peak network extremes.
+    taxes = 0.05 + 0.002 + 0.015  # federal + contribution + wallonia renewables
+    lo = 0.10 + (0.06 + 0.0145) + taxes  # cheapest hour (offpeak energy+net)
+    hi = 0.30 + (0.14 + 0.0145) + taxes  # dearest hour (peak energy+net)
+    assert lo < a < hi
+
+
 def test_compare_smartflex_seasonal_is_dialog_time_invariant() -> None:
     # SmartFlex's seasonal per-kWh estimate must not depend on the hour the
     # user opened the dialog, and must sit between the pure-offpeak and
