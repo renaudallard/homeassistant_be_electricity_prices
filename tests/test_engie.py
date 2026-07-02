@@ -292,6 +292,21 @@ def test_empty_house_is_mono_only() -> None:
     assert snap.energy.offpeak is None
     assert snap.energy.exclusive_night is None
     assert snap.taxes.flanders_renewables == pytest.approx(0.01582)
+    # A vacant home has no registered domicile, so it bills the card's
+    # 'sans domicile' energy fund (10,07/mo), not the 'avec domicile' 0.
+    assert snap.taxes.energy_fund_eur_per_month == pytest.approx(10.07)
+
+
+def test_energy_fund_selects_domicile_case() -> None:
+    # Default (normal contracts) reads 'avec domicile' (0 on this card);
+    # sans_domicile=True (Empty House) reads the 'sans domicile' 10,07.
+    from custom_components.be_electricity_prices.providers.engie import (
+        _extract_energy_fund,
+    )
+
+    text = fixture_text("engie_empty_house_v.pdf")
+    assert _extract_energy_fund(text) == pytest.approx(0.0)
+    assert _extract_energy_fund(text, sans_domicile=True) == pytest.approx(10.07)
 
 
 def test_easy_variable_uses_monthly_not_annual_estimate() -> None:

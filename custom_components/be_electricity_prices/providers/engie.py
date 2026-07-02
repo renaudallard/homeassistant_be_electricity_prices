@@ -367,7 +367,9 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
         if region_key == REGION_FLANDERS:
             dsos.update(_extract_flanders_dsos(text))
             flanders_renewables = renewables
-            energy_fund = _extract_energy_fund(text)
+            energy_fund = _extract_energy_fund(
+                text, sans_domicile=contract_id == "engie_empty_house"
+            )
         elif region_key == REGION_WALLONIA:
             dsos.update(_extract_wallonia_dsos(text))
             wallonia_renewables = renewables
@@ -653,12 +655,18 @@ def _extract_energy_contribution(text: str) -> float:
     return float(f"0.{match.group(1)}") / 100.0
 
 
-def _extract_energy_fund(text: str) -> float:
+def _extract_energy_fund(text: str, *, sans_domicile: bool = False) -> float:
     """Flemish residential energy fund. Optional outside Flanders, so a
     miss legitimately means 'no fund on this card' -- keep the silent
-    default."""
+    default.
+
+    The card prints two sub-cases: 'avec domicile' (0 for most products)
+    and 'sans domicile' (a positive fee). The Empty House product is created
+    for vacant homes, which by definition have no registered domicile, so it
+    bills the 'sans domicile' rate rather than 0."""
+    label = "sans" if sans_domicile else "avec"
     match = re.search(
-        r"Résidentiel\s+\(avec\s+domicile\)\s+([\d,.]+)",
+        rf"Résidentiel\s+\({label}\s+domicile\)\s+([\d,.]+)",
         text,
     )
     return to_float(match.group(1)) if match else 0.0
