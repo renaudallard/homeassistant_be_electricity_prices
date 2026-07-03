@@ -161,13 +161,19 @@ class TimeOfUseRates:
 
     Weekend rule is product-dependent (``weekend_rule``):
 
-      weekend_offpeak (Luminus SmartFlex):
-        Saturday and Sunday are entirely off-peak.
+      weekend_offpeak (generic CWaPE default):
+        Saturday, Sunday and public holidays are entirely off-peak.
 
       weekend_no_peak (Engie Empower Flextime):
         peak       : never
         transition : 07:00-11:00 + 17:00-01:00
         offpeak    : 01:00-07:00 + 11:00-17:00
+
+      smartflex_seasonal (Luminus SmartFlex):
+        Seasonal bands applied every day, no weekend exception. The
+        11:00-17:00 midday window is off-peak in spring/summer
+        (21/03-20/09) and transition otherwise; 22:00-07:00 is always
+        transition. See ``pricing.tou_slot``.
 
     Requires a smart meter (SMR3). Like ``VariableRates``, the rates
     can be re-published monthly; the formula field carries the
