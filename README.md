@@ -479,6 +479,12 @@ and capacity tracking work normally on both entries.
 
 ## Development
 
+Architecture and internals are documented for contributors under
+[`docs/`](./docs/): a module map and end-to-end data flow, the coordinator
+refresh lifecycle, the pricing model, the config and options flow, the ENTSO-E
+and backfill data sources, the provider framework, and one reference page per
+supplier extractor. Start with [`docs/README.md`](./docs/README.md).
+
 ```bash
 ruff check .
 ruff format --check .
