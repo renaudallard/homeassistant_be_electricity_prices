@@ -2703,7 +2703,12 @@ async def _compute_current_year_cost(
 # v12: InjectionRates gained per-slot peak/transition/offpeak (Engie
 # Empower Flextime's per-slot feed-in tariff). Bump so a cached Flextime
 # snapshot is re-fetched with the triplet instead of the flat single rate.
-_SNAPSHOT_SCHEMA_VERSION = 12
+# v13: the July 2026 Eneco cards dropped the "/ VALORISATIE" suffix from
+# the injection heading, so 0.8.3 parsed every Eneco injection to None and
+# cached it. 0.8.4 fixed the anchor but probe-based freshness keeps serving
+# that stale None until Eneco republishes. Bump so the mis-parsed snapshot
+# is dropped and re-fetched with the injection block populated.
+_SNAPSHOT_SCHEMA_VERSION = 13
 
 
 def _snapshot_to_dict(
