@@ -908,6 +908,12 @@ async def _check_octaplus(
     for contract in octaplus._CONTRACTS:
         cid = contract.contract_id
         for region_key in ("flanders", "wallonia"):
+            # octaplus_fixed_impact is Wallonia-only (CWaPE bands); other
+            # contracts leave regions None (both). Skip the regions a
+            # contract does not serve, like the mega/totalenergies loops,
+            # so the Flanders Fixed card is not parsed as an Impact card.
+            if contract.regions and region_key not in contract.regions:
+                continue
             prefix = f"octaplus/{cid}/{region_key}"
             try:
                 snap = await _fetch_with_retry(
