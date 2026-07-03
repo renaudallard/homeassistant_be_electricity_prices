@@ -273,9 +273,11 @@ class DsoOverlay:
     # billed value. None outside Brussels or when the card omits the table.
     brussels_osp_by_tier: dict[str, float] | None = None
     # Prosumer (compensation-regime) tariff in EUR per kVA of solar inverter
-    # capacity per year. Wallonia DSOs publish this; Flanders digital meters
-    # don't (post-2024 SMR3 connections), so it stays None there. Valid in
-    # Wallonia until 2030 per CWaPE.
+    # capacity per year, valid in Wallonia until 2030 per CWaPE. Wallonia DSOs
+    # publish it on every card. Some Flanders supplier cards also carry a
+    # prosumer column for compensation-regime installs, which the extractors
+    # parse, so it is not always None in Flanders; it stays None only when a
+    # card omits the column.
     prosumer_eur_per_kva_year: float | None = None
     # Tarif Impact (Wallonia-only, opt-in for SMR3 customers). Three
     # distribution rates indexed by CWaPE-defined hour-of-day bands:
