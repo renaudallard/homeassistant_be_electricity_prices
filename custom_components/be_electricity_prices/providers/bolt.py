@@ -466,8 +466,11 @@ def _extract_injection(text: str) -> InjectionRates | None:
     # Anchor on the header rather than counting "Prix mensuel"
     # occurrences, so a third consumption-side row can't shift the match.
     # factor/base stay None: Bolt's feed-in is a printed indicative, not a
-    # spot formula.
-    m = re.search(r"Injection\b.*?Prix mensuel\s+([\d.,]+)\s+[\d.,]+", text, re.S)
+    # spot formula. The July 2026 fix cards print a NEGATIVE second
+    # ("Exclusif nuit") column ("Prix mensuel 3,40 -0,43"); only the first
+    # column is billed but the second is a required anchor token, so allow
+    # its optional minus sign.
+    m = re.search(r"Injection\b.*?Prix mensuel\s+([\d.,]+)\s+-?[\d.,]+", text, re.S)
     if not m:
         return None
     current = to_float(m.group(1)) / 100.0

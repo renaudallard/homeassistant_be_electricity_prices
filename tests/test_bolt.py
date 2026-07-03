@@ -34,6 +34,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from tests import fixture_text
 from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
@@ -89,6 +90,19 @@ def test_injection_is_flat_monthly_indicative() -> None:
         assert snap.injection.current == pytest.approx(0.0531)
         assert snap.injection.factor is None
         assert snap.injection.base is None
+
+
+def test_injection_accepts_negative_second_column() -> None:
+    # The July 2026 fix cards print a NEGATIVE "Exclusif nuit" second
+    # injection column ("Prix mensuel 3,40 -0,43"). Only the first column
+    # is billed, but the second is a required anchor token, so the parser
+    # must tolerate its minus sign instead of returning None.
+    text = "Injection\nPrix mensuel 3,40 -0,43 Compteur\n"
+    inj = bolt_mod._extract_injection(text)
+    assert inj is not None
+    assert inj.current == pytest.approx(0.034)
+    assert inj.factor is None
+    assert inj.base is None
 
 
 def test_variable_missing_bihourly_rates_fails_loud() -> None:
