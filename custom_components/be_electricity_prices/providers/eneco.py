@@ -556,7 +556,7 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
 
     Layout (every contract):
 
-      INJECTIE / VALORISATIE
+      AFNAME EN INJECTIE [/ VALORISATIE]
        ... [optional 'Zie afname' recap block on Power Dynamic] ...
        INJECTIE
         <c/kWh value(s)> Geschatte jaarprijs
@@ -566,8 +566,12 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
     Power Fix and Flex use Belpex monthly; Power Dynamic uses Belpex-H
     (hourly). Injection is VAT-exempt for residential, so values are
     EUR/kWh = c/kWh / 100.
+
+    The July 2026 cards dropped the "/ VALORISATIE" suffix from the
+    section heading, so anchor on the stable "AFNAME EN INJECTIE" prefix
+    (present on both the old and the new cards) instead.
     """
-    anchor = re.search(r"INJECTIE\s*/\s*VALORISATIE", text)
+    anchor = re.search(r"AFNAME\s+EN\s+INJECTIE", text)
     if not anchor:
         return None
     section = text[anchor.end() :]

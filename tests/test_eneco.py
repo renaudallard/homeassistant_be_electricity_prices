@@ -264,6 +264,18 @@ def test_fix_extracts_injection_rates() -> None:
     assert inj.formula is not None and "BELPEX" in inj.formula
 
 
+def test_flex_extracts_injection_rates() -> None:
+    snap = parse_snapshot(fixture_text("eneco_flex.pdf"), "power_flex", "test://flex")
+    inj = snap.injection
+    assert inj is not None
+    # Power Flex settles injection on the monthly Belpex-injectie, so it
+    # surfaces only the monthly indicative ("Maandprijs 4,76 c/kWh"); the
+    # monthly coefficients must not leak out as hourly-spot factor/base.
+    assert inj.current == pytest.approx(0.0476)
+    assert inj.factor is None
+    assert inj.base is None
+
+
 def test_dynamic_extracts_injection_rates() -> None:
     snap = parse_snapshot(fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
     inj = snap.injection
@@ -273,6 +285,26 @@ def test_dynamic_extracts_injection_rates() -> None:
     assert inj.factor == pytest.approx(1.0)
     assert inj.base == pytest.approx(-0.01188)
     assert inj.current == pytest.approx(0.0592)
+
+
+def test_injection_survives_valorisatie_suffix_drop() -> None:
+    # The July 2026 cards renamed the injection heading from
+    # "AFNAME EN INJECTIE / VALORISATIE" to just "AFNAME EN INJECTIE".
+    # The old anchor keyed off the dropped "/ VALORISATIE" suffix, which
+    # zeroed every Eneco injection credit (issue #35). Parsing must still
+    # find the block after the rename.
+    for fixture, contract, expected in (
+        ("eneco_fix.pdf", "power_fix", 0.0476),
+        ("eneco_flex.pdf", "power_flex", 0.0476),
+        ("eneco_dyn.pdf", "power_dynamic", 0.0592),
+    ):
+        text = fixture_text(fixture).replace(
+            "AFNAME EN INJECTIE / VALORISATIE", "AFNAME EN INJECTIE"
+        )
+        assert "VALORISATIE" not in text, fixture
+        snap = parse_snapshot(text, contract, f"test://{fixture}")
+        assert snap.injection is not None, fixture
+        assert snap.injection.current == pytest.approx(expected), fixture
 
 
 # ---- fetch_for_month (historical billing) ----------------------------------
