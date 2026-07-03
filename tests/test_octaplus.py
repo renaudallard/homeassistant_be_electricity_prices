@@ -254,6 +254,66 @@ def test_wallonia_dsos_extract_full_set() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.04)
 
 
+def test_wallonia_dsos_new_2026_template() -> None:
+    # The 2026 template recased/renamed the row labels (AIEG -> Aieg,
+    # TECTEO - RESA -> RESA, REGIEDEWAVRE -> Régie de Wavre) and swapped
+    # the last two columns (now terme_fixe | transport | prosumer). The
+    # parser must still surface every DSO and keep the prosumer forfait
+    # (~80 EUR/kVA/an) apart from the transport rate (~2-3 c€/kWh).
+    from custom_components.be_electricity_prices.providers.octaplus import (
+        _extract_wallonia_dsos,
+    )
+
+    text = (
+        "Aieg 10,87 12,05 6,67 15,07 9,82 4,56 6,67 19,49 2,75 81,04\n"
+        "Aiesh 13,64 15,17 8,22 19,07 12,29 5,50 8,22 17,92 2,75 99,29\n"
+        "ORES (Brab. wallon) 11,98 13,27 7,39 16,58 10,83 5,09 7,39 14,10 2,75 85,84\n"
+        "Régie de Wavre 12,48 13,78 7,83 17,12 11,31 5,51 7,83 26,44 2,75 93,00\n"
+        "RESA 11,07 12,20 7,02 15,12 10,05 4,99 7,02 26,50 2,75 84,22\n"
+    )
+    dsos = _extract_wallonia_dsos(text)
+    assert set(dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    aieg = dsos["aieg"]
+    assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.04)
+    assert aieg.transport == pytest.approx(0.0275)
+    assert aieg.data_management_per_year == pytest.approx(19.49)
+
+
+def test_publication_month_reads_fiche_tarifaire_banner() -> None:
+    # The pre-2026 title line still parses, and the 2026 redesign's
+    # "FICHE TARIFAIRE <MOIS> <YYYY>" banner is the fallback, including the
+    # accented month names.
+    from custom_components.be_electricity_prices.providers.octaplus import (
+        _extract_publication_month,
+    )
+
+    assert (
+        _extract_publication_month(
+            "Clients résidentiels en Wallonie - 04/2026 - Tarifs 6% TVAC"
+        )
+        == "04/2026"
+    )
+    assert _extract_publication_month("FICHE TARIFAIRE JUILLET 2026") == "07/2026"
+    assert _extract_publication_month("FICHE TARIFAIRE FÉVRIER 2026") == "02/2026"
+    assert _extract_publication_month("FICHE TARIFAIRE AOÛT 2026") == "08/2026"
+
+
+def test_dynamic_injection_survives_reworded_lead_in() -> None:
+    # The 2026 dynamic card reworded the injection lead-in from "Le prix
+    # de votre injection ..." to "les prix de l'électricité injectée sont
+    # indexés ..."; the formula anchor must still bind so the feed-in
+    # credit is not zeroed.
+    reworded = _text("octaplus_dynamic_w.pdf").replace(
+        "Le prix de votre injection",
+        "les prix de l'électricité injectée sont indexés",
+    )
+    assert "Le prix de votre injection" not in reworded
+    snap = parse_snapshot("octaplus_dynamic", reworded, "wallonia")
+    assert snap.injection is not None
+    assert snap.injection.factor is not None
+    assert snap.injection.base is not None
+
+
 def test_dynamic_pdf_uses_spaced_dso_label() -> None:
     # The Dynamic card renders "REGIE DE WAVRE" with regular spaces
     # (vs. the Fixed card's "REGIEDEWAVRE"); the label regex tolerates

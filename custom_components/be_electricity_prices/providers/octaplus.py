@@ -67,6 +67,7 @@ from ._pdf import (
     SIGN_CHARS,
     fetch_pdf_text_aligned,
     fetch_text,
+    fold_accents,
     head_freshness_key,
     parse_sign,
     parse_valid_until,
@@ -292,7 +293,13 @@ def _vat_multiplier(text: str) -> float:
 _EPEX_FORMULA = (
     rf"Epex\s*15\s*'?\s*\*\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)"
 )
-_INJECTION_LEAD = r"Le\s+prix\s+de\s+votre\s+injection"
+# The 2026 template reworded the injection lead-in from "Le prix de votre
+# injection est indexé ..." to "les prix de l'électricité injectée sont
+# indexés ..."; accept either (with the curly apostrophe the card uses).
+_INJECTION_LEAD = (
+    r"(?:Le\s+prix\s+de\s+votre\s+injection"
+    r"|prix\s+de\s+l['’]électricité\s+injectée\s+sont\s+indexés)"
+)
 
 
 def _dynamic_consumption_formula(text: str) -> re.Match[str] | None:
@@ -402,18 +409,44 @@ def _meter_value(text: str, label_pattern: str) -> float | None:
     return to_float(match.group(1)) / 100.0
 
 
-def _extract_publication_month(text: str) -> str:
-    """Pull MM/YYYY off the OCTA+ title line.
+_FRENCH_MONTHS: dict[str, str] = {
+    "janvier": "01",
+    "fevrier": "02",
+    "mars": "03",
+    "avril": "04",
+    "mai": "05",
+    "juin": "06",
+    "juillet": "07",
+    "aout": "08",
+    "septembre": "09",
+    "octobre": "10",
+    "novembre": "11",
+    "decembre": "12",
+}
 
-    Every card prints ``Clients résidentiels en <region> - MM/YYYY -
-    Tarifs N% TVAC`` near the top. Anchor on that prose so a footer
-    reference matching ``-MM/YYYY-`` can't shadow the title's date.
+
+def _extract_publication_month(text: str) -> str:
+    """Pull MM/YYYY off the OCTA+ card.
+
+    Cards through mid-2026 printed ``Clients résidentiels en <region> -
+    MM/YYYY - Tarifs N% TVAC`` near the top; anchor on that prose so a
+    footer reference matching ``-MM/YYYY-`` can't shadow the title date.
+    The 2026 redesign dropped that line and moved the date to a
+    ``FICHE TARIFAIRE <MOIS> <YYYY>`` banner with the French month spelled
+    out (accented), so fall back to that.
     """
     match = re.search(
         r"Clients\s+r[ée]sidentiels[^\n]{0,80}?-\s*(\d{1,2})/(\d{4})\s*-",
         text,
     )
-    return f"{match.group(1)}/{match.group(2)}" if match else ""
+    if match:
+        return f"{match.group(1)}/{match.group(2)}"
+    banner = re.search(r"FICHE\s+TARIFAIRE\s+([^\s\d]+)\s+(\d{4})", text)
+    if banner:
+        month = _FRENCH_MONTHS.get(fold_accents(banner.group(1)))
+        if month:
+            return f"{month}/{banner.group(2)}"
+    return ""
 
 
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
@@ -523,6 +556,9 @@ def _extract_flanders_renewables(text: str) -> float:
 # ---- DSO row parsers ----------------------------------------------------------
 
 
+# Matched case-insensitively (see _extract_wallonia_dsos): the 2026
+# template recased the labels from ALLCAPS to title case and renamed two
+# of them ("TECTEO - RESA" -> "RESA", "REGIEDEWAVRE" -> "Régie de Wavre").
 _WALLONIA_LABELS: tuple[tuple[str, str], ...] = (
     ("AIEG", DSO_AIEG),
     ("AIESH", DSO_AIESH),
@@ -530,10 +566,12 @@ _WALLONIA_LABELS: tuple[tuple[str, str], ...] = (
     # ``ORES`` may or may not have a space before the opening paren
     # depending on which OCTA+ card we hit.
     (r"ORES\s*\(", DSO_ORES),
-    (r"TECTEO\s*-\s*RESA", DSO_RESA),
-    # Different OCTA+ cards print this either as "REGIEDEWAVRE",
-    # "REGIE DE WAVRE", or other spacing combinations.
-    (r"REGIE\s*DE\s*WAVRE", DSO_REW),
+    # Older cards prefixed this "TECTEO - RESA"; the bare "RESA" token
+    # anchors both spellings.
+    ("RESA", DSO_RESA),
+    # Older cards printed "REGIEDEWAVRE" (no spaces); the accent class and
+    # optional spacing anchor both.
+    (r"R[ée]gie\s*de\s*Wavre", DSO_REW),
 )
 
 
@@ -551,6 +589,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
             + r"([\d.,]+)\s+([\d.,]+)",
             text,
+            re.IGNORECASE,
         )
         if not match:
             continue
@@ -562,8 +601,14 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         eco = to_float(match.group(6))
         excl_night = to_float(match.group(7))
         terme_fixe = to_float(match.group(8))
-        prosumer = to_float(match.group(9))
-        transport = to_float(match.group(10))
+        # Cols 9/10 are the prosumer forfait (€/kVA/an) and the transport
+        # rate (c€/kWh), but the 2026 template swapped their order.
+        # Disambiguate by magnitude: the prosumer forfait (~80-100) always
+        # dwarfs the transport rate (~2-3 c€/kWh).
+        col_a = to_float(match.group(9))
+        col_b = to_float(match.group(10))
+        prosumer = max(col_a, col_b)
+        transport = min(col_a, col_b)
         out[key] = DsoOverlay(
             distribution_single=mono / 100.0,
             distribution_peak=peak / 100.0,
