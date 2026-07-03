@@ -306,14 +306,24 @@ def _extract_fee_and_flanders_renewables(
             r"(\d+(?:,\d+)?)\s+meter Piekuren",
             text,
         )
-        renew_match = re.search(r"^Verbruik\s+(\d+,\d+)\s*$", text, re.MULTILINE)
+        # The July 2026 Flexy card re-rendered the Vlaanderen renewable
+        # onto its OWN line ABOVE the "Verbruik" label ("1,60\nVerbruik")
+        # instead of after it ("Verbruik 1,60"), which stopped the old
+        # same-line anchor from matching and took the whole card offline.
+        # Accept either order, scoped to the Vlaanderen block so the later
+        # federal "Verbruik tussen 0 & 3.000 kWh" row cannot shadow it.
+        renew_match = re.search(
+            r"Verbruik\s+(\d+,\d+)|(\d+,\d+)\s+Verbruik",
+            _flanders_energy_block(text),
+        )
         if not fee_match:
             raise ExtractorError("Ecofix Flexy: yearly fixed fee not found")
         if not renew_match:
             raise ExtractorError("Ecofix Flexy: Vlaanderen renewables not found")
+        renewable = renew_match.group(1) or renew_match.group(2)
         return (
             to_float(fee_match.group(1)),
-            to_float(renew_match.group(1)) / 100.0,
+            to_float(renewable) / 100.0,
         )
 
     block = _flanders_energy_block(text)

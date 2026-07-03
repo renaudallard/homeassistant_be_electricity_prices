@@ -304,6 +304,21 @@ def test_flexy_injection_surfaces_monthly_indicative_only() -> None:
     assert inj.formula is not None and "BELPEX-SPP-M" in inj.formula
 
 
+def test_flexy_renewables_survives_number_before_verbruik_layout() -> None:
+    # The July 2026 Flexy card moved the Vlaanderen renewable onto its own
+    # line ABOVE the "Verbruik" label ("1,60\nVerbruik" instead of
+    # "Verbruik 1,60"), which raised "Vlaanderen renewables not found" and
+    # took the whole card offline. Both orders must yield 0.016 EUR/kWh.
+    base = _layout(_FLEXY)
+    assert "Verbruik 1,60" in base
+    snap_same = parse_snapshot("ecofix_flexy", base, "flanders", "test://f")
+    assert snap_same.taxes.flanders_renewables == pytest.approx(0.016)
+
+    reflowed = base.replace("Verbruik 1,60", "1,60\nVerbruik", 1)
+    snap_reflow = parse_snapshot("ecofix_flexy", reflowed, "flanders", "test://f")
+    assert snap_reflow.taxes.flanders_renewables == pytest.approx(0.016)
+
+
 # ---- ORES sub-area drift detection -----------------------------------------
 
 
