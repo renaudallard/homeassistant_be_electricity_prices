@@ -144,9 +144,9 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef("mega_online_flex", "Mega Online Flex", "variable", "Online Flex"),
     _ContractDef("mega_cosy_fixed", "Mega Cosy Fixed", "fixed", "Cosy Fixed"),
     _ContractDef("mega_cosy_flex", "Mega Cosy Flex", "variable", "Cosy Flex"),
-    _ContractDef(
-        "mega_offpeak_fixed", "Mega Off-peak Fixed", "fixed", "Off-peak Fixed"
-    ),
+    # Mega discontinued "Off-peak Fixed" (July 2026): the listing no longer
+    # advertises it and its CDN PDFs are gone. Only "Off-peak Flex" and
+    # "Off-peak Impact" remain. discover() re-surfaces it if Mega revives it.
     _ContractDef(
         "mega_offpeak_flex", "Mega Off-peak Flex", "variable", "Off-peak Flex"
     ),
