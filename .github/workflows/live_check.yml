@@ -26,9 +26,13 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    # Covers the ~1 h worst-case retry window below plus setup/fetch, well
-    # under the 6 h default so a hung run can't idle for hours.
-    timeout-minutes: 75
+    # Must comfortably exceed the retry loop's wall-clock budget below
+    # (capped at ~90 min) plus one final sweep and the issue-creation
+    # steps. The previous 75 min was shorter than the ~59 min of sleeps
+    # plus seven network sweeps, so a persistently broken extractor timed
+    # the job out mid-retry and filed nothing. Still well under the 6 h
+    # default so a hung run can't idle for hours.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -57,6 +61,14 @@ jobs:
           attempts=7
           delays="10 30 60 120 300 3000"
           set -- $delays
+          # Wall-clock budget for the whole retry loop. A persistently
+          # broken extractor keeps retrying, and the ~59 min of sleeps plus
+          # seven network sweeps used to overrun the job timeout and cancel
+          # the job BEFORE the issue-creation steps below, filing nothing.
+          # Stop retrying once the next sleep would cross this deadline so
+          # the issue always gets filed; the job timeout only needs to
+          # cover this plus one final sweep and the gh steps.
+          retry_deadline=$((SECONDS + 5400))
           for i in $(seq 1 "$attempts"); do
             echo "::group::attempt $i"
             python scripts/live_check.py > report.md
@@ -77,6 +89,10 @@ jobs:
             if [ "$i" -lt "$attempts" ]; then
               sleep_for=$1
               shift
+              if [ $((SECONDS + sleep_for)) -ge "$retry_deadline" ]; then
+                echo "retry budget spent; filing on the current failure" >&2
+                break
+              fi
               echo "attempt $i failed (exit $rc), sleeping ${sleep_for}s..." >&2
               sleep "$sleep_for"
             fi
