@@ -1403,12 +1403,15 @@ BYTES_WARN_THRESHOLD = 5_000_000
 #   * mega: ~5.3 MB (~342KB listing fetched once via the harness's
 #     listing-cache + 33 region PDFs at ~150KB each). Allow 7 MB so a
 #     slow CI day or a slightly larger PDF batch doesn't fire.
+#   * octaplus: ~17.6 MB (8 contracts x 2 regions at ~1 MB each after the
+#     2026 card redesign; fixed_impact is Wallonia-only). Allow 22 MB.
 _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     "bolt": 50_000_000,
     "totalenergies": 15_000_000,
     "engie": 8_000_000,
     "ecofix": 8_000_000,
     "mega": 7_000_000,
+    "octaplus": 22_000_000,
 }
 
 # Per-supplier latency budgets (override the global). NOTE: elapsed_s
