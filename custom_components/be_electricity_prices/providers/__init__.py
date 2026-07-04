@@ -39,6 +39,7 @@ from .base import (
     EnergyRates,
     ExtractorError,
     FixedRates,
+    SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
@@ -46,6 +47,7 @@ from .base import (
 )
 from .bolt import EXTRACTOR as _BOLT
 from .cociter import EXTRACTOR as _COCITER
+from .custom import EXTRACTOR as _CUSTOM
 from .dats24 import EXTRACTOR as _DATS24
 from .ebem import EXTRACTOR as _EBEM
 from .ecofix import EXTRACTOR as _ECOFIX
@@ -72,6 +74,9 @@ EXTRACTORS: dict[str, SupplierExtractor] = {
     _ECOPOWER.id: _ECOPOWER,
     _FRANK.id: _FRANK,
     _OCTAPLUS.id: _OCTAPLUS,
+    # Expert escape hatch, listed last so it sorts to the bottom of the
+    # supplier dropdown.
+    _CUSTOM.id: _CUSTOM,
 }
 
 
@@ -96,6 +101,7 @@ __all__ = [
     "EXTRACTORS",
     "ExtractorError",
     "FixedRates",
+    "SpotMonthlyRates",
     "SupplierExtractor",
     "SupplierSnapshot",
     "TaxOverlay",
