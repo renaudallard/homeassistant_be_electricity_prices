@@ -50,7 +50,9 @@ import aiohttp
 
 from ..const import REGIONS
 
-TariffKind = Literal["fixed", "variable", "dynamic", "tou", "tou_impact"]
+TariffKind = Literal[
+    "fixed", "variable", "dynamic", "tou", "tou_impact", "spot_monthly"
+]
 
 _ALL_REGIONS: frozenset[str] = frozenset(REGIONS)
 
@@ -147,6 +149,29 @@ class DynamicRates:
     quarter_hourly: bool = False
 
 
+@dataclass(frozen=True, kw_only=True)
+class SpotMonthlyRates:
+    """Monthly-indexed energy contract: ``factor x monthly_mean(spot) + base``.
+
+    The energy rate is a single flat value for the whole delivery month,
+    equal to ``factor`` times the arithmetic mean of that month's hourly
+    Day-Ahead spot plus ``base`` (EUR/kWh). Used by group-purchase style
+    products (e.g. the Mega iChoosr / Samen Overstappen groepsaankoop)
+    that index the commodity to the realized monthly average rather than
+    the live hourly spot. The coordinator computes the mean from its
+    ENTSO-E spot cache and threads it through the same ``spot_eur_per_kwh``
+    parameter ``DynamicRates`` uses, so pricing stays a pure formula.
+
+    Unlike ``DynamicRates`` the rate never varies within the month, so it
+    always bills on the hourly grid (no ``quarter_hourly``). The current
+    month's mean is a running estimate until the month closes.
+    """
+
+    factor: float
+    base: float
+    yearly_fixed_fee: float = 0.0
+
+
 WeekendRule = Literal["weekend_offpeak", "weekend_no_peak", "smartflex_seasonal"]
 
 
@@ -214,7 +239,14 @@ class ImpactRates:
     formula: str | None = None
 
 
-EnergyRates = FixedRates | VariableRates | DynamicRates | TimeOfUseRates | ImpactRates
+EnergyRates = (
+    FixedRates
+    | VariableRates
+    | DynamicRates
+    | TimeOfUseRates
+    | ImpactRates
+    | SpotMonthlyRates
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -231,13 +263,21 @@ class InjectionRates:
       - ``factor`` and ``base`` define the hourly formula
         ``injection_eur_per_kwh = factor * spot_eur_per_kwh + base``.
         Belgian formulas can produce negative values at low spot - the
-        producer pays to inject - and the pricing engine respects that.
+        producer pays to inject - and the pricing engine respects that
+        unless ``floor_at_zero`` is set.
+
+    ``floor_at_zero`` clamps the resolved injection rate at 0 EUR/kWh. Some
+    contracts (e.g. the Mega groepsaankoop) guarantee the feed-in tariff can
+    never go negative; the pricing engine then takes ``max(rate, 0)`` in both
+    the live and historical paths. Default False keeps the negative-allowed
+    behaviour every scraped card relies on.
     """
 
     current: float | None = None
     factor: float | None = None
     base: float | None = None
     formula: str | None = None
+    floor_at_zero: bool = False
     # Per-slot injection for a time-of-use contract whose feed-in tariff
     # varies by slot (Engie Empower Flextime publishes a peak / transition
     # / super-off-peak triplet, monthly-realized like its consumption

@@ -219,3 +219,79 @@ RESOLUTION_QUARTER: Final = "PT15M"
 UPDATE_INTERVAL_MINUTES: Final = 60
 
 STORAGE_VERSION: Final = 2
+
+# --- Expert custom-formula supplier ------------------------------------------
+# An escape hatch for suppliers that publish no public, machine-resolvable
+# tariff card (e.g. Yuso, the Mega iChoosr / Samen Overstappen groepsaankoop),
+# so the normal scrape-a-card path is impossible. The user types their own
+# commodity formula and all regulated DSO + tax values; the coordinator builds
+# the snapshot locally from the config entry instead of fetching it. Surfaced
+# last in the supplier dropdown and labelled as an expert option.
+SUPPLIER_CUSTOM: Final = "custom"
+
+# One contract per energy mode (the contract step doubles as the mode picker).
+CUSTOM_CONTRACT_DYNAMIC: Final = "custom_dynamic"  # factor * live spot + base
+CUSTOM_CONTRACT_MONTHLY: Final = "custom_monthly"  # factor * monthly-mean spot + base
+CUSTOM_CONTRACT_FIXED: Final = "custom_fixed"  # flat manual rate
+CUSTOM_CONTRACTS: Final = (
+    CUSTOM_CONTRACT_DYNAMIC,
+    CUSTOM_CONTRACT_MONTHLY,
+    CUSTOM_CONTRACT_FIXED,
+)
+
+# Energy formula inputs (interpretation depends on the chosen contract).
+CONF_CUSTOM_ENERGY_FACTOR: Final = "custom_energy_factor"
+CONF_CUSTOM_ENERGY_BASE: Final = "custom_energy_base"
+CONF_CUSTOM_ENERGY_QUARTER_HOURLY: Final = "custom_energy_quarter_hourly"
+CONF_CUSTOM_ENERGY_SINGLE: Final = "custom_energy_single"
+CONF_CUSTOM_ENERGY_PEAK: Final = "custom_energy_peak"
+CONF_CUSTOM_ENERGY_OFFPEAK: Final = "custom_energy_offpeak"
+CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT: Final = "custom_energy_exclusive_night"
+CONF_CUSTOM_YEARLY_FIXED_FEE: Final = "custom_yearly_fixed_fee"
+
+# Injection formula inputs. "current" = a flat EUR/kWh value; "formula" =
+# factor/base applied against the live spot (dynamic) or the monthly mean
+# (monthly-average), floored at zero when the guarantee forbids negatives.
+CONF_CUSTOM_INJECTION_MODE: Final = "custom_injection_mode"
+CUSTOM_INJECTION_MODE_CURRENT: Final = "current"
+CUSTOM_INJECTION_MODE_FORMULA: Final = "formula"
+CUSTOM_INJECTION_MODES: Final = (
+    CUSTOM_INJECTION_MODE_CURRENT,
+    CUSTOM_INJECTION_MODE_FORMULA,
+)
+CONF_CUSTOM_INJECTION_CURRENT: Final = "custom_injection_current"
+CONF_CUSTOM_INJECTION_FACTOR: Final = "custom_injection_factor"
+CONF_CUSTOM_INJECTION_BASE: Final = "custom_injection_base"
+CONF_CUSTOM_INJECTION_FLOOR: Final = "custom_injection_floor"
+
+# Regulated DSO network overlay, entered by hand (region/meter-relevant fields
+# only; all but distribution_single default to 0.0). Maps onto DsoOverlay.
+CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: Final = "custom_dso_distribution_single"
+CONF_CUSTOM_DSO_DISTRIBUTION_PEAK: Final = "custom_dso_distribution_peak"
+CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK: Final = "custom_dso_distribution_offpeak"
+CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT: Final = (
+    "custom_dso_distribution_exclusive_night"
+)
+CONF_CUSTOM_DSO_TRANSPORT: Final = "custom_dso_transport"
+CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR: Final = "custom_dso_data_management_per_year"
+CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR: Final = "custom_dso_capacity_eur_per_kw_year"
+CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR: Final = (
+    "custom_dso_prosumer_eur_per_kva_year"
+)
+CONF_CUSTOM_DSO_DISTRIBUTION_PIC: Final = "custom_dso_distribution_pic"
+CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM: Final = "custom_dso_distribution_medium"
+CONF_CUSTOM_DSO_DISTRIBUTION_ECO: Final = "custom_dso_distribution_eco"
+CONF_CUSTOM_DSO_BRUSSELS_OSP: Final = "custom_dso_brussels_osp"
+
+# Regulated taxes/levies overlay, entered by hand. Maps onto TaxOverlay; the
+# single regional-renewables field fills the region's slot at build time.
+CONF_CUSTOM_TAX_FEDERAL_EXCISE: Final = "custom_tax_federal_excise"
+CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION: Final = "custom_tax_energy_contribution"
+CONF_CUSTOM_TAX_REGIONAL_RENEWABLES: Final = "custom_tax_regional_renewables"
+CONF_CUSTOM_TAX_REGION_CONNECTION_FEE: Final = "custom_tax_region_connection_fee"
+CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH: Final = "custom_tax_energy_fund_per_month"
+# VAT rate the pricing engine grosses up per component (energy/network/taxes;
+# injection stays exempt). Default 0.06 so users type the excl-VAT coefficients
+# printed on their tariff sheet verbatim.
+CONF_CUSTOM_VAT_RATE: Final = "custom_vat_rate"
+DEFAULT_CUSTOM_VAT_RATE: Final = 0.06
