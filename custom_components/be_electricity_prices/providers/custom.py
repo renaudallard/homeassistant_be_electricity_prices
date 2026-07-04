@@ -47,19 +47,70 @@ ENTSO-E API key for them (gated on the contract kind).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 import aiohttp
 
 from ..const import (
+    CONF_CONNECTION_KVA_TIER,
+    CONF_CONTRACT,
+    CONF_CUSTOM_DSO_BRUSSELS_OSP,
+    CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR,
+    CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR,
+    CONF_CUSTOM_DSO_DISTRIBUTION_ECO,
+    CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT,
+    CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM,
+    CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK,
+    CONF_CUSTOM_DSO_DISTRIBUTION_PEAK,
+    CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
+    CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE,
+    CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR,
+    CONF_CUSTOM_DSO_TRANSPORT,
+    CONF_CUSTOM_ENERGY_BASE,
+    CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
+    CONF_CUSTOM_ENERGY_FACTOR,
+    CONF_CUSTOM_ENERGY_OFFPEAK,
+    CONF_CUSTOM_ENERGY_PEAK,
+    CONF_CUSTOM_ENERGY_QUARTER_HOURLY,
+    CONF_CUSTOM_ENERGY_SINGLE,
+    CONF_CUSTOM_INJECTION_BASE,
+    CONF_CUSTOM_INJECTION_CURRENT,
+    CONF_CUSTOM_INJECTION_FACTOR,
+    CONF_CUSTOM_INJECTION_FLOOR,
+    CONF_CUSTOM_INJECTION_MODE,
+    CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION,
+    CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH,
+    CONF_CUSTOM_TAX_FEDERAL_EXCISE,
+    CONF_CUSTOM_TAX_REGION_CONNECTION_FEE,
+    CONF_CUSTOM_TAX_REGIONAL_RENEWABLES,
+    CONF_CUSTOM_VAT_RATE,
+    CONF_CUSTOM_YEARLY_FIXED_FEE,
+    CONF_SOLAR_REGIME,
     CUSTOM_CONTRACT_DYNAMIC,
     CUSTOM_CONTRACT_FIXED,
     CUSTOM_CONTRACT_MONTHLY,
+    CUSTOM_INJECTION_MODE_FORMULA,
+    DEFAULT_CONNECTION_KVA_TIER,
+    DEFAULT_CUSTOM_VAT_RATE,
+    REGION_BRUSSELS,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+    SOLAR_REGIME_INJECTION,
     SUPPLIER_CUSTOM,
 )
 from .base import (
     Contract,
+    DsoOverlay,
+    DynamicRates,
+    EnergyRates,
     ExtractorError,
+    FixedRates,
+    InjectionRates,
+    SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
+    TaxOverlay,
 )
 
 _CONTRACTS: tuple[Contract, ...] = (
@@ -99,3 +150,123 @@ EXTRACTOR = SupplierExtractor(
     probe=None,
     fetch_for_month=None,
 )
+
+
+# --- snapshot assembly from the config entry ---------------------------------
+#
+# The coordinator calls build_snapshot() every tick instead of fetching a card.
+# Every EUR value is read from the entry the user filled in; missing optional
+# fields default to 0.0 (a legitimate "unset" here, since the user is the
+# source, not a scraped card).
+
+
+def _num(data: Mapping[str, Any], key: str, default: float = 0.0) -> float:
+    value = data.get(key)
+    return float(value) if value is not None else default
+
+
+def _opt(data: Mapping[str, Any], key: str) -> float | None:
+    value = data.get(key)
+    return float(value) if value is not None else None
+
+
+def _build_energy(data: Mapping[str, Any], contract: str) -> EnergyRates:
+    fee = _num(data, CONF_CUSTOM_YEARLY_FIXED_FEE)
+    if contract == CUSTOM_CONTRACT_DYNAMIC:
+        return DynamicRates(
+            factor=_num(data, CONF_CUSTOM_ENERGY_FACTOR),
+            base=_num(data, CONF_CUSTOM_ENERGY_BASE),
+            yearly_fixed_fee=fee,
+            quarter_hourly=bool(data.get(CONF_CUSTOM_ENERGY_QUARTER_HOURLY, False)),
+        )
+    if contract == CUSTOM_CONTRACT_MONTHLY:
+        return SpotMonthlyRates(
+            factor=_num(data, CONF_CUSTOM_ENERGY_FACTOR),
+            base=_num(data, CONF_CUSTOM_ENERGY_BASE),
+            yearly_fixed_fee=fee,
+        )
+    return FixedRates(
+        single=_num(data, CONF_CUSTOM_ENERGY_SINGLE),
+        peak=_opt(data, CONF_CUSTOM_ENERGY_PEAK),
+        offpeak=_opt(data, CONF_CUSTOM_ENERGY_OFFPEAK),
+        exclusive_night=_opt(data, CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT),
+        yearly_fixed_fee=fee,
+    )
+
+
+def _build_dso(data: Mapping[str, Any], region: str) -> DsoOverlay:
+    osp: dict[str, float] | None = None
+    if region == REGION_BRUSSELS:
+        tier = data.get(CONF_CONNECTION_KVA_TIER, DEFAULT_CONNECTION_KVA_TIER)
+        osp = {tier: _num(data, CONF_CUSTOM_DSO_BRUSSELS_OSP)}
+    return DsoOverlay(
+        distribution_single=_num(data, CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE),
+        distribution_peak=_opt(data, CONF_CUSTOM_DSO_DISTRIBUTION_PEAK),
+        distribution_offpeak=_opt(data, CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK),
+        distribution_exclusive_night=_opt(
+            data, CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT
+        ),
+        transport=_num(data, CONF_CUSTOM_DSO_TRANSPORT),
+        data_management_per_year=_num(data, CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR),
+        capacity_eur_per_kw_year=_opt(data, CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR),
+        prosumer_eur_per_kva_year=_opt(data, CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR),
+        distribution_pic=_opt(data, CONF_CUSTOM_DSO_DISTRIBUTION_PIC),
+        distribution_medium=_opt(data, CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM),
+        distribution_eco=_opt(data, CONF_CUSTOM_DSO_DISTRIBUTION_ECO),
+        brussels_osp_by_tier=osp,
+    )
+
+
+def _build_taxes(data: Mapping[str, Any], region: str) -> TaxOverlay:
+    renewables = _num(data, CONF_CUSTOM_TAX_REGIONAL_RENEWABLES)
+    return TaxOverlay(
+        federal_excise=_num(data, CONF_CUSTOM_TAX_FEDERAL_EXCISE),
+        energy_contribution=_num(data, CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION),
+        flanders_renewables=renewables if region == REGION_FLANDERS else 0.0,
+        wallonia_renewables=renewables if region == REGION_WALLONIA else 0.0,
+        brussels_renewables=renewables if region == REGION_BRUSSELS else 0.0,
+        region_connection_fee=_num(data, CONF_CUSTOM_TAX_REGION_CONNECTION_FEE),
+        energy_fund_eur_per_month=_num(data, CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH),
+        vat_rate=_num(data, CONF_CUSTOM_VAT_RATE, DEFAULT_CUSTOM_VAT_RATE),
+    )
+
+
+def _build_injection(data: Mapping[str, Any]) -> InjectionRates | None:
+    if data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
+        return None
+    floor = bool(data.get(CONF_CUSTOM_INJECTION_FLOOR, False))
+    if data.get(CONF_CUSTOM_INJECTION_MODE) == CUSTOM_INJECTION_MODE_FORMULA:
+        # factor/base are applied against the live spot (dynamic) or the
+        # delivery month's mean (monthly-average); the coordinator threads
+        # the right value in and applies the floor.
+        return InjectionRates(
+            factor=_num(data, CONF_CUSTOM_INJECTION_FACTOR),
+            base=_num(data, CONF_CUSTOM_INJECTION_BASE),
+            floor_at_zero=floor,
+        )
+    return InjectionRates(
+        current=_num(data, CONF_CUSTOM_INJECTION_CURRENT),
+        floor_at_zero=floor,
+    )
+
+
+def build_snapshot(data: Mapping[str, Any], region: str, dso: str) -> SupplierSnapshot:
+    """Assemble a SupplierSnapshot from a custom (expert) config entry.
+
+    There is no card to fetch: the user typed the commodity formula and every
+    regulated DSO + tax value, so the whole snapshot is built from the entry.
+    The coordinator calls this every tick (cheap, pure). For the monthly-average
+    mode the energy carries only factor/base; the coordinator threads the
+    delivery month's mean spot through pricing.
+    """
+    contract = str(data.get(CONF_CONTRACT, CUSTOM_CONTRACT_FIXED))
+    return SupplierSnapshot(
+        supplier=SUPPLIER_CUSTOM,
+        contract=contract,
+        energy=_build_energy(data, contract),
+        dsos={dso: _build_dso(data, region)},
+        taxes=_build_taxes(data, region),
+        source_url="custom formula (config entry)",
+        publication_label="Custom formula",
+        injection=_build_injection(data),
+    )

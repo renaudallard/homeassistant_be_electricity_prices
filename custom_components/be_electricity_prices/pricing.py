@@ -61,6 +61,7 @@ from .providers.base import (
     EnergyRates,
     FixedRates,
     ImpactRates,
+    SpotMonthlyRates,
     SupplierSnapshot,
     TaxOverlay,
     TimeOfUseRates,
@@ -301,6 +302,12 @@ def energy_eur_per_kwh(
     if isinstance(energy, DynamicRates):
         if spot_eur_per_kwh is None:
             raise ValueError("dynamic tariff needs a spot price")
+        return energy.factor * spot_eur_per_kwh + energy.base
+    if isinstance(energy, SpotMonthlyRates):
+        # The caller passes the delivery month's mean spot in place of the
+        # live slot price, so the flat monthly rate is the same pure formula.
+        if spot_eur_per_kwh is None:
+            raise ValueError("spot-monthly tariff needs a monthly mean spot")
         return energy.factor * spot_eur_per_kwh + energy.base
     if isinstance(energy, TimeOfUseRates):
         slot = tou_slot(when, energy.weekend_rule)

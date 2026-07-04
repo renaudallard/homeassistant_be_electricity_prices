@@ -40,8 +40,9 @@ import asyncio
 import calendar
 import logging
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
+from statistics import fmean
 from typing import Any
 
 import aiohttp
@@ -93,6 +94,7 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
     STORAGE_VERSION,
+    SUPPLIER_CUSTOM,
     UPDATE_INTERVAL_MINUTES,
     VREG_CAPACITY_FLOOR_KW,
 )
@@ -109,10 +111,12 @@ from .pricing import (
 from .providers import (
     DynamicRates,
     ExtractorError,
+    SpotMonthlyRates,
     SupplierSnapshot,
     get as get_extractor,
 )
 from .providers._pdf import is_transient_fetch_error
+from .providers.custom import build_snapshot as build_custom_snapshot
 from .providers.base import (
     DsoOverlay,
     EnergyRates,
@@ -713,8 +717,26 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._sync_stale_issue(stale)
             raise
 
+    def _refresh_custom_snapshot(self) -> None:
+        """Build the snapshot locally for the expert custom supplier.
+
+        There is no card to fetch: the user typed the formula and all
+        regulated values, so we assemble the snapshot from the config entry
+        every tick. Always fresh (no probe / TTL), so it never goes stale.
+        """
+        self._snapshot = build_custom_snapshot(
+            self.entry.data,
+            self.entry.data.get(CONF_REGION, ""),
+            self.entry.data.get(CONF_DSO, ""),
+        )
+        self._snapshot_fetched_at = dt_util.utcnow()
+        self._last_error = ""
+
     async def _update_body(self) -> CoordinatorData:
-        await self._maybe_refresh_snapshot()
+        if self.entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
+            self._refresh_custom_snapshot()
+        else:
+            await self._maybe_refresh_snapshot()
         await self._track_monthly_peak()
 
         if self._snapshot is None:
@@ -741,7 +763,10 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._sync_entsoe_auth_issue(False)
         if not self._last_error:
             self._sync_extractor_issue(None)
-        if isinstance(self._snapshot.energy, DynamicRates):
+        if isinstance(self._snapshot.energy, (DynamicRates, SpotMonthlyRates)):
+            # Both the live per-slot price (dynamic) and the flat monthly rate
+            # (spot-monthly, from the month mean) need ENTSO-E spots, so they
+            # share the hard-fail-on-cold-start path.
             try:
                 spot_prices = await self._fetch_spot_prices()
             except EntsoeAuthError as err:
@@ -772,8 +797,19 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 )
                 spot_prices = dict(self._spot_cache) if self._spot_cache else {}
 
+        # A spot-monthly contract bills a flat rate = factor * this month's
+        # mean spot + base. Compute the running mean once (over the persisted
+        # year-to-date hours plus today's fetched curve) and reuse it for the
+        # live price table and for baking the mean-indexed injection.
+        monthly_mean: float | None = None
+        if isinstance(self._snapshot.energy, SpotMonthlyRates):
+            now_local = dt_util.now()
+            monthly_mean = self._monthly_spot_mean(
+                now_local.year, now_local.month, spot_prices
+            )
+
         try:
-            hourly = self._build_hourly(spot_prices)
+            hourly = self._build_hourly(spot_prices, monthly_mean)
         except KeyError as err:
             # The fresh snapshot does not contain the user's configured
             # DSO -- typically a regex drift on a new card. Surface a
@@ -791,18 +827,25 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             capacity_cost = _compute_capacity(self._snapshot, self.entry, self._peak_kw)
 
         prosumer_cost = _compute_prosumer(self._snapshot, self.entry)
+        # For a spot-monthly contract, price the injection off the same
+        # monthly mean rather than the live hourly spot: bake the mean-indexed
+        # formula into a flat indicative for this tick (the stored snapshot
+        # keeps factor/base so the YTD path recomputes each month's own mean).
+        injection_snapshot = self._snapshot
+        if isinstance(self._snapshot.energy, SpotMonthlyRates):
+            injection_snapshot = _bake_monthly_injection(self._snapshot, monthly_mean)
         injection_price = _compute_injection_price(
-            self._snapshot, self.entry, spot_prices
+            injection_snapshot, self.entry, spot_prices
         )
         # Dynamic contracts replay historical hourly spots to bill the
-        # YTD energy term; static-energy contracts with a spot-indexed
-        # injection replay them to credit the YTD injection. Backfill any
-        # missing hours in [Jan 1, today] before calling the engine;
-        # failures degrade to "no data" for those hours rather than
-        # tearing the tick down.
-        if isinstance(self._snapshot.energy, DynamicRates) or _injection_needs_spot(
-            self._snapshot, self.entry
-        ):
+        # YTD energy term; spot-monthly contracts average them per month;
+        # static-energy contracts with a spot-indexed injection replay them
+        # to credit the YTD injection. Backfill any missing hours in
+        # [Jan 1, today] before calling the engine; failures degrade to "no
+        # data" for those hours rather than tearing the tick down.
+        if isinstance(
+            self._snapshot.energy, (DynamicRates, SpotMonthlyRates)
+        ) or _injection_needs_spot(self._snapshot, self.entry):
             today_local = dt_util.now().date()
             await self._ensure_historical_spots(
                 date(today_local.year, 1, 1), today_local
@@ -1446,7 +1489,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._peak_kw = max(self._peak_kw, VREG_CAPACITY_FLOOR_KW)
 
     def _build_hourly(
-        self, spot_prices: dict[datetime, float]
+        self,
+        spot_prices: dict[datetime, float],
+        monthly_mean: float | None = None,
     ) -> dict[datetime, PriceBreakdown]:
         snap = self._snapshot
         assert snap is not None
@@ -1463,6 +1508,17 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     snap, dso, region, local, spot, meter, dso_mode
                 )
             return hourly
+
+        # A spot-monthly contract bills a flat rate for the whole month; pass
+        # the delivery month's mean as the "spot" so every slot of the 48-slot
+        # walk prices to factor * mean + base. Without a mean yet (cold start,
+        # no cached spots) leave the table empty so the current price reads
+        # unknown rather than crashing on a missing spot.
+        slot_spot: float | None = None
+        if isinstance(snap.energy, SpotMonthlyRates):
+            if monthly_mean is None:
+                return hourly
+            slot_spot = monthly_mean
 
         # Iterate in UTC for 48 contiguous slots so a DST seam preserves
         # the wall-clock gap correctly. Spring-forward shifts one of the
@@ -1492,10 +1548,24 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         while utc < end_utc:
             local = dt_util.as_local(utc)
             hourly[utc] = compute_breakdown(
-                snap, dso, region, local, None, meter, dso_mode
+                snap, dso, region, local, slot_spot, meter, dso_mode
             )
             utc += timedelta(hours=1)
         return hourly
+
+    def _monthly_spot_mean(
+        self, year: int, month: int, extra_spots: dict[datetime, float]
+    ) -> float | None:
+        """Arithmetic mean of the (year, month)'s hourly Day-Ahead spots.
+
+        Merges the persisted year-to-date cache with ``extra_spots`` (today's
+        freshly fetched curve) so the current month's running mean stays up to
+        date within a tick, and de-duplicates by timestamp. Returns ``None``
+        when no spot for that month is available yet (cold start).
+        """
+        merged = dict(self._historical_spots)
+        merged.update(extra_spots)
+        return _mean_of_month(merged, year, month)
 
     def _snapshot_age_hours(self) -> float:
         if self._snapshot_fetched_at is None:
@@ -1612,6 +1682,39 @@ def _brussels_osp_fee(overlay: DsoOverlay | None, entry: ConfigEntry) -> float:
     return overlay.brussels_osp_by_tier.get(tier, 0.0)
 
 
+def _mean_of_month(spots: dict[datetime, float], year: int, month: int) -> float | None:
+    """Arithmetic mean of the spot values whose local timestamp falls in
+    (year, month). Returns ``None`` when that month has no cached hours."""
+    values = [v for ts, v in spots.items() if _local_ym(ts) == (year, month)]
+    return fmean(values) if values else None
+
+
+def _local_ym(ts: datetime) -> tuple[int, int]:
+    local = dt_util.as_local(ts)
+    return (local.year, local.month)
+
+
+def _bake_monthly_injection(
+    snapshot: SupplierSnapshot, mean: float | None
+) -> SupplierSnapshot:
+    """Turn a mean-indexed injection formula into this month's flat indicative.
+
+    A spot-monthly contract's injection is indexed to the same monthly mean as
+    its energy (e.g. the Mega groepsaankoop ``SPP_mean * 0.96 - 0.9``), not the
+    live hourly spot. Baking the formula into ``current`` routes it through the
+    monthly-indicative injection path; the floor (if any) is applied there.
+    A flat ``current`` injection or none is returned unchanged.
+    """
+    inj = snapshot.injection
+    if inj is None or inj.factor is None or inj.base is None:
+        return snapshot
+    current = None if mean is None else inj.factor * mean + inj.base
+    return replace(
+        snapshot,
+        injection=replace(inj, current=current, factor=None, base=None),
+    )
+
+
 def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> bool:
     """True when pricing this entry's injection requires an ENTSO-E spot
     even though the ENERGY contract isn't dynamic.
@@ -1657,6 +1760,14 @@ def _tou_injection_rate(
     if slot == "transition":
         return inj.transition
     return inj.offpeak
+
+
+def _floor_injection(rate: float | None, inj: InjectionRates) -> float | None:
+    """Clamp an injection rate at 0 when the contract forbids negatives
+    (``floor_at_zero``). A ``None`` rate (no data) passes through unchanged."""
+    if rate is None or not inj.floor_at_zero:
+        return rate
+    return max(rate, 0.0)
 
 
 def _compute_injection_price(
@@ -1720,10 +1831,10 @@ def _compute_injection_price(
             if abs((nearest - now_slot).total_seconds()) > max_gap:
                 return None
             spot = spot_prices[nearest]
-        return inj.factor * spot + inj.base
+        return _floor_injection(inj.factor * spot + inj.base, inj)
     # Static contracts (and static-energy contracts with a monthly-indexed
     # injection formula): the supplier's printed monthly indicative.
-    return inj.current
+    return _floor_injection(inj.current, inj)
 
 
 def _historical_injection_rate(
@@ -1754,9 +1865,9 @@ def _historical_injection_rate(
         if tou_rate is not None:
             return tou_rate
     if injection.factor is not None and injection.base is not None and spot is not None:
-        return injection.factor * spot + injection.base
+        return _floor_injection(injection.factor * spot + injection.base, injection)
     if injection.current is not None:
-        return injection.current
+        return _floor_injection(injection.current, injection)
     return None
 
 
@@ -2257,6 +2368,7 @@ async def _ytd_hourly_energy(
     contract: str | None = None,
     meter: MeterType | None = None,
     historical_spots: dict[datetime, float] | None = None,
+    monthly_mean: bool = False,
 ) -> float | None:
     """YTD energy cost for hourly-billed contracts (TOU + dynamic).
 
@@ -2327,16 +2439,32 @@ async def _ytd_hourly_energy(
             )
         return month_snap_cache[month_first]
 
+    # Spot-monthly contracts bill every hour of a delivery month at that
+    # month's mean spot (energy and mean-indexed injection alike); cache the
+    # mean per month so it's computed once.
+    month_means: dict[tuple[int, int], float | None] = {}
+
     energy_cost = 0.0
     # Iterate the union of both sides so an injection-only wiring
     # still contributes its credit (mirroring _resolve_daily_kwh).
     for utc_hour in cons_per_hour.keys() | inj_per_hour.keys():
+        local = dt_util.as_local(utc_hour)
         spot: float | None = None
-        if historical_spots is not None:
+        if monthly_mean:
+            key = (local.year, local.month)
+            if key not in month_means:
+                month_means[key] = (
+                    _mean_of_month(historical_spots, *key)
+                    if historical_spots is not None
+                    else None
+                )
+            spot = month_means[key]
+            if spot is None:
+                continue
+        elif historical_spots is not None:
             spot = historical_spots.get(utc_hour)
             if spot is None:
                 continue
-        local = dt_util.as_local(utc_hour)
         snap_h = await _snap_for(date(local.year, local.month, 1))
         try:
             bd = compute_breakdown(snap_h, dso, region, local, spot, meter, dso_mode)
@@ -2542,6 +2670,28 @@ async def _compute_current_year_cost(
             return fees
         return dyn_energy + fees
 
+    # Spot-monthly contracts bill each past hour at its delivery month's mean
+    # spot (a flat rate within the month); the hourly replay threads that mean
+    # in place of the live spot and credits mean-indexed injection the same way.
+    if isinstance(snapshot.energy, SpotMonthlyRates):
+        if not historical_spots:
+            return fees
+        monthly_energy = await _ytd_hourly_energy(
+            hass,
+            session,
+            extractor,
+            snapshot,
+            entry,
+            today,
+            contract=contract,
+            meter=meter,
+            historical_spots=historical_spots,
+            monthly_mean=True,
+        )
+        if monthly_energy is None:
+            return fees
+        return monthly_energy + fees
+
     # Per-hour billing is required when the supplier's energy rates
     # vary by hour (TOU + Impact energy contracts), when the DSO bills
     # per Impact band (PIC / MEDIUM / ECO change with hour-of-day), or
@@ -2708,7 +2858,10 @@ async def _compute_current_year_cost(
 # cached it. 0.8.4 fixed the anchor but probe-based freshness keeps serving
 # that stale None until Eneco republishes. Bump so the mis-parsed snapshot
 # is dropped and re-fetched with the injection block populated.
-_SNAPSHOT_SCHEMA_VERSION = 13
+# v14: added the SpotMonthlyRates energy kind (expert custom monthly-average
+# supplier) and the InjectionRates.floor_at_zero flag. Bump so a cached
+# snapshot from before the field existed is dropped and rebuilt with it.
+_SNAPSHOT_SCHEMA_VERSION = 14
 
 
 def _snapshot_to_dict(
@@ -2751,6 +2904,8 @@ def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
         energy = TimeOfUseRates(**energy_args)
     elif energy_kind == "tou_impact":
         energy = ImpactRates(**energy_args)
+    elif energy_kind == "spot_monthly":
+        energy = SpotMonthlyRates(**energy_args)
     else:
         raise ValueError(f"unknown energy kind {energy_kind!r}")
     injection_data = data.get("injection")
@@ -2788,4 +2943,6 @@ def _energy_kind(energy: EnergyRates) -> str:
         return "tou"
     if isinstance(energy, ImpactRates):
         return "tou_impact"
+    if isinstance(energy, SpotMonthlyRates):
+        return "spot_monthly"
     raise TypeError(f"unknown energy rates type {type(energy).__name__}")
