@@ -105,6 +105,7 @@ async def fetch_spp_weights(session: aiohttp.ClientSession, year: int) -> SppWei
         ET.ParseError,
         LookupError,  # KeyError (missing column) or IndexError (bad string index)
         ValueError,
+        ArithmeticError,  # OverflowError from an out-of-range date serial
         OSError,
     ) as err:
         _LOGGER.warning("Synergrid SPP parse failed (%s): %s", url, err)
@@ -237,12 +238,14 @@ def _accumulate_row(
     try:
         serial = _cell_number(cells[header[_UTC_HEADER]])
         value = _cell_number(cells[header[_VALUE_HEADER]])
-    except (KeyError, TypeError, ValueError):
+        if serial is None or value is None:
+            return
+        # Excel serial -> UTC datetime; +30s absorbs float imprecision before
+        # the hour is floored (the quarter's minute is irrelevant once
+        # aggregated). An out-of-range serial raises OverflowError -- skip that
+        # row rather than aborting the whole parse.
+        utc = _EXCEL_EPOCH + timedelta(days=serial) + timedelta(seconds=30)
+    except (KeyError, TypeError, ValueError, OverflowError):
         return
-    if serial is None or value is None:
-        return
-    # Excel serial -> UTC datetime; +30s absorbs float imprecision before the
-    # hour is floored (the quarter's minute is irrelevant once aggregated).
-    utc = _EXCEL_EPOCH + timedelta(days=serial) + timedelta(seconds=30)
     key = (utc.month, utc.day, utc.hour)
     weights[key] = weights.get(key, 0.0) + value

@@ -220,6 +220,26 @@ async def test_fetch_returns_empty_on_index_error() -> None:
     assert not Path(tmp.name).exists()
 
 
+async def test_fetch_returns_empty_on_overflow_error() -> None:
+    # An out-of-range Excel date serial raises OverflowError; it must degrade
+    # to {} (caught via ArithmeticError), not tear down the tick.
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    tmp.close()
+    session = MagicMock()
+    with (
+        patch.object(
+            synergrid, "_download", new=AsyncMock(return_value=Path(tmp.name))
+        ),
+        patch.object(
+            synergrid,
+            "_parse_hourly_weights",
+            side_effect=OverflowError("date value out of range"),
+        ),
+    ):
+        assert await synergrid.fetch_spp_weights(session, 2026) == {}
+    assert not Path(tmp.name).exists()
+
+
 # ---- weighting math + gating -------------------------------------------------
 
 
