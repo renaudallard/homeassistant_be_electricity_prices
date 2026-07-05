@@ -1,14 +1,16 @@
 # Data sources: ENTSO-E and backfill
 
-This document covers the two out-of-band data sources the integration reads
+This document covers the out-of-band data sources the integration reads
 besides the supplier tariff cards: the ENTSO-E day-ahead spot client
 (`api.py`), which supplies the `spot` term that dynamic and spot-indexed
-contracts multiply into their formula, and the recorder backfill (`backfill.py`),
+contracts multiply into their formula; the recorder backfill (`backfill.py`),
 which writes historical price and cost statistics into Home Assistant's
 long-term-statistics store so the Energy dashboard and Statistics card can show
-history that predates the entry's first live tick. Both feed the same
-`pricing.compute_breakdown` engine the live coordinator uses, so a backfilled
-past hour is priced exactly as the live tick would have priced it at the time.
+history that predates the entry's first live tick; and the Synergrid solar
+production profile (`synergrid.py`, Part 3), for the optional SPP-weighted
+custom injection. The first two feed the same `pricing.compute_breakdown` engine
+the live coordinator uses, so a backfilled past hour is priced exactly as the
+live tick would have priced it at the time.
 
 Related documents:
 
@@ -431,3 +433,49 @@ matter to this module:
 - `energy` is the consumer: the Energy dashboard reads the `current_year_cost`
   sum series and the price means this module writes. Ordering after it keeps the
   dashboard's expectations satisfied on first load.
+
+## Part 3: the Synergrid SPP profile (`synergrid.py`)
+
+### Why it exists
+
+Belgian SPP-indexed injection contracts do not pay the plain monthly average of
+the day-ahead price; they pay the **SPP-weighted** average, weighting each
+quarter-hour by the national solar production profile (SPP) Synergrid publishes.
+The plain mean over-credits injection, because solar produces (and the meter
+injects) mostly in the cheap midday hours the SPP down-weights: measured over a
+high-solar month the plain mean ran ~22% above the SPP-weighted value. When the
+expert custom monthly-average mode opts into SPP-weighted injection, the
+coordinator computes that weighted average itself from the profile plus the
+ENTSO-E prices it already caches.
+
+### What it fetches and how
+
+Synergrid publishes the profile as a public, no-login workbook at
+`synergrid.be/images/downloads/SLP-RLP-SPP/<year>/SPP_ex-ante_and_ex-post_<year>.xlsx`.
+The file is ~52 MB, almost entirely the ex-post sheet the fetcher never touches:
+`fetch_spp_weights` streams the download to a temp file (never into memory) and
+parses only the small `SPP_ex-ante` sheet with the stdlib `zipfile` +
+`ElementTree` (no new dependency), keeping peak memory around 20 MB. The sheet is
+resolved by name-prefix and the value column by header text, so a minor layout
+change degrades to an empty result rather than a wrong one. The 15-minute weights
+are aggregated to hourly, keyed by UTC `(month, day, hour)` to line up with the
+coordinator's hourly spot cache. Any failure (download, format drift, a 404 for a
+not-yet-published year) returns `{}` so the caller falls back to the plain mean.
+
+### Caching and use
+
+The coordinator refreshes the profile at most monthly (`_SPP_REFRESH_DAYS`; the
+ex-ante file is revised in-year) via `_ensure_spp_weights`, and persists the
+weights in the entry's Store blob so a restart does not force a fresh download.
+`_spp_weighted_month_mean` then computes `sum(price * weight) / sum(weight)` over
+the delivery month for the injection index, while energy keeps the plain mean.
+Both the live injection sensor and the year-to-date credit use it.
+
+### The ex-ante caveat
+
+Only the **ex-ante** (forecast) profile is public for the running year; the
+realized ex-post lags and is not published for the current month. So the
+SPP-weighted value is much closer than the plain mean but not the exact settled
+figure a supplier prints on its card. Scraped SPP-indexed suppliers (DATS 24,
+Ecofix Flexy, EBEM) are unaffected: they print the realized value and the
+integration reads it into `InjectionRates.current` directly.

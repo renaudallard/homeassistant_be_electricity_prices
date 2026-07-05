@@ -113,9 +113,14 @@ are entered excluding VAT (as printed on a tariff sheet) and the VAT rate grosse
 them up. This trades away the whole point of the live-extractor model: there is no
 card to refresh and no drift check, so the numbers are a static snapshot you must
 keep current yourself, and a monthly-average rate is a running estimate until the
-month closes. Where the source product indexes injection to Synergrid's SPP, the
-integration approximates it with the arithmetic monthly mean of the ENTSO-E
-day-ahead (that SPP index isn't available).
+month closes. For injection, the monthly-average mode offers an optional
+**SPP-weighted** setting: it fetches Synergrid's national solar production profile
+and weights the monthly day-ahead mean by it (as SPP-indexed contracts do) instead
+of a plain average — much closer for a solar prosumer, since the plain mean
+over-credits injection by weighting the cheap midday hours the same as the rest.
+It uses the published *ex-ante* (forecast) profile, so it is close to but not
+exactly the settled SPP value, and it falls back to the plain mean if the profile
+can't be fetched.
 
 ### How often the integration polls
 

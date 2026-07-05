@@ -61,7 +61,7 @@ the "Shown when" column gives the gate.
 | `connection_power` | `async_step_connection_power` (`config_flow.py:938`) | Brussels connection-power tier | `CONF_CONNECTION_KVA_TIER` | Region == Brussels (`config_flow.py:949`) |
 | `solar` | `async_step_solar` (`config_flow.py:846`) | Inverter kVA + regime | `CONF_SOLAR_KVA`, `CONF_SOLAR_REGIME` | Always |
 | `injection_api_key` | `async_step_injection_api_key` (`config_flow.py:874`) | ENTSO-E token (optional) | `CONF_API_KEY` | `_needs_injection_api_key` true (`config_flow.py:856`) |
-| `custom_injection` | `async_step_custom_injection` | Injection formula (flat / spot / monthly-mean, floor) | `CONF_CUSTOM_INJECTION_*` | Custom supplier on the injection regime |
+| `custom_injection` | `async_step_custom_injection` | Injection formula (flat / spot / monthly-mean, floor; plus an SPP-weighted toggle on the monthly-average mode) | `CONF_CUSTOM_INJECTION_*` | Custom supplier on the injection regime |
 | `custom_dso` | `async_step_custom_dso` | Hand-entered DSO overlay (region/meter-relevant fields) | `CONF_CUSTOM_DSO_*` | Custom supplier only |
 | `custom_tax` | `async_step_custom_tax` | Hand-entered taxes/levies + VAT rate | `CONF_CUSTOM_TAX_*`, `CONF_CUSTOM_VAT_RATE` | Custom supplier only |
 | `meters` | `async_step_meters` (`config_flow.py:907`) | kWh sensors (registers or totals) | 6 `CONF_*_KWH` keys | Always (final step, then `_finalize`) |
