@@ -232,6 +232,9 @@ _SHORT_SPOT_DAY_TTL = timedelta(hours=12)
 # The Synergrid ex-ante SPP profile is revised within the year, so re-fetch the
 # 52 MB workbook at most this often (weights survive restarts via the Store).
 _SPP_REFRESH_DAYS = 30
+# Back off this long after a failed SPP fetch so a persistent problem (e.g. the
+# new-year file not yet published) doesn't re-download 52 MB every hourly tick.
+_SPP_RETRY_TTL = timedelta(hours=12)
 
 
 @dataclass
@@ -598,6 +601,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._spp_weights: SppWeights = {}
         self._spp_weights_year: int | None = None
         self._spp_fetched_at: datetime | None = None
+        self._spp_failed_at: datetime | None = None
         # Stable past days whose last spot fetch still came back short of
         # 20 hours, with the attempt time, so we don't re-fetch them every
         # tick (see _SHORT_SPOT_DAY_TTL).
@@ -1635,22 +1639,31 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         Only called for a custom entry that opted into SPP-weighted injection.
         The ex-ante file is revised in-year, so re-fetch monthly. Soft-fail: on
         error keep whatever we already have (the caller degrades to the plain
-        arithmetic mean).
+        arithmetic mean) and back off ``_SPP_RETRY_TTL`` so a persistent failure
+        doesn't re-download the 52 MB workbook every tick.
         """
+        now = dt_util.utcnow()
         year = dt_util.now().year
         fresh = (
             self._spp_weights_year == year
             and self._spp_fetched_at is not None
-            and (dt_util.utcnow() - self._spp_fetched_at)
-            < timedelta(days=_SPP_REFRESH_DAYS)
+            and (now - self._spp_fetched_at) < timedelta(days=_SPP_REFRESH_DAYS)
         )
         if fresh:
+            return
+        if (
+            self._spp_failed_at is not None
+            and (now - self._spp_failed_at) < _SPP_RETRY_TTL
+        ):
             return
         weights = await fetch_spp_weights(self._session, year)
         if weights:
             self._spp_weights = weights
             self._spp_weights_year = year
-            self._spp_fetched_at = dt_util.utcnow()
+            self._spp_fetched_at = now
+            self._spp_failed_at = None
+        else:
+            self._spp_failed_at = now
 
     def _spp_weighted_month_mean(
         self, year: int, month: int, extra_spots: dict[datetime, float]

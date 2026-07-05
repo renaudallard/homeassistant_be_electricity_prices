@@ -304,6 +304,24 @@ async def test_ensure_spp_weights_skips_when_fresh(
     assert mock.await_count == 0  # still fresh, no re-download
 
 
+async def test_ensure_spp_weights_backs_off_after_failure(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A failed fetch (empty) must back off, not re-download every tick."""
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.fetch_spp_weights",
+        new=AsyncMock(return_value={}),
+    ) as mock:
+        await coord._ensure_spp_weights()  # attempt 1 fails
+        await coord._ensure_spp_weights()  # within the retry TTL: no re-fetch
+    assert mock.await_count == 1
+    assert coord._spp_failed_at is not None
+
+
 async def test_spp_weights_survive_persist_round_trip(hass: HomeAssistant) -> None:
     entry = _entry()
     entry.add_to_hass(hass)
