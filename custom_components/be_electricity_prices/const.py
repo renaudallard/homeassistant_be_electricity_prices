@@ -263,6 +263,10 @@ CONF_CUSTOM_INJECTION_CURRENT: Final = "custom_injection_current"
 CONF_CUSTOM_INJECTION_FACTOR: Final = "custom_injection_factor"
 CONF_CUSTOM_INJECTION_BASE: Final = "custom_injection_base"
 CONF_CUSTOM_INJECTION_FLOOR: Final = "custom_injection_floor"
+# Opt-in for the monthly-average mode: weight the injection month-mean by the
+# Synergrid solar production profile (SPP) instead of a plain arithmetic mean,
+# matching SPP-indexed contracts. Fetched live; falls back to the plain mean.
+CONF_CUSTOM_INJECTION_SPP_WEIGHTED: Final = "custom_injection_spp_weighted"
 
 # Regulated DSO network overlay, entered by hand (region/meter-relevant fields
 # only; all but distribution_single default to 0.0). Maps onto DsoOverlay.

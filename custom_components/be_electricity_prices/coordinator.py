@@ -69,6 +69,7 @@ from .const import (
     CONF_CONNECTION_KVA_TIER,
     CONF_CONSUMPTION_KWH,
     CONF_CONTRACT,
+    CONF_CUSTOM_INJECTION_SPP_WEIGHTED,
     CONF_DAY_CONSUMPTION_KWH,
     CONF_DAY_INJECTION_KWH,
     CONF_DSO,
@@ -117,6 +118,7 @@ from .providers import (
 )
 from .providers._pdf import is_transient_fetch_error
 from .providers.custom import build_snapshot as build_custom_snapshot
+from .synergrid import SppWeights, fetch_spp_weights
 from .providers.base import (
     DsoOverlay,
     EnergyRates,
@@ -226,6 +228,10 @@ _MONTHLY_FAILURE_TTL = timedelta(minutes=30)
 # skip it for this long; 12 h re-attempts twice a day in case the data
 # lands late, without hammering the rate-limited endpoint hourly.
 _SHORT_SPOT_DAY_TTL = timedelta(hours=12)
+
+# The Synergrid ex-ante SPP profile is revised within the year, so re-fetch the
+# 52 MB workbook at most this often (weights survive restarts via the Store).
+_SPP_REFRESH_DAYS = 30
 
 
 @dataclass
@@ -585,6 +591,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # replay dynamic energy costs in current_year_cost. Persisted
         # to Store so a fresh restart doesn't lose the YTD window.
         self._historical_spots: dict[datetime, float] = {}
+        # Synergrid solar production profile: hourly weights keyed by UTC
+        # (month, day, hour), for SPP-weighted custom injection. Persisted so a
+        # restart doesn't force a fresh 52 MB download; refreshed monthly (the
+        # ex-ante file is revised in-year).
+        self._spp_weights: SppWeights = {}
+        self._spp_weights_year: int | None = None
+        self._spp_fetched_at: datetime | None = None
         # Stable past days whose last spot fetch still came back short of
         # 20 hours, with the attempt time, so we don't re-fetch them every
         # tick (see _SHORT_SPOT_DAY_TTL).
@@ -674,6 +687,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 if when.tzinfo is None:
                     when = when.replace(tzinfo=UTC)
                 self._historical_spots[when] = float(v)
+        # The SPP profile is the same national curve regardless of supplier, so
+        # it is restored irrespective of the entry-tuple gate above.
+        spp = stored.get("spp_weights")
+        if isinstance(spp, dict):
+            self._restore_spp_weights(spp)
         # Older persisted blobs may carry kwh_buckets / kwh_baselines /
         # year_start / year_start_register_baselines from a previous
         # release that tracked monthly accumulation in-process. Those
@@ -797,6 +815,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 )
                 spot_prices = dict(self._spot_cache) if self._spot_cache else {}
 
+        # Refresh the Synergrid SPP profile for a custom entry that opted into
+        # SPP-weighted injection (soft-fail; degrades to the plain mean below).
+        spp_weighted = _spp_weighting_enabled(self.entry)
+        if spp_weighted:
+            await self._ensure_spp_weights()
+
         # A spot-monthly contract bills a flat rate = factor * this month's
         # mean spot + base. Compute the running mean once (over the persisted
         # year-to-date hours plus today's fetched curve) and reuse it for the
@@ -833,7 +857,18 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # keeps factor/base so the YTD path recomputes each month's own mean).
         injection_snapshot = self._snapshot
         if isinstance(self._snapshot.energy, SpotMonthlyRates):
-            injection_snapshot = _bake_monthly_injection(self._snapshot, monthly_mean)
+            inj_mean = monthly_mean
+            if spp_weighted:
+                # SPP-weight the injection month-mean; keep the flat mean for
+                # energy. Fall back to the flat mean when the profile isn't
+                # available for the month yet.
+                now = dt_util.now()
+                spp_mean = self._spp_weighted_month_mean(
+                    now.year, now.month, spot_prices
+                )
+                if spp_mean is not None:
+                    inj_mean = spp_mean
+            injection_snapshot = _bake_monthly_injection(self._snapshot, inj_mean)
         injection_price = _compute_injection_price(
             injection_snapshot, self.entry, spot_prices
         )
@@ -857,6 +892,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self._snapshot,
             self.entry,
             historical_spots=self._historical_spots,
+            spp_weights=self._spp_weights if spp_weighted else None,
         )
 
         await self._save_persistent()
@@ -1567,6 +1603,72 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         merged.update(extra_spots)
         return _mean_of_month(merged, year, month)
 
+    def _restore_spp_weights(self, blob: dict[str, Any]) -> None:
+        """Rehydrate the persisted SPP profile blob into ``_spp_weights``."""
+        year = blob.get("year")
+        raw = blob.get("weights")
+        if not isinstance(year, int) or not isinstance(raw, dict):
+            return
+        parsed: SppWeights = {}
+        for key, value in raw.items():
+            if not isinstance(key, str) or not isinstance(value, (int, float)):
+                continue
+            try:
+                month, day, hour = (int(x) for x in key.split(","))
+            except ValueError:
+                continue
+            parsed[(month, day, hour)] = float(value)
+        if not parsed:
+            return
+        self._spp_weights = parsed
+        self._spp_weights_year = year
+        fetched = blob.get("fetched_at")
+        if isinstance(fetched, str):
+            try:
+                self._spp_fetched_at = datetime.fromisoformat(fetched)
+            except ValueError:
+                self._spp_fetched_at = None
+
+    async def _ensure_spp_weights(self) -> None:
+        """Refresh the Synergrid SPP profile for the current year if stale.
+
+        Only called for a custom entry that opted into SPP-weighted injection.
+        The ex-ante file is revised in-year, so re-fetch monthly. Soft-fail: on
+        error keep whatever we already have (the caller degrades to the plain
+        arithmetic mean).
+        """
+        year = dt_util.now().year
+        fresh = (
+            self._spp_weights_year == year
+            and self._spp_fetched_at is not None
+            and (dt_util.utcnow() - self._spp_fetched_at)
+            < timedelta(days=_SPP_REFRESH_DAYS)
+        )
+        if fresh:
+            return
+        weights = await fetch_spp_weights(self._session, year)
+        if weights:
+            self._spp_weights = weights
+            self._spp_weights_year = year
+            self._spp_fetched_at = dt_util.utcnow()
+
+    def _spp_weighted_month_mean(
+        self, year: int, month: int, extra_spots: dict[datetime, float]
+    ) -> float | None:
+        """SPP-weighted mean of the delivery month's Day-Ahead spots, or None.
+
+        Weights each hourly price by the Synergrid solar production profile so
+        the injection index matches an SPP-indexed contract. Uses the same
+        local-delivery-month filter as :meth:`_monthly_spot_mean`. Returns
+        ``None`` (caller falls back to the plain mean) when the profile or the
+        month's spots are unavailable.
+        """
+        if not self._spp_weights:
+            return None
+        merged = dict(self._historical_spots)
+        merged.update(extra_spots)
+        return _spp_weighted_month_mean(merged, self._spp_weights, year, month)
+
     def _snapshot_age_hours(self) -> float:
         if self._snapshot_fetched_at is None:
             return float("inf")
@@ -1652,6 +1754,16 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 for h, v in self._historical_spots.items()
                 if h >= keep_after
             }
+        if self._spp_weights and self._spp_weights_year is not None:
+            payload["spp_weights"] = {
+                "year": self._spp_weights_year,
+                "fetched_at": (
+                    self._spp_fetched_at.isoformat() if self._spp_fetched_at else None
+                ),
+                "weights": {
+                    f"{m},{d},{h}": v for (m, d, h), v in self._spp_weights.items()
+                },
+            }
         await self._store.async_save(payload)
 
 
@@ -1692,6 +1804,45 @@ def _mean_of_month(spots: dict[datetime, float], year: int, month: int) -> float
 def _local_ym(ts: datetime) -> tuple[int, int]:
     local = dt_util.as_local(ts)
     return (local.year, local.month)
+
+
+def _spp_weighted_month_mean(
+    spots: dict[datetime, float],
+    weights: SppWeights,
+    year: int,
+    month: int,
+) -> float | None:
+    """SPP-weighted mean of the (year, month)'s prices, or ``None``.
+
+    Selects the same local-delivery-month hours as :func:`_mean_of_month`, then
+    weights each price by the Synergrid profile weight for its UTC hour. The
+    weights span the whole year, so a boundary hour (local month != UTC month)
+    still finds its weight. Returns ``None`` when no weighted hour is available.
+    """
+    num = 0.0
+    den = 0.0
+    for ts, price in spots.items():
+        if _local_ym(ts) != (year, month):
+            continue
+        utc = ts.astimezone(UTC)
+        weight = weights.get((utc.month, utc.day, utc.hour))
+        if weight is None:
+            continue
+        num += price * weight
+        den += weight
+    return num / den if den else None
+
+
+def _spp_weighting_enabled(entry: ConfigEntry) -> bool:
+    """True when this entry is a custom contract that opted into SPP-weighted
+    injection on the injection regime. The energy being spot-monthly and the
+    injection being a formula are enforced structurally downstream (the bake
+    no-ops otherwise), so this gate only needs the flag + regime + supplier."""
+    return (
+        entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM
+        and bool(entry.data.get(CONF_CUSTOM_INJECTION_SPP_WEIGHTED))
+        and entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
+    )
 
 
 def _bake_monthly_injection(
@@ -2369,6 +2520,7 @@ async def _ytd_hourly_energy(
     meter: MeterType | None = None,
     historical_spots: dict[datetime, float] | None = None,
     monthly_mean: bool = False,
+    spp_weights: SppWeights | None = None,
 ) -> float | None:
     """YTD energy cost for hourly-billed contracts (TOU + dynamic).
 
@@ -2443,6 +2595,9 @@ async def _ytd_hourly_energy(
     # month's mean spot (energy and mean-indexed injection alike); cache the
     # mean per month so it's computed once.
     month_means: dict[tuple[int, int], float | None] = {}
+    # SPP-weighted per-month injection means, when the entry opted in. Energy
+    # keeps the flat mean above; only the injection credit uses these.
+    month_spp: dict[tuple[int, int], float | None] = {}
 
     energy_cost = 0.0
     # Iterate the union of both sides so an injection-only wiring
@@ -2477,8 +2632,24 @@ async def _ytd_hourly_energy(
             d_cost = (kwh_cons - kwh_inj) * bd.all_in
         elif regime == SOLAR_REGIME_INJECTION:
             d_cost = kwh_cons * bd.all_in
+            # Energy bills at the flat month-mean (spot); the injection credit
+            # uses the SPP-weighted month-mean when the entry opted in, falling
+            # back to the flat mean when the profile is missing for the month.
+            inj_spot = spot
+            if (
+                monthly_mean
+                and spp_weights is not None
+                and historical_spots is not None
+            ):
+                key = (local.year, local.month)
+                if key not in month_spp:
+                    month_spp[key] = _spp_weighted_month_mean(
+                        historical_spots, spp_weights, *key
+                    )
+                if month_spp[key] is not None:
+                    inj_spot = month_spp[key]
             inj_rate = _historical_injection_rate(
-                snap_h.injection, spot, energy=snap_h.energy, when=local
+                snap_h.injection, inj_spot, energy=snap_h.energy, when=local
             )
             if inj_rate is not None:
                 d_cost -= kwh_inj * inj_rate
@@ -2549,6 +2720,7 @@ async def _compute_current_year_cost(
     contract_override: str | None = None,
     meter_override: MeterType | None = None,
     historical_spots: dict[datetime, float] | None = None,
+    spp_weights: SppWeights | None = None,
 ) -> float | None:
     """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
@@ -2687,6 +2859,7 @@ async def _compute_current_year_cost(
             meter=meter,
             historical_spots=historical_spots,
             monthly_mean=True,
+            spp_weights=spp_weights,
         )
         if monthly_energy is None:
             return fees
