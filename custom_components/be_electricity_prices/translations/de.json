@@ -88,7 +88,7 @@
       },
       "custom_energy": {
         "title": "Eigene Energieformel",
-        "description": "Geben Sie die Commodity-Formel Ihres Vertrags ohne MwSt. ein (wie auf Ihrem Tarifblatt); der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis (Index = der Live-Spot oder das Monatsmittel). Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
+        "description": "Hinweis: Expertenoption, nur fuer Lieferanten OHNE oeffentliches Tarifblatt. Veroeffentlicht Ihr Lieferant eines, oeffnen Sie bitte lieber eine Anfrage, ihn als vollwertigen Lieferanten aufzunehmen: ein von Hand eingegebener Vertrag ist eine statische Momentaufnahme ohne Live-Aktualisierung und ohne Drift-Pruefung, die Werte bleiben also nur korrekt, wenn Sie sie selbst pflegen. Geben Sie die Commodity-Formel Ihres Vertrags ohne MwSt. ein (wie auf Ihrem Tarifblatt); der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis (Index = der Live-Spot oder das Monatsmittel). Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
         "data": {
           "custom_energy_factor": "Energiefaktor (Multiplikator auf den Index)",
           "custom_energy_base": "Energiebasis (EUR/kWh, ohne MwSt.)",
@@ -281,7 +281,7 @@
       },
       "custom_energy": {
         "title": "Eigene Energieformel",
-        "description": "Geben Sie die Commodity-Formel Ihres Vertrags ohne MwSt. ein (wie auf Ihrem Tarifblatt); der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis (Index = der Live-Spot oder das Monatsmittel). Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
+        "description": "Hinweis: Expertenoption, nur fuer Lieferanten OHNE oeffentliches Tarifblatt. Veroeffentlicht Ihr Lieferant eines, oeffnen Sie bitte lieber eine Anfrage, ihn als vollwertigen Lieferanten aufzunehmen: ein von Hand eingegebener Vertrag ist eine statische Momentaufnahme ohne Live-Aktualisierung und ohne Drift-Pruefung, die Werte bleiben also nur korrekt, wenn Sie sie selbst pflegen. Geben Sie die Commodity-Formel Ihres Vertrags ohne MwSt. ein (wie auf Ihrem Tarifblatt); der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis (Index = der Live-Spot oder das Monatsmittel). Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
         "data": {
           "custom_energy_factor": "Energiefaktor (Multiplikator auf den Index)",
           "custom_energy_base": "Energiebasis (EUR/kWh, ohne MwSt.)",

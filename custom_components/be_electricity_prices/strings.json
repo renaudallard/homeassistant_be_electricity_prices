@@ -88,7 +88,7 @@
       },
       "custom_energy": {
         "title": "Custom energy formula",
-        "description": "Enter your contract's commodity formula excluding VAT (as printed on your tariff sheet); the VAT rate on the taxes step grosses it up. For the dynamic and monthly-average modes the price is factor x index + base (index = the live spot, or the delivery month's mean spot). Example (Yuso dynamic): factor 1.0, base 0.02.",
+        "description": "Note: this is an expert option only for suppliers that publish NO public tariff card. If your supplier publishes one, please open a request to add it as a proper provider instead of using this: a hand-entered contract is a static snapshot with no live card refresh and no drift check, so the numbers only stay correct if you keep them up to date yourself. Enter your contract's commodity formula excluding VAT (as printed on your tariff sheet); the VAT rate on the taxes step grosses it up. For the dynamic and monthly-average modes the price is factor x index + base (index = the live spot, or the delivery month's mean spot). Example (Yuso dynamic): factor 1.0, base 0.02.",
         "data": {
           "custom_energy_factor": "Energy factor (multiplier on the index)",
           "custom_energy_base": "Energy base (EUR/kWh, excl. VAT)",

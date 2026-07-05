@@ -88,7 +88,7 @@
       },
       "custom_energy": {
         "title": "Aangepaste energieformule",
-        "description": "Voer de commodityformule van je contract in exclusief btw (zoals op je tariefkaart); het btw-tarief op de belastingstap rekent het door. Voor de dynamische en maandgemiddelde modi is de prijs factor x index + basis (index = de live spot, of het maandgemiddelde). Voorbeeld (Yuso dynamisch): factor 1.0, basis 0.02.",
+        "description": "Let op: expertoptie, alleen voor leveranciers die GEEN publieke tariefkaart publiceren. Publiceert je leverancier er wel een, open dan liever een verzoek om die als volwaardige leverancier toe te voegen: een handmatig ingevoerd contract is een statische momentopname zonder live kaartverversing en zonder driftcontrole, dus de waarden blijven alleen correct als je ze zelf bijhoudt. Voer de commodityformule van je contract in exclusief btw (zoals op je tariefkaart); het btw-tarief op de belastingstap rekent het door. Voor de dynamische en maandgemiddelde modi is de prijs factor x index + basis (index = de live spot, of het maandgemiddelde). Voorbeeld (Yuso dynamisch): factor 1.0, basis 0.02.",
         "data": {
           "custom_energy_factor": "Energiefactor (vermenigvuldiger op de index)",
           "custom_energy_base": "Energiebasis (EUR/kWh, excl. btw)",
@@ -281,7 +281,7 @@
       },
       "custom_energy": {
         "title": "Aangepaste energieformule",
-        "description": "Voer de commodityformule van je contract in exclusief btw (zoals op je tariefkaart); het btw-tarief op de belastingstap rekent het door. Voor de dynamische en maandgemiddelde modi is de prijs factor x index + basis (index = de live spot, of het maandgemiddelde). Voorbeeld (Yuso dynamisch): factor 1.0, basis 0.02.",
+        "description": "Let op: expertoptie, alleen voor leveranciers die GEEN publieke tariefkaart publiceren. Publiceert je leverancier er wel een, open dan liever een verzoek om die als volwaardige leverancier toe te voegen: een handmatig ingevoerd contract is een statische momentopname zonder live kaartverversing en zonder driftcontrole, dus de waarden blijven alleen correct als je ze zelf bijhoudt. Voer de commodityformule van je contract in exclusief btw (zoals op je tariefkaart); het btw-tarief op de belastingstap rekent het door. Voor de dynamische en maandgemiddelde modi is de prijs factor x index + basis (index = de live spot, of het maandgemiddelde). Voorbeeld (Yuso dynamisch): factor 1.0, basis 0.02.",
         "data": {
           "custom_energy_factor": "Energiefactor (vermenigvuldiger op de index)",
           "custom_energy_base": "Energiebasis (EUR/kWh, excl. btw)",

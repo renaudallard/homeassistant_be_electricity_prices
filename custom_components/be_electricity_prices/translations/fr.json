@@ -88,7 +88,7 @@
       },
       "custom_energy": {
         "title": "Formule d'energie personnalisee",
-        "description": "Entrez la formule de votre contrat hors TVA (comme sur votre fiche tarifaire) ; le taux de TVA de l'etape taxes l'applique. Pour les modes dynamique et moyenne mensuelle, le prix est facteur x indice + base (indice = le spot en direct, ou la moyenne du mois de livraison). Exemple (Yuso dynamique) : facteur 1.0, base 0.02.",
+        "description": "Note : option expert reservee aux fournisseurs qui ne publient AUCUNE fiche tarifaire publique. Si votre fournisseur en publie une, ouvrez plutot une demande pour l'ajouter comme fournisseur a part entiere : un contrat saisi a la main est un instantane fige, sans rafraichissement de la fiche ni detection de derive, donc les valeurs ne restent correctes que si vous les tenez a jour vous-meme. Entrez la formule de votre contrat hors TVA (comme sur votre fiche tarifaire) ; le taux de TVA de l'etape taxes l'applique. Pour les modes dynamique et moyenne mensuelle, le prix est facteur x indice + base (indice = le spot en direct, ou la moyenne du mois de livraison). Exemple (Yuso dynamique) : facteur 1.0, base 0.02.",
         "data": {
           "custom_energy_factor": "Facteur d'energie (multiplicateur de l'indice)",
           "custom_energy_base": "Base d'energie (EUR/kWh, hors TVA)",
@@ -281,7 +281,7 @@
       },
       "custom_energy": {
         "title": "Formule d'energie personnalisee",
-        "description": "Entrez la formule de votre contrat hors TVA (comme sur votre fiche tarifaire) ; le taux de TVA de l'etape taxes l'applique. Pour les modes dynamique et moyenne mensuelle, le prix est facteur x indice + base (indice = le spot en direct, ou la moyenne du mois de livraison). Exemple (Yuso dynamique) : facteur 1.0, base 0.02.",
+        "description": "Note : option expert reservee aux fournisseurs qui ne publient AUCUNE fiche tarifaire publique. Si votre fournisseur en publie une, ouvrez plutot une demande pour l'ajouter comme fournisseur a part entiere : un contrat saisi a la main est un instantane fige, sans rafraichissement de la fiche ni detection de derive, donc les valeurs ne restent correctes que si vous les tenez a jour vous-meme. Entrez la formule de votre contrat hors TVA (comme sur votre fiche tarifaire) ; le taux de TVA de l'etape taxes l'applique. Pour les modes dynamique et moyenne mensuelle, le prix est facteur x indice + base (indice = le spot en direct, ou la moyenne du mois de livraison). Exemple (Yuso dynamique) : facteur 1.0, base 0.02.",
         "data": {
           "custom_energy_factor": "Facteur d'energie (multiplicateur de l'indice)",
           "custom_energy_base": "Base d'energie (EUR/kWh, hors TVA)",
