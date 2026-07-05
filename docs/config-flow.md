@@ -29,8 +29,10 @@ Related docs:
 | `BePricesOptionsFlow` | `_WizardStepsMixin, OptionsFlow` | Post-install; menu -> `edit` (re-runs the chain pre-filled) or `compare` (throwaway quote) (`config_flow.py:1020`) |
 
 Both flows walk the *same* chain: `supplier/region -> contract -> dso -> meter ->
-(dso_tariff_mode) -> (api_key) -> (capacity) -> (connection_power) -> solar ->
-(injection_api_key) -> meters`. Only the entry step and `_finalize` differ. The
+(dso_tariff_mode) -> (api_key) -> (custom_energy) -> (capacity) ->
+(connection_power) -> solar -> (injection_api_key) -> (custom_injection) ->
+(custom_dso) -> (custom_tax) -> meters`. The four `custom_*` steps run only for
+the expert custom supplier. Only the entry step and `_finalize` differ. The
 mixin's docstring at `config_flow.py:761` states the invariant: `_after_meter` is
 overridden in `BePricesConfigFlow` to add the install-time unique-id reject, and
 `_finalize` is abstract (`config_flow.py:972` raises `NotImplementedError`).
@@ -53,11 +55,15 @@ the "Shown when" column gives the gate.
 | `dso` | `async_step_dso` (`config_flow.py:792`) | Distribution operator | `CONF_DSO` | Always |
 | `meter` | `async_step_meter` (`config_flow.py:803`) | Meter type | `CONF_METER` | Always; option list narrows by contract kind |
 | `dso_tariff_mode` | `async_step_dso_tariff_mode` (`config_flow.py:919`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia (`config_flow.py:930`) |
-| `api_key` | `async_step_api_key` (`config_flow.py:816`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` (`config_flow.py:957`) |
+| `api_key` | `async_step_api_key` (`config_flow.py:816`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
+| `custom_energy` | `async_step_custom_energy` | Commodity formula (mode-dependent fields) | `CONF_CUSTOM_ENERGY_*`, `CONF_CUSTOM_YEARLY_FIXED_FEE` | Custom supplier only, after the energy/api-key step |
 | `capacity` | `async_step_capacity` (`config_flow.py:834`) | Peak source (sensor/fixed) + value | `CONF_CAPACITY_MODE`, `CONF_CAPACITY_PEAK_SENSOR`, `CONF_CAPACITY_FIXED_KW` | Region == Flanders (`config_flow.py:963`, `:968`) |
 | `connection_power` | `async_step_connection_power` (`config_flow.py:938`) | Brussels connection-power tier | `CONF_CONNECTION_KVA_TIER` | Region == Brussels (`config_flow.py:949`) |
 | `solar` | `async_step_solar` (`config_flow.py:846`) | Inverter kVA + regime | `CONF_SOLAR_KVA`, `CONF_SOLAR_REGIME` | Always |
 | `injection_api_key` | `async_step_injection_api_key` (`config_flow.py:874`) | ENTSO-E token (optional) | `CONF_API_KEY` | `_needs_injection_api_key` true (`config_flow.py:856`) |
+| `custom_injection` | `async_step_custom_injection` | Injection formula (flat / spot / monthly-mean, floor) | `CONF_CUSTOM_INJECTION_*` | Custom supplier on the injection regime |
+| `custom_dso` | `async_step_custom_dso` | Hand-entered DSO overlay (region/meter-relevant fields) | `CONF_CUSTOM_DSO_*` | Custom supplier only |
+| `custom_tax` | `async_step_custom_tax` | Hand-entered taxes/levies + VAT rate | `CONF_CUSTOM_TAX_*`, `CONF_CUSTOM_VAT_RATE` | Custom supplier only |
 | `meters` | `async_step_meters` (`config_flow.py:907`) | kWh sensors (registers or totals) | 6 `CONF_*_KWH` keys | Always (final step, then `_finalize`) |
 
 ### Flow diagram
@@ -80,9 +86,11 @@ the "Shown when" column gives the gate.
                                           │                    │
                           _after_dso_tariff_mode  ◄────────────┘
                                           │
-              contract kind == dynamic? ──┼── yes → async_step_api_key
+       kind == dynamic | spot_monthly? ──┼── yes → async_step_api_key
                                           │            (validate ENTSO-E)
                           _after_api_key  ◄───────────┘
+                                          │
+                       _after_energy_key  ── custom? → async_step_custom_energy
                                           │
                      region == flanders? ─┼── yes → async_step_capacity
                                           │              │
@@ -94,6 +102,8 @@ the "Shown when" column gives the gate.
                                           │
         _after_solar → _needs_injection_api_key? ─ yes → async_step_injection_api_key
                                           │                     │ (optional, skippable)
+                          _custom_tail  ── custom? → (custom_injection) →
+                                          │            custom_dso → custom_tax
                           async_step_meters  ◄──────────────────┘
                                           │
                           _finalize  (create entry / update entry)
@@ -129,7 +139,7 @@ Schema `_contract_schema` (`config_flow.py:240`). Contracts come from
 `get_extractor(supplier_id).contracts` and keeps only those whose
 `Contract.regions` frozenset contains the region. `Contract` is defined at
 `providers/base.py:59`; its `kind` is one of the `TariffKind` literals
-`fixed | variable | dynamic | tou | tou_impact` (`providers/base.py:53`).
+`fixed | variable | dynamic | tou | tou_impact | spot_monthly` (`providers/base.py:53`).
 
 Guard: `async_step_contract` aborts with `supplier_region_unavailable` when the
 filtered list is empty (`config_flow.py:782`), for example a Flanders-only supplier
@@ -189,11 +199,12 @@ automatically when the DSO does not publish Impact rates (`const.py:126`), so th
 step is skipped entirely (Brussels has only Sibelga, Flanders bills via the
 capacity tariff; `config_flow.py:930` comment).
 
-### `api_key`: ENTSO-E token for dynamic energy (required)
+### `api_key`: ENTSO-E token for spot-indexed energy (required)
 
 Schema `_api_key_schema` (`config_flow.py:332`), a `PASSWORD` text field. Reached
-from `_after_dso_tariff_mode` when the contract kind is `dynamic`
-(`config_flow.py:957`). The typed key is stripped and validated live against the
+from `_after_dso_tariff_mode` when the contract kind is `dynamic` or
+`spot_monthly` (both price off ENTSO-E spots — live per-slot for dynamic, monthly
+mean for spot-monthly). The typed key is stripped and validated live against the
 ENTSO-E day-ahead endpoint by `_validate_entsoe_key` (`config_flow.py:343`) before
 the flow proceeds:
 

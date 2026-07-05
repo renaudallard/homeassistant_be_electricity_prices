@@ -69,7 +69,7 @@ per config entry (`providers/base.py:311`).
 | energy contribution | Federal levy (cotisation energie), EUR/kWh, part of the tax overlay. | `providers/base.py:299` |
 | energy fund | Flemish Energiefonds, billed as EUR/month (not per kWh); 0 outside Flanders and 0 for domiciled Flemish customers. | `providers/base.py:304`, README.md:147 |
 | ENTSO-E day-ahead spot | The Belgian day-ahead wholesale price from the ENTSO-E Transparency Platform, the `spot` term in every dynamic and spot-indexed-injection formula. Fetched from `ENTSOE_BASE_URL` for BE domain `ENTSOE_BE_DOMAIN`. | `const.py:205`, `const.py:206` |
-| EnergyRates | Union of the five energy-formula dataclasses a snapshot can carry: `FixedRates | VariableRates | DynamicRates | TimeOfUseRates | ImpactRates`. | `providers/base.py:211` |
+| EnergyRates | Union of the six energy-formula dataclasses a snapshot can carry: `FixedRates | VariableRates | DynamicRates | TimeOfUseRates | ImpactRates | SpotMonthlyRates`. | `providers/base.py:217` |
 | exclusive-night circuit (`METER_EXCLUSIVE_NIGHT`) | A separate meter that only registers during DSO off-peak hours (electric water heater, night-storage heater), billed at the supplier's `exclusive_night` rate. Configured as a second config entry. | `const.py:116`, `const.py:122` |
 | ExtractorError | Raised when a supplier source cannot be fetched or parsed; surfaces the `extractor_failed` repair issue. | `providers/base.py:397` |
 | federal excise | Federal excise duty (accijns / droit d'accise), EUR/kWh, in the tax overlay. | `providers/base.py:298` |
@@ -104,9 +104,11 @@ per config entry (`providers/base.py:311`).
 | SOLAR_REGIME_* | The three solar regimes: `none`, `compensation`, `injection` (`CONF_SOLAR_REGIME`). | `const.py:181`, `const.py:190` |
 | source_url / publication_label | Snapshot provenance: the card URL and its human publication month, surfaced in diagnostics and the `snapshot_publication` attribute. | `providers/base.py:324`, `providers/base.py:325` |
 | spot_indexed_injection | Contract flag: True when a non-dynamic product's injection is itself a per-hour `factor * spot + base` formula (Cociter Variable), so pricing the injection needs an ENTSO-E key even though the energy is variable. | `providers/base.py:75` |
+| SpotMonthlyRates | Energy shape billing a flat rate for the whole month: `factor * monthly_mean(spot) + base`. Used by the expert custom monthly-average mode; the coordinator threads the delivery month's mean spot through the same `spot_eur_per_kwh` parameter `DynamicRates` uses. | `providers/base.py:152` |
+| supplier: custom (`SUPPLIER_CUSTOM`) | The expert escape-hatch supplier for products with no public card: the user types the commodity formula and all regulated DSO + tax values, and the coordinator builds the snapshot from the config entry (no fetch). Three modes: dynamic, monthly-average, fixed. | `const.py`, `providers/custom.py` |
 | SupplierExtractor | The registry entry a provider module exposes as top-level `EXTRACTOR`: id, label, contracts, `fetch`, optional `probe` and `fetch_for_month`. | `providers/base.py:364`, `providers/base.py:391` |
 | Tarif Impact (kind `tou_impact`) | Wallonia CWaPE 3-band time-of-use tariff (pic/medium/eco), opt-in for SMR3 customers. Distinct from plain TOU because the schedule is the CWaPE one with no weekend exception, and the DSO Impact tariff gates eligibility. | `providers/base.py:185`, `const.py:134` |
-| TariffKind | The `Literal` of the five contract kinds: `fixed`, `variable`, `dynamic`, `tou`, `tou_impact`. | `providers/base.py:53` |
+| TariffKind | The `Literal` of the six contract kinds: `fixed`, `variable`, `dynamic`, `tou`, `tou_impact`, `spot_monthly`. | `providers/base.py:53` |
 | TaxOverlay | Federal + regional levy dataclass: excise, energy contribution, three regional renewables, connection fee, energy fund (per month), and `vat_rate`. | `providers/base.py:287` |
 | TimeOfUseRates (kind `tou`) | Three-slot hour-of-day energy contract (peak / transition / offpeak) with a product-dependent `weekend_rule`. Requires an SMR3 meter. | `providers/base.py:153` |
 | TOU slots (peak / transition / offpeak) | The weekday TOU schedule shared across products: peak 07:00-11:00 + 17:00-22:00, transition 11:00-17:00 + 22:00-01:00, offpeak 01:00-07:00. | `providers/base.py:158` |

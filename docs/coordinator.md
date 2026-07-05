@@ -125,9 +125,9 @@ Two config entries on the same `(supplier, contract, region)` share one fetched 
 
 The Store is `_MigratingStore` (`coordinator.py:510`), a `Store[dict]` subclass whose `_async_migrate_func` returns `{}` for any blob written under an older `STORAGE_VERSION` (`coordinator.py:527`). Every persisted field is re-derivable from a fresh fetch, so dropping the cache on a major-version mismatch is safe and avoids HA's "missing migration function" warning. `STORAGE_VERSION` is `2` (`const.py:221`).
 
-There is a **second**, finer version inside the serialized snapshot: `_SNAPSHOT_SCHEMA_VERSION`, currently `13` (`coordinator.py:2711`). `_snapshot_to_dict` stamps it (`coordinator.py:2720`); `_snapshot_from_dict` raises `ValueError` when a loaded blob's `_schema_version` is below it (`coordinator.py:2736`), which `async_load_persistent` catches and treats as "discard and re-fetch".
+There is a **second**, finer version inside the serialized snapshot: `_SNAPSHOT_SCHEMA_VERSION`, currently `14` (`coordinator.py:2864`). `_snapshot_to_dict` stamps it (`coordinator.py:2867`); `_snapshot_from_dict` raises `ValueError` when a loaded blob's `_schema_version` is below it (`coordinator.py:2888`), which `async_load_persistent` catches and treats as "discard and re-fetch".
 
-This is the mechanism that lets a parser fix reach already-cached users. A probe-based supplier keeps serving its cached snapshot until the probe key changes (often the next monthly card, weeks away), so a code fix that adds or corrects a snapshot field does not heal existing users unless `_SNAPSHOT_SCHEMA_VERSION` is also bumped to invalidate their cache. The comment block at `coordinator.py:2685-2710` records why each bump happened (v9/v10 for `DynamicRates.quarter_hourly`, v11 for `supplier_prosumer_eur_per_kva_year`, v12 for per-slot injection, v13 for the mis-parsed Eneco injection snapshot). **When you change what an extractor parses into the snapshot, bump this constant.**
+This is the mechanism that lets a parser fix reach already-cached users. A probe-based supplier keeps serving its cached snapshot until the probe key changes (often the next monthly card, weeks away), so a code fix that adds or corrects a snapshot field does not heal existing users unless `_SNAPSHOT_SCHEMA_VERSION` is also bumped to invalidate their cache. The comment block above the constant records why each bump happened (v9/v10 for `DynamicRates.quarter_hourly`, v11 for `supplier_prosumer_eur_per_kva_year`, v12 for per-slot injection, v13 for the mis-parsed Eneco injection snapshot, v14 for the `SpotMonthlyRates` energy kind and the `InjectionRates.floor_at_zero` flag). **When you change what an extractor parses into the snapshot, bump this constant.**
 
 ## 3. ENTSO-E spot integration
 
@@ -239,7 +239,7 @@ Per-regime day math is documented at `coordinator.py:2436`. For `compensation` t
 
 ## 8. Injection taxonomy and the spot-gating invariant
 
-Belgian residential injection is VAT-exempt, so `InjectionRates` values are never VAT-scaled (`providers/base.py:216`). `InjectionRates` (`providers/base.py:214`) can carry a monthly indicative (`current`), an hourly formula (`factor`/`base`), and a per-slot TOU triplet (`peak`/`transition`/`offpeak`). The coordinator distinguishes three shapes:
+Belgian residential injection is VAT-exempt, so `InjectionRates` values are never VAT-scaled (`providers/base.py:216`). `InjectionRates` (`providers/base.py:214`) can carry a monthly indicative (`current`), an hourly formula (`factor`/`base`), a per-slot TOU triplet (`peak`/`transition`/`offpeak`), and an opt-in `floor_at_zero` flag. The coordinator distinguishes three shapes:
 
 | Shape | Fields | Live price source | Example |
 |-------|--------|-------------------|---------|
@@ -247,7 +247,7 @@ Belgian residential injection is VAT-exempt, so `InjectionRates` values are neve
 | (b) hourly `factor*spot+base` | `factor`+`base`, energy is dynamic | `factor*spot+base` at the current slot | Engie, OCTA+, TotalEnergies, Luminus, Mega dynamic |
 | (c) spot-indexed on static energy | `factor`+`base`, `current is None`, energy NOT dynamic | `factor*spot+base`, but the energy path fetches no spot | Cociter Variable |
 
-`_compute_injection_price` (`coordinator.py:1662`) implements the live selection: per-slot TOU rate first (`coordinator.py:1680`), then the spot formula when the energy is dynamic OR `current is None` (`coordinator.py:1694`), otherwise the static `current`. When a formula needs a spot but none is available it returns `None` rather than fabricating a value. Note the subtlety at `coordinator.py:1694`: a contract that has both a monthly `current` and a `factor`/`base` (shape (a) with a formula, e.g. Ecofix Flexy, EBEM SPP0) uses the realized monthly `current`, not the spot, keeping the live sensor consistent with the YTD credit.
+`_compute_injection_price` implements the live selection: per-slot TOU rate first, then the spot formula when the energy is dynamic OR `current is None`, otherwise the static `current`. When a formula needs a spot but none is available it returns `None` rather than fabricating a value. Note the subtlety: a contract that has both a monthly `current` and a `factor`/`base` (shape (a) with a formula, e.g. Ecofix Flexy, EBEM SPP0) uses the realized monthly `current`, not the spot, keeping the live sensor consistent with the YTD credit. When a contract sets `floor_at_zero` (the expert custom monthly-average mode), `_floor_injection` clamps the resolved rate at 0 in both the live and historical paths. A `SpotMonthlyRates` energy contract's mean-indexed injection is baked into a flat `current` for the tick by `_bake_monthly_injection` so it prices off the delivery month's mean, not the live hourly spot.
 
 ### 8.1 The shape (c) invariant
 

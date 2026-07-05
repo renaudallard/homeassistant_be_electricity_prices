@@ -78,15 +78,17 @@ relative to that package directory.
 | `binary_sensor.py` | The `tomorrow_prices_available` binary sensor (ON once ENTSO-E has published the next-day curve). |
 | `button.py` | A refresh button entity that forces an immediate snapshot re-fetch for the entry. |
 | `diagnostics.py` | The HA download-diagnostics payload for an entry (config, snapshot metadata, last error), redacting the ENTSO-E key. |
-| `providers/base.py` | The extractor protocol and every shared dataclass: `SupplierExtractor`, `Contract`, `SupplierSnapshot`, the five `EnergyRates` shapes, `DsoOverlay`, `TaxOverlay`, `InjectionRates`, and the fetch / probe / archive callable types. |
+| `providers/base.py` | The extractor protocol and every shared dataclass: `SupplierExtractor`, `Contract`, `SupplierSnapshot`, the six `EnergyRates` shapes, `DsoOverlay`, `TaxOverlay`, `InjectionRates`, and the fetch / probe / archive callable types. |
 | `providers/__init__.py` | The supplier registry: imports each module's `EXTRACTOR`, exposes the `EXTRACTORS` dict, and the `get()` / `all_extractors()` lookups. |
 | `providers/_pdf.py` | Shared PDF and HTTP helpers used by the extractors (text extraction, transient-error classification via `is_transient_fetch_error`, and column-alignment utilities). |
 
-In addition, thirteen supplier modules live under `providers/`, each exposing a top-level
+In addition, thirteen scraped supplier modules live under `providers/`, each exposing a top-level
 `EXTRACTOR`: `bolt.py`, `cociter.py`, `dats24.py`, `ebem.py`, `ecofix.py`, `ecopower.py`,
 `eneco.py`, `engie.py`, `frank.py`, `luminus.py`, `mega.py`, `octaplus.py`, and
-`totalenergies.py`. Each has its own page under [providers/](providers/). The framework they
-implement is documented in [provider-framework.md](provider-framework.md).
+`totalenergies.py`. Each has its own page under [providers/](providers/). A fourteenth module,
+`custom.py`, is the expert escape hatch: it is not scraped (its `fetch` is a stub) and the
+coordinator builds its snapshot from the config entry. The framework they implement is
+documented in [provider-framework.md](provider-framework.md).
 
 ## The core domain model
 
@@ -105,7 +107,7 @@ region  (flanders | wallonia | brussels)                     const.py:43
   +-- supplier   (which extractor's EXTRACTOR is used)        providers/__init__.py:61
         |
         +-- contract  (a Contract with a TariffKind)          providers/base.py:53
-        |     fixed | variable | dynamic | tou | tou_impact
+        |     fixed | variable | dynamic | tou | tou_impact | spot_monthly
         |
         +-- meter     (which register split is billed)        const.py:124
               mono | bi | dynamic | exclusive_night
@@ -140,10 +142,16 @@ the `Contract`s it sells (`providers/base.py:59`), each carrying a `TariffKind`
 | `dynamic` | `factor x spot + base` per slot | `DynamicRates` (`providers/base.py:128`) | `quarter_hourly` picks the 15-minute vs hourly billing grid. |
 | `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/base.py:154`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
 | `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/base.py:186`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. |
+| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py:152`) | Expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. |
 
 A `Contract` also carries the `regions` it is actually published in (some products 404 outside
 their home region) and `spot_indexed_injection` (`providers/base.py:75`), a flag for the one
 non-dynamic case (Cociter Variable) where pricing the injection still needs an ENTSO-E spot.
+
+One registry entry is not scraped: the expert **custom** supplier
+(`providers/custom.py`, `SUPPLIER_CUSTOM`), an escape hatch for products with no public tariff
+card. Its `fetch` is a stub; the coordinator builds the snapshot from the config entry the user
+filled in (formula plus all regulated DSO + tax values) via `build_snapshot`.
 
 ### Meter
 

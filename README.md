@@ -61,6 +61,7 @@ publication and how to parse it.
 - **One-off supplier comparison** — the OptionsFlow has a *Compare another supplier* path that quotes a different supplier and contract against your current region / DSO / peak / solar settings. **Static and dynamic contracts can be quoted against each other** ("should I switch from fixed to dynamic?"); the flow prompts for an ENTSO-E key when a side needs spot data (a dynamic contract, or a spot-indexed-injection target like Cociter Variable on the injection regime) and you don't already have one saved. The annual estimate uses your **measured rolling-year consumption** (and, for solar users, injection) read from the same kWh sensors that feed `current_year_cost`, with a sensible 3500 kWh fallback when no sensor is wired. The result page also shows a **year-to-date what-if**: the actual kWh you've used since 1 January re-priced at each supplier's current rate, with two-row unicode bar charts so the difference reads at a glance. The meter type is overridable for static contracts (compare *what if I were on bi-hourly billing under supplier X*). Solar regimes are honoured: compensation nets consumption against injection, injection regime credits each supplier's own injection price. No second entry, no extra polling, nothing saved.
 - **Self-healing** — last-known prices keep serving on outage. Four repair issues surface under **Settings → System → Repairs**: snapshot older than 7 days, a supplier extractor parse failure (layout drift), the supplier being unreachable after repeated fetch failures, and ENTSO-E rejecting the API key. A single transient fetch timeout no longer raises an issue; each auto-clears on the next successful refresh.
 - **Catalog drift detection** — the daily live-check diffs each supplier's public catalog against the registry and opens a GitHub issue when a new product appears, plus per-supplier wallclock + bytes-received telemetry to flag silent slowdowns and PDF size jumps.
+- **Expert custom formula** — an escape hatch for suppliers that publish no public tariff card (group-purchase deals, B2B-flavoured products). You type the commodity formula (`factor × spot + base`, a monthly-averaged spot rate, or a flat rate) and all regulated DSO + tax values; there is no live card, so it's a static snapshot with none of the auto-update or drift-check safety net. Listed last in the supplier dropdown and clearly labelled as expert.
 
 ## Supported providers
 
@@ -79,6 +80,7 @@ publication and how to parse it.
 | **OCTA+** | Fixed · Fixed Impact *(Wallonia, CWaPE 3-band)* · Eco Fixed · Smart Variable · Flux · Eco Flux · Dynamic · Eco Dynamic | [`providers/octaplus.py`](./custom_components/be_electricity_prices/providers/octaplus.py) — stable URLs at `files.octaplus.be/tariffs/E_OCTA_<PRODUCT>_RE_<VL\|WL>_FR.pdf`, parsed via word-coordinate alignment (heavy character spacing in the tax block) — Flanders + Wallonia only |
 | **TotalEnergies** | Electricité Fixe/Variable · Impact · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe | [`providers/totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) — stable URLs at `totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/`, parsed via `pdfplumber` (rotated columns) |
 | **Frank Energie** | Dynamisch · Dynamisch HV · Dynamisch Korting · Dynamisch JN · Dynamisch Slim | [`providers/frank.py`](./custom_components/be_electricity_prices/providers/frank.py) — monthly tariff card PDFs discovered via the public Sanity CMS file-asset API (`8navd656.api.sanity.io`), parsed via `pdfplumber`. Flanders only, five dynamic contract tiers with different factor/base/fee combinations. |
+| **Expert: custom formula** *(no public card)* | Dynamic (`factor × spot + base`) · Monthly average (`factor × monthly-mean spot + base`) · Fixed / manual rate | [`providers/custom.py`](./custom_components/be_electricity_prices/providers/custom.py) — an escape hatch for suppliers with **no public, machine-resolvable tariff card** (see below). Not scraped: you type the commodity formula and all regulated DSO + tax values, and the coordinator builds the snapshot from your config entry. |
 
 Adding another supplier is a self-contained PR: drop a new module under
 [`custom_components/be_electricity_prices/providers/`](./custom_components/be_electricity_prices/providers/),
@@ -95,7 +97,25 @@ facts that no public card lists: the connection tier and contracted or measured
 peak power, the annual consumption band and any sector exemption, the reactive
 power / power factor, and any individually negotiated terms. Those inputs cannot
 be fetched or guessed, so a residential-only integration cannot represent a B2B
-contract.
+contract. If you nonetheless know your own formula and grid/tax rates, the
+**Expert: custom formula** supplier lets you enter them by hand (see below).
+
+**Expert: custom formula (no public card).** Some products can't be scraped
+because the supplier publishes no public, machine-resolvable tariff card — the
+Yuso day-ahead offer, or a one-off group-purchase deal like the Mega iChoosr /
+Samen Overstappen *groepsaankoop*. For those, the last entry in the supplier
+dropdown lets a knowledgeable user type the pricing themselves: a dynamic
+`factor × spot + base` formula, a monthly-average variant that bills a flat rate
+equal to `factor × the delivery month's mean spot + base` (with an optional
+never-negative injection floor), or a plain fixed rate — plus the regulated DSO
+and tax values, which are identical for every supplier on your grid. Coefficients
+are entered excluding VAT (as printed on a tariff sheet) and the VAT rate grosses
+them up. This trades away the whole point of the live-extractor model: there is no
+card to refresh and no drift check, so the numbers are a static snapshot you must
+keep current yourself, and a monthly-average rate is a running estimate until the
+month closes. Where the source product indexes injection to Synergrid's SPP, the
+integration approximates it with the arithmetic monthly mean of the ENTSO-E
+day-ahead (that SPP index isn't available).
 
 ### How often the integration polls
 

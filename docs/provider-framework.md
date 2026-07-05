@@ -155,10 +155,12 @@ months.
 
 ## Contract and rate dataclasses
 
-A `SupplierSnapshot.energy` is one of five `EnergyRates` variants
-(`providers/base.py:211`) chosen by the contract's `kind`. All rate dataclasses
+A `SupplierSnapshot.energy` is one of six `EnergyRates` variants
+(`providers/base.py:217`) chosen by the contract's `kind`. All rate dataclasses
 are `frozen=True, kw_only=True`. EUR values are always populated from a live
-fetch, never hardcoded.
+fetch, never hardcoded — the one exception is the expert **custom** supplier
+(`providers/custom.py`), whose snapshot is built from the config entry the user
+filled in rather than a scraped card.
 
 ### Contract
 
@@ -168,7 +170,7 @@ fetch, never hardcoded.
 | --- | --- | --- | --- |
 | `id` | `str` | required | Stable contract key, stored in the config entry. |
 | `label` | `str` | required | Human-facing product name. |
-| `kind` | `TariffKind` | required | One of `"fixed"`, `"variable"`, `"dynamic"`, `"tou"`, `"tou_impact"` (`providers/base.py:53`). Selects which `EnergyRates` variant the snapshot carries. |
+| `kind` | `TariffKind` | required | One of `"fixed"`, `"variable"`, `"dynamic"`, `"tou"`, `"tou_impact"`, `"spot_monthly"` (`providers/base.py:53`). Selects which `EnergyRates` variant the snapshot carries. |
 | `regions` | `frozenset[str]` | all three | Regions the product is actually published in. Defaults to `{flanders, wallonia, brussels}`; extractors override per-contract for products that 404 outside their home region (for example TotalEnergies Impact is Wallonia-only). |
 | `spot_indexed_injection` | `bool` | `False` | `True` when a non-dynamic product's injection is a per-hour spot formula with no printed monthly indicative (Cociter Variable). Pricing the injection then needs an ENTSO-E spot even though the energy side is variable, so the config flow offers the API-key step on the injection regime. Dynamic contracts already collect the key via their energy formula and leave this `False`. |
 
@@ -281,6 +283,26 @@ eco    : 01:00-07:00 + 11:00-17:00      (lowest)
 | `yearly_fixed_fee` | `float` | `0.0` | Yearly standing charge. |
 | `formula` | `str \| None` | `None` | Per-band formula text for diagnostics. |
 
+### SpotMonthlyRates
+
+`providers/base.py:152`. Monthly-indexed energy contract (`kind = "spot_monthly"`):
+a single flat rate for the whole delivery month, `factor * monthly_mean(spot) +
+base`, where the mean is the arithmetic average of that month's hourly ENTSO-E
+day-ahead spots. Used by the expert **custom** monthly-average mode for
+group-purchase products (e.g. the Mega iChoosr / Samen Overstappen
+*groepsaankoop*) that index the commodity to the realized monthly average. The
+coordinator threads the mean through the same `spot_eur_per_kwh` parameter
+`DynamicRates` uses, so the mean is computed at pricing time, not stored in the
+snapshot. Unlike `DynamicRates` the rate never varies within a month (always the
+hourly grid); the current month's mean is a running estimate until the month
+closes.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `factor` | `float` | required | Multiplier on the monthly mean spot. |
+| `base` | `float` | required | Additive term, EUR/kWh. |
+| `yearly_fixed_fee` | `float` | `0.0` | Yearly standing charge. |
+
 ### InjectionRates
 
 `providers/base.py:214`. Solar feed-in compensation, in EUR/kWh. Belgian
@@ -297,6 +319,7 @@ regardless of the consumption snapshot's `vat_rate`. At least one of (`current`,
 | `peak` | `float \| None` | `None` | Per-slot injection peak rate for a TOU contract whose feed-in varies by slot (Engie Empower Flextime). When set, the engine selects the slot with the same `tou_slot()` rule as the consumption side. |
 | `transition` | `float \| None` | `None` | Per-slot transition injection rate. |
 | `offpeak` | `float \| None` | `None` | Per-slot off-peak (super-off-peak) injection rate. |
+| `floor_at_zero` | `bool` | `False` | Opt-in: clamp the resolved injection rate at 0 (the contract guarantees a never-negative feed-in tariff, e.g. the Mega groepsaankoop). Applied in both the live and historical paths. Leave `False` for every scraped card, which must respect negative formulas. |
 
 When the per-slot triplet is set, `current` stays the single-meter fallback. The
 vast majority of contracts leave the triplet `None` (one injection rate across
@@ -382,7 +405,7 @@ class SupplierSnapshot:
 | --- | --- | --- | --- |
 | `supplier` | `str` | required | Supplier id (matches `SupplierExtractor.id`). |
 | `contract` | `str` | required | Contract id (matches the selected `Contract.id`). |
-| `energy` | `EnergyRates` | required | One of the five rate variants above. |
+| `energy` | `EnergyRates` | required | One of the six rate variants above. |
 | `dsos` | `dict[str, DsoOverlay]` | required | Network/capacity overlay keyed by canonical DSO sub-area key. |
 | `taxes` | `TaxOverlay` | required | Federal + regional levies. |
 | `source_url` | `str` | required | URL the snapshot was parsed from (surfaced in diagnostics). |
