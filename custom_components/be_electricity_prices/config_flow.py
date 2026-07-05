@@ -59,6 +59,7 @@ from homeassistant.config_entries import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     EntitySelector,
     EntitySelectorConfig,
     NumberSelector,
@@ -85,6 +86,37 @@ from .const import (
     CONF_CONNECTION_KVA_TIER,
     CONF_CONSUMPTION_KWH,
     CONF_CONTRACT,
+    CONF_CUSTOM_DSO_BRUSSELS_OSP,
+    CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR,
+    CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR,
+    CONF_CUSTOM_DSO_DISTRIBUTION_ECO,
+    CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT,
+    CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM,
+    CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK,
+    CONF_CUSTOM_DSO_DISTRIBUTION_PEAK,
+    CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
+    CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE,
+    CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR,
+    CONF_CUSTOM_DSO_TRANSPORT,
+    CONF_CUSTOM_ENERGY_BASE,
+    CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
+    CONF_CUSTOM_ENERGY_FACTOR,
+    CONF_CUSTOM_ENERGY_OFFPEAK,
+    CONF_CUSTOM_ENERGY_PEAK,
+    CONF_CUSTOM_ENERGY_QUARTER_HOURLY,
+    CONF_CUSTOM_ENERGY_SINGLE,
+    CONF_CUSTOM_INJECTION_BASE,
+    CONF_CUSTOM_INJECTION_CURRENT,
+    CONF_CUSTOM_INJECTION_FACTOR,
+    CONF_CUSTOM_INJECTION_FLOOR,
+    CONF_CUSTOM_INJECTION_MODE,
+    CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION,
+    CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH,
+    CONF_CUSTOM_TAX_FEDERAL_EXCISE,
+    CONF_CUSTOM_TAX_REGION_CONNECTION_FEE,
+    CONF_CUSTOM_TAX_REGIONAL_RENEWABLES,
+    CONF_CUSTOM_VAT_RATE,
+    CONF_CUSTOM_YEARLY_FIXED_FEE,
     CONF_DAY_CONSUMPTION_KWH,
     CONF_DAY_INJECTION_KWH,
     CONF_DSO,
@@ -98,17 +130,27 @@ from .const import (
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     CONNECTION_KVA_TIERS,
+    CUSTOM_CONTRACT_DYNAMIC,
+    CUSTOM_CONTRACT_FIXED,
+    CUSTOM_CONTRACT_MONTHLY,
+    CUSTOM_INJECTION_MODE_CURRENT,
+    CUSTOM_INJECTION_MODES,
     DEFAULT_CONNECTION_KVA_TIER,
+    DEFAULT_CUSTOM_VAT_RATE,
     DSO_MODE_BI_HORAIRE,
+    DSO_MODE_IMPACT,
     DSO_TARIFF_MODES,
     SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_NONE,
     SOLAR_REGIMES,
+    SUPPLIER_CUSTOM,
     VREG_CAPACITY_FLOOR_KW,
     DOMAIN,
     DSO_CHOICES,
+    METER_BI,
     METER_DYNAMIC,
+    METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     METER_TYPES,
     REGION_BRUSSELS,
@@ -188,6 +230,10 @@ def _compare_supplier_options(region: str, current_kind: str) -> list[SelectOpti
     fetch when crossing into dynamic territory."""
     out: list[SelectOptionDict] = []
     for ext in all_extractors():
+        # The expert custom supplier has no fetchable card, so it can't be a
+        # comparison target (only the current side of a quote).
+        if ext.id == SUPPLIER_CUSTOM:
+            continue
         if region not in ext.regions():
             continue
         if not any(region in c.regions for c in ext.contracts):
@@ -294,6 +340,158 @@ def _connection_power_schema(defaults: dict[str, Any]) -> vol.Schema:
             ),
         }
     )
+
+
+def _custom_num(*, negative: bool = False) -> NumberSelector:
+    """Number selector for a hand-entered EUR/kWh rate or coefficient.
+
+    ``negative=True`` for values a Belgian formula can legitimately drive
+    below zero (an injection factor/base, a spot multiplier/offset); the
+    rest are floored at 0.
+    """
+    if negative:
+        return NumberSelector(
+            NumberSelectorConfig(step="any", mode=NumberSelectorMode.BOX)
+        )
+    return NumberSelector(
+        NumberSelectorConfig(min=0.0, step="any", mode=NumberSelectorMode.BOX)
+    )
+
+
+def _add_custom_num(
+    fields: dict[Any, Any],
+    defaults: dict[str, Any],
+    key: str,
+    default: float = 0.0,
+    *,
+    negative: bool = False,
+) -> None:
+    fields[vol.Optional(key, default=float(defaults.get(key, default)))] = _custom_num(
+        negative=negative
+    )
+
+
+def _custom_energy_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Energy formula fields for the chosen custom mode.
+
+    Coefficients are entered excluding VAT (as printed on a tariff sheet);
+    the ``custom_tax`` step's VAT rate grosses them up.
+    """
+    contract = defaults.get(CONF_CONTRACT)
+    fields: dict[Any, Any] = {}
+    if contract == CUSTOM_CONTRACT_FIXED:
+        meter = defaults.get(CONF_METER, METER_MONO)
+        _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_SINGLE)
+        if meter == METER_BI:
+            _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_PEAK)
+            _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_OFFPEAK)
+        if meter == METER_EXCLUSIVE_NIGHT:
+            _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT)
+    else:
+        _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_FACTOR, 1.0, negative=True)
+        _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_BASE, negative=True)
+        if contract == CUSTOM_CONTRACT_DYNAMIC:
+            fields[
+                vol.Optional(
+                    CONF_CUSTOM_ENERGY_QUARTER_HOURLY,
+                    default=bool(
+                        defaults.get(CONF_CUSTOM_ENERGY_QUARTER_HOURLY, False)
+                    ),
+                )
+            ] = BooleanSelector()
+    _add_custom_num(fields, defaults, CONF_CUSTOM_YEARLY_FIXED_FEE)
+    return vol.Schema(fields)
+
+
+def _custom_injection_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Injection formula fields (shown only on the injection regime).
+
+    A fixed-rate contract can only quote a flat ``current`` credit; the
+    spot-indexed modes also accept a ``factor``/``base`` formula applied to
+    the live spot (dynamic) or the monthly mean (monthly-average).
+    """
+    contract = defaults.get(CONF_CONTRACT)
+    modes = (
+        [CUSTOM_INJECTION_MODE_CURRENT]
+        if contract == CUSTOM_CONTRACT_FIXED
+        else list(CUSTOM_INJECTION_MODES)
+    )
+    fields: dict[Any, Any] = {
+        vol.Required(
+            CONF_CUSTOM_INJECTION_MODE,
+            default=defaults.get(CONF_CUSTOM_INJECTION_MODE, modes[0]),
+        ): SelectSelector(
+            SelectSelectorConfig(
+                options=modes,
+                mode=SelectSelectorMode.LIST,
+                translation_key="custom_injection_mode",
+            )
+        ),
+    }
+    _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_CURRENT)
+    _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_FACTOR, 1.0, negative=True)
+    _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_BASE, negative=True)
+    fields[
+        vol.Optional(
+            CONF_CUSTOM_INJECTION_FLOOR,
+            default=bool(
+                defaults.get(
+                    CONF_CUSTOM_INJECTION_FLOOR,
+                    contract == CUSTOM_CONTRACT_MONTHLY,
+                )
+            ),
+        )
+    ] = BooleanSelector()
+    return vol.Schema(fields)
+
+
+def _custom_dso_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Hand-entered DSO network overlay, only the region/meter-relevant
+    fields. Everything but distribution_single defaults to 0."""
+    region = defaults.get(CONF_REGION)
+    meter = defaults.get(CONF_METER, METER_MONO)
+    dso_mode = defaults.get(CONF_DSO_TARIFF_MODE)
+    fields: dict[Any, Any] = {}
+    _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE)
+    if meter == METER_BI:
+        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_PEAK)
+        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK)
+    if meter == METER_EXCLUSIVE_NIGHT:
+        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT)
+    _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_TRANSPORT)
+    _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR)
+    if region == REGION_FLANDERS:
+        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR)
+    if region == REGION_WALLONIA:
+        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR)
+        if dso_mode == DSO_MODE_IMPACT:
+            _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_PIC)
+            _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM)
+            _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_ECO)
+    if region == REGION_BRUSSELS:
+        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_BRUSSELS_OSP)
+    return vol.Schema(fields)
+
+
+def _custom_tax_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Hand-entered taxes/levies overlay. One regional-renewables field is
+    routed to the region's slot at build time; VAT grosses up every
+    component (injection stays exempt)."""
+    fields: dict[Any, Any] = {}
+    _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_FEDERAL_EXCISE)
+    _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION)
+    _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_REGIONAL_RENEWABLES)
+    _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_REGION_CONNECTION_FEE)
+    _add_custom_num(fields, defaults, CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH)
+    fields[
+        vol.Optional(
+            CONF_CUSTOM_VAT_RATE,
+            default=float(defaults.get(CONF_CUSTOM_VAT_RATE, DEFAULT_CUSTOM_VAT_RATE)),
+        )
+    ] = NumberSelector(
+        NumberSelectorConfig(min=0.0, max=1.0, step=0.01, mode=NumberSelectorMode.BOX)
+    )
+    return vol.Schema(fields)
 
 
 def _meter_schema(
@@ -869,7 +1067,16 @@ class _WizardStepsMixin:
     async def _after_solar(self) -> ConfigFlowResult:
         if self._needs_injection_api_key():
             return await self.async_step_injection_api_key()
+        if self._is_custom():
+            return await self._custom_tail()
         return await self.async_step_meters()
+
+    async def _custom_tail(self) -> ConfigFlowResult:
+        # Collect the injection formula (injection regime only), then the
+        # hand-entered DSO + tax overlays, before the meter-sensor step.
+        if self._data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION:
+            return await self.async_step_custom_injection()
+        return await self.async_step_custom_dso()
 
     async def async_step_injection_api_key(
         self, user_input: dict[str, Any] | None = None
@@ -955,19 +1162,76 @@ class _WizardStepsMixin:
         return await self.async_step_solar()
 
     async def _after_dso_tariff_mode(self) -> ConfigFlowResult:
-        if (
-            _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
-            == "dynamic"
+        # Dynamic and spot-monthly (custom) energy both price off ENTSO-E
+        # spots, so both collect the API key first.
+        if _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT]) in (
+            "dynamic",
+            "spot_monthly",
         ):
             return await self.async_step_api_key()
+        return await self._after_energy_key()
+
+    async def _after_api_key(self) -> ConfigFlowResult:
+        return await self._after_energy_key()
+
+    def _is_custom(self) -> bool:
+        return self._data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM
+
+    async def _after_energy_key(self) -> ConfigFlowResult:
+        # The expert custom supplier types its formula before the network /
+        # solar steps; every other supplier already carries its rates.
+        if self._is_custom():
+            return await self.async_step_custom_energy()
+        return await self._after_energy_collected()
+
+    async def _after_energy_collected(self) -> ConfigFlowResult:
         if self._data[CONF_REGION] == REGION_FLANDERS:
             return await self.async_step_capacity()
         return await self._before_solar()
 
-    async def _after_api_key(self) -> ConfigFlowResult:
-        if self._data[CONF_REGION] == REGION_FLANDERS:
-            return await self.async_step_capacity()
-        return await self._before_solar()
+    async def async_step_custom_energy(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self._after_energy_collected()
+        return self.async_show_form(
+            step_id="custom_energy",
+            data_schema=_custom_energy_schema(self._data),
+        )
+
+    async def async_step_custom_injection(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_custom_dso()
+        return self.async_show_form(
+            step_id="custom_injection",
+            data_schema=_custom_injection_schema(self._data),
+        )
+
+    async def async_step_custom_dso(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_custom_tax()
+        return self.async_show_form(
+            step_id="custom_dso",
+            data_schema=_custom_dso_schema(self._data),
+        )
+
+    async def async_step_custom_tax(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_meters()
+        return self.async_show_form(
+            step_id="custom_tax",
+            data_schema=_custom_tax_schema(self._data),
+        )
 
     def _finalize(self) -> ConfigFlowResult:
         raise NotImplementedError

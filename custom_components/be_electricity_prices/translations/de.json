@@ -85,6 +85,61 @@
           "consumption_kwh": "Gesamtverbrauch (kWh)",
           "injection_kwh": "Gesamteinspeisung (kWh)"
         }
+      },
+      "custom_energy": {
+        "title": "Eigene Energieformel",
+        "description": "Geben Sie die Commodity-Formel Ihres Vertrags ohne MwSt. ein (wie auf Ihrem Tarifblatt); der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis (Index = der Live-Spot oder das Monatsmittel). Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
+        "data": {
+          "custom_energy_factor": "Energiefaktor (Multiplikator auf den Index)",
+          "custom_energy_base": "Energiebasis (EUR/kWh, ohne MwSt.)",
+          "custom_energy_quarter_hourly": "Abrechnung je Viertelstunde",
+          "custom_energy_single": "Einzeltarif (EUR/kWh, ohne MwSt.)",
+          "custom_energy_peak": "Tagtarif (EUR/kWh, ohne MwSt.)",
+          "custom_energy_offpeak": "Nachttarif (EUR/kWh, ohne MwSt.)",
+          "custom_energy_exclusive_night": "Exklusiver Nachttarif (EUR/kWh, ohne MwSt.)",
+          "custom_yearly_fixed_fee": "Jaehrliche Grundgebuehr (EUR/Jahr)"
+        }
+      },
+      "custom_injection": {
+        "title": "Eigene Einspeiseformel",
+        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist.",
+        "data": {
+          "custom_injection_mode": "Einspeiseverguetung",
+          "custom_injection_current": "Fester Einspeisetarif (EUR/kWh)",
+          "custom_injection_factor": "Einspeisefaktor",
+          "custom_injection_base": "Einspeisebasis (EUR/kWh)",
+          "custom_injection_floor": "Nie negativ (Untergrenze 0)"
+        }
+      },
+      "custom_dso": {
+        "title": "Netztarife (VNB)",
+        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder dem Tarifblatt des VNB, ohne MwSt. Nur die Verteilung ist erforderlich; lassen Sie nicht gezahlte Posten auf 0.",
+        "data": {
+          "custom_dso_distribution_single": "Verteilung (EUR/kWh)",
+          "custom_dso_distribution_peak": "Verteilung Tag (EUR/kWh)",
+          "custom_dso_distribution_offpeak": "Verteilung Nacht (EUR/kWh)",
+          "custom_dso_distribution_exclusive_night": "Verteilung exklusive Nacht (EUR/kWh)",
+          "custom_dso_transport": "Transport (EUR/kWh)",
+          "custom_dso_data_management_per_year": "Datenverwaltung (EUR/Jahr)",
+          "custom_dso_capacity_eur_per_kw_year": "Kapazitaetstarif (EUR/kW/Jahr)",
+          "custom_dso_prosumer_eur_per_kva_year": "Prosumer-Tarif (EUR/kVA/Jahr)",
+          "custom_dso_distribution_pic": "Verteilung PIC-Band (EUR/kWh)",
+          "custom_dso_distribution_medium": "Verteilung MEDIUM-Band (EUR/kWh)",
+          "custom_dso_distribution_eco": "Verteilung ECO-Band (EUR/kWh)",
+          "custom_dso_brussels_osp": "Brugel-OSP-Gebuehr (EUR/Jahr)"
+        }
+      },
+      "custom_tax": {
+        "title": "Steuern und Abgaben",
+        "description": "Regulierte Steuern und Abgaben, ohne MwSt. Der MwSt.-Satz unten rechnet Energie, Netz und Steuern auf (Einspeisung bleibt MwSt.-frei). Die belgische Wohn-MwSt. ist 0.06; setzen Sie 0, wenn Sie alles inklusive MwSt. eingegeben haben.",
+        "data": {
+          "custom_tax_federal_excise": "Bundesverbrauchsteuer (EUR/kWh)",
+          "custom_tax_energy_contribution": "Energiebeitrag (EUR/kWh)",
+          "custom_tax_regional_renewables": "Abgabe erneuerbar (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Regionale Abgabe (EUR/kWh)",
+          "custom_tax_energy_fund_per_month": "Energiefonds (EUR/Monat)",
+          "custom_vat_rate": "MwSt.-Satz (z. B. 0.06)"
+        }
       }
     },
     "abort": {
@@ -223,6 +278,61 @@
           "consumption_kwh": "Gesamtverbrauch (kWh)",
           "injection_kwh": "Gesamteinspeisung (kWh)"
         }
+      },
+      "custom_energy": {
+        "title": "Eigene Energieformel",
+        "description": "Geben Sie die Commodity-Formel Ihres Vertrags ohne MwSt. ein (wie auf Ihrem Tarifblatt); der MwSt.-Satz im Steuerschritt rechnet sie auf. Bei den Modi dynamisch und Monatsmittel ist der Preis Faktor x Index + Basis (Index = der Live-Spot oder das Monatsmittel). Beispiel (Yuso dynamisch): Faktor 1.0, Basis 0.02.",
+        "data": {
+          "custom_energy_factor": "Energiefaktor (Multiplikator auf den Index)",
+          "custom_energy_base": "Energiebasis (EUR/kWh, ohne MwSt.)",
+          "custom_energy_quarter_hourly": "Abrechnung je Viertelstunde",
+          "custom_energy_single": "Einzeltarif (EUR/kWh, ohne MwSt.)",
+          "custom_energy_peak": "Tagtarif (EUR/kWh, ohne MwSt.)",
+          "custom_energy_offpeak": "Nachttarif (EUR/kWh, ohne MwSt.)",
+          "custom_energy_exclusive_night": "Exklusiver Nachttarif (EUR/kWh, ohne MwSt.)",
+          "custom_yearly_fixed_fee": "Jaehrliche Grundgebuehr (EUR/Jahr)"
+        }
+      },
+      "custom_injection": {
+        "title": "Eigene Einspeiseformel",
+        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist.",
+        "data": {
+          "custom_injection_mode": "Einspeiseverguetung",
+          "custom_injection_current": "Fester Einspeisetarif (EUR/kWh)",
+          "custom_injection_factor": "Einspeisefaktor",
+          "custom_injection_base": "Einspeisebasis (EUR/kWh)",
+          "custom_injection_floor": "Nie negativ (Untergrenze 0)"
+        }
+      },
+      "custom_dso": {
+        "title": "Netztarife (VNB)",
+        "description": "Regulierte Netzkosten, fuer jeden Lieferanten in Ihrem VNB gleich. Uebernehmen Sie sie von Ihrer Rechnung oder dem Tarifblatt des VNB, ohne MwSt. Nur die Verteilung ist erforderlich; lassen Sie nicht gezahlte Posten auf 0.",
+        "data": {
+          "custom_dso_distribution_single": "Verteilung (EUR/kWh)",
+          "custom_dso_distribution_peak": "Verteilung Tag (EUR/kWh)",
+          "custom_dso_distribution_offpeak": "Verteilung Nacht (EUR/kWh)",
+          "custom_dso_distribution_exclusive_night": "Verteilung exklusive Nacht (EUR/kWh)",
+          "custom_dso_transport": "Transport (EUR/kWh)",
+          "custom_dso_data_management_per_year": "Datenverwaltung (EUR/Jahr)",
+          "custom_dso_capacity_eur_per_kw_year": "Kapazitaetstarif (EUR/kW/Jahr)",
+          "custom_dso_prosumer_eur_per_kva_year": "Prosumer-Tarif (EUR/kVA/Jahr)",
+          "custom_dso_distribution_pic": "Verteilung PIC-Band (EUR/kWh)",
+          "custom_dso_distribution_medium": "Verteilung MEDIUM-Band (EUR/kWh)",
+          "custom_dso_distribution_eco": "Verteilung ECO-Band (EUR/kWh)",
+          "custom_dso_brussels_osp": "Brugel-OSP-Gebuehr (EUR/Jahr)"
+        }
+      },
+      "custom_tax": {
+        "title": "Steuern und Abgaben",
+        "description": "Regulierte Steuern und Abgaben, ohne MwSt. Der MwSt.-Satz unten rechnet Energie, Netz und Steuern auf (Einspeisung bleibt MwSt.-frei). Die belgische Wohn-MwSt. ist 0.06; setzen Sie 0, wenn Sie alles inklusive MwSt. eingegeben haben.",
+        "data": {
+          "custom_tax_federal_excise": "Bundesverbrauchsteuer (EUR/kWh)",
+          "custom_tax_energy_contribution": "Energiebeitrag (EUR/kWh)",
+          "custom_tax_regional_renewables": "Abgabe erneuerbar (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Regionale Abgabe (EUR/kWh)",
+          "custom_tax_energy_fund_per_month": "Energiefonds (EUR/Monat)",
+          "custom_vat_rate": "MwSt.-Satz (z. B. 0.06)"
+        }
       }
     }
   },
@@ -268,6 +378,12 @@
         "none": "Keine Solaranlage",
         "compensation": "Kompensationsregelung (Wallonien, vor 2024-01-01 zertifiziert, bis 2030)",
         "injection": "Einspeisetarif (nach-2024 Anlage oder intelligenter Zaehler)"
+      }
+    },
+    "custom_injection_mode": {
+      "options": {
+        "current": "Fixtarif",
+        "formula": "Formel (Faktor x Index + Basis)"
       }
     }
   },

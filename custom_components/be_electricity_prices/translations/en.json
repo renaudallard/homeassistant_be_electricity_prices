@@ -85,6 +85,61 @@
           "consumption_kwh": "Total consumption (kWh)",
           "injection_kwh": "Total injection (kWh)"
         }
+      },
+      "custom_energy": {
+        "title": "Custom energy formula",
+        "description": "Enter your contract's commodity formula excluding VAT (as printed on your tariff sheet); the VAT rate on the taxes step grosses it up. For the dynamic and monthly-average modes the price is factor x index + base (index = the live spot, or the delivery month's mean spot). Example (Yuso dynamic): factor 1.0, base 0.02.",
+        "data": {
+          "custom_energy_factor": "Energy factor (multiplier on the index)",
+          "custom_energy_base": "Energy base (EUR/kWh, excl. VAT)",
+          "custom_energy_quarter_hourly": "Bill per quarter-hour",
+          "custom_energy_single": "Single rate (EUR/kWh, excl. VAT)",
+          "custom_energy_peak": "Peak rate (EUR/kWh, excl. VAT)",
+          "custom_energy_offpeak": "Off-peak rate (EUR/kWh, excl. VAT)",
+          "custom_energy_exclusive_night": "Exclusive-night rate (EUR/kWh, excl. VAT)",
+          "custom_yearly_fixed_fee": "Yearly fixed fee (EUR/year)"
+        }
+      },
+      "custom_injection": {
+        "title": "Custom injection formula",
+        "description": "How your solar feed-in is paid. A flat rate is a fixed EUR/kWh credit; a formula is factor x index + base against the live spot (dynamic) or the monthly mean (monthly-average). Tick the floor if the contract guarantees the injection price is never negative.",
+        "data": {
+          "custom_injection_mode": "Injection pricing",
+          "custom_injection_current": "Flat injection rate (EUR/kWh)",
+          "custom_injection_factor": "Injection factor",
+          "custom_injection_base": "Injection base (EUR/kWh)",
+          "custom_injection_floor": "Never negative (floor at 0)"
+        }
+      },
+      "custom_dso": {
+        "title": "Grid (DSO) tariffs",
+        "description": "Regulated grid costs, identical for every supplier on your DSO. Copy them from your bill or your DSO's tariff sheet, excluding VAT. Only distribution is required; leave anything you don't pay at 0.",
+        "data": {
+          "custom_dso_distribution_single": "Distribution (EUR/kWh)",
+          "custom_dso_distribution_peak": "Distribution peak (EUR/kWh)",
+          "custom_dso_distribution_offpeak": "Distribution off-peak (EUR/kWh)",
+          "custom_dso_distribution_exclusive_night": "Distribution exclusive-night (EUR/kWh)",
+          "custom_dso_transport": "Transport (EUR/kWh)",
+          "custom_dso_data_management_per_year": "Data-management fee (EUR/year)",
+          "custom_dso_capacity_eur_per_kw_year": "Capacity tariff (EUR/kW/year)",
+          "custom_dso_prosumer_eur_per_kva_year": "Prosumer tariff (EUR/kVA/year)",
+          "custom_dso_distribution_pic": "Distribution PIC band (EUR/kWh)",
+          "custom_dso_distribution_medium": "Distribution MEDIUM band (EUR/kWh)",
+          "custom_dso_distribution_eco": "Distribution ECO band (EUR/kWh)",
+          "custom_dso_brussels_osp": "Brugel OSP fee (EUR/year)"
+        }
+      },
+      "custom_tax": {
+        "title": "Taxes and levies",
+        "description": "Regulated taxes and levies, excluding VAT. The VAT rate below grosses up energy, grid and taxes (injection stays VAT-exempt). Belgian residential VAT is 0.06; set 0 if you entered VAT-inclusive numbers everywhere.",
+        "data": {
+          "custom_tax_federal_excise": "Federal excise (EUR/kWh)",
+          "custom_tax_energy_contribution": "Energy contribution (EUR/kWh)",
+          "custom_tax_regional_renewables": "Regional renewables levy (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Regional connection fee (EUR/kWh)",
+          "custom_tax_energy_fund_per_month": "Energy fund (EUR/month)",
+          "custom_vat_rate": "VAT rate (e.g. 0.06)"
+        }
       }
     },
     "abort": {
@@ -223,6 +278,61 @@
           "consumption_kwh": "Total consumption (kWh)",
           "injection_kwh": "Total injection (kWh)"
         }
+      },
+      "custom_energy": {
+        "title": "Custom energy formula",
+        "description": "Enter your contract's commodity formula excluding VAT (as printed on your tariff sheet); the VAT rate on the taxes step grosses it up. For the dynamic and monthly-average modes the price is factor x index + base (index = the live spot, or the delivery month's mean spot). Example (Yuso dynamic): factor 1.0, base 0.02.",
+        "data": {
+          "custom_energy_factor": "Energy factor (multiplier on the index)",
+          "custom_energy_base": "Energy base (EUR/kWh, excl. VAT)",
+          "custom_energy_quarter_hourly": "Bill per quarter-hour",
+          "custom_energy_single": "Single rate (EUR/kWh, excl. VAT)",
+          "custom_energy_peak": "Peak rate (EUR/kWh, excl. VAT)",
+          "custom_energy_offpeak": "Off-peak rate (EUR/kWh, excl. VAT)",
+          "custom_energy_exclusive_night": "Exclusive-night rate (EUR/kWh, excl. VAT)",
+          "custom_yearly_fixed_fee": "Yearly fixed fee (EUR/year)"
+        }
+      },
+      "custom_injection": {
+        "title": "Custom injection formula",
+        "description": "How your solar feed-in is paid. A flat rate is a fixed EUR/kWh credit; a formula is factor x index + base against the live spot (dynamic) or the monthly mean (monthly-average). Tick the floor if the contract guarantees the injection price is never negative.",
+        "data": {
+          "custom_injection_mode": "Injection pricing",
+          "custom_injection_current": "Flat injection rate (EUR/kWh)",
+          "custom_injection_factor": "Injection factor",
+          "custom_injection_base": "Injection base (EUR/kWh)",
+          "custom_injection_floor": "Never negative (floor at 0)"
+        }
+      },
+      "custom_dso": {
+        "title": "Grid (DSO) tariffs",
+        "description": "Regulated grid costs, identical for every supplier on your DSO. Copy them from your bill or your DSO's tariff sheet, excluding VAT. Only distribution is required; leave anything you don't pay at 0.",
+        "data": {
+          "custom_dso_distribution_single": "Distribution (EUR/kWh)",
+          "custom_dso_distribution_peak": "Distribution peak (EUR/kWh)",
+          "custom_dso_distribution_offpeak": "Distribution off-peak (EUR/kWh)",
+          "custom_dso_distribution_exclusive_night": "Distribution exclusive-night (EUR/kWh)",
+          "custom_dso_transport": "Transport (EUR/kWh)",
+          "custom_dso_data_management_per_year": "Data-management fee (EUR/year)",
+          "custom_dso_capacity_eur_per_kw_year": "Capacity tariff (EUR/kW/year)",
+          "custom_dso_prosumer_eur_per_kva_year": "Prosumer tariff (EUR/kVA/year)",
+          "custom_dso_distribution_pic": "Distribution PIC band (EUR/kWh)",
+          "custom_dso_distribution_medium": "Distribution MEDIUM band (EUR/kWh)",
+          "custom_dso_distribution_eco": "Distribution ECO band (EUR/kWh)",
+          "custom_dso_brussels_osp": "Brugel OSP fee (EUR/year)"
+        }
+      },
+      "custom_tax": {
+        "title": "Taxes and levies",
+        "description": "Regulated taxes and levies, excluding VAT. The VAT rate below grosses up energy, grid and taxes (injection stays VAT-exempt). Belgian residential VAT is 0.06; set 0 if you entered VAT-inclusive numbers everywhere.",
+        "data": {
+          "custom_tax_federal_excise": "Federal excise (EUR/kWh)",
+          "custom_tax_energy_contribution": "Energy contribution (EUR/kWh)",
+          "custom_tax_regional_renewables": "Regional renewables levy (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Regional connection fee (EUR/kWh)",
+          "custom_tax_energy_fund_per_month": "Energy fund (EUR/month)",
+          "custom_vat_rate": "VAT rate (e.g. 0.06)"
+        }
       }
     }
   },
@@ -268,6 +378,12 @@
         "none": "No solar panels",
         "compensation": "Compensation regime (Wallonia, certified before 2024-01-01, until 2030)",
         "injection": "Injection tariff (post-2024 install or smart meter)"
+      }
+    },
+    "custom_injection_mode": {
+      "options": {
+        "current": "Flat rate",
+        "formula": "Formula (factor x index + base)"
       }
     }
   },

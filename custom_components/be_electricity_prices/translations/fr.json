@@ -85,6 +85,61 @@
           "consumption_kwh": "Consommation totale (kWh)",
           "injection_kwh": "Injection totale (kWh)"
         }
+      },
+      "custom_energy": {
+        "title": "Formule d'energie personnalisee",
+        "description": "Entrez la formule de votre contrat hors TVA (comme sur votre fiche tarifaire) ; le taux de TVA de l'etape taxes l'applique. Pour les modes dynamique et moyenne mensuelle, le prix est facteur x indice + base (indice = le spot en direct, ou la moyenne du mois de livraison). Exemple (Yuso dynamique) : facteur 1.0, base 0.02.",
+        "data": {
+          "custom_energy_factor": "Facteur d'energie (multiplicateur de l'indice)",
+          "custom_energy_base": "Base d'energie (EUR/kWh, hors TVA)",
+          "custom_energy_quarter_hourly": "Facturation au quart d'heure",
+          "custom_energy_single": "Tarif simple (EUR/kWh, hors TVA)",
+          "custom_energy_peak": "Tarif jour (EUR/kWh, hors TVA)",
+          "custom_energy_offpeak": "Tarif nuit (EUR/kWh, hors TVA)",
+          "custom_energy_exclusive_night": "Tarif nuit exclusif (EUR/kWh, hors TVA)",
+          "custom_yearly_fixed_fee": "Redevance annuelle (EUR/an)"
+        }
+      },
+      "custom_injection": {
+        "title": "Formule d'injection personnalisee",
+        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. Cochez le plancher si le contrat garantit que l'injection n'est jamais negative.",
+        "data": {
+          "custom_injection_mode": "Tarification de l'injection",
+          "custom_injection_current": "Tarif d'injection fixe (EUR/kWh)",
+          "custom_injection_factor": "Facteur d'injection",
+          "custom_injection_base": "Base d'injection (EUR/kWh)",
+          "custom_injection_floor": "Jamais negatif (plancher a 0)"
+        }
+      },
+      "custom_dso": {
+        "title": "Tarifs reseau (GRD)",
+        "description": "Couts reseau regules, identiques pour tous les fournisseurs sur votre GRD. Copiez-les depuis votre facture ou la fiche tarifaire du GRD, hors TVA. Seule la distribution est requise ; laissez a 0 ce que vous ne payez pas.",
+        "data": {
+          "custom_dso_distribution_single": "Distribution (EUR/kWh)",
+          "custom_dso_distribution_peak": "Distribution jour (EUR/kWh)",
+          "custom_dso_distribution_offpeak": "Distribution nuit (EUR/kWh)",
+          "custom_dso_distribution_exclusive_night": "Distribution nuit exclusif (EUR/kWh)",
+          "custom_dso_transport": "Transport (EUR/kWh)",
+          "custom_dso_data_management_per_year": "Frais de gestion (EUR/an)",
+          "custom_dso_capacity_eur_per_kw_year": "Tarif capacitaire (EUR/kW/an)",
+          "custom_dso_prosumer_eur_per_kva_year": "Tarif prosumer (EUR/kVA/an)",
+          "custom_dso_distribution_pic": "Distribution bande PIC (EUR/kWh)",
+          "custom_dso_distribution_medium": "Distribution bande MEDIUM (EUR/kWh)",
+          "custom_dso_distribution_eco": "Distribution bande ECO (EUR/kWh)",
+          "custom_dso_brussels_osp": "Redevance OSP Brugel (EUR/an)"
+        }
+      },
+      "custom_tax": {
+        "title": "Taxes et prelevements",
+        "description": "Taxes et prelevements regules, hors TVA. Le taux de TVA ci-dessous s'applique a l'energie, au reseau et aux taxes (l'injection reste exoneree). La TVA residentielle belge est 0.06 ; mettez 0 si vous avez tout saisi TVA comprise.",
+        "data": {
+          "custom_tax_federal_excise": "Accise federale (EUR/kWh)",
+          "custom_tax_energy_contribution": "Cotisation energie (EUR/kWh)",
+          "custom_tax_regional_renewables": "Prelevement renouvelable (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Redevance regionale (EUR/kWh)",
+          "custom_tax_energy_fund_per_month": "Fonds energie (EUR/mois)",
+          "custom_vat_rate": "Taux de TVA (ex. 0.06)"
+        }
       }
     },
     "abort": {
@@ -223,6 +278,61 @@
           "consumption_kwh": "Consommation totale (kWh)",
           "injection_kwh": "Injection totale (kWh)"
         }
+      },
+      "custom_energy": {
+        "title": "Formule d'energie personnalisee",
+        "description": "Entrez la formule de votre contrat hors TVA (comme sur votre fiche tarifaire) ; le taux de TVA de l'etape taxes l'applique. Pour les modes dynamique et moyenne mensuelle, le prix est facteur x indice + base (indice = le spot en direct, ou la moyenne du mois de livraison). Exemple (Yuso dynamique) : facteur 1.0, base 0.02.",
+        "data": {
+          "custom_energy_factor": "Facteur d'energie (multiplicateur de l'indice)",
+          "custom_energy_base": "Base d'energie (EUR/kWh, hors TVA)",
+          "custom_energy_quarter_hourly": "Facturation au quart d'heure",
+          "custom_energy_single": "Tarif simple (EUR/kWh, hors TVA)",
+          "custom_energy_peak": "Tarif jour (EUR/kWh, hors TVA)",
+          "custom_energy_offpeak": "Tarif nuit (EUR/kWh, hors TVA)",
+          "custom_energy_exclusive_night": "Tarif nuit exclusif (EUR/kWh, hors TVA)",
+          "custom_yearly_fixed_fee": "Redevance annuelle (EUR/an)"
+        }
+      },
+      "custom_injection": {
+        "title": "Formule d'injection personnalisee",
+        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. Cochez le plancher si le contrat garantit que l'injection n'est jamais negative.",
+        "data": {
+          "custom_injection_mode": "Tarification de l'injection",
+          "custom_injection_current": "Tarif d'injection fixe (EUR/kWh)",
+          "custom_injection_factor": "Facteur d'injection",
+          "custom_injection_base": "Base d'injection (EUR/kWh)",
+          "custom_injection_floor": "Jamais negatif (plancher a 0)"
+        }
+      },
+      "custom_dso": {
+        "title": "Tarifs reseau (GRD)",
+        "description": "Couts reseau regules, identiques pour tous les fournisseurs sur votre GRD. Copiez-les depuis votre facture ou la fiche tarifaire du GRD, hors TVA. Seule la distribution est requise ; laissez a 0 ce que vous ne payez pas.",
+        "data": {
+          "custom_dso_distribution_single": "Distribution (EUR/kWh)",
+          "custom_dso_distribution_peak": "Distribution jour (EUR/kWh)",
+          "custom_dso_distribution_offpeak": "Distribution nuit (EUR/kWh)",
+          "custom_dso_distribution_exclusive_night": "Distribution nuit exclusif (EUR/kWh)",
+          "custom_dso_transport": "Transport (EUR/kWh)",
+          "custom_dso_data_management_per_year": "Frais de gestion (EUR/an)",
+          "custom_dso_capacity_eur_per_kw_year": "Tarif capacitaire (EUR/kW/an)",
+          "custom_dso_prosumer_eur_per_kva_year": "Tarif prosumer (EUR/kVA/an)",
+          "custom_dso_distribution_pic": "Distribution bande PIC (EUR/kWh)",
+          "custom_dso_distribution_medium": "Distribution bande MEDIUM (EUR/kWh)",
+          "custom_dso_distribution_eco": "Distribution bande ECO (EUR/kWh)",
+          "custom_dso_brussels_osp": "Redevance OSP Brugel (EUR/an)"
+        }
+      },
+      "custom_tax": {
+        "title": "Taxes et prelevements",
+        "description": "Taxes et prelevements regules, hors TVA. Le taux de TVA ci-dessous s'applique a l'energie, au reseau et aux taxes (l'injection reste exoneree). La TVA residentielle belge est 0.06 ; mettez 0 si vous avez tout saisi TVA comprise.",
+        "data": {
+          "custom_tax_federal_excise": "Accise federale (EUR/kWh)",
+          "custom_tax_energy_contribution": "Cotisation energie (EUR/kWh)",
+          "custom_tax_regional_renewables": "Prelevement renouvelable (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Redevance regionale (EUR/kWh)",
+          "custom_tax_energy_fund_per_month": "Fonds energie (EUR/mois)",
+          "custom_vat_rate": "Taux de TVA (ex. 0.06)"
+        }
       }
     }
   },
@@ -268,6 +378,12 @@
         "none": "Pas de panneaux",
         "compensation": "Regime de compensation (Wallonie, certifie avant 2024-01-01, jusqu'en 2030)",
         "injection": "Tarif d'injection (installation post-2024 ou compteur intelligent)"
+      }
+    },
+    "custom_injection_mode": {
+      "options": {
+        "current": "Tarif fixe",
+        "formula": "Formule (facteur x indice + base)"
       }
     }
   },

@@ -85,6 +85,61 @@
           "consumption_kwh": "Totaal verbruik (kWh)",
           "injection_kwh": "Totale injectie (kWh)"
         }
+      },
+      "custom_energy": {
+        "title": "Aangepaste energieformule",
+        "description": "Voer de commodityformule van je contract in exclusief btw (zoals op je tariefkaart); het btw-tarief op de belastingstap rekent het door. Voor de dynamische en maandgemiddelde modi is de prijs factor x index + basis (index = de live spot, of het maandgemiddelde). Voorbeeld (Yuso dynamisch): factor 1.0, basis 0.02.",
+        "data": {
+          "custom_energy_factor": "Energiefactor (vermenigvuldiger op de index)",
+          "custom_energy_base": "Energiebasis (EUR/kWh, excl. btw)",
+          "custom_energy_quarter_hourly": "Facturatie per kwartier",
+          "custom_energy_single": "Enkeltarief (EUR/kWh, excl. btw)",
+          "custom_energy_peak": "Dagtarief (EUR/kWh, excl. btw)",
+          "custom_energy_offpeak": "Nachttarief (EUR/kWh, excl. btw)",
+          "custom_energy_exclusive_night": "Exclusief nachttarief (EUR/kWh, excl. btw)",
+          "custom_yearly_fixed_fee": "Jaarlijkse vaste vergoeding (EUR/jaar)"
+        }
+      },
+      "custom_injection": {
+        "title": "Aangepaste injectieformule",
+        "description": "Hoe je zonne-injectie wordt vergoed. Een vast tarief is een vaste EUR/kWh-vergoeding; een formule is factor x index + basis op de live spot (dynamisch) of het maandgemiddelde. Vink de ondergrens aan als het contract garandeert dat de injectie nooit negatief is.",
+        "data": {
+          "custom_injection_mode": "Injectietarifering",
+          "custom_injection_current": "Vast injectietarief (EUR/kWh)",
+          "custom_injection_factor": "Injectiefactor",
+          "custom_injection_base": "Injectiebasis (EUR/kWh)",
+          "custom_injection_floor": "Nooit negatief (ondergrens 0)"
+        }
+      },
+      "custom_dso": {
+        "title": "Nettarieven (DNB)",
+        "description": "Gereguleerde netkosten, gelijk voor elke leverancier op je DNB. Neem ze over van je factuur of de tariefkaart van je DNB, exclusief btw. Enkel distributie is verplicht; laat wat je niet betaalt op 0.",
+        "data": {
+          "custom_dso_distribution_single": "Distributie (EUR/kWh)",
+          "custom_dso_distribution_peak": "Distributie dag (EUR/kWh)",
+          "custom_dso_distribution_offpeak": "Distributie nacht (EUR/kWh)",
+          "custom_dso_distribution_exclusive_night": "Distributie exclusief nacht (EUR/kWh)",
+          "custom_dso_transport": "Transport (EUR/kWh)",
+          "custom_dso_data_management_per_year": "Databeheervergoeding (EUR/jaar)",
+          "custom_dso_capacity_eur_per_kw_year": "Capaciteitstarief (EUR/kW/jaar)",
+          "custom_dso_prosumer_eur_per_kva_year": "Prosumententarief (EUR/kVA/jaar)",
+          "custom_dso_distribution_pic": "Distributie PIC-band (EUR/kWh)",
+          "custom_dso_distribution_medium": "Distributie MEDIUM-band (EUR/kWh)",
+          "custom_dso_distribution_eco": "Distributie ECO-band (EUR/kWh)",
+          "custom_dso_brussels_osp": "Brugel OSP-vergoeding (EUR/jaar)"
+        }
+      },
+      "custom_tax": {
+        "title": "Belastingen en heffingen",
+        "description": "Gereguleerde belastingen en heffingen, exclusief btw. Het btw-tarief hieronder rekent energie, net en belastingen door (injectie blijft btw-vrij). De Belgische residentiele btw is 0.06; zet 0 als je alles inclusief btw hebt ingevoerd.",
+        "data": {
+          "custom_tax_federal_excise": "Federale accijns (EUR/kWh)",
+          "custom_tax_energy_contribution": "Energiebijdrage (EUR/kWh)",
+          "custom_tax_regional_renewables": "Heffing hernieuwbaar (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Gewestelijke bijdrage (EUR/kWh)",
+          "custom_tax_energy_fund_per_month": "Energiefonds (EUR/maand)",
+          "custom_vat_rate": "Btw-tarief (bv. 0.06)"
+        }
       }
     },
     "abort": {
@@ -223,6 +278,61 @@
           "consumption_kwh": "Totaal verbruik (kWh)",
           "injection_kwh": "Totale injectie (kWh)"
         }
+      },
+      "custom_energy": {
+        "title": "Aangepaste energieformule",
+        "description": "Voer de commodityformule van je contract in exclusief btw (zoals op je tariefkaart); het btw-tarief op de belastingstap rekent het door. Voor de dynamische en maandgemiddelde modi is de prijs factor x index + basis (index = de live spot, of het maandgemiddelde). Voorbeeld (Yuso dynamisch): factor 1.0, basis 0.02.",
+        "data": {
+          "custom_energy_factor": "Energiefactor (vermenigvuldiger op de index)",
+          "custom_energy_base": "Energiebasis (EUR/kWh, excl. btw)",
+          "custom_energy_quarter_hourly": "Facturatie per kwartier",
+          "custom_energy_single": "Enkeltarief (EUR/kWh, excl. btw)",
+          "custom_energy_peak": "Dagtarief (EUR/kWh, excl. btw)",
+          "custom_energy_offpeak": "Nachttarief (EUR/kWh, excl. btw)",
+          "custom_energy_exclusive_night": "Exclusief nachttarief (EUR/kWh, excl. btw)",
+          "custom_yearly_fixed_fee": "Jaarlijkse vaste vergoeding (EUR/jaar)"
+        }
+      },
+      "custom_injection": {
+        "title": "Aangepaste injectieformule",
+        "description": "Hoe je zonne-injectie wordt vergoed. Een vast tarief is een vaste EUR/kWh-vergoeding; een formule is factor x index + basis op de live spot (dynamisch) of het maandgemiddelde. Vink de ondergrens aan als het contract garandeert dat de injectie nooit negatief is.",
+        "data": {
+          "custom_injection_mode": "Injectietarifering",
+          "custom_injection_current": "Vast injectietarief (EUR/kWh)",
+          "custom_injection_factor": "Injectiefactor",
+          "custom_injection_base": "Injectiebasis (EUR/kWh)",
+          "custom_injection_floor": "Nooit negatief (ondergrens 0)"
+        }
+      },
+      "custom_dso": {
+        "title": "Nettarieven (DNB)",
+        "description": "Gereguleerde netkosten, gelijk voor elke leverancier op je DNB. Neem ze over van je factuur of de tariefkaart van je DNB, exclusief btw. Enkel distributie is verplicht; laat wat je niet betaalt op 0.",
+        "data": {
+          "custom_dso_distribution_single": "Distributie (EUR/kWh)",
+          "custom_dso_distribution_peak": "Distributie dag (EUR/kWh)",
+          "custom_dso_distribution_offpeak": "Distributie nacht (EUR/kWh)",
+          "custom_dso_distribution_exclusive_night": "Distributie exclusief nacht (EUR/kWh)",
+          "custom_dso_transport": "Transport (EUR/kWh)",
+          "custom_dso_data_management_per_year": "Databeheervergoeding (EUR/jaar)",
+          "custom_dso_capacity_eur_per_kw_year": "Capaciteitstarief (EUR/kW/jaar)",
+          "custom_dso_prosumer_eur_per_kva_year": "Prosumententarief (EUR/kVA/jaar)",
+          "custom_dso_distribution_pic": "Distributie PIC-band (EUR/kWh)",
+          "custom_dso_distribution_medium": "Distributie MEDIUM-band (EUR/kWh)",
+          "custom_dso_distribution_eco": "Distributie ECO-band (EUR/kWh)",
+          "custom_dso_brussels_osp": "Brugel OSP-vergoeding (EUR/jaar)"
+        }
+      },
+      "custom_tax": {
+        "title": "Belastingen en heffingen",
+        "description": "Gereguleerde belastingen en heffingen, exclusief btw. Het btw-tarief hieronder rekent energie, net en belastingen door (injectie blijft btw-vrij). De Belgische residentiele btw is 0.06; zet 0 als je alles inclusief btw hebt ingevoerd.",
+        "data": {
+          "custom_tax_federal_excise": "Federale accijns (EUR/kWh)",
+          "custom_tax_energy_contribution": "Energiebijdrage (EUR/kWh)",
+          "custom_tax_regional_renewables": "Heffing hernieuwbaar (EUR/kWh)",
+          "custom_tax_region_connection_fee": "Gewestelijke bijdrage (EUR/kWh)",
+          "custom_tax_energy_fund_per_month": "Energiefonds (EUR/maand)",
+          "custom_vat_rate": "Btw-tarief (bv. 0.06)"
+        }
       }
     }
   },
@@ -268,6 +378,12 @@
         "none": "Geen zonnepanelen",
         "compensation": "Compensatieregeling (Wallonie, gecertificeerd voor 2024-01-01, tot 2030)",
         "injection": "Injectietarief (na-2024 installatie of digitale meter)"
+      }
+    },
+    "custom_injection_mode": {
+      "options": {
+        "current": "Vast tarief",
+        "formula": "Formule (factor x index + basis)"
       }
     }
   },
