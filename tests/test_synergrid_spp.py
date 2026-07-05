@@ -199,6 +199,24 @@ async def test_fetch_returns_empty_on_bad_payload() -> None:
     assert not Path(garbage.name).exists()
 
 
+async def test_fetch_returns_empty_on_index_error() -> None:
+    # A malformed shared-string index raises IndexError inside the parse; the
+    # fetcher must still degrade to {} rather than tear down the tick.
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    tmp.close()
+    session = MagicMock()
+    with (
+        patch.object(
+            synergrid, "_download", new=AsyncMock(return_value=Path(tmp.name))
+        ),
+        patch.object(
+            synergrid, "_parse_hourly_weights", side_effect=IndexError("bad index")
+        ),
+    ):
+        assert await synergrid.fetch_spp_weights(session, 2026) == {}
+    assert not Path(tmp.name).exists()
+
+
 # ---- weighting math + gating -------------------------------------------------
 
 

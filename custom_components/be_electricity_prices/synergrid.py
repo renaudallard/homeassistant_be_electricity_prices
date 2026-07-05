@@ -100,7 +100,13 @@ async def fetch_spp_weights(session: aiohttp.ClientSession, year: int) -> SppWei
         return {}
     try:
         return await asyncio.to_thread(_parse_hourly_weights, path)
-    except (zipfile.BadZipFile, ET.ParseError, KeyError, ValueError, OSError) as err:
+    except (
+        zipfile.BadZipFile,
+        ET.ParseError,
+        LookupError,  # KeyError (missing column) or IndexError (bad string index)
+        ValueError,
+        OSError,
+    ) as err:
         _LOGGER.warning("Synergrid SPP parse failed (%s): %s", url, err)
         return {}
     finally:
