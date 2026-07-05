@@ -51,6 +51,7 @@ import asyncio
 import logging
 import tempfile
 import zipfile
+from datetime import datetime, timedelta
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -65,6 +66,13 @@ _BASE_URL = "https://www.synergrid.be/images/downloads/SLP-RLP-SPP"
 # rather than hardcoded position so a minor layout change doesn't silently break.
 _SHEET_PREFIX = "SPP_ex-ante"
 _VALUE_HEADER = "SPPExanteBE"
+# The workbook's first column is the true UTC instant (an Excel date serial);
+# its Year/Month/Day/Hour columns are LOCAL Belgian wall-clock, so we key on
+# this column to line up with the coordinator's UTC-keyed spot cache.
+_UTC_HEADER = "UTC"
+# Excel serial day 0 (the 1899-12-30 epoch absorbs Excel's 1900 leap-year bug
+# for post-1900 dates).
+_EXCEL_EPOCH = datetime(1899, 12, 30)
 # The file is ~52 MB today; cap the stream well above that to bound a runaway
 # download without rejecting a legitimately larger future edition.
 _MAX_BYTES = 200 * 1024 * 1024
@@ -176,8 +184,9 @@ def _parse_hourly_weights(path: Path) -> SppWeights:
     """Parse the ex-ante sheet, summing the four quarters of each UTC hour.
 
     Streams the worksheet XML, clearing elements as it goes so peak memory stays
-    a few tens of MB regardless of the 52 MB file. Columns are resolved from the
-    header row (Month / Day / Hour / value) rather than by fixed position.
+    a few tens of MB regardless of the 52 MB file. The UTC instant and value
+    columns are resolved from the header row (by name, not fixed position); the
+    hour is taken from the UTC column, not the local Year/Month/Day/Hour columns.
     """
     with zipfile.ZipFile(path) as z:
         target = _resolve_sheet_path(z)
@@ -209,8 +218,8 @@ def _parse_hourly_weights(path: Path) -> SppWeights:
                         _accumulate_row(row_cells, header, weights)
                     row_cells = {}
                     el.clear()
-    if _VALUE_HEADER not in header:
-        raise KeyError(f"{_VALUE_HEADER!r} column not found")
+    if _UTC_HEADER not in header or _VALUE_HEADER not in header:
+        raise KeyError(f"{_UTC_HEADER!r}/{_VALUE_HEADER!r} column not found")
     return weights
 
 
@@ -220,13 +229,14 @@ def _accumulate_row(
     weights: SppWeights,
 ) -> None:
     try:
-        month = int(_cell_number(cells[header["Month"]]))  # type: ignore[arg-type]
-        day = int(_cell_number(cells[header["Day"]]))  # type: ignore[arg-type]
-        hour = int(_cell_number(cells[header["Hour"]]))  # type: ignore[arg-type]
+        serial = _cell_number(cells[header[_UTC_HEADER]])
         value = _cell_number(cells[header[_VALUE_HEADER]])
     except (KeyError, TypeError, ValueError):
         return
-    if value is None:
+    if serial is None or value is None:
         return
-    key = (month, day, hour)
+    # Excel serial -> UTC datetime; +30s absorbs float imprecision before the
+    # hour is floored (the quarter's minute is irrelevant once aggregated).
+    utc = _EXCEL_EPOCH + timedelta(days=serial) + timedelta(seconds=30)
+    key = (utc.month, utc.day, utc.hour)
     weights[key] = weights.get(key, 0.0) + value

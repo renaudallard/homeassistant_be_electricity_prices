@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import tempfile
 import zipfile
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -65,16 +65,34 @@ def _col(i: int) -> str:
     return chr(ord("A") + i)
 
 
-def _build_xlsx(rows: list[tuple[int, int, int, int, int, float]]) -> bytes:
-    """A one-sheet workbook mimicking the Synergrid ex-ante layout."""
+_EXCEL_EPOCH = datetime(1899, 12, 30)
+
+
+def _build_xlsx(rows: list[tuple[datetime, float]]) -> bytes:
+    """A one-sheet workbook mimicking the Synergrid ex-ante layout.
+
+    Column A (UTC) carries the true UTC instant as an Excel serial; the
+    Year/Month/Day/Hour columns are written as a deliberately-wrong LOCAL time
+    (UTC + 2h) so a test can prove the parser keys on the UTC column.
+    """
     header_cells = "".join(
         f'<c r="{_col(i)}1" t="s"><v>{i}</v></c>' for i in range(len(_HEADERS))
     )
     body = f'<row r="1">{header_cells}</row>'
-    for n, (year, month, day, hour, minute, value) in enumerate(rows, start=2):
-        vals = (year, month, day, hour, minute, value)
+    for n, (utc_dt, value) in enumerate(rows, start=2):
+        serial = (utc_dt - _EXCEL_EPOCH).total_seconds() / 86400.0
+        local = utc_dt + timedelta(hours=2)  # wrong on purpose
+        vals = (
+            serial,
+            utc_dt.year,
+            local.month,
+            local.day,
+            local.hour,
+            utc_dt.minute,
+            value,
+        )
         cells = "".join(
-            f'<c r="{_col(1 + j)}{n}"><v>{v}</v></c>' for j, v in enumerate(vals)
+            f'<c r="{_col(j)}{n}"><v>{v}</v></c>' for j, v in enumerate(vals)
         )
         body += f'<row r="{n}">{cells}</row>'
     sheet = f'<?xml version="1.0"?><worksheet {_NS}><sheetData>{body}</sheetData></worksheet>'
@@ -109,7 +127,7 @@ def _build_xlsx(rows: list[tuple[int, int, int, int, int, float]]) -> bytes:
     return data
 
 
-def _write_xlsx(rows: list[tuple[int, int, int, int, int, float]]) -> Path:
+def _write_xlsx(rows: list[tuple[datetime, float]]) -> Path:
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
     tmp.write(_build_xlsx(rows))
     tmp.close()
@@ -119,26 +137,28 @@ def _write_xlsx(rows: list[tuple[int, int, int, int, int, float]]) -> Path:
 # ---- parser ------------------------------------------------------------------
 
 
-def test_parse_hourly_weights_aggregates_quarters() -> None:
+def test_parse_keys_by_utc_not_local() -> None:
+    # Every row's local Month/Day/Hour columns are UTC+2h; the parser must key
+    # on the UTC column so the weight lands on the UTC hour, not the local one.
     path = _write_xlsx(
         [
-            (2026, 6, 15, 10, 0, 0.5),
-            (2026, 6, 15, 10, 15, 0.5),
-            (2026, 6, 15, 10, 30, 0.5),
-            (2026, 6, 15, 10, 45, 0.5),  # hour 10 -> 2.0
-            (2026, 6, 15, 2, 0, 0.0),
-            (2026, 6, 15, 2, 15, 0.0),  # night -> 0.0
-            (2026, 5, 1, 12, 0, 0.3),
-            (2026, 5, 1, 12, 15, 0.3),  # other month kept in the year map
+            (datetime(2026, 6, 15, 8, 0), 0.5),
+            (datetime(2026, 6, 15, 8, 15), 0.5),
+            (datetime(2026, 6, 15, 8, 30), 0.5),
+            (datetime(2026, 6, 15, 8, 45), 0.5),  # UTC hour 8 -> 2.0
+            (datetime(2026, 6, 15, 0, 0), 0.0),  # UTC hour 0 -> 0.0
+            (datetime(2026, 5, 1, 10, 0), 0.3),
+            (datetime(2026, 5, 1, 10, 15), 0.3),  # other-month UTC hour 10 -> 0.6
         ]
     )
     try:
         weights = synergrid._parse_hourly_weights(path)
     finally:
         path.unlink(missing_ok=True)
-    assert weights[(6, 15, 10)] == pytest.approx(2.0)
-    assert weights[(6, 15, 2)] == pytest.approx(0.0)
-    assert weights[(5, 1, 12)] == pytest.approx(0.6)
+    assert weights[(6, 15, 8)] == pytest.approx(2.0)
+    assert (6, 15, 10) not in weights  # the wrong local hour is never used
+    assert weights[(6, 15, 0)] == pytest.approx(0.0)
+    assert weights[(5, 1, 10)] == pytest.approx(0.6)
 
 
 def test_parse_missing_value_column_raises() -> None:
@@ -147,7 +167,7 @@ def test_parse_missing_value_column_raises() -> None:
     saved = _HEADERS
     _HEADERS = ("UTC", "Year", "Month", "Day", "Hour", "Min", "Other")
     try:
-        path = _write_xlsx([(2026, 6, 1, 12, 0, 1.0)])
+        path = _write_xlsx([(datetime(2026, 6, 1, 12, 0), 1.0)])
         with pytest.raises(KeyError):
             synergrid._parse_hourly_weights(path)
     finally:
