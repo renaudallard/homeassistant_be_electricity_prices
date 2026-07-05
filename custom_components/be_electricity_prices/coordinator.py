@@ -924,15 +924,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             capacity_cost_eur=capacity_cost,
             prosumer_cost_eur=prosumer_cost,
             injection_price_eur_per_kwh=injection_price,
-            # Fixed fees are billed VAT-inclusive: gross up by vat_rate (0 for
-            # VAT-incl scraped cards, non-zero for the excl-VAT custom supplier).
             yearly_fixed_fee_eur=yearly_fixed_fee_for_meter(
                 self._snapshot.energy,
                 self.entry.data.get(CONF_METER, METER_MONO),
-            )
-            * (1.0 + self._snapshot.taxes.vat_rate),
-            energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month
-            * (1.0 + self._snapshot.taxes.vat_rate),
+            ),
+            energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
             current_year_cost_eur=current_year_cost,
         )
 
@@ -1799,10 +1795,7 @@ def _compute_capacity(
     overlay = snapshot.dsos.get(dso)
     if overlay is None or overlay.capacity_eur_per_kw_year is None:
         return 0.0
-    # Gross up by VAT (no-op for VAT-incl scraped cards; grosses the expert
-    # custom supplier's excl-VAT capacity input).
-    vat = 1.0 + snapshot.taxes.vat_rate
-    return peak_kw * overlay.capacity_eur_per_kw_year / 12.0 * vat
+    return peak_kw * overlay.capacity_eur_per_kw_year / 12.0
 
 
 def _brussels_osp_fee(overlay: DsoOverlay | None, entry: ConfigEntry) -> float:
@@ -2083,12 +2076,9 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
         else 0.0
     )
     # Supplier-side compensation forfait (Cociter Variable) is billed on
-    # top of the DSO tariff; it is already TVAC (vat_rate 0, so the gross-up
-    # below is a no-op for it). The expert custom supplier's excl-VAT prosumer
-    # input is grossed up by its vat_rate to match the per-kWh side.
+    # top of the DSO tariff; it is already TVAC, so it is summed raw.
     supplier_rate = snapshot.supplier_prosumer_eur_per_kva_year or 0.0
-    vat = 1.0 + snapshot.taxes.vat_rate
-    return kva * (dso_rate + supplier_rate) / 12.0 * vat
+    return kva * (dso_rate + supplier_rate) / 12.0
 
 
 async def _recorder_rows(
@@ -2454,11 +2444,6 @@ async def _ytd_static_fees(
             # Brussels Brugel OSP fee for the configured connection tier.
             + _brussels_osp_fee(overlay, entry)
         )
-        # Gross up by VAT: fixed fees are billed VAT-inclusive. Scraped cards
-        # are parsed VAT-incl (vat_rate 0, a no-op); the expert custom supplier
-        # takes excl-VAT inputs and expects the same gross-up as the per-kWh
-        # side, so this keeps the whole bill on one VAT convention.
-        annual *= 1.0 + snap_m.taxes.vat_rate
         total += annual * (days_in_ytd / days_in_year)
     return total
 
@@ -2503,11 +2488,7 @@ async def _ytd_prosumer(
         supplier_rate = snap_m.supplier_prosumer_eur_per_kva_year or 0.0
         if dso_rate == 0.0 and supplier_rate == 0.0:
             continue
-        # Gross up by VAT (no-op for VAT-incl scraped cards; grosses the expert
-        # custom supplier's excl-VAT prosumer input).
-        monthly_fee = (
-            kva * (dso_rate + supplier_rate) / 12.0 * (1.0 + snap_m.taxes.vat_rate)
-        )
+        monthly_fee = kva * (dso_rate + supplier_rate) / 12.0
         total += monthly_fee * (days_in_ytd / days_in_full_month)
     return total
 

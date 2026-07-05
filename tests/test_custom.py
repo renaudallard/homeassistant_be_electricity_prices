@@ -129,6 +129,7 @@ def test_build_snapshot_brussels_osp_tier() -> None:
         const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
         const.CONF_CONNECTION_KVA_TIER: const.CONNECTION_KVA_TIER_LE13,
         const.CONF_CUSTOM_DSO_BRUSSELS_OSP: 42.0,
+        const.CONF_CUSTOM_VAT_RATE: 0.0,  # isolate the tier routing from the VAT bake
     }
     snap = build_snapshot(data, const.REGION_BRUSSELS, const.DSO_SIBELGA)
     osp = snap.dsos[const.DSO_SIBELGA].brussels_osp_by_tier
