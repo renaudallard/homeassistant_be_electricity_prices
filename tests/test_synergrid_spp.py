@@ -47,11 +47,14 @@ from custom_components.be_electricity_prices.coordinator import (
     _compute_current_year_cost,
     _spp_weighted_month_mean,
     _spp_weighting_enabled,
+    _ytd_static_fees,
 )
 from custom_components.be_electricity_prices.providers.base import (
+    FixedRates,
     InjectionRates,
     SpotMonthlyRates,
     SupplierExtractor,
+    TaxOverlay,
 )
 from tests import make_snapshot
 
@@ -341,6 +344,50 @@ async def test_spp_weights_survive_persist_round_trip(hass: HomeAssistant) -> No
     await reloaded.async_load_persistent()
     assert reloaded._spp_weights == coord._spp_weights
     assert reloaded._spp_weights_year == 2026
+
+
+# ---- fixed-fee VAT gross-up --------------------------------------------------
+
+
+def _fee_extractor() -> SupplierExtractor:
+    async def _fetch(
+        _s: aiohttp.ClientSession, _c: str, _r: str
+    ) -> Any:  # pragma: no cover
+        raise NotImplementedError
+
+    return SupplierExtractor(id="custom", label="Custom", contracts=(), fetch=_fetch)
+
+
+@pytest.mark.parametrize(
+    ("vat_rate", "factor"),
+    [(0.06, 1.06), (0.0, 1.0)],  # custom grosses up; scraped (vat 0) is a no-op
+)
+async def test_ytd_static_fees_grossed_up_by_vat(
+    hass: HomeAssistant, freezer: Any, vat_rate: float, factor: float
+) -> None:
+    # On Dec 31 the pro-rated YTD is ~the full annual fee, so the total is
+    # (yearly_fixed_fee + 12*energy_fund) * (1 + vat_rate).
+    freezer.move_to("2026-12-31 12:00:00+01:00")
+    snap = make_snapshot(
+        energy=FixedRates(single=0.30, yearly_fixed_fee=100.0),
+        taxes=TaxOverlay(
+            federal_excise=0.0,
+            energy_contribution=0.0,
+            energy_fund_eur_per_month=5.0,
+            vat_rate=vat_rate,
+        ),
+    )
+    entry = _entry(**{const.CONF_METER: const.METER_MONO})
+    entry.add_to_hass(hass)
+    total = await _ytd_static_fees(
+        hass,
+        None,  # type: ignore[arg-type]
+        _fee_extractor(),
+        snap,
+        entry,
+        date(2026, 12, 31),
+    )
+    assert total == pytest.approx((100.0 + 60.0) * factor, rel=1e-3)
 
 
 # ---- config-flow toggle ------------------------------------------------------
