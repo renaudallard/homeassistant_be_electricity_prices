@@ -239,14 +239,19 @@ def test_spp_weighted_month_mean_downweights_night() -> None:
 def test_spp_weighting_enabled_gating() -> None:
     base = {
         const.CONF_SUPPLIER: const.SUPPLIER_CUSTOM,
+        const.CONF_CONTRACT: const.CUSTOM_CONTRACT_MONTHLY,
         const.CONF_CUSTOM_INJECTION_SPP_WEIGHTED: True,
         const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+        const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_FORMULA,
     }
     assert _spp_weighting_enabled(SimpleNamespace(data=base))  # type: ignore[arg-type]
     for override in (
         {const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
         {const.CONF_CUSTOM_INJECTION_SPP_WEIGHTED: False},
         {const.CONF_SUPPLIER: "mega"},
+        # tightened gate: not the monthly contract, or flat-rate injection
+        {const.CONF_CONTRACT: const.CUSTOM_CONTRACT_DYNAMIC},
+        {const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_CURRENT},
     ):
         entry = SimpleNamespace(data={**base, **override})
         assert not _spp_weighting_enabled(entry)  # type: ignore[arg-type]

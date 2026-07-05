@@ -69,6 +69,7 @@ from .const import (
     CONF_CONNECTION_KVA_TIER,
     CONF_CONSUMPTION_KWH,
     CONF_CONTRACT,
+    CONF_CUSTOM_INJECTION_MODE,
     CONF_CUSTOM_INJECTION_SPP_WEIGHTED,
     CONF_DAY_CONSUMPTION_KWH,
     CONF_DAY_INJECTION_KWH,
@@ -95,6 +96,8 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
     STORAGE_VERSION,
+    CUSTOM_CONTRACT_MONTHLY,
+    CUSTOM_INJECTION_MODE_FORMULA,
     SUPPLIER_CUSTOM,
     UPDATE_INTERVAL_MINUTES,
     VREG_CAPACITY_FLOOR_KW,
@@ -1847,14 +1850,19 @@ def _spp_weighted_month_mean(
 
 
 def _spp_weighting_enabled(entry: ConfigEntry) -> bool:
-    """True when this entry is a custom contract that opted into SPP-weighted
-    injection on the injection regime. The energy being spot-monthly and the
-    injection being a formula are enforced structurally downstream (the bake
-    no-ops otherwise), so this gate only needs the flag + regime + supplier."""
+    """True when this entry actually uses SPP-weighted injection: a custom
+    monthly-average contract, injection regime, formula injection, flag set.
+
+    The contract + injection-mode conditions matter: without them a stale flag
+    left after switching a monthly entry to fixed/dynamic (the options flow
+    reseeds it), or a monthly entry on flat-rate injection, would trigger the
+    52 MB profile download even though the weights are then discarded."""
     return (
         entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM
+        and entry.data.get(CONF_CONTRACT) == CUSTOM_CONTRACT_MONTHLY
         and bool(entry.data.get(CONF_CUSTOM_INJECTION_SPP_WEIGHTED))
         and entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
+        and entry.data.get(CONF_CUSTOM_INJECTION_MODE) == CUSTOM_INJECTION_MODE_FORMULA
     )
 
 
