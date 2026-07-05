@@ -102,13 +102,14 @@
       },
       "custom_injection": {
         "title": "Eigene Einspeiseformel",
-        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist.",
+        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist. Aktivieren Sie 'Einspeisung mit dem Solarprofil gewichten', um das Einspeise-Monatsmittel mit dem Synergrid-Solarproduktionsprofil zu gewichten (live abgerufen; eine Ex-ante-Prognose, also nahe an, aber nicht exakt der abgerechnete SPP-Wert).",
         "data": {
           "custom_injection_mode": "Einspeiseverguetung",
           "custom_injection_current": "Fester Einspeisetarif (EUR/kWh)",
           "custom_injection_factor": "Einspeisefaktor",
           "custom_injection_base": "Einspeisebasis (EUR/kWh)",
-          "custom_injection_floor": "Nie negativ (Untergrenze 0)"
+          "custom_injection_floor": "Nie negativ (Untergrenze 0)",
+          "custom_injection_spp_weighted": "Einspeisung mit dem Solarprofil (SPP) gewichten"
         }
       },
       "custom_dso": {
@@ -295,13 +296,14 @@
       },
       "custom_injection": {
         "title": "Eigene Einspeiseformel",
-        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist.",
+        "description": "Wie Ihre Solar-Einspeisung verguetet wird. Ein Fixtarif ist eine feste EUR/kWh-Verguetung; eine Formel ist Faktor x Index + Basis auf den Live-Spot (dynamisch) oder das Monatsmittel. Setzen Sie die Untergrenze, wenn der Vertrag garantiert, dass die Einspeisung nie negativ ist. Aktivieren Sie 'Einspeisung mit dem Solarprofil gewichten', um das Einspeise-Monatsmittel mit dem Synergrid-Solarproduktionsprofil zu gewichten (live abgerufen; eine Ex-ante-Prognose, also nahe an, aber nicht exakt der abgerechnete SPP-Wert).",
         "data": {
           "custom_injection_mode": "Einspeiseverguetung",
           "custom_injection_current": "Fester Einspeisetarif (EUR/kWh)",
           "custom_injection_factor": "Einspeisefaktor",
           "custom_injection_base": "Einspeisebasis (EUR/kWh)",
-          "custom_injection_floor": "Nie negativ (Untergrenze 0)"
+          "custom_injection_floor": "Nie negativ (Untergrenze 0)",
+          "custom_injection_spp_weighted": "Einspeisung mit dem Solarprofil (SPP) gewichten"
         }
       },
       "custom_dso": {

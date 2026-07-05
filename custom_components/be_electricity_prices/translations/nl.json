@@ -102,13 +102,14 @@
       },
       "custom_injection": {
         "title": "Aangepaste injectieformule",
-        "description": "Hoe je zonne-injectie wordt vergoed. Een vast tarief is een vaste EUR/kWh-vergoeding; een formule is factor x index + basis op de live spot (dynamisch) of het maandgemiddelde. Vink de ondergrens aan als het contract garandeert dat de injectie nooit negatief is.",
+        "description": "Hoe je zonne-injectie wordt vergoed. Een vast tarief is een vaste EUR/kWh-vergoeding; een formule is factor x index + basis op de live spot (dynamisch) of het maandgemiddelde. Vink de ondergrens aan als het contract garandeert dat de injectie nooit negatief is. Vink 'injectie wegen met het zonneprofiel' aan om het maandgemiddelde van de injectie te wegen met het zonneproductieprofiel van Synergrid (live opgehaald; een ex-ante prognose, dus dicht bij maar niet exact de definitieve SPP-waarde).",
         "data": {
           "custom_injection_mode": "Injectietarifering",
           "custom_injection_current": "Vast injectietarief (EUR/kWh)",
           "custom_injection_factor": "Injectiefactor",
           "custom_injection_base": "Injectiebasis (EUR/kWh)",
-          "custom_injection_floor": "Nooit negatief (ondergrens 0)"
+          "custom_injection_floor": "Nooit negatief (ondergrens 0)",
+          "custom_injection_spp_weighted": "Injectie wegen met het zonneprofiel (SPP)"
         }
       },
       "custom_dso": {
@@ -295,13 +296,14 @@
       },
       "custom_injection": {
         "title": "Aangepaste injectieformule",
-        "description": "Hoe je zonne-injectie wordt vergoed. Een vast tarief is een vaste EUR/kWh-vergoeding; een formule is factor x index + basis op de live spot (dynamisch) of het maandgemiddelde. Vink de ondergrens aan als het contract garandeert dat de injectie nooit negatief is.",
+        "description": "Hoe je zonne-injectie wordt vergoed. Een vast tarief is een vaste EUR/kWh-vergoeding; een formule is factor x index + basis op de live spot (dynamisch) of het maandgemiddelde. Vink de ondergrens aan als het contract garandeert dat de injectie nooit negatief is. Vink 'injectie wegen met het zonneprofiel' aan om het maandgemiddelde van de injectie te wegen met het zonneproductieprofiel van Synergrid (live opgehaald; een ex-ante prognose, dus dicht bij maar niet exact de definitieve SPP-waarde).",
         "data": {
           "custom_injection_mode": "Injectietarifering",
           "custom_injection_current": "Vast injectietarief (EUR/kWh)",
           "custom_injection_factor": "Injectiefactor",
           "custom_injection_base": "Injectiebasis (EUR/kWh)",
-          "custom_injection_floor": "Nooit negatief (ondergrens 0)"
+          "custom_injection_floor": "Nooit negatief (ondergrens 0)",
+          "custom_injection_spp_weighted": "Injectie wegen met het zonneprofiel (SPP)"
         }
       },
       "custom_dso": {

@@ -102,13 +102,14 @@
       },
       "custom_injection": {
         "title": "Custom injection formula",
-        "description": "How your solar feed-in is paid. A flat rate is a fixed EUR/kWh credit; a formula is factor x index + base against the live spot (dynamic) or the monthly mean (monthly-average). Tick the floor if the contract guarantees the injection price is never negative.",
+        "description": "How your solar feed-in is paid. A flat rate is a fixed EUR/kWh credit; a formula is factor x index + base against the live spot (dynamic) or the monthly mean (monthly-average). Tick the floor if the contract guarantees the injection price is never negative. Tick 'weight injection by the solar profile' to weight the monthly injection mean by the Synergrid solar production profile (fetched live; an ex-ante forecast, so close to but not exactly the settled SPP value).",
         "data": {
           "custom_injection_mode": "Injection pricing",
           "custom_injection_current": "Flat injection rate (EUR/kWh)",
           "custom_injection_factor": "Injection factor",
           "custom_injection_base": "Injection base (EUR/kWh)",
-          "custom_injection_floor": "Never negative (floor at 0)"
+          "custom_injection_floor": "Never negative (floor at 0)",
+          "custom_injection_spp_weighted": "Weight injection by the solar profile (SPP)"
         }
       },
       "custom_dso": {
@@ -295,13 +296,14 @@
       },
       "custom_injection": {
         "title": "Custom injection formula",
-        "description": "How your solar feed-in is paid. A flat rate is a fixed EUR/kWh credit; a formula is factor x index + base against the live spot (dynamic) or the monthly mean (monthly-average). Tick the floor if the contract guarantees the injection price is never negative.",
+        "description": "How your solar feed-in is paid. A flat rate is a fixed EUR/kWh credit; a formula is factor x index + base against the live spot (dynamic) or the monthly mean (monthly-average). Tick the floor if the contract guarantees the injection price is never negative. Tick 'weight injection by the solar profile' to weight the monthly injection mean by the Synergrid solar production profile (fetched live; an ex-ante forecast, so close to but not exactly the settled SPP value).",
         "data": {
           "custom_injection_mode": "Injection pricing",
           "custom_injection_current": "Flat injection rate (EUR/kWh)",
           "custom_injection_factor": "Injection factor",
           "custom_injection_base": "Injection base (EUR/kWh)",
-          "custom_injection_floor": "Never negative (floor at 0)"
+          "custom_injection_floor": "Never negative (floor at 0)",
+          "custom_injection_spp_weighted": "Weight injection by the solar profile (SPP)"
         }
       },
       "custom_dso": {

@@ -102,13 +102,14 @@
       },
       "custom_injection": {
         "title": "Formule d'injection personnalisee",
-        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. Cochez le plancher si le contrat garantit que l'injection n'est jamais negative.",
+        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. Cochez le plancher si le contrat garantit que l'injection n'est jamais negative. Cochez 'ponderer l'injection par le profil solaire' pour ponderer la moyenne mensuelle d'injection par le profil de production solaire de Synergrid (recupere en direct ; une prevision ex-ante, donc proche mais pas exactement la valeur SPP definitive).",
         "data": {
           "custom_injection_mode": "Tarification de l'injection",
           "custom_injection_current": "Tarif d'injection fixe (EUR/kWh)",
           "custom_injection_factor": "Facteur d'injection",
           "custom_injection_base": "Base d'injection (EUR/kWh)",
-          "custom_injection_floor": "Jamais negatif (plancher a 0)"
+          "custom_injection_floor": "Jamais negatif (plancher a 0)",
+          "custom_injection_spp_weighted": "Ponderer l'injection par le profil solaire (SPP)"
         }
       },
       "custom_dso": {
@@ -295,13 +296,14 @@
       },
       "custom_injection": {
         "title": "Formule d'injection personnalisee",
-        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. Cochez le plancher si le contrat garantit que l'injection n'est jamais negative.",
+        "description": "Comment votre injection solaire est payee. Un tarif fixe est un credit fixe EUR/kWh ; une formule est facteur x indice + base sur le spot en direct (dynamique) ou la moyenne mensuelle. Cochez le plancher si le contrat garantit que l'injection n'est jamais negative. Cochez 'ponderer l'injection par le profil solaire' pour ponderer la moyenne mensuelle d'injection par le profil de production solaire de Synergrid (recupere en direct ; une prevision ex-ante, donc proche mais pas exactement la valeur SPP definitive).",
         "data": {
           "custom_injection_mode": "Tarification de l'injection",
           "custom_injection_current": "Tarif d'injection fixe (EUR/kWh)",
           "custom_injection_factor": "Facteur d'injection",
           "custom_injection_base": "Base d'injection (EUR/kWh)",
-          "custom_injection_floor": "Jamais negatif (plancher a 0)"
+          "custom_injection_floor": "Jamais negatif (plancher a 0)",
+          "custom_injection_spp_weighted": "Ponderer l'injection par le profil solaire (SPP)"
         }
       },
       "custom_dso": {

@@ -110,6 +110,7 @@ from .const import (
     CONF_CUSTOM_INJECTION_FACTOR,
     CONF_CUSTOM_INJECTION_FLOOR,
     CONF_CUSTOM_INJECTION_MODE,
+    CONF_CUSTOM_INJECTION_SPP_WEIGHTED,
     CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION,
     CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH,
     CONF_CUSTOM_TAX_FEDERAL_EXCISE,
@@ -442,6 +443,15 @@ def _custom_injection_schema(defaults: dict[str, Any]) -> vol.Schema:
             ),
         )
     ] = BooleanSelector()
+    # SPP-weighting only applies to the monthly-average mode's formula
+    # injection (weighting the month-mean by the Synergrid solar profile).
+    if contract == CUSTOM_CONTRACT_MONTHLY:
+        fields[
+            vol.Optional(
+                CONF_CUSTOM_INJECTION_SPP_WEIGHTED,
+                default=bool(defaults.get(CONF_CUSTOM_INJECTION_SPP_WEIGHTED, False)),
+            )
+        ] = BooleanSelector()
     return vol.Schema(fields)
 
 
