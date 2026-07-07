@@ -338,11 +338,17 @@ catch these comments):
 | bit 2 (rc 4/5/6/7) | Open or update drift issue | `live-check-drift` | `[live-check] supplier drift detected` |
 | bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-catalog` | `[live-check] new supplier products detected` |
 
+The extractor issue body keeps only the failures table and the per-supplier metrics block, dropping
+the `## All checks` checklist: the full report outgrew GitHub's 65,536-character issue body limit,
+which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml:134`). A
+defensive cap truncates the body at a line boundary near 60,000 bytes in case a mass failure
+inflates the failures table itself. The full report is always in the run log.
+
 On `pull_request` events the issue-creation steps are skipped; instead a final step fails the PR
 check if any bit other than the catalog-only bit is set (`rc & ~2`), since a new-product signal is
-informational, not a regression (`.github/workflows/live_check.yml:258`). A separate step fails the
+informational, not a regression (`.github/workflows/live_check.yml:272`). A separate step fails the
 run on `rc=8` (harness crash) so a top-level traceback shows red on the Actions tab instead of
-ending green (`.github/workflows/live_check.yml:267`).
+ending green (`.github/workflows/live_check.yml:281`).
 
 ### autorelease.yml - Autorelease
 
