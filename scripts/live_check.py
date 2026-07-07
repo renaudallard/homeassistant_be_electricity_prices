@@ -813,7 +813,7 @@ async def _check_totalenergies(
 
 async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) -> None:
     # Mega serves all 3 regions for every contract and resolves the URL
-    # by scraping mega.be/fr/cartes-tarifaires; walk every (contract,
+    # by scraping mega.be/fr/energie/cartes-tarifaires; walk every (contract,
     # region) pair to verify both the listing scrape and the PDF parse.
     #
     # Mega's fetch() pulls the listing on every call (~342KB x 33 pairs

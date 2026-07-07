@@ -34,7 +34,7 @@ The MMYYYY rolls every month and the product SUFFIX (e.g. ``Smart0104``,
 that drifts when Mega launches new product variants. To resolve a stable
 ``(contract, region)`` pair to its current PDF without hardcoding any
 suffix, the extractor scrapes the public listing page at
-``mega.be/fr/cartes-tarifaires``: every product card carries a
+``mega.be/fr/energie/cartes-tarifaires``: every product card carries a
 ``data-product-element="<Product Name>"`` anchor pointing at that
 month's PDF, so finding the right URL is a simple regex match.
 
@@ -106,7 +106,7 @@ from .base import (
     VariableRates,
 )
 
-_LISTING_URL = "https://www.mega.be/fr/cartes-tarifaires"
+_LISTING_URL = "https://www.mega.be/fr/energie/cartes-tarifaires"
 
 _REGION_TO_CODE: dict[str, str] = {
     REGION_FLANDERS: "VL",

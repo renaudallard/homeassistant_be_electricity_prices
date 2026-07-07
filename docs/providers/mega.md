@@ -42,7 +42,7 @@ https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-<REGION>-<MMYYYY>-<SUFFIX>.pdf
 `Smart0104`, `Smart2204-Fixed`, `Cap0104`) carries an internal launch-date code that
 drifts whenever Mega launches a product variant. Because the suffix is unstable, the
 extractor never constructs the URL from a hardcoded suffix. Instead it scrapes the
-public listing page `https://www.mega.be/fr/cartes-tarifaires` (`_LISTING_URL`,
+public listing page `https://www.mega.be/fr/energie/cartes-tarifaires` (`_LISTING_URL`,
 `mega.py:109`), where every product card exposes an
 `<a data-product-element="<Product Name>" ... href="<PDF URL>">` anchor, and matches
 the anchor to its PDF with a regex (`_find_pdf_url`, `mega.py:187`).
