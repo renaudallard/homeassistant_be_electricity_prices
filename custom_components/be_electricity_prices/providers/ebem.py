@@ -401,11 +401,21 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
         # excl-night energy split), but an exclusive-night meter still bills
         # the shared card's dedicated night fixed fee, not the standard
         # abonnement, so surface it like the Variabel sibling does.
+        # Numeric coefficients for signing-cohort re-pricing, in the same
+        # VAT-baked EUR/kWh basis as the dynamic path (snapshot vat_rate is 0).
+        # The index is the RLP-weighted Belpex; the coordinator applies these
+        # against the plain arithmetic monthly mean, a close (few-percent)
+        # approximation of the RLP weighting.
+        f_factor, f_base = _formula_to_dynamic(
+            factor_pdf, base_pdf_cents, _vat_multiplier(text)
+        )
         return VariableRates(
             current=_indicative_from_row(text, "Verbruik alle uren"),
             yearly_fixed_fee=_extract_yearly_fee_abonnement(text),
             yearly_fixed_fee_exclusive_night=_extract_excl_night_fee_variable(text),
             formula=f"({factor_pdf} BelpexRLP0 + {base_pdf_cents}) c€/kWh ex-VAT",
+            formula_factor=f_factor,
+            formula_base=f_base,
         )
 
     # ebem_variable: parse all four meter-type rows. Mirror the dynamic +
@@ -430,6 +440,14 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
             parse_sign(m.group(2)) * to_float(m.group(3)),
         )
     yearly_fee = _extract_yearly_fee_variable(text)
+    # Signing-cohort coefficients from the mono row, VAT-baked to the EUR/kWh
+    # basis (as the dynamic path does; snapshot vat_rate is 0). The RLP index is
+    # approximated by the plain arithmetic monthly mean; a bi-hourly meter is
+    # billed the mono formula for the whole month (the small peak/off-peak split
+    # is dropped in the re-price).
+    f_factor, f_base = _formula_to_dynamic(
+        parsed["mono"][0], parsed["mono"][1], _vat_multiplier(text)
+    )
     return VariableRates(
         current=_indicative_from_row(text, "Enkelvoudige teller"),
         peak=_indicative_from_row(text, "Dubbele teller piek"),
@@ -443,6 +461,8 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
             f"· off-peak ({parsed['offpeak'][0]} + {parsed['offpeak'][1]}) "
             f"c€/kWh ex-VAT"
         ),
+        formula_factor=f_factor,
+        formula_base=f_base,
     )
 
 

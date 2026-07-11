@@ -71,6 +71,7 @@ from ._pdf import (
     parse_sign,
     parse_valid_until,
     to_float,
+    vat_multiplier,
 )
 from .base import (
     Contract,
@@ -356,14 +357,34 @@ def _extract_variable(text: str) -> VariableRates:
     # silently drop the formula display string. _extract_dynamic above
     # already does the same.
     formula_match = re.search(
-        rf"\((0,\d+)\s*X\s*BELPEX[\w\-]+\s*[{SIGN_CHARS}]\s*(\d+,\d+)\)", text
+        rf"\((0,\d+)\s*X\s*BELPEX[\w\-]+\s*([{SIGN_CHARS}])\s*(\d+,\d+)\)", text
     )
     if not yearly_fee_match or not monthly_match:
         raise ExtractorError("could not parse Eneco variable energy block")
+    # Numeric coefficients for signing-cohort re-pricing, VAT-baked to EUR/kWh
+    # like the dynamic path (snapshot vat_rate is 0). The variable formula does
+    # not print its VAT multiplier, so read it from the card header ("inclusief
+    # 6% btw"). The BELPEX-RLP-M index is approximated by the plain arithmetic
+    # monthly mean (a close, few-percent approximation of the RLP weighting).
+    f_factor: float | None = None
+    f_base: float | None = None
+    if formula_match:
+        vat_mult = vat_multiplier(
+            text, re.compile(r"inclusief\s*(\d+)\s*%\s*btw", re.IGNORECASE)
+        )
+        f_factor = to_float(formula_match.group(1)) * vat_mult * 10.0
+        f_base = (
+            parse_sign(formula_match.group(2))
+            * to_float(formula_match.group(3))
+            * vat_mult
+            / 100.0
+        )
     return VariableRates(
         current=to_float(monthly_match.group(1)) / 100.0,
         yearly_fixed_fee=to_float(yearly_fee_match.group(1)),
         formula=formula_match.group(0) if formula_match else None,
+        formula_factor=f_factor,
+        formula_base=f_base,
     )
 
 

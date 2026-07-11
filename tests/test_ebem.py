@@ -106,6 +106,15 @@ def test_variable_extracts_energy_for_each_meter_type() -> None:
     assert snap.energy.yearly_fixed_fee_exclusive_night == pytest.approx(35.04)
     assert snap.energy.formula is not None
     assert "BelpexRLP0" in snap.energy.formula
+    # Signing-cohort coefficients from the mono row, VAT-baked to EUR/kWh:
+    # 0,110 * 1.06 * 10 and 2,2 * 1.06 / 100. Applying them to the card's
+    # stated last-month Belpex (85,80 -> 0.0858 EUR/kWh) reproduces `current`.
+    factor = snap.energy.formula_factor
+    base = snap.energy.formula_base
+    assert factor is not None and base is not None
+    assert factor == pytest.approx(1.166, rel=1e-4)
+    assert base == pytest.approx(0.02332, rel=1e-4)
+    assert factor * 0.0858 + base == pytest.approx(snap.energy.current, rel=1e-3)
 
 
 def test_variable_publication_and_validity() -> None:

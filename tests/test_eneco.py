@@ -373,3 +373,21 @@ def test_fetch_for_month_unknown_contract_returns_none() -> None:
     as 'no archive' and falls back to the current snapshot."""
     snap = _run(fetch_for_month(None, "gas_dynamic", "wallonia", date(2025, 12, 1)))  # type: ignore[arg-type]
     assert snap is None
+
+
+def test_flex_extracts_cohort_coefficients() -> None:
+    """The variable card's BELPEX-RLP-M factor / base are surfaced (VAT-baked)
+    so a signing cohort can be re-priced against the monthly mean. Applying them
+    to the card's stated last-known index (96,8502 EUR/MWh) reproduces the
+    printed monthly indicative."""
+    snap = parse_snapshot(fixture_text("eneco_flex.pdf"), "power_flex", "test://flex")
+    assert isinstance(snap.energy, VariableRates)
+    # (0,102 X BELPEX-RLP-M + 3,237) incl 6% VAT:
+    # factor 0,102 * 1.06 * 10, base 3,237 * 1.06 / 100.
+    factor = snap.energy.formula_factor
+    base = snap.energy.formula_base
+    assert factor is not None and base is not None
+    assert factor == pytest.approx(1.0812, rel=1e-4)
+    assert base == pytest.approx(0.034312, rel=1e-4)
+    ref = 96.8502 / 1000.0
+    assert factor * ref + base == pytest.approx(snap.energy.current, rel=2e-3)

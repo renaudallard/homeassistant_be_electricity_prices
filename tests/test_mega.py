@@ -445,3 +445,20 @@ async def test_discover_filters_known_unsupported_products() -> None:
     assert "Hypothetical New" in out
     assert "Prepaid Fixed" not in out
     assert "Prepaid Flex" not in out
+
+
+def test_flex_extracts_cohort_coefficients() -> None:
+    """The Flex prose formula (HTVA) is parsed into VAT-baked factor / base so a
+    signing cohort re-prices against the monthly mean. Mega's Epex is already in
+    c€/kWh, so the factor is not scaled by 10 (unlike BELIX / BELPEX cards)."""
+    snap = parse_snapshot(
+        "mega_smart_flex",
+        fixture_text("mega_smart_flex_w.pdf"),
+        "wallonia",
+        "test://flex",
+    )
+    assert isinstance(snap.energy, VariableRates)
+    # "Compteur mono-horaire : Epex * 1,1095 + 3,6 c€/kWh" (HTVA), TVA 6%:
+    # factor 1,1095 * 1.06, base 3,6 * 1.06 / 100.
+    assert snap.energy.formula_factor == pytest.approx(1.17607, rel=1e-4)
+    assert snap.energy.formula_base == pytest.approx(0.038160, rel=1e-4)

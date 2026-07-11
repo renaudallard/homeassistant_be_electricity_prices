@@ -89,6 +89,7 @@ from ._pdf import (
     parse_sign,
     parse_valid_until,
     to_float,
+    vat_multiplier,
 )
 from .base import (
     Contract,
@@ -471,6 +472,35 @@ def _parse_formula(match: re.Match[str] | None) -> tuple[float, float] | None:
     return factor, base_cents / 100.0
 
 
+# Variable (Flex) cards print the indexation as prose (HTVA), e.g.
+# "Compteur mono-horaire : Epex * 1,1095 + 3,6 c€/kWh". Unlike the dynamic
+# formula this is ex-VAT, so it is grossed by the card's VAT below. Epex is in
+# c€/kWh (same as the dynamic formula) so the factor maps directly to spot in
+# EUR/kWh with no /MWh unit conversion.
+_VARIABLE_MONO_FORMULA_RE = re.compile(
+    rf"Compteur mono-horaire\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
+    rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh",
+    re.IGNORECASE,
+)
+
+
+def _variable_cohort_coefficients(text: str) -> tuple[float | None, float | None]:
+    """Numeric coefficients of the variable indexation formula, VAT-baked to
+    the TVAC EUR/kWh basis (snapshot vat_rate is 0), or ``(None, None)``.
+
+    The Epex index is the monthly RLP-weighted spot; the coordinator applies
+    these against the plain arithmetic monthly mean (a close, few-percent
+    approximation). A bi-hourly meter is billed the mono formula for the month.
+    """
+    match = _VARIABLE_MONO_FORMULA_RE.search(re.sub(r"\s+", " ", text))
+    if match is None:
+        return None, None
+    vat_mult = vat_multiplier(text, re.compile(r"TVA\s*(\d+)\s*%\s*incluse", re.I))
+    factor = to_float(match.group(1)) * vat_mult
+    base = parse_sign(match.group(2)) * to_float(match.group(3)) * vat_mult / 100.0
+    return factor, base
+
+
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     yearly_fee = _extract_yearly_fee(text)
     if kind == "dynamic":
@@ -525,12 +555,15 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             exclusive_night=excl_night,
             yearly_fixed_fee=yearly_fee,
         )
+    f_factor, f_base = _variable_cohort_coefficients(text)
     return VariableRates(
         current=mono,
         peak=peak,
         offpeak=offpeak,
         exclusive_night=excl_night,
         yearly_fixed_fee=yearly_fee,
+        formula_factor=f_factor,
+        formula_base=f_base,
     )
 
 
