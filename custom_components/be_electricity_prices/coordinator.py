@@ -543,6 +543,30 @@ def _manual_energy_leg(
     return None
 
 
+def _cohort_energy_from_archived(
+    archived: "SupplierSnapshot",
+) -> EnergyRates | None:
+    """The energy leg a signing cohort bills at, from its archived card.
+
+    Fixed / dynamic: the archived leg is exactly the locked rate. Variable:
+    re-price the cohort's numeric formula coefficients against the CURRENT
+    month's mean (a SpotMonthlyRates leg) rather than freeze the archived
+    card's stale resolved rate, which would pin the signing-month index.
+    ``None`` when the archived card exposes no re-priceable rate (a variable
+    card whose coefficients couldn't be parsed, or a TOU / Impact kind).
+    """
+    energy = archived.energy
+    if isinstance(energy, (FixedRates, DynamicRates)):
+        return energy
+    if isinstance(energy, VariableRates) and energy.formula_factor is not None:
+        return SpotMonthlyRates(
+            factor=energy.formula_factor,
+            base=energy.formula_base if energy.formula_base is not None else 0.0,
+            yearly_fixed_fee=energy.yearly_fixed_fee,
+        )
+    return None
+
+
 async def _cohort_energy_leg(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -580,22 +604,20 @@ async def _cohort_energy_leg(
         # Signed this month or dated in the future: the current card already
         # is the signing-month card, so there is nothing to splice.
         return None
-    # Prefer the actual archived signing-month card. Only fixed and dynamic
-    # contracts re-price from it here: their locked value (single, or
-    # factor/base applied to the live spot) is exactly the archived leg.
-    # Variable / TOU / Impact re-pricing needs the signing-cohort formula
-    # re-applied to the current index, not the archived card's stale resolved
-    # rate, and is handled separately.
+    # Prefer the actual archived signing-month card. Fixed / dynamic re-price
+    # from its leg directly (the locked value); variable re-prices from the
+    # cohort's parsed coefficients against the current month's mean (see
+    # _cohort_energy_from_archived). TOU / Impact are not re-priced yet.
     if extractor.fetch_for_month is not None:
         snap_start = await _snapshot_for_month(
             hass, session, extractor, contract, region, start, current_snapshot
         )
         # _snapshot_for_month returns the SAME current_snapshot object when the
         # signing month has no archive; identity means "no archived card".
-        if snap_start is not current_snapshot and isinstance(
-            snap_start.energy, (FixedRates, DynamicRates)
-        ):
-            return snap_start.energy
+        if snap_start is not current_snapshot:
+            cohort = _cohort_energy_from_archived(snap_start)
+            if cohort is not None:
+                return cohort
     # No retrievable archived card: use a hand-entered signing rate if present,
     # else keep the current card (``_manual_energy_leg`` returns None when the
     # override was left blank).
@@ -3013,6 +3035,18 @@ async def _compute_current_year_cost(
     dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
 
+    # Dispatch on the EFFECTIVE energy leg. A variable contract with a start
+    # date re-prices its signing cohort to a SpotMonthlyRates leg, which bills
+    # on the monthly-mean hourly path rather than the variable static daily
+    # path. _cohort_energy_leg returns None for the compare flow and for
+    # contracts without a start date, leaving the current card's kind. The
+    # per-month walk resolves the same cohort leg through
+    # _effective_snapshot_for_month, so dispatch and per-month pricing agree.
+    cohort_energy = await _cohort_energy_leg(
+        hass, session, extractor, contract, region, entry, snapshot
+    )
+    eff_energy = snapshot.energy if cohort_energy is None else cohort_energy
+
     jan1 = date(today.year, 1, 1)
 
     static_fees = await _ytd_static_fees(
@@ -3027,7 +3061,7 @@ async def _compute_current_year_cost(
     # past kWh hits its actual factor*spot+base rate. Caller passes the
     # spot cache (the coordinator persists it between runs); when
     # absent or empty we fall back to the fees-only floor.
-    if isinstance(snapshot.energy, DynamicRates):
+    if isinstance(eff_energy, DynamicRates):
         if not historical_spots:
             return fees
         dyn_energy = await _ytd_hourly_energy(
@@ -3048,7 +3082,7 @@ async def _compute_current_year_cost(
     # Spot-monthly contracts bill each past hour at its delivery month's mean
     # spot (a flat rate within the month); the hourly replay threads that mean
     # in place of the live spot and credits mean-indexed injection the same way.
-    if isinstance(snapshot.energy, SpotMonthlyRates):
+    if isinstance(eff_energy, SpotMonthlyRates):
         if not historical_spots:
             return fees
         monthly_energy = await _ytd_hourly_energy(
@@ -3078,7 +3112,7 @@ async def _compute_current_year_cost(
     # cheaper exclusive-night rate). All go through the same hourly path,
     # which routes the meter through compute_breakdown.
     needs_hourly = (
-        isinstance(snapshot.energy, (TimeOfUseRates, ImpactRates))
+        isinstance(eff_energy, (TimeOfUseRates, ImpactRates))
         or dso_mode == DSO_MODE_IMPACT
         or meter == METER_EXCLUSIVE_NIGHT
     )
@@ -3237,7 +3271,11 @@ async def _compute_current_year_cost(
 # v14: added the SpotMonthlyRates energy kind (expert custom monthly-average
 # supplier) and the InjectionRates.floor_at_zero flag. Bump so a cached
 # snapshot from before the field existed is dropped and rebuilt with it.
-_SNAPSHOT_SCHEMA_VERSION = 14
+# v15: VariableRates gained formula_factor / formula_base (numeric BELIX-style
+# coefficients) so a variable contract with a contract start date re-prices its
+# signing cohort against the current month's mean. Bump so a cached variable
+# snapshot from before the fields existed is dropped and re-parsed with them.
+_SNAPSHOT_SCHEMA_VERSION = 15
 
 
 def _snapshot_to_dict(

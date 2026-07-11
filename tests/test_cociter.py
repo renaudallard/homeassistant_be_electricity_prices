@@ -69,6 +69,11 @@ def test_variable_extracts_indicative_rates() -> None:
     assert snap.energy.exclusive_night == pytest.approx(0.116808)
     assert snap.energy.yearly_fixed_fee == pytest.approx(53.0)
     assert snap.energy.formula is not None and "BELIX" in snap.energy.formula
+    # Numeric BELIX coefficients for signing-cohort re-pricing, converted to the
+    # EUR/kWh basis applied against the monthly mean: (0,075 x BELIX + 5) c€/kWh
+    # + 6% VAT -> factor 0.075 * 1.06 * 10, base 5 * 1.06 / 100.
+    assert snap.energy.formula_factor == pytest.approx(0.795)
+    assert snap.energy.formula_base == pytest.approx(0.053)
 
 
 def test_variable_extracts_dso_overlay() -> None:

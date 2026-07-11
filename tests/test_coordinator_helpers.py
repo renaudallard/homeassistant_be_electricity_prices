@@ -47,6 +47,7 @@ from custom_components.be_electricity_prices.const import (
     DOMAIN,
 )
 from custom_components.be_electricity_prices.coordinator import (
+    _cohort_energy_from_archived,
     _cohort_energy_leg,
     _compute_capacity,
     _compute_current_year_cost,
@@ -73,6 +74,7 @@ from custom_components.be_electricity_prices.providers.base import (
     EnergyRates,
     FixedRates,
     InjectionRates,
+    SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
@@ -1932,3 +1934,68 @@ async def test_cohort_energy_leg_archive_wins_over_manual(
     )
     # The actual archived card is authoritative over the typed rate.
     assert leg == FixedRates(single=0.18)
+
+
+# ---- variable signing-cohort re-price (discussion #38, commit 5) -------------
+
+
+def test_cohort_energy_from_archived_fixed_and_dynamic() -> None:
+    fixed = make_snapshot(energy=FixedRates(single=0.20))
+    assert _cohort_energy_from_archived(fixed) == FixedRates(single=0.20)
+    dyn = make_snapshot(energy=DynamicRates(factor=1.02, base=0.01))
+    assert _cohort_energy_from_archived(dyn) == DynamicRates(factor=1.02, base=0.01)
+
+
+def test_cohort_energy_from_archived_variable_builds_spot_monthly() -> None:
+    """A variable card with parsed coefficients re-prices to a SpotMonthlyRates
+    leg (factor * this month's mean + base), not the archived resolved rate."""
+    archived = make_snapshot(
+        energy=VariableRates(
+            current=0.18,
+            yearly_fixed_fee=53.0,
+            formula_factor=1.05,
+            formula_base=-0.005,
+        )
+    )
+    assert _cohort_energy_from_archived(archived) == SpotMonthlyRates(
+        factor=1.05, base=-0.005, yearly_fixed_fee=53.0
+    )
+
+
+def test_cohort_energy_from_archived_variable_without_coefficients() -> None:
+    # No parsed coefficients -> not re-priceable here, keep the current card.
+    archived = make_snapshot(energy=VariableRates(current=0.18))
+    assert _cohort_energy_from_archived(archived) is None
+
+
+def test_cohort_energy_from_archived_tou_not_repriced() -> None:
+    archived = make_snapshot(
+        energy=TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.12)
+    )
+    assert _cohort_energy_from_archived(archived) is None
+
+
+async def test_cohort_energy_leg_variable_uses_signing_coefficients(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(
+        energy=VariableRates(current=0.22, formula_factor=1.20, formula_base=0.03)
+    )
+    archived = make_snapshot(
+        energy=VariableRates(
+            current=0.18, yearly_fixed_fee=53.0, formula_factor=1.05, formula_base=0.01
+        )
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return archived
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2025-11-10")
+    leg = await _cohort_energy_leg(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+    )
+    # Coefficients from the SIGNING month; the coordinator applies them to the
+    # CURRENT month's mean via the SpotMonthlyRates path.
+    assert leg == SpotMonthlyRates(factor=1.05, base=0.01, yearly_fixed_fee=53.0)

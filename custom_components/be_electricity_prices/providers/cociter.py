@@ -351,6 +351,24 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
             rf"([{SIGN_CHARS}])\s*([\d,]+)\)\s*\+\s*(\d+)\s*%\s*TVA",
             text,
         )
+        # Surface the numeric BELIX coefficients so a signing cohort can be
+        # re-priced against the current month's mean spot. Same conversion as
+        # the dynamic path: BELIX is the monthly mean of Belpex in EUR/MWh, so
+        # factor_pdf * BELIX gives c€/kWh -> factor * spot(EUR/kWh) needs
+        # * VAT * 10, and the c€ base needs * VAT / 100. BELIX equals the plain
+        # arithmetic monthly mean the coordinator already computes, so this is
+        # exact.
+        formula_factor: float | None = None
+        formula_base: float | None = None
+        if formula:
+            vat_mult = 1.0 + to_float(formula.group(4)) / 100.0
+            formula_factor = to_float(formula.group(1)) * vat_mult * 10.0
+            formula_base = (
+                parse_sign(formula.group(2))
+                * to_float(formula.group(3))
+                * vat_mult
+                / 100.0
+            )
         return VariableRates(
             current=to_float(mono.group(1)) / 100.0,
             peak=to_float(peak.group(1)) / 100.0 if peak else None,
@@ -363,6 +381,8 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
                 if formula
                 else None
             ),
+            formula_factor=formula_factor,
+            formula_base=formula_base,
         )
 
     # cociter_dynamic

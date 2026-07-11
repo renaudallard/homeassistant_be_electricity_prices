@@ -124,6 +124,16 @@ class VariableRates:
     # an exclusive-night config entry. None -> the standard fee applies.
     yearly_fixed_fee_exclusive_night: float | None = None
     formula: str | None = None
+    # Numeric coefficients of the monthly indexation formula, already converted
+    # to the EUR/kWh basis applied against the arithmetic monthly-mean spot
+    # (``factor * this_month_mean + base``), when the extractor can parse them.
+    # Used to re-price a signing cohort with a contract start date: the cohort's
+    # coefficients are frozen while the index keeps moving, built into a
+    # SpotMonthlyRates leg by the coordinator. ``None`` when the card exposes
+    # only a resolved rate. For RLP-indexed cards the arithmetic mean is a close
+    # (few-percent) approximation of the true residential-load-profile weighting.
+    formula_factor: float | None = None
+    formula_base: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
