@@ -575,6 +575,9 @@
       },
       "current_year_cost": {
         "name": "Kosten dieses Jahr"
+      },
+      "contract_end_date": {
+        "name": "Vertragsende"
       }
     },
     "binary_sensor": {

@@ -45,6 +45,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_CONTRACT_END_DATE,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
@@ -404,7 +405,23 @@ async def async_setup_entry(
     if regime == SOLAR_REGIME_INJECTION:
         descriptions.extend(INJECTION_SENSORS)
 
-    async_add_entities(BePriceSensor(coordinator, desc) for desc in descriptions)
+    entities: list[SensorEntity] = [
+        BePriceSensor(coordinator, desc) for desc in descriptions
+    ]
+    end_date = _parse_iso_date(entry.data.get(CONF_CONTRACT_END_DATE))
+    if end_date is not None:
+        entities.append(ContractEndDateSensor(coordinator, end_date))
+    async_add_entities(entities)
+
+
+def _parse_iso_date(value: Any) -> date | None:
+    """Parse a stored ISO ``YYYY-MM-DD`` date string, or ``None``."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
 
 
 class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
@@ -468,3 +485,37 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "today": today,
             "tomorrow": tomorrow,
         }
+
+
+class ContractEndDateSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
+    """Timestamp of the configured contract end date.
+
+    A standalone entity: it can't reuse ``BePriceSensor`` because that
+    class's ``value_fn`` is typed float-only and ``native_value`` rounds
+    it. The value is a static config value, so this only exists to let an
+    automation fire a renewal reminder ahead of the end date; it has no
+    effect on pricing. Created only when an end date is configured.
+    """
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_translation_key = "contract_end_date"
+
+    def __init__(self, coordinator: BePricesCoordinator, end_date: date) -> None:
+        super().__init__(coordinator)
+        self._end_date = end_date
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_contract_end_date"
+        self._attr_device_info = supplier_device_info(coordinator)
+
+    @property
+    def available(self) -> bool:
+        # A static config value, not fetched data, so it stays available
+        # even when a supplier fetch fails; the default
+        # CoordinatorEntity.available would hide it on the first failure.
+        return True
+
+    @property
+    def native_value(self) -> datetime:
+        # TIMESTAMP requires a tz-aware datetime; anchor the date at local
+        # (Europe/Brussels) midnight.
+        return dt_util.start_of_local_day(self._end_date)
