@@ -24,7 +24,7 @@ Related docs:
 
 Each supplier is a self-contained module (for example `providers/bolt.py`) that
 exposes exactly one top-level name, `EXTRACTOR`, of type `SupplierExtractor`
-(`providers/base.py:391`, `SupplierProtocol`). The module's job is to turn the
+(`providers/base.py:401`, `SupplierProtocol`). The module's job is to turn the
 supplier's live publication (a PDF card, an HTML listing, or a small API) into a
 `SupplierSnapshot`: the energy formula plus a network/tax/capacity overlay for
 every DSO sub-area the supplier operates in. The coordinator then picks the one
@@ -54,7 +54,7 @@ integration uses.
 
 ### SupplierExtractor
 
-The registry entry for one supplier (`providers/base.py:364`). It is a frozen,
+The registry entry for one supplier (`providers/base.py:374`). It is a frozen,
 keyword-only dataclass.
 
 ```python
@@ -78,7 +78,7 @@ class SupplierExtractor:
 | `probe` | `SnapshotProbe \| None` | Optional cheap freshness check; `None` means "no probe, use TTL only". |
 | `fetch_for_month` | `ArchivedSnapshotFetcher \| None` | Optional historical fetch for time-correct yearly-cost billing; `None` means "no archive". |
 
-`regions()` (`providers/base.py:383`) returns the union of `Contract.regions`
+`regions()` (`providers/base.py:393`) returns the union of `Contract.regions`
 across all this supplier's contracts. The config flow uses it to decide whether
 a supplier should be offered for the region the user picked.
 
@@ -100,9 +100,9 @@ SnapshotFetcher = Callable[
 ]
 ```
 
-Defined at `providers/base.py:343`. The mandatory current-card fetch. It must
+Defined at `providers/base.py:353`. The mandatory current-card fetch. It must
 return a fully populated `SupplierSnapshot` or raise `ExtractorError`
-(`providers/base.py:397`) on any fetch or parse failure. It never returns
+(`providers/base.py:407`) on any fetch or parse failure. It never returns
 `None`: a missing current card is an error, not an absence.
 
 #### SnapshotProbe
@@ -113,7 +113,7 @@ SnapshotProbe = Callable[
 ]
 ```
 
-Defined at `providers/base.py:351`. A cheap freshness key. The coordinator calls
+Defined at `providers/base.py:361`. A cheap freshness key. The coordinator calls
 it hourly and only re-runs `fetch` when the returned key changes from the cached
 one. Semantics of the return value:
 
@@ -156,7 +156,7 @@ months.
 ## Contract and rate dataclasses
 
 A `SupplierSnapshot.energy` is one of six `EnergyRates` variants
-(`providers/base.py:217`) chosen by the contract's `kind`. All rate dataclasses
+(`providers/base.py:227`) chosen by the contract's `kind`. All rate dataclasses
 are `frozen=True, kw_only=True`. EUR values are always populated from a live
 fetch, never hardcoded — the one exception is the expert **custom** supplier
 (`providers/custom.py`), whose snapshot is built from the config entry the user
@@ -227,11 +227,11 @@ Ecopower (Dynamische Burgerstroom) bill per quarter-hour (their cards multiply
 the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot) and set it `True`;
 that keeps the live price table, current/next-slot sensors and cheapest-window
 service on native 15-minute slots. Year-to-date billing stays hourly regardless,
-because HA only retains hourly long-term statistics (`providers/base.py:137`).
+because HA only retains hourly long-term statistics (`providers/base.py:147`).
 
 ### TimeOfUseRates and WeekendRule
 
-`providers/base.py:153`. Time-of-use energy contract: three slots by hour-of-day
+`providers/base.py:163`. Time-of-use energy contract: three slots by hour-of-day
 (`kind = "tou"`). Requires an SMR3 smart meter.
 
 The weekday schedule is shared across products:
@@ -263,7 +263,7 @@ schedule:
 
 ### ImpactRates
 
-`providers/base.py:185`. Wallonia Tarif Impact energy contract: three slots on
+`providers/base.py:195`. Wallonia Tarif Impact energy contract: three slots on
 CWaPE bands (`kind = "tou_impact"`). Distinct from `TimeOfUseRates` because the
 schedule is the CWaPE-defined Impact one (every day, no weekend exception),
 matching the DSO Impact tariff that gates eligibility. Requires an SMR3
@@ -332,7 +332,7 @@ indicative prints.
 
 ### DsoOverlay
 
-`providers/base.py:248`. Network + capacity costs for one DSO sub-area, in
+`providers/base.py:258`. Network + capacity costs for one DSO sub-area, in
 EUR/kWh and EUR/kW/yr. One of these is keyed under each DSO in
 `SupplierSnapshot.dsos`.
 
@@ -361,7 +361,7 @@ stable forever because they are stored verbatim in every user's `CONF_DSO`.
 
 ### TaxOverlay
 
-`providers/base.py:287`. Federal and regional levies, all in EUR/kWh except the
+`providers/base.py:297`. Federal and regional levies, all in EUR/kWh except the
 energy fund.
 
 | Field | Type | Default | Meaning |
@@ -382,7 +382,7 @@ gotcha: it does not mean "no VAT", it means "prices already include VAT".
 
 ### SupplierSnapshot
 
-`providers/base.py:311`. Everything extracted from one supplier's card, per
+`providers/base.py:321`. Everything extracted from one supplier's card, per
 `(supplier, contract)`. The coordinator combines it with the user's selected DSO
 to produce the all-in price.
 

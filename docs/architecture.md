@@ -110,13 +110,13 @@ region  (flanders | wallonia | brussels)                     const.py:43
         +-- contract  (a Contract with a TariffKind)          providers/base.py:53
         |     fixed | variable | dynamic | tou | tou_impact | spot_monthly
         |
-        +-- meter     (which register split is billed)        const.py:124
+        +-- meter     (which register split is billed)        const.py:147
               mono | bi | dynamic | exclusive_night
 
 orthogonal axes (independent of the above):
 
-  DSO tariff mode   simple | bi_horaire | impact                const.py:135
-  solar regime      none | compensation | injection             const.py:190
+  DSO tariff mode   simple | bi_horaire | impact                const.py:158
+  solar regime      none | compensation | injection             const.py:213
 ```
 
 ### Region and DSO sub-area
@@ -141,7 +141,7 @@ the `Contract`s it sells (`providers/base.py:59`), each carrying a `TariffKind`
 | `fixed` | Constant EUR/kWh, optionally bi-hourly | `FixedRates` (`providers/base.py:79`) | Optional `exclusive_night` rate for a dedicated night circuit. |
 | `variable` | Current month's effective EUR/kWh (monthly-indexed) | `VariableRates` (`providers/base.py:101`) | May carry per-meter peak/offpeak; `formula` for diagnostics. |
 | `dynamic` | `factor x spot + base` per slot | `DynamicRates` (`providers/base.py:128`) | `quarter_hourly` picks the 15-minute vs hourly billing grid. |
-| `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/base.py:154`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
+| `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/base.py:164`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
 | `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/base.py:186`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. |
 | `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py:152`) | Expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. |
 
@@ -156,7 +156,7 @@ filled in (formula plus all regulated DSO + tax values) via `build_snapshot`.
 
 ### Meter
 
-The meter type (`const.py:124`) selects which register split is billed: `mono` (single register),
+The meter type (`const.py:147`) selects which register split is billed: `mono` (single register),
 `bi` (day/night bi-hourly), `dynamic` (per-slot), or `exclusive_night` (a dedicated night-circuit
 meter for an electric water heater or night-storage heater, configured as a second config entry
 pointing at that circuit's kWh sensor). The pricing engine routes `exclusive_night` through the
@@ -165,13 +165,13 @@ each falling back when the card does not publish a separate value.
 
 ### The two orthogonal axes
 
-The DSO tariff mode (`CONF_DSO_TARIFF_MODE`, `const.py:131`) is a grid-side billing choice
+The DSO tariff mode (`CONF_DSO_TARIFF_MODE`, `const.py:154`) is a grid-side billing choice
 independent of the supplier meter: `simple`, `bi_horaire`, or (Wallonia SMR3 opt-in) `impact`
 (Tarif Impact, three distribution rates by CWaPE hour-of-day band). Outside Wallonia only
 `simple` and `bi_horaire` are meaningful, and the coordinator falls back automatically when the
 DSO does not publish Impact rates.
 
-The solar regime (`CONF_SOLAR_REGIME`, `const.py:181`) is independent again: `none` (no panels),
+The solar regime (`CONF_SOLAR_REGIME`, `const.py:204`) is independent again: `none` (no panels),
 `compensation` (the Walloon "meter runs backwards" regime, valid for pre-2024 installs until
 2030-12-31), or `injection` (feed-in credited at the injection tariff). Belgian residential
 injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
@@ -189,19 +189,19 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |  await coordinator.async_config_entry_first_refresh()
    |        |
    |        v
-   |   _async_update_data                            coordinator.py:679
+   |   _async_update_data                            coordinator.py:856
    |     |  probe() -> fresh?  yes: reuse cached snapshot
    |     |                     no : EXTRACTOR.fetch(session, contract, region)
    |     |        |
    |     |        v
-   |     |   SupplierSnapshot (energy, dsos, taxes, injection, ...)  providers/base.py:312
+   |     |   SupplierSnapshot (energy, dsos, taxes, injection, ...)  providers/base.py:322
    |     |     |
    |     |     |  dynamic / spot-indexed?  ->  EntsoeClient spot curve   api.py
    |     |     v
    |     |   for each slot: compute_breakdown(snapshot, dso_overlay,
    |     |                    taxes, meter, dso_mode, spot)  ->  PriceBreakdown   pricing.py
    |     |     v
-   |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:465
+   |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:472
    |
    entry.runtime_data = coordinator                  __init__.py:141
    async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor, button
@@ -217,16 +217,16 @@ Numbered walkthrough:
 1. The user completes the config flow; HA stores the selections in `entry.data` and calls
    `async_setup_entry` (`__init__.py:135`).
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
-   tuple (`coordinator.py:541`) so a later options edit that mutates `entry.data` can still evict
+   tuple (`coordinator.py:718`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
 3. `async_load_persistent` (`coordinator.py:592`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
-4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:679`). It runs
+4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:856`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:141`),
    so the coordinator must not read `runtime_data` during first refresh.
-5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:312`):
+5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:322`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
    `InjectionRates`.
 6. For a dynamic contract (or a spot-indexed-injection one) the coordinator fetches the ENTSO-E
@@ -234,9 +234,9 @@ Numbered walkthrough:
 7. For each slot the coordinator calls `compute_breakdown` (`pricing.py`), which fuses the chosen
    DSO overlay, the taxes, the meter type, the DSO tariff mode, and (for dynamic) the slot spot
    into a `PriceBreakdown`. See [pricing-model.md](pricing-model.md).
-8. The result is packed into `CoordinatorData` (`coordinator.py:465`): the `hourly` table keyed by
+8. The result is packed into `CoordinatorData` (`coordinator.py:472`): the `hourly` table keyed by
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
-   suppliers, `coordinator.py:826`), plus snapshot metadata, the injection price, fees, and the
+   suppliers, `coordinator.py:1028`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
 9. `entry.runtime_data` is set to the coordinator, the three platforms are forwarded, and a
    slot-boundary push is registered (`__init__.py:162`). Because `current_price` and
@@ -248,27 +248,27 @@ Numbered walkthrough:
 
 ## Freshness and caching, at a glance
 
-The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:219`). Freshness has
+The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:242`). Freshness has
 three layers; the deep detail is in [coordinator.md](coordinator.md).
 
 - Probe: each tick runs the supplier's cheap `probe()` (a HEAD or listing GET returning a
   freshness key like `Last-Modified`, `ETag`, or the resolved PDF URL). The full `fetch` runs
   only when the key changes, so a new publication is caught within an hour at near-zero
-  bandwidth (`providers/base.py:347`).
+  bandwidth (`providers/base.py:357`).
 - TTL fallback: suppliers with no usable probe (Engie, Luminus, DATS 24, where the only cheap
   response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
-  `coordinator.py:170`).
-- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:221`)
+  `coordinator.py:177`).
+- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:244`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
-  `coordinator.py:510`).
+  `coordinator.py:687`).
 
 Two further caching behaviors are worth knowing at the architecture level. First, snapshots are
 shared process-wide across config entries keyed by `(supplier, contract, region)`
-(`coordinator.py:177`), so two entries on the same product never poll the same card twice; the
+(`coordinator.py:184`), so two entries on the same product never poll the same card twice; the
 shared rows are evicted on unload only when no sibling entry still references the tuple
 (`__init__.py:203`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
-(`coordinator.py:187`) and the user-facing "extractor failed" repair issue is raised only after
+(`coordinator.py:194`) and the user-facing "extractor failed" repair issue is raised only after
 the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator.py:198`), so
 a single transient CDN timeout does not false-alarm.
 
@@ -282,7 +282,7 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:365`, `SupplierProtocol` at `providers/base.py:391`). It declares the
+   (`providers/base.py:365`, `SupplierProtocol` at `providers/base.py:401`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.
@@ -296,7 +296,7 @@ A new supplier is a self-contained change; the contract is in
 The extractor maps the card's own DSO labels onto the canonical DSO keys (`const.py:49`), sets a
 per-contract `regions` set for products that are not sold everywhere, and, if the card ships
 ex-VAT numbers, sets `TaxOverlay.vat_rate` explicitly (the default `0.0` means "already
-VAT-inclusive", `providers/base.py:308`).
+VAT-inclusive", `providers/base.py:318`).
 
 ## Where to go next
 
