@@ -90,6 +90,25 @@ async def test_diagnostics_redacts_api_key(hass: HomeAssistant) -> None:
     assert "THIS-IS-A-SECRET" not in str(dump)
 
 
+async def test_diagnostics_keeps_contract_dates(hass: HomeAssistant) -> None:
+    """Contract start/end dates are not secrets and must survive redaction."""
+    entry = _entry_with_data()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            "contract_start_date": "2025-11-15",
+            "contract_end_date": "2027-11-14",
+        },
+    )
+    entry.runtime_data = SimpleNamespace(data=_coordinator_data())
+
+    dump = await async_get_config_entry_diagnostics(hass, entry)
+    assert dump["entry"]["data"]["contract_start_date"] == "2025-11-15"
+    assert dump["entry"]["data"]["contract_end_date"] == "2027-11-14"
+
+
 async def test_diagnostics_scrubs_api_key_from_last_error(hass: HomeAssistant) -> None:
     from dataclasses import replace
 

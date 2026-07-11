@@ -13,7 +13,13 @@
         "title": "Contract",
         "description": "Kies je contract. De integratie haalt bij elke verversing de actuele tariefkaart op.",
         "data": {
-          "contract": "Contract"
+          "contract": "Contract",
+          "contract_start_date": "Startdatum van het contract (optioneel)",
+          "contract_end_date": "Einddatum van het contract (optioneel)"
+        },
+        "data_description": {
+          "contract_start_date": "De datum waarop uw contract is gestart. Voor een vast contract wordt hiermee het tarief gebruikt dat u bij ondertekening hebt vastgelegd in plaats van de huidige tariefkaart, voor zover de leverancier een archief van oude kaarten bijhoudt. Laat leeg om altijd de huidige kaart te gebruiken.",
+          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren. Heeft geen invloed op de prijsberekening."
         }
       },
       "dso": {
@@ -151,10 +157,16 @@
     },
     "error": {
       "invalid_api_key": "ENTSO-E heeft deze token geweigerd. Controleer de waarde op transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "cannot_connect": "Kon ENTSO-E niet bereiken om de token te verifieren. Controleer uw netwerk en probeer opnieuw."
+      "cannot_connect": "Kon ENTSO-E niet bereiken om de token te verifieren. Controleer uw netwerk en probeer opnieuw.",
+      "start_date_in_future": "De startdatum van het contract kan niet in de toekomst liggen.",
+      "end_before_start": "De einddatum van het contract moet na de startdatum liggen."
     }
   },
   "options": {
+    "error": {
+      "start_date_in_future": "De startdatum van het contract kan niet in de toekomst liggen.",
+      "end_before_start": "De einddatum van het contract moet na de startdatum liggen."
+    },
     "step": {
       "init": {
         "title": "Belgische elektriciteitsprijzen",
@@ -207,7 +219,13 @@
         "title": "Contract",
         "description": "Kies je contract. De integratie haalt bij elke verversing de actuele tariefkaart op.",
         "data": {
-          "contract": "Contract"
+          "contract": "Contract",
+          "contract_start_date": "Startdatum van het contract (optioneel)",
+          "contract_end_date": "Einddatum van het contract (optioneel)"
+        },
+        "data_description": {
+          "contract_start_date": "De datum waarop uw contract is gestart. Voor een vast contract wordt hiermee het tarief gebruikt dat u bij ondertekening hebt vastgelegd in plaats van de huidige tariefkaart, voor zover de leverancier een archief van oude kaarten bijhoudt. Laat leeg om altijd de huidige kaart te gebruiken.",
+          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren. Heeft geen invloed op de prijsberekening."
         }
       },
       "dso": {

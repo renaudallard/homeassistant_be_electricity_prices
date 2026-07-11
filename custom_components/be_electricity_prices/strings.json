@@ -13,7 +13,13 @@
         "title": "Contract",
         "description": "Pick your contract. The integration fetches its current rate sheet on every refresh.",
         "data": {
-          "contract": "Contract"
+          "contract": "Contract",
+          "contract_start_date": "Contract start date (optional)",
+          "contract_end_date": "Contract end date (optional)"
+        },
+        "data_description": {
+          "contract_start_date": "The date your contract started. For a fixed contract this prices you at the rate you locked in at signing instead of today's rate sheet, where the supplier keeps an archive of past cards. Leave blank to always use the current card.",
+          "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew. Does not affect pricing."
         }
       },
       "dso": {
@@ -151,10 +157,16 @@
     },
     "error": {
       "invalid_api_key": "ENTSO-E rejected this token. Double-check the value at transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "cannot_connect": "Could not reach ENTSO-E to verify the token. Check your network and try again."
+      "cannot_connect": "Could not reach ENTSO-E to verify the token. Check your network and try again.",
+      "start_date_in_future": "The contract start date cannot be in the future.",
+      "end_before_start": "The contract end date must be after the start date."
     }
   },
   "options": {
+    "error": {
+      "start_date_in_future": "[%key:component::be_electricity_prices::config::error::start_date_in_future%]",
+      "end_before_start": "[%key:component::be_electricity_prices::config::error::end_before_start%]"
+    },
     "step": {
       "init": {
         "title": "Belgian Electricity Prices",
@@ -207,7 +219,13 @@
         "title": "[%key:component::be_electricity_prices::config::step::contract::title%]",
         "description": "[%key:component::be_electricity_prices::config::step::contract::description%]",
         "data": {
-          "contract": "[%key:component::be_electricity_prices::config::step::contract::data::contract%]"
+          "contract": "[%key:component::be_electricity_prices::config::step::contract::data::contract%]",
+          "contract_start_date": "[%key:component::be_electricity_prices::config::step::contract::data::contract_start_date%]",
+          "contract_end_date": "[%key:component::be_electricity_prices::config::step::contract::data::contract_end_date%]"
+        },
+        "data_description": {
+          "contract_start_date": "[%key:component::be_electricity_prices::config::step::contract::data_description::contract_start_date%]",
+          "contract_end_date": "[%key:component::be_electricity_prices::config::step::contract::data_description::contract_end_date%]"
         }
       },
       "dso": {

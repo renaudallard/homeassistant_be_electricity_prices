@@ -107,6 +107,13 @@ CONF_REGION: Final = "region"
 CONF_DSO: Final = "dso"
 CONF_SUPPLIER: Final = "supplier"
 CONF_CONTRACT: Final = "contract"
+# Optional contract lifecycle dates, stored as ISO "YYYY-MM-DD" strings (the
+# DateSelector return value). CONF_CONTRACT_START_DATE prices a fixed/dynamic
+# contract at the rate locked in its signing month instead of the current card
+# (see the coordinator cohort-energy path); CONF_CONTRACT_END_DATE is inert for
+# pricing and only surfaced as a renewal-reminder timestamp sensor.
+CONF_CONTRACT_START_DATE: Final = "contract_start_date"
+CONF_CONTRACT_END_DATE: Final = "contract_end_date"
 CONF_METER: Final = "meter"
 CONF_API_KEY: Final = "api_key"
 

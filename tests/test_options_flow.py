@@ -28,7 +28,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -38,7 +38,15 @@ from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.config_flow import (
+    _parse_iso_date,
+    _validate_contract_dates,
+)
+from custom_components.be_electricity_prices.const import (
+    CONF_CONTRACT_END_DATE,
+    CONF_CONTRACT_START_DATE,
+    DOMAIN,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -1510,3 +1518,116 @@ def test_annual_fees_exclude_capacity_for_ytd() -> None:
     # annual figure.
     assert with_cap - without_cap == pytest.approx(200.0)
     assert without_cap == pytest.approx(70.0)
+
+
+# --- Contract start/end date (discussion #38) ---------------------------------
+
+
+def test_parse_iso_date_helper() -> None:
+    assert _parse_iso_date("2025-11-15") == date(2025, 11, 15)
+    assert _parse_iso_date(None) is None
+    assert _parse_iso_date("") is None
+    assert _parse_iso_date("not-a-date") is None
+
+
+def test_validate_contract_dates_helper() -> None:
+    # Nothing entered, or a plainly-past start, is fine.
+    assert _validate_contract_dates({}) == {}
+    assert _validate_contract_dates({CONF_CONTRACT_START_DATE: "2020-01-01"}) == {}
+    # A future start date is rejected.
+    assert _validate_contract_dates({CONF_CONTRACT_START_DATE: "2099-01-01"}) == {
+        CONF_CONTRACT_START_DATE: "start_date_in_future"
+    }
+    # End must be strictly after start.
+    assert _validate_contract_dates(
+        {CONF_CONTRACT_START_DATE: "2026-01-01", CONF_CONTRACT_END_DATE: "2025-12-01"}
+    ) == {CONF_CONTRACT_END_DATE: "end_before_start"}
+    assert _validate_contract_dates(
+        {CONF_CONTRACT_START_DATE: "2026-01-01", CONF_CONTRACT_END_DATE: "2026-01-01"}
+    ) == {CONF_CONTRACT_END_DATE: "end_before_start"}
+    # An end date without a start date is a bare renewal reminder, allowed.
+    assert _validate_contract_dates({CONF_CONTRACT_END_DATE: "2025-12-01"}) == {}
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_contract_dates_round_trip(hass: HomeAssistant) -> None:
+    """Start/end dates entered at the contract step persist on the entry."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "cociter", "region": "wallonia"}
+    )
+    assert result["step_id"] == "contract"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "contract": "cociter_variable",
+            "contract_start_date": "2025-11-15",
+            "contract_end_date": "2027-11-14",
+        },
+    )
+    assert result["step_id"] == "dso"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "bi"}
+    )
+    assert result["step_id"] == "dso_tariff_mode"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
+    )
+    assert result["step_id"] == "solar"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+
+    assert entry.data["contract_start_date"] == "2025-11-15"
+    assert entry.data["contract_end_date"] == "2027-11-14"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_contract_step_rejects_future_start_date(hass: HomeAssistant) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    assert result["step_id"] == "contract"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"contract": "power_fix", "contract_start_date": "2099-01-01"},
+    )
+    assert result["type"] == data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "contract"
+    assert result["errors"] == {"contract_start_date": "start_date_in_future"}
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_contract_step_rejects_end_before_start(hass: HomeAssistant) -> None:
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    assert result["step_id"] == "contract"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "contract": "power_fix",
+            "contract_start_date": "2026-01-01",
+            "contract_end_date": "2025-12-01",
+        },
+    )
+    assert result["type"] == data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "contract"
+    assert result["errors"] == {"contract_end_date": "end_before_start"}

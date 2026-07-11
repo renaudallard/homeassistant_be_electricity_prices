@@ -60,6 +60,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
+    DateSelector,
     EntitySelector,
     EntitySelectorConfig,
     NumberSelector,
@@ -86,6 +87,8 @@ from .const import (
     CONF_CONNECTION_KVA_TIER,
     CONF_CONSUMPTION_KWH,
     CONF_CONTRACT,
+    CONF_CONTRACT_END_DATE,
+    CONF_CONTRACT_START_DATE,
     CONF_CUSTOM_DSO_BRUSSELS_OSP,
     CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR,
     CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR,
@@ -294,9 +297,56 @@ def _contract_schema(
     selector = SelectSelector(
         SelectSelectorConfig(options=options, mode=SelectSelectorMode.LIST)
     )
-    if current in valid_ids:
-        return vol.Schema({vol.Required(CONF_CONTRACT, default=current): selector})
-    return vol.Schema({vol.Required(CONF_CONTRACT): selector})
+    fields: dict[Any, Any] = (
+        {vol.Required(CONF_CONTRACT, default=current): selector}
+        if current in valid_ids
+        else {vol.Required(CONF_CONTRACT): selector}
+    )
+    _add_contract_date_fields(fields, defaults)
+    return vol.Schema(fields)
+
+
+def _add_contract_date_fields(fields: dict[Any, Any], defaults: dict[str, Any]) -> None:
+    """Append the optional contract start/end date pickers.
+
+    No default when unset, so the frontend omits a blank picker from
+    ``user_input`` and absence cleanly means 'no date'; pre-fill the stored ISO
+    value on the options / reconfigure pass so an existing date shows up.
+    """
+    date_selector = DateSelector()
+    for key in (CONF_CONTRACT_START_DATE, CONF_CONTRACT_END_DATE):
+        stored = defaults.get(key)
+        if stored:
+            fields[vol.Optional(key, default=stored)] = date_selector
+        else:
+            fields[vol.Optional(key)] = date_selector
+
+
+def _parse_iso_date(value: Any) -> date | None:
+    """Parse a DateSelector ISO ``YYYY-MM-DD`` string, or ``None``."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _validate_contract_dates(user_input: dict[str, Any]) -> dict[str, str]:
+    """Reject a future start date or an end date not after the start.
+
+    Both fields are independently optional: an end date without a start date is
+    fine (a bare renewal reminder), so the ordering check only fires when both
+    are present.
+    """
+    errors: dict[str, str] = {}
+    start = _parse_iso_date(user_input.get(CONF_CONTRACT_START_DATE))
+    end = _parse_iso_date(user_input.get(CONF_CONTRACT_END_DATE))
+    if start is not None and start > dt_util.now().date():
+        errors[CONF_CONTRACT_START_DATE] = "start_date_in_future"
+    if start is not None and end is not None and end <= start:
+        errors[CONF_CONTRACT_END_DATE] = "end_before_start"
+    return errors
 
 
 def _dso_schema(region: str, defaults: dict[str, Any]) -> vol.Schema:
@@ -989,12 +1039,16 @@ class _WizardStepsMixin:
         region = self._data[CONF_REGION]
         if not _contracts_for(supplier, region):
             return self.async_abort(reason="supplier_region_unavailable")
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._data.update(user_input)
-            return await self.async_step_dso()
+            errors = _validate_contract_dates(user_input)
+            if not errors:
+                self._data.update(user_input)
+                return await self.async_step_dso()
         return self.async_show_form(
             step_id="contract",
             data_schema=_contract_schema(supplier, region, self._data),
+            errors=errors,
         )
 
     async def async_step_dso(
