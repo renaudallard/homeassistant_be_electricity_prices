@@ -258,7 +258,7 @@ async def test_build_hourly_spot_monthly_is_flat(
     coord._snapshot = build_snapshot(
         dict(entry.data), const.REGION_FLANDERS, const.DSO_FLUVIUS_ANTWERPEN
     )
-    hourly = coord._build_hourly({}, 0.08)
+    hourly = coord._build_hourly(coord._snapshot, {}, 0.08)
     all_in = {bd.all_in for bd in hourly.values()}
     assert len(hourly) >= 24
     assert len(all_in) == 1  # perfectly flat
@@ -278,7 +278,7 @@ async def test_build_hourly_spot_monthly_empty_without_mean(
     coord._snapshot = build_snapshot(
         dict(entry.data), const.REGION_FLANDERS, const.DSO_FLUVIUS_ANTWERPEN
     )
-    assert coord._build_hourly({}, None) == {}
+    assert coord._build_hourly(coord._snapshot, {}, None) == {}
 
 
 # ---- config-flow walks -------------------------------------------------------

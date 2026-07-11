@@ -39,11 +39,14 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import (
+    _cohort_energy_leg,
     _compute_capacity,
     _compute_current_year_cost,
     _compute_injection_price,
     _compute_prosumer,
+    _contract_start_month,
     _days_through,
+    _effective_snapshot_for_month,
     _energy_kind,
     _historical_injection_rate,
     _injection_needs_spot,
@@ -1610,3 +1613,224 @@ def test_brussels_osp_fee_selects_configured_tier() -> None:
     # An overlay with no OSP table (non-Brussels) bills nothing.
     plain = DsoOverlay(distribution_single=0.1, transport=0.0)
     assert _brussels_osp_fee(plain, _entry("le13")) == 0.0
+
+
+# ---- contract start-date cohort pricing (discussion #38) ---------------------
+
+
+def _fixed_extractor(fetch_for_month: Any) -> SupplierExtractor:
+    return SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=fetch_for_month,
+    )
+
+
+def test_contract_start_month_parses_to_first_of_month() -> None:
+    assert _contract_start_month(_entry()) is None
+    assert _contract_start_month(_entry(contract_start_date="2025-11-15")) == date(
+        2025, 11, 1
+    )
+    assert _contract_start_month(_entry(contract_start_date="")) is None
+    assert _contract_start_month(_entry(contract_start_date="not-a-date")) is None
+
+
+async def test_cohort_energy_leg_fixed_uses_signing_month(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A fixed contract signed months ago bills at the signing-month rate,
+    not today's card."""
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(energy=FixedRates(single=0.30))
+    archived = make_snapshot(energy=FixedRates(single=0.20))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return archived
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2025-11-10")
+    leg = await _cohort_energy_leg(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+    )
+    assert leg == FixedRates(single=0.20)
+
+
+async def test_cohort_energy_leg_dynamic_uses_signing_month(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(energy=DynamicRates(factor=1.10, base=0.02))
+    archived = make_snapshot(energy=DynamicRates(factor=1.02, base=0.01))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return archived
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2025-11-10")
+    leg = await _cohort_energy_leg(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+    )
+    assert leg == DynamicRates(factor=1.02, base=0.01)
+
+
+async def test_cohort_energy_leg_none_without_start_date(hass: HomeAssistant) -> None:
+    current = make_snapshot(energy=FixedRates(single=0.30))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return make_snapshot(energy=FixedRates(single=0.20))
+
+    _monthly_snapshots(hass).clear()
+    leg = await _cohort_energy_leg(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "test",
+        "wallonia",
+        _entry(contract="test"),
+        current,
+    )
+    assert leg is None
+
+
+async def test_cohort_energy_leg_none_for_this_month_or_future(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(energy=FixedRates(single=0.30))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return make_snapshot(energy=FixedRates(single=0.20))
+
+    _monthly_snapshots(hass).clear()
+    ext = _fixed_extractor(_ffm)
+    for start in ("2026-07-01", "2026-08-01"):
+        entry = _entry(contract="test", contract_start_date=start)
+        leg = await _cohort_energy_leg(
+            hass, MagicMock(), ext, "test", "wallonia", entry, current
+        )
+        assert leg is None, start
+
+
+async def test_cohort_energy_leg_none_when_no_archive(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A non-archive supplier (_snapshot_for_month returns the current
+    snapshot itself) must not pretend to have retrieved a cohort rate.
+    Relies on the _snapshot_for_month fallback-returns-same-object contract
+    pinned by test_snapshot_for_month_falls_back_to_current_when_no_archive."""
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(energy=FixedRates(single=0.30))
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2025-11-10")
+    leg = await _cohort_energy_leg(
+        hass, MagicMock(), _fixed_extractor(None), "test", "wallonia", entry, current
+    )
+    assert leg is None
+
+
+async def test_cohort_energy_leg_skips_variable(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Variable contracts are not re-priced from an archived card here (their
+    resolved rate would freeze the signing-month index); that lands later."""
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(energy=VariableRates(current=0.22))
+    archived = make_snapshot(energy=VariableRates(current=0.18))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return archived
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2025-11-10")
+    leg = await _cohort_energy_leg(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+    )
+    assert leg is None
+
+
+async def test_cohort_energy_leg_none_for_compare_contract(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The OptionsFlow compare path walks an alternative contract with no
+    signing history, so cohort pricing must not leak onto it."""
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(energy=FixedRates(single=0.30))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return make_snapshot(energy=FixedRates(single=0.20))
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="my_real_contract", contract_start_date="2025-11-10")
+    leg = await _cohort_energy_leg(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "other_contract",
+        "wallonia",
+        entry,
+        current,
+    )
+    assert leg is None
+
+
+async def test_effective_snapshot_splices_cohort_energy_onto_current_overlays(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The energy leg is frozen to the signing month while the DSO / tax
+    overlays keep tracking the delivery month."""
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(energy=FixedRates(single=0.30))
+
+    def _dso(rate: float) -> dict[str, DsoOverlay]:
+        return {"ores": DsoOverlay(distribution_single=rate, transport=0.0145)}
+
+    async def _ffm(
+        _session: object, _contract: str, _region: str, year_month: date
+    ) -> SupplierSnapshot:
+        if (year_month.year, year_month.month) == (2025, 11):
+            # Signing-month card: locked energy + that month's network rate.
+            return make_snapshot(energy=FixedRates(single=0.20), dsos=_dso(0.05))
+        # Delivery-month card: newer energy + newer network rate.
+        return make_snapshot(energy=FixedRates(single=0.25), dsos=_dso(0.11))
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2025-11-10")
+    eff = await _effective_snapshot_for_month(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "test",
+        "wallonia",
+        date(2026, 3, 1),
+        current,
+        entry,
+    )
+    # Energy comes from the signing month, network from the delivery month.
+    assert eff.energy == FixedRates(single=0.20)
+    assert eff.dsos["ores"].distribution_single == 0.11
+
+
+async def test_effective_snapshot_is_noop_without_start_date(
+    hass: HomeAssistant,
+) -> None:
+    current = make_snapshot(energy=FixedRates(single=0.30))
+    delivery = make_snapshot(energy=FixedRates(single=0.25))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return delivery
+
+    _monthly_snapshots(hass).clear()
+    eff = await _effective_snapshot_for_month(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "test",
+        "wallonia",
+        date(2026, 3, 1),
+        current,
+        _entry(contract="test"),
+    )
+    # No start date -> plain delivery-month snapshot, untouched.
+    assert eff is delivery

@@ -69,6 +69,7 @@ from .const import (
     CONF_CONNECTION_KVA_TIER,
     CONF_CONSUMPTION_KWH,
     CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
     CONF_CUSTOM_INJECTION_MODE,
     CONF_CUSTOM_INJECTION_SPP_WEIGHTED,
     CONF_DAY_CONSUMPTION_KWH,
@@ -477,6 +478,106 @@ async def _snapshot_for_month(
     return snap if snap is not None else current_snapshot
 
 
+def _contract_start_month(entry: ConfigEntry) -> date | None:
+    """First-of-month of the configured contract start date, or ``None``.
+
+    The signing month is what a fixed/dynamic contract's rate is locked
+    against; the day within the month is irrelevant to which monthly card
+    applies, so normalise to the first.
+    """
+    raw = entry.data.get(CONF_CONTRACT_START_DATE)
+    if not raw:
+        return None
+    try:
+        d = date.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return None
+    return date(d.year, d.month, 1)
+
+
+async def _cohort_energy_leg(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: "SupplierExtractor",
+    contract: str,
+    region: str,
+    entry: ConfigEntry,
+    current_snapshot: "SupplierSnapshot",
+) -> EnergyRates | None:
+    """Resolve the energy leg a contract actually bills at, or ``None``.
+
+    A fixed / dynamic contract signed months ago is billed at the rate it
+    locked in at signing, not today's card. This returns the signing-month
+    card's energy leg so the caller can splice it onto the current
+    delivery-month DSO / tax overlays; ``None`` means "no cohort override,
+    keep the current energy" (no start date set, this month / a future
+    start, no archive for the signing month, or a kind this increment does
+    not re-price).
+
+    ``None`` is also returned for a ``contract`` that isn't the entry's own
+    (the OptionsFlow compare path walks an alternative contract with no
+    signing history, so it must always price at the current card).
+    """
+    if contract != entry.data.get(CONF_CONTRACT):
+        return None
+    start = _contract_start_month(entry)
+    if start is None:
+        return None
+    now = dt_util.now()
+    if start >= date(now.year, now.month, 1):
+        # Signed this month or dated in the future: the current card already
+        # is the signing-month card, so there is nothing to splice.
+        return None
+    if extractor.fetch_for_month is None:
+        return None
+    snap_start = await _snapshot_for_month(
+        hass, session, extractor, contract, region, start, current_snapshot
+    )
+    # _snapshot_for_month returns the SAME current_snapshot object when the
+    # signing month has no archive; identity means "no archived card", so
+    # keep the current energy rather than pretend we retrieved a cohort rate.
+    if snap_start is current_snapshot:
+        return None
+    # Only fixed and dynamic contracts re-price from the archived card here:
+    # their locked value (single, or factor/base applied to the live spot) is
+    # exactly the archived leg. Variable / TOU / Impact re-pricing needs the
+    # signing-cohort formula re-applied to the current index, not the archived
+    # card's stale resolved rate, and is handled separately.
+    if isinstance(snap_start.energy, (FixedRates, DynamicRates)):
+        return snap_start.energy
+    return None
+
+
+async def _effective_snapshot_for_month(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: "SupplierExtractor",
+    contract: str,
+    region: str,
+    year_month: date,
+    current_snapshot: "SupplierSnapshot",
+    entry: ConfigEntry,
+) -> "SupplierSnapshot":
+    """Delivery-month snapshot with the signing cohort's energy leg spliced in.
+
+    Every archive-walking cost path calls this instead of
+    :func:`_snapshot_for_month`: it resolves the delivery month's regulated
+    DSO / tax overlays as before, then overlays the frozen signing-month
+    energy so a locked contract bills its own rate every month while network
+    tariffs and taxes still track the delivery month. A no-op (returns the
+    plain delivery-month snapshot) when there is no cohort override.
+    """
+    snap_m = await _snapshot_for_month(
+        hass, session, extractor, contract, region, year_month, current_snapshot
+    )
+    cohort = await _cohort_energy_leg(
+        hass, session, extractor, contract, region, entry, current_snapshot
+    )
+    if cohort is None:
+        return snap_m
+    return replace(snap_m, energy=cohort)
+
+
 @dataclass
 class CoordinatorData:
     """Snapshot the coordinator hands to entities."""
@@ -769,6 +870,31 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 f"no supplier snapshot available: {self._last_error or 'cold start'}"
             )
 
+        # Resolve the signing-cohort energy leg for a contract with a start
+        # date: a fixed / dynamic contract signed months ago bills at the rate
+        # it locked in, not today's card. ``priced`` splices that leg onto the
+        # current delivery-month DSO / tax / injection overlays and is read at
+        # every energy-pricing site below. ``self._snapshot`` is never mutated:
+        # it is persisted and seeds the shared (supplier, contract, region)
+        # cache row that sibling entries with a different start date adopt, so
+        # baking cohort energy into it would mis-price co-tenants; ``priced`` is
+        # a per-tick local. A no-op (``priced is self._snapshot``) when no start
+        # date is set.
+        cohort_energy = await _cohort_energy_leg(
+            self.hass,
+            self._session,
+            get_extractor(self.entry.data[CONF_SUPPLIER]),
+            self.entry.data[CONF_CONTRACT],
+            self.entry.data.get(CONF_REGION, ""),
+            self.entry,
+            self._snapshot,
+        )
+        priced = (
+            self._snapshot
+            if cohort_energy is None
+            else replace(self._snapshot, energy=cohort_energy)
+        )
+
         spot_prices: dict[datetime, float] = {}
         # Auth + extractor issue clear paths run OUTSIDE the
         # DynamicRates branch so that an existing Repairs entry
@@ -788,7 +914,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._sync_entsoe_auth_issue(False)
         if not self._last_error:
             self._sync_extractor_issue(None)
-        if isinstance(self._snapshot.energy, (DynamicRates, SpotMonthlyRates)):
+        if isinstance(priced.energy, (DynamicRates, SpotMonthlyRates)):
             # Both the live per-slot price (dynamic) and the flat monthly rate
             # (spot-monthly, from the month mean) need ENTSO-E spots, so they
             # share the hard-fail-on-cold-start path.
@@ -833,14 +959,14 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # year-to-date hours plus today's fetched curve) and reuse it for the
         # live price table and for baking the mean-indexed injection.
         monthly_mean: float | None = None
-        if isinstance(self._snapshot.energy, SpotMonthlyRates):
+        if isinstance(priced.energy, SpotMonthlyRates):
             now_local = dt_util.now()
             monthly_mean = self._monthly_spot_mean(
                 now_local.year, now_local.month, spot_prices
             )
 
         try:
-            hourly = self._build_hourly(spot_prices, monthly_mean)
+            hourly = self._build_hourly(priced, spot_prices, monthly_mean)
         except KeyError as err:
             # The fresh snapshot does not contain the user's configured
             # DSO -- typically a regex drift on a new card. Surface a
@@ -886,7 +1012,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # [Jan 1, today] before calling the engine; failures degrade to "no
         # data" for those hours rather than tearing the tick down.
         if isinstance(
-            self._snapshot.energy, (DynamicRates, SpotMonthlyRates)
+            priced.energy, (DynamicRates, SpotMonthlyRates)
         ) or _injection_needs_spot(self._snapshot, self.entry):
             today_local = dt_util.now().date()
             await self._ensure_historical_spots(
@@ -911,7 +1037,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             hourly=hourly,
             resolution=(
                 RESOLUTION_QUARTER
-                if _energy_is_quarter_hourly(self._snapshot.energy)
+                if _energy_is_quarter_hourly(priced.energy)
                 else RESOLUTION_HOURLY
             ),
             snapshot_publication=self._snapshot.publication_label,
@@ -925,7 +1051,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             prosumer_cost_eur=prosumer_cost,
             injection_price_eur_per_kwh=injection_price,
             yearly_fixed_fee_eur=yearly_fixed_fee_for_meter(
-                self._snapshot.energy,
+                priced.energy,
                 self.entry.data.get(CONF_METER, METER_MONO),
             ),
             energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
@@ -1533,11 +1659,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     def _build_hourly(
         self,
+        snap: SupplierSnapshot,
         spot_prices: dict[datetime, float],
         monthly_mean: float | None = None,
     ) -> dict[datetime, PriceBreakdown]:
-        snap = self._snapshot
-        assert snap is not None
+        # ``snap`` is the signing-cohort-priced snapshot (energy leg swapped
+        # to the locked rate; DSO / tax overlays still the delivery month),
+        # not necessarily self._snapshot.
         dso = self.entry.data[CONF_DSO]
         region = self.entry.data[CONF_REGION]
         meter = self.entry.data.get(CONF_METER, METER_MONO)
@@ -2390,8 +2518,8 @@ async def _walk_ytd_months(
     cur = date(today.year, 1, 1)
     while cur <= today:
         month_first = date(cur.year, cur.month, 1)
-        snap_m = await _snapshot_for_month(
-            hass, session, extractor, contract, region, month_first, snapshot
+        snap_m = await _effective_snapshot_for_month(
+            hass, session, extractor, contract, region, month_first, snapshot, entry
         )
         if cur.month == 12:
             next_first = date(cur.year + 1, 1, 1)
@@ -2607,8 +2735,8 @@ async def _ytd_hourly_energy(
 
     async def _snap_for(month_first: date) -> SupplierSnapshot:
         if month_first not in month_snap_cache:
-            month_snap_cache[month_first] = await _snapshot_for_month(
-                hass, session, extractor, contract, region, month_first, snapshot
+            month_snap_cache[month_first] = await _effective_snapshot_for_month(
+                hass, session, extractor, contract, region, month_first, snapshot, entry
             )
         return month_snap_cache[month_first]
 
@@ -2938,8 +3066,8 @@ async def _compute_current_year_cost(
     ) -> tuple[Any, Any, Any, "SupplierSnapshot"] | None:
         if month_first in month_breakdowns:
             return month_breakdowns[month_first]
-        snap_m = await _snapshot_for_month(
-            hass, session, extractor, contract, region, month_first, snapshot
+        snap_m = await _effective_snapshot_for_month(
+            hass, session, extractor, contract, region, month_first, snapshot, entry
         )
         try:
             single_bd = static_breakdown(snap_m, dso, region, "single", dso_mode)

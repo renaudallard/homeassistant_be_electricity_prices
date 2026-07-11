@@ -165,7 +165,7 @@ async def test_build_hourly_covers_both_days_across_dst_seams(
 
     # Fall-back: today (Oct 25) has 25 local hours, tomorrow (Oct 26) 24.
     freezer.move_to("2026-10-25 12:00:00+01:00")
-    hourly = coord._build_hourly({})
+    hourly = coord._build_hourly(coord._snapshot, {})
     today = sorted(
         dt_util.as_local(k)
         for k in hourly
@@ -181,7 +181,7 @@ async def test_build_hourly_covers_both_days_across_dst_seams(
 
     # Spring-forward: today (Mar 29) has 23 local hours, tomorrow 24.
     freezer.move_to("2026-03-29 12:00:00+02:00")
-    hourly = coord._build_hourly({})
+    hourly = coord._build_hourly(coord._snapshot, {})
     today = sorted(
         dt_util.as_local(k)
         for k in hourly

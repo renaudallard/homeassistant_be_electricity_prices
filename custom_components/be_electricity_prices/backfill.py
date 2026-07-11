@@ -78,12 +78,12 @@ from .const import (
 from .coordinator import (
     BePricesCoordinator,
     _brussels_osp_fee,
+    _effective_snapshot_for_month,
     _historical_injection_rate,
     _hourly_consumption_sensors,
     _hourly_injection_sensors,
     _injection_needs_spot,
     _recorder_hourly_kwh,
-    _snapshot_for_month,
 )
 from .pricing import compute_breakdown, yearly_fixed_fee_for_meter
 from .providers import DynamicRates, get as get_extractor
@@ -351,7 +351,7 @@ async def _backfill_price_sensors(
 
     async def _snap_for(month_first: date) -> SupplierSnapshot:
         if month_first not in month_cache:
-            month_cache[month_first] = await _snapshot_for_month(
+            month_cache[month_first] = await _effective_snapshot_for_month(
                 hass,
                 coordinator._session,
                 extractor,
@@ -359,6 +359,7 @@ async def _backfill_price_sensors(
                 region,
                 month_first,
                 snap,
+                entry,
             )
         return month_cache[month_first]
 
@@ -508,7 +509,7 @@ async def _backfill_cost_sensor(
 
     async def _snap_for(month_first: date) -> SupplierSnapshot:
         if month_first not in month_cache:
-            month_cache[month_first] = await _snapshot_for_month(
+            month_cache[month_first] = await _effective_snapshot_for_month(
                 hass,
                 coordinator._session,
                 extractor,
@@ -516,6 +517,7 @@ async def _backfill_cost_sensor(
                 region,
                 month_first,
                 snap,
+                entry,
             )
         return month_cache[month_first]
 
