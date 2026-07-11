@@ -22,6 +22,18 @@
           "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler. N'affecte pas la tarification."
         }
       },
+      "signed_rate": {
+        "title": "Tarif de signature (facultatif)",
+        "description": "Votre fournisseur ne conserve pas d'archive en ligne des anciennes cartes tarifaires, le tarif bloqué à la signature ne peut donc pas être récupéré automatiquement. Saisissez-le ici pour calculer correctement votre contrat ; laissez vide pour continuer à utiliser la carte actuelle. Valeurs au kWh dans la même base TVA que celle imprimée sur la carte de votre fournisseur ; forfait annuel TVA comprise.",
+        "data": {
+          "manual_energy_single": "Tarif énergie signé (EUR/kWh)",
+          "manual_energy_peak": "Tarif heures pleines signé (EUR/kWh)",
+          "manual_energy_offpeak": "Tarif heures creuses signé (EUR/kWh)",
+          "manual_energy_factor": "Facteur spot signé",
+          "manual_energy_base": "Base spot signée (EUR/kWh)",
+          "manual_yearly_fee": "Forfait annuel signé (EUR, TVA comprise)"
+        }
+      },
       "dso": {
         "title": "Gestionnaire de reseau",
         "data": {
@@ -226,6 +238,18 @@
         "data_description": {
           "contract_start_date": "La date de début de votre contrat. Pour un contrat fixe, la facturation utilise le tarif bloqué à la signature au lieu de la grille actuelle, lorsque le fournisseur conserve une archive des anciennes cartes tarifaires. Laissez vide pour toujours utiliser la carte actuelle.",
           "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler. N'affecte pas la tarification."
+        }
+      },
+      "signed_rate": {
+        "title": "Tarif de signature (facultatif)",
+        "description": "Votre fournisseur ne conserve pas d'archive en ligne des anciennes cartes tarifaires, le tarif bloqué à la signature ne peut donc pas être récupéré automatiquement. Saisissez-le ici pour calculer correctement votre contrat ; laissez vide pour continuer à utiliser la carte actuelle. Valeurs au kWh dans la même base TVA que celle imprimée sur la carte de votre fournisseur ; forfait annuel TVA comprise.",
+        "data": {
+          "manual_energy_single": "Tarif énergie signé (EUR/kWh)",
+          "manual_energy_peak": "Tarif heures pleines signé (EUR/kWh)",
+          "manual_energy_offpeak": "Tarif heures creuses signé (EUR/kWh)",
+          "manual_energy_factor": "Facteur spot signé",
+          "manual_energy_base": "Base spot signée (EUR/kWh)",
+          "manual_yearly_fee": "Forfait annuel signé (EUR, TVA comprise)"
         }
       },
       "dso": {

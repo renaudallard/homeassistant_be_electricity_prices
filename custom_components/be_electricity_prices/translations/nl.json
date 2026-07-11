@@ -22,6 +22,18 @@
           "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren. Heeft geen invloed op de prijsberekening."
         }
       },
+      "signed_rate": {
+        "title": "Tarief bij ondertekening (optioneel)",
+        "description": "Uw leverancier houdt geen online archief van oude tariefkaarten bij, dus het tarief dat u bij ondertekening hebt vastgelegd kan niet automatisch worden opgehaald. Voer het hier in om uw contract correct te berekenen; laat leeg om de huidige kaart te blijven gebruiken. Waarden per kWh in dezelfde btw-basis als op de kaart van uw leverancier; het jaarlijkse vaste bedrag inclusief btw.",
+        "data": {
+          "manual_energy_single": "Vastgelegd energietarief (EUR/kWh)",
+          "manual_energy_peak": "Vastgelegd piektarief (EUR/kWh)",
+          "manual_energy_offpeak": "Vastgelegd daltarief (EUR/kWh)",
+          "manual_energy_factor": "Vastgelegde spotfactor",
+          "manual_energy_base": "Vastgelegde spotbasis (EUR/kWh)",
+          "manual_yearly_fee": "Vastgelegd jaarlijks vast bedrag (EUR, incl. btw)"
+        }
+      },
       "dso": {
         "title": "Distributienetbeheerder",
         "data": {
@@ -226,6 +238,18 @@
         "data_description": {
           "contract_start_date": "De datum waarop uw contract is gestart. Voor een vast contract wordt hiermee het tarief gebruikt dat u bij ondertekening hebt vastgelegd in plaats van de huidige tariefkaart, voor zover de leverancier een archief van oude kaarten bijhoudt. Laat leeg om altijd de huidige kaart te gebruiken.",
           "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren. Heeft geen invloed op de prijsberekening."
+        }
+      },
+      "signed_rate": {
+        "title": "Tarief bij ondertekening (optioneel)",
+        "description": "Uw leverancier houdt geen online archief van oude tariefkaarten bij, dus het tarief dat u bij ondertekening hebt vastgelegd kan niet automatisch worden opgehaald. Voer het hier in om uw contract correct te berekenen; laat leeg om de huidige kaart te blijven gebruiken. Waarden per kWh in dezelfde btw-basis als op de kaart van uw leverancier; het jaarlijkse vaste bedrag inclusief btw.",
+        "data": {
+          "manual_energy_single": "Vastgelegd energietarief (EUR/kWh)",
+          "manual_energy_peak": "Vastgelegd piektarief (EUR/kWh)",
+          "manual_energy_offpeak": "Vastgelegd daltarief (EUR/kWh)",
+          "manual_energy_factor": "Vastgelegde spotfactor",
+          "manual_energy_base": "Vastgelegde spotbasis (EUR/kWh)",
+          "manual_yearly_fee": "Vastgelegd jaarlijks vast bedrag (EUR, incl. btw)"
         }
       },
       "dso": {

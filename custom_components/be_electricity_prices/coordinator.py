@@ -77,6 +77,12 @@ from .const import (
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_INJECTION_KWH,
+    CONF_MANUAL_ENERGY_BASE,
+    CONF_MANUAL_ENERGY_FACTOR,
+    CONF_MANUAL_ENERGY_OFFPEAK,
+    CONF_MANUAL_ENERGY_PEAK,
+    CONF_MANUAL_ENERGY_SINGLE,
+    CONF_MANUAL_YEARLY_FEE,
     CONF_METER,
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
@@ -495,6 +501,48 @@ def _contract_start_month(entry: ConfigEntry) -> date | None:
     return date(d.year, d.month, 1)
 
 
+def _manual_energy_leg(
+    entry: ConfigEntry, current_snapshot: "SupplierSnapshot"
+) -> EnergyRates | None:
+    """Build the energy leg from a hand-entered signing rate, or ``None``.
+
+    The fallback for a start date the archive cannot cover: the user typed the
+    rate they signed at. Shaped to match the contract's current kind (dynamic
+    -> factor / base, fixed -> single / peak / offpeak). Per-kWh values are
+    stored as entered (grossed by compute_breakdown at the current card's VAT
+    rate); the yearly fee is stored VAT-inclusive, matching how cards store it.
+    ``None`` when the override was left blank, or the contract is neither fixed
+    nor dynamic.
+    """
+    energy = current_snapshot.energy
+    fee_raw = entry.data.get(CONF_MANUAL_YEARLY_FEE)
+    fee = float(fee_raw) if fee_raw is not None else 0.0
+    if isinstance(energy, DynamicRates):
+        factor = entry.data.get(CONF_MANUAL_ENERGY_FACTOR)
+        base = entry.data.get(CONF_MANUAL_ENERGY_BASE)
+        if factor is None and base is None:
+            return None
+        return DynamicRates(
+            factor=float(factor) if factor is not None else 0.0,
+            base=float(base) if base is not None else 0.0,
+            yearly_fixed_fee=fee,
+            quarter_hourly=energy.quarter_hourly,
+        )
+    if isinstance(energy, FixedRates):
+        single = entry.data.get(CONF_MANUAL_ENERGY_SINGLE)
+        if single is None:
+            return None
+        peak = entry.data.get(CONF_MANUAL_ENERGY_PEAK)
+        offpeak = entry.data.get(CONF_MANUAL_ENERGY_OFFPEAK)
+        return FixedRates(
+            single=float(single),
+            peak=float(peak) if peak is not None else None,
+            offpeak=float(offpeak) if offpeak is not None else None,
+            yearly_fixed_fee=fee,
+        )
+    return None
+
+
 async def _cohort_energy_leg(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -511,8 +559,12 @@ async def _cohort_energy_leg(
     card's energy leg so the caller can splice it onto the current
     delivery-month DSO / tax overlays; ``None`` means "no cohort override,
     keep the current energy" (no start date set, this month / a future
-    start, no archive for the signing month, or a kind this increment does
-    not re-price).
+    start, and no archived card or manual rate to re-price with).
+
+    Resolution order is archive, then a hand-entered manual rate, then the
+    current card: the actual archived signing-month card is authoritative when
+    the supplier keeps one; a manually entered rate covers non-archive
+    suppliers and start dates older than the archive reaches.
 
     ``None`` is also returned for a ``contract`` that isn't the entry's own
     (the OptionsFlow compare path walks an alternative contract with no
@@ -528,24 +580,26 @@ async def _cohort_energy_leg(
         # Signed this month or dated in the future: the current card already
         # is the signing-month card, so there is nothing to splice.
         return None
-    if extractor.fetch_for_month is None:
-        return None
-    snap_start = await _snapshot_for_month(
-        hass, session, extractor, contract, region, start, current_snapshot
-    )
-    # _snapshot_for_month returns the SAME current_snapshot object when the
-    # signing month has no archive; identity means "no archived card", so
-    # keep the current energy rather than pretend we retrieved a cohort rate.
-    if snap_start is current_snapshot:
-        return None
-    # Only fixed and dynamic contracts re-price from the archived card here:
-    # their locked value (single, or factor/base applied to the live spot) is
-    # exactly the archived leg. Variable / TOU / Impact re-pricing needs the
-    # signing-cohort formula re-applied to the current index, not the archived
-    # card's stale resolved rate, and is handled separately.
-    if isinstance(snap_start.energy, (FixedRates, DynamicRates)):
-        return snap_start.energy
-    return None
+    # Prefer the actual archived signing-month card. Only fixed and dynamic
+    # contracts re-price from it here: their locked value (single, or
+    # factor/base applied to the live spot) is exactly the archived leg.
+    # Variable / TOU / Impact re-pricing needs the signing-cohort formula
+    # re-applied to the current index, not the archived card's stale resolved
+    # rate, and is handled separately.
+    if extractor.fetch_for_month is not None:
+        snap_start = await _snapshot_for_month(
+            hass, session, extractor, contract, region, start, current_snapshot
+        )
+        # _snapshot_for_month returns the SAME current_snapshot object when the
+        # signing month has no archive; identity means "no archived card".
+        if snap_start is not current_snapshot and isinstance(
+            snap_start.energy, (FixedRates, DynamicRates)
+        ):
+            return snap_start.energy
+    # No retrievable archived card: use a hand-entered signing rate if present,
+    # else keep the current card (``_manual_energy_leg`` returns None when the
+    # override was left blank).
+    return _manual_energy_leg(entry, current_snapshot)
 
 
 async def _effective_snapshot_for_month(

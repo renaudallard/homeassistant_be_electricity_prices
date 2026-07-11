@@ -1631,3 +1631,70 @@ async def test_contract_step_rejects_end_before_start(hass: HomeAssistant) -> No
     assert result["type"] == data_entry_flow.FlowResultType.FORM
     assert result["step_id"] == "contract"
     assert result["errors"] == {"contract_end_date": "end_before_start"}
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_signed_rate_step_for_fixed_with_start_date(
+    hass: HomeAssistant,
+) -> None:
+    """A start date on a fixed contract inserts the optional signing-rate step,
+    and the typed rate round-trips onto the entry."""
+    entry = _make_entry()  # eneco / power_fix (fixed) / wallonia
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    assert result["step_id"] == "contract"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"contract": "power_fix", "contract_start_date": "2025-11-10"},
+    )
+    # Fixed + start date -> the signing-rate override step.
+    assert result["step_id"] == "signed_rate"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"manual_energy_single": 0.22, "manual_yearly_fee": 60.0},
+    )
+    assert result["step_id"] == "dso"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "mono"}
+    )
+    assert result["step_id"] == "dso_tariff_mode"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "simple"}
+    )
+    assert result["step_id"] == "solar"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+
+    assert entry.data["contract_start_date"] == "2025-11-10"
+    assert entry.data["manual_energy_single"] == 0.22
+    assert entry.data["manual_yearly_fee"] == 60.0
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_no_signed_rate_step_without_start_date(
+    hass: HomeAssistant,
+) -> None:
+    """No start date -> the signing-rate step is skipped entirely."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "power_fix"}
+    )
+    # Straight to the DSO step, no signing-rate detour.
+    assert result["step_id"] == "dso"

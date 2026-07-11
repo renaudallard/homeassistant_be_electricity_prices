@@ -114,6 +114,22 @@ CONF_CONTRACT: Final = "contract"
 # pricing and only surfaced as a renewal-reminder timestamp sensor.
 CONF_CONTRACT_START_DATE: Final = "contract_start_date"
 CONF_CONTRACT_END_DATE: Final = "contract_end_date"
+
+# Optional manual signing-rate override, offered on the config flow when a
+# start date is set on a fixed / dynamic contract. Used as the cohort energy
+# leg when the supplier keeps no archive of the signing month (or the archive
+# does not reach that far back), where the rate cannot be retrieved and only
+# the user knows what they locked in. Fixed contracts fill single (+ optional
+# peak / offpeak); dynamic contracts fill factor / base. Per-kWh values are
+# entered in the supplier card's VAT basis (grossed at compute time); the
+# yearly fee is entered VAT-inclusive, matching how cards store it.
+CONF_MANUAL_ENERGY_SINGLE: Final = "manual_energy_single"
+CONF_MANUAL_ENERGY_PEAK: Final = "manual_energy_peak"
+CONF_MANUAL_ENERGY_OFFPEAK: Final = "manual_energy_offpeak"
+CONF_MANUAL_ENERGY_FACTOR: Final = "manual_energy_factor"
+CONF_MANUAL_ENERGY_BASE: Final = "manual_energy_base"
+CONF_MANUAL_YEARLY_FEE: Final = "manual_yearly_fee"
+
 CONF_METER: Final = "meter"
 CONF_API_KEY: Final = "api_key"
 

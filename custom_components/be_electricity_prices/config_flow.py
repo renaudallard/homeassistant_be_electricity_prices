@@ -126,6 +126,12 @@ from .const import (
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_INJECTION_KWH,
+    CONF_MANUAL_ENERGY_BASE,
+    CONF_MANUAL_ENERGY_FACTOR,
+    CONF_MANUAL_ENERGY_OFFPEAK,
+    CONF_MANUAL_ENERGY_PEAK,
+    CONF_MANUAL_ENERGY_SINGLE,
+    CONF_MANUAL_YEARLY_FEE,
     CONF_METER,
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
@@ -347,6 +353,49 @@ def _validate_contract_dates(user_input: dict[str, Any]) -> dict[str, str]:
     if start is not None and end is not None and end <= start:
         errors[CONF_CONTRACT_END_DATE] = "end_before_start"
     return errors
+
+
+def _add_manual_num(
+    fields: dict[Any, Any],
+    defaults: dict[str, Any],
+    key: str,
+    *,
+    negative: bool = False,
+) -> None:
+    """Append an optional manual signing-rate field, pre-filled on reconfigure.
+
+    No default when unset so a blank box is omitted from ``user_input`` and
+    absence means 'not entered' (the whole override is skippable).
+    """
+    stored = defaults.get(key)
+    selector = _custom_num(negative=negative)
+    if stored is not None:
+        fields[vol.Optional(key, default=float(stored))] = selector
+    else:
+        fields[vol.Optional(key)] = selector
+
+
+def _signed_rate_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Optional signing-rate override fields, shaped by the contract kind.
+
+    Dynamic contracts collect factor / base (which a Belgian formula can drive
+    negative); fixed contracts collect single (+ optional peak / offpeak). All
+    fields are optional: leave them blank to let the archive price the contract,
+    or to keep the current card when the supplier keeps no archive.
+    """
+    kind = _contract_kind(
+        defaults.get(CONF_SUPPLIER, ""), defaults.get(CONF_CONTRACT, "")
+    )
+    fields: dict[Any, Any] = {}
+    if kind == "dynamic":
+        _add_manual_num(fields, defaults, CONF_MANUAL_ENERGY_FACTOR, negative=True)
+        _add_manual_num(fields, defaults, CONF_MANUAL_ENERGY_BASE, negative=True)
+    else:
+        _add_manual_num(fields, defaults, CONF_MANUAL_ENERGY_SINGLE)
+        _add_manual_num(fields, defaults, CONF_MANUAL_ENERGY_PEAK)
+        _add_manual_num(fields, defaults, CONF_MANUAL_ENERGY_OFFPEAK)
+    _add_manual_num(fields, defaults, CONF_MANUAL_YEARLY_FEE)
+    return vol.Schema(fields)
 
 
 def _dso_schema(region: str, defaults: dict[str, Any]) -> vol.Schema:
@@ -1044,11 +1093,44 @@ class _WizardStepsMixin:
             errors = _validate_contract_dates(user_input)
             if not errors:
                 self._data.update(user_input)
-                return await self.async_step_dso()
+                return await self._after_contract()
         return self.async_show_form(
             step_id="contract",
             data_schema=_contract_schema(supplier, region, self._data),
             errors=errors,
+        )
+
+    def _needs_manual_rate(self) -> bool:
+        """Offer the signing-rate override for a start date on a fixed /
+        dynamic contract of a real (non-custom) supplier.
+
+        It becomes the cohort energy leg whenever the archive cannot recover
+        the signing month (a non-archive supplier, or a start date older than
+        the archive reaches); the archived card wins when it is available.
+        """
+        if self._data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
+            return False
+        if not self._data.get(CONF_CONTRACT_START_DATE):
+            return False
+        return _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT]) in (
+            "fixed",
+            "dynamic",
+        )
+
+    async def _after_contract(self) -> ConfigFlowResult:
+        if self._needs_manual_rate():
+            return await self.async_step_signed_rate()
+        return await self.async_step_dso()
+
+    async def async_step_signed_rate(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_dso()
+        return self.async_show_form(
+            step_id="signed_rate",
+            data_schema=_signed_rate_schema(self._data),
         )
 
     async def async_step_dso(

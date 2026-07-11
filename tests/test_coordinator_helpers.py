@@ -37,7 +37,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.const import (
+    CONF_MANUAL_ENERGY_BASE,
+    CONF_MANUAL_ENERGY_FACTOR,
+    CONF_MANUAL_ENERGY_OFFPEAK,
+    CONF_MANUAL_ENERGY_PEAK,
+    CONF_MANUAL_ENERGY_SINGLE,
+    CONF_MANUAL_YEARLY_FEE,
+    DOMAIN,
+)
 from custom_components.be_electricity_prices.coordinator import (
     _cohort_energy_leg,
     _compute_capacity,
@@ -50,6 +58,7 @@ from custom_components.be_electricity_prices.coordinator import (
     _energy_kind,
     _historical_injection_rate,
     _injection_needs_spot,
+    _manual_energy_leg,
     _ytd_spot_injection_credit,
     _monthly_snapshots,
     _recorder_daily_kwh,
@@ -1834,3 +1843,92 @@ async def test_effective_snapshot_is_noop_without_start_date(
     )
     # No start date -> plain delivery-month snapshot, untouched.
     assert eff is delivery
+
+
+# ---- manual signing-rate fallback (discussion #38, commit 4) -----------------
+
+
+def test_manual_energy_leg_fixed() -> None:
+    current = make_snapshot(energy=FixedRates(single=0.30))
+    entry = _entry(
+        contract="test",
+        **{
+            CONF_MANUAL_ENERGY_SINGLE: 0.22,
+            CONF_MANUAL_ENERGY_PEAK: 0.25,
+            CONF_MANUAL_ENERGY_OFFPEAK: 0.18,
+            CONF_MANUAL_YEARLY_FEE: 60.0,
+        },
+    )
+    assert _manual_energy_leg(entry, current) == FixedRates(
+        single=0.22, peak=0.25, offpeak=0.18, yearly_fixed_fee=60.0
+    )
+
+
+def test_manual_energy_leg_dynamic_keeps_quarter_hourly() -> None:
+    current = make_snapshot(
+        energy=DynamicRates(factor=1.10, base=0.02, quarter_hourly=True)
+    )
+    entry = _entry(
+        contract="test",
+        **{
+            CONF_MANUAL_ENERGY_FACTOR: 1.02,
+            CONF_MANUAL_ENERGY_BASE: 0.01,
+            CONF_MANUAL_YEARLY_FEE: 48.0,
+        },
+    )
+    assert _manual_energy_leg(entry, current) == DynamicRates(
+        factor=1.02, base=0.01, yearly_fixed_fee=48.0, quarter_hourly=True
+    )
+
+
+def test_manual_energy_leg_blank_returns_none() -> None:
+    current = make_snapshot(energy=FixedRates(single=0.30))
+    assert _manual_energy_leg(_entry(contract="test"), current) is None
+
+
+def test_manual_energy_leg_none_for_variable() -> None:
+    # A single manual rate would freeze a monthly-reindexed contract, so the
+    # override is not offered for variable and must not be applied.
+    current = make_snapshot(energy=VariableRates(current=0.22))
+    entry = _entry(contract="test", **{CONF_MANUAL_ENERGY_SINGLE: 0.20})
+    assert _manual_energy_leg(entry, current) is None
+
+
+async def test_cohort_energy_leg_manual_when_no_archive(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(energy=FixedRates(single=0.30))
+    _monthly_snapshots(hass).clear()
+    entry = _entry(
+        contract="test",
+        contract_start_date="2025-11-10",
+        **{CONF_MANUAL_ENERGY_SINGLE: 0.20},
+    )
+    leg = await _cohort_energy_leg(
+        hass, MagicMock(), _fixed_extractor(None), "test", "wallonia", entry, current
+    )
+    assert leg == FixedRates(single=0.20)
+
+
+async def test_cohort_energy_leg_archive_wins_over_manual(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(energy=FixedRates(single=0.30))
+    archived = make_snapshot(energy=FixedRates(single=0.18))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return archived
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(
+        contract="test",
+        contract_start_date="2025-11-10",
+        **{CONF_MANUAL_ENERGY_SINGLE: 0.25},
+    )
+    leg = await _cohort_energy_leg(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+    )
+    # The actual archived card is authoritative over the typed rate.
+    assert leg == FixedRates(single=0.18)

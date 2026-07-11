@@ -22,6 +22,18 @@
           "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew. Does not affect pricing."
         }
       },
+      "signed_rate": {
+        "title": "Signing rate (optional)",
+        "description": "Your supplier keeps no online archive of past tariff cards, so the rate you locked in at signing cannot be retrieved automatically. Enter it here to price your contract correctly; leave blank to keep using the current published card. Per-kWh values go in the same VAT basis your supplier prints on its card; the yearly fee goes in VAT-inclusive.",
+        "data": {
+          "manual_energy_single": "Signed energy rate (EUR/kWh)",
+          "manual_energy_peak": "Signed peak rate (EUR/kWh)",
+          "manual_energy_offpeak": "Signed off-peak rate (EUR/kWh)",
+          "manual_energy_factor": "Signed spot factor",
+          "manual_energy_base": "Signed spot base (EUR/kWh)",
+          "manual_yearly_fee": "Signed yearly fee (EUR, incl. VAT)"
+        }
+      },
       "dso": {
         "title": "Distribution operator",
         "data": {
@@ -226,6 +238,18 @@
         "data_description": {
           "contract_start_date": "The date your contract started. For a fixed contract this prices you at the rate you locked in at signing instead of today's rate sheet, where the supplier keeps an archive of past cards. Leave blank to always use the current card.",
           "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew. Does not affect pricing."
+        }
+      },
+      "signed_rate": {
+        "title": "Signing rate (optional)",
+        "description": "Your supplier keeps no online archive of past tariff cards, so the rate you locked in at signing cannot be retrieved automatically. Enter it here to price your contract correctly; leave blank to keep using the current published card. Per-kWh values go in the same VAT basis your supplier prints on its card; the yearly fee goes in VAT-inclusive.",
+        "data": {
+          "manual_energy_single": "Signed energy rate (EUR/kWh)",
+          "manual_energy_peak": "Signed peak rate (EUR/kWh)",
+          "manual_energy_offpeak": "Signed off-peak rate (EUR/kWh)",
+          "manual_energy_factor": "Signed spot factor",
+          "manual_energy_base": "Signed spot base (EUR/kWh)",
+          "manual_yearly_fee": "Signed yearly fee (EUR, incl. VAT)"
         }
       },
       "dso": {
