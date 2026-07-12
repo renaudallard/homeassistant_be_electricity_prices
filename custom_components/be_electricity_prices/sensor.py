@@ -223,6 +223,27 @@ def _today_ranked(
     )
 
 
+def _split_hourly_today_tomorrow(
+    hourly: dict[datetime, Any],
+    row_fn: Callable[[datetime, Any], dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Group ``hourly`` into today and tomorrow buckets in chronological
+    order, serialising each slot with ``row_fn(local, value)``. Slots
+    outside the two-day window (typically none) are dropped."""
+    today = dt_util.now().date()
+    tomorrow = today + timedelta(days=1)
+    today_rows: list[dict[str, Any]] = []
+    tomorrow_rows: list[dict[str, Any]] = []
+    for h, value in sorted(hourly.items()):
+        local = dt_util.as_local(h)
+        row = row_fn(local, value)
+        if local.date() == today:
+            today_rows.append(row)
+        elif local.date() == tomorrow:
+            tomorrow_rows.append(row)
+    return today_rows, tomorrow_rows
+
+
 def _split_today_tomorrow(
     data: CoordinatorData,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -231,19 +252,7 @@ def _split_today_tomorrow(
     Both lists are returned in chronological order. Hours outside the
     today/tomorrow window (typically there are none) are dropped.
     """
-    hourly = _hourly_view(data)
-    today = dt_util.now().date()
-    tomorrow = today + timedelta(days=1)
-    today_rows: list[dict[str, Any]] = []
-    tomorrow_rows: list[dict[str, Any]] = []
-    for h, bd in sorted(hourly.items()):
-        local = dt_util.as_local(h)
-        row = breakdown_row(local, bd)
-        if local.date() == today:
-            today_rows.append(row)
-        elif local.date() == tomorrow:
-            tomorrow_rows.append(row)
-    return today_rows, tomorrow_rows
+    return _split_hourly_today_tomorrow(_hourly_view(data), breakdown_row)
 
 
 def _injection_hourly_view(data: CoordinatorData) -> dict[datetime, float]:
@@ -275,19 +284,10 @@ def _split_injection_today_tomorrow(
     are empty for a contract whose injection doesn't vary intra-day (the
     coordinator emits no ``injection_hourly`` for it).
     """
-    hourly = _injection_hourly_view(data)
-    today = dt_util.now().date()
-    tomorrow = today + timedelta(days=1)
-    today_rows: list[dict[str, Any]] = []
-    tomorrow_rows: list[dict[str, Any]] = []
-    for h, rate in sorted(hourly.items()):
-        local = dt_util.as_local(h)
-        row = {"start": local.isoformat(), "injection": round(rate, 6)}
-        if local.date() == today:
-            today_rows.append(row)
-        elif local.date() == tomorrow:
-            tomorrow_rows.append(row)
-    return today_rows, tomorrow_rows
+    return _split_hourly_today_tomorrow(
+        _injection_hourly_view(data),
+        lambda local, rate: {"start": local.isoformat(), "injection": round(rate, 6)},
+    )
 
 
 def _current_field(field: str) -> Callable[[CoordinatorData], float | None]:
