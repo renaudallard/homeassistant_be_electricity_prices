@@ -64,12 +64,12 @@ from custom_components.be_electricity_prices.coordinator import (
     _injection_price_for_slot,
     _injection_varies_intraday,
     _manual_energy_leg,
-    _ytd_spot_injection_credit,
     _monthly_snapshots,
     _recorder_daily_kwh,
     _snapshot_for_month,
     _snapshot_from_dict,
     _snapshot_to_dict,
+    _ytd_spot_injection_credit,
     _ytd_static_fees,
 )
 from custom_components.be_electricity_prices.providers.base import (
@@ -85,7 +85,7 @@ from custom_components.be_electricity_prices.providers.base import (
     TimeOfUseRates,
     VariableRates,
 )
-from tests import make_snapshot
+from tests import make_snapshot, make_stub_extractor
 
 
 def _snapshot(
@@ -1112,12 +1112,7 @@ def _expected_prosumer_ytd(monthly_fee: float, today: date) -> float:
 
 
 def _stub_extractor() -> SupplierExtractor:
-    return SupplierExtractor(
-        id="test",
-        label="Test",
-        contracts=(),
-        fetch=AsyncMock(),
-    )
+    return make_stub_extractor()
 
 
 def _patch_recorder_per_entity(

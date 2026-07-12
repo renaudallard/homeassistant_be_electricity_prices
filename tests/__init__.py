@@ -30,6 +30,8 @@ from __future__ import annotations
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -43,6 +45,7 @@ from custom_components.be_electricity_prices.providers.base import (
     EnergyRates,
     FixedRates,
     InjectionRates,
+    SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
 )
@@ -148,4 +151,26 @@ def make_entry(
     return MockConfigEntry(domain=DOMAIN, data=data, options=options, title=title)
 
 
-__all__ = ["FIXTURES", "fixture_text", "make_entry", "make_snapshot"]
+def make_stub_extractor(
+    *, extractor_id: str = "test", label: str = "Test", fetch: Any = None
+) -> SupplierExtractor:
+    """A no-op SupplierExtractor for tests that only need a registry entry.
+
+    ``fetch`` defaults to a fresh ``AsyncMock``; pass a coroutine function
+    to control what fetch does (e.g. raise).
+    """
+    return SupplierExtractor(
+        id=extractor_id,
+        label=label,
+        contracts=(),
+        fetch=fetch or AsyncMock(),
+    )
+
+
+__all__ = [
+    "FIXTURES",
+    "fixture_text",
+    "make_entry",
+    "make_snapshot",
+    "make_stub_extractor",
+]

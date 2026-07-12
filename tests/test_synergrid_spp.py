@@ -54,7 +54,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierExtractor,
 )
 from custom_components.be_electricity_prices.providers.custom import build_snapshot
-from tests import make_snapshot
+from tests import make_snapshot, make_stub_extractor
 
 # ---- minimal xlsx fixture (built with the stdlib, no openpyxl) ---------------
 
@@ -422,7 +422,7 @@ def _stub_extractor() -> SupplierExtractor:
     ) -> Any:  # pragma: no cover
         raise NotImplementedError
 
-    return SupplierExtractor(id="custom", label="Custom", contracts=(), fetch=_fetch)
+    return make_stub_extractor(extractor_id="custom", label="Custom", fetch=_fetch)
 
 
 async def test_ytd_injection_uses_spp_not_flat_mean(
