@@ -69,14 +69,7 @@ from datetime import date
 import aiohttp
 
 from ..const import (
-    DSO_FLUVIUS_ANTWERPEN,
-    DSO_FLUVIUS_HALLE_VILVOORDE,
-    DSO_FLUVIUS_IMEWO,
-    DSO_FLUVIUS_INTERGEM,
-    DSO_FLUVIUS_IVEKA,
-    DSO_FLUVIUS_LIMBURG,
-    DSO_FLUVIUS_WEST,
-    DSO_FLUVIUS_ZENNE_DIJLE,
+    FLUVIUS_CARD_LABELS,
     REGION_FLANDERS,
 )
 from ._pdf import (
@@ -122,16 +115,7 @@ _CARD_RE = re.compile(
     re.IGNORECASE,
 )
 
-_DSO_LABELS: dict[str, str] = {
-    "Fluvius Antwerpen": DSO_FLUVIUS_ANTWERPEN,
-    "Fluvius Halle-Vilvoorde": DSO_FLUVIUS_HALLE_VILVOORDE,
-    "Fluvius Imewo": DSO_FLUVIUS_IMEWO,
-    "Fluvius Kempen": DSO_FLUVIUS_IVEKA,
-    "Fluvius Limburg": DSO_FLUVIUS_LIMBURG,
-    "Fluvius Midden-Vlaanderen": DSO_FLUVIUS_INTERGEM,
-    "Fluvius West": DSO_FLUVIUS_WEST,
-    "Fluvius Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
-}
+_DSO_LABELS = FLUVIUS_CARD_LABELS
 
 
 _CONTRACT_ID = "ecopower_burgerstroom"

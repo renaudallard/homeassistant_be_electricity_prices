@@ -56,18 +56,11 @@ import aiohttp
 from ..const import (
     DSO_AIEG,
     DSO_AIESH,
-    DSO_FLUVIUS_ANTWERPEN,
-    DSO_FLUVIUS_HALLE_VILVOORDE,
-    DSO_FLUVIUS_IMEWO,
-    DSO_FLUVIUS_INTERGEM,
-    DSO_FLUVIUS_IVEKA,
-    DSO_FLUVIUS_LIMBURG,
-    DSO_FLUVIUS_WEST,
-    DSO_FLUVIUS_ZENNE_DIJLE,
     DSO_ORES,
     DSO_RESA,
     DSO_REW,
     DSO_SIBELGA,
+    FLUVIUS_CARD_LABELS,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
@@ -684,16 +677,7 @@ def _extract_renewables(text: str) -> float:
 # ---- DSO row parsers ----------------------------------------------------------
 
 
-_FLANDERS_LABELS: dict[str, str] = {
-    "Fluvius Antwerpen": DSO_FLUVIUS_ANTWERPEN,
-    "Fluvius Halle-Vilvoorde": DSO_FLUVIUS_HALLE_VILVOORDE,
-    "Fluvius Imewo": DSO_FLUVIUS_IMEWO,
-    "Fluvius Kempen": DSO_FLUVIUS_IVEKA,
-    "Fluvius Limburg": DSO_FLUVIUS_LIMBURG,
-    "Fluvius Midden-Vlaanderen": DSO_FLUVIUS_INTERGEM,
-    "Fluvius West": DSO_FLUVIUS_WEST,
-    "Fluvius Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
-}
+_FLANDERS_LABELS = FLUVIUS_CARD_LABELS
 
 
 def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:

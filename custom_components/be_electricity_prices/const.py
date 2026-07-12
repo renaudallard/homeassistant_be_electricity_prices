@@ -79,6 +79,22 @@ WALLONIA_DSO_KEYS: Final[frozenset[str]] = frozenset(
     {DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW}
 )
 
+# Fluvius sub-area names as most suppliers print them in their Flanders
+# DSO table (Title case, hyphenated), mapped to the DSO key. Shared by the
+# providers whose cards use this exact spelling; suppliers that abbreviate
+# or upper-case (Bolt "Midden-Vl", Engie all-caps, EBEM unhyphenated) keep
+# their own label map.
+FLUVIUS_CARD_LABELS: Final[dict[str, str]] = {
+    "Fluvius Antwerpen": DSO_FLUVIUS_ANTWERPEN,
+    "Fluvius Halle-Vilvoorde": DSO_FLUVIUS_HALLE_VILVOORDE,
+    "Fluvius Imewo": DSO_FLUVIUS_IMEWO,
+    "Fluvius Kempen": DSO_FLUVIUS_IVEKA,
+    "Fluvius Limburg": DSO_FLUVIUS_LIMBURG,
+    "Fluvius Midden-Vlaanderen": DSO_FLUVIUS_INTERGEM,
+    "Fluvius West": DSO_FLUVIUS_WEST,
+    "Fluvius Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
+}
+
 # DSO selection per region. Flanders has eight Fluvius sub-areas with
 # materially different distribution rates; Wallonia DSOs are uniform per
 # operator; Brussels has one (Sibelga).
