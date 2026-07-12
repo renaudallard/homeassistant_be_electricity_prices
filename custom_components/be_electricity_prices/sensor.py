@@ -60,7 +60,7 @@ from .coordinator import (
     _parse_iso_date,
     supplier_device_info,
 )
-from .pricing import PriceBreakdown, slot_start
+from .pricing import PriceBreakdown, breakdown_row, slot_start
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -238,13 +238,7 @@ def _split_today_tomorrow(
     tomorrow_rows: list[dict[str, Any]] = []
     for h, bd in sorted(hourly.items()):
         local = dt_util.as_local(h)
-        row = {
-            "start": local.isoformat(),
-            "energy": round(bd.energy, 6),
-            "network": round(bd.network, 6),
-            "taxes": round(bd.taxes, 6),
-            "all_in": round(bd.all_in, 6),
-        }
+        row = breakdown_row(local, bd)
         if local.date() == today:
             today_rows.append(row)
         elif local.date() == tomorrow:

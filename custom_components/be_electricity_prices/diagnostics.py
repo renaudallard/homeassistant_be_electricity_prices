@@ -48,6 +48,7 @@ from .coordinator import (
     _recorder_daily_kwh,
     _shared_failed_fetches,
 )
+from .pricing import breakdown_row
 
 TO_REDACT = {CONF_API_KEY}
 
@@ -173,16 +174,7 @@ async def async_get_config_entry_diagnostics(
             "energy_fund_eur_per_month": data.energy_fund_eur_per_month,
             "injection_price_eur_per_kwh": data.injection_price_eur_per_kwh,
             "current_year_cost_eur": data.current_year_cost_eur,
-            "hourly": [
-                {
-                    "start": dt_util.as_local(h).isoformat(),
-                    "energy": round(bd.energy, 6),
-                    "network": round(bd.network, 6),
-                    "taxes": round(bd.taxes, 6),
-                    "all_in": round(bd.all_in, 6),
-                }
-                for h, bd in hourly
-            ],
+            "hourly": [breakdown_row(dt_util.as_local(h), bd) for h, bd in hourly],
         },
         "consumption": {
             "rolling_year_kwh": cons_year,

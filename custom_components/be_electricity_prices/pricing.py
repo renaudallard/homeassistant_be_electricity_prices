@@ -47,7 +47,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 from .const import (
     REGION_BRUSSELS,
@@ -370,6 +370,19 @@ def yearly_fixed_fee_for_meter(energy: EnergyRates, meter: MeterType) -> float:
         if excl is not None:
             return float(excl)
     return standard
+
+
+def breakdown_row(local: datetime, breakdown: PriceBreakdown) -> dict[str, Any]:
+    """Serialise ``breakdown`` at ``local`` time to a JSON-friendly row:
+    the ISO start plus each component rounded to 6 decimals. Shared by the
+    sensor today/tomorrow attributes and the diagnostics dump."""
+    return {
+        "start": local.isoformat(),
+        "energy": round(breakdown.energy, 6),
+        "network": round(breakdown.network, 6),
+        "taxes": round(breakdown.taxes, 6),
+        "all_in": round(breakdown.all_in, 6),
+    }
 
 
 def _require_overlay(snapshot: SupplierSnapshot, dso_key: str) -> DsoOverlay:
