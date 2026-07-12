@@ -372,6 +372,42 @@ def yearly_fixed_fee_for_meter(energy: EnergyRates, meter: MeterType) -> float:
     return standard
 
 
+def _require_overlay(snapshot: SupplierSnapshot, dso_key: str) -> DsoOverlay:
+    """Return the DSO overlay for ``dso_key`` or raise ``KeyError`` listing
+    the snapshot's available DSOs, so a mis-configured DSO fails loud."""
+    overlay = snapshot.dsos.get(dso_key)
+    if overlay is None:
+        raise KeyError(
+            f"DSO {dso_key!r} not in snapshot for "
+            f"{snapshot.supplier}/{snapshot.contract}; "
+            f"available: {sorted(snapshot.dsos)}"
+        )
+    return overlay
+
+
+def _finalize_breakdown(
+    energy: float, network: float, taxes: float, vat_rate: float
+) -> PriceBreakdown:
+    """Gross each component up by VAT, then assemble the breakdown.
+
+    VAT is applied per component and then summed so the invariant
+    ``energy + network + taxes == all_in`` holds bit-for-bit even when
+    ``vat_rate`` becomes non-zero for a future extractor that parses
+    ex-VAT prices; computing ``all_in`` as ``(e + n + t) * vat`` would
+    diverge by sub-femto-euro rounding.
+    """
+    vat_factor = 1.0 + vat_rate
+    energy_v = energy * vat_factor
+    network_v = network * vat_factor
+    taxes_v = taxes * vat_factor
+    return PriceBreakdown(
+        energy=energy_v,
+        network=network_v,
+        taxes=taxes_v,
+        all_in=energy_v + network_v + taxes_v,
+    )
+
+
 def static_breakdown(
     snapshot: SupplierSnapshot,
     dso_key: str,
@@ -393,13 +429,7 @@ def static_breakdown(
     energy = static_energy_eur_per_kwh(snapshot.energy, band)
     if energy is None:
         return None
-    overlay = snapshot.dsos.get(dso_key)
-    if overlay is None:
-        raise KeyError(
-            f"DSO {dso_key!r} not in snapshot for "
-            f"{snapshot.supplier}/{snapshot.contract}; "
-            f"available: {sorted(snapshot.dsos)}"
-        )
+    overlay = _require_overlay(snapshot, dso_key)
     if dso_tariff_mode == "impact" and overlay.distribution_pic is not None:
         # Impact distribution differs per CWaPE band (PIC / MEDIUM /
         # ECO) and can't collapse to single/peak/offpeak; the caller
@@ -415,19 +445,7 @@ def static_breakdown(
         dist = overlay.distribution_single
     network = dist + overlay.transport
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
-    vat_factor = 1.0 + snapshot.taxes.vat_rate
-    # Apply VAT per component then sum, so "energy + network + taxes ==
-    # all_in" holds bit-for-bit, matching compute_breakdown; (e+n+t)*vat
-    # would diverge by sub-femto-euro rounding once vat_rate is non-zero.
-    energy_v = energy * vat_factor
-    network_v = network * vat_factor
-    taxes_v = taxes * vat_factor
-    return PriceBreakdown(
-        energy=energy_v,
-        network=network_v,
-        taxes=taxes_v,
-        all_in=energy_v + network_v + taxes_v,
-    )
+    return _finalize_breakdown(energy, network, taxes, snapshot.taxes.vat_rate)
 
 
 DsoTariffMode = Literal["simple", "bi_horaire", "impact"]
@@ -563,30 +581,10 @@ def compute_breakdown(
     ``vat_rate = 0.06``, VAT applies uniformly to each component
     instead of being rolled into the taxes component.
     """
-    overlay = snapshot.dsos.get(dso_key)
-    if overlay is None:
-        raise KeyError(
-            f"DSO {dso_key!r} not in snapshot for "
-            f"{snapshot.supplier}/{snapshot.contract}; "
-            f"available: {sorted(snapshot.dsos)}"
-        )
+    overlay = _require_overlay(snapshot, dso_key)
     energy = energy_eur_per_kwh(
         snapshot.energy, when, spot_eur_per_kwh, meter, region, dso_tariff_mode
     )
     network = network_eur_per_kwh(overlay, when, meter, dso_tariff_mode, region)
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
-    vat_factor = 1.0 + snapshot.taxes.vat_rate
-    # Apply VAT to each component first, then sum, so the invariant
-    # "energy + network + taxes == all_in" holds bit-for-bit even when
-    # vat_rate becomes non-zero in a future extractor that parses
-    # ex-VAT prices. Computing all_in as (e+n+t)*vat would diverge from
-    # the per-component sum by sub-femto-euro rounding error.
-    energy_v = energy * vat_factor
-    network_v = network * vat_factor
-    taxes_v = taxes * vat_factor
-    return PriceBreakdown(
-        energy=energy_v,
-        network=network_v,
-        taxes=taxes_v,
-        all_in=energy_v + network_v + taxes_v,
-    )
+    return _finalize_breakdown(energy, network, taxes, snapshot.taxes.vat_rate)
