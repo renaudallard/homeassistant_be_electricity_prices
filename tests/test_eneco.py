@@ -36,7 +36,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from tests import fixture_text
+from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
@@ -47,6 +47,7 @@ from custom_components.be_electricity_prices.providers.eneco import (
     fetch_for_month,
     parse_snapshot,
 )
+from tests import fixture_text
 
 _T = TypeVar("_T")
 
@@ -98,16 +99,7 @@ def test_fix_fluvius_has_no_prosumer_rate() -> None:
 
 def test_fix_extracts_all_fluvius_sub_areas() -> None:
     snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
-    expected_keys = {
-        "fluvius_halle_vilvoorde",
-        "fluvius_antwerpen",
-        "fluvius_imewo",
-        "fluvius_limburg",
-        "fluvius_west",
-        "fluvius_intergem",
-        "fluvius_iveka",
-        "fluvius_zenne_dijle",
-    }
+    expected_keys = set(FLUVIUS_KEYS)
     assert expected_keys <= set(snap.dsos)
 
     # Antwerpen is the digital-meter row "FLUVIUS ANTWERPEN 5,35 4,81 18,92

@@ -33,6 +33,7 @@ from typing import Any
 
 import pytest
 
+from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
@@ -157,16 +158,7 @@ def test_motion_online_flanders_dsos() -> None:
     snap = parse_snapshot(
         "ecofix_motion_online", _layout(_MOTION_ONLINE), "flanders", "test://mo"
     )
-    expected_keys = {
-        "fluvius_antwerpen",
-        "fluvius_halle_vilvoorde",
-        "fluvius_imewo",
-        "fluvius_iveka",
-        "fluvius_limburg",
-        "fluvius_intergem",
-        "fluvius_west",
-        "fluvius_zenne_dijle",
-    }
+    expected_keys = set(FLUVIUS_KEYS)
     assert set(snap.dsos) == expected_keys
     # Issue reporter is on Fluvius Kempen (= fluvius_iveka in the
     # integration's DSO key namespace).

@@ -31,6 +31,7 @@ import asyncio
 
 import pytest
 
+from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text_aligned,
@@ -326,16 +327,7 @@ def test_dynamic_pdf_uses_spaced_dso_label() -> None:
 
 def test_flanders_dsos_extract_full_set() -> None:
     snap = parse_snapshot("octaplus_fixed", _text("octaplus_fixed_v.pdf"), "flanders")
-    expected = {
-        "fluvius_antwerpen",
-        "fluvius_halle_vilvoorde",
-        "fluvius_imewo",
-        "fluvius_intergem",
-        "fluvius_iveka",
-        "fluvius_limburg",
-        "fluvius_west",
-        "fluvius_zenne_dijle",
-    }
+    expected = set(FLUVIUS_KEYS)
     assert expected <= set(snap.dsos)
     antwerpen = snap.dsos["fluvius_antwerpen"]
     assert antwerpen.transport == 0.0

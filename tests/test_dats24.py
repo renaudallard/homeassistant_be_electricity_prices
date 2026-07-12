@@ -31,6 +31,7 @@ from datetime import date
 
 import pytest
 
+from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
     SupplierSnapshot,
@@ -194,16 +195,7 @@ def test_injection_indicative_handles_negative_value() -> None:
 
 def test_april_card_flanders_dsos_cover_all_eight_fluvius() -> None:
     snap = _snap("flanders")
-    assert set(snap.dsos) == {
-        "fluvius_antwerpen",
-        "fluvius_halle_vilvoorde",
-        "fluvius_imewo",
-        "fluvius_intergem",
-        "fluvius_iveka",
-        "fluvius_limburg",
-        "fluvius_west",
-        "fluvius_zenne_dijle",
-    }
+    assert set(snap.dsos) == set(FLUVIUS_KEYS)
     # Spot-check Antwerpen: capacity 52.37 EUR/kW/yr, distribution
     # 5.35 c€/kWh, data-management 18.92 EUR/yr (jaarlijks meteropname).
     a = snap.dsos["fluvius_antwerpen"]

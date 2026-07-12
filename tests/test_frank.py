@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import pytest
 
+from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
@@ -83,16 +84,7 @@ def test_yearly_fixed_fee() -> None:
 
 def test_dsos_cover_all_eight_fluvius_subareas() -> None:
     snap = _snap()
-    expected = {
-        "fluvius_antwerpen",
-        "fluvius_halle_vilvoorde",
-        "fluvius_imewo",
-        "fluvius_intergem",
-        "fluvius_iveka",
-        "fluvius_limburg",
-        "fluvius_west",
-        "fluvius_zenne_dijle",
-    }
+    expected = set(FLUVIUS_KEYS)
     assert set(snap.dsos) == expected
 
 

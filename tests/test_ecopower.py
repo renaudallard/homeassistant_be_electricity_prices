@@ -34,6 +34,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
@@ -96,16 +97,7 @@ def test_april_card_energy_is_groene_burgerstroom_resolved_rate() -> None:
 
 def test_april_card_dsos_cover_all_eight_fluvius_subareas() -> None:
     snap = _april_snap()
-    expected = {
-        "fluvius_antwerpen",
-        "fluvius_halle_vilvoorde",
-        "fluvius_imewo",
-        "fluvius_intergem",
-        "fluvius_iveka",
-        "fluvius_limburg",
-        "fluvius_west",
-        "fluvius_zenne_dijle",
-    }
+    expected = set(FLUVIUS_KEYS)
     assert set(snap.dsos) == expected
 
 
@@ -188,16 +180,7 @@ def test_split_layout_card_parses_energy_and_injection() -> None:
     assert snap.energy.current == pytest.approx(0.1378)
     assert snap.injection is not None
     assert snap.injection.current == pytest.approx(0.020)
-    assert set(snap.dsos) == {
-        "fluvius_antwerpen",
-        "fluvius_halle_vilvoorde",
-        "fluvius_imewo",
-        "fluvius_intergem",
-        "fluvius_iveka",
-        "fluvius_limburg",
-        "fluvius_west",
-        "fluvius_zenne_dijle",
-    }
+    assert set(snap.dsos) == set(FLUVIUS_KEYS)
 
 
 def test_stale_fixed_injection_note_is_ignored_on_a_later_card() -> None:
@@ -282,16 +265,7 @@ def test_dbs_card_dsos_cover_all_eight_fluvius_subareas() -> None:
     """The narrower dynamic card wraps 'Fluvius Midden-Vlaanderen' across
     its data row; the label-stitch must keep all eight sub-areas."""
     snap = _dbs_snap()
-    assert set(snap.dsos) == {
-        "fluvius_antwerpen",
-        "fluvius_halle_vilvoorde",
-        "fluvius_imewo",
-        "fluvius_intergem",
-        "fluvius_iveka",
-        "fluvius_limburg",
-        "fluvius_west",
-        "fluvius_zenne_dijle",
-    }
+    assert set(snap.dsos) == set(FLUVIUS_KEYS)
 
 
 def test_dbs_card_dso_row_columns_for_antwerpen() -> None:
