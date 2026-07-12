@@ -332,16 +332,6 @@ def _add_contract_date_fields(fields: dict[Any, Any], defaults: dict[str, Any]) 
             fields[vol.Optional(key)] = date_selector
 
 
-def _parse_iso_date(value: Any) -> date | None:
-    """Parse a DateSelector ISO ``YYYY-MM-DD`` string, or ``None``."""
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
-
-
 def _validate_contract_dates(user_input: dict[str, Any]) -> dict[str, str]:
     """Reject a future start date or an end date not after the start.
 
@@ -349,6 +339,8 @@ def _validate_contract_dates(user_input: dict[str, Any]) -> dict[str, str]:
     fine (a bare renewal reminder), so the ordering check only fires when both
     are present.
     """
+    from .coordinator import _parse_iso_date
+
     errors: dict[str, str] = {}
     start = _parse_iso_date(user_input.get(CONF_CONTRACT_START_DATE))
     end = _parse_iso_date(user_input.get(CONF_CONTRACT_END_DATE))

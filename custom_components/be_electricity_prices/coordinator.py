@@ -484,6 +484,20 @@ async def _snapshot_for_month(
     return snap if snap is not None else current_snapshot
 
 
+def _parse_iso_date(value: Any) -> date | None:
+    """Parse a stored ISO ``YYYY-MM-DD`` date string, or ``None``.
+
+    Accepts the DateSelector return value used for the contract lifecycle
+    fields; returns ``None`` for a missing / malformed value.
+    """
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _contract_start_month(entry: ConfigEntry) -> date | None:
     """First-of-month of the configured contract start date, or ``None``.
 
@@ -491,12 +505,8 @@ def _contract_start_month(entry: ConfigEntry) -> date | None:
     against; the day within the month is irrelevant to which monthly card
     applies, so normalise to the first.
     """
-    raw = entry.data.get(CONF_CONTRACT_START_DATE)
-    if not raw:
-        return None
-    try:
-        d = date.fromisoformat(raw)
-    except (TypeError, ValueError):
+    d = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
+    if d is None:
         return None
     return date(d.year, d.month, 1)
 

@@ -39,9 +39,9 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.config_flow import (
-    _parse_iso_date,
     _validate_contract_dates,
 )
+from custom_components.be_electricity_prices.coordinator import _parse_iso_date
 from custom_components.be_electricity_prices.const import (
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,

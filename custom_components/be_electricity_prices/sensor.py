@@ -54,7 +54,12 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
-from .coordinator import BePricesCoordinator, CoordinatorData, supplier_device_info
+from .coordinator import (
+    BePricesCoordinator,
+    CoordinatorData,
+    _parse_iso_date,
+    supplier_device_info,
+)
 from .pricing import PriceBreakdown, slot_start
 
 
@@ -456,16 +461,6 @@ async def async_setup_entry(
     if end_date is not None:
         entities.append(ContractEndDateSensor(coordinator, end_date))
     async_add_entities(entities)
-
-
-def _parse_iso_date(value: Any) -> date | None:
-    """Parse a stored ISO ``YYYY-MM-DD`` date string, or ``None``."""
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
 
 
 class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
