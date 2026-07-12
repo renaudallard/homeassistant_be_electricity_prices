@@ -640,6 +640,32 @@ _MONTH_NAMES: dict[str, int] = {
 }
 
 
+def end_of_month(year: int, month: int) -> date:
+    """The last calendar day of ``year``-``month`` as a :class:`date`."""
+    return date(year, month, calendar.monthrange(year, month)[1])
+
+
+_MONTH_YEAR_RE = re.compile(r"\b([A-Za-z]+)\s+(20\d{2})\b")
+
+
+def scan_month_end(
+    text: str, month_names: dict[str, int], *, limit: int
+) -> date | None:
+    """Find the first "<month name> <year>" token in ``text[:limit]`` and
+    return that month's last day, or ``None`` if none is present.
+
+    Word+year tokens whose word is not a known month (e.g. a
+    "Versie 2026" edition marker that shares the shape) are skipped
+    rather than aborting the scan, so a colliding token ahead of the real
+    month line does not drop validity.
+    """
+    for match in _MONTH_YEAR_RE.finditer(text[:limit]):
+        name = match.group(1).lower()
+        if name in month_names:
+            return end_of_month(int(match.group(2)), month_names[name])
+    return None
+
+
 _VALID_KEYWORDS = ("geldig", "valable", "validit", "valid ")
 
 
@@ -840,9 +866,7 @@ def parse_valid_until(text: str) -> date | None:
         for match in bare_month_re.finditer(window):
             month_name, year = match.group(1), match.group(2)
             try:
-                month = _MONTH_NAMES[month_name]
-                last_day = calendar.monthrange(int(year), month)[1]
-                cand = date(int(year), month, last_day)
+                cand = end_of_month(int(year), _MONTH_NAMES[month_name])
             except (KeyError, ValueError):
                 continue
             if _accept(cand):

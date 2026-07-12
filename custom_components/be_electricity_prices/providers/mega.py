@@ -54,7 +54,6 @@ straight to EUR/kWh without a VAT multiplier.
 
 from __future__ import annotations
 
-import calendar
 import re
 from dataclasses import dataclass
 from datetime import date
@@ -84,6 +83,7 @@ from ._pdf import (
     FR_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
+    end_of_month,
     fetch_pdf_text,
     fetch_text,
     parse_brussels_osp,
@@ -649,8 +649,7 @@ def _extract_valid_until(text: str) -> date | None:
     year = int(fallback.group(2))
     if not 1 <= month <= 12:
         return None
-    last_day = calendar.monthrange(year, month)[1]
-    return date(year, month, last_day)
+    return end_of_month(year, month)
 
 
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:

@@ -45,7 +45,6 @@ coordinator bill past consumption at each month's actual rates.
 
 from __future__ import annotations
 
-import calendar
 import re
 from dataclasses import dataclass
 from datetime import date
@@ -71,6 +70,7 @@ from ._pdf import (
     fetch_text,
     head_freshness_key,
     parse_sign,
+    scan_month_end,
     to_float,
     vat_multiplier,
 )
@@ -303,22 +303,12 @@ def _extract_validity(text: str) -> date | None:
     shared helper would return ``None``. The card title ends with
     ``<maand> <jaar>``; parse that directly.
     """
-    # Accept both lowercase ("mei 2026") and title case ("Mei 2026"); the
-    # dictionary lookup below already lowercases. Anchoring on lowercase
-    # only would silently miss a future card that drifts to title case.
-    # Scan for the first word+year token that is actually a month instead
-    # of aborting on the first one: the dynamic card's header window
-    # carries a colliding "VERSIE 2026" token, and today only its position
-    # after the month keeps the parse working. A None here silently skips
-    # the past-month CDN-substitution cross-check in fetch_for_month.
-    for match in re.finditer(r"\b([A-Za-z]+)\s+(20\d{2})\b", text[:600]):
-        month_name = match.group(1).lower()
-        if month_name not in _DUTCH_MONTHS:
-            continue
-        year = int(match.group(2))
-        month = _DUTCH_MONTHS[month_name]
-        return date(year, month, calendar.monthrange(year, month)[1])
-    return None
+    # The card title ends with "<maand> <jaar>" and has no validity
+    # keyword; scan_month_end lowercases and skips the dynamic card's
+    # colliding "VERSIE 2026" token, returning the first real month. A
+    # None here silently skips the past-month CDN-substitution cross-check
+    # in fetch_for_month.
+    return scan_month_end(text, _DUTCH_MONTHS, limit=600)
 
 
 # ---- energy + injection -----------------------------------------------------

@@ -49,7 +49,6 @@ proxy-forward fallback handles past consumption windows.
 
 from __future__ import annotations
 
-import calendar
 import logging
 import re
 from dataclasses import dataclass
@@ -75,11 +74,13 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    NL_MONTHS,
     SIGN_CHARS,
     fetch_pdf_text_layout,
     head_freshness_key,
     head_ok,
     parse_sign,
+    scan_month_end,
     to_float,
     vat_multiplier,
 )
@@ -125,20 +126,7 @@ def _document_url(contract: _ContractDef) -> str:
     return f"{_BASE_URL}/EL_Ecofix_{contract.slug}_NL.pdf"
 
 
-_DUTCH_MONTHS: dict[str, int] = {
-    "januari": 1,
-    "februari": 2,
-    "maart": 3,
-    "april": 4,
-    "mei": 5,
-    "juni": 6,
-    "juli": 7,
-    "augustus": 8,
-    "september": 9,
-    "oktober": 10,
-    "november": 11,
-    "december": 12,
-}
+_DUTCH_MONTHS: dict[str, int] = {name: i for i, name in enumerate(NL_MONTHS, 1)}
 
 
 # ---- top-level fetch / probe / discover --------------------------------------
@@ -502,20 +490,13 @@ def _extract_publication(text: str) -> tuple[str, date | None]:
     the Dutch month name + year directly. ``valid_until`` is the last
     day of that month so the binary sensor reflects monthly rotation.
     """
-    # Scan for the first word+year token that is actually a month, rather
-    # than aborting on the first capitalised-word+year token: the header
-    # prints the product name on the line above the month, so a future
-    # edition / version marker ("... Versie 2026") would otherwise shadow
-    # the month line and silently drop validity.
-    for match in re.finditer(r"\b([A-Za-z]+)\s+(20\d{2})\b", text[:1000]):
-        month_name = match.group(1).lower()
-        if month_name not in _DUTCH_MONTHS:
-            continue
-        year = int(match.group(2))
-        month = _DUTCH_MONTHS[month_name]
-        last_day = calendar.monthrange(year, month)[1]
-        return f"{year}-{month:02d}", date(year, month, last_day)
-    return "", None
+    # scan_month_end skips a shadowing edition marker ("... Versie 2026")
+    # that the header prints above the month line, returning the first
+    # real month token.
+    d = scan_month_end(text, _DUTCH_MONTHS, limit=1000)
+    if d is None:
+        return "", None
+    return f"{d.year}-{d.month:02d}", d
 
 
 # ---- taxes ------------------------------------------------------------------
