@@ -1816,3 +1816,72 @@ async def test_reset_monthly_peak_drops_persisted_value(
     assert coord._peak_kw == 0.0
     coord._save_persistent.assert_awaited_once()
     coord.async_request_refresh.assert_awaited_once()
+
+
+async def test_variable_cohort_bakes_injection_at_month_mean(
+    hass: HomeAssistant,
+) -> None:
+    """Fix-2 regression: a Cociter Variable contract with a start date
+    re-prices to a SpotMonthlyRates cohort, so its spot-indexed injection must
+    be credited at the delivery-month mean (matching the YTD walk and backfill),
+    not the per-hour spot. Before the fix the bake was gated on
+    self._snapshot.energy (still VariableRates) and so was skipped."""
+    from unittest.mock import MagicMock
+
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        SpotMonthlyRates,
+        VariableRates,
+    )
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "api_key": "TESTKEY",
+            "contract_start_date": "2025-11-10",
+        },
+        title="Cociter Variable cohort injection",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17, formula_factor=0.8, formula_base=0.05),
+        injection=InjectionRates(current=None, factor=0.97, base=-0.021),
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(  # type: ignore[method-assign]
+        return_value={datetime(2026, 7, 1, 10, tzinfo=UTC): 0.30}
+    )
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    # Fix the month mean so the expected injection value is deterministic.
+    coord._monthly_spot_mean = MagicMock(return_value=0.10)  # type: ignore[method-assign]
+
+    async def _cohort(*_a: object, **_k: object) -> SpotMonthlyRates:
+        return SpotMonthlyRates(factor=0.8, base=0.05)
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator._cohort_energy_leg",
+            new=_cohort,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator._compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._update_body()
+
+    # Injection baked at the month mean: 0.97 * 0.10 - 0.021 = 0.076, NOT
+    # 0.97 * 0.30 - 0.021 = 0.270 (the per-hour spot).
+    value = data.injection_price_eur_per_kwh
+    assert value is not None and abs(value - 0.076) < 1e-9

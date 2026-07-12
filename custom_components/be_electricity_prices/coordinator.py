@@ -1064,8 +1064,15 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # monthly mean rather than the live hourly spot: bake the mean-indexed
         # formula into a flat indicative for this tick (the stored snapshot
         # keeps factor/base so the YTD path recomputes each month's own mean).
+        # Gate on the EFFECTIVE (cohort) energy: a variable contract re-priced
+        # to a SpotMonthlyRates cohort must bake its spot-indexed injection at
+        # the month mean too, so the live credit matches the YTD walk (which
+        # dispatches on the cohort) and the backfill; self._snapshot.energy
+        # stays VariableRates for such a contract, so keying off it would skip
+        # the bake and leave live crediting at the per-hour spot. The bake is a
+        # no-op for a flat monthly-indicative injection (EBEM/Eneco/Mega).
         injection_snapshot = self._snapshot
-        if isinstance(self._snapshot.energy, SpotMonthlyRates):
+        if isinstance(priced.energy, SpotMonthlyRates):
             inj_mean = monthly_mean
             if spp_weighted:
                 # SPP-weight the injection month-mean; keep the flat mean for
