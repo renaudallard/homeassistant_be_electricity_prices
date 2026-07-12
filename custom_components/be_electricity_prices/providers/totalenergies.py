@@ -82,7 +82,6 @@ from .base import (
     DynamicRates,
     EnergyRates,
     ExtractorError,
-    FixedRates,
     InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
@@ -90,6 +89,7 @@ from .base import (
     TaxOverlay,
     VariableRates,
     brussels_sibelga_overlay,
+    fixed_or_variable_rates,
     walloon_dso_overlay,
 )
 
@@ -422,16 +422,9 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     peak = to_float(consumption_match.group(2)) / 100.0
     offpeak = to_float(consumption_match.group(3)) / 100.0
     excl_night = to_float(consumption_match.group(4)) / 100.0
-    if kind == "fixed":
-        return FixedRates(
-            single=mono,
-            peak=peak,
-            offpeak=offpeak,
-            exclusive_night=excl_night,
-            yearly_fixed_fee=yearly_fee,
-        )
-    return VariableRates(
-        current=mono,
+    return fixed_or_variable_rates(
+        kind,
+        single=mono,
         peak=peak,
         offpeak=offpeak,
         exclusive_night=excl_night,

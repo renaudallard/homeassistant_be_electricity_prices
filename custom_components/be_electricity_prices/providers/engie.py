@@ -85,15 +85,14 @@ from .base import (
     DynamicRates,
     EnergyRates,
     ExtractorError,
-    FixedRates,
     InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
     TariffKind,
     TaxOverlay,
     TimeOfUseRates,
-    VariableRates,
     brussels_sibelga_overlay,
+    fixed_or_variable_rates,
 )
 
 _API_URL = (
@@ -526,16 +525,9 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             "(Flextime triplet); not present in this card."
         )
 
-    if kind == "fixed":
-        return FixedRates(
-            single=mono,
-            peak=peak,
-            offpeak=offpeak,
-            exclusive_night=excl_night,
-            yearly_fixed_fee=yearly_fee,
-        )
-    return VariableRates(
-        current=mono,
+    return fixed_or_variable_rates(
+        kind,
+        single=mono,
         peak=peak,
         offpeak=offpeak,
         exclusive_night=excl_night,

@@ -347,6 +347,41 @@ class DsoOverlay:
     distribution_eco: float | None = None
 
 
+def fixed_or_variable_rates(
+    kind: str,
+    *,
+    single: float,
+    peak: float | None,
+    offpeak: float | None,
+    exclusive_night: float | None,
+    yearly_fixed_fee: float,
+) -> FixedRates | VariableRates:
+    """Build :class:`FixedRates` (``kind == "fixed"``) or
+    :class:`VariableRates` from the same single/peak/offpeak/exclusive-night
+    row and yearly fixed fee.
+
+    The two rate classes carry the identical fields under different names
+    (``single`` vs ``current``); providers whose variable card also parses a
+    dynamic formula or a separate exclusive-night fee build the rate object
+    directly instead.
+    """
+    if kind == "fixed":
+        return FixedRates(
+            single=single,
+            peak=peak,
+            offpeak=offpeak,
+            exclusive_night=exclusive_night,
+            yearly_fixed_fee=yearly_fixed_fee,
+        )
+    return VariableRates(
+        current=single,
+        peak=peak,
+        offpeak=offpeak,
+        exclusive_night=exclusive_night,
+        yearly_fixed_fee=yearly_fixed_fee,
+    )
+
+
 def walloon_dso_overlay(
     *,
     mono: float,

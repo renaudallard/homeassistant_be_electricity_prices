@@ -74,14 +74,13 @@ from .base import (
     DynamicRates,
     EnergyRates,
     ExtractorError,
-    FixedRates,
     ImpactRates,
     InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
     TariffKind,
     TaxOverlay,
-    VariableRates,
+    fixed_or_variable_rates,
     walloon_dso_overlay,
 )
 
@@ -380,16 +379,9 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     # so it stays nullable.)
     if peak is None or offpeak is None:
         raise ExtractorError(f"could not parse OCTA+ {kind} bi-hourly rates")
-    if kind == "fixed":
-        return FixedRates(
-            single=mono,
-            peak=peak,
-            offpeak=offpeak,
-            exclusive_night=excl,
-            yearly_fixed_fee=yearly_fee,
-        )
-    return VariableRates(
-        current=mono,
+    return fixed_or_variable_rates(
+        kind,
+        single=mono,
         peak=peak,
         offpeak=offpeak,
         exclusive_night=excl,
