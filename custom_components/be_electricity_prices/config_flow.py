@@ -315,15 +315,19 @@ def _contract_schema(
 def _add_contract_date_fields(fields: dict[Any, Any], defaults: dict[str, Any]) -> None:
     """Append the optional contract start/end date pickers.
 
-    No default when unset, so the frontend omits a blank picker from
-    ``user_input`` and absence cleanly means 'no date'; pre-fill the stored ISO
-    value on the options / reconfigure pass so an existing date shows up.
+    Pre-filled with the stored value as a *suggestion* (not a default) on the
+    options / reconfigure pass, so blanking the picker truly omits the key from
+    ``user_input`` -- the step handler then pops it, which is how a date is
+    cleared. A ``default`` would re-inject the stored value on a blank submit,
+    making the date unclearable.
     """
     date_selector = DateSelector()
     for key in (CONF_CONTRACT_START_DATE, CONF_CONTRACT_END_DATE):
         stored = defaults.get(key)
         if stored:
-            fields[vol.Optional(key, default=stored)] = date_selector
+            fields[vol.Optional(key, description={"suggested_value": stored})] = (
+                date_selector
+            )
         else:
             fields[vol.Optional(key)] = date_selector
 
@@ -355,6 +359,16 @@ def _validate_contract_dates(user_input: dict[str, Any]) -> dict[str, str]:
     return errors
 
 
+_MANUAL_RATE_KEYS: tuple[str, ...] = (
+    CONF_MANUAL_ENERGY_SINGLE,
+    CONF_MANUAL_ENERGY_PEAK,
+    CONF_MANUAL_ENERGY_OFFPEAK,
+    CONF_MANUAL_ENERGY_FACTOR,
+    CONF_MANUAL_ENERGY_BASE,
+    CONF_MANUAL_YEARLY_FEE,
+)
+
+
 def _add_manual_num(
     fields: dict[Any, Any],
     defaults: dict[str, Any],
@@ -364,13 +378,16 @@ def _add_manual_num(
 ) -> None:
     """Append an optional manual signing-rate field, pre-filled on reconfigure.
 
-    No default when unset so a blank box is omitted from ``user_input`` and
-    absence means 'not entered' (the whole override is skippable).
+    The stored value is a *suggestion*, not a default, so blanking the box omits
+    the key and the step handler can pop it (how the override is cleared). A
+    ``default`` would re-inject the value on a blank submit.
     """
     stored = defaults.get(key)
     selector = _custom_num(negative=negative)
     if stored is not None:
-        fields[vol.Optional(key, default=float(stored))] = selector
+        fields[vol.Optional(key, description={"suggested_value": float(stored)})] = (
+            selector
+        )
     else:
         fields[vol.Optional(key)] = selector
 
@@ -1092,6 +1109,12 @@ class _WizardStepsMixin:
         if user_input is not None:
             errors = _validate_contract_dates(user_input)
             if not errors:
+                # A cleared (blanked) optional date is absent from user_input;
+                # drop it so "leave blank" removes the date instead of keeping
+                # the previously stored one.
+                for key in (CONF_CONTRACT_START_DATE, CONF_CONTRACT_END_DATE):
+                    if key not in user_input:
+                        self._data.pop(key, None)
                 self._data.update(user_input)
                 return await self._after_contract()
         return self.async_show_form(
@@ -1126,6 +1149,12 @@ class _WizardStepsMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
+            # A cleared manual-rate field is absent from user_input; drop it so
+            # blanking the override removes it (and a kind switch drops the
+            # now-irrelevant coefficients).
+            for key in _MANUAL_RATE_KEYS:
+                if key not in user_input:
+                    self._data.pop(key, None)
             self._data.update(user_input)
             return await self.async_step_dso()
         return self.async_show_form(

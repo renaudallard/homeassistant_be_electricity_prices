@@ -1698,3 +1698,59 @@ async def test_options_flow_no_signed_rate_step_without_start_date(
     )
     # Straight to the DSO step, no signing-rate detour.
     assert result["step_id"] == "dso"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_clears_contract_dates_when_blanked(
+    hass: HomeAssistant,
+) -> None:
+    """Blanking the start/end date pickers on the options edit flow removes the
+    stored dates (turns signing-cohort pricing / the reminder back off), rather
+    than re-injecting the old value."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "contract_start_date": "2025-11-15",
+            "contract_end_date": "2027-11-14",
+        },
+        title="Eneco - power_fix (Wallonia)",
+    )
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    assert result["step_id"] == "contract"
+    # Submit the contract with the date pickers left blank (cleared): the keys
+    # are absent from user_input, so the flow must drop them.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "power_fix"}
+    )
+    # Start date cleared -> no signing-rate step; straight to DSO.
+    assert result["step_id"] == "dso"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "mono"}
+    )
+    assert result["step_id"] == "dso_tariff_mode"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "simple"}
+    )
+    assert result["step_id"] == "solar"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+
+    assert "contract_start_date" not in entry.data
+    assert "contract_end_date" not in entry.data
