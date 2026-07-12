@@ -87,7 +87,7 @@ from .coordinator import (
     _injection_needs_spot,
     _mean_of_month,
     _prosumer_monthly_fee,
-    _recorder_hourly_kwh,
+    _sum_hourly_kwh,
 )
 from .pricing import compute_breakdown
 from .providers import DynamicRates, SpotMonthlyRates, get as get_extractor
@@ -548,12 +548,12 @@ async def _backfill_cost_sensor(
     if hours:
         start_d = dt_util.as_local(hours[0]).date()
         end_d = dt_util.as_local(hours[-1]).date()
-        for cid in _hourly_consumption_sensors(entry):
-            for k, v in (await _recorder_hourly_kwh(hass, cid, start_d, end_d)).items():
-                cons_per_hour[k] = cons_per_hour.get(k, 0.0) + v
-        for iid in _hourly_injection_sensors(entry):
-            for k, v in (await _recorder_hourly_kwh(hass, iid, start_d, end_d)).items():
-                inj_per_hour[k] = inj_per_hour.get(k, 0.0) + v
+        cons_per_hour = await _sum_hourly_kwh(
+            hass, _hourly_consumption_sensors(entry), start_d, end_d
+        )
+        inj_per_hour = await _sum_hourly_kwh(
+            hass, _hourly_injection_sensors(entry), start_d, end_d
+        )
 
     month_cache: dict[date, SupplierSnapshot] = {}
 

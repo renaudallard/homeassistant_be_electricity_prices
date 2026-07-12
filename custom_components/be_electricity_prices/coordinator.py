@@ -2521,6 +2521,27 @@ async def _recorder_hourly_kwh(
     return out
 
 
+async def _sum_hourly_kwh(
+    hass: HomeAssistant,
+    entity_ids: Iterable[str],
+    start: date,
+    end: date,
+) -> dict[datetime, float]:
+    """Per-UTC-hour kWh summed across ``entity_ids`` into one dict.
+
+    A house with several consumption (or injection) sensors totals them
+    hour by hour; used by the live YTD cost, the injection-credit and the
+    backfill accrual so the binning is written once.
+    """
+    out: dict[datetime, float] = {}
+    for entity_id in entity_ids:
+        for utc_hour, kwh in (
+            await _recorder_hourly_kwh(hass, entity_id, start, end)
+        ).items():
+            out[utc_hour] = out.get(utc_hour, 0.0) + kwh
+    return out
+
+
 async def _recorder_daily_band_ratio(
     hass: HomeAssistant, entity_id: str, start: date, end: date, region: str
 ) -> dict[date, tuple[float, float]]:
@@ -2915,14 +2936,8 @@ async def _ytd_hourly_energy(
         return None
 
     jan1 = date(today.year, 1, 1)
-    cons_per_hour: dict[datetime, float] = {}
-    for cid in cons_ids:
-        for k, v in (await _recorder_hourly_kwh(hass, cid, jan1, today)).items():
-            cons_per_hour[k] = cons_per_hour.get(k, 0.0) + v
-    inj_per_hour: dict[datetime, float] = {}
-    for iid in inj_ids:
-        for k, v in (await _recorder_hourly_kwh(hass, iid, jan1, today)).items():
-            inj_per_hour[k] = inj_per_hour.get(k, 0.0) + v
+    cons_per_hour = await _sum_hourly_kwh(hass, cons_ids, jan1, today)
+    inj_per_hour = await _sum_hourly_kwh(hass, inj_ids, jan1, today)
 
     month_snap_cache: dict[date, SupplierSnapshot] = {}
 
@@ -3039,10 +3054,7 @@ async def _ytd_spot_injection_credit(
     if not inj_ids:
         return 0.0
     jan1 = date(today.year, 1, 1)
-    per_hour: dict[datetime, float] = {}
-    for iid in inj_ids:
-        for k, v in (await _recorder_hourly_kwh(hass, iid, jan1, today)).items():
-            per_hour[k] = per_hour.get(k, 0.0) + v
+    per_hour = await _sum_hourly_kwh(hass, inj_ids, jan1, today)
     credit = 0.0
     for utc_hour, kwh in per_hour.items():
         spot = historical_spots.get(utc_hour)
