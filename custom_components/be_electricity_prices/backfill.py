@@ -86,6 +86,7 @@ from .coordinator import (
     _hourly_injection_sensors,
     _injection_needs_spot,
     _mean_of_month,
+    _prosumer_monthly_fee,
     _recorder_hourly_kwh,
 )
 from .pricing import compute_breakdown, yearly_fixed_fee_for_meter
@@ -641,14 +642,8 @@ async def _backfill_cost_sensor(
         # backfills prosumer on top of the capacity tariff.
         if is_compensation and kva > 0.0 and region == REGION_WALLONIA:
             overlay = snap_h.dsos.get(dso)
-            dso_rate = (
-                overlay.prosumer_eur_per_kva_year
-                if overlay is not None and overlay.prosumer_eur_per_kva_year is not None
-                else 0.0
-            )
-            supplier_rate = snap_h.supplier_prosumer_eur_per_kva_year or 0.0
-            if dso_rate or supplier_rate:
-                monthly_fee = kva * (dso_rate + supplier_rate) / 12.0
+            monthly_fee = _prosumer_monthly_fee(overlay, snap_h, kva)
+            if monthly_fee:
                 # Prorate the monthly prosumer fee per local day, the same way
                 # the static fee above is spread, so both reach a full daily
                 # share on the current in-progress day and the backfill meets

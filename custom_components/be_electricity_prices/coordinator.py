@@ -2347,6 +2347,25 @@ def _historical_injection_rate(
     return None
 
 
+def _prosumer_monthly_fee(
+    overlay: DsoOverlay | None, snapshot: SupplierSnapshot, kva: float
+) -> float:
+    """Monthly prosumer (compensation-regime) fee for ``kva`` of inverter.
+
+    Sums the DSO per-kVA/year tariff and the supplier-side compensation
+    forfait (Cociter Variable), the latter already TVAC so it is summed
+    raw, then divides to a monthly amount. Callers gate this to Walloon
+    compensation installs; a missing rate contributes zero.
+    """
+    dso_rate = (
+        overlay.prosumer_eur_per_kva_year
+        if overlay is not None and overlay.prosumer_eur_per_kva_year is not None
+        else 0.0
+    )
+    supplier_rate = snapshot.supplier_prosumer_eur_per_kva_year or 0.0
+    return kva * (dso_rate + supplier_rate) / 12.0
+
+
 def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
     """Monthly prosumer (compensation regime) cost in EUR.
 
@@ -2374,15 +2393,7 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
     if kva <= 0.0:
         return 0.0
     overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
-    dso_rate = (
-        overlay.prosumer_eur_per_kva_year
-        if overlay is not None and overlay.prosumer_eur_per_kva_year is not None
-        else 0.0
-    )
-    # Supplier-side compensation forfait (Cociter Variable) is billed on
-    # top of the DSO tariff; it is already TVAC, so it is summed raw.
-    supplier_rate = snapshot.supplier_prosumer_eur_per_kva_year or 0.0
-    return kva * (dso_rate + supplier_rate) / 12.0
+    return _prosumer_monthly_fee(overlay, snapshot, kva)
 
 
 async def _recorder_rows(
@@ -2784,15 +2795,9 @@ async def _ytd_prosumer(
         hass, session, extractor, snapshot, entry, today, contract=contract
     ):
         overlay = snap_m.dsos.get(dso)
-        dso_rate = (
-            overlay.prosumer_eur_per_kva_year
-            if overlay is not None and overlay.prosumer_eur_per_kva_year is not None
-            else 0.0
-        )
-        supplier_rate = snap_m.supplier_prosumer_eur_per_kva_year or 0.0
-        if dso_rate == 0.0 and supplier_rate == 0.0:
+        monthly_fee = _prosumer_monthly_fee(overlay, snap_m, kva)
+        if monthly_fee == 0.0:
             continue
-        monthly_fee = kva * (dso_rate + supplier_rate) / 12.0
         total += monthly_fee * (days_in_ytd / days_in_full_month)
     return total
 
