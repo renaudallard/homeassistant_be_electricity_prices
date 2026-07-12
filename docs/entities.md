@@ -108,7 +108,7 @@ pulls (all fields defined at `coordinator.py:472`).
 | Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only) |
 | Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw` (Flanders only) |
 | Prosumer cost | `prosumer_cost` | - | MEASUREMENT | EUR | `prosumer_cost_eur` (compensation regime) |
-| Injection price | `injection_price` | - | MEASUREMENT | EUR/kWh | `injection_price_eur_per_kwh` (injection regime) |
+| Injection price | `injection_price` | - | MEASUREMENT | EUR/kWh | `injection_price_eur_per_kwh` (injection regime); also `today`/`tomorrow` arrays when the injection varies intra-day |
 | Contract end date | `contract_end_date` | timestamp | - | - | `entry.data[CONF_CONTRACT_END_DATE]` (a config value, not `CoordinatorData`; standalone `ContractEndDateSensor`) |
 
 ### Current-price selection and the nearest-slot guard
@@ -130,10 +130,15 @@ The today/tomorrow scalar sensors (`_bucket`, `sensor.py:101`) reduce over every
 slot whose local date matches, so on a quarter-hourly contract they operate at
 native 15-minute resolution.
 
-### `current_price` extra_state_attributes
+### extra_state_attributes
 
-Only `current_price` carries extra attributes (`sensor.py:471`); every other
-sensor returns `{}`. The payload:
+`current_price` always carries extra attributes, and `injection_price` carries
+`today`/`tomorrow` arrays when its injection varies intra-day (`sensor.py:471`);
+every other sensor returns `{}`.
+
+#### `current_price`
+
+The payload:
 
 | Attribute | Source | Meaning |
 | --- | --- | --- |
@@ -165,6 +170,20 @@ flat tariff where every hour rounds to the same all-in price the tie-break makes
 "cheapest" simply the first N hours and "most expensive" the last N; the source
 comment (`sensor.py:188`) says to treat the output as undefined when prices do
 not actually vary across the day.
+
+#### `injection_price`
+
+When the injection price varies across the day, `injection_price` also carries
+`today` and `tomorrow` arrays of `{start, injection}` rows (each rounded to 6
+decimals) so a battery force-export automation can rank the day's injection
+hours ahead of time (`_split_injection_today_tomorrow`). The coordinator fills
+`data.injection_hourly` only for contracts whose injection actually varies:
+every dynamic contract and Cociter Variable (spot-indexed `factor*spot+base`),
+plus Engie Empower Flextime (a fixed TOU schedule). A flat or monthly-indexed
+contract emits no array, so both lists come back empty and the sensor returns
+`{}`. The same quarter->hour downsampling as `current_price` applies through
+`_injection_hourly_view`, and `tomorrow` fills in once the day-ahead publishes
+(~13:00 CET), like the consumption array.
 
 ### Unrecorded attributes
 

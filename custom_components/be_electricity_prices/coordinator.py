@@ -39,7 +39,7 @@ from __future__ import annotations
 import asyncio
 import calendar
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from statistics import fmean
@@ -686,6 +686,14 @@ class CoordinatorData:
     #   - the snapshot's injection block has no usable data (formula needs
     #     spot but contract is variable so we don't fetch ENTSO-E).
     injection_price_eur_per_kwh: float | None = None
+    # Per-slot injection price (EUR/kWh) across the same today+tomorrow grid
+    # as ``hourly``, for the injection_price sensor's today/tomorrow arrays.
+    # Empty except on the injection regime for a contract whose injection
+    # varies intra-day (spot-indexed dynamic + Cociter Variable, or the Engie
+    # Empower Flextime TOU schedule); flat contracts emit no array since it
+    # would just repeat the scalar above. Same quarter->hour downsampling as
+    # the consumption arrays happens in the sensor layer.
+    injection_hourly: dict[datetime, float] = field(default_factory=dict)
     # Supplier yearly fixed fee (EUR/year) and Flemish energy-fund
     # monthly charge (EUR/month). Both are parsed from the tariff card
     # but don't enter the per-kWh all-in number; surfacing them as
@@ -1137,6 +1145,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             capacity_cost_eur=capacity_cost,
             prosumer_cost_eur=prosumer_cost,
             injection_price_eur_per_kwh=injection_price,
+            injection_hourly=self._build_injection_hourly(
+                injection_snapshot, priced.energy, spot_prices, hourly.keys()
+            ),
             yearly_fixed_fee_eur=yearly_fixed_fee_for_meter(
                 priced.energy,
                 self.entry.data.get(CONF_METER, METER_MONO),
@@ -1811,6 +1822,39 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             utc += timedelta(hours=1)
         return hourly
 
+    def _build_injection_hourly(
+        self,
+        injection_snapshot: SupplierSnapshot,
+        energy: EnergyRates,
+        spot_prices: dict[datetime, float],
+        grid_keys: Iterable[datetime],
+    ) -> dict[datetime, float]:
+        """Per-slot injection price (EUR/kWh) over the same today+tomorrow grid
+        as ``hourly``, for the injection sensor's today/tomorrow arrays.
+
+        Empty unless the user is on the injection regime AND the injection
+        actually varies intra-day: a flat contract would just repeat its
+        scalar, so no array is emitted. ``injection_snapshot`` is the possibly
+        mean-baked snapshot and ``energy`` the effective (cohort) energy, so a
+        spot-monthly / Cociter-cohort contract is treated as flat and gated
+        out -- keeping the array consistent with the live scalar and the YTD
+        credit. Slots with no spot (tomorrow before the day-ahead publishes)
+        are dropped, exactly like the consumption tomorrow array.
+        """
+        if self.entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
+            return {}
+        inj = injection_snapshot.injection
+        if inj is None or not _injection_varies_intraday(inj, energy):
+            return {}
+        out: dict[datetime, float] = {}
+        for utc in grid_keys:
+            rate = _injection_price_for_slot(
+                inj, energy, spot_prices.get(utc), dt_util.as_local(utc)
+            )
+            if rate is not None:
+                out[utc] = rate
+        return out
+
     def _monthly_spot_mean(
         self, year: int, month: int, extra_spots: dict[datetime, float]
     ) -> float | None:
@@ -2157,6 +2201,76 @@ def _floor_injection(rate: float | None, inj: InjectionRates) -> float | None:
     return max(rate, 0.0)
 
 
+def _injection_price_for_slot(
+    inj: InjectionRates,
+    energy: EnergyRates,
+    spot: float | None,
+    when: datetime,
+) -> float | None:
+    """Injection price in EUR/kWh for a single slot.
+
+    The per-slot core shared by the live current-hour scalar and the
+    today/tomorrow injection array. Priority (identical to the historical
+    walk): a per-slot TOU rate first (Engie Empower Flextime), then the
+    spot-indexed formula ``factor*spot + base`` when the contract is
+    spot-indexed, otherwise the printed monthly ``current`` indicative.
+    ``spot`` is the already-resolved spot for ``when``'s billing slot (None
+    when unavailable); the spot branch returns None rather than fabricate a
+    value when it has no spot.
+
+    The spot branch fires only when the energy bills per hour (DynamicRates)
+    OR the injection is a spot formula with no monthly indicative (``current``
+    is None) -- e.g. Cociter Variable. A static-energy contract whose injection
+    carries a MONTHLY index but also a printed ``current`` (Ecofix Flexy's
+    BELPEX-SPP-M, EBEM Groen Variabel / B@sic+'s SPP0) uses that realized
+    monthly rate instead, keeping the live sensor consistent with the YTD
+    credit. Do NOT drop this guard: without it a flat monthly-indicative
+    credit would flip to a spot-varying one on the several dynamic-injection
+    cards that publish BOTH a ``current`` and ``factor``/``base``.
+    """
+    tou_rate = _tou_injection_rate(inj, energy, when)
+    if tou_rate is not None:
+        return tou_rate
+    if (
+        inj.factor is not None
+        and inj.base is not None
+        and (isinstance(energy, DynamicRates) or inj.current is None)
+    ):
+        if spot is None:
+            return None
+        return _floor_injection(inj.factor * spot + inj.base, inj)
+    return _floor_injection(inj.current, inj)
+
+
+def _now_slot_spot(
+    energy: EnergyRates, spot_prices: dict[datetime, float]
+) -> float | None:
+    """ENTSO-E spot for the current billing slot, matching the grid the
+    contract bills on so an Engie injection price tracks the current
+    quarter-hour, not the hourly mean. Falls back to the nearest cached spot
+    within one billing slot (15 min quarter-hourly, 1 h otherwise); returns
+    None when none are cached or none are within range."""
+    if not spot_prices:
+        return None
+    resolution = (
+        RESOLUTION_QUARTER if _energy_is_quarter_hourly(energy) else RESOLUTION_HOURLY
+    )
+    now_slot = slot_start(dt_util.utcnow(), resolution)
+    spot = spot_prices.get(now_slot)
+    if spot is None:
+        nearest = min(
+            spot_prices.keys(),
+            key=lambda h: abs((h - now_slot).total_seconds()),
+        )
+        # A fixed 1 h window let a quarter-hourly injection price use a spot
+        # up to four slots away.
+        max_gap = 900.0 if resolution == RESOLUTION_QUARTER else 3600.0
+        if abs((nearest - now_slot).total_seconds()) > max_gap:
+            return None
+        spot = spot_prices[nearest]
+    return spot
+
+
 def _compute_injection_price(
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
@@ -2175,53 +2289,28 @@ def _compute_injection_price(
     inj = snapshot.injection
     if inj is None:
         return None
-    tou_rate = _tou_injection_rate(inj, snapshot.energy, dt_util.now())
-    if tou_rate is not None:
-        return tou_rate
-    # Per-hour spot-indexed injection (factor x spot + base) applies when
-    # either the energy contract itself bills per hour (DynamicRates) OR
-    # the injection is a spot formula with no monthly indicative
-    # (``current`` is None) -- e.g. Cociter Variable, whose static-energy
-    # card prices injection off the hourly BELPEX with no fixed credit. It
-    # needs a spot, so return None until one is available rather than
-    # fabricate a value. A static-energy contract whose injection carries
-    # a MONTHLY index but also a printed ``current`` (Ecofix Flexy's
-    # BELPEX-SPP-M, EBEM Groen Variabel / B@sic+'s SPP0) uses that
-    # realized monthly rate instead, keeping the live sensor consistent
-    # with the YTD credit for the same hour.
-    if (
+    return _injection_price_for_slot(
+        inj,
+        snapshot.energy,
+        _now_slot_spot(snapshot.energy, spot_prices),
+        dt_util.now(),
+    )
+
+
+def _injection_varies_intraday(inj: InjectionRates, energy: EnergyRates) -> bool:
+    """True when this contract's injection changes across the day -- a TOU
+    schedule (Engie Empower Flextime) or a spot-indexed formula (every dynamic
+    contract plus Cociter Tarif Variable). Flat monthly-indicative, fixed and
+    (mean-baked) spot-monthly injection is constant intra-day, so no per-hour
+    array is worth emitting for it. Mirrors the branch conditions of
+    ``_injection_price_for_slot``."""
+    if isinstance(energy, TimeOfUseRates) and inj.peak is not None:
+        return True
+    return (
         inj.factor is not None
         and inj.base is not None
-        and (isinstance(snapshot.energy, DynamicRates) or inj.current is None)
-    ):
-        if not spot_prices:
-            return None
-        # Match the grid the contract bills on so an Engie injection price
-        # tracks the current quarter-hour, not the hourly mean.
-        resolution = (
-            RESOLUTION_QUARTER
-            if _energy_is_quarter_hourly(snapshot.energy)
-            else RESOLUTION_HOURLY
-        )
-        now_slot = slot_start(dt_util.utcnow(), resolution)
-        spot = spot_prices.get(now_slot)
-        if spot is None:
-            nearest = min(
-                spot_prices.keys(),
-                key=lambda h: abs((h - now_slot).total_seconds()),
-            )
-            # Accept a substitute spot only within one billing slot of
-            # "now" (15 min on a quarter-hourly contract, 1 h otherwise).
-            # A fixed 1 h window let a quarter-hourly injection price use a
-            # spot up to four slots away.
-            max_gap = 900.0 if resolution == RESOLUTION_QUARTER else 3600.0
-            if abs((nearest - now_slot).total_seconds()) > max_gap:
-                return None
-            spot = spot_prices[nearest]
-        return _floor_injection(inj.factor * spot + inj.base, inj)
-    # Static contracts (and static-energy contracts with a monthly-indexed
-    # injection formula): the supplier's printed monthly indicative.
-    return _floor_injection(inj.current, inj)
+        and (isinstance(energy, DynamicRates) or inj.current is None)
+    )
 
 
 def _historical_injection_rate(

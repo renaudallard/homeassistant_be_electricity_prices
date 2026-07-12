@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import calendar
 from datetime import UTC, date, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -47,6 +48,7 @@ from custom_components.be_electricity_prices.const import (
     DOMAIN,
 )
 from custom_components.be_electricity_prices.coordinator import (
+    BePricesCoordinator,
     _cohort_energy_from_archived,
     _cohort_energy_leg,
     _compute_capacity,
@@ -59,6 +61,8 @@ from custom_components.be_electricity_prices.coordinator import (
     _energy_kind,
     _historical_injection_rate,
     _injection_needs_spot,
+    _injection_price_for_slot,
+    _injection_varies_intraday,
     _manual_energy_leg,
     _ytd_spot_injection_credit,
     _monthly_snapshots,
@@ -409,6 +413,170 @@ def test_injection_price_spot_indexed_static_uses_formula(freezer: Any) -> None:
     )
     # No spot -> unknown (there is no monthly indicative to fall back to).
     assert _compute_injection_price(snap, entry, {}) is None
+
+
+# --- today/tomorrow injection array (issue #40) -------------------------
+
+
+def _slot(hour: int) -> datetime:
+    """A UTC grid key at ``hour`` on the pinned synthetic day."""
+    return datetime(2026, 5, 15, hour, tzinfo=UTC)
+
+
+def test_injection_price_for_slot_spot_formula() -> None:
+    inj = InjectionRates(factor=0.97, base=-0.021, current=None)
+    energy = DynamicRates(factor=0.1, base=0.0)
+    when = _slot(12)
+    assert _injection_price_for_slot(inj, energy, 0.10, when) == pytest.approx(
+        0.97 * 0.10 - 0.021
+    )
+    # Spot-indexed but no spot for the slot -> None (never fabricate a value).
+    assert _injection_price_for_slot(inj, energy, None, when) is None
+
+
+def test_injection_price_for_slot_flat_current_ignores_spot() -> None:
+    inj = InjectionRates(current=0.0476)
+    energy = FixedRates(single=0.20)
+    when = _slot(12)
+    assert _injection_price_for_slot(inj, energy, 0.10, when) == pytest.approx(0.0476)
+    assert _injection_price_for_slot(inj, energy, None, when) == pytest.approx(0.0476)
+
+
+def test_injection_price_for_slot_dual_published_static_stays_on_current() -> None:
+    # Static energy + injection carrying BOTH a monthly `current` and
+    # factor/base (Ecofix Flexy, EBEM B@sic+): the guard must keep it on the
+    # flat monthly rate even when a spot is present, or the flat credit would
+    # flip to a spot-varying one (the F41-class shape bug).
+    inj = InjectionRates(current=0.0432, factor=0.884, base=-0.005)
+    energy = VariableRates(current=0.16)
+    assert _injection_price_for_slot(inj, energy, 0.10, _slot(12)) == pytest.approx(
+        0.0432
+    )
+
+
+def test_injection_price_for_slot_tou_picks_slot_over_spot() -> None:
+    energy = TimeOfUseRates(
+        peak=0.20, transition=0.15, offpeak=0.10, weekend_rule="weekend_no_peak"
+    )
+    inj = InjectionRates(current=0.05, peak=0.084, transition=0.048, offpeak=0.015)
+    wed = date(2026, 4, 29)
+    peak_h = datetime.combine(wed, datetime.min.time()).replace(hour=9)
+    off_h = datetime.combine(wed, datetime.min.time()).replace(hour=3)
+    # The TOU rate wins even when a spot is passed; the slot is picked by hour.
+    assert _injection_price_for_slot(inj, energy, 0.99, peak_h) == pytest.approx(0.084)
+    assert _injection_price_for_slot(inj, energy, 0.99, off_h) == pytest.approx(0.015)
+
+
+def test_injection_price_for_slot_floors_negative() -> None:
+    inj = InjectionRates(factor=0.9, base=-0.5, current=None, floor_at_zero=True)
+    energy = DynamicRates(factor=0.1, base=0.0)
+    # 0.9 * 0.10 - 0.5 = -0.41 -> clamped to 0.
+    assert _injection_price_for_slot(inj, energy, 0.10, _slot(12)) == 0.0
+
+
+def test_injection_varies_intraday_true_for_spot_and_tou() -> None:
+    # Dynamic energy + formula.
+    assert _injection_varies_intraday(
+        InjectionRates(factor=0.9, base=-0.01, current=0.05),
+        DynamicRates(factor=0.1, base=0.0),
+    )
+    # Static energy + spot formula with no monthly indicative (Cociter Variable).
+    assert _injection_varies_intraday(
+        InjectionRates(factor=0.97, base=-0.021, current=None),
+        VariableRates(current=0.16),
+    )
+    # TOU schedule (Engie Empower Flextime).
+    assert _injection_varies_intraday(
+        InjectionRates(current=0.05, peak=0.08, transition=0.05, offpeak=0.02),
+        TimeOfUseRates(
+            peak=0.2, transition=0.15, offpeak=0.1, weekend_rule="weekend_no_peak"
+        ),
+    )
+
+
+def test_injection_varies_intraday_false_for_flat() -> None:
+    # Flat monthly indicative only.
+    assert not _injection_varies_intraday(
+        InjectionRates(current=0.0476), FixedRates(single=0.20)
+    )
+    # Dual-published on static energy -> guard keeps it flat.
+    assert not _injection_varies_intraday(
+        InjectionRates(current=0.0432, factor=0.884, base=-0.005),
+        VariableRates(current=0.16),
+    )
+    # Spot-monthly baked to a flat indicative (factor/base cleared).
+    assert not _injection_varies_intraday(
+        InjectionRates(current=0.05, factor=None, base=None),
+        SpotMonthlyRates(factor=1.0, base=0.0),
+    )
+
+
+def _build_injection_hourly(
+    entry: MockConfigEntry,
+    snap: SupplierSnapshot,
+    spot_prices: dict[datetime, float],
+    grid_keys: list[datetime],
+) -> dict[datetime, float]:
+    """Call the coordinator method with a light stub (only ``entry`` is read)."""
+    stub = SimpleNamespace(entry=entry)
+    return BePricesCoordinator._build_injection_hourly(
+        stub,  # type: ignore[arg-type]
+        snap,
+        snap.energy,
+        spot_prices,
+        grid_keys,
+    )
+
+
+def test_build_injection_hourly_prices_each_slot() -> None:
+    entry = _entry(solar_regime="injection")
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=DynamicRates(factor=0.1, base=0.0),
+        injection=InjectionRates(factor=0.97, base=-0.021, current=None),
+    )
+    spots = {_slot(10): 0.10, _slot(11): 0.20}
+    out = _build_injection_hourly(entry, snap, spots, [_slot(10), _slot(11)])
+    assert out[_slot(10)] == pytest.approx(0.97 * 0.10 - 0.021)
+    assert out[_slot(11)] == pytest.approx(0.97 * 0.20 - 0.021)
+
+
+def test_build_injection_hourly_drops_slots_without_spot() -> None:
+    # Tomorrow's slots have no spot until the day-ahead publishes -> dropped,
+    # exactly like the consumption tomorrow array.
+    entry = _entry(solar_regime="injection")
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=DynamicRates(factor=0.1, base=0.0),
+        injection=InjectionRates(factor=0.97, base=-0.021, current=None),
+    )
+    out = _build_injection_hourly(
+        entry, snap, {_slot(10): 0.10}, [_slot(10), _slot(11)]
+    )
+    assert list(out) == [_slot(10)]
+
+
+def test_build_injection_hourly_empty_off_injection_regime() -> None:
+    entry = _entry(solar_regime="compensation")
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=DynamicRates(factor=0.1, base=0.0),
+        injection=InjectionRates(factor=0.97, base=-0.021, current=None),
+    )
+    assert _build_injection_hourly(entry, snap, {_slot(10): 0.10}, [_slot(10)]) == {}
+
+
+def test_build_injection_hourly_empty_for_flat_contract() -> None:
+    # A flat monthly-indicative injection would just repeat its scalar, so no
+    # array is emitted.
+    entry = _entry(solar_regime="injection")
+    snap = _snapshot(
+        prosumer=None, capacity=None, injection=InjectionRates(current=0.0476)
+    )
+    assert _build_injection_hourly(entry, snap, {}, [_slot(10), _slot(11)]) == {}
 
 
 def test_injection_needs_spot_only_for_static_spot_indexed_injection() -> None:

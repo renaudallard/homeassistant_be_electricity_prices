@@ -247,6 +247,50 @@ def _split_today_tomorrow(
     return today_rows, tomorrow_rows
 
 
+def _injection_hourly_view(data: CoordinatorData) -> dict[datetime, float]:
+    """Hourly-resolution view of the per-slot injection prices.
+
+    Returns ``data.injection_hourly`` unchanged for hourly contracts. For a
+    quarter-hourly contract it averages each hour's four slots into one value
+    so the ``today`` / ``tomorrow`` attribute stays hourly (a full 15-minute
+    curve would blow past HA's 16 KB per-state-attribute recorder limit).
+    Averaging the already-floored quarter rates is exact for the linear
+    ``factor * spot + base`` formula and a deliberate approximation for a
+    floored quarter-hourly contract.
+    """
+    if data.resolution == RESOLUTION_HOURLY:
+        return data.injection_hourly
+    buckets: dict[datetime, list[float]] = {}
+    for slot, rate in data.injection_hourly.items():
+        hour = slot.replace(minute=0, second=0, microsecond=0)
+        buckets.setdefault(hour, []).append(rate)
+    return {hour: sum(rates) / len(rates) for hour, rates in buckets.items()}
+
+
+def _split_injection_today_tomorrow(
+    data: CoordinatorData,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Group the per-slot injection prices into today and tomorrow buckets.
+
+    Each bucket is a chronological list of ``{start, injection}`` rows. Both
+    are empty for a contract whose injection doesn't vary intra-day (the
+    coordinator emits no ``injection_hourly`` for it).
+    """
+    hourly = _injection_hourly_view(data)
+    today = dt_util.now().date()
+    tomorrow = today + timedelta(days=1)
+    today_rows: list[dict[str, Any]] = []
+    tomorrow_rows: list[dict[str, Any]] = []
+    for h, rate in sorted(hourly.items()):
+        local = dt_util.as_local(h)
+        row = {"start": local.isoformat(), "injection": round(rate, 6)}
+        if local.date() == today:
+            today_rows.append(row)
+        elif local.date() == tomorrow:
+            tomorrow_rows.append(row)
+    return today_rows, tomorrow_rows
+
+
 def _current_field(field: str) -> Callable[[CoordinatorData], float | None]:
     def _inner(data: CoordinatorData) -> float | None:
         bd = _current(data)
@@ -470,21 +514,29 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        if self.entity_description.key != "current_price":
-            return {}
         data = self.coordinator.data
-        cheapest, most_expensive = _today_ranked(data, 4)
-        today, tomorrow = _split_today_tomorrow(data)
-        return {
-            "snapshot_publication": data.snapshot_publication,
-            "snapshot_age_hours": round(data.snapshot_age_hours, 2),
-            "snapshot_stale": data.snapshot_stale,
-            "last_error": data.last_error,
-            "cheapest_4h_today": cheapest,
-            "most_expensive_4h_today": most_expensive,
-            "today": today,
-            "tomorrow": tomorrow,
-        }
+        if self.entity_description.key == "current_price":
+            cheapest, most_expensive = _today_ranked(data, 4)
+            today, tomorrow = _split_today_tomorrow(data)
+            return {
+                "snapshot_publication": data.snapshot_publication,
+                "snapshot_age_hours": round(data.snapshot_age_hours, 2),
+                "snapshot_stale": data.snapshot_stale,
+                "last_error": data.last_error,
+                "cheapest_4h_today": cheapest,
+                "most_expensive_4h_today": most_expensive,
+                "today": today,
+                "tomorrow": tomorrow,
+            }
+        if self.entity_description.key == "injection_price":
+            # Only spot-indexed / TOU contracts populate injection_hourly, so
+            # a flat contract stays attribute-free rather than repeating one
+            # value 24-48 times.
+            today, tomorrow = _split_injection_today_tomorrow(data)
+            if not today and not tomorrow:
+                return {}
+            return {"today": today, "tomorrow": tomorrow}
+        return {}
 
 
 class ContractEndDateSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):

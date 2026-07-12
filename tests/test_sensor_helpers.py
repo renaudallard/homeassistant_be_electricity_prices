@@ -39,6 +39,8 @@ from custom_components.be_electricity_prices.pricing import PriceBreakdown
 from custom_components.be_electricity_prices.sensor import (
     _current,
     _hourly_view,
+    _injection_hourly_view,
+    _split_injection_today_tomorrow,
     _split_today_tomorrow,
     _today_ranked,
     _tomorrow_avg,
@@ -275,3 +277,69 @@ def test_current_price_bulk_attributes_are_unrecorded() -> None:
 
     for key in ("today", "tomorrow", "cheapest_4h_today", "most_expensive_4h_today"):
         assert key in BePriceSensor._unrecorded_attributes
+
+
+# --- today/tomorrow injection array (issue #40) -------------------------
+
+
+def _injection_today_and_tomorrow(
+    today_vals: list[float], tomorrow_vals: list[float]
+) -> CoordinatorData:
+    """Build a CoordinatorData whose injection_hourly spans today and tomorrow."""
+    today_midnight = _fixed_today_local()
+    tomorrow_midnight = today_midnight + timedelta(days=1)
+    inj: dict[datetime, float] = {}
+    for i, v in enumerate(today_vals):
+        inj[dt_util.as_utc(today_midnight + timedelta(hours=i))] = v
+    for i, v in enumerate(tomorrow_vals):
+        inj[dt_util.as_utc(tomorrow_midnight + timedelta(hours=i))] = v
+    return CoordinatorData(injection_hourly=inj)
+
+
+def test_split_injection_buckets_by_local_date() -> None:
+    data = _injection_today_and_tomorrow([0.05] * 24, [0.06] * 24)
+    today, tomorrow = _split_injection_today_tomorrow(data)
+    assert len(today) == 24
+    assert len(tomorrow) == 24
+    assert {row["injection"] for row in today} == {0.05}
+    assert {row["injection"] for row in tomorrow} == {0.06}
+    assert all("start" in row for row in today)
+    assert all(today[i]["start"] < today[i + 1]["start"] for i in range(23))
+
+
+def test_split_injection_empty_tomorrow_before_publication() -> None:
+    data = _injection_today_and_tomorrow([0.05] * 24, [])
+    today, tomorrow = _split_injection_today_tomorrow(data)
+    assert len(today) == 24
+    assert tomorrow == []
+
+
+def test_split_injection_handles_empty_data() -> None:
+    # A flat contract emits no injection_hourly, so both lists are empty.
+    today, tomorrow = _split_injection_today_tomorrow(CoordinatorData())
+    assert today == []
+    assert tomorrow == []
+
+
+def test_injection_hourly_view_downsamples_quarter_to_hourly_mean() -> None:
+    today_midnight = _fixed_today_local()
+    inj: dict[datetime, float] = {}
+    # Hour 0's four quarters average to 0.03; the rest are flat.
+    for i, v in enumerate([0.00, 0.02, 0.04, 0.06]):
+        inj[dt_util.as_utc(today_midnight + timedelta(minutes=15 * i))] = v
+    data = CoordinatorData(injection_hourly=inj, resolution=RESOLUTION_QUARTER)
+    view = _injection_hourly_view(data)
+    assert len(view) == 1
+    assert view[min(view)] == pytest.approx(0.03)
+
+
+def test_split_injection_stays_hourly_for_quarter_contract() -> None:
+    # A 15-minute injection curve (96 today slots) must collapse to 24 hourly
+    # rows so the attribute stays under HA's 16 KB cap.
+    today_midnight = _fixed_today_local()
+    inj: dict[datetime, float] = {}
+    for i in range(96):
+        inj[dt_util.as_utc(today_midnight + timedelta(minutes=15 * i))] = 0.05
+    data = CoordinatorData(injection_hourly=inj, resolution=RESOLUTION_QUARTER)
+    today, _tomorrow = _split_injection_today_tomorrow(data)
+    assert len(today) == 24
