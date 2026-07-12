@@ -421,7 +421,11 @@ def vat_multiplier(
 
 
 async def fetch_text(
-    session: aiohttp.ClientSession, url: str, *, timeout: int = 20
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    params: dict[str, str] | None = None,
+    timeout: int = 20,
 ) -> str:
     """GET ``url`` and return the response body as text.
 
@@ -430,14 +434,21 @@ async def fetch_text(
     other plain-text sources; reach for :func:`fetch_pdf_text` (or its
     layout / aligned variants) when the body is expected to be a PDF.
 
+    ``params`` is passed straight to :meth:`aiohttp.ClientSession.get`
+    for endpoints that carry their query in the URL string (e.g. a
+    Sanity CMS ``query``).
+
     Callers that prefer a soft None-on-failure can wrap this in a
     ``try / except ExtractorError`` block; concentrating the network /
     HTTP error handling here keeps the ~6 lines of boilerplate out of
-    every provider.
+    every provider, and routes every fetch through the one
+    :func:`is_transient_fetch_error` taxonomy so transient failures
+    retry uniformly.
     """
     try:
         async with session.get(
             url,
+            params=params,
             headers={"User-Agent": USER_AGENT},
             timeout=aiohttp.ClientTimeout(total=timeout),
         ) as resp:

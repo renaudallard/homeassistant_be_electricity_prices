@@ -61,9 +61,9 @@ from ..const import (
 )
 from ._pdf import (
     SIGN_CHARS,
-    USER_AGENT,
     archive_validity_check,
     fetch_pdf_text_layout,
+    fetch_text,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -153,18 +153,7 @@ async def _sanity_query(
     session: aiohttp.ClientSession,
     query: str,
 ) -> list[dict[str, str]]:
-    try:
-        async with session.get(
-            _SANITY_API,
-            params={"query": query},
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=15),
-        ) as resp:
-            if resp.status >= 400:
-                raise ExtractorError(f"Sanity API HTTP {resp.status}")
-            body = await resp.text()
-    except (aiohttp.ClientError, TimeoutError) as err:
-        raise ExtractorError(f"Sanity API network error: {err}") from err
+    body = await fetch_text(session, _SANITY_API, params={"query": query}, timeout=15)
     try:
         result = json.loads(body).get("result", [])
         if isinstance(result, dict):
