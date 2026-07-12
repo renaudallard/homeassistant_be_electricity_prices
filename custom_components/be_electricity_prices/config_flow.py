@@ -2533,24 +2533,17 @@ def _annual_fees(
     YTD path, both of which bill capacity as a separate sensor. The full
     annual estimate keeps it (the default)."""
     from .coordinator import (
-        _brussels_osp_fee,
+        _annual_static_fees,
         _compute_capacity,
         _compute_prosumer,
     )
-    from .pricing import yearly_fixed_fee_for_meter
 
-    yearly_fixed = float(yearly_fixed_fee_for_meter(snapshot.energy, meter) or 0.0)
-    energy_fund = 12.0 * float(snapshot.taxes.energy_fund_eur_per_month or 0.0)
+    static = _annual_static_fees(snapshot, meter, entry)
     capacity = 0.0
     if include_capacity and entry.data.get(CONF_REGION) == REGION_FLANDERS:
         capacity = 12.0 * _compute_capacity(snapshot, entry, peak_kw)
     prosumer = 12.0 * _compute_prosumer(snapshot, entry)
-    # Digital-meter data-management fee, a fixed EUR/year DSO charge.
-    overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
-    data_mgmt = float(overlay.data_management_per_year) if overlay is not None else 0.0
-    # Brussels Brugel OSP fee for the configured connection-power tier.
-    osp = _brussels_osp_fee(overlay, entry)
-    return yearly_fixed + energy_fund + capacity + prosumer + data_mgmt + osp
+    return static + capacity + prosumer
 
 
 async def _read_total_kwh(

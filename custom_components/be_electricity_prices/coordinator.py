@@ -2069,6 +2069,27 @@ def _brussels_osp_fee(overlay: DsoOverlay | None, entry: ConfigEntry) -> float:
     return overlay.brussels_osp_by_tier.get(tier, 0.0)
 
 
+def _annual_static_fees(
+    snapshot: SupplierSnapshot, meter: MeterType, entry: ConfigEntry
+) -> float:
+    """Fixed EUR/year fees that do not depend on consumption: the supplier
+    yearly fixed fee (for ``meter``), twelve times the monthly energy-fund
+    levy, the digital-meter data-management charge and the Brussels Brugel
+    OSP fee.
+
+    Shared by the live YTD sensor, the backfill accrual and the config-flow
+    annual estimate so a new static-fee component is added in one place
+    instead of drifting between the three paths.
+    """
+    overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
+    return (
+        float(yearly_fixed_fee_for_meter(snapshot.energy, meter) or 0.0)
+        + 12.0 * float(snapshot.taxes.energy_fund_eur_per_month or 0.0)
+        + (overlay.data_management_per_year if overlay is not None else 0.0)
+        + _brussels_osp_fee(overlay, entry)
+    )
+
+
 def _mean_of_month(spots: dict[datetime, float], year: int, month: int) -> float | None:
     """Arithmetic mean of the spot values whose local timestamp falls in
     (year, month). Returns ``None`` when that month has no cached hours."""
@@ -2747,17 +2768,8 @@ async def _ytd_static_fees(
     async for snap_m, _, _, days_in_ytd in _walk_ytd_months(
         hass, session, extractor, snapshot, entry, today, contract=contract
     ):
-        overlay = snap_m.dsos.get(entry.data.get(CONF_DSO, ""))
-        annual = (
-            yearly_fixed_fee_for_meter(
-                snap_m.energy, meter or entry.data.get(CONF_METER, METER_MONO)
-            )
-            + snap_m.taxes.energy_fund_eur_per_month * 12.0
-            # Digital-meter data-management fee (databeheer / terme fixe
-            # reseau): a fixed EUR/year DSO charge billed per connection.
-            + (overlay.data_management_per_year if overlay is not None else 0.0)
-            # Brussels Brugel OSP fee for the configured connection tier.
-            + _brussels_osp_fee(overlay, entry)
+        annual = _annual_static_fees(
+            snap_m, meter or entry.data.get(CONF_METER, METER_MONO), entry
         )
         total += annual * (days_in_ytd / days_in_year)
     return total

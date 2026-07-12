@@ -77,7 +77,7 @@ from .const import (
 )
 from .coordinator import (
     BePricesCoordinator,
-    _brussels_osp_fee,
+    _annual_static_fees,
     _cohort_energy_leg,
     _contract_start_month,
     _effective_snapshot_for_month,
@@ -89,7 +89,7 @@ from .coordinator import (
     _prosumer_monthly_fee,
     _recorder_hourly_kwh,
 )
-from .pricing import compute_breakdown, yearly_fixed_fee_for_meter
+from .pricing import compute_breakdown
 from .providers import DynamicRates, SpotMonthlyRates, get as get_extractor
 from .providers.base import SupplierSnapshot
 
@@ -624,15 +624,7 @@ async def _backfill_cost_sensor(
         # annual/(days_in_year*24) rate accrued 23 or 25 hours' worth on
         # the seam days, drifting from the live sensor at the seam.
         days_in_year = 366 if calendar.isleap(local.year) else 365
-        overlay_h = snap_h.dsos.get(dso)
-        annual_static = (
-            yearly_fixed_fee_for_meter(snap_h.energy, meter)
-            + snap_h.taxes.energy_fund_eur_per_month * 12.0
-            # Digital-meter data-management fee, a fixed EUR/year DSO charge.
-            + (overlay_h.data_management_per_year if overlay_h is not None else 0.0)
-            # Brussels Brugel OSP fee for the configured connection tier.
-            + _brussels_osp_fee(overlay_h, entry)
-        )
+        annual_static = _annual_static_fees(snap_h, meter, entry)
         running_fees += (
             annual_static / days_in_year / hours_per_local_date[local.date()]
         )
