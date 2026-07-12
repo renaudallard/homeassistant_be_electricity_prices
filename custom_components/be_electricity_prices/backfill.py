@@ -80,18 +80,17 @@ from .coordinator import (
     _annual_static_fees,
     _cohort_energy_leg,
     _contract_start_month,
-    _effective_snapshot_for_month,
     _historical_injection_rate,
     _hourly_consumption_sensors,
     _hourly_injection_sensors,
     _injection_needs_spot,
     _mean_of_month,
+    _month_snapshot_cache,
     _prosumer_monthly_fee,
     _sum_hourly_kwh,
 )
 from .pricing import compute_breakdown
 from .providers import DynamicRates, SpotMonthlyRates, get as get_extractor
-from .providers.base import SupplierSnapshot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -396,21 +395,9 @@ async def _backfill_price_sensors(
 
     # Cache per-month snapshot lookups so a 365-day window touches at
     # most 12 archive fetches.
-    month_cache: dict[date, SupplierSnapshot] = {}
-
-    async def _snap_for(month_first: date) -> SupplierSnapshot:
-        if month_first not in month_cache:
-            month_cache[month_first] = await _effective_snapshot_for_month(
-                hass,
-                coordinator._session,
-                extractor,
-                contract,
-                region,
-                month_first,
-                snap,
-                entry,
-            )
-        return month_cache[month_first]
+    _snap_for = _month_snapshot_cache(
+        hass, coordinator._session, extractor, contract, region, snap, entry
+    )
 
     rows_per_key: dict[str, list[Any]] = {key: [] for key in stat_ids}
     month_mean_cache: dict[tuple[int, int], float | None] = {}
@@ -555,21 +542,9 @@ async def _backfill_cost_sensor(
             hass, _hourly_injection_sensors(entry), start_d, end_d
         )
 
-    month_cache: dict[date, SupplierSnapshot] = {}
-
-    async def _snap_for(month_first: date) -> SupplierSnapshot:
-        if month_first not in month_cache:
-            month_cache[month_first] = await _effective_snapshot_for_month(
-                hass,
-                coordinator._session,
-                extractor,
-                contract,
-                region,
-                month_first,
-                snap,
-                entry,
-            )
-        return month_cache[month_first]
+    _snap_for = _month_snapshot_cache(
+        hass, coordinator._session, extractor, contract, region, snap, entry
+    )
 
     # UTC-hour count per local day so the static fee accrues smoothly per
     # hour yet each local day sums to exactly annual/days_in_year, even on

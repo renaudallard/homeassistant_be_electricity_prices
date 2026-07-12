@@ -39,7 +39,7 @@ from __future__ import annotations
 import asyncio
 import calendar
 import logging
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from statistics import fmean
@@ -2090,6 +2090,34 @@ def _annual_static_fees(
     )
 
 
+def _month_snapshot_cache(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: SupplierExtractor,
+    contract: str,
+    region: str,
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+) -> Callable[[date], Awaitable[SupplierSnapshot]]:
+    """Return a memoised ``snap_for(month_first)`` fetching each delivery
+    month's effective snapshot once.
+
+    The live YTD cost and both backfill passes walk the same months
+    repeatedly; the per-call cache keeps archive fetches to at most one
+    per month.
+    """
+    cache: dict[date, SupplierSnapshot] = {}
+
+    async def _snap_for(month_first: date) -> SupplierSnapshot:
+        if month_first not in cache:
+            cache[month_first] = await _effective_snapshot_for_month(
+                hass, session, extractor, contract, region, month_first, snapshot, entry
+            )
+        return cache[month_first]
+
+    return _snap_for
+
+
 def _mean_of_month(spots: dict[datetime, float], year: int, month: int) -> float | None:
     """Arithmetic mean of the spot values whose local timestamp falls in
     (year, month). Returns ``None`` when that month has no cached hours."""
@@ -2939,14 +2967,9 @@ async def _ytd_hourly_energy(
     cons_per_hour = await _sum_hourly_kwh(hass, cons_ids, jan1, today)
     inj_per_hour = await _sum_hourly_kwh(hass, inj_ids, jan1, today)
 
-    month_snap_cache: dict[date, SupplierSnapshot] = {}
-
-    async def _snap_for(month_first: date) -> SupplierSnapshot:
-        if month_first not in month_snap_cache:
-            month_snap_cache[month_first] = await _effective_snapshot_for_month(
-                hass, session, extractor, contract, region, month_first, snapshot, entry
-            )
-        return month_snap_cache[month_first]
+    _snap_for = _month_snapshot_cache(
+        hass, session, extractor, contract, region, snapshot, entry
+    )
 
     # Spot-monthly contracts bill every hour of a delivery month at that
     # month's mean spot (energy and mean-indexed injection alike); cache the
