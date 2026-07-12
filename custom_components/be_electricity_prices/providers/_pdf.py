@@ -33,9 +33,11 @@ import json
 import logging
 import re
 import unicodedata
+from collections.abc import Callable
 from datetime import date
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import aiohttp
 import pypdf
@@ -193,6 +195,33 @@ def extract_pdf_text(payload: bytes) -> str:
         raise ExtractorError(f"PDF parse error: {err}") from err
 
 
+def _pdfplumber_text(payload: bytes, kind: str, render: Callable[[Any], str]) -> str:
+    """Open ``payload`` with pdfplumber, reconstruct text via ``render``,
+    and rewrap failures uniformly.
+
+    ``render`` receives the open pdfplumber document and returns the
+    reconstructed text; ``kind`` ("layout" / "aligned") only shapes the
+    :class:`ExtractorError` message. A PDF with pages but no decodable
+    text fails loud rather than returning "" and letting every downstream
+    regex miss silently (only mandatory fields fail loud; nullable ones
+    zero), matching the pypdf path's all-pages guard.
+    """
+    try:
+        import pdfplumber
+
+        with pdfplumber.open(BytesIO(payload)) as pdf:
+            text = render(pdf)
+            if pdf.pages and not text.strip():
+                raise ExtractorError(
+                    f"PDF {kind} parse error: pages present but no text decoded"
+                )
+            return text
+    except ExtractorError:
+        raise
+    except Exception as err:  # noqa: BLE001 - rewrap pdfplumber surface as ExtractorError
+        raise ExtractorError(f"PDF {kind} parse error: {err}") from err
+
+
 def extract_pdf_text_layout(payload: bytes) -> str:
     """Extract PDF text via pdfplumber, preserving table layout.
 
@@ -208,28 +237,13 @@ def extract_pdf_text_layout(payload: bytes) -> str:
     instead of ``5,09`` in the April-2026 myDrive Wallonia card). The
     dedupe drops those overlapped copies before text reconstruction.
     """
-    try:
-        import pdfplumber
-
-        with pdfplumber.open(BytesIO(payload)) as pdf:
-            pages = pdf.pages
-            text = "\n".join(
-                (page.dedupe_chars().extract_text() or "") for page in pages
-            )
-            if pages and not text.strip():
-                # A PDF with pages but no decodable text would otherwise
-                # return "" and let every downstream regex miss silently
-                # (only mandatory fields fail loud; nullable ones zero).
-                # Fail loud here, matching the pypdf path's all-pages
-                # guard.
-                raise ExtractorError(
-                    "PDF layout parse error: pages present but no text decoded"
-                )
-            return text
-    except ExtractorError:
-        raise
-    except Exception as err:  # noqa: BLE001 - rewrap pdfplumber surface as ExtractorError
-        raise ExtractorError(f"PDF layout parse error: {err}") from err
+    return _pdfplumber_text(
+        payload,
+        "layout",
+        lambda pdf: "\n".join(
+            (page.dedupe_chars().extract_text() or "") for page in pdf.pages
+        ),
+    )
 
 
 def extract_pdf_text_aligned(
@@ -255,48 +269,33 @@ def extract_pdf_text_aligned(
     with tight numeric columns would silently glue values together if
     this defaulted to non-zero.
     """
-    try:
-        import pdfplumber
+    from collections import defaultdict
 
-        from collections import defaultdict
-
+    def render(pdf: Any) -> str:
         out: list[str] = []
-        with pdfplumber.open(BytesIO(payload)) as pdf:
-            for page in pdf.pages:
-                rows: defaultdict[int, list[tuple[float, float, str]]] = defaultdict(
-                    list
+        for page in pdf.pages:
+            rows: defaultdict[int, list[tuple[float, float, str]]] = defaultdict(list)
+            for word in page.extract_words():
+                bucket = round(float(word["top"]) / y_tolerance) * y_tolerance
+                rows[bucket].append(
+                    (float(word["x0"]), float(word["x1"]), word["text"])
                 )
-                for word in page.extract_words():
-                    bucket = round(float(word["top"]) / y_tolerance) * y_tolerance
-                    rows[bucket].append(
-                        (float(word["x0"]), float(word["x1"]), word["text"])
-                    )
-                lines: list[str] = []
-                for y in sorted(rows.keys()):
-                    cells = sorted(rows[y])
-                    parts: list[str] = []
-                    prev_x1: float | None = None
-                    for x0, x1, text in cells:
-                        if prev_x1 is not None and x0 - prev_x1 < x_join_threshold:
-                            parts[-1] += text
-                        else:
-                            parts.append(text)
-                        prev_x1 = x1
-                    lines.append(" ".join(parts))
-                out.append("\n".join(lines))
-        result = "\f".join(out)
-        if out and not result.strip():
-            # Pages present but no words decoded: fail loud rather than
-            # return blank text that every downstream regex misses
-            # silently (matches the layout helper and pypdf path).
-            raise ExtractorError(
-                "PDF aligned parse error: pages present but no text decoded"
-            )
-        return result
-    except ExtractorError:
-        raise
-    except Exception as err:  # noqa: BLE001 - rewrap pdfplumber surface as ExtractorError
-        raise ExtractorError(f"PDF aligned parse error: {err}") from err
+            lines: list[str] = []
+            for y in sorted(rows.keys()):
+                cells = sorted(rows[y])
+                parts: list[str] = []
+                prev_x1: float | None = None
+                for x0, x1, text in cells:
+                    if prev_x1 is not None and x0 - prev_x1 < x_join_threshold:
+                        parts[-1] += text
+                    else:
+                        parts.append(text)
+                    prev_x1 = x1
+                lines.append(" ".join(parts))
+            out.append("\n".join(lines))
+        return "\f".join(out)
+
+    return _pdfplumber_text(payload, "aligned", render)
 
 
 async def fetch_pdf_text_aligned(
