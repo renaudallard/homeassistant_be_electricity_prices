@@ -101,6 +101,7 @@ from .base import (
     TariffKind,
     TaxOverlay,
     VariableRates,
+    walloon_dso_overlay,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -727,17 +728,17 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         transport = to_float(match.group(8))
         terme_fixe = to_float(match.group(9))
         prosumer = to_float(match.group(10))
-        out[key] = DsoOverlay(
-            distribution_single=mono / 100.0,
-            distribution_peak=peak / 100.0,
-            distribution_offpeak=offpeak / 100.0,
-            distribution_exclusive_night=excl_night / 100.0,
-            distribution_pic=pic / 100.0,
-            distribution_medium=medium / 100.0,
-            distribution_eco=eco / 100.0,
-            transport=transport / 100.0,
-            data_management_per_year=terme_fixe,
-            prosumer_eur_per_kva_year=prosumer,
+        out[key] = walloon_dso_overlay(
+            mono=mono,
+            peak=peak,
+            offpeak=offpeak,
+            excl_night=excl_night,
+            pic=pic,
+            medium=medium,
+            eco=eco,
+            transport=transport,
+            terme_fixe=terme_fixe,
+            prosumer=prosumer,
         )
     # Sanity check: under the swap, RESA's distribution_single must
     # remain strictly cheaper than REW's (regulator pattern that holds

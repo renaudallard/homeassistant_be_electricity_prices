@@ -347,6 +347,44 @@ class DsoOverlay:
     distribution_eco: float | None = None
 
 
+def walloon_dso_overlay(
+    *,
+    mono: float,
+    peak: float,
+    offpeak: float,
+    excl_night: float,
+    pic: float,
+    medium: float,
+    eco: float,
+    transport: float,
+    terme_fixe: float,
+    prosumer: float | None,
+) -> DsoOverlay:
+    """Build a Walloon :class:`DsoOverlay` from a card's c/kWh row.
+
+    CWaPE tariff cards print the distribution and transport rates in
+    c€/kWh; every field here is scaled to EUR/kWh (``/ 100``).
+    ``terme_fixe`` (databeheer, EUR/year) and ``prosumer`` (EUR/kVA/year)
+    are annual amounts passed through unscaled.
+
+    Providers whose cards print values already in EUR/kWh (Eneco) or with
+    nullable Impact bands (Luminus), or that index the row positionally
+    (Engie, DATS24), build :class:`DsoOverlay` directly.
+    """
+    return DsoOverlay(
+        distribution_single=mono / 100.0,
+        distribution_peak=peak / 100.0,
+        distribution_offpeak=offpeak / 100.0,
+        distribution_exclusive_night=excl_night / 100.0,
+        distribution_pic=pic / 100.0,
+        distribution_medium=medium / 100.0,
+        distribution_eco=eco / 100.0,
+        transport=transport / 100.0,
+        data_management_per_year=terme_fixe,
+        prosumer_eur_per_kva_year=prosumer,
+    )
+
+
 @dataclass(frozen=True, kw_only=True)
 class TaxOverlay:
     """Federal + regional levies, all in EUR/kWh except the energy fund.

@@ -99,6 +99,7 @@ from .base import (
     TariffKind,
     TaxOverlay,
     VariableRates,
+    walloon_dso_overlay,
 )
 
 _LISTING_URL = "https://www.mega.be/fr/energie/cartes-tarifaires"
@@ -886,17 +887,17 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         medium = to_float(match.group(7))
         eco = to_float(match.group(8))
         transport = to_float(match.group(9))
-        out[key] = DsoOverlay(
-            distribution_single=mono / 100.0,
-            distribution_peak=peak / 100.0,
-            distribution_offpeak=offpeak / 100.0,
-            distribution_exclusive_night=excl_night / 100.0,
-            distribution_pic=pic / 100.0,
-            distribution_medium=medium / 100.0,
-            distribution_eco=eco / 100.0,
-            transport=transport / 100.0,
-            data_management_per_year=terme_fixe,
-            prosumer_eur_per_kva_year=prosumer_by_key.get(key),
+        out[key] = walloon_dso_overlay(
+            mono=mono,
+            peak=peak,
+            offpeak=offpeak,
+            excl_night=excl_night,
+            pic=pic,
+            medium=medium,
+            eco=eco,
+            transport=transport,
+            terme_fixe=terme_fixe,
+            prosumer=prosumer_by_key.get(key),
         )
     return out
 
