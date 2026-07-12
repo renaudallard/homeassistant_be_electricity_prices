@@ -53,6 +53,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 import aiohttp
+from homeassistant.util import dt as dt_util
 
 from ..const import (
     DSO_AIEG,
@@ -73,8 +74,6 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from homeassistant.util import dt as dt_util
-
 from ._pdf import (
     FR_MONTHS,
     SIGN_CHARS,
@@ -101,6 +100,7 @@ from .base import (
     TariffKind,
     TaxOverlay,
     VariableRates,
+    brussels_sibelga_overlay,
     walloon_dso_overlay,
 )
 
@@ -806,17 +806,14 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     transport = to_float(match.group(5))
     terme_fixe = to_float(match.group(6))
     return {
-        DSO_SIBELGA: DsoOverlay(
-            distribution_single=mono / 100.0,
-            distribution_peak=peak / 100.0,
-            distribution_offpeak=offpeak / 100.0,
-            # The excl_nuit column was parsed but dropped, so an
-            # exclusive-night Brussels meter fell back to off-peak -
-            # correct only while the two columns happen to be equal.
-            distribution_exclusive_night=excl_night / 100.0,
-            transport=transport / 100.0,
+        DSO_SIBELGA: brussels_sibelga_overlay(
+            mono=mono,
+            peak=peak,
+            offpeak=offpeak,
+            excl_night=excl_night,
+            transport=transport,
             data_management_per_year=terme_fixe,
-            brussels_osp_by_tier=parse_brussels_osp(text),
+            osp_by_tier=parse_brussels_osp(text),
         )
     }
 

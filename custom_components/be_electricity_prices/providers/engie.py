@@ -93,6 +93,7 @@ from .base import (
     TaxOverlay,
     TimeOfUseRates,
     VariableRates,
+    brussels_sibelga_overlay,
 )
 
 _API_URL = (
@@ -839,14 +840,14 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     # (nums[5]). Brussels has no separate capacity charge (capacity is
     # Flanders-only), so fold both flat annual euros into the DSO fee.
     return {
-        DSO_SIBELGA: DsoOverlay(
-            distribution_single=nums[0] / 100.0,
-            distribution_peak=nums[1] / 100.0,
-            distribution_offpeak=nums[2] / 100.0,
-            distribution_exclusive_night=nums[3] / 100.0,
-            transport=nums[7] / 100.0,
+        DSO_SIBELGA: brussels_sibelga_overlay(
+            mono=nums[0],
+            peak=nums[1],
+            offpeak=nums[2],
+            excl_night=nums[3],
+            transport=nums[7],
             data_management_per_year=nums[4] + nums[5],
-            brussels_osp_by_tier=parse_brussels_osp(text),
+            osp_by_tier=parse_brussels_osp(text),
         )
     }
 

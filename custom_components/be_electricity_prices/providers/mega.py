@@ -99,6 +99,7 @@ from .base import (
     TariffKind,
     TaxOverlay,
     VariableRates,
+    brussels_sibelga_overlay,
     walloon_dso_overlay,
 )
 
@@ -930,14 +931,14 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     # (group 8) is for larger connections and is not billed here.
     fixed_term_le13 = to_float(match.group(7))
     return {
-        DSO_SIBELGA: DsoOverlay(
-            distribution_single=mono / 100.0,
-            distribution_peak=peak / 100.0,
-            distribution_offpeak=offpeak / 100.0,
-            distribution_exclusive_night=excl_night / 100.0,
-            transport=transport / 100.0,
+        DSO_SIBELGA: brussels_sibelga_overlay(
+            mono=mono,
+            peak=peak,
+            offpeak=offpeak,
+            excl_night=excl_night,
+            transport=transport,
             data_management_per_year=mesure + fixed_term_le13,
-            brussels_osp_by_tier=parse_brussels_osp(text),
+            osp_by_tier=parse_brussels_osp(text),
         )
     }
 

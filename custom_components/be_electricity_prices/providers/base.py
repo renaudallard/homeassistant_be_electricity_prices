@@ -385,6 +385,36 @@ def walloon_dso_overlay(
     )
 
 
+def brussels_sibelga_overlay(
+    *,
+    mono: float,
+    peak: float,
+    offpeak: float,
+    excl_night: float,
+    transport: float,
+    data_management_per_year: float,
+    osp_by_tier: dict[str, float] | None,
+) -> DsoOverlay:
+    """Build the Brussels (Sibelga) :class:`DsoOverlay` from a card's row.
+
+    The distribution and transport rates print in c€/kWh and scale to
+    EUR/kWh (``/ 100``). ``data_management_per_year`` (databeheer / terme
+    fixe) and ``osp_by_tier`` (the Brugel OSP table from
+    :func:`_pdf.parse_brussels_osp`) are supplier-specific -- some cards
+    print a single databeheer line, others sum a measurement and a
+    fixed-term charge -- so the caller computes them and passes them in.
+    """
+    return DsoOverlay(
+        distribution_single=mono / 100.0,
+        distribution_peak=peak / 100.0,
+        distribution_offpeak=offpeak / 100.0,
+        distribution_exclusive_night=excl_night / 100.0,
+        transport=transport / 100.0,
+        data_management_per_year=data_management_per_year,
+        brussels_osp_by_tier=osp_by_tier,
+    )
+
+
 @dataclass(frozen=True, kw_only=True)
 class TaxOverlay:
     """Federal + regional levies, all in EUR/kWh except the energy fund.
