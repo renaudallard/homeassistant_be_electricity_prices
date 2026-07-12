@@ -37,8 +37,10 @@ from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from tests import fixture_text
 from custom_components.be_electricity_prices.providers.base import (
+    DynamicRates,
     ExtractorError,
     FixedRates,
+    InjectionRates,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.bolt import parse_snapshot
@@ -50,7 +52,8 @@ def test_bolt_is_registered() -> None:
     contract_ids = {c.id for c in EXTRACTORS["bolt"].contracts}
     assert "bolt_fix" in contract_ids
     assert "bolt_variable" in contract_ids
-    assert len(contract_ids) == 6
+    assert "bolt_dynamic" in contract_ids
+    assert len(contract_ids) == 7
 
 
 def test_fix_yearly_fee_is_monthly_x_12() -> None:
@@ -98,7 +101,7 @@ def test_injection_accepts_negative_second_column() -> None:
     # is billed, but the second is a required anchor token, so the parser
     # must tolerate its minus sign instead of returning None.
     text = "Injection\nPrix mensuel 3,40 -0,43 Compteur\n"
-    inj = bolt_mod._extract_injection(text)
+    inj = bolt_mod._extract_injection(text, "fixed")
     assert inj is not None
     assert inj.current == pytest.approx(0.034)
     assert inj.factor is None
@@ -249,3 +252,41 @@ def test_fetch_for_month_rejects_mismatched_month() -> None:
             assert rejected is None
 
     asyncio.run(_run())
+
+
+def test_dynamic_extracts_belpex_formula() -> None:
+    """Bolt Dynamic reads the same variable card but applies the printed
+    formula to the quarter-hourly Belpex spot. The card prints EUR/MWh HTVA:
+    consumption ``Belpex * 1,1192 + 13,94``, injection ``Belpex * 0,94 - 11,33``.
+    Converted to EUR/kWh on the EUR/kWh spot, VAT-baked for energy (snapshot
+    vat_rate 0), VAT-exempt for injection."""
+    snap = parse_snapshot(
+        "bolt_dynamic", fixture_text("bolt_variable.pdf", layout=True), "wallonia"
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is True
+    assert snap.energy.factor == pytest.approx(1.1192 * 1.06)
+    assert snap.energy.base == pytest.approx(13.94 / 1000.0 * 1.06)
+    # Cross-check: at the card's implied Belpex (~0.0992 EUR/kWh) the formula
+    # reproduces Bolt Variable's validated resolved rate (0.1325 EUR/kWh TVAC).
+    assert snap.energy.factor * 0.0992 + snap.energy.base == pytest.approx(
+        0.1325, abs=1e-3
+    )
+    # Injection is spot-indexed (factor/base, current None), VAT-exempt.
+    assert isinstance(snap.injection, InjectionRates)
+    assert snap.injection.current is None
+    assert snap.injection.factor == pytest.approx(0.94)
+    assert snap.injection.base == pytest.approx(-11.33 / 1000.0)
+
+
+def test_variable_unchanged_by_dynamic_addition() -> None:
+    """Adding the dynamic contract must not change how the variable card prices
+    its resolved monthly rate."""
+    snap = parse_snapshot(
+        "bolt_variable", fixture_text("bolt_variable.pdf", layout=True), "wallonia"
+    )
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current == pytest.approx(0.1325)
+    # Variable injection stays the flat monthly indicative (not spot-indexed).
+    assert snap.injection is not None
+    assert snap.injection.factor is None and snap.injection.base is None

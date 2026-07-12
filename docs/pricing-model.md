@@ -186,7 +186,7 @@ meter type (`providers/base.py:105-108`).
 (`pricing.py:301-304`). The spot is the ENTSO-E BE day-ahead price for the slot.
 `DynamicRates.quarter_hourly` selects whether the contract bills on the native
 15-minute grid (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische
-Burgerstroom) or the hourly-aggregated curve (Frank default, Luminus, Mega,
+Burgerstroom, Bolt Dynamisch) or the hourly-aggregated curve (Frank default, Luminus, Mega,
 TotalEnergies, Eneco); YTD billing stays hourly regardless
 (`providers/base.py:127-147`). See [data-sources.md](data-sources.md) for how the
 curve is fetched and the grid helpers `slots_per_hour` / `slot_delta` /

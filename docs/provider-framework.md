@@ -222,8 +222,8 @@ price slot, against the ENTSO-E BE day-ahead spot.
 `quarter_hourly` reflects a real billing-grid difference between suppliers.
 Frank Energie (by default), Luminus, Mega, TotalEnergies and Eneco price per
 clock hour, so the integration aggregates the 15-minute day-ahead curve to
-hourly and these leave the flag `False`. Engie, Cociter, EBEM, Ecofix, OCTA+ and
-Ecopower (Dynamische Burgerstroom) bill per quarter-hour (their cards multiply
+hourly and these leave the flag `False`. Engie, Cociter, EBEM, Ecofix, OCTA+,
+Ecopower (Dynamische Burgerstroom) and Bolt (Dynamisch) bill per quarter-hour (their cards multiply
 the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot) and set it `True`;
 that keeps the live price table, current/next-slot sensors and cheapest-window
 service on native 15-minute slots. Year-to-date billing stays hourly regardless,

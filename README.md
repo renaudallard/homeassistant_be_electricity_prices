@@ -47,7 +47,7 @@ publication and how to parse it.
 
 - **Live tariff cards** — prices come straight from the supplier's published PDF; no EUR values live in this repo.
 - **Whole-bill view** — energy, transport, distribution, regional levies and VAT all add up to a single EUR/kWh sensor.
-- **Dynamic contracts** — `factor × spot + base`, where `spot` is the Belgian day-ahead price from ENTSO-E. Priced per hour by default; suppliers that bill per quarter-hour (Engie, Cociter, EBEM, Ecofix, OCTA+ and Ecopower Dynamische Burgerstroom, after the SDAC 15-minute market switch of Oct 2025) keep the native 15-minute slots for the live price, next slot and cheapest-window service. Year-to-date billing stays hourly, since Home Assistant only retains hourly long-term statistics.
+- **Dynamic contracts** — `factor × spot + base`, where `spot` is the Belgian day-ahead price from ENTSO-E. Priced per hour by default; suppliers that bill per quarter-hour (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom and Bolt Dynamisch, after the SDAC 15-minute market switch of Oct 2025) keep the native 15-minute slots for the live price, next slot and cheapest-window service. Year-to-date billing stays hourly, since Home Assistant only retains hourly long-term statistics.
 - **Time-of-Use contracts** — Luminus SmartFlex and Engie Empower Flextime: 3 hour-of-day bands (peak / transition / offpeak) with the supplier's published rates per slot. Luminus SmartFlex is billed on its *seasonal* schedule: peak 07:00-11:00 + 17:00-22:00 all year, the cheapest super-creuses band 11:00-17:00 only in spring/summer (21/03-20/09), and 22:00-07:00 always at the middle creuses rate (the "free electricity on Sundays" first-year promo is not modelled).
 - **Tarif Impact (Wallonia)** — opt-in CWaPE 3-band distribution pricing (PIC 17–22, MEDIUM 7–11 + 22–1, ECO 1–7 + 11–17), selectable independently of the supplier tariff. Under Impact comptage the SMR3 meter registers in these bands, so a bi-hourly supplier energy rate follows them too (ECO → off-peak rate, MEDIUM/PIC → peak rate) rather than the plain bi-horaire clock.
 - **Flanders capacity tariff** — monthly peak tracked from any power sensor (W, kW, VA, or kVA — the unit is honoured) or a fixed value; billed against the configured Fluvius sub-area.
@@ -69,7 +69,7 @@ publication and how to parse it.
 
 | Supplier | Contracts | Source |
 | --- | --- | --- |
-| **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty Variable · Bolt Online · Bolt Plenty Online | [`providers/bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) — stable URLs at `files.boltenergie.be/pricelists/<fix\|var>/`, parsed via `pdfplumber` (rotated columns + Unicode line-separators) |
+| **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Dynamisch *(quarter-hourly Belpex)* · Bolt Plenty Variable · Bolt Online · Bolt Plenty Online | [`providers/bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) — stable URLs at `files.boltenergie.be/pricelists/<fix\|var>/`, parsed via `pdfplumber` (rotated columns + Unicode line-separators). Bolt Dynamisch reads the same variable card and applies its printed `Belpex × factor + base` formula to the 15-minute spot. |
 | **Cociter** | Tarif Variable (BELIX) · Tarif Dynamique (quarter-hourly BELPEX) | [`providers/cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) — monthly cards `RCVar_YMR_Coop-YYMM-fr.pdf` / `RCDyn_SM3_Coop-YYMM-fr.pdf` |
 | **DATS 24** | Elektriciteit Groen Variabel (BE_spotRLP-indexed monthly) | [`providers/dats24.py`](./custom_components/be_electricity_prices/providers/dats24.py) — stable URL at `profile.dats24.be/api/v1/ratecard?...` (returns a PDF despite the JSON-style query). Colruyt subsidiary; Flanders + Wallonia. Single product covers mono / bi / exclusive-night meter rates and includes the BE_spotSPP injection formula. |
 | **EBEM** | Groen Variabel (BelpexRLP0 monthly, mono / bi / excl. night) · Groen B@sic+ (BelpexRLP0 monthly, single rate, online-only) · Groen Dyn@mic (Belpex 15-min, SMR3) | [`providers/ebem.py`](./custom_components/be_electricity_prices/providers/ebem.py) — Mol/Geel-area Flemish supplier (Ebem bvba). Monthly cards linked from `ebem.be/tarieven/` under opaque Umbraco media-hash URLs; the provider scrapes the listing each fetch and supports `fetch_for_month` against the public archive (≥ 6 months back), so past consumption bills at each month's actual rates. Variabel + B@sic+ share the `elek` PDF; Dyn@mic has its own. Flanders only. |
@@ -148,7 +148,7 @@ For dynamic contracts the energy term is `factor × spot + base`, where `spot`
 is the Belgian day-ahead price from the ENTSO-E Transparency Platform —
 published at 15-minute resolution since the SDAC switch of Oct 2025. The
 integration aggregates it to hourly except for suppliers that bill per
-quarter-hour (Engie, Cociter, EBEM, Ecofix, OCTA+ and Ecopower Dynamische Burgerstroom), which keep the native 15-minute slots.
+quarter-hour (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom and Bolt Dynamisch), which keep the native 15-minute slots.
 
 VAT spreads uniformly across components, so `energy_component +
 network_component + taxes_component` always equals `current_price` to the cent.
@@ -349,7 +349,7 @@ opens a two-option menu:
   Multiple entries pointing at the same
   `(supplier, contract, region)` tuple share their fetched snapshot
   through an in-memory cache, so the same PDF is never polled twice.
-- **Spot prices** *(dynamic only)* — fetched from ENTSO-E at hourly resolution, or at the native 15-minute resolution for suppliers that bill per quarter-hour (Engie, Cociter, EBEM, Ecofix, OCTA+ and Ecopower Dynamische Burgerstroom); tomorrow's curve picked up after publication around 12:55 CET. Historical spots are backfilled lazily at hourly resolution into a per-entry persistent cache so dynamic `current_year_cost` replays each past hour at its actual rate without re-fetching the same window every tick.
+- **Spot prices** *(dynamic only)* — fetched from ENTSO-E at hourly resolution, or at the native 15-minute resolution for suppliers that bill per quarter-hour (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom and Bolt Dynamisch); tomorrow's curve picked up after publication around 12:55 CET. Historical spots are backfilled lazily at hourly resolution into a per-entry persistent cache so dynamic `current_year_cost` replays each past hour at its actual rate without re-fetching the same window every tick.
 - **Monthly capacity peak** *(Flanders)* — tracked continuously, resets on the 1st of each local month.
 - **`current_year_cost`** — recomputed every coordinator tick from HA's
   recorder. The recorder's daily statistics are the source of truth for
@@ -397,7 +397,7 @@ upcoming price table. Both services share the same fields:
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `duration_hours` | _required_ | Window length in whole hours (1-48). On a 15-minute contract (Engie / Cociter / EBEM / Ecofix / OCTA+ / Ecopower Dynamische Burgerstroom) the window aligns to quarter-hour boundaries. |
+| `duration_hours` | _required_ | Window length in whole hours (1-48). On a 15-minute contract (Engie / Cociter / EBEM / Ecofix / OCTA+ / Ecopower Dynamische Burgerstroom / Bolt Dynamisch) the window aligns to quarter-hour boundaries. |
 | `entry_id` | first loaded | Optional config entry to target. |
 | `earliest_start` | now | Don't consider windows starting before this time. |
 | `latest_end` | end of the cached table | Don't consider windows ending after this time. |

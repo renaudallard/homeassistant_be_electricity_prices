@@ -76,17 +76,21 @@ from ..const import (
 from homeassistant.util import dt as dt_util
 
 from ._pdf import (
+    SIGN_CHARS,
     archive_validity_check,
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
     parse_brussels_osp,
+    parse_sign,
     parse_valid_until,
     to_float,
+    vat_multiplier,
 )
 from .base import (
     Contract,
     DsoOverlay,
+    DynamicRates,
     EnergyRates,
     ExtractorError,
     FixedRates,
@@ -143,6 +147,10 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "bolt_plenty_fix", "Bolt Plenty Fixe (1 year)", "fixed", "fix", "plenty_fix"
     ),
     _ContractDef("bolt_variable", "Bolt Variable", "variable", "var", "bolt"),
+    # Same card + formula as Bolt Variable, but the formula is applied to the
+    # live quarter-hourly Belpex spot instead of the monthly average (Bolt's
+    # dynamic option on the variable contract). Shares the var/bolt document.
+    _ContractDef("bolt_dynamic", "Bolt Dynamisch", "dynamic", "var", "bolt"),
     _ContractDef("bolt_plenty", "Bolt Plenty Variable", "variable", "var", "plenty"),
     _ContractDef("bolt_online", "Bolt Online", "variable", "var", "online"),
     _ContractDef(
@@ -322,7 +330,7 @@ def parse_snapshot(
     text = text.replace(" ", "\n")
 
     energy = _extract_energy(text, contract.kind)
-    injection = _extract_injection(text)
+    injection = _extract_injection(text, contract.kind)
     publication_label = _extract_publication_month(text)
     federal_excise, energy_contribution, region_connection_fee = _extract_taxes(
         text, region
@@ -387,8 +395,43 @@ def _extract_yearly_fee(text: str) -> float:
     return to_float(match.group(1)) * 12.0
 
 
+# Bolt's variable card prints its tariff formula for both consumption and
+# injection as "Belpex * <factor> <sign> <base>" in EUR/MWh (HTVA), one row per
+# meter type. The dynamic contract applies the same coefficients to the live
+# quarter-hourly Belpex spot. The consumption formula is the first match; the
+# injection formula is the first match that differs from it (Bolt lists all
+# consumption rows, then all injection rows).
+_BELPEX_FORMULA_RE = re.compile(
+    rf"Belpex\s*\*\s*([\d.,]+)\s*([{SIGN_CHARS}])\s*([\d.,]+)"
+)
+
+
+def _extract_dynamic_energy(text: str, yearly_fee: float) -> DynamicRates:
+    """Bolt Dynamic: factor * quarter-hourly Belpex spot + base.
+
+    The card formula is EUR/MWh HTVA; convert to the EUR/kWh basis applied
+    against the EUR/kWh spot and bake VAT (snapshot vat_rate is 0): the factor
+    is a dimensionless ratio (* VAT), the base goes EUR/MWh -> EUR/kWh (/1000 *
+    VAT). Bills per quarter-hour, so keep the native 15-minute grid.
+    """
+    matches = _BELPEX_FORMULA_RE.findall(text)
+    if not matches:
+        raise ExtractorError("Bolt: could not parse dynamic Belpex formula")
+    factor_s, sign, base_s = matches[0]
+    vat = vat_multiplier(text, re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE))
+    base_eur_mwh = parse_sign(sign) * to_float(base_s)
+    return DynamicRates(
+        factor=to_float(factor_s) * vat,
+        base=base_eur_mwh / 1000.0 * vat,
+        yearly_fixed_fee=yearly_fee,
+        quarter_hourly=True,
+    )
+
+
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     yearly_fee = _extract_yearly_fee(text)
+    if kind == "dynamic":
+        return _extract_dynamic_energy(text, yearly_fee)
     # Bolt's 'Prix mensuel' line is the current month's price for all
     # contract kinds. Static cards have only this; variable cards also
     # show 'Prix annuel estimé' which we ignore. Layout: two adjacent
@@ -450,8 +493,9 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             exclusive_night=excl,
             yearly_fixed_fee=yearly_fee,
         )
-    # Bolt has no Dynamic product today, but keep the path explicit.
-    raise ExtractorError(f"Bolt: dynamic kind not supported on {kind}")
+    # Dynamic is handled up front by _extract_dynamic_energy; any other kind is
+    # a registry mistake.
+    raise ExtractorError(f"Bolt: unexpected contract kind {kind!r}")
 
 
 def _extract_publication_month(text: str) -> str:
@@ -459,7 +503,23 @@ def _extract_publication_month(text: str) -> str:
     return match.group(1) if match else ""
 
 
-def _extract_injection(text: str) -> InjectionRates | None:
+def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
+    if kind == "dynamic":
+        # Dynamic injection is spot-indexed: the same Belpex formula table
+        # prints an injection row (factor < 1). It is the first formula that
+        # differs from the consumption one. Feed-in is VAT-exempt for
+        # residential, so no VAT bake; base goes EUR/MWh -> EUR/kWh.
+        matches = _BELPEX_FORMULA_RE.findall(text)
+        consumption = matches[0] if matches else None
+        inj = next((m for m in matches if m != consumption), None)
+        if inj is None:
+            return None
+        return InjectionRates(
+            current=None,
+            factor=to_float(inj[0]),
+            base=parse_sign(inj[1]) * to_float(inj[2]) / 1000.0,
+            formula=None,
+        )
     # Injection is a flat monthly indicative ("Prix mensuel 5,31 4,03")
     # in the block that follows the "Injection" header, on both fix and
     # variable cards (the consumption "Prix mensuel" sits above it).
