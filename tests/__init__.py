@@ -31,6 +31,9 @@ from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text,
     extract_pdf_text_layout,
@@ -115,4 +118,34 @@ def make_snapshot(
     )
 
 
-__all__ = ["FIXTURES", "fixture_text", "make_snapshot"]
+def make_entry(
+    *,
+    supplier: str = "eneco",
+    contract: str = "power_fix",
+    region: str = "wallonia",
+    dso: str = "ores",
+    meter: str = "mono",
+    title: str = "Eneco - Eneco Zon & Wind Vast (Wallonia)",
+    options: dict[str, object] | None = None,
+    **extra: object,
+) -> MockConfigEntry:
+    """MockConfigEntry with the canonical Eneco / Wallonia / mono base.
+
+    Override any of the five base fields; pass extra entry-data keys as
+    keyword arguments (e.g. ``solar_regime="none"``) and ``options`` for
+    the entry options mapping.
+    """
+    data: dict[str, object] = {
+        "supplier": supplier,
+        "contract": contract,
+        "region": region,
+        "dso": dso,
+        "meter": meter,
+        **extra,
+    }
+    if options is None:
+        return MockConfigEntry(domain=DOMAIN, data=data, title=title)
+    return MockConfigEntry(domain=DOMAIN, data=data, options=options, title=title)
+
+
+__all__ = ["FIXTURES", "fixture_text", "make_entry", "make_snapshot"]

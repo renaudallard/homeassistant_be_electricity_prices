@@ -41,6 +41,7 @@ from custom_components.be_electricity_prices.binary_sensor import (
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import CoordinatorData
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
+from tests import make_entry
 
 
 @pytest.fixture(autouse=True)
@@ -56,15 +57,9 @@ def _freeze_brussels(freezer: Any) -> None:
 
 
 def _entry() -> MockConfigEntry:
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "supplier": "eneco",
-            "contract": "power_dynamic",
-            "region": "wallonia",
-            "dso": "ores",
-            "meter": "dynamic",
-        },
+    return make_entry(
+        contract="power_dynamic",
+        meter="dynamic",
         title="Eneco - Eneco Zon & Wind Dynamisch (Wallonia)",
     )
 

@@ -41,12 +41,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.be_electricity_prices.config_flow import (
     _validate_contract_dates,
 )
-from custom_components.be_electricity_prices.coordinator import _parse_iso_date
 from custom_components.be_electricity_prices.const import (
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
     DOMAIN,
 )
+from custom_components.be_electricity_prices.coordinator import _parse_iso_date
+from tests import make_entry
 
 
 @pytest.fixture(autouse=True)
@@ -71,17 +72,7 @@ def _bypass_entsoe_validation() -> Iterator[MagicMock]:
 
 
 def _make_entry() -> MockConfigEntry:
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "supplier": "eneco",
-            "contract": "power_fix",
-            "region": "wallonia",
-            "dso": "ores",
-            "meter": "mono",
-        },
-        title="Eneco - Eneco Zon & Wind Vast (Wallonia)",
-    )
+    return make_entry()
 
 
 async def _enter_edit_branch(
@@ -448,7 +439,6 @@ def _stub_snapshot(supplier: str, contract: str, single_rate: float) -> Any:
     so the all-in number is in a realistic range without depending on
     fixture PDFs."""
     from custom_components.be_electricity_prices.providers.base import FixedRates
-
     from tests import make_snapshot
 
     return make_snapshot(
@@ -570,7 +560,6 @@ async def test_compare_branch_static_to_dynamic_prompts_for_api_key(
         DynamicRates,
         InjectionRates,
     )
-
     from tests import make_snapshot
 
     entry = _make_entry()
@@ -628,7 +617,6 @@ async def test_compare_branch_spot_injection_target_prompts_for_api_key(
         InjectionRates,
         VariableRates,
     )
-
     from tests import make_snapshot
 
     entry = MockConfigEntry(
@@ -692,7 +680,6 @@ async def test_compare_does_not_mutate_live_historical_spots(
         InjectionRates,
         VariableRates,
     )
-
     from tests import make_snapshot
 
     entry = MockConfigEntry(
@@ -774,7 +761,6 @@ async def test_compare_branch_spot_injection_current_prompts_for_api_key(
         FixedRates,
         InjectionRates,
     )
-
     from tests import make_snapshot
 
     entry = MockConfigEntry(
@@ -1051,7 +1037,6 @@ async def test_compare_injection_regime_credits_injection_price(
         FixedRates,
         InjectionRates,
     )
-
     from tests import make_snapshot
 
     entry = MockConfigEntry(
@@ -1134,7 +1119,6 @@ async def test_compare_meter_override_changes_per_kwh(
         DsoOverlay,
         FixedRates,
     )
-
     from tests import make_snapshot
 
     # Snapshot with distinct peak / offpeak rates so meter=bi yields a
@@ -1183,7 +1167,6 @@ async def test_compare_tou_uses_weighted_average_across_slots(
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers.base import TimeOfUseRates
-
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -1235,7 +1218,6 @@ def test_compare_tou_weights_bihoraire_network_over_full_week() -> None:
         DsoOverlay,
         TimeOfUseRates,
     )
-
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -1279,7 +1261,6 @@ def test_compare_smartflex_seasonal_is_dialog_time_invariant() -> None:
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers.base import TimeOfUseRates
-
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -1320,7 +1301,6 @@ def test_compare_bihourly_meter_weights_peak_offpeak() -> None:
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers.base import FixedRates
-
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -1383,7 +1363,6 @@ def test_compare_spot_indexed_injection_uses_mean_spot() -> None:
         InjectionRates,
         VariableRates,
     )
-
     from tests import make_snapshot
 
     snap = make_snapshot(
@@ -1411,7 +1390,6 @@ def test_compare_tou_injection_uses_weighted_average_across_slots() -> None:
         InjectionRates,
         TimeOfUseRates,
     )
-
     from tests import make_snapshot
 
     snap = make_snapshot(

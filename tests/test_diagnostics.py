@@ -33,27 +33,21 @@ from types import SimpleNamespace
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import CoordinatorData
 from custom_components.be_electricity_prices.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
+from tests import make_entry
 
 
 def _entry_with_data(api_key: str = "secret-token") -> MockConfigEntry:
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "supplier": "eneco",
-            "contract": "power_dynamic",
-            "region": "wallonia",
-            "dso": "ores",
-            "meter": "dynamic",
-            "api_key": api_key,
-        },
-        options={"api_key": api_key},
+    return make_entry(
+        contract="power_dynamic",
+        meter="dynamic",
         title="Eneco - Eneco Zon & Wind Dynamisch (Wallonia)",
+        options={"api_key": api_key},
+        api_key=api_key,
     )
 
 

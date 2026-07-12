@@ -41,23 +41,12 @@ from custom_components.be_electricity_prices.sensor import (
     ContractEndDateSensor,
     async_setup_entry,
 )
+from tests import make_entry
 
 
 def _entry(end_date: str | None = "2027-11-14") -> MockConfigEntry:
-    data = {
-        "supplier": "eneco",
-        "contract": "power_fix",
-        "region": "wallonia",
-        "dso": "ores",
-        "meter": "mono",
-    }
-    if end_date is not None:
-        data["contract_end_date"] = end_date
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data=data,
-        title="Eneco - Eneco Zon & Wind Vast (Wallonia)",
-    )
+    extra = {"contract_end_date": end_date} if end_date is not None else {}
+    return make_entry(**extra)
 
 
 def _coord(entry: MockConfigEntry) -> SimpleNamespace:

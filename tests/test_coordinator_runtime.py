@@ -50,21 +50,11 @@ from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
     SupplierSnapshot,
 )
-from tests import make_snapshot
+from tests import make_entry, make_snapshot
 
 
 def _entry() -> MockConfigEntry:
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "supplier": "eneco",
-            "contract": "power_fix",
-            "region": "wallonia",
-            "dso": "ores",
-            "meter": "mono",
-        },
-        title="Eneco - Eneco Zon & Wind Vast (Wallonia)",
-    )
+    return make_entry()
 
 
 async def test_ensure_historical_spots_anchors_on_local_day(
@@ -515,8 +505,8 @@ async def test_force_refresh_not_defeated_by_sibling_cache(
     snapshot. Without the guard, the user-facing be_electricity_prices.
     refresh service is a no-op on multi-entry installs."""
     from custom_components.be_electricity_prices.coordinator import (
-        _SharedSnapshot,
         _shared_snapshots,
+        _SharedSnapshot,
     )
 
     entry_a = _entry()

@@ -47,7 +47,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
-from tests import make_snapshot
+from tests import make_entry, make_snapshot
 
 # Belgian integration: tests pin Europe/Brussels via conftest, but
 # tz-sensitive constants in this file spell it out so the intent is
@@ -209,18 +209,7 @@ def _fixed_snapshot() -> SupplierSnapshot:
 
 
 def _entry() -> MockConfigEntry:
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "supplier": "eneco",
-            "contract": "power_fix",
-            "region": "wallonia",
-            "dso": "ores",
-            "meter": "mono",
-            "solar_regime": "none",
-        },
-        title="Eneco Fix",
-    )
+    return make_entry(title="Eneco Fix", solar_regime="none")
 
 
 def _register_sensors(

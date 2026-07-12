@@ -28,36 +28,21 @@ from custom_components.be_electricity_prices.button import (
 )
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+from tests import make_entry
 
 
 def _flanders_entry() -> MockConfigEntry:
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "supplier": "eneco",
-            "contract": "power_fix",
-            "region": "flanders",
-            "dso": "fluvius_antwerpen",
-            "meter": "mono",
-            "capacity_mode": "sensor",
-            "capacity_peak_sensor": "sensor.house_power",
-        },
+    return make_entry(
+        region="flanders",
+        dso="fluvius_antwerpen",
         title="Eneco (Flanders)",
+        capacity_mode="sensor",
+        capacity_peak_sensor="sensor.house_power",
     )
 
 
 def _wallonia_entry() -> MockConfigEntry:
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "supplier": "eneco",
-            "contract": "power_fix",
-            "region": "wallonia",
-            "dso": "ores",
-            "meter": "mono",
-        },
-        title="Eneco (Wallonia)",
-    )
+    return make_entry(title="Eneco (Wallonia)")
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
