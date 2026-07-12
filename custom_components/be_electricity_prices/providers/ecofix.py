@@ -76,9 +76,9 @@ from ..const import (
 )
 from ._pdf import (
     SIGN_CHARS,
-    USER_AGENT,
     fetch_pdf_text_layout,
     head_freshness_key,
+    head_ok,
     parse_sign,
     to_float,
     vat_multiplier,
@@ -190,18 +190,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     """
     out: set[str] = set()
     for contract in _CONTRACTS:
-        url = _document_url(contract)
-        try:
-            async with session.head(
-                url,
-                headers={"User-Agent": USER_AGENT},
-                timeout=aiohttp.ClientTimeout(total=10),
-                allow_redirects=True,
-            ) as resp:
-                if resp.status < 400:
-                    out.add(contract.contract_id)
-        except aiohttp.ClientError:
-            continue
+        if await head_ok(session, _document_url(contract), timeout=10):
+            out.add(contract.contract_id)
     return out
 
 

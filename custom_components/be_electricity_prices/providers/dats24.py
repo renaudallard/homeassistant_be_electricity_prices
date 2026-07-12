@@ -71,9 +71,9 @@ from ..const import (
 )
 from ._pdf import (
     SIGN_CHARS,
-    USER_AGENT,
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
+    head_ok,
     parse_sign,
     parse_valid_until,
     to_float,
@@ -148,18 +148,9 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     etc.) this check stays green and we'd notice via a separate
     extractor failure rather than a false-positive new-product alert.
     """
-    try:
-        async with session.head(
-            _RATECARD_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=20),
-            allow_redirects=True,
-        ) as resp:
-            if resp.status >= 400:
-                return set()
-    except aiohttp.ClientError:
-        return set()
-    return {_CONTRACT_ID}
+    return (
+        {_CONTRACT_ID} if await head_ok(session, _RATECARD_URL, timeout=20) else set()
+    )
 
 
 def parse_snapshot(text: str, source_url: str, region: str) -> SupplierSnapshot:

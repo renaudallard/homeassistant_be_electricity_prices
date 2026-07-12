@@ -366,6 +366,30 @@ async def head_freshness_key(
         return None
 
 
+async def head_ok(
+    session: aiohttp.ClientSession, url: str, *, timeout: int = 10
+) -> bool:
+    """Whether ``url`` answers a HEAD probe with a non-error status.
+
+    A small existence check for ``discover()`` paths that only need to
+    know the card still resolves. Returns ``False`` on any HTTP >= 400 or
+    on a network failure, including the bare ``TimeoutError`` that
+    aiohttp's total ``ClientTimeout`` raises (it is not an
+    ``aiohttp.ClientError``, so catching only the latter would let a slow
+    endpoint bubble a crash out of the probe).
+    """
+    try:
+        async with session.head(
+            url,
+            headers={"User-Agent": USER_AGENT},
+            timeout=aiohttp.ClientTimeout(total=timeout),
+            allow_redirects=True,
+        ) as resp:
+            return resp.status < 400
+    except (aiohttp.ClientError, TimeoutError):
+        return False
+
+
 def vat_multiplier(
     text: str,
     *patterns: str | re.Pattern[str],
