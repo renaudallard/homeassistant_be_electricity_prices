@@ -590,3 +590,119 @@ async def test_ensure_dynamic_spots_empty_for_static_non_spot_contract() -> None
     )
     assert spots == {}
     coordinator._ensure_historical_spots.assert_not_awaited()
+
+
+def test_hour_spot_uses_month_mean_for_spot_monthly() -> None:
+    """A SpotMonthlyRates leg (a re-priced variable cohort) prices at the
+    delivery-month arithmetic mean; every other kind uses the per-hour spot."""
+    from custom_components.be_electricity_prices.providers.base import (
+        DynamicRates,
+        FixedRates,
+        SpotMonthlyRates,
+    )
+
+    spots = {
+        datetime(2026, 3, 10, 9, tzinfo=UTC): 0.10,
+        datetime(2026, 3, 10, 10, tzinfo=UTC): 0.20,
+    }
+    hour = datetime(2026, 3, 10, 9, tzinfo=UTC)
+    local = dt_util.as_local(hour)
+    cache: dict[tuple[int, int], float | None] = {}
+    # SpotMonthly -> month mean (0.15), NOT the per-hour 0.10.
+    assert bf._hour_spot(
+        SpotMonthlyRates(factor=1.0, base=0.0), local, hour, spots, cache
+    ) == pytest.approx(0.15)
+    # Dynamic / fixed -> per-hour spot.
+    assert bf._hour_spot(
+        DynamicRates(factor=1.0, base=0.0), local, hour, spots, cache
+    ) == pytest.approx(0.10)
+    assert bf._hour_spot(
+        FixedRates(single=0.2), local, hour, spots, cache
+    ) == pytest.approx(0.10)
+    # No cached spots for the month -> None (the hour is then skipped).
+    assert (
+        bf._hour_spot(SpotMonthlyRates(factor=1.0, base=0.0), local, hour, {}, {})
+        is None
+    )
+
+
+async def test_ensure_dynamic_spots_fetches_for_variable_cohort() -> None:
+    """A variable contract with a start date re-prices to a SpotMonthly cohort,
+    which needs spots for its monthly mean; the backfill must fetch them
+    (return the cache) rather than return {} and drop every cohort hour."""
+    from custom_components.be_electricity_prices.providers.base import (
+        SpotMonthlyRates,
+        VariableRates,
+    )
+
+    snap = make_snapshot(
+        supplier="eneco", contract="power_flex", energy=VariableRates(current=0.14)
+    )
+    cache = {datetime(2026, 1, 1, tzinfo=UTC): 0.05}
+    coordinator = SimpleNamespace(
+        hass=MagicMock(),
+        _session=MagicMock(),
+        _snapshot=snap,
+        _historical_spots=cache,
+        _ensure_historical_spots=AsyncMock(),
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_flex",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "contract_start_date": "2025-11-10",
+        },
+        title="Eneco Flex cohort",
+    )
+
+    async def _fake_cohort(*_a: object, **_k: object) -> SpotMonthlyRates:
+        return SpotMonthlyRates(factor=1.05, base=0.01)
+
+    with patch.object(bf, "_cohort_energy_leg", new=_fake_cohort):
+        spots = await bf._ensure_dynamic_spots(
+            coordinator,  # type: ignore[arg-type]
+            entry,
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 6, 1, tzinfo=UTC),
+        )
+    assert spots == cache
+    coordinator._ensure_historical_spots.assert_awaited()
+
+
+async def test_ensure_dynamic_spots_empty_for_variable_without_start_date() -> None:
+    """Same variable contract, no start date: no cohort, static energy, {}."""
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    snap = make_snapshot(
+        supplier="eneco", contract="power_flex", energy=VariableRates(current=0.14)
+    )
+    coordinator = SimpleNamespace(
+        hass=MagicMock(),
+        _session=MagicMock(),
+        _snapshot=snap,
+        _historical_spots={},
+        _ensure_historical_spots=AsyncMock(),
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_flex",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+        },
+        title="Eneco Flex no start date",
+    )
+    spots = await bf._ensure_dynamic_spots(
+        coordinator,  # type: ignore[arg-type]
+        entry,
+        datetime(2026, 1, 1, tzinfo=UTC),
+        datetime(2026, 6, 1, tzinfo=UTC),
+    )
+    assert spots == {}
+    coordinator._ensure_historical_spots.assert_not_awaited()

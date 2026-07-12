@@ -78,15 +78,18 @@ from .const import (
 from .coordinator import (
     BePricesCoordinator,
     _brussels_osp_fee,
+    _cohort_energy_leg,
+    _contract_start_month,
     _effective_snapshot_for_month,
     _historical_injection_rate,
     _hourly_consumption_sensors,
     _hourly_injection_sensors,
     _injection_needs_spot,
+    _mean_of_month,
     _recorder_hourly_kwh,
 )
 from .pricing import compute_breakdown, yearly_fixed_fee_for_meter
-from .providers import DynamicRates, get as get_extractor
+from .providers import DynamicRates, SpotMonthlyRates, get as get_extractor
 from .providers.base import SupplierSnapshot
 
 _LOGGER = logging.getLogger(__name__)
@@ -272,10 +275,31 @@ async def _ensure_dynamic_spots(
     seam.
     """
     snap = coordinator._snapshot
-    if snap is None or (
-        not isinstance(snap.energy, DynamicRates)
-        and not _injection_needs_spot(snap, entry)
-    ):
+    if snap is None:
+        return {}
+    # A variable contract with a contract start date re-prices to a
+    # SpotMonthlyRates cohort, which needs spots for its monthly mean just like
+    # a dynamic contract. Resolve the effective (cohort) energy only when a
+    # start date is set (the common path never fetches), so the backfill fetches
+    # spots for the cohort too, matching the live coordinator (which gates the
+    # historical-spot fetch on ``priced.energy``); otherwise the cohort hours
+    # get no spot and are dropped, leaving a fees-only backfill.
+    eff_energy = snap.energy
+    if _contract_start_month(entry) is not None:
+        cohort = await _cohort_energy_leg(
+            coordinator.hass,
+            coordinator._session,
+            get_extractor(entry.data[CONF_SUPPLIER]),
+            entry.data[CONF_CONTRACT],
+            entry.data.get(CONF_REGION, ""),
+            entry,
+            snap,
+        )
+        if cohort is not None:
+            eff_energy = cohort
+    if not isinstance(
+        eff_energy, (DynamicRates, SpotMonthlyRates)
+    ) and not _injection_needs_spot(snap, entry):
         return {}
     # _ensure_historical_spots anchors each fetched day on LOCAL midnight,
     # so feed it LOCAL dates: passing the UTC date of end (which lands on
@@ -287,6 +311,30 @@ async def _ensure_dynamic_spots(
         dt_util.as_local(start).date(), dt_util.as_local(end).date()
     )
     return coordinator._historical_spots
+
+
+def _hour_spot(
+    energy: Any,
+    local: datetime,
+    utc_hour: datetime,
+    spots: dict[datetime, float],
+    mean_cache: dict[tuple[int, int], float | None],
+) -> float | None:
+    """The spot value to price ``energy`` at for one hour.
+
+    A ``SpotMonthlyRates`` leg (a variable contract re-priced at its signing
+    cohort's coefficients) bills the delivery month's arithmetic mean, matching
+    the live price table (``_build_hourly``) and the YTD walk
+    (``_ytd_hourly_energy`` with ``monthly_mean=True``); every other kind uses
+    the per-hour spot. The month mean is memoised so a 365-day window computes
+    at most 12 means.
+    """
+    if isinstance(energy, SpotMonthlyRates):
+        key = (local.year, local.month)
+        if key not in mean_cache:
+            mean_cache[key] = _mean_of_month(spots, *key) if spots else None
+        return mean_cache[key]
+    return spots.get(utc_hour) if spots else None
 
 
 async def _backfill_price_sensors(
@@ -364,14 +412,15 @@ async def _backfill_price_sensors(
         return month_cache[month_first]
 
     rows_per_key: dict[str, list[Any]] = {key: [] for key in stat_ids}
+    month_mean_cache: dict[tuple[int, int], float | None] = {}
     for utc_hour in hours:
         local = dt_util.as_local(utc_hour)
         snap_h = await _snap_for(date(local.year, local.month, 1))
-        spot = spots.get(utc_hour) if spots else None
-        # Dynamic supplier without a spot for this hour: nothing to
-        # write, the formula factor*spot+base needs both. Fixed/var
-        # contracts pass spot=None and ignore it inside compute_breakdown.
-        if isinstance(snap_h.energy, DynamicRates) and spot is None:
+        spot = _hour_spot(snap_h.energy, local, utc_hour, spots, month_mean_cache)
+        # Dynamic / spot-monthly without a spot for this hour: nothing to
+        # write, the formula factor*spot+base (or factor*mean+base) needs both.
+        # Fixed / variable pass spot=None and ignore it in compute_breakdown.
+        if isinstance(snap_h.energy, (DynamicRates, SpotMonthlyRates)) and spot is None:
             continue
         try:
             bd = compute_breakdown(snap_h, dso, region, local, spot, meter, dso_mode)
@@ -532,16 +581,19 @@ async def _backfill_cost_sensor(
     rows: list[Any] = []
     running_energy = 0.0
     running_fees = 0.0
+    month_mean_cache: dict[tuple[int, int], float | None] = {}
     for utc_hour in hours:
         local = dt_util.as_local(utc_hour)
         month_first = date(local.year, local.month, 1)
         snap_h = await _snap_for(month_first)
-        spot = spots.get(utc_hour) if spots else None
+        spot = _hour_spot(snap_h.energy, local, utc_hour, spots, month_mean_cache)
 
-        # Energy term: skipped when the supplier is dynamic and we
-        # have no spot for this hour (formula factor*spot+base needs
-        # both), or when compute_breakdown can't evaluate the hour.
-        if not (isinstance(snap_h.energy, DynamicRates) and spot is None):
+        # Energy term: skipped when the supplier is dynamic / spot-monthly and
+        # we have no spot (or month mean) for this hour (the formula needs it),
+        # or when compute_breakdown can't evaluate the hour.
+        if not (
+            isinstance(snap_h.energy, (DynamicRates, SpotMonthlyRates)) and spot is None
+        ):
             try:
                 bd = compute_breakdown(
                     snap_h, dso, region, local, spot, meter, dso_mode
