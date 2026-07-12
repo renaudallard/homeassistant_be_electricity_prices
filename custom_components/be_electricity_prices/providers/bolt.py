@@ -76,6 +76,7 @@ from ..const import (
 from homeassistant.util import dt as dt_util
 
 from ._pdf import (
+    FR_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
     fetch_pdf_text_layout,
@@ -116,20 +117,7 @@ _VARIABLE_SUFFIX = "11"  # current variable-card version
 # Bolt's fix cards print "Carte Tarifaire Bolt Fixe <Month> <Year>" in
 # the header but never expose a parseable valid_until, so the archive
 # cross-check falls back to a textual month match on these names.
-_FR_MONTH_NAMES = (
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-)
+_FR_MONTH_NAMES = FR_MONTHS
 
 
 @dataclass(frozen=True)

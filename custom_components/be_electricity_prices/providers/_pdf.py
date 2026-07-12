@@ -554,6 +554,42 @@ def parse_brussels_osp(text: str) -> dict[str, float] | None:
     return out or None
 
 
+# Full month names in calendar order (index 0 == January). The single
+# source of truth for the per-supplier archive-validity checks, which
+# match a card's spelled-out month against ``month_names[month - 1]``.
+# Suppliers import the tuple for their card's language rather than
+# re-listing the twelve names (and drifting on accents); dict-shaped
+# lookups derive from these with ``enumerate(.., 1)``.
+NL_MONTHS: tuple[str, ...] = (
+    "januari",
+    "februari",
+    "maart",
+    "april",
+    "mei",
+    "juni",
+    "juli",
+    "augustus",
+    "september",
+    "oktober",
+    "november",
+    "december",
+)
+FR_MONTHS: tuple[str, ...] = (
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+)
+
+
 # Month names recognised in publication strings, mapped to their 1-12
 # index. Each language's full name + a few common abbreviations Belgian
 # tariff cards use. The lookup key is lowercase, accent-stripped not

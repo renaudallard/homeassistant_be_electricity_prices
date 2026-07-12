@@ -60,6 +60,7 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    NL_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
     fetch_pdf_text_layout,
@@ -83,22 +84,11 @@ _LOGGER = logging.getLogger(__name__)
 
 _SANITY_API = "https://8navd656.api.sanity.io/v2023-01-01/data/query/production-be"
 
-_NL_MONTHS_TITLE = (
-    "Januari",
-    "Februari",
-    "Maart",
-    "April",
-    "Mei",
-    "Juni",
-    "Juli",
-    "Augustus",
-    "September",
-    "Oktober",
-    "November",
-    "December",
-)
-_NL_MONTHS_LOWER: frozenset[str] = frozenset(m.lower() for m in _NL_MONTHS_TITLE)
-_NL_MONTHS = tuple(m.lower() for m in _NL_MONTHS_TITLE)
+# Frank prints the month title-cased ("Januari"); keep a title tuple for
+# indexing and the header regex, plus a lowercase set for membership.
+_NL_MONTHS = NL_MONTHS
+_NL_MONTHS_TITLE = tuple(m.capitalize() for m in NL_MONTHS)
+_NL_MONTHS_LOWER: frozenset[str] = frozenset(NL_MONTHS)
 
 # (contract_id, label, sanity filename suffix after "Dynamisch")
 _TIERS: tuple[tuple[str, str, str | None], ...] = (

@@ -63,6 +63,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    NL_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
     fetch_pdf_text,
@@ -93,20 +94,7 @@ _LISTING_URL = "https://eneco.be/nl/elektriciteit-gas/tariefkaarten"
 # Dutch month names Eneco prints in the validity header. Used by
 # fetch_for_month to confirm a CDN-served PDF actually mentions the
 # requested month when parse_valid_until missed.
-_NL_MONTHS = (
-    "januari",
-    "februari",
-    "maart",
-    "april",
-    "mei",
-    "juni",
-    "juli",
-    "augustus",
-    "september",
-    "oktober",
-    "november",
-    "december",
-)
+_NL_MONTHS = NL_MONTHS
 
 
 # Contract id -> the POWER_<NAME> token Eneco uses in its filenames.

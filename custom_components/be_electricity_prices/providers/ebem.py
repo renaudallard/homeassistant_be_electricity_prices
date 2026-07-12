@@ -64,6 +64,7 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    NL_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
     fetch_pdf_text_layout,
@@ -291,20 +292,7 @@ def parse_snapshot(
     )
 
 
-_DUTCH_MONTHS: dict[str, int] = {
-    "januari": 1,
-    "februari": 2,
-    "maart": 3,
-    "april": 4,
-    "mei": 5,
-    "juni": 6,
-    "juli": 7,
-    "augustus": 8,
-    "september": 9,
-    "oktober": 10,
-    "november": 11,
-    "december": 12,
-}
+_DUTCH_MONTHS: dict[str, int] = {name: i for i, name in enumerate(NL_MONTHS, 1)}
 
 
 def _extract_validity(text: str) -> date | None:

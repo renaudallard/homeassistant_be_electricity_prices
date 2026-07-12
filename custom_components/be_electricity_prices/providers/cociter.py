@@ -55,6 +55,7 @@ from ..const import (
     WALLONIA_DSO_KEYS,
 )
 from ._pdf import (
+    FR_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
     fetch_pdf_text,
@@ -81,20 +82,7 @@ _INDEX_URL = "https://www.cociter.be/electricite/cartes-tarifaires/"
 # French month names Cociter prints in the validity header. Used by
 # fetch_for_month to confirm a CDN-served PDF actually mentions the
 # requested month when parse_valid_until missed.
-_FR_MONTHS = (
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-)
+_FR_MONTHS = FR_MONTHS
 
 
 # Cociter's current monthly publication patterns. The 4-digit group is YYMM.

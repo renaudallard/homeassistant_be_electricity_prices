@@ -81,6 +81,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    FR_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
     fetch_pdf_text,
@@ -617,20 +618,7 @@ def _extract_yearly_fee(text: str) -> float:
     return to_float(match.group(1))
 
 
-_FR_MONTH_NAMES = (
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-)
+_FR_MONTH_NAMES = FR_MONTHS
 
 
 def _extract_publication_month(text: str) -> str:

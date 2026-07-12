@@ -64,6 +64,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    FR_MONTHS,
     SIGN_CHARS,
     fetch_pdf_text_aligned,
     fetch_text,
@@ -409,19 +410,11 @@ def _meter_value(text: str, label_pattern: str) -> float | None:
     return to_float(match.group(1)) / 100.0
 
 
+# Banner month -> zero-padded number. Keys are accent-folded (matching
+# the fold_accents() applied to the parsed banner) so "février" / "août"
+# / "décembre" resolve.
 _FRENCH_MONTHS: dict[str, str] = {
-    "janvier": "01",
-    "fevrier": "02",
-    "mars": "03",
-    "avril": "04",
-    "mai": "05",
-    "juin": "06",
-    "juillet": "07",
-    "aout": "08",
-    "septembre": "09",
-    "octobre": "10",
-    "novembre": "11",
-    "decembre": "12",
+    fold_accents(name): f"{i:02d}" for i, name in enumerate(FR_MONTHS, 1)
 }
 
 

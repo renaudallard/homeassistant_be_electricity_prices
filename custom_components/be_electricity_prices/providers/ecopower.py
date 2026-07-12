@@ -80,6 +80,7 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    NL_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
     extract_pdf_text_layout,
@@ -107,20 +108,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # Dutch month names for archive_validity_check; the helper indexes into
 # this tuple as month_names[year_month.month - 1].
-_NL_MONTHS = (
-    "januari",
-    "februari",
-    "maart",
-    "april",
-    "mei",
-    "juni",
-    "juli",
-    "augustus",
-    "september",
-    "oktober",
-    "november",
-    "december",
-)
+_NL_MONTHS = NL_MONTHS
 
 _BASE_URL = "https://ecopower.be"
 _PRICE_PAGE = f"{_BASE_URL}/groene-stroom/prijs-nieuw"
