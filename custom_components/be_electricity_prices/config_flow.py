@@ -2555,16 +2555,9 @@ async def _read_total_kwh(
     or the recorder has nothing in the requested window -- the caller
     falls back to a default consumption assumption in that case so the
     quote page still renders."""
-    from .coordinator import _recorder_daily_kwh
+    from .coordinator import _kwh_sensor_ids, _recorder_daily_kwh
 
-    if side == "injection":
-        day_id = entry.data.get(CONF_DAY_INJECTION_KWH)
-        night_id = entry.data.get(CONF_NIGHT_INJECTION_KWH)
-        total_id = entry.data.get(CONF_INJECTION_KWH)
-    else:
-        day_id = entry.data.get(CONF_DAY_CONSUMPTION_KWH)
-        night_id = entry.data.get(CONF_NIGHT_CONSUMPTION_KWH)
-        total_id = entry.data.get(CONF_CONSUMPTION_KWH)
+    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
     if day_id and night_id:
         d = await _recorder_daily_kwh(hass, day_id, start, end)
         n = await _recorder_daily_kwh(hass, night_id, start, end)

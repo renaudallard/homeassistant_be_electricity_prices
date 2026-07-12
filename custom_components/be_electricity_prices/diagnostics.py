@@ -37,18 +37,13 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_API_KEY,
-    CONF_CONSUMPTION_KWH,
     CONF_CONTRACT,
-    CONF_DAY_CONSUMPTION_KWH,
-    CONF_DAY_INJECTION_KWH,
-    CONF_INJECTION_KWH,
-    CONF_NIGHT_CONSUMPTION_KWH,
-    CONF_NIGHT_INJECTION_KWH,
     CONF_REGION,
     CONF_SUPPLIER,
 )
 from .coordinator import (
     BePricesCoordinator,
+    _kwh_sensor_ids,
     _monthly_snapshots,
     _recorder_daily_kwh,
     _shared_failed_fetches,
@@ -82,14 +77,7 @@ async def _kwh_window(
     ``0.0`` when the recorder has no rows or the window genuinely totals
     zero, so a bug-report reader can tell an unconfigured sensor apart
     from a wired one that reads zero."""
-    if side == "injection":
-        day_id = entry.data.get(CONF_DAY_INJECTION_KWH)
-        night_id = entry.data.get(CONF_NIGHT_INJECTION_KWH)
-        total_id = entry.data.get(CONF_INJECTION_KWH)
-    else:
-        day_id = entry.data.get(CONF_DAY_CONSUMPTION_KWH)
-        night_id = entry.data.get(CONF_NIGHT_CONSUMPTION_KWH)
-        total_id = entry.data.get(CONF_CONSUMPTION_KWH)
+    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
     today = dt_util.now().date()
     start = today - timedelta(days=days)
     if day_id and night_id:

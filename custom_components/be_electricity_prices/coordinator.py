@@ -2873,6 +2873,24 @@ async def _ytd_prosumer(
     return total
 
 
+def _kwh_sensor_ids(
+    entry: ConfigEntry, side: str
+) -> tuple[str | None, str | None, str | None]:
+    """The (day, night, total) recorder entity ids configured for ``side``
+    ("injection" or "consumption"); any element may be ``None``."""
+    if side == "injection":
+        return (
+            entry.data.get(CONF_DAY_INJECTION_KWH),
+            entry.data.get(CONF_NIGHT_INJECTION_KWH),
+            entry.data.get(CONF_INJECTION_KWH),
+        )
+    return (
+        entry.data.get(CONF_DAY_CONSUMPTION_KWH),
+        entry.data.get(CONF_NIGHT_CONSUMPTION_KWH),
+        entry.data.get(CONF_CONSUMPTION_KWH),
+    )
+
+
 def _hourly_consumption_sensors(entry: ConfigEntry) -> list[str]:
     """Recorder entity ids whose hourly kWh sums add up to total
     consumption.
