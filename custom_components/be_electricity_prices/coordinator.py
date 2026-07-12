@@ -563,6 +563,10 @@ def _cohort_energy_from_archived(
             factor=energy.formula_factor,
             base=energy.formula_base if energy.formula_base is not None else 0.0,
             yearly_fixed_fee=energy.yearly_fixed_fee,
+            # Carry the dedicated exclusive-night standing fee so an
+            # exclusive-night meter keeps its own fee instead of falling back to
+            # the standard abonnement (yearly_fixed_fee_for_meter reads it).
+            yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
         )
     return None
 

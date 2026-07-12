@@ -1999,3 +1999,27 @@ async def test_cohort_energy_leg_variable_uses_signing_coefficients(
     # Coefficients from the SIGNING month; the coordinator applies them to the
     # CURRENT month's mean via the SpotMonthlyRates path.
     assert leg == SpotMonthlyRates(factor=1.05, base=0.01, yearly_fixed_fee=53.0)
+
+
+def test_cohort_energy_from_archived_carries_exclusive_night_fee() -> None:
+    """An EBEM variable card prints a dedicated exclusive-night standing fee;
+    the SpotMonthly cohort must carry it so an exclusive-night meter is not
+    billed the standard abonnement."""
+    from custom_components.be_electricity_prices.pricing import (
+        yearly_fixed_fee_for_meter,
+    )
+
+    archived = make_snapshot(
+        energy=VariableRates(
+            current=0.18,
+            yearly_fixed_fee=85.0,
+            yearly_fixed_fee_exclusive_night=35.04,
+            formula_factor=1.10,
+            formula_base=0.02,
+        )
+    )
+    cohort = _cohort_energy_from_archived(archived)
+    assert isinstance(cohort, SpotMonthlyRates)
+    assert cohort.yearly_fixed_fee_exclusive_night == pytest.approx(35.04)
+    assert yearly_fixed_fee_for_meter(cohort, "exclusive_night") == pytest.approx(35.04)
+    assert yearly_fixed_fee_for_meter(cohort, "mono") == pytest.approx(85.0)

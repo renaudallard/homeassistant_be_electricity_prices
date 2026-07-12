@@ -180,6 +180,11 @@ class SpotMonthlyRates:
     factor: float
     base: float
     yearly_fixed_fee: float = 0.0
+    # Dedicated yearly fixed fee for an exclusive-night meter circuit, carried
+    # from a variable card re-priced to this monthly-mean leg for a signing
+    # cohort (EBEM Groen Variabel / B@sic+ print one). None -> the standard fee
+    # applies to every meter type.
+    yearly_fixed_fee_exclusive_night: float | None = None
 
 
 WeekendRule = Literal["weekend_offpeak", "weekend_no_peak", "smartflex_seasonal"]
