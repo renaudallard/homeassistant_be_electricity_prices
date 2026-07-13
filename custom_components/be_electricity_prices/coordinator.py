@@ -2927,6 +2927,38 @@ def _hourly_injection_sensors(entry: ConfigEntry) -> list[str]:
     return []
 
 
+def _spp_injection_spot(
+    spot: float | None,
+    *,
+    monthly_mean: bool,
+    spp_weights: SppWeights | None,
+    historical_spots: dict[datetime, float] | None,
+    year: int,
+    month: int,
+    cache: dict[tuple[int, int], float | None],
+) -> float | None:
+    """The spot value to price mean-indexed injection at.
+
+    Energy bills at the flat month-mean (``spot``); when the entry opted
+    into SPP-weighted injection (a custom monthly contract) and the
+    Synergrid profile is available, the injection credit instead uses the
+    SPP-weighted month-mean, falling back to ``spot`` when the profile is
+    missing for the month. ``cache`` memoises the per-month weighted mean.
+
+    Shared by the live YTD credit and the backfill accrual so the two
+    price mean-indexed injection identically.
+    """
+    if not (monthly_mean and spp_weights is not None and historical_spots is not None):
+        return spot
+    key = (year, month)
+    if key not in cache:
+        cache[key] = _spp_weighted_month_mean(
+            historical_spots, spp_weights, year, month
+        )
+    weighted = cache[key]
+    return weighted if weighted is not None else spot
+
+
 async def _ytd_hourly_energy(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -3043,19 +3075,15 @@ async def _ytd_hourly_energy(
             # Energy bills at the flat month-mean (spot); the injection credit
             # uses the SPP-weighted month-mean when the entry opted in, falling
             # back to the flat mean when the profile is missing for the month.
-            inj_spot = spot
-            if (
-                monthly_mean
-                and spp_weights is not None
-                and historical_spots is not None
-            ):
-                key = (local.year, local.month)
-                if key not in month_spp:
-                    month_spp[key] = _spp_weighted_month_mean(
-                        historical_spots, spp_weights, *key
-                    )
-                if month_spp[key] is not None:
-                    inj_spot = month_spp[key]
+            inj_spot = _spp_injection_spot(
+                spot,
+                monthly_mean=monthly_mean,
+                spp_weights=spp_weights,
+                historical_spots=historical_spots,
+                year=local.year,
+                month=local.month,
+                cache=month_spp,
+            )
             inj_rate = _historical_injection_rate(
                 snap_h.injection, inj_spot, energy=snap_h.energy, when=local
             )

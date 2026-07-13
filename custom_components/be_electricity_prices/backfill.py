@@ -87,6 +87,8 @@ from .coordinator import (
     _mean_of_month,
     _month_snapshot_cache,
     _prosumer_monthly_fee,
+    _spp_injection_spot,
+    _spp_weighting_enabled,
     _sum_hourly_kwh,
 )
 from .pricing import compute_breakdown
@@ -399,6 +401,15 @@ async def _backfill_price_sensors(
         hass, coordinator._session, extractor, contract, region, snap, entry
     )
 
+    # Custom monthly entries that opted into SPP-weighted injection price
+    # the mean-indexed credit off the Synergrid solar profile; mirror the
+    # live YTD credit so the backfilled injection_price meets it at the seam.
+    spp_weights = None
+    if _spp_weighting_enabled(entry):
+        await coordinator._ensure_spp_weights()
+        spp_weights = coordinator._spp_weights
+    month_spp_cache: dict[tuple[int, int], float | None] = {}
+
     rows_per_key: dict[str, list[Any]] = {key: [] for key in stat_ids}
     month_mean_cache: dict[tuple[int, int], float | None] = {}
     for utc_hour in hours:
@@ -428,8 +439,17 @@ async def _backfill_price_sensors(
             elif key == "taxes_component":
                 value = bd.taxes
             elif key == _INJECTION_PRICE_SENSOR_KEY:
+                inj_spot = _spp_injection_spot(
+                    spot,
+                    monthly_mean=isinstance(snap_h.energy, SpotMonthlyRates),
+                    spp_weights=spp_weights,
+                    historical_spots=spots,
+                    year=local.year,
+                    month=local.month,
+                    cache=month_spp_cache,
+                )
                 inj_rate = _historical_injection_rate(
-                    snap_h.injection, spot, energy=snap_h.energy, when=local
+                    snap_h.injection, inj_spot, energy=snap_h.energy, when=local
                 )
                 if inj_rate is None:
                     continue
@@ -554,6 +574,14 @@ async def _backfill_cost_sensor(
         d = dt_util.as_local(h).date()
         hours_per_local_date[d] = hours_per_local_date.get(d, 0) + 1
 
+    # SPP-weighted injection for a custom monthly entry that opted in;
+    # mirrors the live YTD credit so the backfilled cost meets it at the seam.
+    spp_weights = None
+    if _spp_weighting_enabled(entry):
+        await coordinator._ensure_spp_weights()
+        spp_weights = coordinator._spp_weights
+    month_spp_cache: dict[tuple[int, int], float | None] = {}
+
     rows: list[Any] = []
     running_energy = 0.0
     running_fees = 0.0
@@ -583,8 +611,17 @@ async def _backfill_cost_sensor(
                     running_energy += (cons - inj) * bd.all_in
                 elif regime == SOLAR_REGIME_INJECTION:
                     running_energy += cons * bd.all_in
+                    inj_spot = _spp_injection_spot(
+                        spot,
+                        monthly_mean=isinstance(snap_h.energy, SpotMonthlyRates),
+                        spp_weights=spp_weights,
+                        historical_spots=spots,
+                        year=local.year,
+                        month=local.month,
+                        cache=month_spp_cache,
+                    )
                     inj_rate = _historical_injection_rate(
-                        snap_h.injection, spot, energy=snap_h.energy, when=local
+                        snap_h.injection, inj_spot, energy=snap_h.energy, when=local
                     )
                     if inj_rate is not None:
                         running_energy -= inj * inj_rate

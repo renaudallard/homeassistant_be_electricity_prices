@@ -465,6 +465,88 @@ async def test_cost_backfill_multiyear_stays_in_end_year_without_sum_drop(
     assert all(sums[i] <= sums[i + 1] for i in range(len(sums) - 1))
 
 
+async def test_cost_backfill_injection_uses_spp_not_flat_mean(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A custom monthly entry that opted into SPP-weighted injection must
+    have its backfilled cost credit injection at the SPP-weighted month
+    mean, matching the live YTD credit, not the plain flat mean."""
+    from custom_components.be_electricity_prices import const, coordinator
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    snap = make_snapshot(
+        supplier="custom",
+        contract=const.CUSTOM_CONTRACT_MONTHLY,
+        energy=SpotMonthlyRates(factor=1.0, base=0.0),
+        injection=InjectionRates(factor=0.5, base=0.0, floor_at_zero=False),
+    )
+    entry = make_entry(
+        supplier=const.SUPPLIER_CUSTOM,
+        contract=const.CUSTOM_CONTRACT_MONTHLY,
+        region=const.REGION_WALLONIA,
+        dso=const.DSO_ORES,
+        meter=const.METER_MONO,
+        title="Custom SPP",
+        **{
+            const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+            const.CONF_INJECTION_KWH: "sensor.inj_total",
+            const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_BI_HORAIRE,
+            const.CONF_CUSTOM_INJECTION_SPP_WEIGHTED: True,
+            const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_FORMULA,
+        },
+    )
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_year_cost"])
+
+    # Flat month mean = 0.20; SPP-weighted mean = 0.15 (hour 10 counts 3x).
+    hour10 = datetime(2026, 6, 15, 10, tzinfo=UTC)
+    hour11 = datetime(2026, 6, 15, 11, tzinfo=UTC)
+    spots = {hour10: 0.10, hour11: 0.30}
+    weights = {(6, 15, 10): 3.0, (6, 15, 11): 1.0}
+
+    async def _ensure() -> None:
+        return None
+
+    coord = SimpleNamespace(_snapshot=snap, _session=None, _spp_weights=weights)
+    coord._ensure_spp_weights = _ensure
+
+    async def _snap_for(_month_first: object) -> Any:
+        return snap
+
+    def _fake_cache(*_a: object, **_k: object) -> Any:
+        return _snap_for
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return {hour10: 1.0} if entity_id == "sensor.inj_total" else {}
+
+    captured: list[tuple[str, list[Any]]] = []
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        captured.append((metadata["statistic_id"], list(statistics)))
+
+    with (
+        patch.object(bf, "_month_snapshot_cache", _fake_cache),
+        patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_fake_import,
+        ),
+    ):
+        await bf._backfill_cost_sensor(hass, entry, coord, [hour10, hour11], spots)  # type: ignore[arg-type]
+
+    cost_rows = next(rows for sid, rows in captured if sid == ids["current_year_cost"])
+    # 1 kWh injected, no consumption, no static fees on this snapshot: the
+    # running cost is the injection credit alone. factor 0.5 x SPP mean 0.15
+    # = -0.075; the flat mean 0.20 (the old behaviour) would give -0.10.
+    assert cost_rows[-1]["state"] == pytest.approx(-(0.5 * 0.15))
+
+
 async def test_backfill_range_without_runtime_data_raises(
     hass: HomeAssistant,
 ) -> None:
