@@ -279,6 +279,27 @@ def test_dynamic_extracts_belpex_formula() -> None:
     assert snap.injection.base == pytest.approx(-11.33 / 1000.0)
 
 
+def test_dynamic_injection_selected_by_factor_not_position() -> None:
+    """The dynamic injection row is the Belpex formula whose factor is < 1
+    (Bolt redistributes a fraction of the spot). Even when the card prints
+    per-meter-type consumption rows with DIFFERING factors, the parser must
+    pick the injection row, not the first consumption row that differs from
+    the first."""
+    text = (
+        "Consommation\n"
+        "Simple Belpex * 1,10 + 13,94\n"
+        "Jour Belpex * 1,12 + 13,94\n"
+        "Nuit Belpex * 1,11 + 13,94\n"
+        "Injection\n"
+        "Injection nuit Belpex * 0,94 - 11,33\n"
+    )
+    inj = bolt_mod._extract_injection(text, "dynamic")
+    assert inj is not None
+    assert inj.current is None
+    assert inj.factor == pytest.approx(0.94)
+    assert inj.base == pytest.approx(-11.33 / 1000.0)
+
+
 def test_variable_unchanged_by_dynamic_addition() -> None:
     """Adding the dynamic contract must not change how the variable card prices
     its resolved monthly rate."""
