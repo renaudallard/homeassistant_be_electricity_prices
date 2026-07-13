@@ -255,6 +255,10 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_exclusive_night=to_float(row.group(3)) / 100.0,
             transport=0.0,  # rolled into Fluvius distribution on this card
             capacity_eur_per_kw_year=to_float(row.group(1)),
+            # Column 8 is PROSUMENTEN-TARIEF (reverse-metering forfait);
+            # parse it like the Wallonia block and the sibling Ecofix / EBEM
+            # Flanders cards so the overlay is complete.
+            prosumer_eur_per_kva_year=to_float(row.group(8)),
             data_management_per_year=to_float(row.group(10)),
         )
     return out
