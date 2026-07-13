@@ -310,7 +310,16 @@ def parse_dbs_snapshot(
 # ---- energy ------------------------------------------------------------------
 
 
-_ENERGY_RE = re.compile(r"Groene burgerstroom[^\n]*?([\d,]+)\s*euro/kWh", re.IGNORECASE)
+# Anchor on the start of the consumption line ("Groene burgerstroom" or
+# "Afname Groene burgerstroom"). Without the line anchor this also matched
+# the "Injectie Groene Burgerstroom ... euro/kWh" line, so a card that
+# printed split-layout energy (value below the label) together with a
+# same-line injection value would bind the energy rate to the injection
+# figure instead of falling through to _ENERGY_SPLIT_RE.
+_ENERGY_RE = re.compile(
+    r"^[ \t]*(?:Afname\s+)?Groene\s+burgerstroom[^\n]*?([\d,]+)\s*euro/kWh",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 # Mid-2026 cards moved the resolved rate onto the line *below* the
 # "Afname Groene burgerstroom (50% vast ... + 50% variabel ...)" label
