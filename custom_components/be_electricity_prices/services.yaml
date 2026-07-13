@@ -109,9 +109,10 @@ most_expensive_window:
   name: Most expensive window
   description: >-
     Find the most expensive contiguous window of N hours within the
-    upcoming price table. Returns start, end, average EUR/kWh and the
-    per-hour breakdown. Useful as a guard for "don't run heavy loads
-    during the daily peak" automations.
+    upcoming price table. Returns start, end, average EUR/kWh, the slot
+    resolution and a per-slot breakdown (one row per price slot - hourly,
+    or quarter-hourly on a 15-minute contract). Useful as a guard for
+    "don't run heavy loads during the daily peak" automations.
   fields:
     duration_hours:
       name: Duration
