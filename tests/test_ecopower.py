@@ -43,6 +43,8 @@ from custom_components.be_electricity_prices.providers.base import (
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.ecopower import (
+    _extract_energy,
+    _extract_injection,
     fetch_for_month,
     parse_dbs_snapshot,
     parse_snapshot,
@@ -181,6 +183,38 @@ def test_split_layout_card_parses_energy_and_injection() -> None:
     assert snap.injection is not None
     assert snap.injection.current == pytest.approx(0.020)
     assert set(snap.dsos) == set(FLUVIUS_KEYS)
+
+
+def test_energy_regex_ignores_same_line_injection_in_split_layout() -> None:
+    """Split-layout energy (resolved value on the line below the label)
+    together with a same-line injection value must not bind the energy rate
+    to the injection figure. The unanchored 'Groene burgerstroom' pattern
+    also matched the 'Injectie Groene Burgerstroom ... euro/kWh' line and
+    won before the split fallback ran, pricing energy ~7x too low."""
+    text = (
+        "Afname Groene Burgerstroom (50% vast aan 0,17 euro + 50% variabel "
+        "aan 0,10558785 euro)\n"
+        "0,1378 euro/kWh\n"
+        "Injectie Groene Burgerstroom (terugleververgoeding)2 -0,0200 euro/kWh\n"
+    )
+    assert _extract_energy(text).current == pytest.approx(0.1378)
+
+
+@pytest.mark.parametrize(
+    "sign",
+    ["-", "‐", "‑", "‒", "–", "—", "−"],
+)
+def test_injection_normalises_every_minus_glyph(sign: str) -> None:
+    """The injection regex admits every SIGN_CHARS minus glyph, so the value
+    normalisation must strip all of them. U+2010 and U+2011 slipped past the
+    hand-rolled variant list and reached to_float unnormalised, raising
+    ValueError and crashing the refresh."""
+    text = (
+        f"Injectie Groene Burgerstroom (terugleververgoeding)2 {sign}0,0200 euro/kWh\n"
+    )
+    inj = _extract_injection(text)
+    assert inj is not None
+    assert inj.current == pytest.approx(0.02)
 
 
 def test_stale_fixed_injection_note_is_ignored_on_a_later_card() -> None:
