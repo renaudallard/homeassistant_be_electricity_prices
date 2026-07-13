@@ -175,7 +175,15 @@
     }
   },
   "options": {
+    "abort": {
+      "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Please go back and pick a different combination.",
+      "already_configured": "Another entry already polls the same (supplier, contract, region, DSO) tuple. Edit that entry instead, or pick a different combination.",
+      "compare_no_alternative": "No other supplier or contract is available in your region to compare against.",
+      "compare_done": "Comparison complete - no changes saved."
+    },
     "error": {
+      "invalid_api_key": "ENTSO-E rejected this token. Double-check the value at transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "cannot_connect": "Could not reach ENTSO-E to verify the token. Check your network and try again.",
       "start_date_in_future": "The contract start date cannot be in the future.",
       "end_before_start": "The contract end date must be after the start date."
     },

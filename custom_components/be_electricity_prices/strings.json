@@ -175,7 +175,15 @@
     }
   },
   "options": {
+    "abort": {
+      "supplier_region_unavailable": "[%key:component::be_electricity_prices::config::abort::supplier_region_unavailable%]",
+      "already_configured": "[%key:component::be_electricity_prices::config::abort::already_configured%]",
+      "compare_no_alternative": "[%key:component::be_electricity_prices::config::abort::compare_no_alternative%]",
+      "compare_done": "[%key:component::be_electricity_prices::config::abort::compare_done%]"
+    },
     "error": {
+      "invalid_api_key": "[%key:component::be_electricity_prices::config::error::invalid_api_key%]",
+      "cannot_connect": "[%key:component::be_electricity_prices::config::error::cannot_connect%]",
       "start_date_in_future": "[%key:component::be_electricity_prices::config::error::start_date_in_future%]",
       "end_before_start": "[%key:component::be_electricity_prices::config::error::end_before_start%]"
     },

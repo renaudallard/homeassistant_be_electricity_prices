@@ -175,7 +175,15 @@
     }
   },
   "options": {
+    "abort": {
+      "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Ga terug en kies een andere combinatie.",
+      "already_configured": "Een andere ingang bevraagt al dezelfde combinatie (leverancier, contract, regio, DNB). Bewerk die ingang of kies een andere combinatie.",
+      "compare_no_alternative": "Geen andere leverancier of contract beschikbaar in jouw regio om mee te vergelijken.",
+      "compare_done": "Vergelijking voltooid - geen wijzigingen opgeslagen."
+    },
     "error": {
+      "invalid_api_key": "ENTSO-E heeft deze token geweigerd. Controleer de waarde op transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "cannot_connect": "Kon ENTSO-E niet bereiken om de token te verifieren. Controleer uw netwerk en probeer opnieuw.",
       "start_date_in_future": "De startdatum van het contract kan niet in de toekomst liggen.",
       "end_before_start": "De einddatum van het contract moet na de startdatum liggen."
     },
