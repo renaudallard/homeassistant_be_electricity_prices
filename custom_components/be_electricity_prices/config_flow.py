@@ -525,10 +525,16 @@ def _custom_injection_schema(defaults: dict[str, Any]) -> vol.Schema:
         if contract == CUSTOM_CONTRACT_FIXED
         else list(CUSTOM_INJECTION_MODES)
     )
+    # Clamp the default to the narrowed list: a formula mode stored under a
+    # wider contract kind must not be pre-selected once the contract narrows
+    # to current-only (mirrors the guard in _dso_schema / _meter_schema).
+    mode_default = defaults.get(CONF_CUSTOM_INJECTION_MODE, modes[0])
+    if mode_default not in modes:
+        mode_default = modes[0]
     fields: dict[Any, Any] = {
         vol.Required(
             CONF_CUSTOM_INJECTION_MODE,
-            default=defaults.get(CONF_CUSTOM_INJECTION_MODE, modes[0]),
+            default=mode_default,
         ): SelectSelector(
             SelectSelectorConfig(
                 options=modes,
