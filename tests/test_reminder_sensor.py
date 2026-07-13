@@ -45,8 +45,9 @@ from tests import make_entry
 
 
 def _entry(end_date: str | None = "2027-11-14") -> MockConfigEntry:
-    extra = {"contract_end_date": end_date} if end_date is not None else {}
-    return make_entry(**extra)
+    if end_date is None:
+        return make_entry()
+    return make_entry(contract_end_date=end_date)
 
 
 def _coord(entry: MockConfigEntry) -> SimpleNamespace:

@@ -491,13 +491,11 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
         dso=const.DSO_ORES,
         meter=const.METER_MONO,
         title="Custom SPP",
-        **{
-            const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
-            const.CONF_INJECTION_KWH: "sensor.inj_total",
-            const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_BI_HORAIRE,
-            const.CONF_CUSTOM_INJECTION_SPP_WEIGHTED: True,
-            const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_FORMULA,
-        },
+        solar_regime=const.SOLAR_REGIME_INJECTION,
+        injection_kwh="sensor.inj_total",
+        dso_tariff_mode=const.DSO_MODE_BI_HORAIRE,
+        custom_injection_spp_weighted=True,
+        custom_injection_mode=const.CUSTOM_INJECTION_MODE_FORMULA,
     )
     entry.add_to_hass(hass)
     ids = _register_sensors(hass, entry, ["current_year_cost"])
