@@ -48,8 +48,10 @@ jobs:
         run: |
           ruff check .
           ruff format --check .
-      - name: Type check
+      - name: Type check (production code, --strict)
         run: mypy --strict custom_components/be_electricity_prices
+      - name: Type check (tests + helper scripts, non-strict)
+        run: mypy custom_components/ tests/ scripts/
       - name: Tests
         run: pytest tests/ -q
 
