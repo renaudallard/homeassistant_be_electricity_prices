@@ -811,6 +811,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._peak_kw: float = 0.0
         self._peak_month: date | None = None
         self._last_error: str = ""
+        # Set by async_unload_entry. A slow in-flight tick can resume after
+        # the entry was unloaded or removed; without this flag it would
+        # resurrect a just-deleted Repairs issue or rewrite the removed
+        # storage blob (the reload guards in _save_persistent don't fire on
+        # a removal, which leaves entry.data unchanged), or contradict the
+        # successor coordinator after a reload.
+        self._unloaded = False
 
     async def async_load_persistent(self) -> None:
         """Restore the latest snapshot + monthly peak from HA Store."""
@@ -1168,6 +1175,8 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
 
     def _sync_stale_issue(self, stale: bool) -> None:
         """Raise or clear the 'snapshot stale' repair issue for this entry."""
+        if self._unloaded:
+            return
         issue_id = f"snapshot_stale_{self.entry.entry_id}"
         if stale:
             ir.async_create_issue(
@@ -1206,6 +1215,8 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         both at once. ``message`` ``None`` means the latest fetch succeeded
         and clears both.
         """
+        if self._unloaded:
+            return
         failed_id = f"extractor_failed_{self.entry.entry_id}"
         unreachable_id = f"extractor_unreachable_{self.entry.entry_id}"
         if not message:
@@ -1241,6 +1252,8 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         outage. Cleared as soon as a refresh succeeds with a key the
         endpoint accepts.
         """
+        if self._unloaded:
+            return
         issue_id = f"entsoe_auth_failed_{self.entry.entry_id}"
         if active:
             ir.async_create_issue(
@@ -1980,6 +1993,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         }
 
     async def _save_persistent(self) -> None:
+        # Removal/unload guard: a tick resuming after the entry was removed
+        # would recreate the storage blob async_remove_entry just deleted;
+        # the reload guards below don't fire on a removal (entry.data is
+        # unchanged), so this explicit check is the one that catches it.
+        if self._unloaded:
+            return
         # Identity guard: a slow tick that started before the user
         # changed supplier/contract/region via OptionsFlow can finish
         # after the reload has already swapped runtime_data to a fresh

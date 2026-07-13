@@ -192,6 +192,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
     if not isinstance(coordinator, BePricesCoordinator):
         coordinator = None
     cached_key = coordinator._supplier_tuple if coordinator is not None else None
+    if coordinator is not None:
+        # Flag the coordinator so a slow in-flight tick that resumes after
+        # this unload/removal skips its Repairs-issue sync and persistent
+        # write instead of resurrecting a just-deleted issue or storage blob.
+        coordinator._unloaded = True
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         # Drop any shared-cache rows pinned to this entry's previous
