@@ -1784,6 +1784,19 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         days_in_year = (date(today_local.year + 1, 1, 1) - jan1).days
         days_elapsed = (today_local - jan1).days + 1
         fee_proration = days_elapsed / days_in_year
+        # The prosumer fee is billed per-month (each month's fee prorated by
+        # its own days) in the live sensor and backfill, not by the uniform
+        # days_in_year fraction, so mirror that: every completed month counts
+        # as 1 plus the elapsed fraction of the current month.
+        first_of_month = today_local.replace(day=1)
+        next_month = date(
+            today_local.year + today_local.month // 12,
+            today_local.month % 12 + 1,
+            1,
+        )
+        prosumer_proration = (today_local.month - 1) + today_local.day / (
+            next_month - first_of_month
+        ).days
         spot_dict: dict[datetime, float] = (
             dict(coord._spot_cache) if coord._spot_cache else {}
         )
@@ -2095,6 +2108,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 ytd_inj_kwh,
                 current_inj_price,
                 fee_proration=fee_proration,
+                prosumer_proration=prosumer_proration,
                 meter=current_meter,
                 include_capacity=False,
             )
@@ -2107,6 +2121,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 ytd_inj_kwh,
                 compare_inj_price,
                 fee_proration=fee_proration,
+                prosumer_proration=prosumer_proration,
                 meter=meter,
                 include_capacity=False,
             )
@@ -2484,6 +2499,7 @@ def _annual_bill(
     injection_kwh: float = 0.0,
     injection_price: float | None = None,
     fee_proration: float = 1.0,
+    prosumer_proration: float | None = None,
     meter: Any = METER_MONO,
     include_capacity: bool = True,
 ) -> float:
@@ -2491,9 +2507,13 @@ def _annual_bill(
     ``consumption_kwh`` and ``injection_kwh``.
 
     ``fee_proration`` scales the EUR/year fee components (1.0 for a
-    full year, ``days_elapsed/days_in_year`` for YTD). ``include_capacity``
-    is forwarded to :func:`_annual_fees` (off for the YTD what-if so it
-    matches the live ``current_year_cost`` sensor).
+    full year, ``days_elapsed/days_in_year`` for YTD). ``prosumer_proration``,
+    when given, overrides that for the prosumer term only: the live sensor and
+    backfill prorate the prosumer fee per-month (each month's fee by its own
+    days), so the YTD what-if passes the same per-month factor there to keep
+    its absolute figure equal to the live ``current_year_cost`` sensor.
+    ``include_capacity`` is forwarded to :func:`_annual_fees` (off for the YTD
+    what-if so it matches the live sensor).
 
     Solar handling honours the entry's configured regime:
 
@@ -2510,6 +2530,15 @@ def _annual_bill(
     fees = (
         _annual_fees(snapshot, entry, peak_kw, meter, include_capacity) * fee_proration
     )
+    if prosumer_proration is not None:
+        # _annual_fees prorated the prosumer term uniformly by fee_proration;
+        # swap in the per-month proration the live sensor and backfill use so
+        # the YTD absolute matches. The delta is zero for a non-compensation
+        # entry (prosumer fee is 0 there).
+        from .coordinator import _compute_prosumer
+
+        prosumer_annual = 12.0 * _compute_prosumer(snapshot, entry)
+        fees += prosumer_annual * (prosumer_proration - fee_proration)
     regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     if regime == "compensation":
         billable = max(consumption_kwh - injection_kwh, 0.0)
