@@ -219,6 +219,20 @@ def test_injection_normalises_every_minus_glyph(sign: str) -> None:
     assert inj.current == pytest.approx(0.02)
 
 
+def test_energy_regex_tolerates_a_bullet_prefix() -> None:
+    """A re-render that prefixes the consumption line with a bullet must still
+    parse. The line anchor allows a leading run of punctuation but cannot
+    consume the leading word of "Injectie", so the injection line on the next
+    line stays excluded and the energy rate binds to the bulleted line."""
+    text = (
+        "• Afname Groene burgerstroom (50% vast aan 0,17 euro) 0,1341 euro/kWh\n"
+        "Injectie Groene Burgerstroom (terugleververgoeding)2 -0,0200 euro/kWh\n"
+    )
+    energy = _extract_energy(text)
+    assert isinstance(energy, VariableRates)
+    assert energy.current == pytest.approx(0.1341)
+
+
 def test_stale_fixed_injection_note_is_ignored_on_a_later_card() -> None:
     """The '100% vast' note declares its own expiry (t.e.m. 30 juni). If a
     later month's card still carries the stale note while already printing
