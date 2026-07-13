@@ -3139,7 +3139,10 @@ async def _ytd_spot_injection_credit(
         spot = historical_spots.get(utc_hour)
         if spot is None:
             continue
-        credit += kwh * (inj.factor * spot + inj.base)
+        # Route through the shared helper so the floor_at_zero clamp the live
+        # scalar and array apply is honoured here too, rather than summing the
+        # raw factor*spot+base and diverging on a negative-spot hour.
+        credit += kwh * (_historical_injection_rate(inj, spot) or 0.0)
     return credit
 
 
