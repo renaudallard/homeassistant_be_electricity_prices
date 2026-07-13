@@ -1138,9 +1138,9 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         )
 
 
-# Expected injection shape per contract id (see _validate_injection). Monthly-
-# indexed cards must keep ``current`` only; spot/dynamic cards carry
-# factor+base. Anything not listed is gated on presence only.
+# Explicit injection-shape overrides per contract id (see _validate_injection).
+# Anything not listed is derived from contract metadata by
+# _expected_injection_shape, so a new card is covered without editing this map.
 _INJECTION_SHAPE: dict[str, str] = {
     "power_fix": "monthly",
     "power_flex": "monthly",
@@ -1155,6 +1155,31 @@ _INJECTION_SHAPE: dict[str, str] = {
     "cociter_variable": "spot",
 }
 
+# contract id -> Contract, populated in _run once the providers are loaded so
+# _expected_injection_shape can derive a shape for every card.
+_CONTRACTS_BY_ID: dict[str, object] = {}
+
+
+def _expected_injection_shape(contract_id: str) -> str:
+    """Expected injection shape for a contract.
+
+    Explicit _INJECTION_SHAPE entries win; otherwise derive from the
+    contract's own metadata so a fixed/variable (monthly-indexed) card can't
+    silently gain a spot factor/base -- the 0.6.7-class latent mispricing --
+    without failing here. ``spot_indexed_injection`` marks the one variable
+    card whose injection is a spot formula (Cociter Variable); dynamic and TOU
+    cards carry factor/base or per-slot rates, so they stay presence-only."""
+    if contract_id in _INJECTION_SHAPE:
+        return _INJECTION_SHAPE[contract_id]
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None:
+        return "present"
+    if getattr(contract, "spot_indexed_injection", False):
+        return "spot"
+    if getattr(contract, "kind", "") in ("fixed", "variable"):
+        return "monthly"
+    return "present"
+
 
 def _validate_snapshot(
     prefix: str, contract_id: str, snap: object, *, injection_shape: str | None = None
@@ -1165,7 +1190,7 @@ def _validate_snapshot(
     the per-contract default (used for region-dependent cases like
     DATS 24, whose Wallonia card pays no feed-in)."""
     _validate_energy(prefix, contract_id, getattr(snap, "energy", None))
-    shape = injection_shape or _INJECTION_SHAPE.get(contract_id, "present")
+    shape = injection_shape or _expected_injection_shape(contract_id)
     _validate_injection(prefix, snap, shape)
     _validate_dsos(prefix, snap)
 
@@ -1350,6 +1375,11 @@ async def _run() -> int:
         "octaplus": octaplus,
         "frank": frank,
     }
+    # Index every contract so _expected_injection_shape can derive a shape
+    # for cards not explicitly listed in _INJECTION_SHAPE.
+    for _mod in modules.values():
+        for _contract in _mod.EXTRACTOR.contracts:
+            _CONTRACTS_BY_ID[_contract.id] = _contract
     timeout = aiohttp.ClientTimeout(total=60)
     async with aiohttp.ClientSession(
         timeout=timeout, trace_configs=[_trace_config()]
