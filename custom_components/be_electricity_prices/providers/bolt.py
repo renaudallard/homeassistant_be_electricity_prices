@@ -518,8 +518,10 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     # spot formula. The July 2026 fix cards print a NEGATIVE second
     # ("Exclusif nuit") column ("Prix mensuel 3,40 -0,43"); only the first
     # column is billed but the second is a required anchor token, so allow
-    # its optional minus sign.
-    m = re.search(r"Injection\b.*?Prix mensuel\s+([\d.,]+)\s+-?[\d.,]+", text, re.S)
+    # its optional minus sign. The billed first column carries an optional
+    # minus too, so a month that ever prints a negative feed-in indicative
+    # is captured instead of failing the match and dropping the credit.
+    m = re.search(r"Injection\b.*?Prix mensuel\s+(-?[\d.,]+)\s+-?[\d.,]+", text, re.S)
     if not m:
         return None
     current = to_float(m.group(1)) / 100.0
