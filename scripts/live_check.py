@@ -288,6 +288,17 @@ async def _attributed_check(
                 False,
                 f"exceeded {_SUPPLIER_HARD_TIMEOUT_S:.0f}s wallclock",
             )
+        except Exception as err:  # noqa: BLE001
+            # Record any other failure as this supplier's row instead of
+            # letting it propagate out of the top-level gather, which would
+            # abort every other supplier's check and mis-report a real data
+            # regression as a harness crash (rc=8). CancelledError is a
+            # BaseException and is deliberately not caught here.
+            _record(
+                f"{supplier}: unexpected error",
+                False,
+                f"{type(err).__name__}: {err}",
+            )
 
 
 def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
