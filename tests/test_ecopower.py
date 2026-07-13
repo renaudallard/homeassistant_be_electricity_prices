@@ -197,7 +197,9 @@ def test_energy_regex_ignores_same_line_injection_in_split_layout() -> None:
         "0,1378 euro/kWh\n"
         "Injectie Groene Burgerstroom (terugleververgoeding)2 -0,0200 euro/kWh\n"
     )
-    assert _extract_energy(text).current == pytest.approx(0.1378)
+    energy = _extract_energy(text)
+    assert isinstance(energy, VariableRates)
+    assert energy.current == pytest.approx(0.1378)
 
 
 @pytest.mark.parametrize(
