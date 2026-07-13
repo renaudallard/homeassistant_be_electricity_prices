@@ -1877,6 +1877,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """
         merged = dict(self._historical_spots)
         merged.update(extra_spots)
+        merged = _drop_future_spots(merged, dt_util.now().date())
         return _mean_of_month(merged, year, month)
 
     def _restore_spp_weights(self, blob: dict[str, Any]) -> None:
@@ -1952,6 +1953,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return None
         merged = dict(self._historical_spots)
         merged.update(extra_spots)
+        merged = _drop_future_spots(merged, dt_util.now().date())
         return _spp_weighted_month_mean(merged, self._spp_weights, year, month)
 
     def _snapshot_age_hours(self) -> float:
@@ -2138,6 +2140,19 @@ def _mean_of_month(spots: dict[datetime, float], year: int, month: int) -> float
 def _local_ym(ts: datetime) -> tuple[int, int]:
     local = dt_util.as_local(ts)
     return (local.year, local.month)
+
+
+def _drop_future_spots(
+    spots: dict[datetime, float], today: date
+) -> dict[datetime, float]:
+    """Keep only spots whose local date is ``today`` or earlier.
+
+    The live monthly mean must average the same [Jan 1 .. today] window the
+    YTD path bills on. Tomorrow's day-ahead curve is present in the fetched
+    ``spot_prices`` after ~13:00 CET; leaving it in would nudge the flat
+    spot-monthly rate and the mean-baked injection above what
+    ``current_year_cost`` charges for the same month."""
+    return {ts: v for ts, v in spots.items() if dt_util.as_local(ts).date() <= today}
 
 
 def _spp_weighted_month_mean(
