@@ -1961,6 +1961,24 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return float("inf")
         return (dt_util.utcnow() - self._snapshot_fetched_at).total_seconds() / 3600.0
 
+    def _prune_historical_spots(self) -> None:
+        """Drop cached spots older than the current YTD window.
+
+        Called each tick so the in-memory dict (and the persisted blob) do
+        not grow unbounded across year boundaries. Anchor on local midnight:
+        in Brussels (UTC+1/+2) the local Jan 1 00:00 falls one or two hours
+        BEFORE UTC Jan 1 00:00, so a UTC anchor would silently drop the first
+        hour or two of YTD. Prior-year keys are pure dead weight -- every
+        consumer filters by the current (year, month) or an exact current-year
+        hour key -- so removing them changes no result."""
+        if not self._historical_spots:
+            return
+        today = dt_util.now().date()
+        keep_after = dt_util.start_of_local_day(date(today.year, 1, 1)).astimezone(UTC)
+        self._historical_spots = {
+            h: v for h, v in self._historical_spots.items() if h >= keep_after
+        }
+
     async def _save_persistent(self) -> None:
         # Identity guard: a slow tick that started before the user
         # changed supplier/contract/region via OptionsFlow can finish
@@ -2025,21 +2043,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 self._snapshot_fetched_at,
                 self._snapshot_probe_key,
             )
+        # Prune in memory (not just in the serialized copy) so a coordinator
+        # running across a year boundary doesn't retain the prior year's
+        # ~8760 hourly entries forever.
+        self._prune_historical_spots()
         if self._historical_spots:
-            # Drop spots older than the current YTD window so the blob
-            # doesn't grow unbounded across years. Anchor on local
-            # midnight: in Brussels (UTC+1/+2) the local Jan 1 00:00
-            # falls one or two hours BEFORE UTC Jan 1 00:00, so a UTC
-            # anchor would silently drop the first hour or two of YTD
-            # whenever HA restarted in early January.
-            today = dt_util.now().date()
-            keep_after = dt_util.start_of_local_day(date(today.year, 1, 1)).astimezone(
-                UTC
-            )
             payload["historical_spots"] = {
-                h.isoformat(): v
-                for h, v in self._historical_spots.items()
-                if h >= keep_after
+                h.isoformat(): v for h, v in self._historical_spots.items()
             }
         if self._spp_weights and self._spp_weights_year is not None:
             payload["spp_weights"] = {
