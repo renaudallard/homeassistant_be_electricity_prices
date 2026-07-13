@@ -1361,7 +1361,19 @@ async def _run() -> int:
         # to a synthetic bucket so they don't double-count against
         # any one supplier's per-card timing.
         with _attributed("_catalog"):
-            await _check_catalogs(session, modules)
+            try:
+                await _check_catalogs(session, modules)
+            except Exception as err:  # noqa: BLE001
+                # The catalog phase dereferences provider-internal attributes
+                # (renamed by a refactor -> AttributeError). Record it as a
+                # catalog failure instead of letting it escape and discard the
+                # extractor report that was already computed above.
+                _record(
+                    "_catalog: probe crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                    kind="catalog",
+                )
 
     extractor_checks = [c for c in CHECKS if c.kind == "extractor"]
     catalog_checks = [c for c in CHECKS if c.kind == "catalog"]
