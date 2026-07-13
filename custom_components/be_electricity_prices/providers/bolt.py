@@ -495,12 +495,15 @@ def _extract_publication_month(text: str) -> str:
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     if kind == "dynamic":
         # Dynamic injection is spot-indexed: the same Belpex formula table
-        # prints an injection row (factor < 1). It is the first formula that
-        # differs from the consumption one. Feed-in is VAT-exempt for
-        # residential, so no VAT bake; base goes EUR/MWh -> EUR/kWh.
+        # prints an injection row whose factor is < 1 (Bolt redistributes a
+        # fraction of the spot), while every consumption row marks the spot up
+        # with a factor > 1. Keying on factor < 1 rather than "the first row
+        # that differs from consumption[0]" stays correct even if the card ever
+        # prints per-meter-type consumption rows with differing factors.
+        # Feed-in is VAT-exempt for residential, so no VAT bake; base goes
+        # EUR/MWh -> EUR/kWh.
         matches = _BELPEX_FORMULA_RE.findall(text)
-        consumption = matches[0] if matches else None
-        inj = next((m for m in matches if m != consumption), None)
+        inj = next((m for m in matches if to_float(m[0]) < 1.0), None)
         if inj is None:
             return None
         return InjectionRates(
