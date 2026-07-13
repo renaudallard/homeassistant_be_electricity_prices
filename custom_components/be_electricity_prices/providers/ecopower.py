@@ -315,9 +315,12 @@ def parse_dbs_snapshot(
 # the "Injectie Groene Burgerstroom ... euro/kWh" line, so a card that
 # printed split-layout energy (value below the label) together with a
 # same-line injection value would bind the energy rate to the injection
-# figure instead of falling through to _ENERGY_SPLIT_RE.
+# figure instead of falling through to _ENERGY_SPLIT_RE. The leading
+# ``[^\w\n]*`` tolerates a bullet or other punctuation prefix a re-render
+# might add; it cannot consume the leading word of "Injectie", so that line
+# stays excluded.
 _ENERGY_RE = re.compile(
-    r"^[ \t]*(?:Afname\s+)?Groene\s+burgerstroom[^\n]*?([\d,]+)\s*euro/kWh",
+    r"^[^\w\n]*(?:Afname\s+)?Groene\s+burgerstroom[^\n]*?([\d,]+)\s*euro/kWh",
     re.IGNORECASE | re.MULTILINE,
 )
 
