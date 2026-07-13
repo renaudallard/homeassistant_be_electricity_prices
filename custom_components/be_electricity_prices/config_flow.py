@@ -2156,7 +2156,7 @@ def _compare_injection_credit(
     different instants. Monthly-indexed injection is spot-independent (uses
     the realized monthly value), so delegate that to the live helper.
     """
-    from .coordinator import _compute_injection_price
+    from .coordinator import _compute_injection_price, _floor_injection
     from .providers.base import DynamicRates, TimeOfUseRates
 
     inj = getattr(snapshot, "injection", None)
@@ -2178,7 +2178,14 @@ def _compare_injection_credit(
         and inj.base is not None
         and (isinstance(energy, DynamicRates) or inj.current is None)
     ):
-        return inj.factor * avg_spot + inj.base if avg_spot is not None else None
+        # Floor the formula result like the live and historical paths so the
+        # compare estimate doesn't count a negative feed-in as extra cost when
+        # the contract clamps injection at zero.
+        return (
+            _floor_injection(inj.factor * avg_spot + inj.base, inj)
+            if avg_spot is not None
+            else None
+        )
     return _compute_injection_price(snapshot, entry, spot_dict)
 
 
