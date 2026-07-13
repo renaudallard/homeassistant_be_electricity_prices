@@ -466,8 +466,18 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
     # them out of the recorder (HA stores state attributes by default) so
     # they don't bloat the long-term database; they are live display
     # helpers, not history.
+    # snapshot_age_hours rises ~1/hour and last_error is diagnostic, so
+    # recording them would write a fresh states row every tick even for a flat
+    # contract whose price never moves; keep them out of history too.
     _unrecorded_attributes = frozenset(
-        {"today", "tomorrow", "cheapest_4h_today", "most_expensive_4h_today"}
+        {
+            "today",
+            "tomorrow",
+            "cheapest_4h_today",
+            "most_expensive_4h_today",
+            "snapshot_age_hours",
+            "last_error",
+        }
     )
     entity_description: BePriceSensorDescription
 
