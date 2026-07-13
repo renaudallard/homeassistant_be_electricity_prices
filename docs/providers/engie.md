@@ -22,9 +22,9 @@ Related reading:
 
 | Property | Value |
 | --- | --- |
-| Extractor id | `engie` (`engie.py:862`) |
-| Label | `Engie` (`engie.py:863`) |
-| Regions served | Flanders, Wallonia, Brussels (union across contracts, `engie.py:857`) |
+| Extractor id | `engie` (`engie.py:855`) |
+| Label | `Engie` (`engie.py:856`) |
+| Regions served | Flanders, Wallonia, Brussels (union across contracts, `engie.py:850`) |
 | Publication form | Per (contract, region) PDF behind a REST query endpoint |
 | `source_url` | the bare API base, `engie.py:396` |
 | `probe` | none declared (TTL-only, see below) |
@@ -63,10 +63,10 @@ one snapshot (`engie.py:39`, `engie.py:343`).
 ## Contracts
 
 Ten products are declared in `_CONTRACTS` (`engie.py:129`). Every `Contract`
-exposed to the registry (`engie.py:864`) sets `regions` from the contract's
-`months_per_region` keys (`engie.py:857`); none set `spot_indexed_injection`
+exposed to the registry (`engie.py:857`) sets `regions` from the contract's
+`months_per_region` keys (`engie.py:850`); none set `spot_indexed_injection`
 (dynamic contracts already collect the ENTSO-E key via their energy formula, so
-the flag stays False, matching the framework note at `base.py:75`).
+the flag stays False, matching the framework note at `base.py:77`).
 
 | contract_id | label | kind | regions | Notes |
 | --- | --- | --- | --- | --- |
@@ -98,7 +98,7 @@ fit the energy-plus-network-plus-tax model.
 (`engie.py:474`). Engie bills the dynamic consumer formula against `eSpot_15`,
 the Belgian day-ahead EPEX price for that specific quarter-hour, so the
 integration keeps the native 15-minute slots rather than aggregating to hourly
-(`engie.py:466`, framework note `base.py:127`). Billing of long-term YTD
+(`engie.py:466`, framework note `base.py:139`). Billing of long-term YTD
 statistics still collapses to hourly because Home Assistant only retains hourly
 long-term statistics.
 
@@ -112,24 +112,24 @@ long-term statistics.
    `unknown region` on miss (`engie.py:334`).
 3. Reject regions the contract has no document for (`engie.py:336`).
 4. Build the slug and query URL (`_document_url`, `engie.py:240`), download and
-   extract the PDF text with `fetch_pdf_text` (`_pdf.py:158`), and delegate to
+   extract the PDF text with `fetch_pdf_text` (`_pdf.py:160`), and delegate to
    `parse_snapshot` with a single-region text map (`engie.py:339`).
 
 ### `probe`: none
 
-`EXTRACTOR` declares no `probe` (`engie.py:861` has no `probe=` argument, so it
+`EXTRACTOR` declares no `probe` (`engie.py:854` has no `probe=` argument, so it
 defaults to `None`, `base.py:375`). Engie's tariff API has no cheap freshness
 key: the endpoint always serves "the current month" for a slug with no ETag or
-listing to diff. Per the framework contract (`base.py:347`), a `None` probe means
+listing to diff. Per the framework contract (`base.py:505`), a `None` probe means
 the coordinator's time-based TTL governs refresh instead.
 
 ### `fetch_for_month`: none
 
-`EXTRACTOR` declares no `fetch_for_month` (`engie.py:861`), so it defaults to
-`None` (`base.py:381`). The API is overwrite-in-place / API-only: `monthOffset=0`
+`EXTRACTOR` declares no `fetch_for_month` (`engie.py:854`), so it defaults to
+`None` (`base.py:539`). The API is overwrite-in-place / API-only: `monthOffset=0`
 is hardcoded in the URL (`engie.py:243`) and there is no accessible archive of
 past months. The framework lists Engie explicitly as an API-only supplier with no
-month archive (`base.py:357`). For historical billing the coordinator falls back
+month archive (`base.py:515`). For historical billing the coordinator falls back
 to the current snapshot as a proxy.
 
 ### `discover(session)` (`engie.py:298`)
@@ -159,17 +159,17 @@ Fields pulled from the card:
 | Field | Helper | Notes |
 | --- | --- | --- |
 | Energy rates | `_extract_energy` (`engie.py:431`) | Branches on `TariffKind`; returns Fixed/Variable/Dynamic/TOU rates. |
-| Injection | `_extract_injection` (`engie.py:553`) | See taxonomy below. |
-| Publication month label | `_extract_publication_month` (`engie.py:545`) | Anchored on `contrats conclus en <Month> <Year>`. |
-| Federal excise | `_extract_federal_excise` (`engie.py:630`) | 0-3000 kWh tier row. |
-| Energy contribution | `_extract_energy_contribution` (`engie.py:641`) | Comma-stripped digits reconstructed. |
-| Regional renewables | `_extract_consumption_renewables` (`engie.py:612`) | Trailing column of the Consommation row. |
-| Flemish energy fund | `_extract_energy_fund` (`engie.py:658`) | `avec`/`sans domicile` cases. |
-| Walloon connection fee | `_extract_connection_fee` (`engie.py:675`) | Wallonia only. |
-| Flanders DSOs | `_extract_flanders_dsos` (`engie.py:702`) | Digital-meter Fluvius table. |
-| Wallonia DSOs | `_extract_wallonia_dsos` (`engie.py:751`) | 9/10-number rows, ORES divergence guard. |
-| Brussels DSO | `_extract_brussels_dsos` (`engie.py:821`) | Sibelga row + Brugel OSP table. |
-| `valid_until` | `parse_valid_until` (`_pdf.py:677`) | Best-effort validity date. |
+| Injection | `_extract_injection` (`engie.py:546`) | See taxonomy below. |
+| Publication month label | `_extract_publication_month` (`engie.py:538`) | Anchored on `contrats conclus en <Month> <Year>`. |
+| Federal excise | `_extract_federal_excise` (`engie.py:623`) | 0-3000 kWh tier row. |
+| Energy contribution | `_extract_energy_contribution` (`engie.py:634`) | Comma-stripped digits reconstructed. |
+| Regional renewables | `_extract_consumption_renewables` (`engie.py:605`) | Trailing column of the Consommation row. |
+| Flemish energy fund | `_extract_energy_fund` (`engie.py:651`) | `avec`/`sans domicile` cases. |
+| Walloon connection fee | `_extract_connection_fee` (`engie.py:668`) | Wallonia only. |
+| Flanders DSOs | `_extract_flanders_dsos` (`engie.py:695`) | Digital-meter Fluvius table. |
+| Wallonia DSOs | `_extract_wallonia_dsos` (`engie.py:744`) | 9/10-number rows, ORES divergence guard. |
+| Brussels DSO | `_extract_brussels_dsos` (`engie.py:814`) | Sibelga row + Brugel OSP table. |
+| `valid_until` | `parse_valid_until` (`_pdf.py:773`) | Best-effort validity date. |
 
 ### The yearly-fee two-layout problem
 
@@ -214,7 +214,7 @@ visually-cheapest Flextime super-creuses column (`engie.py:509`, test
 
 Dynamic cards print `Formule de prix hors TVA <base> + (<factor> x eSpot_15)`.
 `_FORMULA_RE` (`engie.py:425`) accepts the full sign class `[SIGN_CHARS]` on both
-the base and the factor and routes each through `parse_sign` (`_pdf.py:477`) so a
+the base and the factor and routes each through `parse_sign` (`_pdf.py:511`) so a
 re-render that swaps a hyphen-minus for a Unicode minus or en-dash does not
 silently miss (`engie.py:419`). The formula is printed pre-VAT, so factor and
 base are scaled by the parsed VAT multiplier (`engie.py:461`). The conversion
@@ -234,13 +234,13 @@ otherwise cancel out (`0.1039 * 10.6 == 0.1039 * 1.06 * 10`).
 
 ### Tax-block parse hurdles
 
-- `_extract_energy_contribution` (`engie.py:641`): Engie's PDF strips the comma,
+- `_extract_energy_contribution` (`engie.py:634`): Engie's PDF strips the comma,
   so `0,20417` renders as `020417`. The regex matches an optional separator and
   reconstructs the value as `0.<digits>` with a `\d{4,6}` quantifier
   (illustrative parsed value `0.0020417`, test `tests/test_engie.py:230`).
-- `_extract_federal_excise` (`engie.py:630`): anchored on
+- `_extract_federal_excise` (`engie.py:623`): anchored on
   `Consommation entre 0 et 3.000 kWh`; mandatory across regions, raises on miss.
-- `_extract_consumption_renewables` (`engie.py:612`): takes the last number on
+- `_extract_consumption_renewables` (`engie.py:605`): takes the last number on
   the Consommation row as the regional renewable surcharge (Flanders cogen +
   green, Wallonia green contribution, or Brussels green levy). Mandatory in every
   region (source comment `~1.5-3 c€/kWh`); raises on miss so a levy is never
@@ -261,19 +261,19 @@ Empower row; the parser raises if it is asked for Flextime on a card that does
 not carry the triplet (a 4-price row, `engie.py:519`). Its weekend rule is
 `weekend_no_peak` (peak never applies at weekends; transition/offpeak split is
 kept), distinct from Luminus SmartFlex's `weekend_offpeak`, per CWaPE Engie
-publication (`engie.py:197`, framework schedule `base.py:162`).
+publication (`engie.py:197`, framework schedule `base.py:202`).
 
 ## DSO overlay coverage
 
-### Flanders (`_extract_flanders_dsos`, `engie.py:702`)
+### Flanders (`_extract_flanders_dsos`, `engie.py:695`)
 
 Reads the `Compteur digital` Fluvius table only (the analog table is ignored,
-`engie.py:710`). Fluvius distribution rates already include Elia transport
+`engie.py:703`). Fluvius distribution rates already include Elia transport
 (`incluant déjà les coûts de transport`), so the parser sets `transport=0` and
-rolls the full c€/kWh into `distribution_single` (`engie.py:729`, test
+rolls the full c€/kWh into `distribution_single` (`engie.py:722`, test
 `test_dynamic_flanders_dso_includes_transport_in_distribution`
 `tests/test_engie.py:187`). The eight Fluvius sub-areas are mapped through
-`_FLANDERS_LABELS` (`engie.py:690`); note the card labels do not match the
+`_FLANDERS_LABELS` (`engie.py:683`); note the card labels do not match the
 canonical keys one-to-one:
 
 | Card label | Canonical key |
@@ -289,11 +289,11 @@ canonical keys one-to-one:
 
 Each row yields capacity (`capacity_eur_per_kw_year`), distribution single,
 distribution exclusive-night (a lower dedicated night-meter rate), and the
-quarter-hourly data-management fee (`engie.py:725`).
+quarter-hourly data-management fee (`engie.py:718`).
 
-### Wallonia (`_extract_wallonia_dsos`, `engie.py:751`)
+### Wallonia (`_extract_wallonia_dsos`, `engie.py:744`)
 
-Five DSOs mapped via `_WALLONIA_LABELS` (`engie.py:742`): AIEG, AIESH,
+Five DSOs mapped via `_WALLONIA_LABELS` (`engie.py:735`): AIEG, AIESH,
 `ORES (Brab. Wal.)` -> `ores`, `REGIE DE WAVRE` -> `rew`, `TECTEO - RESA` ->
 `resa`. Rows carry 10 numbers on static contracts (with a prosumer column) and 9
 on dynamic contracts (the prosumer column is replaced by nothing, since dynamic
@@ -304,11 +304,11 @@ so it is billed separately (unlike Flanders).
 
 Two gotchas guard this parser:
 
-- Horizontal-whitespace-only matching (`[^\S\n]`, `engie.py:769`): a fix for a
+- Horizontal-whitespace-only matching (`[^\S\n]`, `engie.py:762`): a fix for a
   bug where a greedy match spanned a blank line and pulled the next row's or a
   footnote's leading number into this row, shifting every column right and
   billing transport at a stray value.
-- ORES sub-area divergence guard (`engie.py:806`): the card lists ~7 ORES
+- ORES sub-area divergence guard (`engie.py:799`): the card lists ~7 ORES
   sub-areas that are numerically identical today, and only the `Brab. Wal.` row
   is mapped into the single `ores` key. The parser asserts every other ORES
   sub-area row equals the first and raises `ORES sub-area tariffs diverged`
@@ -316,15 +316,15 @@ Two gotchas guard this parser:
   every ORES customer the Brab. Wal. rate. Test
   `test_wallonia_ores_subarea_divergence_is_fatal` (`tests/test_engie.py:142`).
 
-### Brussels (`_extract_brussels_dsos`, `engie.py:821`)
+### Brussels (`_extract_brussels_dsos`, `engie.py:814`)
 
-Reads the single Sibelga row (`engie.py:828`). Brussels has no separate capacity
+Reads the single Sibelga row (`engie.py:821`). Brussels has no separate capacity
 charge (capacity is Flanders-only), so the parser folds two flat annual euros,
 the metering fee (`Activité de mesure`, column 5) and the Sibelga <=13kVA power
-term (column 6), into `data_management_per_year` (`engie.py:848`, test
+term (column 6), into `data_management_per_year` (`engie.py:841`, test
 `test_dynamic_brussels_extracts_sibelga` `tests/test_engie.py:214`, illustrative
 `14.73 + 50.07`). It also parses the Brugel OSP annual-fee table via the shared
-`parse_brussels_osp` (`_pdf.py:498`) into `brussels_osp_by_tier`.
+`parse_brussels_osp` (`_pdf.py:532`) into `brussels_osp_by_tier`.
 
 ## Tax overlay
 
@@ -341,7 +341,7 @@ term (column 6), into `data_management_per_year` (`engie.py:848`, test
 | `energy_fund_eur_per_month` | `_extract_energy_fund` | Flanders only (`engie.py:370`). |
 | `vat_rate` | hardcoded `0.0` (`engie.py:394`) | Card is 6% VAT inclusive. |
 
-`vat_rate=0.0` is the "prices are already VAT-incl" convention (`base.py:307`).
+`vat_rate=0.0` is the "prices are already VAT-incl" convention (`base.py:465`).
 Engie's cards print 6% VAT inclusive (`engie.py:42`), so the extracted energy /
 network / tax numbers are post-VAT and must not be re-scaled; the one exception is
 the dynamic formula, which is printed pre-VAT and is scaled locally in
@@ -349,53 +349,53 @@ the dynamic formula, which is printed pre-VAT and is scaled locally in
 (`tests/test_engie.py:226`) asserts `vat_rate == 0.0`.
 
 The Flemish energy fund has two sub-cases (`_extract_energy_fund`,
-`engie.py:658`): `Résidentiel (avec domicile)` (0 for most products) and
+`engie.py:651`): `Résidentiel (avec domicile)` (0 for most products) and
 `Résidentiel (sans domicile)` (a positive fee). The Empty House product is for
 vacant homes with no registered domicile, so `parse_snapshot` passes
 `sans_domicile=True` for it (`engie.py:371`) and it bills the `sans domicile`
 rate (illustrative `10,07/mo`, tests `test_empty_house_is_mono_only`
 `tests/test_engie.py:280` and `test_energy_fund_selects_domicile_case`
 `tests/test_engie.py:300`). A miss legitimately means "no fund on this card"
-outside Flanders, so this helper keeps a silent `0.0` default (`engie.py:672`),
+outside Flanders, so this helper keeps a silent `0.0` default (`engie.py:665`),
 unlike the mandatory levies which raise.
 
 ## Injection
 
-`_extract_injection` (`engie.py:553`) produces all three shapes of the injection
+`_extract_injection` (`engie.py:546`) produces all three shapes of the injection
 taxonomy (see [../pricing-model.md](../pricing-model.md)) depending on the
 contract:
 
 - Monthly-indicative-only (`current`): the first `Injection(3)` row's first
-  column (`engie.py:558`, divided by 100). The second `Injection(3)` row is the
+  column (`engie.py:551`, divided by 100). The second `Injection(3)` row is the
   annual estimate and is ignored. Fixed and non-Flextime variable contracts carry
   only this (test `test_easy_fixed_extracts_bihourly_rates`
   `tests/test_engie.py:242`: `current` set, `factor`/`base` None;
   `test_empower_variable_injection_is_single_rate` `tests/test_engie.py:109`).
 - Per-slot TOU triplet (`peak`/`transition`/`offpeak`): only for `kind == "tou"`
-  when the row has >=6 numbers (`engie.py:569`), reading columns 4/5/6. Engie
+  when the row has >=6 numbers (`engie.py:562`), reading columns 4/5/6. Engie
   Empower Flextime's feed-in tariff varies by slot, so the pricing engine selects
-  the slot with the same `tou_slot()` rule as consumption (`base.py:235`). Issue
+  the slot with the same `tou_slot()` rule as consumption (`base.py:248`). Issue
   #34; test `test_empower_flextime_injection_varies_by_slot`
   (`tests/test_engie.py:93`).
 - Hourly `factor * spot + base`: only for `kind == "dynamic"` when the card
-  carries a second BELPEX formula (`engie.py:586`). The second `_FORMULA_RE`
+  carries a second BELPEX formula (`engie.py:579`). The second `_FORMULA_RE`
   match is the injection formula. Residential injection is VAT-exempt
   (`base.py:216`), so it is not VAT-scaled: `factor = factor_pdf * 10` and
-  `base = base_pdf_cents / 100` (`engie.py:596`, no `vat` multiplier, contrast the
+  `base = base_pdf_cents / 100` (`engie.py:589`, no `vat` multiplier, contrast the
   consumption path). Test `test_dynamic_extracts_injection_formula`
   (`tests/test_engie.py:166`): illustrative `-1,3135 + (0,1000 x eSpot_15)` gives
   `factor == 1.0`, `base == -0.013135`, and the indicative `current == 0.09136`
   from the row.
 
 The dynamic injection formula path is deliberately gated on `kind == "dynamic"`
-(`engie.py:586`): a future indexed or variable card that happens to print a price
+(`engie.py:579`): a future indexed or variable card that happens to print a price
 formula must not flip the injection taxonomy into a spot factor/base shape. If
 none of `current`, `factor`, or `peak` is set, injection is `None`
-(`engie.py:599`).
+(`engie.py:592`).
 
 No supplier-side PV / prosumer forfait: Engie does not populate
 `supplier_prosumer_eur_per_kva_year` (the field stays at its `None` default,
-`base.py:332`). The Wallonia DSO overlay carries the DSO-side
+`base.py:490`). The Wallonia DSO overlay carries the DSO-side
 `prosumer_eur_per_kva_year` on static contracts only.
 
 ## Quirks and historical bugs (land mines)
@@ -417,15 +417,15 @@ No supplier-side PV / prosumer forfait: Engie does not populate
   Consommation rows; the extractor must take the monthly one (the first match),
   because the annual estimate over-bills by ~7% in a falling-price month (test
   `test_easy_variable_uses_monthly_not_annual_estimate` `tests/test_engie.py:312`).
-- Comma-stripped energy contribution (`020417` for `0,20417`), `engie.py:641`.
+- Comma-stripped energy contribution (`020417` for `0,20417`), `engie.py:634`.
 - Apostrophe glyph drift: `d'usage` matched as `d[©']usage`, `Cotisation sur
-  l['©]énergie` (`engie.py:445`, `engie.py:650`).
+  l['©]énergie` (`engie.py:445`, `engie.py:643`).
 - Flanders distribution includes transport, so `transport=0` there
-  (`engie.py:729`); Wallonia and Brussels bill transport as a separate column.
+  (`engie.py:722`); Wallonia and Brussels bill transport as a separate column.
 - Wallonia whitespace-only row matching to avoid a column-shift bug
-  (`engie.py:764`).
-- ORES sub-area divergence guard raises on a future tariff split (`engie.py:806`).
-- Brussels folds metering + <=13kVA power term into the DSO fee (`engie.py:848`).
+  (`engie.py:757`).
+- ORES sub-area divergence guard raises on a future tariff split (`engie.py:799`).
+- Brussels folds metering + <=13kVA power term into the DSO fee (`engie.py:841`).
 - Dynamic Wallonia rows have no prosumer column (9 numbers, not 10),
   `engie.py:757`.
 - Tarif Social is intentionally excluded (`engie.py:225`).
@@ -462,11 +462,11 @@ likely-to-break order:
 2. `_FORMULA_RE` and `_vat_multiplier` (`engie.py:425`, `engie.py:409`): dynamic
    formula punctuation (sign chars, `eSpot_15` token) and the mandatory VAT
    phrase.
-3. `_extract_injection` (`engie.py:553`): the `Injection(3)` row column order and
+3. `_extract_injection` (`engie.py:546`): the `Injection(3)` row column order and
    the second-formula gate for dynamic.
-4. DSO row parsers (`_extract_flanders_dsos` `engie.py:702`,
-   `_extract_wallonia_dsos` `engie.py:751`, `_extract_brussels_dsos`
-   `engie.py:821`): the DSO-label-to-key maps, the digital-meter block boundary,
+4. DSO row parsers (`_extract_flanders_dsos` `engie.py:695`,
+   `_extract_wallonia_dsos` `engie.py:744`, `_extract_brussels_dsos`
+   `engie.py:814`): the DSO-label-to-key maps, the digital-meter block boundary,
    the Wallonia 9/10-number split and ORES guard, and the Sibelga column order.
 5. The tax helpers (`_extract_federal_excise`, `_extract_energy_contribution`,
    `_extract_consumption_renewables`, `_extract_energy_fund`,

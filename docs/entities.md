@@ -40,8 +40,8 @@ see [Services](#services).
 
 ### How a sensor is defined
 
-Every sensor is one `BePriceSensor` (`sensor.py:444`) instance driven by a
-frozen `BePriceSensorDescription` (`sensor.py:62`), which extends HA's
+Every sensor is one `BePriceSensor` (`sensor.py:477`) instance driven by a
+frozen `BePriceSensorDescription` (`sensor.py:67`), which extends HA's
 `SensorEntityDescription` with two pure callables:
 
 ```python
@@ -59,21 +59,21 @@ would otherwise persist and chart, because `suggested_display_precision` only
 affects the displayed string, not the stored `native_value`.
 
 Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
-(`sensor.py:259`), which stamps `state_class=MEASUREMENT`,
+(`sensor.py:302`), which stamps `state_class=MEASUREMENT`,
 `native_unit_of_measurement="EUR/kWh"` and `suggested_display_precision=4`.
 
 ### Which sensors exist for a given entry
 
-`async_setup_entry` (`sensor.py:387`) assembles the entity list conditionally:
+`async_setup_entry` (`sensor.py:430`) assembles the entity list conditionally:
 
 | Group | Source | Created when |
 | --- | --- | --- |
-| `SENSORS` (11 core price sensors) | `sensor.py:273` | always |
-| `FEE_SENSORS` (3 fee/cost sensors) | `sensor.py:304` | always |
-| `CAPACITY_SENSORS` (2) | `sensor.py:352` | `CONF_REGION == REGION_FLANDERS` |
-| `PROSUMER_SENSORS` (1) | `sensor.py:289` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
-| `INJECTION_SENSORS` (1) | `sensor.py:301` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
-| `ContractEndDateSensor` (1) | `sensor.py:490` | `CONF_CONTRACT_END_DATE` is set |
+| `SENSORS` (11 core price sensors) | `sensor.py:316` | always |
+| `FEE_SENSORS` (3 fee/cost sensors) | `sensor.py:347` | always |
+| `CAPACITY_SENSORS` (2) | `sensor.py:395` | `CONF_REGION == REGION_FLANDERS` |
+| `PROSUMER_SENSORS` (1) | `sensor.py:332` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
+| `INJECTION_SENSORS` (1) | `sensor.py:344` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
+| `ContractEndDateSensor` (1) | `sensor.py:531` | `CONF_CONTRACT_END_DATE` is set |
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
@@ -113,27 +113,27 @@ pulls (all fields defined at `coordinator.py:472`).
 
 ### Current-price selection and the nearest-slot guard
 
-`_current` (`sensor.py:69`) looks up the slot at `slot_start(utcnow,
+`_current` (`sensor.py:74`) looks up the slot at `slot_start(utcnow,
 resolution)`. On an exact miss it falls back to the temporally nearest slot but
 only within one billing slot of "now": `max_gap` is 3600 s on an hourly
-contract and 900 s on a quarter-hourly one (`sensor.py:86`). This bound stops a
+contract and 900 s on a quarter-hourly one (`sensor.py:91`). This bound stops a
 stale spot cache from surfacing yesterday's last slot as "current"; a fixed 1 h
 window used to let a quarter-hourly sensor present an up-to-45-min-stale slot as
 current. The 1 h hourly window also absorbs the DST seam.
 
-`_next_hour` (`sensor.py:91`) targets `slot_start(now) + 1h`. On a 15-minute
+`_next_hour` (`sensor.py:96`) targets `slot_start(now) + 1h`. On a 15-minute
 contract that deliberately stays the same quarter one hour later, so the sensor
 keeps its "next hour" meaning rather than becoming "next 15 minutes". If that
 exact slot is absent the sensor is `None` (no nearest-slot fallback).
 
-The today/tomorrow scalar sensors (`_bucket`, `sensor.py:101`) reduce over every
+The today/tomorrow scalar sensors (`_bucket`, `sensor.py:106`) reduce over every
 slot whose local date matches, so on a quarter-hourly contract they operate at
 native 15-minute resolution.
 
 ### extra_state_attributes
 
 `current_price` always carries extra attributes, and `injection_price` carries
-`today`/`tomorrow` arrays when its injection varies intra-day (`sensor.py:471`);
+`today`/`tomorrow` arrays when its injection varies intra-day (`sensor.py:460`);
 every other sensor returns `{}`.
 
 #### `current_price`
@@ -153,22 +153,22 @@ The payload:
 
 `today` / `tomorrow` rows are `{start, energy, network, taxes, all_in}` (each
 rounded to 6 decimals, `sensor.py:237`). `cheapest_4h_today` /
-`most_expensive_4h_today` rows are `{start, price}` (`sensor.py:209`).
+`most_expensive_4h_today` rows are `{start, price}` (`sensor.py:214`).
 
 Quarter-hourly vs hourly payloads: the `today`, `tomorrow`, `cheapest_4h_today`
 and `most_expensive_4h_today` attributes are always hourly. `_hourly_view`
-(`sensor.py:132`) returns `data.hourly` unchanged for an hourly contract but for
+(`sensor.py:137`) returns `data.hourly` unchanged for an hourly contract but for
 a quarter-hourly contract averages each hour's four slots into one breakdown.
 A full 15-minute curve (~192 rows) would exceed HA's 16 KB per-state-attribute
 recorder limit. Only these list attributes are downsampled; the scalar
 today/tomorrow min/max/avg sensors keep native resolution.
 
-`_today_ranked` (`sensor.py:176`) guarantees the cheapest and dearest lists are
+`_today_ranked` (`sensor.py:181`) guarantees the cheapest and dearest lists are
 disjoint (cheapest take their share first) and breaks price ties on the hour so
 the result is deterministic across reloads. Gotcha for automation authors: on a
 flat tariff where every hour rounds to the same all-in price the tie-break makes
 "cheapest" simply the first N hours and "most expensive" the last N; the source
-comment (`sensor.py:188`) says to treat the output as undefined when prices do
+comment (`sensor.py:193`) says to treat the output as undefined when prices do
 not actually vary across the day.
 
 #### `injection_price`
@@ -187,14 +187,14 @@ contract emits no array, so both lists come back empty and the sensor returns
 
 ### Unrecorded attributes
 
-`BePriceSensor._unrecorded_attributes` (`sensor.py:453`) excludes `today`,
+`BePriceSensor._unrecorded_attributes` (`sensor.py:486`) excludes `today`,
 `tomorrow`, `cheapest_4h_today` and `most_expensive_4h_today` from the recorder.
 They change every hour and are live display helpers, not history, so keeping
 them out of state-attribute storage stops long-term-database bloat.
 
 ### `current_year_cost`: state class and last_reset
 
-`current_year_cost` (`sensor.py:327`) is the only sensor with a non-trivial
+`current_year_cost` (`sensor.py:370`) is the only sensor with a non-trivial
 statistics setup, documented in its source comment:
 
 - `device_class=MONETARY` so HA's Energy dashboard auto-suggests it in the
@@ -202,7 +202,7 @@ statistics setup, documented in its source comment:
 - `state_class=TOTAL` (not `TOTAL_INCREASING`): under the compensation regime a
   heavy-injection day can lower the running total day-over-day, which
   `TOTAL_INCREASING` forbids.
-- `last_reset` (`sensor.py:468`) is pinned to Jan 1 00:00 local via
+- `last_reset` (`sensor.py:501`) is pinned to Jan 1 00:00 local via
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
 The value is always numeric: missing meter inputs collapse to the fees-only
@@ -210,7 +210,7 @@ floor, so the sensor never goes `unknown`.
 
 ### `monthly_peak_kw`: why MEASUREMENT
 
-`monthly_peak_kw` (`sensor.py:366`) must use `state_class=MEASUREMENT` because
+`monthly_peak_kw` (`sensor.py:409`) must use `state_class=MEASUREMENT` because
 that is the only class HA accepts under the `POWER` device class
 (`DEVICE_CLASS_STATE_CLASSES[POWER] == {MEASUREMENT}`); `TOTAL` would log a
 "state class is impossible" warning on setup. The statistics graph defaults to
@@ -356,7 +356,7 @@ The handler `_async_backfill_service` (`__init__.py:509`) resolves the target
 coordinator, then raises `ServiceValidationError` translation_key
 `snapshot_not_loaded` if `coordinator._snapshot is None`, before delegating to
 `backfill_range` (see [data-sources.md](data-sources.md)). It returns
-(`backfill.py:741`):
+(`backfill.py:792`):
 
 ```python
 { "rows_written": <int>, "sensors": { "<statistic_id>": <int>, ... },
@@ -388,11 +388,11 @@ All handlers raise localized `ServiceValidationError`s keyed under
 
 ## Diagnostics (`diagnostics.py`)
 
-`async_get_config_entry_diagnostics` (`diagnostics.py:105`) returns a single
+`async_get_config_entry_diagnostics` (`diagnostics.py:94`) returns a single
 dict a contributor downloads via "Download diagnostics" on the entry. If the
 entry is mid-reload (`runtime_data` is HA's `UNDEFINED` singleton, detected by
 type name to avoid importing a HA-private symbol) it returns
-`{"status": "coordinator_not_ready"}` instead of raising (`diagnostics.py:114`).
+`{"status": "coordinator_not_ready"}` instead of raising (`diagnostics.py:103`).
 
 Top-level dump keys:
 
@@ -406,7 +406,7 @@ Top-level dump keys:
 | `monthly_snapshot_labels` | `{ "YYYY-MM": publication_label or null }` for this (supplier, contract, region) |
 | `shared_failure` | sibling-coordinator negative-fetch marker, or null |
 
-The `coordinator` block (`diagnostics.py:168`) mirrors the current-price
+The `coordinator` block (`diagnostics.py:157`) mirrors the current-price
 attributes plus every scalar `CoordinatorData` field:
 `snapshot_publication`, `snapshot_age_hours`, `snapshot_stale`,
 `snapshot_valid_until`, `last_error`, `monthly_peak_kw`, `monthly_peak_month`,
@@ -417,10 +417,10 @@ attributes plus every scalar `CoordinatorData` field:
 
 ### Redaction
 
-`TO_REDACT = {CONF_API_KEY}` (`diagnostics.py:57`). `async_redact_data` masks
+`TO_REDACT = {CONF_API_KEY}` (`diagnostics.py:53`). `async_redact_data` masks
 only known config keys, so free-text error fields (`last_error`,
 `shared_failure.error`) get a second scrub via `_scrub_secret`
-(`diagnostics.py:60`), which replaces the API key literal anywhere it appears
+(`diagnostics.py:56`), which replaces the API key literal anywhere it appears
 with `**REDACTED**`. This is defence-in-depth: an ENTSO-E transport error string
 can, in narrow cases, embed the request URL and thus the `securityToken`.
 
@@ -436,9 +436,9 @@ can, in narrow cases, embed the request URL and thus the `securityToken`.
    months (relevant to the YTD `current_year_cost` path).
 5. `consumption` / `injection` roll-ups show whether the user's kWh sensors are
    wired: `null` means no sensor configured for that side, `0.0` means a wired
-   sensor that genuinely reads zero (`_kwh_window`, `diagnostics.py:74`), which
+   sensor that genuinely reads zero (`_kwh_window`, `diagnostics.py:70`), which
    tells apart an unconfigured sensor from a zero-reading one.
-6. `shared_failure` (`diagnostics.py:147`) shows whether sibling coordinators
+6. `shared_failure` (`diagnostics.py:136`) shows whether sibling coordinators
    for the same (supplier, contract, region) backed off, with the scrubbed error
    and consecutive-failure count, without the reporter having to grep logs.
 

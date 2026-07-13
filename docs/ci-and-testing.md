@@ -75,11 +75,11 @@ Shared helpers live in `tests/__init__.py`:
 
 - `make_snapshot(...)` builds a `SupplierSnapshot` with sensible defaults (a canonical Wallonia
   fixed-rate snapshot under ORES) so a pricing or coordinator test can override just the one field
-  it cares about (`tests/__init__.py:79`).
+  it cares about (`tests/__init__.py:85`).
 - `fixture_text(name, *, layout=False)` reads a fixture PDF and runs it through the real
   extractor, `extract_pdf_text` (pypdf) by default or `extract_pdf_text_layout` (pdfplumber) when
   `layout=True` for the column-positional cards (Bolt, DATS 24, Ecopower, TotalEnergies)
-  (`tests/__init__.py:51`). It is `lru_cache`d for the process lifetime because PDF extraction
+  (`tests/__init__.py:57`). It is `lru_cache`d for the process lifetime because PDF extraction
   dominates suite runtime (the comment notes roughly 10s per fixture, and the cache cuts a full
   run from about 190s to about 30s). The cache is process-scoped, so if you rewrite a fixture
   mid-session call `fixture_text.cache_clear()` or restart pytest.
@@ -133,9 +133,9 @@ Production code is type-checked with `mypy --strict`, but tests and helper scrip
 non-strict (see the workflows below). Several entity and coordinator tests substitute a
 `types.SimpleNamespace` for the real coordinator or config entry when only a couple of attributes
 are read (for example `entry.runtime_data = SimpleNamespace(data=...)` in
-`tests/test_diagnostics.py:85`). That stub does not match the production signature, so the call
+`tests/test_diagnostics.py:79`). That stub does not match the production signature, so the call
 site is annotated with `# type: ignore[arg-type]` to keep the non-strict mypy pass clean, as in
-`tests/test_button.py:77` and `tests/test_ecopower.py:385`. The convention is to suppress at the
+`tests/test_button.py:62` and `tests/test_ecopower.py:359`. The convention is to suppress at the
 call site with `# type: ignore[arg-type]`, never to relax the production function signature to
 accept the stub. `pyproject.toml` sets `explicit_package_bases = true` (`pyproject.toml:12`) so
 mypy treats `custom_components/be_electricity_prices` and `tests/` as separate package roots

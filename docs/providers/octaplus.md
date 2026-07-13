@@ -21,13 +21,13 @@ Related reading:
 
 ## Overview
 
-OCTA+ (extractor `id="octaplus"`, label `"OCTA+"`, `octaplus.py:702-716`) sells
+OCTA+ (extractor `id="octaplus"`, label `"OCTA+"`, `octaplus.py:672-686`) sells
 residential electricity only in Wallonia and Flanders. Brussels is rejected: the
 Brussels offers on OCTA+'s site are professional-only, so `_OCTAPLUS_REGIONS`
-(`octaplus.py:700`) is `frozenset({REGION_FLANDERS, REGION_WALLONIA})` and
-`EXTRACTOR.regions()` (the union over contracts, `base.py:383-388`) is those two
+(`octaplus.py:670`) is `frozenset({REGION_FLANDERS, REGION_WALLONIA})` and
+`EXTRACTOR.regions()` (the union over contracts, `base.py:541-546`) is those two
 regions. `fetch` raises `ExtractorError("... not available in region ...")` for
-any other region (`octaplus.py:188-189`, exercised by
+any other region (`octaplus.py:182-183`, exercised by
 `test_brussels_region_rejected`).
 
 OCTA+ publishes one PDF per (product, region) at a stable, predictable URL
@@ -38,15 +38,15 @@ https://files.octaplus.be/tariffs/E_OCTA_<SLUG>_RE_<VL|WL>_FR.pdf
 ```
 
 `<SLUG>` is the product slug (see the contracts table), and `<VL|WL>` is the
-region code (`_REGION_TO_CODE`, `octaplus.py:95-98`): `VL` for Flanders, `WL`
+region code (`_REGION_TO_CODE`, `octaplus.py:89-92`): `VL` for Flanders, `WL`
 for Wallonia. There is no per-month archive: OCTA+ overwrites each card in place
-under the same filename (`octaplus.py:151-155`). A human-facing listing page at
-`_LISTING_URL` (`octaplus.py:139`) links every card and is used only by
+under the same filename (`octaplus.py:145-149`). A human-facing listing page at
+`_LISTING_URL` (`octaplus.py:133`) links every card and is used only by
 `discover` for CI drift detection, not by `fetch`.
 
 ## Contracts
 
-Eight products are declared in `_CONTRACTS` (`octaplus.py:112-134`). The
+Eight products are declared in `_CONTRACTS` (`octaplus.py:106-128`). The
 `_ContractDef` `slug` field is the URL token; `regions=None` means "every region
 OCTA+ serves" (both), overridden only for the Impact variant.
 
@@ -64,47 +64,47 @@ OCTA+ serves" (both), overridden only for the Impact variant.
 Notes:
 
 - `octaplus_fixed_impact` is the only region-limited product. It sets
-  `regions=frozenset({REGION_WALLONIA})` (`octaplus.py:116-122`) because
+  `regions=frozenset({REGION_WALLONIA})` (`octaplus.py:110-116`) because
   Impact comptage is a Walloon CWaPE concept and the Flanders `FIXED` card
   carries no Impact block. `test_octaplus_is_registered` pins this: eight
   contract ids, and `impact.regions == frozenset({"wallonia"})`.
-- Both dynamic products set `quarter_hourly=True` (`octaplus.py:354-355`),
+- Both dynamic products set `quarter_hourly=True` (`octaplus.py:348-349`),
   because OCTA+ indexes on the 15-minute EPEX spot (`Epex 15'`). Billing thus
   uses the native 15-minute grid, like Engie / Cociter / EBEM / Ecofix; without
   it the live price table would aggregate to hourly and the current / next-slot
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
-  long-term statistics). See `DynamicRates` docs in `base.py:127-148`.
+  long-term statistics). See `DynamicRates` docs in `base.py:139-148`.
 - No product carries `spot_indexed_injection=True`. Non-dynamic OCTA+ cards
   print a flat monthly indicative injection rate, so no ENTSO-E spot is needed
   for the injection regime (contrast Cociter Variable).
 
 ## Fetch strategy
 
-### `fetch` (`octaplus.py:179-195`)
+### `fetch` (`octaplus.py:173-189`)
 
 1. Validate `contract_id` against `_CONTRACTS_BY_ID`, raise
    `ExtractorError("unknown OCTA+ contract ...")` on miss
    (`test_unknown_contract_raises`).
 2. Validate `region` is `VL`/`WL`, raise `not available in region` otherwise.
-3. Build the URL via `_document_url` (`octaplus.py:142-143`).
+3. Build the URL via `_document_url` (`octaplus.py:136-137`).
 4. Fetch aligned PDF text with `fetch_pdf_text_aligned(session, url,
    x_join_threshold=1.0)` and hand off to `parse_snapshot`.
 
 The `x_join_threshold=1.0` is load-bearing. OCTA+'s tax block renders each glyph
 as its own pdfplumber word with sub-point gaps (`"5 ,0 3 2 9 0 ,2 0 4 2"`); a
 1.0pt merge threshold reassembles them into `"5,0329 0,2042"` while keeping real
-inter-word spacing intact (`octaplus.py:191-194`,
-`extract_pdf_text_aligned` at `_pdf.py:235-299`, exercised by
+inter-word spacing intact (`octaplus.py:185-188`,
+`extract_pdf_text_aligned` at `_pdf.py:249-299`, exercised by
 `test_federal_taxes_use_first_tier`). The aligned extractor also exists because
 pdfplumber's default text extractor returns OCTA+'s DSO block in column-major
 order (one number per line); bucketing words by y coordinate reassembles each
 visual row into a single line like `AIEG 10,87 12,05 ...`
 (`octaplus.py:35-39`).
 
-### `probe` (`octaplus.py:146-159`)
+### `probe` (`octaplus.py:140-153`)
 
-The freshness key is `head_freshness_key(session, url)` (`_pdf.py:329-366`),
+The freshness key is `head_freshness_key(session, url)` (`_pdf.py:328-365`),
 which HEADs the per-(contract, region) PDF and returns its `Last-Modified` (or
 `ETag`) header. This works because OCTA+ overwrites cards in place under stable
 filenames, so the file's modification time is the correct freshness signal. The
@@ -115,12 +115,12 @@ preferred headers.
 ### `fetch_for_month`
 
 OCTA+ declares no `fetch_for_month` (the `SupplierExtractor` is built with only
-`fetch` and `probe`, `octaplus.py:714-715`). There is no accessible archive:
+`fetch` and `probe`, `octaplus.py:684-685`). There is no accessible archive:
 cards are overwrite-in-place, so past months fall back to the current snapshot
 as a proxy. This is the documented behaviour for overwrite-in-place suppliers in
-`base.py:353-361`.
+`base.py:511-519`.
 
-### `discover` (`octaplus.py:162-173`)
+### `discover` (`octaplus.py:156-167`)
 
 CI-only. It GETs `_LISTING_URL` and regex-scrapes every
 `E_OCTA_<SLUG>_RE_(VL|WL)_FR.pdf` link, returning the set of slugs.
@@ -130,7 +130,7 @@ returns an empty set on fetch failure.
 
 ## Parsing
 
-`parse_snapshot` (`octaplus.py:198-242`) is a pure function (no I/O) exposed for
+`parse_snapshot` (`octaplus.py:192-236`) is a pure function (no I/O) exposed for
 unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 
 | snapshot field | source function | notes |
@@ -143,10 +143,10 @@ unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 | `taxes.flanders_renewables` | `_extract_flanders_renewables` (`:537`) | Flanders only, green + cogen |
 | `taxes.wallonia_renewables` | `_extract_wallonia_renewables` (`:522`) | Wallonia only |
 | `dsos` | `_extract_flanders_dsos` (`:639`) or `_extract_wallonia_dsos` (`:578`) | region-branched |
-| `valid_until` | `parse_valid_until` (`_pdf.py:677`) | shared helper |
+| `valid_until` | `parse_valid_until` (`_pdf.py:773`) | shared helper |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` (`:245`) | PV forfait, annualised |
 
-### Energy block (`_extract_energy`, `octaplus.py:327-402`)
+### Energy block (`_extract_energy`, `octaplus.py:321-389`)
 
 `_extract_yearly_fee` (`:273-285`) always runs first and matches `Redevance
 fixe (€/an) <value>` (illustrative ~65 EUR/year per the comment and
@@ -182,7 +182,7 @@ By kind:
   stays nullable (separate optional circuit). `fixed` returns `FixedRates`,
   `variable` returns `VariableRates`.
 
-### Publication month (`_extract_publication_month`, `octaplus.py:428-449`)
+### Publication month (`_extract_publication_month`, `octaplus.py:407-428`)
 
 Two layouts are handled. Pre-2026 cards print `Clients résidentiels en <region>
 - MM/YYYY - Tarifs N% TVAC`; the regex anchors on that prose so a footer
@@ -192,7 +192,7 @@ month spelled out and accented; the fallback maps the folded month name through
 `_FRENCH_MONTHS` (`:412-425`). `test_publication_month_reads_fiche_tarifaire_banner`
 exercises both, including accented `FÉVRIER` and `AOÛT`.
 
-### Taxes (`_extract_taxes`, `octaplus.py:485-519`)
+### Taxes (`_extract_taxes`, `octaplus.py:464-498`)
 
 OCTA+ prints four federal-tier rows on page 2; the residential tier is the first
 (`0 & 3.000 kWh`). The regex `0\s*&\s*3\.000\s*kWh\s+<a>\s+<b>` anchors on the
@@ -207,9 +207,9 @@ non-matching separator to force the raise). Wallonia adds
 `energy_contribution 0.002042` (`test_federal_taxes_use_first_tier`),
 `region_connection_fee 0.00075` (`test_taxes_split_correctly_per_region`).
 
-The `TaxOverlay` sets `vat_rate=0.0` (`octaplus.py:234`): OCTA+ snapshots ship
+The `TaxOverlay` sets `vat_rate=0.0` (`octaplus.py:228`): OCTA+ snapshots ship
 VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
-`vat_rate` convention in `base.py:305-308`.
+`vat_rate` convention in `base.py:305-466`.
 
 ### Regional renewables
 
@@ -224,7 +224,7 @@ VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
 
 Both raises are covered by `test_missing_regional_renewables_raises`.
 
-### Injection (`_extract_injection`, `octaplus.py:452-479`)
+### Injection (`_extract_injection`, `octaplus.py:431-458`)
 
 Injection taxonomy: **flat monthly indicative** on fixed/variable, **hourly
 factor*spot+base** on dynamic. `current` is the second number on the `Compteur
@@ -232,7 +232,7 @@ monohoraire` line (the injection column next to the consumption rate), divided b
 100. Pinned illustrative `0.0472` with `factor`/`base` `None`
 (`test_fixed_wallonia_extracts_meter_rates`). For `dynamic`, the injection
 formula is found after the `_INJECTION_LEAD` prose and yields `factor` and `base`
-that are NOT VAT-adjusted (injection is VAT-exempt, `base.py:214-229`);
+that are NOT VAT-adjusted (injection is VAT-exempt, `base.py:254-276`);
 `base = b_eur_mwh / 1000`. Pinned illustrative `factor 1.0`, `base -0.01389` for
 `Epex 15' * 1 - 13,89 €/MWh` (`test_dynamic_extracts_injection_formula`). Returns
 `None` only when both `current` and `factor` are absent.
@@ -242,7 +242,7 @@ votre injection` or the 2026 rewording `les prix de l'électricité injectée so
 indexés`, with the curly apostrophe the card uses.
 `test_dynamic_injection_survives_reworded_lead_in` guards this.
 
-### Supplier PV forfait (`_extract_supplier_prosumer`, `octaplus.py:245-267`)
+### Supplier PV forfait (`_extract_supplier_prosumer`, `octaplus.py:239-261`)
 
 Fixed and variable cards print `+ <value> €/kVA par mois` ("Forfait panneaux
 solaires", applicable only under the compensation regime). It is TVAC and must
@@ -260,9 +260,9 @@ exactly like the Cociter Variable and Mega forfaits (see
 
 ## DSO overlay coverage
 
-Region-branched in `parse_snapshot` (`octaplus.py:214-219`).
+Region-branched in `parse_snapshot` (`octaplus.py:208-213`).
 
-### Wallonia (`_extract_wallonia_dsos`, `octaplus.py:578-624`)
+### Wallonia (`_extract_wallonia_dsos`, `octaplus.py:557-603`)
 
 Five DSO keys via `_WALLONIA_LABELS` (`:562-575`): `AIEG` -> `DSO_AIEG`,
 `AIESH` -> `DSO_AIESH`, `ORES\(` -> `DSO_ORES` (eight ORES sub-areas share one
@@ -285,7 +285,7 @@ illustrative for `aieg`: single 0.1087, peak 0.1205, offpeak 0.0667, transport
 (`test_wallonia_dsos_extract_full_set`, and the 2026-template variant
 `test_wallonia_dsos_new_2026_template`).
 
-### Flanders (`_extract_flanders_dsos`, `octaplus.py:639-697`)
+### Flanders (`_extract_flanders_dsos`, `octaplus.py:609-667`)
 
 Eight Fluvius sub-areas via `_FLANDERS_LABELS` (`:627-636`). Note the label-to-
 key mapping is not one-to-one by name: `Fluvius Kempen` -> `DSO_FLUVIUS_IVEKA`
@@ -314,7 +314,7 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
 ## Quirks and historical bugs (land mines)
 
 - **VAT convention**: snapshot prices are TVAC, so `vat_rate=0.0`
-  (`octaplus.py:234`). The dynamic formula is the exception: it is HTVA on the
+  (`octaplus.py:228`). The dynamic formula is the exception: it is HTVA on the
   card and is scaled by the parsed VAT multiplier before storage
   (`:341-348`).
 - **Injection is VAT-exempt**: dynamic injection factor/base are stored
@@ -362,7 +362,7 @@ cards):
 | `octaplus_dynamic_w.pdf` | OCTA+ Dynamic, Wallonia. `Epex 15'` consumption + injection formulas, spaced DSO labels. |
 
 Fixture text is read through `extract_pdf_text_aligned(..., x_join_threshold=1.0)`
-in the test helper `_text` (`test_octaplus.py:53-56`), matching the production
+in the test helper `_text` (`test_octaplus.py:54-57`), matching the production
 fetch path.
 
 ## When the card changes, look here
