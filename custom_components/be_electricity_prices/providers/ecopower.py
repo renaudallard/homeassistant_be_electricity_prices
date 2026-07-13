@@ -674,16 +674,12 @@ def _extract_injection(text: str) -> InjectionRates | None:
     match = _INJECTION_RE.search(text) or _INJECTION_SPLIT_RE.search(text)
     if not match:
         return None
-    raw = match.group(1).replace(" ", "")
-    # Normalise non-ASCII minus glyphs to '-' so to_float can parse them.
-    for variant in ("‒", "–", "—", "−"):
-        if raw.startswith(variant):
-            raw = "-" + raw[len(variant) :]
-            break
-    # The credit is never negative (Ecopower states this); the card
-    # merely prints it in the energy/cost column as a negative figure.
-    # Take the magnitude so a card that ever prints it as a positive
-    # number isn't flipped into a debit.
+    # The credit is never negative (Ecopower states this); the card merely
+    # prints it in the energy/cost column as a negative figure. Strip any
+    # leading sign glyph -- the regex admits every SIGN_CHARS minus, so the
+    # hand-rolled variant list missed U+2010 / U+2011 and to_float raised
+    # ValueError on them -- and take the magnitude.
+    raw = match.group(1).replace(" ", "").lstrip(SIGN_CHARS)
     return InjectionRates(current=abs(to_float(raw)))
 
 
