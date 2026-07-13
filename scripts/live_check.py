@@ -1167,6 +1167,25 @@ def _validate_snapshot(
     _validate_energy(prefix, contract_id, getattr(snap, "energy", None))
     shape = injection_shape or _INJECTION_SHAPE.get(contract_id, "present")
     _validate_injection(prefix, snap, shape)
+    _validate_dsos(prefix, snap)
+
+
+def _validate_dsos(prefix: str, snap: object) -> None:
+    """Bounds-check the capacity tariff on every DSO overlay a supplier
+    populates, so a column-index misread fails CI instead of shipping
+    silently (the capaciteitstarief is the dominant cost for a Flemish
+    digital-meter user). It's a regulated, supplier-independent rate; the
+    field is None on non-Flemish overlays, which are skipped. Only the sole
+    prior spot-check (one Fluvius row on three suppliers) covered it."""
+    dsos = getattr(snap, "dsos", None) or {}
+    for key, overlay in dsos.items():
+        capacity = getattr(overlay, "capacity_eur_per_kw_year", None)
+        if capacity is not None:
+            _expect(
+                f"{prefix}: {key} capacity tariff in [20, 200] EUR/kW/yr",
+                20.0 <= capacity <= 200.0,
+                detail=f"capacity={capacity}",
+            )
 
 
 def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:  # noqa: ARG001 - contract_id reserved for richer validation
