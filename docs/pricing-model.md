@@ -188,7 +188,7 @@ meter type (`providers/base.py:107-108`).
 15-minute grid (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische
 Burgerstroom, Bolt Dynamisch) or the hourly-aggregated curve (Frank default, Luminus, Mega,
 TotalEnergies, Eneco); YTD billing stays hourly regardless
-(`providers/base.py:127-147`). See [data-sources.md](data-sources.md) for how the
+(`providers/base.py:139-159`). See [data-sources.md](data-sources.md) for how the
 curve is fetched and the grid helpers `slots_per_hour` / `slot_delta` /
 `slot_start` (`pricing.py:84-105`).
 
@@ -546,5 +546,5 @@ Sibelga overlay (`providers/base.py:279-273`). The user picks the tier in the
 config flow; the four residential tiers are `le1_44`, `le6`, `le9_6`, `le13`
 (residential connections are <=13 kVA), default `le6`
 (`const.py:180-172`). Returns `0.0` outside Brussels or when the card omits the
-OSP table. The fee is added to the Brussels annual cost in the YTD path
-(`coordinator.py:2161-2162`), not to the per-kWh all-in.
+OSP table. The fee is added to the Brussels annual cost in `_annual_static_fees`
+(`coordinator.py:2099`), not to the per-kWh all-in.

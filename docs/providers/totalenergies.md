@@ -73,7 +73,7 @@ Notes on the kind mapping:
   `test_impact_parses_as_flat_supplier_energy_with_impact_dso_bands`
   (`tests/test_totalenergies.py:194`).
 - **myDynamic bills per clock hour, not per quarter hour.** `DynamicRates.quarter_hourly`
-  defaults `False` (`providers/base.py:147`) and TotalEnergies never overrides it,
+  defaults `False` (`providers/base.py:159`) and TotalEnergies never overrides it,
   so the integration aggregates the ENTSO-E 15 minute curve to hourly for this
   contract (same grid choice as Frank/Luminus/Mega/Eneco, `providers/base.py:140-154`).
 - No contract sets `spot_indexed_injection` (it defaults `False`,

@@ -63,7 +63,7 @@ Notes:
 - Both dynamic products set `quarter_hourly=True` (`ecofix.py:374`): the cards bill
   on the 15-minute Belpex spot ("Belpex 15M"), so the integration keeps the native
   quarter-hour slots rather than the hourly mean, like Engie and OCTA+ (see the
-  `DynamicRates.quarter_hourly` docstring at `providers/base.py:127`). YTD billing
+  `DynamicRates.quarter_hourly` docstring at `providers/base.py:139`). YTD billing
   is still hourly because HA only retains hourly long-term statistics.
 - Motion vs Motion Online differ only in the energy formula and the yearly fixed
   fee; the yearly fee is the sole reason two dynamic products exist. Motion Online
@@ -354,7 +354,7 @@ test in the source.
   prints on the line above the month; `_extract_publication` scans the first 1000
   chars for a word+year token that is actually a Dutch month, so a future
   `... Versie 2026` header cannot shadow the real month line and drop validity
-  (`ecofix.py:520`, `test_publication_scan_skips_colliding_version_token`,
+  (`ecofix.py:497`, `test_publication_scan_skips_colliding_version_token`,
   `tests/test_ecofix.py:269`). The card has no `geldig`/`valable` keyword, so the
   shared `parse_valid_until` helper would return None; the month name is parsed
   directly and `valid_until` is set to the last day of that month for the monthly

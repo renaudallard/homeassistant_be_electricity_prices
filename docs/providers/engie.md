@@ -250,8 +250,8 @@ otherwise cancel out (`0.1039 * 10.6 == 0.1039 * 1.06 * 10`).
 
 | kind | Returned dataclass | How the rates map |
 | --- | --- | --- |
-| fixed | `FixedRates` (`engie.py:529`) | `single/peak/offpeak/exclusive_night` from the 4- or 7-column row + `yearly_fixed_fee`. |
-| variable | `VariableRates` (`engie.py:536`) | `current/peak/offpeak/exclusive_night`; monthly-indexed. Reads the `Prix mensuels` row, not the `Prix annuels estimés` row (see quirks). |
+| fixed | `FixedRates` via `fixed_or_variable_rates` (`engie.py:528`) | `single/peak/offpeak/exclusive_night` from the 4- or 7-column row + `yearly_fixed_fee`. |
+| variable | `VariableRates` via `fixed_or_variable_rates` (`engie.py:528`) | `current/peak/offpeak/exclusive_night`; monthly-indexed. Reads the `Prix mensuels` row, not the `Prix annuels estimés` row (see quirks). |
 | dynamic | `DynamicRates` (`engie.py:470`) | `factor * eSpot_15 + base`, VAT-scaled, `quarter_hourly=True`. |
 | tou | `TimeOfUseRates` (`engie.py:499`) | Flextime triplet from columns 4/5/6, `weekend_rule="weekend_no_peak"`. |
 

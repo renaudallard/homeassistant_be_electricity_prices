@@ -316,7 +316,7 @@ injected each past hour. `_backfill_cost_sensor` (`backfill.py:482`) recovers
 that from the recorder: it reads hourly kWh for every configured consumption
 sensor (`_hourly_consumption_sensors`) and injection sensor
 (`_hourly_injection_sensors`) through `_recorder_hourly_kwh`, binned into
-UTC-hour totals (`backfill.py:501`). The recorder helpers treat their date
+UTC-hour totals (`backfill.py:558`). The recorder helpers treat their date
 arguments as local-day boundaries, so the code passes the local dates of the
 first and last UTC hour, keeping the query window aligned with the backfill's
 `_hour_iter` grid (`backfill.py:550`).
@@ -324,7 +324,7 @@ first and last UTC hour, keeping the query window aligned with the backfill's
 ### Billing each past hour at its historical rate
 
 Both backfill passes cache one `SupplierSnapshot` per month via
-`_snapshot_for_month` (`backfill.py:352`, `backfill.py:509`), so a 365-day window
+`_month_snapshot_cache` (`backfill.py:400`, `backfill.py:565`), so a 365-day window
 touches at most 12 archive fetches. `_snapshot_for_month` reuses the extractor's
 `fetch_for_month` archive path (see [provider-framework.md](provider-framework.md)),
 falling back to the current live snapshot when a supplier publishes no archive.
@@ -333,7 +333,7 @@ snapshot, looks up the hour's spot (or `None`), and calls
 `compute_breakdown(snap, dso, region, local, spot, meter, dso_mode)`
 (`backfill.py:425`, `backfill.py:602`). A dynamic supplier with no spot for the
 hour is skipped, because `factor * spot + base` needs both terms
-(`backfill.py:374`). `KeyError` / `ValueError` (a missing DSO row for an archived
+(`backfill.py:422`). `KeyError` / `ValueError` (a missing DSO row for an archived
 month, or a non-static rate kind reaching the static path) skips just that hour
 rather than tearing the whole backfill down (`backfill.py:426`).
 
@@ -349,7 +349,7 @@ both places.
 threshold, negative cache) stays in one place. It returns an empty dict when no
 spot is needed (static energy with a monthly or no injection). The gate is
 `isinstance(snap.energy, DynamicRates) or _injection_needs_spot(snap, entry)`
-(`backfill.py:275`): a static-energy contract whose injection is itself
+(`backfill.py:280`): a static-energy contract whose injection is itself
 spot-indexed (Cociter Variable) still needs spots so its feed-in credit lands in
 the backfilled rows and no sum-chain step appears at the backfill-to-live seam.
 It feeds `_ensure_historical_spots` local dates (`dt_util.as_local(...).date()`,

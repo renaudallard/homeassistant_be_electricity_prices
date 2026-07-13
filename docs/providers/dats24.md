@@ -103,7 +103,7 @@ there is nothing cheap to diff, so the coordinator's time-based TTL governs
 refresh. This is exactly the "DATS 24 single-PDF" case called out in the
 `SnapshotProbe` contract comment in `base.py:505-509`.
 
-Note the module does define a `discover` coroutine (`dats24.py:141-162`), but it
+Note the module does define a `discover` coroutine (`dats24.py:141-153`), but it
 is a catalog-drift check for the live-check harness, not a coordinator probe. It
 HEADs `_RATECARD_URL` and returns `{_CONTRACT_ID}` on any status below 400,
 `set()` otherwise. Its docstring explains the deliberate design: a single 200 is

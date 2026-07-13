@@ -255,12 +255,12 @@ Schema `_connection_power_schema` (`config_flow.py:438`), default
 `DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:195`). Options are the four
 residential tiers `CONNECTION_KVA_TIERS` (`const.py:189`): `le1_44`, `le6`,
 `le9_6`, `le13`, `translation_key="connection_kva_tier"`. Reached from
-`_before_solar` when region is Brussels (`config_flow.py:949`). Brussels bills a
+`_before_solar` when region is Brussels (`config_flow.py:1323`). Brussels bills a
 Brugel OSP (Obligations de Service Public) annual fee scaled by contractual
 connection power, so the tier is asked before solar. Residential connections are
 <=13 kVA, so only the four residential tiers are offered; the key is matched
 against the parsed OSP table (`const.py:180`). Other regions have no such fee and go
-straight to solar (`config_flow.py:949` comment).
+straight to solar (`config_flow.py:1323` comment).
 
 ### `solar`: inverter kVA + regime
 
@@ -347,7 +347,7 @@ Anything pre-filled stays editable (`strings.json:79`).
 | Dynamic/TOU/Impact contract forces `METER_DYNAMIC` | `config_flow.py:418` | Smart meter required; mixing bi-horaire network with TOU energy mis-bills |
 | `dso_tariff_mode` (incl. Impact) only in Wallonia | `config_flow.py:1304` | Impact is CWaPE-only; other regions bill differently |
 | `capacity` step only in Flanders | `config_flow.py:1071`, `:968` | Only Flanders has the capaciteitstarief |
-| `connection_power` step only in Brussels | `config_flow.py:949` | Only Brussels charges the Brugel OSP fee |
+| `connection_power` step only in Brussels | `config_flow.py:1323` | Only Brussels charges the Brugel OSP fee |
 | Compensation regime only in Wallonia | `config_flow.py:825` | Avoids double-counting the Flemish capacity tariff |
 | Peak sensor restricted to power/apparent_power | `config_flow.py:500` | Issue #19: a kWh sensor would inflate the capacity bill |
 | kWh sensors restricted to device_class energy | `config_flow.py:746` | A non-energy sensor would be read as raw kWh |

@@ -51,7 +51,7 @@ class BePriceSensorDescription(SensorEntityDescription):
     last_reset_fn: Callable[[], datetime] | None = None
 ```
 
-`native_value` (`sensor.py:474`) calls `value_fn(coordinator.data)` and then
+`native_value` (`sensor.py:490`) calls `value_fn(coordinator.data)` and then
 rounds to `suggested_display_precision + 2` decimals (or 6 when no precision is
 set). The extra two decimals beyond what the UI shows exist to strip
 float-representation noise (for example `0.35322099999999995`) that the recorder
@@ -152,7 +152,7 @@ The payload:
 | `tomorrow` | `_split_today_tomorrow(data)[1]` | per-hour breakdown rows for tomorrow |
 
 `today` / `tomorrow` rows are `{start, energy, network, taxes, all_in}` (each
-rounded to 6 decimals, `sensor.py:237`). `cheapest_4h_today` /
+rounded to 6 decimals, `pricing.py:380`). `cheapest_4h_today` /
 `most_expensive_4h_today` rows are `{start, price}` (`sensor.py:214`).
 
 Quarter-hourly vs hourly payloads: the `today`, `tomorrow`, `cheapest_4h_today`

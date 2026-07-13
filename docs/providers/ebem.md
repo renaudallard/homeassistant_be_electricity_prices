@@ -389,7 +389,7 @@ feed-in credit (`ebem.py:529`, `ebem.py:562`, `tests/test_ebem.py:194`).
   (underscore), so `_PDF_RE` accepts `[-_]` between kind and MM (`ebem.py:96`).
 - **Colliding `VERSIE 2026` token**: `_extract_validity` scans for the first
   real Dutch month rather than aborting on the first `word + year`
-  (`ebem.py:322`).
+  (`ebem.py:298`).
 - **VAT columns**: cards print both ex-VAT and incl-VAT; the extractor stores
   incl-VAT for consumption, ex-VAT-based factors are VAT-scaled, injection is
   never VAT-scaled (`providers/base.py:216`).

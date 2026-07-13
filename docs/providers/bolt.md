@@ -299,10 +299,11 @@ the invariant in CI.
 
 **Brussels (`_extract_brussels_dsos`, `bolt.py:790`).** One row, `Sibelga`, with six captured
 numbers: mono, jour, nuit, excl_nuit, transport, terme_fixe (the prosumer trailing token is `-`).
-The exclusive-night column (group 4) is now wired into `distribution_exclusive_night`; the comment
-records that it was previously dropped, causing a Brussels night meter to fall back to off-peak,
-correct only while the two columns happened to be equal (`bolt.py:764`). The Sibelga overlay also
-carries the Brussels Brugel OSP annual-fee table via `parse_brussels_osp` (`bolt.py:770`,
+The exclusive-night column (group 4) is wired into `distribution_exclusive_night` via the shared
+`brussels_sibelga_overlay` builder (`bolt.py:813`); earlier it was dropped, which made a Brussels
+night meter fall back to off-peak, correct only while the two columns happened to be equal. The
+Sibelga overlay also carries the Brussels Brugel OSP annual-fee table via `parse_brussels_osp`
+(`bolt.py:816`,
 `_pdf.py:532`); Bolt prints `Obligations de service publique` with a lowercase `s`, which the
 case-insensitive helper handles. A missing Sibelga row returns an empty dict (permitted).
 `test_brussels_extracts_sibelga` (`tests/test_bolt.py:204`) checks distribution 0.0996, off-peak
@@ -334,7 +335,7 @@ case-insensitive helper handles. A missing Sibelga row returns an empty dict (pe
   (`bolt.py:649`).
 - **Exclusive-night everywhere.** `Prix mensuel` group 2 and Fluvius group 4 and the Sibelga column
   are all dedicated night-circuit rates, not day/peak rates (`bolt.py:428`, `bolt.py:670`,
-  `bolt.py:764`).
+  `bolt.py:813`).
 
 ## Test fixtures
 

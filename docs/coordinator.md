@@ -162,11 +162,11 @@ Spots are fetched only for two shapes:
 |-----|------|---------|---------|
 | `hourly` | `dict[datetime, PriceBreakdown]` | UTC-keyed price table (48-ish slots covering today+tomorrow); keys are hour or quarter-hour boundaries per `resolution` | current/next/today/tomorrow price sensors and window services; `tomorrow_prices_available` binary sensor (`sensor.py:74`, `binary_sensor.py:63`) |
 | `resolution` | `str` | `RESOLUTION_HOURLY` or `RESOLUTION_QUARTER`; slot width of `hourly` keys | slot truncation in `sensor.py:77`; window sizing in `__init__.py:463` |
-| `snapshot_publication` | `str` | supplier's publication label for the current card | `current_price` sensor attribute (`sensor.py:479`) |
-| `snapshot_age_hours` | `float` | hours since `_snapshot_fetched_at` (`inf` if never) | `current_price` sensor attribute (`sensor.py:480`) |
-| `snapshot_stale` | `bool` | True when age > 7 days | `current_price` sensor attribute (`sensor.py:481`) |
+| `snapshot_publication` | `str` | supplier's publication label for the current card | `current_price` sensor attribute (`sensor.py:511`) |
+| `snapshot_age_hours` | `float` | hours since `_snapshot_fetched_at` (`inf` if never) | `current_price` sensor attribute (`sensor.py:512`) |
+| `snapshot_stale` | `bool` | True when age > 7 days | `current_price` sensor attribute (`sensor.py:513`) |
 | `snapshot_valid_until` | `date \| None` | last calendar day the rates apply; `None` = unknown | `tomorrow_prices_available` binary sensor (`binary_sensor.py:66`) |
-| `last_error` | `str` | last human-readable failure reason | `current_price` sensor attribute (`sensor.py:482`) |
+| `last_error` | `str` | last human-readable failure reason | `current_price` sensor attribute (`sensor.py:514`) |
 | `monthly_peak_kw` | `float` | Flanders rolling monthly peak in kW (>= VREG floor) | `monthly_peak_kw` sensor (`sensor.py:424`) |
 | `monthly_peak_month` | `date \| None` | month the peak belongs to | diagnostics (`diagnostics.py:168`) |
 | `capacity_cost_eur` | `float` | monthly Flemish capacity cost estimate | `capacity_cost` sensor (`sensor.py:406`) |
@@ -227,7 +227,7 @@ Three energy paths, chosen by contract shape:
 
 - **Day + night register pair** (`CONF_DAY_*_KWH` + `CONF_NIGHT_*_KWH`): one recorder delta per day per register, fanned into band slots.
 - **Single totals sensor** (`CONF_CONSUMPTION_KWH` / `CONF_INJECTION_KWH`): for mono meters the total goes to the day slot and the math sums it; for bi/dynamic meters `_recorder_daily_band_ratio` (`coordinator.py:1970`) recovers the day/night split from hourly recorder statistics binned on `is_offpeak`, defaulting to a time-weighted `_default_band_ratio_for` (`coordinator.py:2434`) for days with no accumulation so a flat Sunday isn't billed all-peak.
-- **Partial pair** (one register half missing): returns `None`, so the caller falls back to the fees-only floor rather than silently undercounting a band (`coordinator.py:2192`).
+- **Partial pair** (one register half missing): returns `None`, so the caller falls back to the fees-only floor rather than silently undercounting a band (`coordinator.py:2620`).
 
 The recorder is read via `_recorder_rows` (`coordinator.py:2070`), which requests the `change` field (delta of the cumulative `sum`, not the all-time total) with `units={"energy": "kWh"}` so a Wh/MWh sensor is normalised rather than billed 1000x wrong.
 
