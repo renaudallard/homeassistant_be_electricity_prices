@@ -1988,6 +1988,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return
         today = dt_util.now().date()
         keep_after = dt_util.start_of_local_day(date(today.year, 1, 1)).astimezone(UTC)
+        # Within a calendar year every cached hour already sits at or after the
+        # cutoff, so skip rebuilding the whole dict every tick. Only rebuild
+        # when a prior-year key actually needs dropping (the year boundary).
+        # The min() scan is a cheap comparison; it avoids a full dict
+        # reallocation on each of the other 364 days.
+        if min(self._historical_spots) >= keep_after:
+            return
         self._historical_spots = {
             h: v for h, v in self._historical_spots.items() if h >= keep_after
         }
