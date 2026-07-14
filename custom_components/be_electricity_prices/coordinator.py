@@ -2188,16 +2188,44 @@ def _month_snapshot_cache(
     return _snap_for
 
 
+# A spot cache grouped by local (year, month) so several months' means can be
+# read without rescanning the whole year (and re-localising every hour) once
+# per month. Each bucket keeps (utc_ts, value) pairs so the SPP-weighted mean
+# can still resolve each hour's Synergrid weight.
+_SpotMonthBucket = dict[tuple[int, int], list[tuple[datetime, float]]]
+
+
+def _bucket_by_local_month(spots: dict[datetime, float]) -> _SpotMonthBucket:
+    """Group ``spots`` by their local ``(year, month)``, doing the timezone
+    conversion once per entry.
+
+    The YTD walk reads up to twelve months' means from the same year long
+    cache; without bucketing each month rescans the whole dict and calls
+    ``dt_util.as_local`` on every hour. Bucketing once turns each month into a
+    dict lookup. Insertion order follows ``spots`` so a mean over a bucket
+    matches the pre-bucket scan bit for bit.
+    """
+    buckets: _SpotMonthBucket = {}
+    for ts, value in spots.items():
+        local = dt_util.as_local(ts)
+        buckets.setdefault((local.year, local.month), []).append((ts, value))
+    return buckets
+
+
+def _month_mean(bucket: _SpotMonthBucket, year: int, month: int) -> float | None:
+    """Arithmetic mean of the (year, month) bucket, or ``None`` if empty."""
+    entries = bucket.get((year, month))
+    return fmean([value for _, value in entries]) if entries else None
+
+
 def _mean_of_month(spots: dict[datetime, float], year: int, month: int) -> float | None:
     """Arithmetic mean of the spot values whose local timestamp falls in
-    (year, month). Returns ``None`` when that month has no cached hours."""
-    values = [v for ts, v in spots.items() if _local_ym(ts) == (year, month)]
-    return fmean(values) if values else None
+    (year, month). Returns ``None`` when that month has no cached hours.
 
-
-def _local_ym(ts: datetime) -> tuple[int, int]:
-    local = dt_util.as_local(ts)
-    return (local.year, local.month)
+    Convenience wrapper for callers holding a raw spot dict; the per-tick hot
+    paths bucket once up front and call :func:`_month_mean` directly.
+    """
+    return _month_mean(_bucket_by_local_month(spots), year, month)
 
 
 def _drop_future_spots(
@@ -2213,6 +2241,30 @@ def _drop_future_spots(
     return {ts: v for ts, v in spots.items() if dt_util.as_local(ts).date() <= today}
 
 
+def _spp_month_mean(
+    bucket: _SpotMonthBucket,
+    weights: SppWeights,
+    year: int,
+    month: int,
+) -> float | None:
+    """SPP-weighted mean of the (year, month) bucket's prices, or ``None``.
+
+    Weights each price by the Synergrid profile weight for its UTC hour. The
+    weights span the whole year, so a boundary hour (local month != UTC month)
+    still finds its weight. Returns ``None`` when no weighted hour is available.
+    """
+    num = 0.0
+    den = 0.0
+    for ts, price in bucket.get((year, month), ()):
+        utc = ts.astimezone(UTC)
+        weight = weights.get((utc.month, utc.day, utc.hour))
+        if weight is None:
+            continue
+        num += price * weight
+        den += weight
+    return num / den if den else None
+
+
 def _spp_weighted_month_mean(
     spots: dict[datetime, float],
     weights: SppWeights,
@@ -2221,23 +2273,12 @@ def _spp_weighted_month_mean(
 ) -> float | None:
     """SPP-weighted mean of the (year, month)'s prices, or ``None``.
 
-    Selects the same local-delivery-month hours as :func:`_mean_of_month`, then
-    weights each price by the Synergrid profile weight for its UTC hour. The
-    weights span the whole year, so a boundary hour (local month != UTC month)
-    still finds its weight. Returns ``None`` when no weighted hour is available.
+    Convenience wrapper over :func:`_spp_month_mean` for callers holding a raw
+    spot dict; selects the same local-delivery-month hours as
+    :func:`_mean_of_month`. The per-tick hot path buckets once and calls
+    :func:`_spp_month_mean` directly.
     """
-    num = 0.0
-    den = 0.0
-    for ts, price in spots.items():
-        if _local_ym(ts) != (year, month):
-            continue
-        utc = ts.astimezone(UTC)
-        weight = weights.get((utc.month, utc.day, utc.hour))
-        if weight is None:
-            continue
-        num += price * weight
-        den += weight
-    return num / den if den else None
+    return _spp_month_mean(_bucket_by_local_month(spots), weights, year, month)
 
 
 def _spp_weighting_enabled(entry: ConfigEntry) -> bool:
@@ -3005,7 +3046,8 @@ def _spp_injection_spot(
     *,
     monthly_mean: bool,
     spp_weights: SppWeights | None,
-    historical_spots: dict[datetime, float] | None,
+    historical_spots: dict[datetime, float] | None = None,
+    bucket: _SpotMonthBucket | None = None,
     year: int,
     month: int,
     cache: dict[tuple[int, int], float | None],
@@ -3018,16 +3060,20 @@ def _spp_injection_spot(
     SPP-weighted month-mean, falling back to ``spot`` when the profile is
     missing for the month. ``cache`` memoises the per-month weighted mean.
 
-    Shared by the live YTD credit and the backfill accrual so the two
-    price mean-indexed injection identically.
+    Callers that already bucketed the spot cache for the tick pass ``bucket``;
+    the rest pass the raw ``historical_spots`` and it is bucketed here on the
+    first miss for a month. Shared by the live YTD credit and the backfill
+    accrual so the two price mean-indexed injection identically.
     """
-    if not (monthly_mean and spp_weights is not None and historical_spots is not None):
+    if not (monthly_mean and spp_weights is not None):
         return spot
     key = (year, month)
     if key not in cache:
-        cache[key] = _spp_weighted_month_mean(
-            historical_spots, spp_weights, year, month
-        )
+        if bucket is None:
+            if historical_spots is None:
+                return spot
+            bucket = _bucket_by_local_month(historical_spots)
+        cache[key] = _spp_month_mean(bucket, spp_weights, year, month)
     weighted = cache[key]
     return weighted if weighted is not None else spot
 
@@ -3111,6 +3157,10 @@ async def _ytd_hourly_energy(
     # SPP-weighted per-month injection means, when the entry opted in. Energy
     # keeps the flat mean above; only the injection credit uses these.
     month_spp: dict[tuple[int, int], float | None] = {}
+    # Bucket the year's spots by local month once so each month's mean is a
+    # lookup rather than a full-year rescan (this loop touches up to twelve
+    # distinct months). Empty for a dynamic contract, which prices per hour.
+    month_bucket = _bucket_by_local_month(historical_spots) if historical_spots else {}
 
     energy_cost = 0.0
     # Iterate the union of both sides so an injection-only wiring
@@ -3121,11 +3171,7 @@ async def _ytd_hourly_energy(
         if monthly_mean:
             key = (local.year, local.month)
             if key not in month_means:
-                month_means[key] = (
-                    _mean_of_month(historical_spots, *key)
-                    if historical_spots is not None
-                    else None
-                )
+                month_means[key] = _month_mean(month_bucket, *key)
             spot = month_means[key]
             if spot is None:
                 continue
@@ -3152,7 +3198,7 @@ async def _ytd_hourly_energy(
                 spot,
                 monthly_mean=monthly_mean,
                 spp_weights=spp_weights,
-                historical_spots=historical_spots,
+                bucket=month_bucket,
                 year=local.year,
                 month=local.month,
                 cache=month_spp,
