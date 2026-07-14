@@ -3158,9 +3158,14 @@ async def _ytd_hourly_energy(
     # keeps the flat mean above; only the injection credit uses these.
     month_spp: dict[tuple[int, int], float | None] = {}
     # Bucket the year's spots by local month once so each month's mean is a
-    # lookup rather than a full-year rescan (this loop touches up to twelve
-    # distinct months). Empty for a dynamic contract, which prices per hour.
-    month_bucket = _bucket_by_local_month(historical_spots) if historical_spots else {}
+    # lookup rather than a full-year rescan (the loop reads up to twelve
+    # distinct months). Only the spot-monthly path reads it; a dynamic
+    # contract prices per hour, so skip the bucketing there entirely.
+    month_bucket = (
+        _bucket_by_local_month(historical_spots)
+        if monthly_mean and historical_spots
+        else {}
+    )
 
     energy_cost = 0.0
     # Iterate the union of both sides so an injection-only wiring
