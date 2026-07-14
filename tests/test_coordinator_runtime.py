@@ -138,6 +138,57 @@ async def test_ensure_historical_spots_skips_permanently_short_day(
         # Second call within the TTL must not re-fetch the short day.
         await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
         assert len(calls) == first
+        # A permanently short day is never recorded as complete.
+        assert date(2026, 1, 1) not in coord._complete_spot_days
+
+
+async def test_ensure_historical_spots_records_and_skips_complete_days(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A local day holding >= 20 cached spot hours is recorded complete and
+    is neither re-fetched nor re-scanned on later ticks."""
+    freezer.move_to("2026-06-29 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    calls: list[tuple[datetime, datetime]] = []
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        calls.append((start, end))
+        # A full local day: 24 hours from the local-midnight anchor.
+        return {start + timedelta(hours=h): 0.05 for h in range(24)}
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+    ) as mock_client_cls:
+        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        # First pass fetches to fill the empty day.
+        await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
+        assert len(calls) == 1
+        # The next pass sees the full day, records it complete, no re-fetch.
+        await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
+        assert date(2026, 1, 1) in coord._complete_spot_days
+        assert len(calls) == 1
+        # Once complete the day is skipped: dropping its cached hours does not
+        # trigger a rescan-driven re-fetch.
+        for h in range(24):
+            coord._historical_spots.pop(
+                datetime(2025, 12, 31, 23, tzinfo=UTC) + timedelta(hours=h), None
+            )
+        await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
+        assert len(calls) == 1
 
 
 async def test_build_hourly_covers_both_days_across_dst_seams(

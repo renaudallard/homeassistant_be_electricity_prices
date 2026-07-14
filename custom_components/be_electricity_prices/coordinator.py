@@ -808,6 +808,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # 20 hours, with the attempt time, so we don't re-fetch them every
         # tick (see _SHORT_SPOT_DAY_TTL).
         self._short_spot_days: dict[date, datetime] = {}
+        # Local days already confirmed to hold >= 20 cached spot hours. Within
+        # a calendar year spots are only ever added, so a complete day stays
+        # complete; caching the set lets the per-tick coverage scan skip the
+        # timezone conversion and 24 dict lookups for every settled day. Prior
+        # year entries are dropped in _prune_historical_spots at the boundary.
+        self._complete_spot_days: set[date] = set()
         self._peak_kw: float = 0.0
         self._peak_month: date | None = None
         self._last_error: str = ""
@@ -1603,12 +1609,23 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         range_start: date | None = None
         cur = start
         while cur <= end:
-            day_start_utc = dt_util.start_of_local_day(cur).astimezone(UTC)
-            present = sum(
-                1
-                for h in range(24)
-                if (day_start_utc + timedelta(hours=h)) in self._historical_spots
-            )
+            if cur in self._complete_spot_days:
+                # Confirmed fully covered on an earlier tick. Treat as present
+                # (so it closes any open missing range) without redoing the tz
+                # conversion and 24 dict lookups.
+                present = 24
+            else:
+                day_start_utc = dt_util.start_of_local_day(cur).astimezone(UTC)
+                present = sum(
+                    1
+                    for h in range(24)
+                    if (day_start_utc + timedelta(hours=h)) in self._historical_spots
+                )
+                # >= 20 is the same threshold the fetch decision below uses, so
+                # a day recorded here is one that would never be re-fetched
+                # anyway; caching it just skips the scan next tick.
+                if present >= 20:
+                    self._complete_spot_days.add(cur)
             last_attempt = self._short_spot_days.get(cur)
             recently_short = (
                 present < 20
@@ -1997,6 +2014,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             return
         self._historical_spots = {
             h: v for h, v in self._historical_spots.items() if h >= keep_after
+        }
+        # Drop prior year days from the completeness set alongside their spots
+        # so it doesn't grow without bound across years.
+        self._complete_spot_days = {
+            d for d in self._complete_spot_days if d.year >= today.year
         }
 
     async def _save_persistent(self) -> None:
