@@ -132,10 +132,19 @@ This is the mechanism that lets a parser fix reach already-cached users. A probe
 
 ## 3. ENTSO-E spot integration
 
-Spots are fetched only for two shapes:
+Spots are fetched only for two shapes, and the dispatch reads the *effective*
+(cohort-spliced) energy `priced.energy`, not `self._snapshot.energy`:
 
-1. **Dynamic energy** (`isinstance(self._snapshot.energy, DynamicRates)`, `coordinator.py:766`): the energy price is `factor*spot + base`, so a spot is mandatory. `_fetch_spot_prices` is called; `EntsoeAuthError` raises `UpdateFailed` and sets the `entsoe_auth_failed` Repairs issue (`coordinator.py:769`), while a transient `EntsoeError` degrades to the last good `_spot_cache` and only fails the tick if nothing is cached (`coordinator.py:949`).
-2. **Spot-indexed injection on a static-energy contract** (`_injection_needs_spot`, `coordinator.py:959`): here the energy is priced without a spot, so a spot failure must not tear the entry down. The fetch is soft: on any ENTSO-E error it falls back to the cached curve, then to no injection price (`coordinator.py:968`). This is the Cociter Variable case (see section 8).
+1. **Dynamic or spot-monthly energy** (`isinstance(priced.energy, (DynamicRates, SpotMonthlyRates))`, `coordinator.py:1040`): dynamic prices each slot at `factor*spot + base`, spot-monthly bills a flat `factor*mean + base` off the month's mean, so both need a spot and share the hard-fail path. `_fetch_spot_prices` is called; `EntsoeAuthError` raises `UpdateFailed` and sets the `entsoe_auth_failed` Repairs issue (`coordinator.py:1048`), while a transient `EntsoeError` degrades to the last good `_spot_cache` and only fails the tick if nothing is cached (`coordinator.py:1058`).
+2. **Spot-indexed injection on a static-energy contract** (`_injection_needs_spot`, `coordinator.py:2334`): here the energy is priced without a spot, so a spot failure must not tear the entry down. The fetch is soft: on any ENTSO-E error it falls back to the cached curve, then to no injection price (`coordinator.py:1072`). This is the Cociter Variable case (see section 8).
+
+Note the asymmetry: branch 1 tests `priced.energy` while branch 2 tests the
+un-spliced `self._snapshot.energy`, so a cohort leg reaches branch 1 and never
+falls through to branch 2's soft path. Because only the dynamic and spot-monthly
+*contract kinds* are asked for an API key, a variable cohort that re-prices to
+`SpotMonthlyRates` would otherwise hard-fail an entry over a key the user was
+never prompted for; `_cohort_energy_leg` therefore drops the cohort leg when no
+key is configured (`coordinator.py:641`), keeping the current card instead.
 
 ### 3.1 Resolution selection (hourly vs quarter-hourly)
 

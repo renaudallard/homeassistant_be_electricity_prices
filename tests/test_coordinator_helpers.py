@@ -39,6 +39,7 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.const import (
+    CONF_API_KEY,
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_ENERGY_FACTOR,
     CONF_MANUAL_ENERGY_OFFPEAK,
@@ -2155,13 +2156,42 @@ async def test_cohort_energy_leg_variable_uses_signing_coefficients(
         return archived
 
     _monthly_snapshots(hass).clear()
-    entry = _entry(contract="test", contract_start_date="2025-11-10")
+    # The monthly mean comes from ENTSO-E, so the re-price needs a key.
+    entry = _entry(contract="test", contract_start_date="2025-11-10", api_key="k")
     leg = await _cohort_energy_leg(
         hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
     )
     # Coefficients from the SIGNING month; the coordinator applies them to the
     # CURRENT month's mean via the SpotMonthlyRates path.
     assert leg == SpotMonthlyRates(factor=1.05, base=0.01, yearly_fixed_fee=53.0)
+
+
+async def test_cohort_energy_leg_variable_keeps_current_card_without_key(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A variable contract is never asked for an ENTSO-E key, so its cohort
+    re-price must degrade to the current card rather than hand the coordinator
+    a SpotMonthlyRates leg it can only price by failing the entry."""
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(
+        energy=VariableRates(current=0.22, formula_factor=1.20, formula_base=0.03)
+    )
+    archived = make_snapshot(
+        energy=VariableRates(
+            current=0.18, yearly_fixed_fee=53.0, formula_factor=1.05, formula_base=0.01
+        )
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return archived
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2025-11-10")
+    assert CONF_API_KEY not in entry.data
+    leg = await _cohort_energy_leg(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+    )
+    assert leg is None
 
 
 def test_cohort_energy_from_archived_carries_exclusive_night_fee() -> None:

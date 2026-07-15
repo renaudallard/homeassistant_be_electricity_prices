@@ -597,7 +597,8 @@ async def _cohort_energy_leg(
     card's energy leg so the caller can splice it onto the current
     delivery-month DSO / tax overlays; ``None`` means "no cohort override,
     keep the current energy" (no start date set, this month / a future
-    start, and no archived card or manual rate to re-price with).
+    start, no archived card or manual rate to re-price with, or a variable
+    cohort with no ENTSO-E key to resolve its monthly mean).
 
     Resolution order is archive, then a hand-entered manual rate, then the
     current card: the actual archived signing-month card is authoritative when
@@ -630,6 +631,17 @@ async def _cohort_energy_leg(
         # signing month has no archive; identity means "no archived card".
         if snap_start is not current_snapshot:
             cohort = _cohort_energy_from_archived(snap_start)
+            # A SpotMonthlyRates leg bills at the current month's mean spot,
+            # which needs an ENTSO-E key. Only the dynamic and spot-monthly
+            # contract kinds are asked for one, so a variable cohort can reach
+            # here without a key: keep the current card (priced off its own
+            # resolved rate) instead of tearing the entry down over a key the
+            # user was never prompted for. Fixed / dynamic legs re-price from
+            # the archived value alone and stay unaffected.
+            if isinstance(cohort, SpotMonthlyRates) and not entry.data.get(
+                CONF_API_KEY
+            ):
+                cohort = None
             if cohort is not None:
                 return cohort
     # No retrievable archived card: use a hand-entered signing rate if present,

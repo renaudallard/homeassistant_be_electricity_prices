@@ -1926,3 +1926,76 @@ async def test_variable_cohort_bakes_injection_at_month_mean(
     # 0.97 * 0.30 - 0.021 = 0.270 (the per-hour spot).
     value = data.injection_price_eur_per_kwh
     assert value is not None and abs(value - 0.076) < 1e-9
+
+
+async def test_variable_cohort_without_key_still_prices(hass: HomeAssistant) -> None:
+    """A variable contract with a past start date and no ENTSO-E key must load
+    and price off the current card. The cohort re-price used to hand back a
+    SpotMonthlyRates leg, which took the spot path and failed setup with
+    "missing ENTSO-E API key" on a key the variable flow never asks for."""
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        VariableRates,
+    )
+
+    dsos = {"fluvius_limburg": DsoOverlay(distribution_single=0.10, transport=0.0145)}
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_flex",
+            "region": "flanders",
+            "dso": "fluvius_limburg",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "contract_start_date": "2025-11-01",
+        },
+        title="Eneco Zon & Wind Flex cohort without key",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    # Coefficients as parsed from the real Zon & Wind Flex card.
+    coord._snapshot = make_snapshot(
+        supplier="eneco",
+        contract="power_flex",
+        dsos=dsos,
+        energy=VariableRates(
+            current=0.1219, formula_factor=1.0812, formula_base=0.0343122
+        ),
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+
+    # The archived signing-month card carries its own coefficients, so the
+    # cohort re-price is live here; _fetch_spot_prices is deliberately NOT
+    # stubbed so a regression raises the real missing-key EntsoeError.
+    async def _archived(*_a: object, **_k: object) -> object:
+        return make_snapshot(
+            supplier="eneco",
+            contract="power_flex",
+            dsos=dsos,
+            energy=VariableRates(
+                current=0.1219,
+                formula_factor=1.0812,
+                formula_base=0.03763,
+                yearly_fixed_fee=65.0,
+            ),
+        )
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator._snapshot_for_month",
+            new=_archived,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator._compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._update_body()
+
+    # A full hourly table priced off the current card's resolved rate. A
+    # SpotMonthlyRates leg with no mean to price against yields an empty one.
+    assert data.hourly
+    assert data.last_error == ""
