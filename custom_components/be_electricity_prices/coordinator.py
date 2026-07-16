@@ -2691,10 +2691,10 @@ async def _live_today_kwh(
 
     midnight = dt_util.start_of_local_day(today).astimezone(UTC)
     try:
-        from homeassistant.components.recorder import (  # noqa: PLC0415
+        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
             get_instance,
         )
-        from homeassistant.components.recorder.history import (  # noqa: PLC0415
+        from homeassistant.components.recorder.history import (
             get_significant_states,
         )
     except ImportError:
