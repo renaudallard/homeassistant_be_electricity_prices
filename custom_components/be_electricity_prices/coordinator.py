@@ -636,8 +636,15 @@ async def _cohort_energy_leg(
             # contract kinds are asked for one, so a variable cohort can reach
             # here without a key: keep the current card (priced off its own
             # resolved rate) instead of tearing the entry down over a key the
-            # user was never prompted for. Fixed / dynamic legs re-price from
-            # the archived value alone and stay unaffected.
+            # user was never prompted for.
+            #
+            # An archived DynamicRates leg needs a spot just as much, and is
+            # deliberately not gated here: every extractor derives the energy
+            # shape from the static catalogue kind rather than from the card
+            # text, so a dynamic leg implies kind == "dynamic", which always
+            # collected a key. Flipping an existing contract's kind in place,
+            # or sniffing the shape out of the card, would break that and let
+            # a keyless entry reach the spot fetch again.
             if isinstance(cohort, SpotMonthlyRates) and not entry.data.get(
                 CONF_API_KEY
             ):
