@@ -34,7 +34,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -66,6 +66,7 @@ from custom_components.be_electricity_prices.coordinator import (
     _injection_varies_intraday,
     _manual_energy_leg,
     _monthly_snapshots,
+    _live_today_kwh,
     _recorder_daily_kwh,
     _snapshot_for_month,
     _snapshot_from_dict,
@@ -869,6 +870,148 @@ async def test_recorder_daily_kwh_swallows_recorder_errors(
             hass, "sensor.day_cons", date(2026, 1, 1), date(2026, 5, 1)
         )
     assert out == {}
+
+
+# ---- _live_today_kwh (running-day read straight off the meter) ---------------
+
+
+def _midnight_instance(history: dict[str, list[State]]) -> MagicMock:
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value=history)
+    return instance
+
+
+def _meter_attrs(unit: str) -> dict[str, str]:
+    return {
+        "unit_of_measurement": unit,
+        "device_class": "energy",
+        "state_class": "total_increasing",
+    }
+
+
+async def test_live_today_kwh_returns_state_delta(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Today's kWh is the live cumulative reading minus the reading at
+    local midnight."""
+    freezer.move_to("2026-07-16 10:00:00+02:00")
+    hass.states.async_set("sensor.meter", "150.0", _meter_attrs("kWh"))
+    inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "100.0")]})
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 7, 16))
+    assert kwh == 50.0
+
+
+async def test_live_today_kwh_converts_wh_to_kwh(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A Wh meter is normalised to kWh, not read 1000x too high."""
+    freezer.move_to("2026-07-16 10:00:00+02:00")
+    hass.states.async_set("sensor.meter", "150000.0", _meter_attrs("Wh"))
+    inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "100000.0")]})
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 7, 16))
+    assert kwh == 50.0
+
+
+async def test_live_today_kwh_handles_meter_reset(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A total_increasing meter that reset since midnight bills everything
+    it has counted since the reset, not a negative delta."""
+    freezer.move_to("2026-07-16 10:00:00+02:00")
+    hass.states.async_set("sensor.meter", "5.0", _meter_attrs("kWh"))
+    inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "100.0")]})
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 7, 16))
+    assert kwh == 5.0
+
+
+async def test_live_today_kwh_none_when_unavailable(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An unavailable meter yields None so the caller keeps the statistic."""
+    freezer.move_to("2026-07-16 10:00:00+02:00")
+    hass.states.async_set("sensor.meter", "unavailable", _meter_attrs("kWh"))
+    kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 7, 16))
+    assert kwh is None
+
+
+async def test_live_today_kwh_none_on_unconvertible_unit(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An unknown unit falls back (None) rather than risk a wrong figure."""
+    freezer.move_to("2026-07-16 10:00:00+02:00")
+    hass.states.async_set("sensor.meter", "150.0", _meter_attrs("widgets"))
+    inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "100.0")]})
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 7, 16))
+    assert kwh is None
+
+
+async def test_live_today_kwh_none_without_midnight_reading(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """No recorded reading at midnight yet -> None (fall back)."""
+    freezer.move_to("2026-07-16 10:00:00+02:00")
+    hass.states.async_set("sensor.meter", "150.0", _meter_attrs("kWh"))
+    inst = _midnight_instance({})
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 7, 16))
+    assert kwh is None
+
+
+async def test_recorder_daily_kwh_overrides_today_with_live(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Today is billed from the live meter delta, not the (lagging) daily
+    statistic, so the running cost tracks today's usage in real time."""
+    freezer.move_to("2026-07-16 10:00:00+02:00")
+    today = date(2026, 7, 16)
+    stats = {"sensor.meter": [_stat_row(2026, 7, 15, 8.0), _stat_row(2026, 7, 16, 2.0)]}
+    hass.states.async_set("sensor.meter", "150.0", _meter_attrs("kWh"))
+    inst = MagicMock()
+    inst.async_add_executor_job = AsyncMock(
+        side_effect=[stats, {"sensor.meter": [State("sensor.meter", "100.0")]}]
+    )
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        out = await _recorder_daily_kwh(hass, "sensor.meter", date(2026, 1, 1), today)
+    assert out[date(2026, 7, 15)] == 8.0  # settled past day from the statistic
+    assert out[today] == 50.0  # today from the live 150 - 100 delta, not 2.0
+
+
+async def test_recorder_daily_kwh_keeps_statistic_when_live_none(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """When the live read is unavailable, today falls back to the daily
+    statistic rather than dropping to zero."""
+    freezer.move_to("2026-07-16 10:00:00+02:00")
+    today = date(2026, 7, 16)
+    stats = {"sensor.meter": [_stat_row(2026, 7, 16, 2.0)]}
+    hass.states.async_set("sensor.meter", "unavailable", _meter_attrs("kWh"))
+    inst = MagicMock()
+    inst.async_add_executor_job = AsyncMock(return_value=stats)
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        out = await _recorder_daily_kwh(hass, "sensor.meter", date(2026, 1, 1), today)
+    assert out[today] == 2.0
+
+
+async def test_recorder_daily_kwh_no_live_override_for_past_end(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A window that doesn't end today never reads the live meter (the
+    compare / diagnostics callers pass historical ranges)."""
+    freezer.move_to("2026-07-16 10:00:00+02:00")
+    stats = {"sensor.meter": [_stat_row(2026, 5, 1, 3.0)]}
+    hass.states.async_set("sensor.meter", "150.0", _meter_attrs("kWh"))
+    inst = MagicMock()
+    inst.async_add_executor_job = AsyncMock(return_value=stats)
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        out = await _recorder_daily_kwh(
+            hass, "sensor.meter", date(2026, 1, 1), date(2026, 5, 1)
+        )
+    assert out == {date(2026, 5, 1): 3.0}
+    assert inst.async_add_executor_job.call_count == 1  # no second (history) call
 
 
 # ---- _snapshot_for_month -----------------------------------------------------

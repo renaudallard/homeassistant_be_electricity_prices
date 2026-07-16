@@ -42,21 +42,30 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from statistics import fmean
 from typing import Any
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import (
+    ATTR_UNIT_OF_MEASUREMENT,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+    UnitOfEnergy,
+)
 from homeassistant.core import (
     HomeAssistant,
     State,
 )
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
+from homeassistant.util.unit_conversion import EnergyConverter
 
 from .api import EntsoeAuthError, EntsoeClient, EntsoeError
 from .const import (
@@ -2656,10 +2665,88 @@ async def _recorder_rows(
     return rows
 
 
+async def _live_today_kwh(
+    hass: HomeAssistant, entity_id: str, today: date
+) -> float | None:
+    """Today's kWh for ``entity_id`` from the live meter, or ``None``.
+
+    Reads ``current cumulative total - total at local midnight`` from the
+    state machine and the recorder's state history, bypassing the long-term
+    daily statistics the past-day path relies on. This keeps the running year
+    cost tracking today's consumption in real time and, crucially, keeps it
+    moving when statistics compilation lags or stalls -- states are still
+    recorded regardless. ``None`` means "no reliable live reading": the meter
+    is unavailable / non-numeric, has no reading at midnight yet, or carries a
+    unit that can't be converted to kWh; the caller then keeps the daily
+    statistic as a fallback rather than risk a wrong figure.
+    """
+    state = hass.states.get(entity_id)
+    if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        return None
+    try:
+        current = float(state.state)
+    except (TypeError, ValueError):
+        return None
+    unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
+
+    midnight = dt_util.start_of_local_day(today).astimezone(UTC)
+    try:
+        from homeassistant.components.recorder import (  # noqa: PLC0415
+            get_instance,
+        )
+        from homeassistant.components.recorder.history import (  # noqa: PLC0415
+            get_significant_states,
+        )
+    except ImportError:
+        return None
+    try:
+        history = await get_instance(hass).async_add_executor_job(
+            partial(
+                get_significant_states,
+                hass,
+                midnight,
+                midnight + timedelta(seconds=1),
+                [entity_id],
+                include_start_time_state=True,
+                significant_changes_only=False,
+                no_attributes=True,
+            )
+        )
+    except Exception:  # noqa: BLE001 - recorder may surface anything
+        return None
+    rows = history.get(entity_id, [])
+    if not rows or not isinstance(rows[0], State):
+        return None
+    try:
+        opening = float(rows[0].state)
+    except (TypeError, ValueError):
+        return None
+    delta = current - opening
+    if delta < 0.0:
+        # A ``total_increasing`` meter that reset since midnight: everything
+        # it has counted since the reset is today's consumption.
+        delta = current
+    if unit == UnitOfEnergy.KILO_WATT_HOUR:
+        return delta
+    try:
+        return EnergyConverter.convert(delta, unit, UnitOfEnergy.KILO_WATT_HOUR)
+    except HomeAssistantError:
+        # Unknown / non-energy unit: fall back to the normalized daily
+        # statistic rather than risk a 1000x mis-bill from an assumed unit.
+        return None
+
+
 async def _recorder_daily_kwh(
     hass: HomeAssistant, entity_id: str, start: date, end: date
 ) -> dict[date, float]:
-    """Per-day kWh deltas for ``entity_id`` keyed by local-day date."""
+    """Per-day kWh deltas for ``entity_id`` keyed by local-day date.
+
+    Past days come from the recorder's long-term daily statistics. When
+    ``end`` is today, that day is overridden with a live meter reading (see
+    :func:`_live_today_kwh`) so the running year cost tracks today's usage in
+    real time and does not freeze if statistics compilation lags or stalls;
+    it falls back to the daily statistic when no live reading is available.
+    """
     out: dict[date, float] = {}
     for row in await _recorder_rows(hass, entity_id, start, end, "day"):
         ts = row.get("start")
@@ -2668,6 +2755,10 @@ async def _recorder_daily_kwh(
             continue
         local_day = dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC)).date()
         out[local_day] = float(delta)
+    if end == dt_util.now().date():
+        live_today = await _live_today_kwh(hass, entity_id, end)
+        if live_today is not None:
+            out[end] = live_today
     return out
 
 
