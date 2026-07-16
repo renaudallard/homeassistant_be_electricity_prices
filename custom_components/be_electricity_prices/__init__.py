@@ -41,6 +41,7 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.storage import Store
@@ -132,8 +133,37 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa:
     return True
 
 
+@callback
+def _migrate_current_year_cost_unique_id(
+    hass: HomeAssistant, entry: BePricesConfigEntry
+) -> None:
+    """Carry the current-year-cost sensor across its 0.5.2 key rename.
+
+    The sensor's key changed ``yearly_cost`` -> ``current_year_cost`` in
+    0.5.2, which changed its unique_id (``{entry_id}_{key}``) and orphaned
+    the existing entity on the upgrade that crossed it -- dropping its
+    recorded history, its name and any dashboard references, while a fresh
+    entity took over under the new id. Rename the registry entry so the
+    sensor keeps its identity across that boundary. Runs before the sensor
+    platform is set up so the reborn entity is adopted rather than
+    duplicated. A no-op once migrated, and skipped when the new id already
+    exists (the entry was first set up after the rename, or the user has
+    already run past it) so the rename can never collide with a live entity.
+    """
+    registry = er.async_get(hass)
+    old_unique_id = f"{entry.entry_id}_yearly_cost"
+    entity_id = registry.async_get_entity_id("sensor", DOMAIN, old_unique_id)
+    if entity_id is None:
+        return
+    new_unique_id = f"{entry.entry_id}_current_year_cost"
+    if registry.async_get_entity_id("sensor", DOMAIN, new_unique_id) is not None:
+        return
+    registry.async_update_entity(entity_id, new_unique_id=new_unique_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> bool:
     """Set up one config entry."""
+    _migrate_current_year_cost_unique_id(hass, entry)
     coordinator = BePricesCoordinator(hass, entry)
     await coordinator.async_load_persistent()
     await coordinator.async_config_entry_first_refresh()

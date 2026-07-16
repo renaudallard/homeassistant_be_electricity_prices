@@ -183,7 +183,8 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
  config entry (region, dso, supplier, contract, meter, solar, api key)
         |
         v
- async_setup_entry            __init__.py:135
+ async_setup_entry            __init__.py:164
+   |  _migrate_current_year_cost_unique_id(hass, entry)  # 0.5.2 key rename carry-over
    |  BePricesCoordinator(hass, entry)
    |  await coordinator.async_load_persistent()      # warm cache from .storage
    |  await coordinator.async_config_entry_first_refresh()
@@ -203,7 +204,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |     |     v
    |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:472
    |
-   entry.runtime_data = coordinator                  __init__.py:141
+   entry.runtime_data = coordinator                  __init__.py:171
    async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor, button
    async_track_time_change(...) -> push at slot boundaries   __init__.py:162
    async_create_background_task(backfill_if_missing) # one-shot recorder backfill
