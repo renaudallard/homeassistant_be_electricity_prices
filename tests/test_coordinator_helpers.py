@@ -1350,6 +1350,55 @@ async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
     assert cost == pytest.approx((65.0 + 12 * 2.5) * fraction + expected_prosumer)
 
 
+async def test_year_cost_breakdown_exposes_clamped_energy(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The optional ``breakdown`` out-dict records the YTD/today kWh, the
+    pre-clamp raw energy term and the fees floor, so a flat sensor sitting on
+    the compensation zero-floor can be told apart from a stalled meter: the
+    raw energy is negative (hidden by the clamp) while the value equals fees."""
+
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    snap = make_snapshot(
+        energy=FixedRates(single=0.18, yearly_fixed_fee=65.0),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                prosumer_eur_per_kva_year=24.0,
+            )
+        },
+        taxes=TaxOverlay(
+            federal_excise=0.0, energy_contribution=0.0, energy_fund_eur_per_month=2.5
+        ),
+    )
+    entry = _yearly_entry(meter="mono", solar_regime="compensation", solar_kva=2.0)
+    today = dt_util.now().date()
+    days = _days_through(date(today.year, 1, 1), today)
+    cons_per_day = {d: 5.0 for d in days}
+    inj_per_day = {d: 25.0 for d in days}  # over-produces every day
+    breakdown: dict[str, float] = {}
+    with _patch_recorder_per_entity(
+        {"sensor.day_cons": cons_per_day, "sensor.day_inj": inj_per_day}
+    ):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            breakdown=breakdown,
+        )
+    assert breakdown["consumption_ytd_kwh"] == pytest.approx(5.0 * len(days))
+    assert breakdown["injection_ytd_kwh"] == pytest.approx(25.0 * len(days))
+    assert breakdown["consumption_today_kwh"] == pytest.approx(5.0)
+    assert breakdown["injection_today_kwh"] == pytest.approx(25.0)
+    # Raw energy is negative (25 kWh injected vs 5 kWh drawn each day); the
+    # clamp hides it, so the billed value is the fees floor.
+    assert breakdown["energy_ytd_raw_eur"] < 0.0
+    assert breakdown["fees_ytd_eur"] == pytest.approx(cost)
+
+
 async def test_year_cost_uses_per_month_snapshot_when_archive_available(
     hass: HomeAssistant, freezer: Any
 ) -> None:

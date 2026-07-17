@@ -469,6 +469,8 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
     # snapshot_age_hours rises ~1/hour and last_error is diagnostic, so
     # recording them would write a fresh states row every tick even for a flat
     # contract whose price never moves; keep them out of history too.
+    # The current_year_cost diagnostic breakdown (YTD/today kWh, raw energy,
+    # fees) climbs every tick as well, so keep it out of the recorder too.
     _unrecorded_attributes = frozenset(
         {
             "today",
@@ -477,6 +479,12 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "most_expensive_4h_today",
             "snapshot_age_hours",
             "last_error",
+            "consumption_ytd_kwh",
+            "injection_ytd_kwh",
+            "consumption_today_kwh",
+            "injection_today_kwh",
+            "energy_ytd_raw_eur",
+            "fees_ytd_eur",
         }
     )
     entity_description: BePriceSensorDescription
@@ -535,6 +543,16 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             if not today and not tomorrow:
                 return {}
             return {"today": today, "tomorrow": tomorrow}
+        if self.entity_description.key == "current_year_cost":
+            # Diagnostic breakdown (static per-day contracts only): lets a flat
+            # sensor be told apart -- a negative energy_ytd_raw_eur means the
+            # compensation zero-floor is hiding banked injection (working as
+            # designed), while a consumption_today_kwh that never grows points
+            # at a stalled meter input. Empty for hourly-billed contracts.
+            diag = data.ytd_diagnostics
+            if not diag:
+                return {}
+            return {k: round(v, 4) for k, v in diag.items()}
         return {}
 
 

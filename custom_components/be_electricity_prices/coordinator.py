@@ -748,6 +748,13 @@ class CoordinatorData:
     # negative when injection credit exceeds consumption + pro-rated
     # fees; for "none" only consumption counts.
     current_year_cost_eur: float | None = None
+    # Optional diagnostic breakdown behind current_year_cost: YTD and today
+    # consumption / injection kWh, the pre-clamp raw energy term and the fees
+    # floor. Populated only on the static per-day (fixed / variable) path;
+    # None for hourly-billed contracts and when no meter is wired. Surfaced as
+    # attributes so a flat sensor can be told apart (negative raw energy = the
+    # compensation clamp; a today kWh that never moves = stalled meter input).
+    ytd_diagnostics: dict[str, float] | None = None
 
 
 class _MigratingStore(Store[dict[str, Any]]):
@@ -1164,6 +1171,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             await self._ensure_historical_spots(
                 date(today_local.year, 1, 1), today_local
             )
+        ytd_breakdown: dict[str, float] = {}
         current_year_cost = await _compute_current_year_cost(
             self.hass,
             self._session,
@@ -1172,6 +1180,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self.entry,
             historical_spots=self._historical_spots,
             spp_weights=self._spp_weights if spp_weighted else None,
+            breakdown=ytd_breakdown,
         )
 
         await self._save_persistent()
@@ -1205,6 +1214,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             ),
             energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
             current_year_cost_eur=current_year_cost,
+            ytd_diagnostics=ytd_breakdown or None,
         )
 
     def _sync_stale_issue(self, stale: bool) -> None:
@@ -3391,6 +3401,7 @@ async def _compute_current_year_cost(
     meter_override: MeterType | None = None,
     historical_spots: dict[datetime, float] | None = None,
     spp_weights: SppWeights | None = None,
+    breakdown: dict[str, float] | None = None,
 ) -> float | None:
     """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
@@ -3466,6 +3477,15 @@ async def _compute_current_year_cost(
     would risk serving a stale YTD; the full replay is O(hours-in-year)
     pure arithmetic (~100 ms by December), which is negligible at the
     hourly update cadence, so keep it simple.
+
+    ``breakdown`` is an optional diagnostic out-dict. When passed (only the
+    live coordinator does; the compare / backfill callers leave it ``None``),
+    the static per-day branch records the YTD and today kWh totals, the
+    pre-clamp raw energy term and the fees floor into it, so the
+    current_year_cost sensor can surface them as attributes. This piggybacks
+    on the walk already happening here rather than reading the recorder twice.
+    It stays empty for the dynamic / spot-monthly / TOU (hourly) branches,
+    which don't produce daily kWh totals.
     """
     today = dt_util.now().date()
     # contract / meter overrides let the OptionsFlow's compare path run
@@ -3665,6 +3685,10 @@ async def _compute_current_year_cost(
 
         energy_cost += d_cost
 
+    # Raw energy term before the compensation zero-floor: a negative value
+    # here is what the clamp below hides, so surface it for diagnostics.
+    energy_ytd_raw = energy_cost
+
     if regime == SOLAR_REGIME_COMPENSATION:
         # YTD clamp at zero: the bill never goes negative, surplus
         # injection past consumption is forfeited (by most Walloon
@@ -3680,6 +3704,18 @@ async def _compute_current_year_cost(
         energy_cost -= await _ytd_spot_injection_credit(
             hass, snapshot, entry, today, historical_spots
         )
+        # This regime has no compensation clamp, so the billed energy is
+        # already the raw energy term.
+        energy_ytd_raw = energy_cost
+
+    if breakdown is not None:
+        breakdown["consumption_ytd_kwh"] = sum(r[0] + r[1] for r in daily_kwh.values())
+        breakdown["injection_ytd_kwh"] = sum(r[2] + r[3] for r in daily_kwh.values())
+        today_kwh = daily_kwh.get(today, (0.0, 0.0, 0.0, 0.0))
+        breakdown["consumption_today_kwh"] = today_kwh[0] + today_kwh[1]
+        breakdown["injection_today_kwh"] = today_kwh[2] + today_kwh[3]
+        breakdown["energy_ytd_raw_eur"] = energy_ytd_raw
+        breakdown["fees_ytd_eur"] = fees
 
     return energy_cost + fees
 
