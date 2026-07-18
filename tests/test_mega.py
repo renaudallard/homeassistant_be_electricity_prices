@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import date
 from unittest.mock import AsyncMock, patch
 
@@ -45,6 +46,7 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.providers.mega import (
     _find_pdf_url,
+    _resolve_pdf_url,
     parse_snapshot,
 )
 
@@ -76,6 +78,40 @@ def test_listing_url_finder_picks_electricity_for_region() -> None:
 def test_listing_url_finder_returns_none_for_unknown_product() -> None:
     listing = (FIXTURES / "mega_listing.html").read_text()
     assert _find_pdf_url(listing, "Bogus Product", "WL") is None
+
+
+def test_resolver_returns_direct_url_when_block_present() -> None:
+    # When the listing carries the requested region's block, the resolver
+    # is a pass-through of _find_pdf_url -- no rewrite, byte-identical.
+    listing = (FIXTURES / "mega_listing.html").read_text()
+    assert _resolve_pdf_url(listing, "Dynamic", "WL") == _find_pdf_url(
+        listing, "Dynamic", "WL"
+    )
+
+
+def test_resolver_falls_back_to_sibling_region_when_block_missing() -> None:
+    # Reproduce #42: Mega dropped the Wallonia Dynamic block from the
+    # listing while the card PDF stayed published. The three regional
+    # editions differ only by the -B2C-<REGION>- filename segment, so the
+    # resolver must rewrite a surviving sibling's URL to the Wallonia code.
+    listing = (FIXTURES / "mega_listing.html").read_text()
+    gapped = re.sub(
+        r'<a data-product-element="Dynamic"[^>]*Mega-FR-EL-B2C-WL-[^<]*</a>',
+        "",
+        listing,
+    )
+    assert _find_pdf_url(gapped, "Dynamic", "WL") is None
+    assert _find_pdf_url(gapped, "Dynamic", "VL") is not None
+    resolved = _resolve_pdf_url(gapped, "Dynamic", "WL")
+    assert (
+        resolved
+        == "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-WL-042026-Dynamic0104.pdf"
+    )
+
+
+def test_resolver_returns_none_when_no_region_has_the_product() -> None:
+    listing = (FIXTURES / "mega_listing.html").read_text()
+    assert _resolve_pdf_url(listing, "Bogus Product", "WL") is None
 
 
 def test_fetch_for_month_rewrites_effective_date_month_preserving_day() -> None:
@@ -338,6 +374,20 @@ def test_missing_flanders_renewables_is_fatal() -> None:
     text = fixture_text("mega_smart_fixed_v.pdf").replace("Cotisation", "XXX")
     with pytest.raises(ExtractorError, match="green-energy"):
         parse_snapshot("mega_smart_fixed", text, "flanders")
+
+
+def test_wrong_region_card_is_rejected() -> None:
+    # parse_snapshot applies region-specific DSO and levy overlays, so the
+    # sibling-region URL fallback (#42) must never let a mismatched card
+    # through. Feeding the Flanders Dynamic card as a Wallonia request is
+    # rejected on the "Client résidentiel - <Region>" header, even though
+    # both cards name every region in the cross-region Cotisation table.
+    with pytest.raises(ExtractorError, match="not the wallonia edition"):
+        parse_snapshot("mega_dynamic", fixture_text("mega_dynamic_v.pdf"), "wallonia")
+    with pytest.raises(ExtractorError, match="not the flanders edition"):
+        parse_snapshot(
+            "mega_smart_fixed", fixture_text("mega_smart_fixed_b.pdf"), "flanders"
+        )
 
 
 def test_smart_flex_is_a_variable_contract() -> None:

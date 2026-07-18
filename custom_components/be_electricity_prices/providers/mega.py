@@ -36,7 +36,13 @@ that drifts when Mega launches new product variants. To resolve a stable
 suffix, the extractor scrapes the public listing page at
 ``mega.be/fr/energie/cartes-tarifaires``: every product card carries a
 ``data-product-element="<Product Name>"`` anchor pointing at that
-month's PDF, so finding the right URL is a simple regex match.
+month's PDF, so finding the right URL is a simple regex match. When the
+listing drops one product's block for a single region while the card
+itself stays published (as it did for Dynamic Wallonia in July 2026,
+#42), the resolver rewrites a sibling region's URL, since the three
+regional editions differ only by the ``-B2C-<REGION>-`` filename
+segment; parse_snapshot then re-checks the card's own region header so a
+wrong guess fails loud instead of mis-pricing.
 
 All eleven residential electricity products are registered. Mega
 serves all three regions (Flanders, Wallonia, Brussels) for every
@@ -54,6 +60,7 @@ straight to EUR/kWh without a VAT multiplier.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import date
@@ -79,6 +86,7 @@ from ._pdf import (
     end_of_month,
     fetch_pdf_text,
     fetch_text,
+    fold_accents,
     parse_brussels_osp,
     parse_sign,
     parse_valid_until,
@@ -103,6 +111,8 @@ from .base import (
     walloon_dso_overlay,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 _LISTING_URL = "https://www.mega.be/fr/energie/cartes-tarifaires"
 
 _REGION_TO_CODE: dict[str, str] = {
@@ -110,6 +120,23 @@ _REGION_TO_CODE: dict[str, str] = {
     REGION_WALLONIA: "WL",
     REGION_BRUSSELS: "BX",
 }
+
+# The header label each regional edition prints under "Carte tarifaire".
+# _assert_card_region uses it to reject a card whose region does not match
+# the one requested, since parse_snapshot applies region-specific DSO and
+# levy overlays.
+_REGION_CARD_LABELS: dict[str, str] = {
+    REGION_FLANDERS: "Flandre",
+    REGION_WALLONIA: "Wallonie",
+    REGION_BRUSSELS: "Bruxelles",
+}
+
+# The region code is the only part of a card's filename that differs
+# between the three regional editions of one product, so a missing listing
+# block can be resolved off a sibling region's URL. Anchor on the fixed
+# -B2C-<CODE>-<MMYYYY>- shape, the same grammar fetch_for_month's month
+# rewrite relies on.
+_REGION_SEGMENT_RE = re.compile(r"(?<=-B2C-)(?:BX|VL|WL)(?=-\d{6}-)")
 
 
 _MEGA_ALL_REGIONS: frozenset[str] = frozenset(
@@ -199,6 +226,44 @@ def _find_pdf_url(listing_html: str, product_name: str, region_code: str) -> str
     return match.group(1) if match else None
 
 
+def _resolve_pdf_url(
+    listing_html: str, product_name: str, region_code: str
+) -> str | None:
+    """The current PDF URL for product+region, via the listing.
+
+    Mega intermittently drops a single (product, region) block from the
+    listing while still publishing the card: in July 2026 the Dynamic
+    Wallonia block vanished overnight and its PDF was untouched (#42). The
+    three regional editions differ only by the -B2C-<CODE>- segment, so
+    rewrite a sibling's URL rather than dead-ending a healthy entry.
+
+    The rewrite is only a guess at the URL. parse_snapshot re-checks the
+    card's own region header, and a product genuinely not published in the
+    region resolves to the CDN's HTML stub, which fetch_pdf_text rejects,
+    so a wrong guess fails loud instead of mis-pricing.
+    """
+    url = _find_pdf_url(listing_html, product_name, region_code)
+    if url is not None:
+        return url
+    for sibling_code in _REGION_TO_CODE.values():
+        if sibling_code == region_code:
+            continue
+        sibling_url = _find_pdf_url(listing_html, product_name, sibling_code)
+        if sibling_url is None:
+            continue
+        rewritten, count = _REGION_SEGMENT_RE.subn(region_code, sibling_url, count=1)
+        if count:
+            _LOGGER.warning(
+                "Mega listing has no %s block for %r; resolved %s from the %s edition",
+                region_code,
+                product_name,
+                rewritten,
+                sibling_code,
+            )
+            return rewritten
+    return None
+
+
 async def _fetch_listing_html(session: aiohttp.ClientSession) -> str:
     return await fetch_text(session, _LISTING_URL)
 
@@ -243,7 +308,7 @@ async def probe(
         listing = await _fetch_listing_html(session)
     except ExtractorError:
         return None
-    return _find_pdf_url(listing, contract.product_name, region_code)
+    return _resolve_pdf_url(listing, contract.product_name, region_code)
 
 
 async def fetch(
@@ -260,7 +325,7 @@ async def fetch(
         raise ExtractorError(f"Mega: unknown region {region!r}")
 
     listing = await _fetch_listing_html(session)
-    pdf_url = _find_pdf_url(listing, contract.product_name, region_code)
+    pdf_url = _resolve_pdf_url(listing, contract.product_name, region_code)
     if pdf_url is None:
         raise ExtractorError(
             f"Mega {contract_id}: no listing entry for region {region!r}"
@@ -302,7 +367,7 @@ async def fetch_for_month(
         listing = await _fetch_listing_html(session)
     except ExtractorError:
         return None
-    current_url = _find_pdf_url(listing, contract.product_name, region_code)
+    current_url = _resolve_pdf_url(listing, contract.product_name, region_code)
     if current_url is None:
         return None
     # Capture the current card's month from the -MMYYYY- segment so we
@@ -349,6 +414,23 @@ async def fetch_for_month(
     return archive_validity_check(snap, text, year_month, month_names=_FR_MONTH_NAMES)
 
 
+def _assert_card_region(text: str, region: str) -> None:
+    """Reject a card that is not the requested region's edition.
+
+    parse_snapshot applies region-specific DSO and levy overlays, so a
+    wrong-region card mis-prices silently. Every card prints "Carte
+    tarifaire / Client résidentiel - <Flandre|Wallonie|Bruxelles>"; the
+    three region names also all appear in the cross-region "Cotisation
+    Verte" table on every card, so anchor on that header label rather than
+    on a bare region name. Fold accents and collapse whitespace so a
+    re-render that splits or de-accents the line still matches.
+    """
+    label = fold_accents(_REGION_CARD_LABELS[region])
+    haystack = fold_accents(re.sub(r"\s+", " ", text))
+    if not re.search(rf"client\s+residentiel\s*[-–]\s*{label}", haystack):
+        raise ExtractorError(f"Mega: card is not the {region} edition")
+
+
 def parse_snapshot(
     contract_id: str, text: str, region: str, source_url: str = _LISTING_URL
 ) -> SupplierSnapshot:
@@ -356,6 +438,8 @@ def parse_snapshot(
     if contract_id not in _CONTRACTS_BY_ID:
         raise ExtractorError(f"unknown Mega contract {contract_id!r}")
     contract = _CONTRACTS_BY_ID[contract_id]
+
+    _assert_card_region(text, region)
 
     energy = _extract_energy(text, contract.kind)
     injection = _extract_injection(text, contract.kind)
