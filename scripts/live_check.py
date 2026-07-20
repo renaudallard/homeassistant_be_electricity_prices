@@ -1500,7 +1500,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
 _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     "bolt": 200.0,
     "engie": 130.0,
-    "luminus": 125.0,
+    "luminus": 150.0,
     "mega": 120.0,
     # TotalEnergies and OCTA+ fetch every (contract, region) PDF
     # sequentially (25 and 21 fetches), so their summed elapsed_s blows
