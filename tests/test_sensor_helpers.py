@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Any
 
 import pytest
 from homeassistant.util import dt as dt_util
@@ -38,6 +39,7 @@ from custom_components.be_electricity_prices.coordinator import CoordinatorData
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
 from custom_components.be_electricity_prices.sensor import (
     _current,
+    _current_injection,
     _hourly_view,
     _injection_hourly_view,
     _split_injection_today_tomorrow,
@@ -319,6 +321,69 @@ def test_split_injection_handles_empty_data() -> None:
     today, tomorrow = _split_injection_today_tomorrow(CoordinatorData())
     assert today == []
     assert tomorrow == []
+
+
+# --- injection state follows the wall clock (issue #44) -----------------
+
+
+def _injection_day(rates: list[float], scalar: float | None) -> CoordinatorData:
+    """A day of per-slot injection rates plus the scalar the coordinator
+    baked at its last tick, so a test can tell which one the sensor read."""
+    midnight = _fixed_today_local()
+    inj = {
+        dt_util.as_utc(midnight + timedelta(hours=i)): rate
+        for i, rate in enumerate(rates)
+    }
+    return CoordinatorData(injection_hourly=inj, injection_price_eur_per_kwh=scalar)
+
+
+def test_injection_price_tracks_the_slot_boundary(freezer: Any) -> None:
+    # Issue #44: the sensor replayed a scalar resolved at the last coordinator
+    # tick, and that tick is a plain 60-minute interval anchored on setup, so
+    # an Engie Empower Flextime user saw the injection rate change up to an
+    # hour after the TOU band did. One distinct rate per hour, one
+    # CoordinatorData, no refresh in between: the state must still move on
+    # every boundary the way current_price does.
+    data = _injection_day([0.01 * h for h in range(24)], scalar=0.06)
+    midnight = _fixed_today_local()
+
+    for hour, expected in ((6, 0.06), (7, 0.07), (11, 0.11), (23, 0.23)):
+        freezer.move_to(midnight + timedelta(hours=hour, seconds=1))
+        assert _current_injection(data) == pytest.approx(expected)
+
+
+def test_injection_price_falls_back_to_the_tick_scalar_without_an_array() -> None:
+    # A flat contract emits no injection_hourly; its scalar is constant across
+    # the day, so the tick value is both the only one available and correct.
+    assert _current_injection(
+        CoordinatorData(injection_price_eur_per_kwh=0.0476)
+    ) == pytest.approx(0.0476)
+    assert _current_injection(CoordinatorData()) is None
+
+
+def test_injection_price_falls_back_when_no_slot_is_within_range() -> None:
+    # Yesterday's curve must not be surfaced as "now". Beyond the one-slot
+    # window the sensor drops back to the scalar rather than to a stale rate.
+    midnight = _fixed_today_local() - timedelta(days=1)
+    inj = {dt_util.as_utc(midnight + timedelta(hours=i)): 0.05 for i in range(24)}
+    data = CoordinatorData(injection_hourly=inj, injection_price_eur_per_kwh=0.09)
+    assert _current_injection(data) == pytest.approx(0.09)
+
+
+def test_injection_price_tracks_the_quarter_slot(freezer: Any) -> None:
+    # A 15-minute contract must land on the quarter, not on the hour.
+    midnight = _fixed_today_local()
+    inj = {
+        dt_util.as_utc(midnight + timedelta(minutes=15 * i)): 0.001 * i
+        for i in range(96)
+    }
+    data = CoordinatorData(
+        injection_hourly=inj,
+        injection_price_eur_per_kwh=0.0,
+        resolution=RESOLUTION_QUARTER,
+    )
+    freezer.move_to(midnight + timedelta(hours=7, minutes=40))
+    assert _current_injection(data) == pytest.approx(0.030)  # the 07:30 quarter
 
 
 def test_injection_hourly_view_downsamples_quarter_to_hourly_mean() -> None:

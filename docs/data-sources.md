@@ -216,10 +216,10 @@ A malformed `price.amount` or `position` raises `EntsoeError`
 ### How the coordinator drives this client (caching and dedup)
 
 `api.py` itself is stateless. All caching lives in the coordinator, which
-constructs a fresh `EntsoeClient` per call (`coordinator.py:1530`,
-`coordinator.py:1590`). Two paths use it:
+constructs a fresh `EntsoeClient` per call (`coordinator.py:1536`,
+`coordinator.py:1596`). Two paths use it:
 
-- Live curve, `_fetch_spot_prices` (`coordinator.py:1572`). Windows the request
+- Live curve, `_fetch_spot_prices` (`coordinator.py:1578`). Windows the request
   on the local (Europe/Brussels) day so a 00:00 to 02:00 local query does not
   drop yesterday's UTC tail; anchors both endpoints on local midnight converted
   to UTC so the fetched window matches the actual local-day hour count, which
@@ -229,24 +229,24 @@ constructs a fresh `EntsoeClient` per call (`coordinator.py:1530`,
   separate `_spot_cache_includes_tomorrow` flag set from what the response
   actually carries, not what was requested, so a pre-publication tick that came
   back with today only will retry tomorrow on the next hourly tick
-  (`coordinator.py:1583`, `coordinator.py:1617`). `quarter_hourly` is derived from
-  the loaded snapshot's energy kind (`coordinator.py:1606`).
-- Historical backfill, `_ensure_historical_spots` (`coordinator.py:1466`).
+  (`coordinator.py:1589`, `coordinator.py:1623`). `quarter_hourly` is derived from
+  the loaded snapshot's energy kind (`coordinator.py:1612`).
+- Historical backfill, `_ensure_historical_spots` (`coordinator.py:1472`).
   Ensures `self._historical_spots` covers every hour of the local days in a range,
   fetching only the missing spans. It considers a day "present" when at least 20
-  of its 24 hours are cached (`coordinator.py:1508`), tolerating both the
+  of its 24 hours are cached (`coordinator.py:1514`), tolerating both the
   carry-forward gaps ENTSO-E occasionally leaves and the 23/25-hour DST seam days
   without re-fetching every tick. Missing spans are fetched in week-sized chunks
-  (`coordinator.py:1622`). A negative cache, `_short_spot_days` with a TTL, marks
+  (`coordinator.py:1628`). A negative cache, `_short_spot_days` with a TTL, marks
   stable past days that stay short after a fetch so subsequent ticks skip them
-  (`coordinator.py:1565`); today and yesterday are always re-fetched.
+  (`coordinator.py:1571`); today and yesterday are always re-fetched.
 
 `_historical_spots` is persisted to HA storage (`STORAGE_VERSION = 2`,
-`const.py:260`) and reloaded on restart (`coordinator.py:860`). The reload is
+`const.py:260`) and reloaded on restart (`coordinator.py:866`). The reload is
 gated on a "tuple" match (supplier / contract / region): spots collected while
 the entry was dynamic are dropped after an options-flow swap to a static supplier
-rather than being re-saved indefinitely (`coordinator.py:878`). Persisted keys
-are ISO strings; a naive one is treated as UTC on load (`coordinator.py:869`).
+rather than being re-saved indefinitely (`coordinator.py:884`). Persisted keys
+are ISO strings; a naive one is treated as UTC on load (`coordinator.py:875`).
 
 ## Part 2: recorder backfill (`backfill.py`)
 

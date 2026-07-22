@@ -49,6 +49,7 @@ from .coordinator import (
     _shared_failed_fetches,
 )
 from .pricing import breakdown_row
+from .sensor import _current_injection
 
 TO_REDACT = {CONF_API_KEY}
 
@@ -172,7 +173,14 @@ async def async_get_config_entry_diagnostics(
             "prosumer_cost_eur": data.prosumer_cost_eur,
             "yearly_fixed_fee_eur": data.yearly_fixed_fee_eur,
             "energy_fund_eur_per_month": data.energy_fund_eur_per_month,
+            # Both numbers, because they legitimately differ: the first is what
+            # the last coordinator tick resolved, the second is what the
+            # injection_price entity is showing right now (the current slot of
+            # injection_hourly, falling back to the first). A triage report that
+            # carried only the tick value would not match the entity the user is
+            # complaining about.
             "injection_price_eur_per_kwh": data.injection_price_eur_per_kwh,
+            "injection_price_current_slot": _current_injection(data),
             "current_year_cost_eur": data.current_year_cost_eur,
             "hourly": [breakdown_row(dt_util.as_local(h), bd) for h, bd in hourly],
         },

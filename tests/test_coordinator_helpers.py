@@ -560,6 +560,34 @@ def test_build_injection_hourly_drops_slots_without_spot() -> None:
     assert list(out) == [_slot(10)]
 
 
+def test_build_injection_hourly_prices_each_tou_slot() -> None:
+    # Engie Empower Flextime: no spot is involved, but the array must still
+    # carry the per-band rate for every slot, because that array is what the
+    # injection_price sensor reads for the current slot (issue #44). Without
+    # it the sensor falls back to the scalar the coordinator baked at its last
+    # tick and lags the band change.
+    entry = _entry(solar_regime="injection")
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=TimeOfUseRates(
+            peak=0.16738,
+            transition=0.13072,
+            offpeak=0.09796,
+            weekend_rule="weekend_no_peak",
+        ),
+        injection=InjectionRates(
+            current=0.04918, peak=0.08417, transition=0.04834, offpeak=0.01465
+        ),
+    )
+    # The pinned day is a Friday, Brussels is UTC+2, so the UTC grid keys land
+    # on 02:00 / 07:00 / 11:00 local.
+    out = _build_injection_hourly(entry, snap, {}, [_slot(0), _slot(5), _slot(9)])
+    assert out[_slot(0)] == pytest.approx(0.01465)  # super-creuses
+    assert out[_slot(5)] == pytest.approx(0.08417)  # pleines
+    assert out[_slot(9)] == pytest.approx(0.04834)  # creuses
+
+
 def test_build_injection_hourly_empty_off_injection_regime() -> None:
     entry = _entry(solar_regime="compensation")
     snap = _snapshot(

@@ -30,7 +30,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, TypeVar
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -62,6 +62,10 @@ from .coordinator import (
 )
 from .pricing import PriceBreakdown, breakdown_row, slot_start
 
+# What one slot of a per-slot table holds: a PriceBreakdown for the price
+# table, a plain EUR/kWh float for the injection one.
+_SlotValue = TypeVar("_SlotValue")
+
 
 @dataclass(frozen=True, kw_only=True)
 class BePriceSensorDescription(SensorEntityDescription):
@@ -71,26 +75,60 @@ class BePriceSensorDescription(SensorEntityDescription):
     last_reset_fn: Callable[[], datetime] | None = None
 
 
-def _current(data: CoordinatorData) -> PriceBreakdown | None:
-    if not data.hourly:
+def _current_slot_value(
+    slots: dict[datetime, _SlotValue], resolution: str
+) -> _SlotValue | None:
+    """Look ``slots`` up at the slot the wall clock is in.
+
+    Reading the clock here rather than at coordinator-refresh time is what
+    keeps a sensor aligned to the slot the user is billed for: the
+    coordinator's own tick is a plain 60-minute interval anchored on setup,
+    so a value baked into it lags the boundary by however far the tick has
+    drifted.
+
+    On an exact miss the temporally nearest slot is substituted, but only
+    within one billing slot of "now" (15 min on a quarter-hourly contract,
+    1 h otherwise, the latter also absorbing the DST seam). That bound
+    stops a stale spot cache from silently surfacing yesterday's last slot
+    as "now"; a fixed 1 h window let a quarter-hourly sensor surface an
+    up-to-45-min-stale slot as current. Returns ``None`` when the table is
+    empty or nothing falls inside the window.
+    """
+    if not slots:
         return None
-    now = slot_start(dt_util.utcnow(), data.resolution)
-    if (exact := data.hourly.get(now)) is not None:
+    now = slot_start(dt_util.utcnow(), resolution)
+    if (exact := slots.get(now)) is not None:
         return exact
-    nearest_slot = min(
-        data.hourly.keys(),
-        key=lambda h: abs((h - now).total_seconds()),
-    )
-    # Bound the nearest-slot fallback so a stale spot cache doesn't
-    # silently surface yesterday's last slot as "now". Accept a substitute
-    # only within one billing slot of "now" (15 min on a quarter-hourly
-    # contract, 1 h otherwise -- the latter also absorbs the DST seam),
-    # mirroring the live-injection path. A fixed 1 h window let a
-    # quarter-hourly sensor surface an up-to-45-min-stale slot as current.
-    max_gap = 3600.0 if data.resolution == RESOLUTION_HOURLY else 900.0
+    nearest_slot = min(slots, key=lambda h: abs((h - now).total_seconds()))
+    max_gap = 3600.0 if resolution == RESOLUTION_HOURLY else 900.0
     if abs((nearest_slot - now).total_seconds()) > max_gap:
         return None
-    return data.hourly[nearest_slot]
+    return slots[nearest_slot]
+
+
+def _current(data: CoordinatorData) -> PriceBreakdown | None:
+    return _current_slot_value(data.hourly, data.resolution)
+
+
+def _current_injection(data: CoordinatorData) -> float | None:
+    """Injection price for the slot the wall clock is in.
+
+    ``injection_price_eur_per_kwh`` is resolved once per coordinator tick,
+    so on a contract whose injection varies intra-day (Engie Empower
+    Flextime's TOU schedule, every spot-indexed injection) the sensor kept
+    the previous slot's rate until the next tick, while the consumption
+    sensors moved on the boundary (issue #44). ``injection_hourly`` already
+    holds the per-slot rate over the same grid as ``hourly``, so read the
+    current slot out of it the way ``_current`` reads the price table.
+
+    A single slot the coordinator could not price (a dynamic contract with
+    a hole in the day-ahead curve) is covered by the shared nearest-slot
+    rule, so the sensor shows an adjacent slot's rate. The tick's scalar is
+    the last resort: the flat contracts that emit no array at all, and a
+    table with nothing inside the window.
+    """
+    rate = _current_slot_value(data.injection_hourly, data.resolution)
+    return data.injection_price_eur_per_kwh if rate is None else rate
 
 
 def _next_hour(data: CoordinatorData) -> PriceBreakdown | None:
@@ -341,7 +379,7 @@ PROSUMER_SENSORS: tuple[BePriceSensorDescription, ...] = (
 )
 
 INJECTION_SENSORS: tuple[BePriceSensorDescription, ...] = (
-    _eur_per_kwh("injection_price", lambda d: d.injection_price_eur_per_kwh),
+    _eur_per_kwh("injection_price", _current_injection),
 )
 
 FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (

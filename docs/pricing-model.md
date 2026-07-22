@@ -366,10 +366,10 @@ energy) but the injection prices off the hourly BELPEX with no printed monthly
 indicative, so pricing the credit still needs an ENTSO-E spot. `Contract`
 advertises this with `spot_indexed_injection` so the config flow offers the API-key
 step on the injection regime (`providers/base.py:71-77`). At runtime,
-`_injection_needs_spot` detects it (`coordinator.py:1884-1669`):
+`_injection_needs_spot` detects it (`coordinator.py:1890-1669`):
 
 ```python
-def _injection_needs_spot(snapshot, entry) -> bool:   # coordinator.py:1884
+def _injection_needs_spot(snapshot, entry) -> bool:   # coordinator.py:1890
     if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
         return False
     inj = snapshot.injection
@@ -384,7 +384,7 @@ def _injection_needs_spot(snapshot, entry) -> bool:   # coordinator.py:1884
 
 The coordinator uses this to fetch spots for a static-energy card too (soft fetch:
 falls back to cached curve, then to no injection price) so the credit does not go
-unavailable (`coordinator.py:959-793`, `coordinator.py:1027`). This is the
+unavailable (`coordinator.py:965-793`, `coordinator.py:1033`). This is the
 spot-indexed injection invariant: shape (c) must be gated on `_injection_needs_spot`
 in the live, backfill and compare paths, or the credit drifts.
 
@@ -392,41 +392,54 @@ in the live, backfill and compare paths, or the credit drifts.
 
 `_compute_injection_price(snapshot, entry, spot_prices)` returns the current-hour
 EUR/kWh price only on the injection regime and only when the snapshot has injection
-data (`coordinator.py:1931-1758`). Priority:
+data (`coordinator.py:1937-1758`). Priority:
 
-1. **Per-slot TOU** via `_tou_injection_rate` (`coordinator.py:1949-1714`).
+1. **Per-slot TOU** via `_tou_injection_rate` (`coordinator.py:1955-1714`).
 2. **Spot formula** `factor * spot + base` when either the energy is
    `DynamicRates` (shape b) OR `inj.current is None` (shape c). If no spot is
    available it returns `None` rather than fabricate a value
-   (`coordinator.py:1963-1755`). The spot is looked up on the contract's own grid
+   (`coordinator.py:1969-1755`). The spot is looked up on the contract's own grid
    (`RESOLUTION_QUARTER` when `_energy_is_quarter_hourly`, else hourly), snapped
    with `slot_start`, and a nearest substitute is accepted only within one billing
-   slot (900 s quarter-hourly, 3600 s hourly) (`coordinator.py:1970-1754`).
+   slot (900 s quarter-hourly, 3600 s hourly) (`coordinator.py:1976-1754`).
 3. **Monthly indicative** `inj.current` otherwise, including static-energy cards
    whose injection carries a monthly index but also a printed `current` (Ecofix
-   Flexy, EBEM Groen Variabel / B@sic+) (`coordinator.py:1959-1725`,
-   `coordinator.py:1724-1758`).
+   Flexy, EBEM Groen Variabel / B@sic+) (`coordinator.py:1965-1725`,
+   `coordinator.py:1730-1758`).
+
+This scalar is resolved once per coordinator tick, so it is not what the
+`injection_price` sensor publishes when the injection varies intra-day. There the
+sensor indexes `injection_hourly` at the current slot (`_current_injection`,
+`sensor.py:113`), the same way the price sensors index `hourly`, nearest-slot
+guard included: an unpriced slot resolves to an adjacent slot's rate, and the
+scalar is reached only for a flat contract, which emits no array at all, or when
+nothing lies inside the guard's window. Beware that a dynamic contract with a
+hole in its curve therefore shows a neighbouring hour's rate rather than the
+tick value the diagnostics dump reports.
+The tick is a plain 60-minute interval anchored on setup, so publishing the scalar
+directly made the sensor lag every band change by however far the tick had
+drifted (issue #44, Engie Empower Flextime).
 
 ### Per-slot TOU injection: `_tou_injection_rate`
 
 `_tou_injection_rate(inj, energy, when)` returns a per-slot rate only when the
 energy is `TimeOfUseRates` and `inj.peak` is set (Engie Empower Flextime publishes
 a peak/transition/super-off-peak feed-in triplet, monthly-realized)
-(`coordinator.py:1909-1691`, fields at `providers/base.py:250-250`). It reuses the
+(`coordinator.py:1915-1691`, fields at `providers/base.py:250-250`). It reuses the
 energy contract's own `weekend_rule` via `tou_slot` so injection and consumption
-agree on the slot for a given hour (`coordinator.py:2247`). Returns `None`
+agree on the slot for a given hour (`coordinator.py:2253`). Returns `None`
 otherwise so the caller falls back to the current / factor+base path.
 
 ### Historical injection: `_historical_injection_rate`
 
 `_historical_injection_rate(injection, spot, *, energy, when)` mirrors the live
 priority for a past hour: TOU slot first, then `factor*spot+base` when both the
-formula and a historical spot exist, then `current` (`coordinator.py:2375-2406`).
+formula and a historical spot exist, then `current` (`coordinator.py:2381-2406`).
 The ordering (formula before `current`) is a bug fix: several dynamic-injection
 contracts (Engie, OCTA+, TotalEnergies, Luminus, Mega) publish BOTH a `current`
 indicative and `factor`/`base`, and checking `current` first made the YTD credit
 use the flat indicative while the live sensor used the spot formula, so the two
-user-facing numbers diverged (`coordinator.py:2011-1780`).
+user-facing numbers diverged (`coordinator.py:2017-1780`).
 
 ### Historical bug: monthly-indexed injection emitting an hourly factor
 
@@ -434,56 +447,56 @@ A monthly-indexed injection (EBEM Variabel/B@sic+, Eneco Fix/Flex, DATS 24) must
 emit only the realized monthly `current`, never an hourly `factor*spot+base`,
 because the indicative is the actual credit. The guard that keeps shape (b)/(c)
 from swallowing these cards is the `inj.current is None` clause in both
-`_injection_needs_spot` (`coordinator.py:1902`) and `_compute_injection_price`
-(`coordinator.py:1966`): when a card prints a monthly `current`, the spot branch
+`_injection_needs_spot` (`coordinator.py:1908`) and `_compute_injection_price`
+(`coordinator.py:1972`): when a card prints a monthly `current`, the spot branch
 is skipped and the realized rate is used, keeping the live sensor consistent with
-the YTD credit for the same hour (`coordinator.py:1959-1725`). A latent mis-price
+the YTD credit for the same hour (`coordinator.py:1965-1725`). A latent mis-price
 here is masked whenever the indicative prints, which is why it was fixed
 explicitly rather than left to fall through.
 
 ### YTD injection paths
 
-Past-month YTD billing routes injection per regime (`coordinator.py:2678-2461`,
+Past-month YTD billing routes injection per regime (`coordinator.py:2684-2461`,
 context):
 
 - `compensation`: per-hour `(cons - inj) * all_in`, netting injection against
   consumption (per band when bi) and clamping at zero.
 - `injection`: per-hour `cons * all_in - inj * inj_rate`, where `inj_rate` comes
-  from `_historical_injection_rate` (`coordinator.py:2747-2354`).
+  from `_historical_injection_rate` (`coordinator.py:2753-2354`).
 
 Shape (c) has a dedicated YTD helper `_ytd_spot_injection_credit`
-(`coordinator.py:2761`) that credits a static-energy contract whose injection is a
+(`coordinator.py:2767`) that credits a static-energy contract whose injection is a
 pure BELPEX formula with no fixed credit; it is a no-op unless the injection is
 exactly that shape and an injection sensor is wired, and it skips hours with no
-cached spot (`coordinator.py:2774-2588`).
+cached spot (`coordinator.py:2780-2588`).
 
 ## Capacity tariff
 
 The Flanders capaciteitstarief is billed by the coordinator, not folded into the
-per-kWh all-in. Monthly cost (`_compute_capacity`, `coordinator.py:1824-1632`):
+per-kWh all-in. Monthly cost (`_compute_capacity`, `coordinator.py:1830-1632`):
 
 ```
 capacity_cost_eur = peak_kw * overlay.capacity_eur_per_kw_year / 12.0
 ```
 
 Returns `0.0` when the entry lost its `CONF_DSO` key, the overlay is missing, or
-`capacity_eur_per_kw_year is None` (`coordinator.py:1830-1631`). The rate lives on
+`capacity_eur_per_kw_year is None` (`coordinator.py:1836-1631`). The rate lives on
 `DsoOverlay.capacity_eur_per_kw_year` (`providers/base.py:278`); Flanders digital
 meters publish it, other regions leave it `None`.
 
-`peak_kw` is resolved in `_track_monthly_peak` (`coordinator.py:1623-1478`) and
+`peak_kw` is resolved in `_track_monthly_peak` (`coordinator.py:1629-1478`) and
 applies only in Flanders; outside Flanders the peak is reset to `0.0`
-(`coordinator.py:1624-1428`). It rolls over on the local 1st of month
-(`coordinator.py:1633-1435`). Two modes (`const.py:235-213`):
+(`coordinator.py:1630-1428`). It rolls over on the local 1st of month
+(`coordinator.py:1639-1435`). Two modes (`const.py:235-213`):
 
 - `CAPACITY_MODE_FIXED`: use `CONF_CAPACITY_FIXED_KW` directly (a rolling max would
-  ignore a mid-month decrease the user just made) (`coordinator.py:1640-1444`).
+  ignore a mid-month decrease the user just made) (`coordinator.py:1646-1444`).
 - `CAPACITY_MODE_SENSOR`: rolling max of a power sensor, scaled by its unit (W/VA
   scaled by 0.001 to kW; issue #19 was a 1000x inflation when W was stored as kW)
-  (`coordinator.py:1647-1473`).
+  (`coordinator.py:1653-1473`).
 
 Regardless of mode, the regulated VREG floor is applied last
-(`coordinator.py:1677-1478`):
+(`coordinator.py:1683-1478`):
 
 ```
 peak_kw = max(peak_kw, VREG_CAPACITY_FLOOR_KW)     # VREG_CAPACITY_FLOOR_KW = 2.5
@@ -497,7 +510,7 @@ the floor.
 ## Prosumer term
 
 The prosumer (compensation-regime) fee is Walloon-only and monthly
-(`_compute_prosumer`, `coordinator.py:2032-1830`):
+(`_compute_prosumer`, `coordinator.py:2038-1830`):
 
 ```
 prosumer_cost_eur = kva * (dso_rate + supplier_rate) / 12.0
@@ -507,10 +520,10 @@ prosumer_cost_eur = kva * (dso_rate + supplier_rate) / 12.0
 ```
 
 Returns `0.0` unless the regime is `compensation` AND the region is Wallonia AND
-`CONF_SOLAR_KVA > 0` (`coordinator.py:2043-1820`). The Wallonia gate is deliberate:
+`CONF_SOLAR_KVA > 0` (`coordinator.py:2049-1820`). The Wallonia gate is deliberate:
 compensation is Walloon-only, and billing a prosumer fee in Flanders on top of the
 always-billed capacity tariff would double-count grid recovery
-(`coordinator.py:2045-1814`).
+(`coordinator.py:2051-1814`).
 
 The DSO rate lives on `DsoOverlay.prosumer_eur_per_kva_year`
 (`providers/base.py:285-278`), published by Wallonia DSOs (valid until 2030 per
@@ -518,23 +531,23 @@ CWaPE) and `None` on Flemish SMR3 connections. The supplier-side forfait lives o
 `SupplierSnapshot.supplier_prosumer_eur_per_kva_year`
 (`providers/base.py:342-337`), billed on top of the DSO tariff; Cociter Variable
 publishes one. It is already TVAC (VAT-incl) and summed raw, never VAT-scaled
-(`coordinator.py:2064-1829`, `providers/base.py:346`).
+(`coordinator.py:2070-1829`, `providers/base.py:346`).
 
 Regime semantics (`const.py:222-210`): `compensation` ("compteur qui tourne a
 l'envers") applies only to installations certified before 2024-01-01 and stays
 valid until 2030-12-31; newer installations use the `injection` tariff (no per-kVA
 fee); Flemish digital meters are SMR3 from the start. The YTD counterpart
 `_ytd_prosumer` sums the monthly fee across the year using each month's archived
-overlay, gated the same Walloon-only way (`coordinator.py:2837-2424`).
+overlay, gated the same Walloon-only way (`coordinator.py:2843-2424`).
 
 ## Brussels OSP tier
 
 The Brussels Brugel OSP (Obligations de Service Public) fee is a flat annual
 Sibelga charge scaled by contractual connection power
-(`_brussels_osp_fee`, `coordinator.py:2070-2079`):
+(`_brussels_osp_fee`, `coordinator.py:2076-2079`):
 
 ```python
-def _brussels_osp_fee(overlay, entry) -> float:      # coordinator.py:2070
+def _brussels_osp_fee(overlay, entry) -> float:      # coordinator.py:2076
     if overlay is None or overlay.brussels_osp_by_tier is None:
         return 0.0
     tier = entry.data.get(CONF_CONNECTION_KVA_TIER, DEFAULT_CONNECTION_KVA_TIER)
@@ -547,4 +560,4 @@ config flow; the four residential tiers are `le1_44`, `le6`, `le9_6`, `le13`
 (residential connections are <=13 kVA), default `le6`
 (`const.py:180-172`). Returns `0.0` outside Brussels or when the card omits the
 OSP table. The fee is added to the Brussels annual cost in `_annual_static_fees`
-(`coordinator.py:2099`), not to the per-kWh all-in.
+(`coordinator.py:2105`), not to the per-kWh all-in.

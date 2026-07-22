@@ -719,18 +719,24 @@ class CoordinatorData:
     monthly_peak_month: date | None = None
     capacity_cost_eur: float = 0.0
     prosumer_cost_eur: float = 0.0
-    # EUR/kWh injection price for the current hour. None when:
+    # EUR/kWh injection price for the slot this tick ran in. The sensor only
+    # publishes it for contracts with no ``injection_hourly``; everything that
+    # varies intra-day is read per slot from that table instead, so this value
+    # does not follow the clock between ticks. None when:
     #   - the user is not on the injection regime, or
     #   - the snapshot's injection block has no usable data (formula needs
     #     spot but contract is variable so we don't fetch ENTSO-E).
     injection_price_eur_per_kwh: float | None = None
     # Per-slot injection price (EUR/kWh) across the same today+tomorrow grid
-    # as ``hourly``, for the injection_price sensor's today/tomorrow arrays.
+    # as ``hourly``. Drives BOTH the injection_price sensor's state (looked up
+    # at the current slot, which is what keeps it on the slot the user is
+    # billed for) and its today/tomorrow arrays, so narrowing or dropping this
+    # table would silently put the state back on the tick's scalar (issue #44).
     # Empty except on the injection regime for a contract whose injection
     # varies intra-day (spot-indexed dynamic + Cociter Variable, or the Engie
     # Empower Flextime TOU schedule); flat contracts emit no array since it
     # would just repeat the scalar above. Same quarter->hour downsampling as
-    # the consumption arrays happens in the sensor layer.
+    # the consumption arrays happens in the sensor layer, for the arrays only.
     injection_hourly: dict[datetime, float] = field(default_factory=dict)
     # Supplier yearly fixed fee (EUR/year) and Flemish energy-fund
     # monthly charge (EUR/month). Both are parsed from the tariff card

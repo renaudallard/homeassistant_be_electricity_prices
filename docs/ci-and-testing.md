@@ -133,7 +133,7 @@ Production code is type-checked with `mypy --strict`, but tests and helper scrip
 non-strict (see the workflows below). Several entity and coordinator tests substitute a
 `types.SimpleNamespace` for the real coordinator or config entry when only a couple of attributes
 are read (for example `entry.runtime_data = SimpleNamespace(data=...)` in
-`tests/test_diagnostics.py:79`). That stub does not match the production signature, so the call
+`tests/test_diagnostics.py:81`). That stub does not match the production signature, so the call
 site is annotated with `# type: ignore[arg-type]` to keep the non-strict mypy pass clean, as in
 `tests/test_button.py:62` and `tests/test_ecopower.py:359`. The convention is to suppress at the
 call site with `# type: ignore[arg-type]`, never to relax the production function signature to

@@ -190,7 +190,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |  await coordinator.async_config_entry_first_refresh()
    |        |
    |        v
-   |   _async_update_data                            coordinator.py:878
+   |   _async_update_data                            coordinator.py:884
    |     |  probe() -> fresh?  yes: reuse cached snapshot
    |     |                     no : EXTRACTOR.fetch(session, contract, region)
    |     |        |
@@ -218,11 +218,11 @@ Numbered walkthrough:
 1. The user completes the config flow; HA stores the selections in `entry.data` and calls
    `async_setup_entry` (`__init__.py:135`).
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
-   tuple (`coordinator.py:740`) so a later options edit that mutates `entry.data` can still evict
+   tuple (`coordinator.py:746`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
-3. `async_load_persistent` (`coordinator.py:815`) loads the last snapshot from `.storage` so an
+3. `async_load_persistent` (`coordinator.py:821`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
-4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:878`). It runs
+4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:884`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:141`),
@@ -237,7 +237,7 @@ Numbered walkthrough:
    into a `PriceBreakdown`. See [pricing-model.md](pricing-model.md).
 8. The result is packed into `CoordinatorData` (`coordinator.py:472`): the `hourly` table keyed by
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
-   suppliers, `coordinator.py:1050`), plus snapshot metadata, the injection price, fees, and the
+   suppliers, `coordinator.py:1056`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
 9. `entry.runtime_data` is set to the coordinator, the three platforms are forwarded, and a
    slot-boundary push is registered (`__init__.py:162`). Because `current_price` and

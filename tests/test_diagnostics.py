@@ -27,9 +27,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
+from typing import Any
 
+import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -136,6 +138,30 @@ async def test_diagnostics_includes_snapshot_and_hourly(hass: HomeAssistant) -> 
     assert coord["current_year_cost_eur"] == 345.67
     assert len(coord["hourly"]) == 1
     assert coord["hourly"][0]["all_in"] == 0.312
+
+
+async def test_diagnostics_reports_the_injection_price_the_entity_shows(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The dump carries both injection numbers: the one the last tick resolved
+    and the one the entity is showing. They diverge as soon as the clock leaves
+    the tick's slot, and a triage dump that only had the former would not match
+    the sensor the reporter is complaining about."""
+    from dataclasses import replace
+
+    midnight = datetime(2026, 7, 22, tzinfo=UTC)
+    inj = {midnight + timedelta(hours=h): 0.01 * h for h in range(24)}
+    entry = _entry_with_data()
+    entry.add_to_hass(hass)
+    data = replace(
+        _coordinator_data(), injection_hourly=inj, injection_price_eur_per_kwh=0.045
+    )
+    entry.runtime_data = SimpleNamespace(data=data)
+
+    freezer.move_to("2026-07-22T09:30:00+00:00")
+    coord = (await async_get_config_entry_diagnostics(hass, entry))["coordinator"]
+    assert coord["injection_price_eur_per_kwh"] == 0.045  # what the tick resolved
+    assert coord["injection_price_current_slot"] == pytest.approx(0.09)
 
 
 async def test_diagnostics_includes_consumption_and_monthly_labels(
