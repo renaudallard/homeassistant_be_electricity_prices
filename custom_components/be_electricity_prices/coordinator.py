@@ -1815,9 +1815,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if self.entry.data.get(CONF_REGION) != REGION_FLANDERS:
             # Outside Flanders the capacity tariff doesn't apply. Reset
             # any peak left over from a previous Flanders config so it
-            # doesn't linger in diagnostics or the persistent store.
+            # doesn't linger in diagnostics or the persistent store. The
+            # banked window goes too, or moving back to Flanders later would
+            # resume billing on year-old peaks from the previous address;
+            # Fluvius likewise restarts the window when the grid user changes.
             self._peak_kw = 0.0
             self._peak_month = None
+            self._peak_history.clear()
             return
         # Roll over on the local 1st-of-month; using UTC would lag CET/CEST
         # users by 1-2 hours on the boundary and miss late-Dec-31 / early-Jan-1.

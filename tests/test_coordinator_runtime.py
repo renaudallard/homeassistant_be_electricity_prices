@@ -2158,3 +2158,37 @@ async def test_reset_monthly_peak_also_clears_the_history(
 
     assert coord._peak_kw == 0.0
     assert coord._peak_history == {}
+
+
+async def test_non_flanders_tick_clears_the_banked_peak_window(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Moving an entry out of Flanders drops the whole peak state, window
+    included. Leaving the window behind would let a later move back to
+    Flanders resume billing on year-old peaks from the previous address, and
+    Fluvius restarts the window when the grid user changes."""
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "capacity_mode": "sensor",
+            "capacity_peak_sensor": "sensor.house_power",
+        },
+        title="Eneco (Wallonia)",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_kw = 7.0
+    coord._peak_month = date(2026, 5, 1)
+    coord._peak_history = {f"2025-{m:02d}-01": 6.0 for m in range(6, 12)}
+
+    await coord._track_monthly_peak()
+
+    assert coord._peak_kw == 0.0
+    assert coord._peak_month is None
+    assert coord._peak_history == {}
