@@ -950,11 +950,44 @@ async def _apply_energy_manager_defaults(
         return
 
 
+def _dsmr_monthly_peak_sensor(hass: HomeAssistant) -> str | None:
+    """The Belgian meter's own monthly peak entity, when the user has one.
+
+    Fluvius bills the highest quarter-hour offtake of the month, and a DSMR
+    5B meter publishes exactly that on the P1 port; Home Assistant's built-in
+    ``dsmr`` integration surfaces it as ``maximum_demand_current_month``. That
+    entity is strictly better than anything derived from an instantaneous
+    power sensor: the meter computes the true quarter-hour average, so no
+    sampling of ours can miss a peak between reads or mistake a momentary
+    spike for a quarter-hour one.
+
+    Matched on the registry's ``translation_key`` rather than the entity id,
+    which the user is free to rename.
+    """
+    from homeassistant.helpers import entity_registry as er
+
+    registry = er.async_get(hass)
+    for entry in registry.entities.values():
+        if (
+            entry.domain == "sensor"
+            and entry.platform == "dsmr"
+            and entry.translation_key == "maximum_demand_current_month"
+            and not entry.disabled
+        ):
+            return entry.entity_id
+    return None
+
+
 async def _apply_energy_manager_capacity_default(
     hass: HomeAssistant, defaults: dict[str, Any]
 ) -> None:
-    """Pre-fill the Flemish capacity peak sensor from the Energy
-    dashboard when nothing is already set.
+    """Pre-fill the Flemish capacity peak sensor when nothing is already set.
+
+    Prefer the meter's own monthly peak (see ``_dsmr_monthly_peak_sensor``).
+    Only when there is none do we fall back to the Energy dashboard walk
+    below, which yields an instantaneous power sensor: the coordinator then
+    samples it once an hour and keeps a rolling max, which is a rough
+    estimate of a quarter-hour peak rather than the billed quantity.
 
     The dashboard tracks cumulative kWh, but the capacity tariff needs
     a kW power sensor. The common bridge is a Riemann ``integration``
@@ -970,6 +1003,9 @@ async def _apply_energy_manager_capacity_default(
         (no way to derive the kW source automatically).
     """
     if defaults.get(CONF_CAPACITY_PEAK_SENSOR) is not None:
+        return
+    if (meter_peak := _dsmr_monthly_peak_sensor(hass)) is not None:
+        defaults[CONF_CAPACITY_PEAK_SENSOR] = meter_peak
         return
     try:
         from homeassistant.components.energy.data import async_get_manager

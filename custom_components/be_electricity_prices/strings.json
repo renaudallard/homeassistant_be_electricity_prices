@@ -77,10 +77,10 @@
       },
       "capacity": {
         "title": "Capacity tariff (Flanders)",
-        "description": "Pick a sensor that exposes your monthly peak in kW or use a fixed value.",
+        "description": "Prefer your meter's own monthly peak sensor (DSMR 5B publishes \"Maximum demand current month\"), which is the quarter-hour peak Fluvius actually bills. A plain power sensor is sampled hourly and only approximates it. Or use a fixed value.",
         "data": {
           "capacity_mode": "Peak source",
-          "capacity_peak_sensor": "Peak power sensor",
+          "capacity_peak_sensor": "Monthly peak sensor",
           "capacity_fixed_kw": "Fixed peak (kW)"
         }
       },

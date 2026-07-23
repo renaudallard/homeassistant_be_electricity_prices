@@ -77,10 +77,10 @@
       },
       "capacity": {
         "title": "Capaciteitstarief (Vlaanderen)",
-        "description": "Kies een sensor met je maandpiek in kW of een vaste waarde.",
+        "description": "Kies bij voorkeur de maandpieksensor van je meter (DSMR 5B publiceert \"Maximum demand current month\"), dat is de kwartierpiek die Fluvius aanrekent. Een gewone vermogenssensor wordt elk uur bemonsterd en benadert die alleen. Of gebruik een vaste waarde.",
         "data": {
           "capacity_mode": "Bron van de piek",
-          "capacity_peak_sensor": "Vermogenssensor",
+          "capacity_peak_sensor": "Maandpieksensor",
           "capacity_fixed_kw": "Vaste piek (kW)"
         }
       },
@@ -303,10 +303,10 @@
       },
       "capacity": {
         "title": "Capaciteitstarief (Vlaanderen)",
-        "description": "Kies een sensor met je maandpiek in kW of een vaste waarde.",
+        "description": "Kies bij voorkeur de maandpieksensor van je meter (DSMR 5B publiceert \"Maximum demand current month\"), dat is de kwartierpiek die Fluvius aanrekent. Een gewone vermogenssensor wordt elk uur bemonsterd en benadert die alleen. Of gebruik een vaste waarde.",
         "data": {
           "capacity_mode": "Bron van de piek",
-          "capacity_peak_sensor": "Vermogenssensor",
+          "capacity_peak_sensor": "Maandpieksensor",
           "capacity_fixed_kw": "Vaste piek (kW)"
         }
       },

@@ -238,11 +238,27 @@ Fields:
   `VREG_CAPACITY_FLOOR_KW` (2.5 kW, the regulated minimum monthly peak Fluvius bills
   against; `const.py:238`).
 
-Energy-dashboard default: before rendering, `async_step_capacity` copies
-`self._data` and calls `_apply_energy_manager_capacity_default`
-(`config_flow.py:947`). That helper walks dashboard kWh grid source -> Riemann
-`integration` helper config entry -> the helper's `source` (the kW sensor) and
-pre-fills `CONF_CAPACITY_PEAK_SENSOR` only when that source is a real power sensor
+Pre-fill: before rendering, `async_step_capacity` copies `self._data` and calls
+`_apply_energy_manager_capacity_default` (`config_flow.py:947`), which tries two
+sources in order.
+
+First `_dsmr_monthly_peak_sensor` looks for the meter's own monthly peak: a
+registry entity on the `dsmr` platform whose `translation_key` is
+`maximum_demand_current_month`, matched on the translation key rather than the
+entity id because the user may rename the latter. That entity is what a Belgian
+DSMR 5B meter publishes on the P1 port, and it is the highest quarter-hour
+offtake of the month, i.e. exactly the quantity Fluvius bills. Preferring it
+means the coordinator's hourly sampling cannot lose anything: the value is a
+monthly maximum that only rises within a month, so reading it once an hour and
+keeping the running max is lossless. Disabled entities are skipped, since they
+never report a state.
+
+Only when there is no such entity does the helper fall back to the Energy
+dashboard walk: dashboard kWh grid source -> Riemann `integration` helper config
+entry -> the helper's `source` (the kW sensor). That source is *instantaneous*
+power, so the resulting peak is an hourly-sampled estimate of a quarter-hour
+average rather than the billed figure; the config-flow description says so. The
+fallback pre-fills `CONF_CAPACITY_PEAK_SENSOR` only when that source is a real power sensor
 (device_class power/apparent_power, or unit W/kW/VA/kVA). It is skipped when the
 user already picked a sensor, the energy component is not loaded, there is no grid
 source, or the consumption sensor is not a Riemann child (`config_flow.py:751`

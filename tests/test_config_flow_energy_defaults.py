@@ -402,3 +402,89 @@ async def test_capacity_pre_fill_rejects_non_power_riemann_source(
     with _patch_manager(prefs):
         await _apply_energy_manager_capacity_default(hass, defaults)
     assert "capacity_peak_sensor" not in defaults
+
+
+def _add_dsmr_monthly_peak(
+    hass: HomeAssistant, *, entity_id: str = "sensor.p1_maximum_demand_current_month"
+) -> str:
+    """Register the entity HA's dsmr integration creates for a DSMR 5B meter."""
+    registry = er.async_get(hass)
+    return registry.async_get_or_create(
+        "sensor",
+        "dsmr",
+        "1234_belgium_maximum_demand_current_month",
+        translation_key="maximum_demand_current_month",
+        suggested_object_id=entity_id.removeprefix("sensor."),
+    ).entity_id
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_capacity_pre_fill_prefers_the_meters_own_monthly_peak(
+    hass: HomeAssistant,
+) -> None:
+    """A DSMR 5B meter publishes the quarter-hour peak Fluvius actually bills.
+    That beats the Riemann source, which is instantaneous power the coordinator
+    can only sample hourly, so it must win even when both are available."""
+    peak_id = _add_dsmr_monthly_peak(hass)
+    _add_integration_helper(
+        hass,
+        source_kw="sensor.electricity_meter_power",
+        output_kwh="sensor.electricity_meter_total",
+        entry_id="riemann_kwh",
+    )
+    hass.states.async_set(
+        "sensor.electricity_meter_power",
+        "1234",
+        {"device_class": "power", "unit_of_measurement": "W"},
+    )
+    defaults: dict[str, Any] = {}
+    prefs = _grid_prefs(consumption="sensor.electricity_meter_total")
+    with _patch_manager(prefs):
+        await _apply_energy_manager_capacity_default(hass, defaults)
+    assert defaults["capacity_peak_sensor"] == peak_id
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_capacity_pre_fill_keeps_a_manual_pick_over_the_meter_peak(
+    hass: HomeAssistant,
+) -> None:
+    """The meter preference must not override a choice the user already made."""
+    _add_dsmr_monthly_peak(hass)
+    defaults: dict[str, Any] = {"capacity_peak_sensor": "sensor.user_pick"}
+    with _patch_manager(_grid_prefs(consumption="sensor.whatever")):
+        await _apply_energy_manager_capacity_default(hass, defaults)
+    assert defaults["capacity_peak_sensor"] == "sensor.user_pick"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_capacity_pre_fill_ignores_a_disabled_meter_peak(
+    hass: HomeAssistant,
+) -> None:
+    """A disabled entity has no state, so falling back to the Riemann walk
+    beats pre-filling something that will never report."""
+    registry = er.async_get(hass)
+    entry = registry.async_get_or_create(
+        "sensor",
+        "dsmr",
+        "1234_belgium_maximum_demand_current_month",
+        translation_key="maximum_demand_current_month",
+        suggested_object_id="p1_maximum_demand_current_month",
+    )
+    registry.async_update_entity(
+        entry.entity_id, disabled_by=er.RegistryEntryDisabler.USER
+    )
+    _add_integration_helper(
+        hass,
+        source_kw="sensor.electricity_meter_power",
+        output_kwh="sensor.electricity_meter_total",
+        entry_id="riemann_kwh",
+    )
+    hass.states.async_set(
+        "sensor.electricity_meter_power",
+        "1234",
+        {"device_class": "power", "unit_of_measurement": "W"},
+    )
+    defaults: dict[str, Any] = {}
+    with _patch_manager(_grid_prefs(consumption="sensor.electricity_meter_total")):
+        await _apply_energy_manager_capacity_default(hass, defaults)
+    assert defaults["capacity_peak_sensor"] == "sensor.electricity_meter_power"

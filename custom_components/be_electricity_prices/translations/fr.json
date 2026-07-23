@@ -77,10 +77,10 @@
       },
       "capacity": {
         "title": "Tarif capacitaire (Flandre)",
-        "description": "Choisissez un capteur exposant le pic mensuel en kW ou une valeur fixe.",
+        "description": "Preferez le capteur de pic mensuel du compteur (DSMR 5B publie \"Maximum demand current month\"), soit le pic quart-horaire reellement facture par Fluvius. Un simple capteur de puissance est echantillonne chaque heure et ne fait que l'approcher. Ou une valeur fixe.",
         "data": {
           "capacity_mode": "Source du pic",
-          "capacity_peak_sensor": "Capteur de puissance",
+          "capacity_peak_sensor": "Capteur de pic mensuel",
           "capacity_fixed_kw": "Pic fixe (kW)"
         }
       },
@@ -303,10 +303,10 @@
       },
       "capacity": {
         "title": "Tarif capacitaire (Flandre)",
-        "description": "Choisissez un capteur exposant le pic mensuel en kW ou une valeur fixe.",
+        "description": "Preferez le capteur de pic mensuel du compteur (DSMR 5B publie \"Maximum demand current month\"), soit le pic quart-horaire reellement facture par Fluvius. Un simple capteur de puissance est echantillonne chaque heure et ne fait que l'approcher. Ou une valeur fixe.",
         "data": {
           "capacity_mode": "Source du pic",
-          "capacity_peak_sensor": "Capteur de puissance",
+          "capacity_peak_sensor": "Capteur de pic mensuel",
           "capacity_fixed_kw": "Pic fixe (kW)"
         }
       },

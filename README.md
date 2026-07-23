@@ -50,7 +50,7 @@ publication and how to parse it.
 - **Dynamic contracts** — `factor × spot + base`, where `spot` is the Belgian day-ahead price from ENTSO-E. Priced per hour by default; suppliers that bill per quarter-hour (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom and Bolt Dynamisch, after the SDAC 15-minute market switch of Oct 2025) keep the native 15-minute slots for the live price, next slot and cheapest-window service. Year-to-date billing stays hourly, since Home Assistant only retains hourly long-term statistics.
 - **Time-of-Use contracts** — Luminus SmartFlex and Engie Empower Flextime: 3 hour-of-day bands (peak / transition / offpeak) with the supplier's published rates per slot. Luminus SmartFlex is billed on its *seasonal* schedule: peak 07:00-11:00 + 17:00-22:00 all year, the cheapest super-creuses band 11:00-17:00 only in spring/summer (21/03-20/09), and 22:00-07:00 always at the middle creuses rate (the "free electricity on Sundays" first-year promo is not modelled).
 - **Tarif Impact (Wallonia)** — opt-in CWaPE 3-band distribution pricing (PIC 17–22, MEDIUM 7–11 + 22–1, ECO 1–7 + 11–17), selectable independently of the supplier tariff. Under Impact comptage the SMR3 meter registers in these bands, so a bi-hourly supplier energy rate follows them too (ECO → off-peak rate, MEDIUM/PIC → peak rate) rather than the plain bi-horaire clock.
-- **Flanders capacity tariff** — monthly peak tracked from any power sensor (W, kW, VA, or kVA — the unit is honoured) or a fixed value; billed against the configured Fluvius sub-area.
+- **Flanders capacity tariff** — monthly peak taken from your meter's own monthly-peak sensor when you have one (a DSMR 5B meter publishes it as *Maximum demand current month*, which is the quarter-hour peak Fluvius bills), else from any power sensor (W, kW, VA, or kVA — the unit is honoured) or a fixed value; billed against the configured Fluvius sub-area.
 - **Solar** — prosumer fee for the Walloon compensation regime (until 2030-12-31), and a per-kWh injection price entity that plugs straight into HA Energy.
 - **Year-to-date cost** — `current_year_cost` sensor reports your running bill in EUR since Jan 1, computed day by day (or hour by hour for TOU and dynamic contracts) from HA's recorder (consumption × the tariff of the month that day/hour belongs to). Each day is billed at its own month's published rate when the supplier archives historical cards (Eneco / Cociter / Ecopower / Bolt fix / Mega / EBEM / Frank); other suppliers fall back to the current rate as a proxy. **TOU contracts** (Engie Empower Flextime, Luminus SmartFlex) use the per-hour path so each kWh hits its actual peak / transition / offpeak rate. **Dynamic contracts** replay historical hourly ENTSO-E day-ahead spots from a persistent cache so each past kWh is billed at its actual `factor × spot + base` rate; missing hours (cold-start gaps) are skipped rather than zeroed. Compensation regime nets injection against consumption across the whole year (clamped at zero, since most Walloon suppliers forfeit surplus injection past consumption). Annual fees are pro-rated to the elapsed fraction of the year so the figure grows day by day instead of jumping to the full annual on Jan 1.
 - **Cheapest / most-expensive window services** — find the optimal contiguous N-hour window in the upcoming price table for EV charging, heat-pump cycles, or peak avoidance.
@@ -230,12 +230,20 @@ supplier's tariff card.
    injection case it is optional and skippable: leave it blank to finish
    setup, and the injection price simply stays unavailable until you add
    a key via Reconfigure.
-7. **Capacity tariff peak source** *(Flanders only)* — either a power sensor
-   reporting your live draw (W, kW, VA, or kVA; the unit is honoured so a
-   Riemann-source sensor in W is not misread as kW), or a fixed kW value
-   (default 2.5 kW, the VREG regulated minimum). The picker is restricted
-   to power / apparent-power sensors so a kWh / temperature / unitless
-   sensor cannot be selected. The field is auto-filled from the power
+7. **Capacity tariff peak source** *(Flanders only)* — a sensor, or a fixed
+   kW value (default 2.5 kW, the VREG regulated minimum). Fluvius bills the
+   highest **quarter-hour** average offtake of the month, and a DSMR 5B meter
+   computes exactly that and publishes it on the P1 port; Home Assistant's
+   `dsmr` integration exposes it as *Maximum demand current month*. Point the
+   field at that entity when you have it and the figure matches the meter.
+   Any other power sensor (W, kW, VA, or kVA; the unit is honoured so a
+   Riemann-source sensor in W is not misread as kW) reports your *live* draw,
+   which the integration samples once an hour and keeps the maximum of: that
+   is an estimate, not the billed quantity, and it can miss a peak between
+   samples or read a momentary spike as a quarter-hour one. The picker is
+   restricted to power / apparent-power sensors so a kWh / temperature /
+   unitless sensor cannot be selected. The field is auto-filled with the
+   meter's monthly-peak entity when one exists, otherwise with the power
    input of any Riemann `integration` helper that feeds the Energy
    dashboard's grid source, so users with the typical P1-power →
    kWh-Riemann → dashboard chain don't have to pick the same sensor

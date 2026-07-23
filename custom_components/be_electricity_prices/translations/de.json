@@ -77,10 +77,10 @@
       },
       "capacity": {
         "title": "Kapazitaetstarif (Flandern)",
-        "description": "Sensor mit der monatlichen Spitzenleistung in kW oder festen Wert waehlen.",
+        "description": "Bevorzugen Sie den Monatsspitzen-Sensor des Zaehlers (DSMR 5B liefert \"Maximum demand current month\"), also die Viertelstundenspitze, die Fluvius abrechnet. Ein einfacher Leistungssensor wird stuendlich abgetastet und ist nur eine Naeherung. Oder festen Wert waehlen.",
         "data": {
           "capacity_mode": "Quelle der Spitze",
-          "capacity_peak_sensor": "Leistungssensor",
+          "capacity_peak_sensor": "Monatsspitzen-Sensor",
           "capacity_fixed_kw": "Feste Spitze (kW)"
         }
       },
@@ -303,10 +303,10 @@
       },
       "capacity": {
         "title": "Kapazitaetstarif (Flandern)",
-        "description": "Sensor mit der monatlichen Spitzenleistung in kW oder festen Wert waehlen.",
+        "description": "Bevorzugen Sie den Monatsspitzen-Sensor des Zaehlers (DSMR 5B liefert \"Maximum demand current month\"), also die Viertelstundenspitze, die Fluvius abrechnet. Ein einfacher Leistungssensor wird stuendlich abgetastet und ist nur eine Naeherung. Oder festen Wert waehlen.",
         "data": {
           "capacity_mode": "Quelle der Spitze",
-          "capacity_peak_sensor": "Leistungssensor",
+          "capacity_peak_sensor": "Monatsspitzen-Sensor",
           "capacity_fixed_kw": "Feste Spitze (kW)"
         }
       },
