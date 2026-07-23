@@ -1212,6 +1212,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             historical_spots=self._historical_spots,
             spp_weights=self._spp_weights if spp_weighted else None,
             breakdown=ytd_breakdown,
+            billed_peak_kw=billed_peak,
         )
 
         await self._save_persistent()
@@ -3175,6 +3176,47 @@ async def _ytd_prosumer(
     return total
 
 
+async def _ytd_capacity(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: SupplierExtractor,
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    today: date,
+    billed_peak_kw: float,
+    *,
+    contract: str | None = None,
+) -> float:
+    """Sum the monthly Flemish capacity charge across YTD, reading each
+    month's archived DSO overlay so a VREG indexation landing mid-year is
+    honoured for the months it applies to.
+
+    ``billed_peak_kw`` is the CURRENT gemiddelde maandpiek, applied to every
+    month of the year rather than reconstructed per month. Reconstruction is
+    not available in general: the rolling window holds at most twelve months
+    and an entry installed mid-year has no history for the months before it,
+    where Fluvius billed against meter history we never saw. The current mean
+    is the honest stand-in precisely because it is a twelve-month mean, so it
+    moves slowly and is close to what each month of this year was billed on.
+    """
+    if entry.data.get(CONF_REGION) != REGION_FLANDERS:
+        return 0.0
+    dso = entry.data.get(CONF_DSO)
+    if dso is None:
+        return 0.0
+
+    total = 0.0
+    async for snap_m, _, days_in_full_month, days_in_ytd in _walk_ytd_months(
+        hass, session, extractor, snapshot, entry, today, contract=contract
+    ):
+        overlay = snap_m.dsos.get(dso)
+        if overlay is None or overlay.capacity_eur_per_kw_year is None:
+            continue
+        monthly = billed_peak_kw * overlay.capacity_eur_per_kw_year / 12.0
+        total += monthly * (days_in_ytd / days_in_full_month)
+    return total
+
+
 def _kwh_sensor_ids(
     entry: ConfigEntry, side: str
 ) -> tuple[str | None, str | None, str | None]:
@@ -3470,6 +3512,7 @@ async def _compute_current_year_cost(
     historical_spots: dict[datetime, float] | None = None,
     spp_weights: SppWeights | None = None,
     breakdown: dict[str, float] | None = None,
+    billed_peak_kw: float = 0.0,
 ) -> float | None:
     """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
@@ -3588,7 +3631,17 @@ async def _compute_current_year_cost(
     prosumer_ytd = await _ytd_prosumer(
         hass, session, extractor, snapshot, entry, today, contract=contract
     )
-    fees = static_fees + prosumer_ytd
+    capacity_ytd = await _ytd_capacity(
+        hass,
+        session,
+        extractor,
+        snapshot,
+        entry,
+        today,
+        billed_peak_kw,
+        contract=contract,
+    )
+    fees = static_fees + prosumer_ytd + capacity_ytd
 
     # Dynamic contracts replay historical hourly ENTSO-E spots so each
     # past kWh hits its actual factor*spot+base rate. Caller passes the

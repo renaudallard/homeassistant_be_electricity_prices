@@ -71,6 +71,7 @@ from .const import (
     DOMAIN,
     DSO_MODE_BI_HORAIRE,
     METER_MONO,
+    REGION_FLANDERS,
     REGION_WALLONIA,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
@@ -543,6 +544,11 @@ async def _backfill_cost_sensor(
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
     is_compensation = regime == SOLAR_REGIME_COMPENSATION
     kva = _solar_kva(entry) if is_compensation else 0.0
+    # The kW the Flemish capacity tariff is charged on. Read from the live
+    # coordinator so the backfilled series accrues it exactly as the live
+    # _ytd_capacity does; the rolling mean is not reconstructable per past
+    # month, so both use the current one (see _ytd_capacity).
+    billed_peak_kw = coordinator._billed_peak_kw() if region == REGION_FLANDERS else 0.0
 
     # One bulk fetch per recorder entity; bin into UTC-hour totals.
     # _recorder_rows treats the start/end arguments as local-day
@@ -640,6 +646,25 @@ async def _backfill_cost_sensor(
         running_fees += (
             annual_static / days_in_year / hours_per_local_date[local.date()]
         )
+
+        # Flemish capacity tariff, spread per local day like the prosumer fee
+        # below (its monthly charge over that month's days), so the backfill
+        # meets the live _ytd_capacity proration (days_in_ytd /
+        # days_in_full_month) at the seam rather than trailing it.
+        if billed_peak_kw:
+            overlay = snap_h.dsos.get(dso)
+            rate = overlay.capacity_eur_per_kw_year if overlay is not None else None
+            if rate is not None:
+                days_in_full_month = calendar.monthrange(
+                    month_first.year, month_first.month
+                )[1]
+                running_fees += (
+                    billed_peak_kw
+                    * rate
+                    / 12.0
+                    / days_in_full_month
+                    / hours_per_local_date[local.date()]
+                )
 
         # Compensation is Walloon-only (see coordinator._compute_prosumer):
         # gate the prosumer accrual to Wallonia so a Flanders entry never

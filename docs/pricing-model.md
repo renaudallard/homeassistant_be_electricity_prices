@@ -473,7 +473,9 @@ cached spot (`coordinator.py:2780-2588`).
 ## Capacity tariff
 
 The Flanders capaciteitstarief is billed by the coordinator, not folded into the
-per-kWh all-in. Monthly cost (`_compute_capacity`, `coordinator.py:1830-1632`):
+per-kWh all-in. It is surfaced on its own `capacity_cost` sensor AND accrued into
+`current_year_cost` through `_ytd_capacity`, so the running bill reflects what
+Fluvius actually charges rather than the energy side alone. Monthly cost (`_compute_capacity`, `coordinator.py:1830-1632`):
 
 ```
 capacity_cost_eur = peak_kw * overlay.capacity_eur_per_kw_year / 12.0

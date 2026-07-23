@@ -232,7 +232,9 @@ The window computation is *not* owned by the coordinator. `_find_window` (`__ini
 
 `_billed_peak_kw` turns that window into the quantity Fluvius actually charges on, the "gemiddelde maandpiek". Its methodology gives the formula outright: `Rekenkundig gemiddelde van de Max (Maandpiek (m), 2.5) voor elke maand (m)`, i.e. the floor lands on each month BEFORE the mean, not on the mean. Every term is then at least the floor, so the mean is too and no outer clamp is needed. `CAPACITY_MODE_FIXED` bypasses the window and floors the configured value directly. `_peak_kw` itself is left raw, so `monthly_peak_kw` reports a measurement rather than a billing figure.
 
-`_compute_capacity` (`coordinator.py:1830`) then returns `billed_peak_kw * capacity_eur_per_kw_year / 12` from the configured DSO overlay, or 0 when the overlay omits a capacity rate.
+`_compute_capacity` (`coordinator.py:1830`) then returns `billed_peak_kw * capacity_eur_per_kw_year / 12` from the configured DSO overlay, or 0 when the overlay omits a capacity rate. That feeds the `capacity_cost` sensor.
+
+The same charge is accrued into the running bill by `_ytd_capacity`, which walks the year month by month like `_ytd_prosumer` and prorates each month by `days_in_ytd / days_in_full_month`, reading each month's archived overlay so a VREG indexation landing mid-year applies only to the months it covers. It applies the CURRENT gemiddelde maandpiek to every month rather than reconstructing one per month: the rolling window holds at most twelve months, and an entry installed mid-year has no history for the months before it, where Fluvius billed against meter history the integration never saw. Because the quantity is itself a twelve-month mean it moves slowly, so the current value is close to what each month of this year was billed on. All three cost paths use it: the live sensor, `backfill.py` (per local day, divided by that day's real UTC-hour count so the DST seam days still total a full daily share) and the OptionsFlow compare what-if.
 
 ## 7. Year-to-date / current-year cost
 

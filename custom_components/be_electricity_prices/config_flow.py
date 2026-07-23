@@ -1807,7 +1807,12 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         meter = self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
         current_meter = current.get(CONF_METER, METER_MONO)
         dso_mode = current.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
-        peak_kw = max(coord._peak_kw or 0.0, VREG_CAPACITY_FLOOR_KW)
+        # The quantity the capacity tariff is charged on, not this month's
+        # reading: _billed_peak_kw applies the regulated floor per month and
+        # means the rolling twelve, so the comparison quotes the same kW the
+        # live sensor bills. Flooring _peak_kw here instead would quote a
+        # seasonal household its winter peak against the year.
+        peak_kw = coord._billed_peak_kw()
         regime = current.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
 
         now_utc = dt_util.utcnow()
@@ -2094,6 +2099,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                     coord._snapshot,
                     self.config_entry,
                     historical_spots=hist_spots,
+                    billed_peak_kw=peak_kw,
                 )
                 compare_ytd_val = await _compute_current_year_cost(
                     self.hass,
@@ -2104,6 +2110,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                     contract_override=self._compare[CONF_CONTRACT],
                     meter_override=meter,
                     historical_spots=hist_spots,
+                    billed_peak_kw=peak_kw,
                 )
             except Exception:  # noqa: BLE001 - degrade to '-'
                 current_ytd_val = None
@@ -2146,7 +2153,6 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 fee_proration=fee_proration,
                 prosumer_proration=prosumer_proration,
                 meter=current_meter,
-                include_capacity=False,
             )
             compare_ytd = _annual_bill(
                 other_snap,
@@ -2159,7 +2165,6 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 fee_proration=fee_proration,
                 prosumer_proration=prosumer_proration,
                 meter=meter,
-                include_capacity=False,
             )
             placeholders["current_ytd"] = f"{current_ytd:.2f}"
             placeholders["compare_ytd"] = f"{compare_ytd:.2f}"
@@ -2548,8 +2553,10 @@ def _annual_bill(
     backfill prorate the prosumer fee per-month (each month's fee by its own
     days), so the YTD what-if passes the same per-month factor there to keep
     its absolute figure equal to the live ``current_year_cost`` sensor.
-    ``include_capacity`` is forwarded to :func:`_annual_fees` (off for the YTD
-    what-if so it matches the live sensor).
+    ``include_capacity`` is forwarded to :func:`_annual_fees`; it exists for
+    callers that want the per-kWh and fee terms without the Flanders capacity
+    charge, and both the annual estimate and the YTD what-if keep it on so
+    they match the live ``current_year_cost`` sensor.
 
     Solar handling honours the entry's configured regime:
 
@@ -2598,10 +2605,10 @@ def _annual_fees(
     selects the supplier yearly fixed fee, so an exclusive-night meter
     gets its dedicated fee (EBEM) rather than the standard one.
 
-    ``include_capacity`` excludes the Flanders capacity tariff so the YTD
-    what-if matches the live ``current_year_cost`` sensor and the archive
-    YTD path, both of which bill capacity as a separate sensor. The full
-    annual estimate keeps it (the default)."""
+    ``include_capacity`` can exclude the Flanders capacity tariff. It is on
+    everywhere today: the live ``current_year_cost`` sensor accrues capacity
+    through ``_ytd_capacity``, so a what-if that dropped it would quote a
+    lower bill than the sensor it sits next to."""
     from .coordinator import (
         _annual_static_fees,
         _compute_capacity,

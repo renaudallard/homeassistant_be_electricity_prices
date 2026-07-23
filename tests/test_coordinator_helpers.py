@@ -2436,3 +2436,142 @@ def test_cohort_energy_from_archived_carries_exclusive_night_fee() -> None:
     assert cohort.yearly_fixed_fee_exclusive_night == pytest.approx(35.04)
     assert yearly_fixed_fee_for_meter(cohort, "exclusive_night") == pytest.approx(35.04)
     assert yearly_fixed_fee_for_meter(cohort, "mono") == pytest.approx(85.0)
+
+
+def _capacity_entry(region: str = "flanders") -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": region,
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "capacity_mode": "sensor",
+        },
+    )
+
+
+def _capacity_snapshot(rate: float | None = 52.37) -> SupplierSnapshot:
+    return make_snapshot(
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                capacity_eur_per_kw_year=rate,
+            )
+        }
+    )
+
+
+async def test_ytd_capacity_accrues_the_monthly_charge(hass: HomeAssistant) -> None:
+    """The capacity term is a EUR/kW/year rate billed monthly on the
+    gemiddelde maandpiek, so a full year at 4 kW accrues peak x rate."""
+    from custom_components.be_electricity_prices.coordinator import _ytd_capacity
+
+    snap = _capacity_snapshot()
+
+    async def _fake_walk(*_a: Any, **_k: Any):
+        # Twelve whole months, each fully elapsed.
+        for month in range(1, 13):
+            days = calendar.monthrange(2026, month)[1]
+            yield snap, date(2026, month, 1), days, days
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator._walk_ytd_months",
+        new=_fake_walk,
+    ):
+        total = await _ytd_capacity(
+            hass,
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            snap,
+            _capacity_entry(),
+            date(2026, 12, 31),
+            4.0,
+        )
+    # 12 months x (4.0 * 52.37 / 12) == a full year of the annual rate.
+    assert total == pytest.approx(4.0 * 52.37)
+
+
+async def test_ytd_capacity_is_flanders_only(hass: HomeAssistant) -> None:
+    """Wallonia and Brussels do not bill a capacity tariff; a leftover rate on
+    the overlay must not accrue there."""
+    from custom_components.be_electricity_prices.coordinator import _ytd_capacity
+
+    snap = _capacity_snapshot()
+
+    async def _fake_walk(*_a: Any, **_k: Any):
+        yield snap, date(2026, 1, 1), 31, 31
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator._walk_ytd_months",
+        new=_fake_walk,
+    ):
+        total = await _ytd_capacity(
+            hass,
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            snap,
+            _capacity_entry(region="wallonia"),
+            date(2026, 1, 31),
+            4.0,
+        )
+    assert total == 0.0
+
+
+async def test_ytd_capacity_skips_months_whose_card_omits_the_rate(
+    hass: HomeAssistant,
+) -> None:
+    """Cards outside Flanders leave capacity_eur_per_kw_year None; such a month
+    contributes nothing rather than raising."""
+    from custom_components.be_electricity_prices.coordinator import _ytd_capacity
+
+    priced, unpriced = _capacity_snapshot(), _capacity_snapshot(rate=None)
+
+    async def _fake_walk(*_a: Any, **_k: Any):
+        yield unpriced, date(2026, 1, 1), 31, 31
+        yield priced, date(2026, 2, 1), 28, 28
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator._walk_ytd_months",
+        new=_fake_walk,
+    ):
+        total = await _ytd_capacity(
+            hass,
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            priced,
+            _capacity_entry(),
+            date(2026, 2, 28),
+            4.0,
+        )
+    assert total == pytest.approx(4.0 * 52.37 / 12.0)  # February only
+
+
+async def test_ytd_capacity_prorates_the_running_month(hass: HomeAssistant) -> None:
+    """A part-elapsed month accrues its own fraction, the same proration
+    _ytd_prosumer uses, so the backfill can meet it at the seam."""
+    from custom_components.be_electricity_prices.coordinator import _ytd_capacity
+
+    snap = _capacity_snapshot()
+
+    async def _fake_walk(*_a: Any, **_k: Any):
+        yield snap, date(2026, 1, 1), 31, 31
+        yield snap, date(2026, 2, 1), 28, 14  # half of February
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator._walk_ytd_months",
+        new=_fake_walk,
+    ):
+        total = await _ytd_capacity(
+            hass,
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            snap,
+            _capacity_entry(),
+            date(2026, 2, 14),
+            4.0,
+        )
+    monthly = 4.0 * 52.37 / 12.0
+    assert total == pytest.approx(monthly * (1 + 14 / 28))
