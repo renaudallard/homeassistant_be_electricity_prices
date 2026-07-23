@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -44,6 +45,7 @@ from custom_components.be_electricity_prices.sensor import (
     _injection_hourly_view,
     _split_injection_today_tomorrow,
     _split_today_tomorrow,
+    _today_avg,
     _today_ranked,
     _tomorrow_avg,
     _tomorrow_max,
@@ -270,6 +272,37 @@ def test_tomorrow_aggregations_return_none_before_publication() -> None:
     assert _tomorrow_avg(data) is None
     assert _tomorrow_min(data) is None
     assert _tomorrow_max(data) is None
+
+
+def test_tomorrow_aggregations_stop_at_the_card_validity() -> None:
+    # A monthly card valid to the end of today: the forward-filled tomorrow
+    # rows exist in the table but price next month, which the supplier has not
+    # published. tomorrow_prices_available has always refused to claim them;
+    # these three used to report the extrapolation as a number anyway, so the
+    # two entities disagreed for the whole last day of every month.
+    data = replace(
+        _today_and_tomorrow_data([0.10] * 24, [0.20] * 24),
+        snapshot_valid_until=_fixed_today_local().date(),
+    )
+    assert _has_tomorrow(data) is False
+    assert _tomorrow_avg(data) is None
+    assert _tomorrow_min(data) is None
+    assert _tomorrow_max(data) is None
+    # Today is unaffected: an expired card still describes today better than
+    # nothing, and staleness has its own repair issue.
+    assert _today_avg(data) == pytest.approx(0.10)
+
+
+def test_tomorrow_aggregations_report_inside_the_card_validity() -> None:
+    base = _today_and_tomorrow_data([0.10] * 24, [0.20] * 24)
+    covering = replace(
+        base, snapshot_valid_until=_fixed_today_local().date() + timedelta(days=1)
+    )
+    for data in (base, covering):  # unknown validity, then one that covers
+        assert _has_tomorrow(data) is True
+        assert _tomorrow_avg(data) == pytest.approx(0.20)
+        assert _tomorrow_min(data) == pytest.approx(0.20)
+        assert _tomorrow_max(data) == pytest.approx(0.20)
 
 
 def test_current_price_bulk_attributes_are_unrecorded() -> None:

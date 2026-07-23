@@ -165,7 +165,7 @@ All sensors share one device per config entry.
 | `next_hour_price` | All-in EUR/kWh for the next hour. |
 | `today_average` | Daily average all-in EUR/kWh. |
 | `today_min` / `today_max` | Daily extremes. |
-| `tomorrow_average` | Average all-in EUR/kWh for tomorrow. Empty until ENTSO-E publishes the next-day curve (~13:00 CET) for dynamic contracts; available all day for fixed/variable contracts. |
+| `tomorrow_average` | Average all-in EUR/kWh for tomorrow. Empty until ENTSO-E publishes the next-day curve (~13:00 CET) for dynamic contracts; available all day for fixed/variable contracts, except on the last day covered by a monthly card, where next month's rates are not published yet. Tracks `tomorrow_prices_available` exactly: the sensor has a value when that binary sensor is on. |
 | `tomorrow_min` / `tomorrow_max` | Tomorrow's extremes. Same availability as `tomorrow_average`. |
 | `energy_component` | Energy-only EUR/kWh now (VAT-inclusive). |
 | `network_component` | Distribution + transport EUR/kWh now (VAT-inclusive). |

@@ -169,22 +169,22 @@ key is configured (`coordinator.py:641`), keeping the current card instead.
 
 | Key | Type | Meaning | Read by |
 |-----|------|---------|---------|
-| `hourly` | `dict[datetime, PriceBreakdown]` | UTC-keyed price table (48-ish slots covering today+tomorrow); keys are hour or quarter-hour boundaries per `resolution` | current/next/today/tomorrow price sensors and window services; `tomorrow_prices_available` binary sensor (`sensor.py:109`, `binary_sensor.py:63`) |
-| `resolution` | `str` | `RESOLUTION_HOURLY` or `RESOLUTION_QUARTER`; slot width of `hourly` keys | slot truncation in `sensor.py:99`; window sizing in `__init__.py:482` |
-| `snapshot_publication` | `str` | supplier's publication label for the current card | `current_price` sensor attribute (`sensor.py:567`) |
-| `snapshot_age_hours` | `float` | hours since `_snapshot_fetched_at` (`inf` if never) | `current_price` sensor attribute (`sensor.py:568`) |
-| `snapshot_stale` | `bool` | True when age > 7 days | `current_price` sensor attribute (`sensor.py:569`) |
+| `hourly` | `dict[datetime, PriceBreakdown]` | UTC-keyed price table (48-ish slots covering today+tomorrow); keys are hour or quarter-hour boundaries per `resolution` | current/next/today/tomorrow price sensors and window services; `tomorrow_prices_available` binary sensor (`sensor.py:110`, `binary_sensor.py:63`) |
+| `resolution` | `str` | `RESOLUTION_HOURLY` or `RESOLUTION_QUARTER`; slot width of `hourly` keys | slot truncation in `sensor.py:100`; window sizing in `__init__.py:482` |
+| `snapshot_publication` | `str` | supplier's publication label for the current card | `current_price` sensor attribute (`sensor.py:591`) |
+| `snapshot_age_hours` | `float` | hours since `_snapshot_fetched_at` (`inf` if never) | `current_price` sensor attribute (`sensor.py:592`) |
+| `snapshot_stale` | `bool` | True when age > 7 days | `current_price` sensor attribute (`sensor.py:593`) |
 | `snapshot_valid_until` | `date \| None` | last calendar day the rates apply; `None` = unknown | `tomorrow_prices_available` binary sensor (`binary_sensor.py:66`) |
-| `last_error` | `str` | last human-readable failure reason | `current_price` sensor attribute (`sensor.py:570`) |
-| `monthly_peak_kw` | `float` | Flanders rolling monthly peak in kW (>= VREG floor) | `monthly_peak_kw` sensor (`sensor.py:462`) |
+| `last_error` | `str` | last human-readable failure reason | `current_price` sensor attribute (`sensor.py:594`) |
+| `monthly_peak_kw` | `float` | Flanders rolling monthly peak in kW (>= VREG floor) | `monthly_peak_kw` sensor (`sensor.py:486`) |
 | `monthly_peak_month` | `date \| None` | month the peak belongs to | diagnostics (`diagnostics.py:169`) |
-| `capacity_cost_eur` | `float` | monthly Flemish capacity cost estimate | `capacity_cost` sensor (`sensor.py:444`) |
-| `prosumer_cost_eur` | `float` | monthly Walloon compensation-regime prosumer fee | `prosumer_cost` sensor (`sensor.py:377`) |
-| `injection_price_eur_per_kwh` | `float \| None` | injection price for the slot the tick ran in; `None` off the injection regime or when a needed spot is missing | `injection_price` sensor fallback for contracts with no `injection_hourly` (`sensor.py:381`) |
+| `capacity_cost_eur` | `float` | monthly Flemish capacity cost estimate | `capacity_cost` sensor (`sensor.py:468`) |
+| `prosumer_cost_eur` | `float` | monthly Walloon compensation-regime prosumer fee | `prosumer_cost` sensor (`sensor.py:401`) |
+| `injection_price_eur_per_kwh` | `float \| None` | injection price for the slot the tick ran in; `None` off the injection regime or when a needed spot is missing | `injection_price` sensor fallback for contracts with no `injection_hourly` (`sensor.py:405`) |
 | `injection_hourly` | `dict[datetime, float]` | per-slot injection price over the same today+tomorrow grid as `hourly`; empty unless on the injection regime with an intra-day-varying injection (spot-indexed or TOU) | `injection_price` sensor state at the current slot, plus its `today`/`tomorrow` arrays |
-| `yearly_fixed_fee_eur` | `float` | supplier flat annual subscription for the configured meter | `fixed_fee_eur_per_year` sensor (`sensor.py:394`) |
-| `energy_fund_eur_per_month` | `float` | Flemish Energiefonds monthly charge | `energy_fund_eur_per_month` sensor (`sensor.py:405`) |
-| `current_year_cost_eur` | `float \| None` | running YTD bill since Jan 1; fees-only floor when no meters wired | `current_year_cost` sensor (`sensor.py:425`) |
+| `yearly_fixed_fee_eur` | `float` | supplier flat annual subscription for the configured meter | `fixed_fee_eur_per_year` sensor (`sensor.py:418`) |
+| `energy_fund_eur_per_month` | `float` | Flemish Energiefonds monthly charge | `energy_fund_eur_per_month` sensor (`sensor.py:429`) |
+| `current_year_cost_eur` | `float \| None` | running YTD bill since Jan 1; fees-only floor when no meters wired | `current_year_cost` sensor (`sensor.py:449`) |
 | `ytd_diagnostics` | `dict[str, float] \| None` | optional breakdown behind the bill: YTD + today consumption/injection kWh, `energy_ytd_raw_eur` (pre-clamp energy term) and `fees_ytd_eur`; static per-day contracts only, `None` for hourly-billed contracts and when no meter is wired | `current_year_cost` sensor attributes (`sensor.py`) |
 
 The current-slot sensors (`current_price`, `energy_component`, `network_component`, `taxes_component`, and the today/tomorrow min/avg/max) do not read a top-level field: they index `hourly` at the current slot and read a `PriceBreakdown` attribute (`all_in`, `energy`, `network`, `taxes`). `resolution` populated as `RESOLUTION_QUARTER` only when `_energy_is_quarter_hourly(self._snapshot.energy)` (`coordinator.py:1056`); everything else is hourly.
@@ -198,7 +198,7 @@ The current-slot sensors (`current_price`, `energy_component`, `network_componen
 - **Dynamic** (`coordinator.py:1699`): one breakdown per spot returned by ENTSO-E; the table's resolution follows the spot grid (15-minute for quarter-hourly suppliers).
 - **Static/TOU/Impact** (`coordinator.py:1706`): iterate UTC from local midnight to the start of the day after tomorrow, one slot per clock hour, so DST seams keep the wall-clock gap correct (47 slots spring-forward, 49 fall-back, 48 otherwise). The local-midnight anchor makes `today_min`/`today_max`/`today_average` cover the full local day rather than "now to midnight".
 
-The entities, not the coordinator, do the current/next-slot lookup. `sensor.py:99` truncates `utcnow()` to the slot with `slot_start(..., data.resolution)`, reads the exact slot, and if it is missing accepts the nearest slot within one slot width (`max_gap` 3600 s hourly, 900 s quarter-hourly, `sensor.py:103`). `next_hour_price` targets `slot_start(now) + 1h` (`sensor.py:140`).
+The entities, not the coordinator, do the current/next-slot lookup. `sensor.py:100` truncates `utcnow()` to the slot with `slot_start(..., data.resolution)`, reads the exact slot, and if it is missing accepts the nearest slot within one slot width (`max_gap` 3600 s hourly, 900 s quarter-hourly, `sensor.py:104`). `next_hour_price` targets `slot_start(now) + 1h` (`sensor.py:141`).
 
 ### 5.1 Slot-boundary push
 
@@ -257,7 +257,7 @@ The recorder is read via `_recorder_rows` (`coordinator.py:2606`), which request
 
 ### 7.2 Injection credit and regime math
 
-Per-regime day math is documented at `coordinator.py:2836`. For `compensation` the injection nets 1:1 against consumption (per band when bi) and the YTD energy term is clamped at zero at the end (`coordinator.py:2871`): surplus injection past consumption is forfeited by most Walloon suppliers, and the clamp happens once over the whole YTD so a day of over-injection can offset a later high-consumption day. For `injection` each side uses its own rate and the total can dip negative; the running `current_year_cost` value dipping day-over-day is why the sensor is `TOTAL`, not `TOTAL_INCREASING` (`sensor.py:416`). The pre-clamp energy term is exported to the `energy_ytd_raw_eur` attribute (via the optional `breakdown` out-dict `_compute_current_year_cost` fills on the live tick), alongside the YTD/today kWh totals and the fees floor, so a sensor resting on the compensation zero-floor (negative raw energy, value `= fees_ytd_eur`) can be told apart from a stalled meter input (a today kWh that never grows). The historical injection rate is chosen by `_historical_injection_rate` (`coordinator.py:2381`), which mirrors the live priority (per-slot TOU, then `factor*spot+base`, then the monthly `current`) so the YTD credit and the live `injection_price` sensor never diverge.
+Per-regime day math is documented at `coordinator.py:2836`. For `compensation` the injection nets 1:1 against consumption (per band when bi) and the YTD energy term is clamped at zero at the end (`coordinator.py:2871`): surplus injection past consumption is forfeited by most Walloon suppliers, and the clamp happens once over the whole YTD so a day of over-injection can offset a later high-consumption day. For `injection` each side uses its own rate and the total can dip negative; the running `current_year_cost` value dipping day-over-day is why the sensor is `TOTAL`, not `TOTAL_INCREASING` (`sensor.py:440`). The pre-clamp energy term is exported to the `energy_ytd_raw_eur` attribute (via the optional `breakdown` out-dict `_compute_current_year_cost` fills on the live tick), alongside the YTD/today kWh totals and the fees floor, so a sensor resting on the compensation zero-floor (negative raw energy, value `= fees_ytd_eur`) can be told apart from a stalled meter input (a today kWh that never grows). The historical injection rate is chosen by `_historical_injection_rate` (`coordinator.py:2381`), which mirrors the live priority (per-slot TOU, then `factor*spot+base`, then the monthly `current`) so the YTD credit and the live `injection_price` sensor never diverge.
 
 ### 7.3 Why YTD stays hourly for quarter-hourly contracts
 

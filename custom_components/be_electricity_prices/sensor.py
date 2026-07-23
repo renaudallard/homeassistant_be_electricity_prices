@@ -44,6 +44,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
+from .binary_sensor import _has_tomorrow
 from .const import (
     CONF_CONTRACT_END_DATE,
     CONF_REGION,
@@ -203,16 +204,39 @@ def _today_max(data: CoordinatorData) -> float | None:
     return _bucket(data, dt_util.now().date(), max)
 
 
+def _tomorrow_bucket(
+    data: CoordinatorData, reducer: Callable[[list[float]], float]
+) -> float | None:
+    """Reduce tomorrow's slots, but only while the card actually covers them.
+
+    The price table forward-fills 48 hours, so on the last day of a monthly
+    card's validity the "tomorrow" rows are an extrapolation the supplier has
+    not published: next month's rates do not exist yet. ``_has_tomorrow`` has
+    always refused to claim those hours, so the binary sensor went off while
+    these three reported the extrapolation as a number, and the two entities
+    contradicted each other for a full day every month. Sharing the predicate
+    makes the invariant explicit: a tomorrow_* sensor has a value exactly when
+    tomorrow_prices_available is on.
+
+    Only the tomorrow side is gated. An expired card still describes today
+    better than nothing does, and a snapshot stale enough to worry about
+    raises its own repair issue.
+    """
+    if not _has_tomorrow(data):
+        return None
+    return _bucket(data, dt_util.now().date() + timedelta(days=1), reducer)
+
+
 def _tomorrow_avg(data: CoordinatorData) -> float | None:
-    return _bucket(data, dt_util.now().date() + timedelta(days=1), _avg)
+    return _tomorrow_bucket(data, _avg)
 
 
 def _tomorrow_min(data: CoordinatorData) -> float | None:
-    return _bucket(data, dt_util.now().date() + timedelta(days=1), min)
+    return _tomorrow_bucket(data, min)
 
 
 def _tomorrow_max(data: CoordinatorData) -> float | None:
-    return _bucket(data, dt_util.now().date() + timedelta(days=1), max)
+    return _tomorrow_bucket(data, max)
 
 
 def _today_ranked(
