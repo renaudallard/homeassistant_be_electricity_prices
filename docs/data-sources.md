@@ -272,10 +272,10 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py:41`). Backfill is reached either automatically
 at setup or through the `backfill_statistics` service, wired in `__init__.py`
-(service handler `_async_backfill_service` at `__init__.py:547`, one-shot
-scheduling at `__init__.py:201`). The service handler validates that a snapshot
+(service handler `_async_backfill_service` at `__init__.py:566`, one-shot
+scheduling at `__init__.py:220`). The service handler validates that a snapshot
 is loaded and raises a localized `ServiceValidationError` otherwise, matching the
-window services (`__init__.py:531`).
+window services (`__init__.py:550`).
 
 `backfill_if_missing` tolerates entry removal mid-flight: because it runs as a
 background task the user can delete the entry between scheduling and execution,

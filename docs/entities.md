@@ -255,7 +255,11 @@ only when both gates hold:
    (`any(as_local(h).date() == tomorrow for h in data.hourly)`). For dynamic
    contracts this happens only after ENTSO-E publishes the next-day curve; for
    fixed / variable / TOU contracts the coordinator forward-fills 48 hours so
-   this is normally already true.
+   this is normally already true. "Normally" because those 48 hours are
+   anchored at the local midnight of the tick that built them: crossing
+   midnight used to fail this gate, and the `tomorrow_*` scalar sensors along
+   with it, until the next tick landed. A local-midnight refresh now re-anchors
+   the table on the new day (see coordinator.md 5.1.1).
 2. The snapshot's published validity covers tomorrow:
    `data.snapshot_valid_until is None or tomorrow <= data.snapshot_valid_until`.
 
@@ -300,17 +304,17 @@ any entry finishes loading. Names and field descriptions are declared in
 
 | Service | Handler | Response mode | Targets an entry? |
 | --- | --- | --- | --- |
-| `refresh` | `_async_refresh_service` (`__init__.py:273`) | none | no, hits every loaded entry |
-| `cheapest_window` | `_async_cheapest_window_service` (`__init__.py:493`) | `ONLY` | optional `entry_id` |
-| `most_expensive_window` | `_async_most_expensive_window_service` (`__init__.py:501`) | `ONLY` | optional `entry_id` |
-| `backfill_statistics` | `_async_backfill_service` (`__init__.py:509`) | `OPTIONAL` | optional `entry_id` |
+| `refresh` | `_async_refresh_service` (`__init__.py:292`) | none | no, hits every loaded entry |
+| `cheapest_window` | `_async_cheapest_window_service` (`__init__.py:512`) | `ONLY` | optional `entry_id` |
+| `most_expensive_window` | `_async_most_expensive_window_service` (`__init__.py:520`) | `ONLY` | optional `entry_id` |
+| `backfill_statistics` | `_async_backfill_service` (`__init__.py:528`) | `OPTIONAL` | optional `entry_id` |
 
 ### `refresh`
 
 No fields. Iterates `async_loaded_entries(DOMAIN)` and calls
 `coordinator.async_force_refresh()` on each, skipping any entry whose
 `runtime_data` is still the `UNDEFINED` sentinel mid-reload
-(`__init__.py:280`). It drops the cached supplier snapshot and the ENTSO-E spot
+(`__init__.py:299`). It drops the cached supplier snapshot and the ENTSO-E spot
 cache and re-fetches both immediately, clearing a transient fetch error without
 waiting for the next hourly tick.
 
@@ -326,25 +330,25 @@ Same shape; one minimizes the window average, the other maximizes. Fields
 | `earliest_start` | no | datetime | earliest window start; defaults to now |
 | `latest_end` | no | datetime | latest window end; defaults to the end of the cached table |
 
-Both call `_resolve_window_inputs` (`__init__.py:439`) then `_find_window`
-(`__init__.py:286`). Key behaviors:
+Both call `_resolve_window_inputs` (`__init__.py:458`) then `_find_window`
+(`__init__.py:305`). Key behaviors:
 
 - `duration_hours` is rounded half-up and scaled to the table's slot grid:
   `duration_slots = int(duration_hours + 0.5) * slots_per_hour(resolution)`
-  (`__init__.py:463`). A 2-hour window is 2 slots on an hourly table, 8 on a
+  (`__init__.py:482`). A 2-hour window is 2 slots on an hourly table, 8 on a
   quarter-hourly one, so on a 15-minute (Engie Dynamic) contract the window can
   start on any quarter-hour boundary.
 - `earliest_start` is truncated down to its slot boundary
-  (`slot_start`, `__init__.py:314`), so 14:30 still considers the 14:00 slot
+  (`slot_start`, `__init__.py:333`), so 14:30 still considers the 14:00 slot
   (14:30 on a 15-minute contract). A naive datetime from YAML is interpreted in
   the HA time zone (typically Europe/Brussels), not the host's tz
-  (`_to_utc`, `__init__.py:476`).
+  (`_to_utc`, `__init__.py:495`).
 - `latest_end` filters out any slot whose end (`slot + width`) falls after it.
 - Only strictly time-contiguous runs are considered: a run must span exactly
   `delta * (duration_slots - 1)` so a gap ENTSO-E omitted cannot let the window
-  silently drop an interior hour from its average (`__init__.py:338`).
+  silently drop an interior hour from its average (`__init__.py:357`).
 
-Return value (`ServiceResponse`, `__init__.py:375`):
+Return value (`ServiceResponse`, `__init__.py:394`):
 
 ```python
 {
@@ -360,9 +364,9 @@ Return value (`ServiceResponse`, `__init__.py:375`):
 `resolution` is exposed so the caller can tell that each `hours` row is a
 quarter-hour rather than an hour on a 15-minute contract. When too few slots
 match, the handler raises `ServiceValidationError` with translation_key
-`not_enough_hours` (`__init__.py:319`), or, when slots exist but none form a
+`not_enough_hours` (`__init__.py:338`), or, when slots exist but none form a
 contiguous run of the needed length, reports the longest available contiguous
-run in the same error (`__init__.py:362`).
+run in the same error (`__init__.py:381`).
 
 ### `backfill_statistics`
 
@@ -377,7 +381,7 @@ predating the entry's first live tick. Fields (`services.yaml:65`):
 | `end` | no | datetime (exclusive) | the current hour |
 | `clear` | no | boolean | false |
 
-The handler `_async_backfill_service` (`__init__.py:509`) resolves the target
+The handler `_async_backfill_service` (`__init__.py:528`) resolves the target
 coordinator, then raises `ServiceValidationError` translation_key
 `snapshot_not_loaded` if `coordinator._snapshot is None`, before delegating to
 `backfill_range` (see [data-sources.md](data-sources.md)). It returns

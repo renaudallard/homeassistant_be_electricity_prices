@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import zlib
 from datetime import datetime
 from typing import Any
 
@@ -191,6 +192,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
 
     entry.async_on_unload(
         async_track_time_change(hass, _push_slot_boundary, minute=slot_minute, second=0)
+    )
+
+    # Crossing local midnight invalidates the price table itself, which no
+    # amount of re-reading can fix. ``_build_hourly`` anchors the today +
+    # tomorrow table at the local midnight of the tick that built it, so once
+    # the date rolls over the table covers yesterday + today: the
+    # tomorrow_average / tomorrow_min / tomorrow_max sensors read unknown and
+    # tomorrow_prices_available drops off, until the next non-clock-aligned
+    # tick happens to land. Ask for a rebuild on the day boundary instead of
+    # widening the table, which would let the window services return a slot
+    # two days out. ``async_track_time_change`` matches local time, so this
+    # follows Brussels across both DST seams; midnight exists on each.
+    #
+    # Every install of a Belgian integration shares one timezone, so firing on
+    # the same second would put the whole user base on a supplier's doorstep at
+    # once. Spread the rebuild over the first minute using a stable per-entry
+    # offset: crc32 rather than hash() because the latter is salted per process
+    # and would move the entry to a different second on every restart.
+    rollover_second = zlib.crc32(entry.entry_id.encode()) % 60
+
+    async def _rebuild_on_local_day_rollover(_now: datetime) -> None:
+        await coordinator.async_request_refresh()
+
+    entry.async_on_unload(
+        async_track_time_change(
+            hass,
+            _rebuild_on_local_day_rollover,
+            hour=0,
+            minute=0,
+            second=rollover_second,
+        )
     )
 
     # One-shot backfill: only fires when the recorder has no

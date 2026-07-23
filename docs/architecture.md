@@ -268,7 +268,7 @@ Two further caching behaviors are worth knowing at the architecture level. First
 shared process-wide across config entries keyed by `(supplier, contract, region)`
 (`coordinator.py:184`), so two entries on the same product never poll the same card twice; the
 shared rows are evicted on unload only when no sibling entry still references the tuple
-(`__init__.py:203`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
+(`__init__.py:222`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
 (`coordinator.py:194`) and the user-facing "extractor failed" repair issue is raised only after
 the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator.py:214`), so
 a single transient CDN timeout does not false-alarm.
