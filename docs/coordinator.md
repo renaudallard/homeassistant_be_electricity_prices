@@ -176,7 +176,8 @@ key is configured (`coordinator.py:641`), keeping the current card instead.
 | `snapshot_stale` | `bool` | True when age > 7 days | `current_price` sensor attribute (`sensor.py:593`) |
 | `snapshot_valid_until` | `date \| None` | last calendar day the rates apply; `None` = unknown | `tomorrow_prices_available` binary sensor (`binary_sensor.py:66`) |
 | `last_error` | `str` | last human-readable failure reason | `current_price` sensor attribute (`sensor.py:594`) |
-| `monthly_peak_kw` | `float` | Flanders rolling monthly peak in kW (>= VREG floor) | `monthly_peak_kw` sensor (`sensor.py:486`) |
+| `monthly_peak_kw` | `float` | Flanders running monthly peak in kW, as measured (NOT floored) | `monthly_peak_kw` sensor (`sensor.py:486`) |
+| `capacity_billed_peak_kw` / `capacity_peak_months` | `float` / `int` | the twelve-month mean the tariff is charged on, and how many months it covers | `capacity_cost` sensor attributes |
 | `monthly_peak_month` | `date \| None` | month the peak belongs to | diagnostics (`diagnostics.py:169`) |
 | `capacity_cost_eur` | `float` | monthly Flemish capacity cost estimate | `capacity_cost` sensor (`sensor.py:468`) |
 | `prosumer_cost_eur` | `float` | monthly Walloon compensation-regime prosumer fee | `prosumer_cost` sensor (`sensor.py:401`) |
@@ -227,9 +228,11 @@ The window computation is *not* owned by the coordinator. `_find_window` (`__ini
 - Outside Flanders it resets both to 0/`None` (`coordinator.py:1720`) so a stale peak from a former Flanders config doesn't linger.
 - It rolls over on the local 1st of the month (`coordinator.py:1640`); UTC would lag CET/CEST users at the boundary.
 - `CAPACITY_MODE_FIXED` uses the configured value directly (`coordinator.py:1646`); `CAPACITY_MODE_SENSOR` takes a rolling max of the peak-power sensor (`coordinator.py:1653`), scaling W/VA to kW (`coordinator.py:1670`, issue #19: an unscaled 4481 W stored as 4481 kW inflated capacity cost 1000x).
-- The regulated VREG floor `VREG_CAPACITY_FLOOR_KW = 2.5` (`const.py:242`) is applied regardless of mode (`coordinator.py:1686`): Fluvius bills `max(measured, floor)`.
+- On rollover the closing month is banked into `_peak_history` and the window is pruned to the eleven most recent completed months, so with the running one the mean covers twelve. A month still at `0.0` is not banked: no reading was ever collected, which is not a measured zero.
 
-`_compute_capacity` (`coordinator.py:1830`) then returns `peak_kw * capacity_eur_per_kw_year / 12` from the configured DSO overlay, or 0 when the overlay omits a capacity rate.
+`_billed_peak_kw` turns that window into the quantity Fluvius actually charges on, the "gemiddelde maandpiek". Its methodology gives the formula outright: `Rekenkundig gemiddelde van de Max (Maandpiek (m), 2.5) voor elke maand (m)`, i.e. the floor lands on each month BEFORE the mean, not on the mean. Every term is then at least the floor, so the mean is too and no outer clamp is needed. `CAPACITY_MODE_FIXED` bypasses the window and floors the configured value directly. `_peak_kw` itself is left raw, so `monthly_peak_kw` reports a measurement rather than a billing figure.
+
+`_compute_capacity` (`coordinator.py:1830`) then returns `billed_peak_kw * capacity_eur_per_kw_year / 12` from the configured DSO overlay, or 0 when the overlay omits a capacity rate.
 
 ## 7. Year-to-date / current-year cost
 

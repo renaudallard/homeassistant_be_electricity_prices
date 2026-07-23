@@ -484,28 +484,58 @@ Returns `0.0` when the entry lost its `CONF_DSO` key, the overlay is missing, or
 `DsoOverlay.capacity_eur_per_kw_year` (`providers/base.py:278`); Flanders digital
 meters publish it, other regions leave it `None`.
 
-`peak_kw` is resolved in `_track_monthly_peak` (`coordinator.py:1629-1478`) and
-applies only in Flanders; outside Flanders the peak is reset to `0.0`
-(`coordinator.py:1630-1428`). It rolls over on the local 1st of month
-(`coordinator.py:1639-1435`). Two modes (`const.py:235-213`):
+`peak_kw` is the *billed* quantity, resolved by `_billed_peak_kw`, and applies
+only in Flanders; outside Flanders the peak is reset to `0.0`.
 
-- `CAPACITY_MODE_FIXED`: use `CONF_CAPACITY_FIXED_KW` directly (a rolling max would
-  ignore a mid-month decrease the user just made) (`coordinator.py:1646-1444`).
+Fluvius bills the "gemiddelde maandpiek": the mean of the last twelve monthly
+peaks, where one monthly peak is the highest quarter-hour offtake of that month
+(`de maandpiek is het hoogste kwartiervermogen van de maand`). So the tariff is
+charged on a twelve-month mean, not on the month being accumulated:
+
+```
+billed_peak_kw = mean(max(monthly_peak, VREG_CAPACITY_FLOOR_KW) for the last 12)
+```
+
+`_track_monthly_peak` keeps the running month in `_peak_kw` and banks it into
+`_peak_history` when the local 1st rolls over, pruning to the eleven most recent
+completed months so the running one makes twelve. A month whose peak is still
+`0.0` is not banked: that means no reading was ever collected (fresh entry, or
+HA down throughout), which is not a measured zero and must not drag the mean
+down. The history is persisted alongside the peak and is absent on blobs written
+before it shipped, in which case the window simply starts over.
+
+Two modes (`const.py:235-213`):
+
+- `CAPACITY_MODE_FIXED`: use `CONF_CAPACITY_FIXED_KW` directly, bypassing the
+  window (the user is stating a peak, not measuring one) and applying only the
+  floor. A rolling max would ignore a mid-month decrease the user just made.
 - `CAPACITY_MODE_SENSOR`: rolling max of a power sensor, scaled by its unit (W/VA
-  scaled by 0.001 to kW; issue #19 was a 1000x inflation when W was stored as kW)
-  (`coordinator.py:1653-1473`).
+  scaled by 0.001 to kW; issue #19 was a 1000x inflation when W was stored as kW).
+  Prefer the meter's own monthly-peak entity here: a DSMR 5B meter publishes the
+  billed quarter-hour peak directly, whereas an instantaneous power sensor is
+  sampled hourly and only approximates it (see config-flow.md).
 
-Regardless of mode, the regulated VREG floor is applied last
-(`coordinator.py:1683-1478`):
+The regulated floor is applied to EACH MONTH before the mean, not to the mean
+(`VREG_CAPACITY_FLOOR_KW = 2.5`). Fluvius's estimation methodology gives the
+formula outright: `Formule = Rekenkundig gemiddelde van de Max (Maandpiek (m),
+2.5) voor elke maand (m) ... Er worden maximaal 12 maanden gebruikt`. The
+placement matters: a household at 1.0 kW for eleven months with one 20 kW spike
+bills on `(11 x 2.5 + 20) / 12 = 3.96` kW, where flooring the mean instead would
+give 2.58 kW. Because every term is then at least the floor, the mean is too, so
+no outer clamp is needed; the customer-facing FAQ describes that consequence
+(`een minimumbijdrage ... die overeenkomt met een gemiddelde maandpiek 2,5 kW`)
+rather than the mechanism.
 
-```
-peak_kw = max(peak_kw, VREG_CAPACITY_FLOOR_KW)     # VREG_CAPACITY_FLOOR_KW = 2.5
-```
+A month the integration never measured is simply left out of the mean rather
+than banked as a zero. That matches the regulator: Fluvius estimates a missing
+month as the mean of the validated ones, and inserting a set's own mean into it
+leaves the mean unchanged.
 
-`VREG_CAPACITY_FLOOR_KW = 2.5` is the regulated minimum monthly peak Fluvius bills
-against, set when the capacity tariff was introduced in January 2023 and unchanged
-since (`const.py:238-219`). A household whose peak stays below the floor still pays
-the floor.
+`monthly_peak_kw` reports the running month RAW, without the floor: it is a
+measurement, and the floor is a billing rule that belongs on the billed quantity.
+The `capacity_cost` sensor carries `billed_peak_kw` and `months_counted`
+attributes so the two numbers can be told apart, the latter reaching 12 once a
+full year of history has accumulated.
 
 ## Prosumer term
 

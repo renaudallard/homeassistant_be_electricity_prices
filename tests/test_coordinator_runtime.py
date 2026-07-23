@@ -31,6 +31,8 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
@@ -1822,7 +1824,7 @@ async def test_capacity_peak_rejects_energy_sensor(
 ) -> None:
     """A user that mistakenly picked a kWh sensor must NOT see the
     cumulative kWh climb into the monthly-peak slot. Ignore the
-    update; the floor still applies."""
+    update; the billed quantity still falls back to the floor."""
     freezer.move_to("2026-05-11 12:00:00+02:00")
     entity_id = "sensor.monthly_consumption"
     entry = _flanders_sensor_entry(entity_id)
@@ -1832,8 +1834,10 @@ async def test_capacity_peak_rejects_energy_sensor(
 
     await coord._track_monthly_peak()
 
-    # VREG floor still applies; the bogus 4481 kWh reading is ignored.
-    assert coord._peak_kw == 2.5
+    # The bogus 4481 kWh reading is ignored, so nothing is measured. The
+    # measurement stays raw at 0; the VREG floor lives on the billed quantity.
+    assert coord._peak_kw == 0.0
+    assert coord._billed_peak_kw() == 2.5
 
 
 async def test_reset_monthly_peak_drops_persisted_value(
@@ -1999,3 +2003,158 @@ async def test_variable_cohort_without_key_still_prices(hass: HomeAssistant) -> 
     # SpotMonthlyRates leg with no mean to price against yields an empty one.
     assert data.hourly
     assert data.last_error == ""
+
+
+async def test_billed_peak_averages_the_last_twelve_months(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Fluvius bills the mean of the last twelve monthly peaks, not the month
+    being accumulated. A seasonal household must therefore see a steady billed
+    figure rather than one that tracks whichever month it is in."""
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entity_id = "sensor.house_power"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_history = {
+        f"2025-{m:02d}-01": kw
+        for m, kw in zip(range(6, 12), [6.0, 5.5, 4.5, 3.5, 3.0, 2.8], strict=True)
+    }
+    hass.states.async_set(entity_id, "4.0", {"unit_of_measurement": "kW"})
+
+    await coord._track_monthly_peak()
+
+    assert coord._peak_kw == 4.0  # this month, raw
+    # Every month clears the 2.5 kW floor, so the per-month Max is a no-op:
+    # (6.0 + 5.5 + 4.5 + 3.5 + 3.0 + 2.8 + 4.0) / 7
+    assert coord._billed_peak_kw() == pytest.approx(29.3 / 7)
+
+
+async def test_billed_peak_floors_each_month_before_averaging(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Fluvius's methodology spells the formula out: "Rekenkundig gemiddelde
+    van de Max (Maandpiek (m), 2.5)". The minimum lands on each month, not on
+    the mean, so 11 x 1.0 plus one 20.0 bills (11 x 2.5 + 20) / 12 = 3.96 kW,
+    not the 2.58 kW that flooring the mean would give."""
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entity_id = "sensor.house_power"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_history = {f"2025-{m:02d}-01": 1.0 for m in range(1, 12)}
+    hass.states.async_set(entity_id, "20.0", {"unit_of_measurement": "kW"})
+
+    await coord._track_monthly_peak()
+
+    assert coord._billed_peak_kw() == pytest.approx((11 * 2.5 + 20.0) / 12)
+    assert coord._billed_peak_kw() > 2.6  # flooring the mean would give 2.58
+
+
+async def test_billed_peak_falls_back_to_the_floor_when_low(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entity_id = "sensor.house_power"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_history = {f"2025-{m:02d}-01": 1.8 for m in range(1, 12)}
+    hass.states.async_set(entity_id, "1.8", {"unit_of_measurement": "kW"})
+
+    await coord._track_monthly_peak()
+
+    assert coord._billed_peak_kw() == 2.5
+
+
+async def test_month_rollover_banks_the_closed_month_and_prunes(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The closing month joins the window; only the eleven most recent
+    completed months are kept, so with the running month the mean covers
+    twelve."""
+    entity_id = "sensor.house_power"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_history = {f"2025-{m:02d}-01": 3.0 for m in range(1, 12)}
+    coord._peak_month = date(2025, 12, 1)
+    coord._peak_kw = 7.0
+
+    freezer.move_to("2026-01-05 12:00:00+01:00")
+    hass.states.async_set(entity_id, "1.0", {"unit_of_measurement": "kW"})
+    await coord._track_monthly_peak()
+
+    assert "2025-12-01" in coord._peak_history
+    assert coord._peak_history["2025-12-01"] == 7.0
+    assert len(coord._peak_history) == 11  # oldest dropped
+    assert "2025-01-01" not in coord._peak_history
+    assert coord._peak_month == date(2026, 1, 1)
+    assert coord._peak_kw == 1.0
+
+
+async def test_month_rollover_does_not_bank_a_month_with_no_reading(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A zero peak means the month never collected a reading (fresh entry, or
+    HA down throughout). That is not a measured zero and must not drag the
+    mean down."""
+    entity_id = "sensor.house_power"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_month = date(2025, 12, 1)
+    coord._peak_kw = 0.0
+
+    freezer.move_to("2026-01-05 12:00:00+01:00")
+    hass.states.async_set(entity_id, "3.0", {"unit_of_measurement": "kW"})
+    await coord._track_monthly_peak()
+
+    assert coord._peak_history == {}
+
+
+async def test_billed_peak_ignores_history_in_fixed_mode(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Fixed mode is the user stating a peak, not measuring one, so it bypasses
+    the window entirely and behaves exactly as it did before."""
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "capacity_mode": "fixed",
+            "capacity_fixed_kw": 6.0,
+        },
+        title="Eneco (Flanders)",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_history = {f"2025-{m:02d}-01": 1.0 for m in range(1, 12)}
+
+    await coord._track_monthly_peak()
+
+    assert coord._billed_peak_kw() == 6.0
+
+
+async def test_reset_monthly_peak_also_clears_the_history(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A bad value that already rolled into a completed month would otherwise
+    drag the twelve-month mean for a year."""
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entry = _flanders_sensor_entry("sensor.house_power")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_kw = 4481.0
+    coord._peak_history = {"2025-12-01": 4481.0}
+
+    with patch.object(coord, "async_request_refresh", AsyncMock()):
+        await coord.reset_monthly_peak()
+
+    assert coord._peak_kw == 0.0
+    assert coord._peak_history == {}

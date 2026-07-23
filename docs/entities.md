@@ -105,8 +105,8 @@ pulls (all fields defined at `coordinator.py:472`).
 | Fixed fee per year | `fixed_fee_eur_per_year` | - | MEASUREMENT | EUR | `yearly_fixed_fee_eur` |
 | Energy fund per month | `energy_fund_eur_per_month` | - | MEASUREMENT | EUR | `energy_fund_eur_per_month` |
 | Current year cost | `current_year_cost` | MONETARY | TOTAL | EUR | `current_year_cost_eur` |
-| Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only) |
-| Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw` (Flanders only) |
+| Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only); also `billed_peak_kw` / `months_counted` attributes |
+| Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw`, the running month as measured and NOT floored (Flanders only) |
 | Prosumer cost | `prosumer_cost` | - | MEASUREMENT | EUR | `prosumer_cost_eur` (compensation regime) |
 | Injection price | `injection_price` | - | MEASUREMENT | EUR/kWh | current slot of `injection_hourly`, else `injection_price_eur_per_kwh` (injection regime); also `today`/`tomorrow` arrays when the injection varies intra-day |
 | Contract end date | `contract_end_date` | timestamp | - | - | `entry.data[CONF_CONTRACT_END_DATE]` (a config value, not `CoordinatorData`; standalone `ContractEndDateSensor`) |

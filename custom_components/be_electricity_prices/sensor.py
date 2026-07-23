@@ -605,6 +605,16 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             if not today and not tomorrow:
                 return {}
             return {"today": today, "tomorrow": tomorrow}
+        if self.entity_description.key == "capacity_cost":
+            # The cost is charged on the twelve-month mean, not on this month's
+            # reading, so without these the number looks disconnected from the
+            # monthly_peak_kw sensor sitting next to it. months_counted says how
+            # far the window has filled: it reaches 12 after a full year, and
+            # until then the mean covers only what has been measured.
+            return {
+                "billed_peak_kw": round(data.capacity_billed_peak_kw, 3),
+                "months_counted": data.capacity_peak_months,
+            }
         if self.entity_description.key == "current_year_cost":
             # Diagnostic breakdown (static per-day contracts only): lets a flat
             # sensor be told apart -- a negative energy_ytd_raw_eur means the

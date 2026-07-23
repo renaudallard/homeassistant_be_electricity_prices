@@ -715,8 +715,18 @@ class CoordinatorData:
     # fall back to "treat as valid".
     snapshot_valid_until: date | None = None
     last_error: str = ""
+    # This month's running peak, as measured. NOT floored at the regulated
+    # minimum: it is a measurement, and the floor is a billing rule that
+    # belongs on the quantity below.
     monthly_peak_kw: float = 0.0
     monthly_peak_month: date | None = None
+    # The kW the capacity tariff is charged on: the mean of the last twelve
+    # monthly peaks, floored at VREG_CAPACITY_FLOOR_KW. Surfaced as attributes
+    # on capacity_cost so the bill can be told apart from this month's reading,
+    # together with how many months the mean covers (12 once a full year of
+    # history has accumulated).
+    capacity_billed_peak_kw: float = 0.0
+    capacity_peak_months: int = 0
     capacity_cost_eur: float = 0.0
     prosumer_cost_eur: float = 0.0
     # EUR/kWh injection price for the slot this tick ran in. The sensor only
@@ -857,6 +867,10 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._complete_spot_days: set[date] = set()
         self._peak_kw: float = 0.0
         self._peak_month: date | None = None
+        # Completed months' peaks, keyed by their ISO first-of-month, capped at
+        # the 11 most recent. Together with the running _peak_kw they form the
+        # rolling twelve Fluvius averages to bill the capacity tariff.
+        self._peak_history: dict[str, float] = {}
         self._last_error: str = ""
         # Set by async_unload_entry. A slow in-flight tick can resume after
         # the entry was unloaded or removed; without this flag it would
@@ -929,6 +943,15 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     self._peak_month = date.fromisoformat(month)
                 except ValueError:
                     self._peak_month = None
+            # Absent on a blob written before the rolling average shipped, in
+            # which case the entry simply starts its twelve-month window over.
+            history = peak.get("history")
+            if isinstance(history, dict):
+                self._peak_history = {
+                    key: float(kw)
+                    for key, kw in history.items()
+                    if isinstance(key, str) and isinstance(kw, (int, float))
+                }
         # Same tuple_mismatch gate as the snapshot above: ENTSO-E spots
         # were collected while the entry was on a *dynamic* contract on
         # the previous tuple. After an OptionsFlow swap to a static
@@ -1132,8 +1155,10 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             ) from err
 
         capacity_cost = 0.0
+        billed_peak = 0.0
         if self.entry.data.get(CONF_REGION) == REGION_FLANDERS:
-            capacity_cost = _compute_capacity(self._snapshot, self.entry, self._peak_kw)
+            billed_peak = self._billed_peak_kw()
+            capacity_cost = _compute_capacity(self._snapshot, self.entry, billed_peak)
 
         prosumer_cost = _compute_prosumer(self._snapshot, self.entry)
         # For a spot-monthly contract, price the injection off the same
@@ -1208,6 +1233,8 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             last_error=self._last_error,
             monthly_peak_kw=self._peak_kw,
             monthly_peak_month=self._peak_month,
+            capacity_billed_peak_kw=billed_peak,
+            capacity_peak_months=len(self._peak_history) + 1,
             capacity_cost_eur=capacity_cost,
             prosumer_cost_eur=prosumer_cost,
             injection_price_eur_per_kwh=injection_price,
@@ -1358,9 +1385,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         misread as kW pre-0.5.45) and the rolling-max comparison would
         otherwise hold the bad value until the next 1st of the month.
         Persists immediately so the reset survives an HA restart between
-        now and the next coordinator tick.
+        now and the next coordinator tick. The banked history goes too: a
+        bad value that has already rolled into a completed month would
+        otherwise keep dragging the twelve-month mean for a year.
         """
         self._peak_kw = 0.0
+        self._peak_history.clear()
         await self._save_persistent()
         await self.async_request_refresh()
 
@@ -1793,6 +1823,16 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         local_now = dt_util.now()
         current_month = date(local_now.year, local_now.month, 1)
         if self._peak_month != current_month:
+            # Bank the month that just closed before resetting: the capacity
+            # tariff bills the mean of the last twelve monthly peaks, not the
+            # one being accumulated. A peak of 0 means the month collected no
+            # reading at all (fresh entry, or HA down throughout), which is not
+            # a measured 0 and must not drag the mean down.
+            if self._peak_month is not None and self._peak_kw > 0.0:
+                self._peak_history[self._peak_month.isoformat()] = self._peak_kw
+            # Eleven completed months plus the running one make twelve.
+            for stale in sorted(self._peak_history)[:-11]:
+                del self._peak_history[stale]
             self._peak_month = current_month
             self._peak_kw = 0.0
 
@@ -1834,10 +1874,31 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 if value > self._peak_kw:
                     self._peak_kw = value
 
-        # Apply the regulated VREG floor regardless of mode - Fluvius bills
-        # max(measured_peak, floor), so a household whose monthly peak stays
-        # below 2.5 kW still pays the floor in the capacity_cost sensor.
-        self._peak_kw = max(self._peak_kw, VREG_CAPACITY_FLOOR_KW)
+    def _billed_peak_kw(self) -> float:
+        """The kW the capacity tariff is actually charged on.
+
+        Fluvius bills the "gemiddelde maandpiek", and its own methodology gives
+        the formula outright: "Rekenkundig gemiddelde van de Max (Maandpiek
+        (m), 2.5) voor elke maand (m) ... Er worden maximaal 12 maanden
+        gebruikt." So the regulated minimum lands on EACH month before the
+        mean, not on the mean, and one monthly peak is the highest
+        quarter-hour offtake of that month. Because every term is then at
+        least the floor, the mean is too, and no outer clamp is needed.
+
+        Fewer than twelve months of history means the mean is taken over what
+        there is, so a fresh entry starts out billing on this month alone
+        (exactly what it did before the window existed) and converges over the
+        first year. That also covers a month we never measured: Fluvius
+        estimates a missing month as the mean of the validated ones, and
+        inserting a set's own mean into it leaves the mean unchanged, so
+        simply leaving the gap out lands on the same number. Fixed mode
+        bypasses the window entirely: the user is stating a peak, not
+        measuring one.
+        """
+        if self.entry.data.get(CONF_CAPACITY_MODE) == CAPACITY_MODE_FIXED:
+            return max(self._peak_kw, VREG_CAPACITY_FLOOR_KW)
+        peaks = [*self._peak_history.values(), self._peak_kw]
+        return sum(max(kw, VREG_CAPACITY_FLOOR_KW) for kw in peaks) / len(peaks)
 
     def _build_hourly(
         self,
@@ -2127,6 +2188,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             "peak": {
                 "kw": self._peak_kw,
                 "month": self._peak_month.isoformat() if self._peak_month else "",
+                "history": dict(self._peak_history),
             },
         }
         if self._snapshot is not None and self._snapshot_fetched_at is not None:
