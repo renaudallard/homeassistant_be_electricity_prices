@@ -53,6 +53,7 @@ from .ebem import EXTRACTOR as _EBEM
 from .ecofix import EXTRACTOR as _ECOFIX
 from .ecopower import EXTRACTOR as _ECOPOWER
 from .eneco import EXTRACTOR as _ENECO
+from .energiebe import EXTRACTOR as _ENERGIEBE
 from .frank import EXTRACTOR as _FRANK
 from .engie import EXTRACTOR as _ENGIE
 from .luminus import EXTRACTOR as _LUMINUS
@@ -73,6 +74,7 @@ EXTRACTORS: dict[str, SupplierExtractor] = {
     _ECOFIX.id: _ECOFIX,
     _ECOPOWER.id: _ECOPOWER,
     _FRANK.id: _FRANK,
+    _ENERGIEBE.id: _ENERGIEBE,
     _OCTAPLUS.id: _OCTAPLUS,
     # Expert escape hatch, listed last so it sorts to the bottom of the
     # supplier dropdown.

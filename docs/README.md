@@ -53,6 +53,7 @@ changes, look here" reference tied to the provider's tests and fixtures.
 | Ecofix | [providers/ecofix.md](providers/ecofix.md) |
 | Ecopower | [providers/ecopower.md](providers/ecopower.md) |
 | Eneco | [providers/eneco.md](providers/eneco.md) |
+| energie.be | [providers/energiebe.md](providers/energiebe.md) |
 | Engie | [providers/engie.md](providers/engie.md) |
 | Frank Energie | [providers/frank.md](providers/frank.md) |
 | Luminus | [providers/luminus.md](providers/luminus.md) |

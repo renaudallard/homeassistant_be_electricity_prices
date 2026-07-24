@@ -50,6 +50,7 @@ machinery.
 | `tests/test_ecofix.py` | Ecofix extractor |
 | `tests/test_ecopower.py` | Ecopower extractor |
 | `tests/test_eneco.py` | Eneco extractor |
+| `tests/test_energiebe.py` | energie.be extractor |
 | `tests/test_engie.py` | Engie extractor |
 | `tests/test_frank.py` | Frank Energie extractor |
 | `tests/test_luminus.py` | Luminus extractor |
@@ -171,7 +172,7 @@ main()                       scripts/live_check.py:1486  asyncio.run(_run()); rc
       _check_eneco ...       scripts/live_check.py:345   one _check_<supplier> per registered extractor
       _check_frank                                       (cociter, dats24, ebem, ecofix, ecopower,
       _check_bolt                                         engie, luminus, mega, totalenergies,
-      ...                                                 bolt, octaplus, frank)
+      ...                                                 bolt, octaplus, frank, energiebe)
     _check_catalogs(...)     scripts/live_check.py:997   run each discover(), flag new product ids
     _fetch_with_retry(...)   scripts/live_check.py:306   transient-only retry with backoff
     _validate_snapshot(...)  scripts/live_check.py:1148  energy + injection shape gates
