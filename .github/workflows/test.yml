@@ -29,7 +29,7 @@ jobs:
           # known-good versions; an upstream HA-core or test-shim
           # release would otherwise silently turn the suite red on main.
           pip install \
-            ruff==0.15.18 \
+            ruff==0.16.0 \
             mypy \
             pytest \
             pytest-asyncio \

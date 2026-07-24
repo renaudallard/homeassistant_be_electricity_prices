@@ -287,10 +287,12 @@ Four workflows live under `.github/workflows/`.
 ### test.yml - Tests
 
 Runs on push to `main`, on every pull request, and on manual dispatch (`.github/workflows/test.yml:3`).
-It pins Python 3.13 and installs a pinned toolchain: `homeassistant==2026.2.3` and
-`pytest-homeassistant-custom-component==0.13.316` (plus `pytest-freezer==0.4.9`, `pypdf`,
-`pdfplumber`, `defusedxml`), so an upstream HA-core or test-shim release cannot silently turn the
-suite red on `main` (`.github/workflows/test.yml:31`). The steps are:
+It pins Python 3.13 and installs a pinned toolchain: `homeassistant==2026.2.3`,
+`pytest-homeassistant-custom-component==0.13.316` and `ruff==0.16.0` (plus `pytest-freezer==0.4.9`,
+`pypdf`, `pdfplumber`, `defusedxml`), so an upstream HA-core, test-shim or linter release cannot
+silently turn the suite red on `main` (`.github/workflows/test.yml:31`). The lint rule set is itself
+pinned in `pyproject.toml` (`[tool.ruff.lint] select`), so a ruff upgrade cannot expand what is
+linted for; `[tool.ruff.format] exclude` keeps the formatter off Markdown. The steps are:
 
 | Step | Command | Notes |
 | --- | --- | --- |
