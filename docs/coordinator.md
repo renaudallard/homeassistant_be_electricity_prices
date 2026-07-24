@@ -148,7 +148,7 @@ key is configured (`coordinator.py:641`), keeping the current card instead.
 
 ### 3.1 Resolution selection (hourly vs quarter-hourly)
 
-`_energy_is_quarter_hourly` (`coordinator.py:162`) returns True only for `DynamicRates` with `quarter_hourly=True`. Those extractors (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom) bill on the native 15-minute Belpex/eSpot_15/Epex/EPEX DA grid; every other contract stays hourly. `_fetch_spot_prices` passes this as `quarter_hourly=` to `client.fetch_day_ahead` (`coordinator.py:1613`). The constants are `RESOLUTION_HOURLY = "PT60M"` and `RESOLUTION_QUARTER = "PT15M"` (`const.py:253`), matching ENTSO-E's resolution tokens. YTD billing stays hourly regardless (section 7).
+`_energy_is_quarter_hourly` (`coordinator.py:162`) returns True only for `DynamicRates` with `quarter_hourly=True`. Those extractors (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom, Bolt Dynamisch, energie.be) bill on the native 15-minute Belpex/eSpot_15/Epex/EPEX DA grid; every other contract stays hourly. `_fetch_spot_prices` passes this as `quarter_hourly=` to `client.fetch_day_ahead` (`coordinator.py:1613`). The constants are `RESOLUTION_HOURLY = "PT60M"` and `RESOLUTION_QUARTER = "PT15M"` (`const.py:253`), matching ENTSO-E's resolution tokens. YTD billing stays hourly regardless (section 7).
 
 ### 3.2 The today/tomorrow spot cache
 
