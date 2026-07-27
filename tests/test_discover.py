@@ -48,6 +48,9 @@ from custom_components.be_electricity_prices.providers import ebem as ebem_mod
 from custom_components.be_electricity_prices.providers import ecofix as ecofix_mod
 from custom_components.be_electricity_prices.providers import ecopower as ecopower_mod
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
+from custom_components.be_electricity_prices.providers import (
+    energyvision as energyvision_mod,
+)
 from custom_components.be_electricity_prices.providers import engie as engie_mod
 from custom_components.be_electricity_prices.providers import frank as frank_mod
 from custom_components.be_electricity_prices.providers import luminus as luminus_mod
@@ -148,6 +151,15 @@ def test_mega_discover_matches_registry() -> None:
     discovered = _run(mega_mod.discover(session))
     expected = {c.product_name for c in mega_mod._CONTRACTS}
     assert discovered == expected
+
+
+def test_energyvision_discover_matches_registry() -> None:
+    session = _FakeSession(_read("energyvision.html"))
+    discovered = _run(energyvision_mod.discover(session))
+    # discover() returns every residential NL (Flanders) code on the listing;
+    # the -WAL-fr (Wallonia) rows must be excluded. The registry baseline is
+    # DISCOVER_IDS (the full catalogue, so only a genuinely new code flags).
+    assert discovered == set(energyvision_mod.DISCOVER_IDS)
 
 
 def test_bolt_discover_matches_registry() -> None:

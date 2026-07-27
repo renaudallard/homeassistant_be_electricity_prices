@@ -1,0 +1,283 @@
+# Copyright (c) 2026, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+"""Fixture-based tests for the EnergyVision extractor."""
+
+from __future__ import annotations
+
+from datetime import date
+
+import pytest
+
+from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
+from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers.base import (
+    DynamicRates,
+    ExtractorError,
+    FixedRates,
+    SupplierSnapshot,
+)
+from custom_components.be_electricity_prices.providers.energyvision import (
+    DISCOVER_IDS,
+    parse_snapshot,
+)
+from tests import fixture_text
+
+_DYNAMIC = "energyvision_dynamic"
+_FIXED = "energyvision_fixed_3y"
+
+
+def _dyn_text() -> str:
+    return fixture_text("energyvision_dynamic_jul.pdf", layout=True)
+
+
+def _fixed_text() -> str:
+    return fixture_text("energyvision_fixed_3y_jul.pdf", layout=True)
+
+
+def _dyn() -> SupplierSnapshot:
+    return parse_snapshot(_DYNAMIC, _dyn_text(), "test://ev-dynamic-jul")
+
+
+def _fixed() -> SupplierSnapshot:
+    return parse_snapshot(_FIXED, _fixed_text(), "test://ev-fixed-jul")
+
+
+# ---- dynamic card (GSDYN) ---------------------------------------------------
+
+
+def test_dynamic_energy_is_quarter_hourly() -> None:
+    """The card indexes 'op kwartierbasis' on the EPEX day-ahead 15-min curve."""
+    snap = _dyn()
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is True
+
+
+def test_dynamic_energy_factor() -> None:
+    """1,05 x Belpex + 15 EUR/MWh, Belpex in EUR/MWh => factor = 1,05 * 1,06.
+
+    The coefficient is a dimensionless Belpex multiplier (Bolt axis), so it is
+    NOT scaled by ten the way Frank's cents-output coefficient is.
+    """
+    snap = _dyn()
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.05 * 1.06)
+
+
+def test_dynamic_energy_base() -> None:
+    """base = 15 EUR/MWh => 0,015 EUR/kWh, times the 1,06 VAT multiplier."""
+    snap = _dyn()
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.base == pytest.approx(15.0 / 1000.0 * 1.06)
+
+
+def test_dynamic_yearly_fixed_fee() -> None:
+    """Vaste vergoeding 50 EUR/jaar, carried through unscaled."""
+    snap = _dyn()
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(50.0)
+
+
+def test_dynamic_injection_factor_is_one() -> None:
+    """1 x Belpex - 15 EUR/MWh, VAT-exempt => factor exactly 1,0."""
+    snap = _dyn()
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(1.0)
+
+
+def test_dynamic_injection_base() -> None:
+    """base = -15 EUR/MWh => -0,015 EUR/kWh (no VAT)."""
+    snap = _dyn()
+    assert snap.injection is not None
+    assert snap.injection.base == pytest.approx(-15.0 / 1000.0)
+
+
+def test_dynamic_injection_current_is_none() -> None:
+    """Spot-indexed injection: priced off the live spot, no monthly indicative."""
+    snap = _dyn()
+    assert snap.injection is not None
+    assert snap.injection.current is None
+
+
+# ---- fixed card (GS3JV) -----------------------------------------------------
+
+
+def test_fixed_energy_is_fixed_rates() -> None:
+    snap = _fixed()
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(13.57 / 100.0)
+
+
+def test_fixed_yearly_fixed_fee() -> None:
+    """Vaste vergoeding 75 EUR/jaar on the 3-year fixed card."""
+    snap = _fixed()
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(75.0)
+
+
+def test_fixed_injection_is_monthly_indicative() -> None:
+    """Injection is Belpex-SPP-M (monthly), so the printed 2,07 c€/kWh
+    indicative is billed as ``current`` -- never a live hourly factor/base."""
+    snap = _fixed()
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(2.07 / 100.0)
+    assert snap.injection.factor is None
+    assert snap.injection.base is None
+
+
+# ---- shared DSO + tax blocks (identical on both cards) ----------------------
+
+
+@pytest.mark.parametrize("snap_fn", [_dyn, _fixed])
+def test_dsos_cover_all_eight_fluvius_subareas(snap_fn) -> None:  # type: ignore[no-untyped-def]
+    assert set(snap_fn().dsos) == set(FLUVIUS_KEYS)
+
+
+def test_dso_antwerpen_digital_meter_columns() -> None:
+    """Antwerpen digital meter: cap 52,3679 EUR/kW/yr, kWh 5,35329 c€,
+    excl-nacht 4,81301 c€, databeheer 18,92 EUR/yr (maximumtarief ignored)."""
+    a = _dyn().dsos["fluvius_antwerpen"]
+    assert a.capacity_eur_per_kw_year == pytest.approx(52.3679)
+    assert a.distribution_single == pytest.approx(5.35329 / 100.0)
+    assert a.distribution_exclusive_night == pytest.approx(4.81301 / 100.0)
+    assert a.data_management_per_year == pytest.approx(18.92)
+
+
+def test_dso_kempen_maps_to_iveka() -> None:
+    """'FLUVIUS KEMPEN' is the Iveka sub-area."""
+    assert _dyn().dsos["fluvius_iveka"].capacity_eur_per_kw_year == pytest.approx(
+        59.5794
+    )
+
+
+def test_dso_midden_vlaanderen_maps_to_intergem() -> None:
+    assert _dyn().dsos["fluvius_intergem"].distribution_single == pytest.approx(
+        5.27945 / 100.0
+    )
+
+
+def test_dso_transport_is_zero() -> None:
+    for overlay in _dyn().dsos.values():
+        assert overlay.transport == 0.0
+
+
+def test_taxes_federal_excise() -> None:
+    assert _dyn().taxes.federal_excise == pytest.approx(5.03288 / 100.0)
+
+
+def test_taxes_energy_contribution() -> None:
+    assert _dyn().taxes.energy_contribution == pytest.approx(0.20417 / 100.0)
+
+
+def test_taxes_flanders_renewables_combined_gsc_wkc() -> None:
+    """GSC + WKC print as a single combined 1,554 c€/kWh."""
+    assert _dyn().taxes.flanders_renewables == pytest.approx(1.554 / 100.0)
+
+
+def test_taxes_energy_fund_domiciled_zero() -> None:
+    """Standard residential is domiciled (0 EUR/month), not the 10,07 row."""
+    assert _dyn().taxes.energy_fund_eur_per_month == pytest.approx(0.0)
+
+
+def test_taxes_vat_rate_zero() -> None:
+    """The energy leg is pre-scaled to VAT-inclusive, so vat_rate stays 0.0."""
+    assert _dyn().taxes.vat_rate == 0.0
+
+
+# ---- metadata ---------------------------------------------------------------
+
+
+def test_publication_label_and_valid_until() -> None:
+    snap = _dyn()
+    assert snap.publication_label == "juli 2026"
+    assert snap.valid_until == date(2026, 7, 31)
+
+
+def test_dot_decimal_render_matches_comma() -> None:
+    # A dot-decimal PDF re-render must extract identical values, not truncate a
+    # mandatory value to its integer part as a comma-only regex would.
+    comma = _dyn()
+    dot = parse_snapshot(_DYNAMIC, _dyn_text().replace(",", "."), "test://ev")
+    assert isinstance(comma.energy, DynamicRates)
+    assert isinstance(dot.energy, DynamicRates)
+    assert dot.energy.factor == pytest.approx(comma.energy.factor)
+    assert dot.energy.base == pytest.approx(comma.energy.base)
+    assert dot.taxes.federal_excise == pytest.approx(comma.taxes.federal_excise)
+    assert dot.injection is not None and comma.injection is not None
+    assert dot.injection.base == pytest.approx(comma.injection.base)
+
+
+# ---- loud-fail contract -----------------------------------------------------
+
+
+def test_missing_fee_is_fatal() -> None:
+    text = _dyn_text().replace("Vaste vergoeding", "XXX")
+    with pytest.raises(ExtractorError, match="vaste vergoeding"):
+        parse_snapshot(_DYNAMIC, text, "test://ev")
+
+
+def test_missing_gsc_wkc_is_fatal() -> None:
+    text = _dyn_text().replace("GSC en WKC", "XXX")
+    with pytest.raises(ExtractorError, match="tax block"):
+        parse_snapshot(_DYNAMIC, text, "test://ev")
+
+
+def test_missing_dynamic_injection_is_fatal() -> None:
+    # Every dynamic card prints the injectietarief formula; a miss must raise
+    # rather than silently zero the solar feed-in credit.
+    text = _dyn_text().replace("injectietarief", "XXX")
+    with pytest.raises(ExtractorError, match="injectie"):
+        parse_snapshot(_DYNAMIC, text, "test://ev")
+
+
+def test_missing_fixed_energy_is_fatal() -> None:
+    text = _fixed_text().replace("vast tarief", "XXX")
+    with pytest.raises(ExtractorError, match="fixed energy"):
+        parse_snapshot(_FIXED, text, "test://ev")
+
+
+# ---- registration -----------------------------------------------------------
+
+
+def test_energyvision_is_registered() -> None:
+    assert "energyvision" in EXTRACTORS
+    assert EXTRACTORS["energyvision"].label == "EnergyVision"
+    contract_ids = {c.id for c in EXTRACTORS["energyvision"].contracts}
+    assert contract_ids == {_DYNAMIC, _FIXED}
+
+
+def test_contracts_are_flanders_only() -> None:
+    for c in EXTRACTORS["energyvision"].contracts:
+        assert c.regions == frozenset({"flanders"})
+
+
+def test_contract_kinds() -> None:
+    kinds = {c.id: c.kind for c in EXTRACTORS["energyvision"].contracts}
+    assert kinds[_DYNAMIC] == "dynamic"
+    assert kinds[_FIXED] == "fixed"
+
+
+def test_discover_ids_superset_of_supported() -> None:
+    assert {"GSDYN", "GS3JV"} <= DISCOVER_IDS

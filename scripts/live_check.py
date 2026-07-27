@@ -110,6 +110,9 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
     octaplus = _load("be_pkg.providers.octaplus", PKG / "providers" / "octaplus.py")
     frank = _load("be_pkg.providers.frank", PKG / "providers" / "frank.py")
     energiebe = _load("be_pkg.providers.energiebe", PKG / "providers" / "energiebe.py")
+    energyvision = _load(
+        "be_pkg.providers.energyvision", PKG / "providers" / "energyvision.py"
+    )
     return (
         eneco,
         cociter,
@@ -125,6 +128,7 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
         octaplus,
         frank,
         energiebe,
+        energyvision,
     )
 
 
@@ -704,6 +708,52 @@ async def _check_energiebe(
         )
 
 
+async def _check_energyvision(
+    session: aiohttp.ClientSession, energyvision: types.ModuleType
+) -> None:
+    expected_dso_keys = _FLUVIUS_KEYS
+    for contract in energyvision.EXTRACTOR.contracts:
+        cid = contract.id
+        prefix = f"energyvision/{cid}"
+        try:
+            snap = await _fetch_with_retry(
+                partial(energyvision.fetch, session, cid, "flanders")
+            )
+        except Exception as err:
+            _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+            continue
+        _expect(f"{prefix}: publication label", bool(snap.publication_label))
+        _expect(
+            f"{prefix}: all eight Fluvius DSOs present",
+            expected_dso_keys <= set(snap.dsos),
+            detail=f"missing: {sorted(expected_dso_keys - set(snap.dsos))}",
+        )
+        _expect(
+            f"{prefix}: federal excise > 0",
+            snap.taxes.federal_excise > 0,
+            detail=str(snap.taxes),
+        )
+        _expect(
+            f"{prefix}: flanders renewables > 0",
+            snap.taxes.flanders_renewables > 0,
+            detail=str(snap.taxes),
+        )
+        _expect(
+            f"{prefix}: vat_rate is 0.0 (VAT-inclusive card)",
+            snap.taxes.vat_rate == 0.0,
+            detail=str(snap.taxes),
+        )
+        _validate_snapshot(prefix, cid, snap)
+        if "fluvius_antwerpen" in snap.dsos:
+            a = snap.dsos["fluvius_antwerpen"]
+            _expect(
+                f"{prefix}: fluvius capacity tariff in [20, 200] EUR/kW/yr",
+                a.capacity_eur_per_kw_year is not None
+                and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
+                detail=str(a),
+            )
+
+
 async def _check_luminus(
     session: aiohttp.ClientSession, luminus: types.ModuleType
 ) -> None:
@@ -1075,6 +1125,7 @@ async def _check_catalogs(
         "ecopower": set(modules["ecopower"].DISCOVER_IDS),
         "dats24": {modules["dats24"]._CONTRACT_ID},
         "frank": {t[0] for t in modules["frank"]._TIERS},
+        "energyvision": set(modules["energyvision"].DISCOVER_IDS),
     }
     for name, mod in modules.items():
         discover = getattr(mod, "discover", None)
@@ -1407,6 +1458,7 @@ async def _run() -> int:
         octaplus,
         frank,
         energiebe,
+        energyvision,
     ) = _load_providers()
     modules = {
         "eneco": eneco,
@@ -1423,6 +1475,7 @@ async def _run() -> int:
         "octaplus": octaplus,
         "frank": frank,
         "energiebe": energiebe,
+        "energyvision": energyvision,
     }
     # Index every contract so _expected_injection_shape can derive a shape
     # for cards not explicitly listed in _INJECTION_SHAPE.
@@ -1455,6 +1508,9 @@ async def _run() -> int:
             _attributed_check("octaplus", _check_octaplus, session, octaplus),
             _attributed_check("frank", _check_frank, session, frank),
             _attributed_check("energiebe", _check_energiebe, session, energiebe),
+            _attributed_check(
+                "energyvision", _check_energyvision, session, energyvision
+            ),
         )
         # Catalog probes fan out across suppliers; attribute them
         # to a synthetic bucket so they don't double-count against
