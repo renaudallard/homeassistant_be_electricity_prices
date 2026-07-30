@@ -156,9 +156,12 @@ def test_mega_discover_matches_registry() -> None:
 def test_energyvision_discover_matches_registry() -> None:
     session = _FakeSession(_read("energyvision.html"))
     discovered = _run(energyvision_mod.discover(session))
-    # discover() returns every residential NL (Flanders) code on the listing;
-    # the -WAL-fr (Wallonia) rows must be excluded. The registry baseline is
-    # DISCOVER_IDS (the full catalogue, so only a genuinely new code flags).
+    # discover() returns every residential electricity code on the listing,
+    # across BOTH language tokens: the Flemish cards are published only as
+    # -nl and the Walloon ones only as -WAL-fr, so matching one token would
+    # silently drop a whole region's catalogue from the drift check. The
+    # registry baseline is DISCOVER_IDS (the full catalogue, so only a
+    # genuinely new code flags).
     assert discovered == set(energyvision_mod.DISCOVER_IDS)
 
 

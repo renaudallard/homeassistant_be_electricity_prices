@@ -357,7 +357,7 @@ the engine respects that: no clamping in `_compute_injection_price` or
 
 | Shape | Populated fields | Needs spot? | Example |
 | --- | --- | --- | --- |
-| (a) Monthly indicative | `current` set | No | Eneco Fix/Flex, EBEM, DATS 24, monthly-indexed variables |
+| (a) Monthly indicative | `current` set | No | Eneco Fix/Flex, EBEM, DATS 24, EnergyVision fixed (both regions), monthly-indexed variables |
 | (b) Hourly formula | `factor` + `base` set | Yes | Dynamic contracts (Engie, OCTA+, Luminus, Mega, TotalEnergies) |
 | (c) Spot-indexed on a static-energy card | `factor` + `base` set, `current is None`, energy NOT dynamic | Yes | Cociter Variable |
 
@@ -443,7 +443,8 @@ user-facing numbers diverged (`coordinator.py:2017-1780`).
 
 ### Historical bug: monthly-indexed injection emitting an hourly factor
 
-A monthly-indexed injection (EBEM Variabel/B@sic+, Eneco Fix/Flex, DATS 24) must
+A monthly-indexed injection (EBEM Variabel/B@sic+, Eneco Fix/Flex, DATS 24,
+EnergyVision 3 jaar vast / 1 an fixe) must
 emit only the realized monthly `current`, never an hourly `factor*spot+base`,
 because the indicative is the actual credit. The guard that keeps shape (b)/(c)
 from swallowing these cards is the `inj.current is None` clause in both

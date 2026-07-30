@@ -762,47 +762,71 @@ async def _check_energiebe(
 async def _check_energyvision(
     session: aiohttp.ClientSession, energyvision: types.ModuleType
 ) -> None:
-    expected_dso_keys = _FLUVIUS_KEYS
+    # Each product is published for exactly one region (the Flemish cards in
+    # Dutch, the Walloon one in French), so walk the contract's own regions
+    # rather than assuming Flanders: fetching a Walloon contract as flanders
+    # raises, and its card carries Walloon DSOs and CV instead of GSC/WKC.
     for contract in energyvision.EXTRACTOR.contracts:
         cid = contract.id
-        prefix = f"energyvision/{cid}"
-        try:
-            snap = await _fetch_with_retry(
-                partial(energyvision.fetch, session, cid, "flanders")
-            )
-        except Exception as err:
-            _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
-            continue
-        _expect(f"{prefix}: publication label", bool(snap.publication_label))
-        _expect(
-            f"{prefix}: all eight Fluvius DSOs present",
-            expected_dso_keys <= set(snap.dsos),
-            detail=f"missing: {sorted(expected_dso_keys - set(snap.dsos))}",
-        )
-        _expect(
-            f"{prefix}: federal excise > 0",
-            snap.taxes.federal_excise > 0,
-            detail=str(snap.taxes),
-        )
-        _expect(
-            f"{prefix}: flanders renewables > 0",
-            snap.taxes.flanders_renewables > 0,
-            detail=str(snap.taxes),
-        )
-        _expect(
-            f"{prefix}: vat_rate is 0.0 (VAT-inclusive card)",
-            snap.taxes.vat_rate == 0.0,
-            detail=str(snap.taxes),
-        )
-        _validate_snapshot(prefix, cid, snap)
-        if "fluvius_antwerpen" in snap.dsos:
-            a = snap.dsos["fluvius_antwerpen"]
+        for region in sorted(contract.regions):
+            prefix = f"energyvision/{cid}/{region}"
+            flanders = region == "flanders"
+            expected_dso_keys = _FLUVIUS_KEYS if flanders else _WALLONIA_DSO_KEYS
+            try:
+                snap = await _fetch_with_retry(
+                    partial(energyvision.fetch, session, cid, region)
+                )
+            except Exception as err:
+                _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
+                continue
+            _expect(f"{prefix}: publication label", bool(snap.publication_label))
             _expect(
-                f"{prefix}: fluvius capacity tariff in [20, 200] EUR/kW/yr",
-                a.capacity_eur_per_kw_year is not None
-                and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
-                detail=str(a),
+                f"{prefix}: expected DSOs present",
+                expected_dso_keys <= set(snap.dsos),
+                detail=f"missing: {sorted(expected_dso_keys - set(snap.dsos))}",
             )
+            _expect(
+                f"{prefix}: federal excise > 0",
+                snap.taxes.federal_excise > 0,
+                detail=str(snap.taxes),
+            )
+            _expect(
+                f"{prefix}: regional renewables > 0",
+                (
+                    snap.taxes.flanders_renewables
+                    if flanders
+                    else snap.taxes.wallonia_renewables
+                )
+                > 0,
+                detail=str(snap.taxes),
+            )
+            _expect(
+                f"{prefix}: vat_rate is 0.0 (VAT-inclusive card)",
+                snap.taxes.vat_rate == 0.0,
+                detail=str(snap.taxes),
+            )
+            _validate_snapshot(prefix, cid, snap)
+            if "fluvius_antwerpen" in snap.dsos:
+                a = snap.dsos["fluvius_antwerpen"]
+                _expect(
+                    f"{prefix}: fluvius capacity tariff in [20, 200] EUR/kW/yr",
+                    a.capacity_eur_per_kw_year is not None
+                    and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
+                    detail=str(a),
+                )
+            if "ores" in snap.dsos:
+                # The Walloon card prints the CWaPE Impact bands cheapest
+                # first, the reverse of the DATS 24 layout: a positional
+                # mis-map silently swaps peak and off-peak distribution.
+                o = snap.dsos["ores"]
+                _expect(
+                    f"{prefix}: impact bands ordered eco < medium < pic",
+                    None not in (o.distribution_eco, o.distribution_medium)
+                    and o.distribution_pic is not None
+                    and o.distribution_eco < o.distribution_medium
+                    and o.distribution_medium < o.distribution_pic,
+                    detail=str(o),
+                )
 
 
 async def _check_luminus(

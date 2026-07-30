@@ -47,6 +47,7 @@ from tests import fixture_text
 
 _DYNAMIC = "energyvision_dynamic"
 _FIXED = "energyvision_fixed_3y"
+_FIXED_WAL = "energyvision_fixed_1y"
 
 
 def _dyn_text() -> str:
@@ -63,6 +64,14 @@ def _dyn() -> SupplierSnapshot:
 
 def _fixed() -> SupplierSnapshot:
     return parse_snapshot(_FIXED, _fixed_text(), "test://ev-fixed-jul")
+
+
+def _wal_text() -> str:
+    return fixture_text("energyvision_fixed_1y_wal_jul.pdf", layout=True)
+
+
+def _wal() -> SupplierSnapshot:
+    return parse_snapshot(_FIXED_WAL, _wal_text(), "test://ev-wal-jul")
 
 
 # ---- dynamic card (GSDYN) ---------------------------------------------------
@@ -265,19 +274,149 @@ def test_energyvision_is_registered() -> None:
     assert "energyvision" in EXTRACTORS
     assert EXTRACTORS["energyvision"].label == "EnergyVision"
     contract_ids = {c.id for c in EXTRACTORS["energyvision"].contracts}
-    assert contract_ids == {_DYNAMIC, _FIXED}
+    assert contract_ids == {_DYNAMIC, _FIXED, _FIXED_WAL}
 
 
-def test_contracts_are_flanders_only() -> None:
-    for c in EXTRACTORS["energyvision"].contracts:
-        assert c.regions == frozenset({"flanders"})
+def test_each_contract_serves_exactly_one_region() -> None:
+    # EnergyVision publishes each product for one region in one language, so
+    # a contract is never offered in a region whose card does not exist.
+    regions = {c.id: c.regions for c in EXTRACTORS["energyvision"].contracts}
+    assert regions[_DYNAMIC] == frozenset({"flanders"})
+    assert regions[_FIXED] == frozenset({"flanders"})
+    assert regions[_FIXED_WAL] == frozenset({"wallonia"})
 
 
 def test_contract_kinds() -> None:
     kinds = {c.id: c.kind for c in EXTRACTORS["energyvision"].contracts}
     assert kinds[_DYNAMIC] == "dynamic"
     assert kinds[_FIXED] == "fixed"
+    assert kinds[_FIXED_WAL] == "fixed"
 
 
 def test_discover_ids_superset_of_supported() -> None:
-    assert {"GSDYN", "GS3JV"} <= DISCOVER_IDS
+    assert {"GSDYN", "GS3JV", "GS1JV"} <= DISCOVER_IDS
+
+
+# ---- Wallonia fixed card (GS1JV) --------------------------------------------
+
+
+def test_wallonia_card_publication_metadata() -> None:
+    snap = _wal()
+    assert snap.supplier == "energyvision"
+    assert snap.contract == _FIXED_WAL
+    # French card: "Carte tarifaire juillet 2026". The label regex uses \w
+    # rather than [A-Za-z] so the accented months (fevrier, aout, decembre)
+    # do not silently blank it.
+    assert snap.publication_label == "juillet 2026"
+    assert snap.valid_until == date(2026, 7, 31)
+
+
+def test_wallonia_energy_is_one_flat_vat_inclusive_rate() -> None:
+    """The card prints a single "Electricite verte - tarif fixe" rate: no
+    bi-horaire or exclusive-night energy price (those words appear only as
+    DSO-table column headers), so every meter type bills `single`."""
+    snap = _wal()
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(0.1357)
+    assert snap.energy.peak is None
+    assert snap.energy.offpeak is None
+    assert snap.energy.exclusive_night is None
+    # "Frais fixes 75 EUR/an", used as printed (TVAC).
+    assert snap.energy.yearly_fixed_fee == pytest.approx(75.0)
+
+
+def test_wallonia_injection_is_monthly_indicative_only() -> None:
+    """Belpex-SPP-M is a month-long average the card says is only known at
+    month-end, so there is no live spot to index: bill the printed monthly
+    indicative and leave factor/base None. Emitting them would apply a
+    monthly coefficient to the hourly spot and mis-price the credit."""
+    snap = _wal()
+    inj = snap.injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.0207)
+    assert inj.factor is None
+    assert inj.base is None
+    # The card's 1 c-EUR/kWh guarantee is monthly and already applied to the
+    # printed value, and it is not a zero floor, so the flag stays off.
+    assert inj.floor_at_zero is False
+
+
+def test_wallonia_taxes_carry_cv_and_connection_fee() -> None:
+    """A Walloon card has no GSC/WKC and no Flemish energiefonds; it carries
+    the CV green-certificate quota and the connection fee instead. Both are
+    per-kWh, so silently zeroing either under-bills the whole contract."""
+    taxes = _wal().taxes
+    assert taxes.federal_excise == pytest.approx(0.0503288)
+    assert taxes.energy_contribution == pytest.approx(0.0020417)
+    assert taxes.wallonia_renewables == pytest.approx(0.03)
+    assert taxes.region_connection_fee == pytest.approx(0.00075)
+    assert taxes.flanders_renewables == 0.0
+    assert taxes.energy_fund_eur_per_month == 0.0
+    # Header: "Tous les prix et tarifs incluent la TVA a 6 %".
+    assert taxes.vat_rate == 0.0
+
+
+def test_wallonia_dsos_cover_every_walloon_key() -> None:
+    snap = _wal()
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    # Seven ORES sub-areas print identical numbers and collapse onto one key;
+    # Brabant Wallon is the representative row, as on the DATS 24 card.
+    ores = snap.dsos["ores"]
+    assert ores.distribution_single == pytest.approx(0.1198)
+    assert ores.distribution_peak == pytest.approx(0.1327)
+    assert ores.distribution_offpeak == pytest.approx(0.0739)
+    assert ores.distribution_exclusive_night == pytest.approx(0.0739)
+    assert ores.transport == pytest.approx(0.0274)
+    assert ores.data_management_per_year == pytest.approx(14.10)
+    assert ores.prosumer_eur_per_kva_year == pytest.approx(85.84)
+
+
+def test_wallonia_impact_bands_are_not_swapped() -> None:
+    """EnergyVision prints the CWaPE Impact bands cheapest-first
+    (ECO | MEDIUM | PIC), the REVERSE of the DATS 24 card carrying the same
+    regulated numbers. Reusing that positional mapping swaps peak and
+    off-peak distribution for every Walloon Impact user, so pin the order by
+    value rather than by column index."""
+    ores = _wal().dsos["ores"]
+    eco, medium, pic = (
+        ores.distribution_eco,
+        ores.distribution_medium,
+        ores.distribution_pic,
+    )
+    assert eco is not None and medium is not None and pic is not None
+    assert eco == pytest.approx(0.0509)
+    assert medium == pytest.approx(0.1083)
+    assert pic == pytest.approx(0.1657)
+    assert eco < medium < pic
+
+
+def test_wallonia_dsos_are_not_all_the_same_row() -> None:
+    """Guards against a regex that anchors loosely and aligns every operator
+    to the first matching row."""
+    dsos = _wal().dsos
+    assert dsos["aieg"].distribution_single == pytest.approx(0.1087)
+    assert dsos["aiesh"].distribution_single == pytest.approx(0.1363)
+    assert dsos["resa"].distribution_single == pytest.approx(0.1106)
+    assert dsos["rew"].distribution_single == pytest.approx(0.1247)
+    assert dsos["rew"].data_management_per_year == pytest.approx(26.44)
+
+
+def test_wallonia_mandatory_rows_fail_loud() -> None:
+    for needle, match in (
+        ("Électricité verte - tarif fixe", "energy price"),
+        ("Injection – variable", "injection price"),
+        ("Frais fixes", "frais fixes"),
+        ("Contribution énergétique", "tax block"),
+        ("Redevance de raccordement", "tax block"),
+        ("certificats de cogénération", "tax block"),
+    ):
+        text = _wal_text().replace(needle, "XXX")
+        with pytest.raises(ExtractorError, match=match):
+            parse_snapshot(_FIXED_WAL, text, "test://ev-wal-jul")
+
+
+def test_flanders_parsers_are_not_used_for_the_walloon_card() -> None:
+    """The two cards share no wording, so a Walloon card fed through the
+    Dutch path must fail rather than silently produce a partial snapshot."""
+    with pytest.raises(ExtractorError):
+        parse_snapshot(_FIXED, _wal_text(), "test://ev-wal-jul")

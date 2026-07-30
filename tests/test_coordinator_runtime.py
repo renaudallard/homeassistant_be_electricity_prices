@@ -45,6 +45,7 @@ from custom_components.be_electricity_prices.coordinator import (
     _shared_failed_fetches,
     _shared_lock,
     _shared_snapshots,
+    _successor_for,
     evict_shared_caches,
 )
 from custom_components.be_electricity_prices.providers.base import (
@@ -1023,30 +1024,40 @@ async def test_sync_deprecated_supplier_issue_creates_and_clears(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
-async def test_deprecated_supplier_issue_omits_an_out_of_region_successor(
+async def test_deprecated_supplier_issue_names_the_successor_in_both_regions(
     hass: HomeAssistant,
 ) -> None:
-    """The successor is named for the whole country, our coverage is per
-    region: EnergyVision took over DATS 24's Walloon customers too, but only
-    its Flanders cards are modelled. Naming it to a Walloon entry would send
-    the user to a supplier the contract step then refuses."""
-    entry = make_entry(
-        supplier="dats24", contract="dats24_groen_variabel", region="wallonia"
-    )
-    entry.add_to_hass(hass)
-    coord = BePricesCoordinator(hass, entry)
+    """DATS 24 sold in Flanders and Wallonia, and EnergyVision is modelled in
+    both, so a Walloon entry gets routed too. Before the Walloon card was
+    added this named a supplier the contract step then refused."""
+    for region in ("flanders", "wallonia"):
+        entry = make_entry(
+            supplier="dats24", contract="dats24_groen_variabel", region=region
+        )
+        entry.add_to_hass(hass)
+        BePricesCoordinator(hass, entry)._sync_deprecated_supplier_issue()
+        issue = ir.async_get(hass).async_get_issue(
+            DOMAIN, f"supplier_deprecated_{entry.entry_id}"
+        )
+        assert issue is not None
+        assert issue.translation_key == "supplier_deprecated"
+        assert issue.translation_placeholders == {
+            "supplier": "DATS 24",
+            "successor": "EnergyVision",
+            "ends_on": "2026-08-31",
+        }
 
-    coord._sync_deprecated_supplier_issue()
-    issue = ir.async_get(hass).async_get_issue(
-        DOMAIN, f"supplier_deprecated_{entry.entry_id}"
-    )
-    assert issue is not None
-    # Same card slot, but the variant that gives no unfollowable advice.
-    assert issue.translation_key == "supplier_deprecated_no_successor"
-    assert issue.translation_placeholders == {
-        "supplier": "DATS 24",
-        "ends_on": "2026-08-31",
-    }
+
+def test_successor_is_dropped_when_it_does_not_serve_the_region() -> None:
+    """A withdrawal names one successor nationally while our coverage is per
+    region, so the card must not send a user to a supplier the config flow
+    would refuse. EnergyVision sells nothing in Brussels."""
+    assert _successor_for("energyvision", "flanders") is not None
+    assert _successor_for("energyvision", "wallonia") is not None
+    assert _successor_for("energyvision", "brussels") is None
+    # Unset or unknown successors resolve to None rather than raising.
+    assert _successor_for(None, "flanders") is None
+    assert _successor_for("no_such_supplier", "flanders") is None
 
 
 async def test_sync_extractor_failed_issue_creates_and_clears(

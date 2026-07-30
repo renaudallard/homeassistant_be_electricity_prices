@@ -274,7 +274,7 @@ Belgian residential injection is VAT-exempt, so `InjectionRates` values are neve
 
 | Shape | Fields | Live price source | Example |
 |-------|--------|-------------------|---------|
-| (a) monthly-indicative only | `current` set, no usable `factor`/`base` for pricing | the printed `current` value, no spot | Eneco Fix/Flex, EBEM Variabel/B@sic+, DATS 24 |
+| (a) monthly-indicative only | `current` set, no usable `factor`/`base` for pricing | the printed `current` value, no spot | Eneco Fix/Flex, EBEM Variabel/B@sic+, DATS 24, EnergyVision fixed |
 | (b) hourly `factor*spot+base` | `factor`+`base`, energy is dynamic | `factor*spot+base` at the current slot | Engie, OCTA+, TotalEnergies, Luminus, Mega dynamic |
 | (c) spot-indexed on static energy | `factor`+`base`, `current is None`, energy NOT dynamic | `factor*spot+base`, but the energy path fetches no spot | Cociter Variable |
 

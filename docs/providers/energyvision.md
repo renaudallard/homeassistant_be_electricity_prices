@@ -23,15 +23,21 @@ Related reading:
 ## Overview
 
 EnergyVision sells a "Goedkope stroom" family of residential electricity cards; the
-integration tracks two of them, both in Flanders only:
+integration tracks three of them:
 
-- **GSDYN** ("Goedkope Stroom Dynamisch") - a quarter-hourly spot-indexed dynamic product.
-- **GS3JV** ("Goedkope stroom 3 jaar vast") - a flat 3-year fixed rate.
+- **GSDYN** ("Goedkope Stroom Dynamisch", Flanders) - a quarter-hourly spot-indexed dynamic product.
+- **GS3JV** ("Goedkope stroom 3 jaar vast", Flanders) - a flat 3-year fixed rate.
+- **GS1JV** ("Électricité bon marché 1 an fixe", Wallonia) - the same fixed shape on a
+  1-year lock, off a French card.
 
-`_REGIONS` (`providers/energyvision.py:95`) fixes the region to `REGION_FLANDERS`; `fetch`
-rejects any other region with "EnergyVision cards are Flanders-only"
-(`providers/energyvision.py:210`). Wallonia (`-WAL-fr` cards) and gas are separate cards
-that are out of scope here. The other NL electricity SKUs (GSVI3 / GS1800V / GSLP / GSEZ /
+Region is a property of the product, not a variant of one card: EnergyVision publishes each
+product for exactly one region in exactly one language (`-nl` for the Flemish cards,
+`-WAL-fr` for the Walloon one), and there is no card for the other pairing. `_ContractDef`
+therefore carries both a `regions` frozenset and the filename `token`, and `fetch` rejects a
+region the contract is not sold in, naming the regions it is. The two publications share no
+wording, so the Walloon card has its own parser set (the `*_fr` helpers) rather than
+bilingual alternations - see [Wallonia](#wallonia-gs1jv) below. Gas (GSG / GS1JVG) stays out
+of scope. The other electricity SKUs (GSVI3 / GS1800V / GSLP / GSEZ /
 GSEZLP) are per-volume tiered products the pricing model cannot represent (a first-N-kWh
 fixed block plus a variable remainder), so they are catalogued-but-declined; GRSO is a
 transient group-buy SKU. `DISCOVER_IDS` (`providers/energyvision.py:117`) lists all of
@@ -60,13 +66,17 @@ header via `_publication_label` (`providers/energyvision.py:283`).
 
 ## Contracts
 
-Two contracts are declared in the `EXTRACTOR` (`providers/energyvision.py:399`), built from
-`_CONTRACTS` (`providers/energyvision.py:106`):
+Three contracts are declared in the `EXTRACTOR`, built from `_CONTRACTS`:
 
-| contract id | label | TariffKind | code | regions | quarter_hourly |
-| --- | --- | --- | --- | --- | --- |
-| `energyvision_dynamic` | EnergyVision Dynamisch | dynamic | GSDYN | flanders | True |
-| `energyvision_fixed_3y` | EnergyVision 3 jaar vast | fixed | GS3JV | flanders | n/a |
+| contract id | label | TariffKind | code | token | regions | quarter_hourly |
+| --- | --- | --- | --- | --- | --- | --- |
+| `energyvision_dynamic` | EnergyVision Dynamisch | dynamic | GSDYN | `nl` | flanders | True |
+| `energyvision_fixed_3y` | EnergyVision 3 jaar vast | fixed | GS3JV | `nl` | flanders | n/a |
+| `energyvision_fixed_1y` | EnergyVision 1 an fixe | fixed | GS1JV | `WAL-fr` | wallonia | n/a |
+
+Contract ids carry no region token, per the project convention: the region lives only in
+the `regions` frozenset. The Walloon product is a separate contract rather than the Flemish
+one in another region because it is a different product (a 1-year lock, not 3).
 
 `quarter_hourly=True` on the dynamic card (`providers/energyvision.py:315`): it bills "op
 kwartierbasis" on the Day-Ahead EPEX SPOT Belgium 15-minute curve, so the live price table,
@@ -81,8 +91,8 @@ injection is a monthly indicative that needs no live spot.
 
 `fetch` (`providers/energyvision.py:201`) validates the contract id and region, then
 `_resolve_card_url` (`providers/energyvision.py:241`) GETs the listing HTML and regexes the
-first `href="/sites/default/files/inline-files/EV-<4 digits>-<CODE>-nl...pdf"` for the
-contract's code. The `[^"]*` before `.pdf` tolerates the Drupal `_0` dedup suffix. The
+first `href="/sites/default/files/inline-files/EV-<4 digits>-<CODE>-<token>...pdf"` for the
+contract's code and language token. The `[^"]*` before `.pdf` tolerates the Drupal `_0` dedup suffix. The
 resolved absolute URL is layout-extracted with `fetch_pdf_text_layout` (the layout
 extractor keeps column alignment, important for the DSO table), then parsed.
 
@@ -247,6 +257,46 @@ card says "is geldig voor het product ... van juli 2026", so the month name sits
 "geldig" validity-keyword window and resolves to the last day of the month
 (`date(2026, 7, 31)`, `test_publication_label_and_valid_until`).
 
+## Wallonia (GS1JV)
+
+The Walloon card is a separate French publication, so it shares no wording with the two
+Dutch ones: all ten module-level patterns above were verified to miss it. `parse_snapshot`
+branches on the contract's regions into `_parse_wallonia`, which uses the parallel `*_fr`
+helpers. Only `parse_valid_until` is shared unchanged, because the shared `_MONTH_NAMES`
+map already carries the French months.
+
+| What | Card wording | Result |
+| --- | --- | --- |
+| Energy | `Électricité verte - tarif fixe 13,57 €cent/kWh` | `FixedRates(single=0.1357)` |
+| Standing charge | `Frais fixes 75 €/an` | `yearly_fixed_fee=75.0` |
+| Injection | `Injection – variable 2,07 €cent/kWh` | `InjectionRates(current=0.0207)` |
+| Federal excise | `Consommation entre 0 & 3.000 kWh 5,03288` | `federal_excise=0.0503288` |
+| Energy contribution | `Contribution énergétique 0,20417` | `energy_contribution=0.0020417` |
+| Green certificates | `certificats verts et ... cogénération ... 3,00 €cent/kWh` | `wallonia_renewables=0.03` |
+| Connection fee | `Redevance de raccordement 0,07500` | `region_connection_fee=0.00075` |
+
+Four things a maintainer needs to know about this card:
+
+- **One flat energy rate.** The card prints no bi-horaire or exclusive-night energy price;
+  `Compteur mono-horaire`, `Heures pleines/creuses` and `Exclusif nuit` appear only as DSO
+  table column headers. So `peak` / `offpeak` / `exclusive_night` stay unset and every meter
+  type bills `single`.
+- **The Impact bands print in the REVERSE order to DATS 24.** EnergyVision lays the CWaPE
+  3-band columns out cheapest-first (ECO | MEDIUM | PIC) while `dats24.py` parses
+  PIC | MEDIUM | ECO off the very same regulated numbers. Copying that positional mapping
+  swaps peak and off-peak distribution for every Walloon Impact user. Both the unit test
+  and the live-check pin the order by value (`eco < medium < pic`) rather than by index.
+- **Injection is monthly-indicative only**, exactly like GS3JV: Belpex-SPP-M is a month-long
+  average the card states is "connue qu'à la fin du mois", so there is no live spot to index
+  and `factor` / `base` must stay `None`. The 1 c€/kWh guarantee is monthly too and already
+  applied to the printed value, so `floor_at_zero` stays `False` (it is a 1 c€ floor, not a
+  zero floor).
+- **The tax block has no GSC/WKC and no energiefonds**, but adds the CV quota cost and the
+  connection fee. All four Walloon tax rows are mandatory: the CV cost and the connection
+  fee are per-kWh charges, so zeroing either under-bills the whole contract. The CV cost is
+  supplier-specific (EnergyVision prints 3,00 c€/kWh where DATS 24 prints 2,860 for the same
+  month), so it is never cross-filled from a sibling card.
+
 ## Quirks and historical bugs (land mines)
 
 - **Dynamic card is EUR/MWh HTVA (Bolt axis).** The `1,05` coefficient is a dimensionless
@@ -280,6 +330,7 @@ The fixtures live under `tests/fixtures/`:
 | --- | --- |
 | `energyvision_dynamic_jul.pdf` | the GSDYN "Goedkope Stroom Dynamisch" card, July 2026 |
 | `energyvision_fixed_3y_jul.pdf` | the GS3JV "Goedkope stroom 3 jaar vast" card, July 2026 |
+| `energyvision_fixed_1y_wal_jul.pdf` | the GS1JV "Électricité bon marché 1 an fixe" Walloon card, July 2026 |
 
 Tests load them through `fixture_text("energyvision_<...>_jul.pdf", layout=True)`, matching
 the layout-preserving extraction used in production.
