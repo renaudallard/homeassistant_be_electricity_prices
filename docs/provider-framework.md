@@ -121,8 +121,9 @@ one. Semantics of the return value:
   still valid (skip the expensive `fetch`).
 - A different string means the card changed; refetch.
 - `None` means the supplier has no probe path the coordinator can rely on
-  (for example Engie/Luminus API endpoints, or DATS 24's single overwrite-in-place
-  PDF). The coordinator then falls back to its time-based TTL.
+  (for example Engie/Luminus API endpoints, or DATS 24's one PDF per month,
+  replaced in place within the month). The coordinator then falls back to its
+  time-based TTL.
 
 Most PDF providers implement this by delegating to `head_freshness_key()` (see
 [_pdf.py helpers](#the-pdf-toolkit-providers_pdfpy) below).
