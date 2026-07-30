@@ -380,7 +380,9 @@ opens a two-option menu:
 
 If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
-attributes on `sensor.<...>_current_price`. Five repair issues surface
+attributes on `sensor.<...>_current_price`. `last_error` always names the
+failing exception, so a CDN timeout reads `network error fetching <url>:
+TimeoutError` rather than trailing off after the colon. Five repair issues surface
 under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; each auto-clears on the next successful refresh:
 

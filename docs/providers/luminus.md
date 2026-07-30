@@ -101,8 +101,8 @@ suppliers (Frank default, Mega, TotalEnergies, Eneco).
 2. Reject a region other than Flanders/Wallonia (`not available in region`).
 3. Build the URL with `_document_url(contract.slug, region)`.
 4. `fetch_pdf_text(session, url)` downloads and pypdf-extracts the PDF text
-   (`_pdf.py:160-166`); the payload is magic-byte-validated as a real PDF, so a
-   CDN 404-disguised-as-HTML fails loud (`_pdf.py:149-157`).
+   (`_pdf.py:179-185`); the payload is magic-byte-validated as a real PDF, so a
+   CDN 404-disguised-as-HTML fails loud (`_pdf.py:168-176`).
 5. Hand the text to `parse_snapshot` (the pure parser exposed for unit tests,
    `luminus.py:186-227`).
 
@@ -159,7 +159,7 @@ Fields pulled and their helpers:
 | Yearly fixed fee | `_extract_yearly_fee` | `luminus.py:258-270` |
 | Exclusive-night fee | `_extract_excl_night_fee` | `luminus.py:273-290` |
 | VAT multiplier | `_vat_multiplier` | `luminus.py:250-255` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:773-874` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:794-895` |
 
 ### Numeric token
 
@@ -168,7 +168,7 @@ ending digit precisely so a trailing sentence period is not captured. The commen
 flags the concrete hazard: `0,1019 x Belpex H + 2,4591.\n` from
 `luminus_dynamic_w` would grab the final `.` under a lazier `[\d,.]+`
 (`luminus.py:234-238`). Values are parsed with the shared `to_float` (handles
-Belgian comma decimals and every Unicode space variant, `_pdf.py:486-497`).
+Belgian comma decimals and every Unicode space variant, `_pdf.py:507-518`).
 
 ### Units
 
@@ -232,7 +232,7 @@ Parses the ex-VAT formula
 `Prélèvement (...) = <factor> x Belpex H <sign> <base>` via `_DYNAMIC_FORMULA_RE`
 (`luminus.py:240-243`, matched at `luminus.py:324-328`). The sign character is
 matched from the shared `SIGN_CHARS` class and resolved with `parse_sign`
-(`_pdf.py:506-518`), so a card that flips to a Unicode minus does not silently
+(`_pdf.py:527-539`), so a card that flips to a Unicode minus does not silently
 break polarity.
 
 The PDF formula is `c€/kWh hors TVA = factor_pdf * Belpex_eur_mwh + base_cents`.
@@ -253,7 +253,7 @@ and pass (`test_luminus.py:87-92`).
 The VAT rate is read by `_vat_multiplier` (`luminus.py:250-255`), which wraps the
 shared `vat_multiplier` helper with two Luminus-specific patterns
 (`TVA sur les prix ... N %` and `TVA N %`) and the shared 1.06 default
-(`_pdf.py:392-419`).
+(`_pdf.py:411-438`).
 
 ## DSO overlay coverage
 
@@ -500,7 +500,7 @@ variable parse paths already covered by the fixtures above.
 
 | Symptom | First place to look | Why |
 | --- | --- | --- |
-| Every field misses / fetch fails | `fetch` + `fetch_pdf_text` (`luminus.py:168-183`, `_pdf.py:160-166`) | URL construction, slug/tabValue, PDF magic-byte validation |
+| Every field misses / fetch fails | `fetch` + `fetch_pdf_text` (`luminus.py:168-183`, `_pdf.py:179-185`) | URL construction, slug/tabValue, PDF magic-byte validation |
 | Energy rates wrong / missing | `_extract_energy` (`luminus.py:293-368`) | four-column vs three-column row, unit /100, TOU lookahead |
 | Dynamic factor/base off by ~1.06 or ~10 | dynamic branch (`luminus.py:323-338`) | VAT multiplier + mWh->kWh + c->EUR conversion |
 | Injection wrong or raising | `_extract_injection` (`luminus.py:383-425`) | applicable-vs-estimate `Tarif` capitalisation, VAT-exempt scaling |

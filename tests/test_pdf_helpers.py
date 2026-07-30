@@ -43,6 +43,7 @@ from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text_layout,
     fetch_pdf_text,
     fetch_text,
+    is_transient_fetch_error,
     parse_sign,
     parse_valid_until,
     text_mentions_month,
@@ -206,6 +207,46 @@ async def test_fetch_text_still_converts_aiohttp_client_errors() -> None:
     session = _FakeSession(aiohttp.ClientConnectionError("dns failed"))
     with pytest.raises(ExtractorError, match="network error"):
         await fetch_text(session, "https://example.com/")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "fetcher",
+    [
+        lambda s: fetch_text(s, "https://example.com/x"),
+        lambda s: fetch_pdf_text(s, "https://example.com/x"),
+    ],
+)
+async def test_blank_stringifying_exception_is_named_not_dropped(
+    fetcher: object,
+) -> None:
+    """aiohttp raises its timeouts argless, so ``str(err)`` is empty. Both
+    wrap sites must name the class instead of ending in a bare colon: this
+    message is shown to users on the snapshot_stale Repairs card, as the
+    current_price ``last_error`` attribute, and in diagnostics.
+
+    Asserted by exact equality, not a prefix match, so the tail cannot
+    silently regress to empty again.
+    """
+    session = _FakeSession(asyncio.TimeoutError())
+    with pytest.raises(ExtractorError) as excinfo:
+        await fetcher(session)  # type: ignore[operator]
+    assert str(excinfo.value) == (
+        "network error fetching https://example.com/x: TimeoutError"
+    )
+    # The "network error fetching" prefix is load-bearing: the coordinator and
+    # the live-check both key retry behaviour on it.
+    assert is_transient_fetch_error(str(excinfo.value))
+
+
+async def test_non_empty_exception_message_is_passed_through() -> None:
+    """The class name is a fallback only; a real message must survive
+    verbatim so a DNS or reset reason is not replaced by its type."""
+    session = _FakeSession(aiohttp.ClientConnectionError("dns failed"))
+    with pytest.raises(ExtractorError) as excinfo:
+        await fetch_text(session, "https://example.com/x")  # type: ignore[arg-type]
+    assert str(excinfo.value) == (
+        "network error fetching https://example.com/x: dns failed"
+    )
 
 
 # ---- vat_multiplier ----------------------------------------------------------

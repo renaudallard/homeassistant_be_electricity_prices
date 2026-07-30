@@ -112,7 +112,7 @@ long-term statistics.
    `unknown region` on miss (`engie.py:334`).
 3. Reject regions the contract has no document for (`engie.py:336`).
 4. Build the slug and query URL (`_document_url`, `engie.py:240`), download and
-   extract the PDF text with `fetch_pdf_text` (`_pdf.py:160`), and delegate to
+   extract the PDF text with `fetch_pdf_text` (`_pdf.py:179`), and delegate to
    `parse_snapshot` with a single-region text map (`engie.py:339`).
 
 ### `probe`: none
@@ -169,7 +169,7 @@ Fields pulled from the card:
 | Flanders DSOs | `_extract_flanders_dsos` (`engie.py:695`) | Digital-meter Fluvius table. |
 | Wallonia DSOs | `_extract_wallonia_dsos` (`engie.py:744`) | 9/10-number rows, ORES divergence guard. |
 | Brussels DSO | `_extract_brussels_dsos` (`engie.py:814`) | Sibelga row + Brugel OSP table. |
-| `valid_until` | `parse_valid_until` (`_pdf.py:773`) | Best-effort validity date. |
+| `valid_until` | `parse_valid_until` (`_pdf.py:794`) | Best-effort validity date. |
 
 ### The yearly-fee two-layout problem
 
@@ -214,7 +214,7 @@ visually-cheapest Flextime super-creuses column (`engie.py:509`, test
 
 Dynamic cards print `Formule de prix hors TVA <base> + (<factor> x eSpot_15)`.
 `_FORMULA_RE` (`engie.py:425`) accepts the full sign class `[SIGN_CHARS]` on both
-the base and the factor and routes each through `parse_sign` (`_pdf.py:511`) so a
+the base and the factor and routes each through `parse_sign` (`_pdf.py:532`) so a
 re-render that swaps a hyphen-minus for a Unicode minus or en-dash does not
 silently miss (`engie.py:419`). The formula is printed pre-VAT, so factor and
 base are scaled by the parsed VAT multiplier (`engie.py:461`). The conversion
@@ -324,7 +324,7 @@ the metering fee (`Activité de mesure`, column 5) and the Sibelga <=13kVA power
 term (column 6), into `data_management_per_year` (`engie.py:841`, test
 `test_dynamic_brussels_extracts_sibelga` `tests/test_engie.py:214`, illustrative
 `14.73 + 50.07`). It also parses the Brugel OSP annual-fee table via the shared
-`parse_brussels_osp` (`_pdf.py:532`) into `brussels_osp_by_tier`.
+`parse_brussels_osp` (`_pdf.py:553`) into `brussels_osp_by_tier`.
 
 ## Tax overlay
 

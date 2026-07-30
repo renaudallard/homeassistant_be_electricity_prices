@@ -83,6 +83,23 @@ def is_transient_fetch_error(message: str) -> bool:
     return False
 
 
+def error_text(err: BaseException) -> str:
+    """The exception's message, or its class name when it carries none.
+
+    aiohttp raises its timeouts argless, and ``str()`` of an argless
+    exception is ``""``. Interpolated into a message that ends in ``": "``
+    that produced a user-facing sentence trailing off after the colon, on
+    all three surfaces that show ``last_error``: the ``snapshot_stale``
+    Repairs card, the ``current_price`` sensor attribute, and diagnostics.
+    Naming the class is the smallest thing that stays informative -- the
+    caller's own prefix already says what was being attempted.
+
+    Also used by the ENTSO-E client, whose ``EntsoeError`` reaches the same
+    three surfaces through ``ENTSO-E: {err}``.
+    """
+    return str(err) or type(err).__name__
+
+
 # 64 MiB: ~12x the largest real tariff card (Bolt's ~5 MiB PDFs), so it
 # never trips on a legitimate card while bounding what a broken or
 # hostile CDN can pull into the coordinator's memory in one fetch.
@@ -131,8 +148,8 @@ async def _fetch_validated_pdf_bytes(
     a ClientError subclass, so a slow supplier endpoint would otherwise
     bubble a bare TimeoutError out of discover/fetch and crash the
     live-check. The ``network error fetching`` prefix is load-bearing -
-    :func:`is_transient_fetch_error` keys on it to decide whether to retry
-    - so keep it in this one place.
+    :func:`is_transient_fetch_error` keys on it to decide whether to retry -
+    so only this function and :func:`fetch_text` may write it.
     """
     try:
         async with session.get(
@@ -144,7 +161,9 @@ async def _fetch_validated_pdf_bytes(
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             payload = await _read_pdf_bytes(resp, url)
     except (aiohttp.ClientError, TimeoutError) as err:
-        raise ExtractorError(f"network error fetching {url}: {err}") from err
+        raise ExtractorError(
+            f"network error fetching {url}: {error_text(err)}"
+        ) from err
 
     if not _is_pdf_payload(payload):
         # Some CDNs return 200 + text/html for missing PDFs (a 404
@@ -455,7 +474,9 @@ async def fetch_text(
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             return await resp.text()
     except (aiohttp.ClientError, TimeoutError) as err:
-        raise ExtractorError(f"network error fetching {url}: {err}") from err
+        raise ExtractorError(
+            f"network error fetching {url}: {error_text(err)}"
+        ) from err
 
 
 _NUMERIC_SEPARATORS = (

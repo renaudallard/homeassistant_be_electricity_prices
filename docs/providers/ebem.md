@@ -95,9 +95,9 @@ If EBEM revives one, its PDF kind (e.g. `fix`) surfaces verbatim from
    filters `_PDF_RE` matches to the requested `pdf_kind`, sorts ascending by
    `(YYYY, MM)`, and returns the newest `(url, "YYYY-MM")`. It raises
    `ExtractorError` when no card of that kind is linked.
-3. `fetch_pdf_text_layout` (`_pdf.py:315`) downloads the PDF and extracts
+3. `fetch_pdf_text_layout` (`_pdf.py:334`) downloads the PDF and extracts
    layout-preserving text. This variant rejects CDNs that return HTTP 200 with
-   `text/html` for a missing PDF (`_pdf.py:318`).
+   `text/html` for a missing PDF (`_pdf.py:337`).
 4. `parse_snapshot` (`ebem.py:259`) does the parsing.
 
 Two of the three contracts (`ebem_variable`, `ebem_basic_plus`) share the same
@@ -106,7 +106,7 @@ block (`ebem.py:336`).
 
 ### `probe` (`ebem.py:195`)
 
-HEADs the listing page via `head_freshness_key` (`_pdf.py:328`) and returns its
+HEADs the listing page via `head_freshness_key` (`_pdf.py:347`) and returns its
 `Last-Modified` (preferred) or `ETag`. EBEM publishes a new monthly card by
 editing the listing page (the opaque media-hash URL changes for every month),
 so the listing's freshness header is the right key for *every* contract at once;
@@ -125,14 +125,14 @@ be billed at their own rates instead of the current-snapshot proxy.
    not published.
 4. Resolve the URL, set `label = "YYYY-MM"`, download + parse; return `None` on
    `ExtractorError`.
-5. Pass the result through `archive_validity_check` (`_pdf.py:734`).
+5. Pass the result through `archive_validity_check` (`_pdf.py:755`).
 
 `archive_validity_check` is called with `month_names=None`. When
 `snap.valid_until` parsed, it rejects the snapshot if that date does not fall in
 the requested month (a defence against a CDN-substituted current card
 mis-billing past consumption). When `valid_until` is `None` and `month_names` is
 `None` (the EBEM case), the textual fallback is skipped and the snapshot is
-accepted on the strength of the URL resolver alone (`_pdf.py:766`). This is why
+accepted on the strength of the URL resolver alone (`_pdf.py:787`). This is why
 `_extract_validity` failing silently degrades the safety check, not the fetch.
 
 `test_fetch_for_month_handles_underscore_separator` (`tests/test_ebem.py:354`)
@@ -192,7 +192,7 @@ EBEM cards print both ex-VAT and incl-VAT columns:
 
 - `_vat_multiplier` (`ebem.py:322`) reads the percentage from the card header
   (`INCL. BTW N%` or `BTW N%`) via the shared `vat_multiplier` helper
-  (`_pdf.py:392`), defaulting to 1.06.
+  (`_pdf.py:411`), defaulting to 1.06.
 - Dynamic energy factor / base are converted from the ex-VAT formula:
   `_formula_to_dynamic` (`ebem.py:330`) does `factor * vat * 10` and
   `base_cents * vat / 100`, identical to `cociter.py`'s dynamic conversion.
@@ -397,7 +397,7 @@ feed-in credit (`ebem.py:529`, `ebem.py:562`, `tests/test_ebem.py:194`).
   with capital `MWH` (`ebem.py:592`).
 - **Sign flexibility everywhere**: every formula and indicative regex accepts
   `SIGN_CHARS` (plus, hyphen, figure/en/em dash, U+2212) because supplier PDFs
-  flip silently between them on re-render (`_pdf.py:500`). A literal `+` in
+  flip silently between them on re-render (`_pdf.py:521`). A literal `+` in
   `_indicative_from_row` previously failed valid cards that printed a negative
   offset (`ebem.py:459`).
 - **Exclusive-night yearly fee**: both variable products surface a dedicated

@@ -80,7 +80,7 @@ need to gate it (`base.py:71`).
 `fetch_pdf_text_layout(session, _CARD_URL)` to download and layout-extract the PDF (the
 layout extractor keeps column alignment, important for the DSO table), then
 `parse_snapshot`. Validation is by `%PDF` magic bytes in the shared helper
-(`_pdf.py:109`), not Content-Type, so the JSON-style API URL and its blob redirect work.
+(`_pdf.py:126`), not Content-Type, so the JSON-style API URL and its blob redirect work.
 
 ### Probe and archive
 
@@ -120,7 +120,7 @@ the `SupplierSnapshot` from four sub-parsers plus the shared `parse_valid_until`
 | `injection` (`InjectionRates`) | `_extract_injection` | `providers/energiebe.py:231` |
 | `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/energiebe.py:249` |
 | `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/energiebe.py:274` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:773` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:794` |
 
 `_NUM = r"([\d]+(?:[.,][\d]+)?)"` accepts both decimal separators; a dot-decimal re-render
 must not truncate a mandatory value to its integer part.
@@ -270,7 +270,7 @@ that does not match is skipped (not fatal); the eight-sub-area test is the safet
 
 ## valid_until
 
-`parse_valid_until` (`_pdf.py:773`) is the shared best-effort validity parser. energie.be's
+`parse_valid_until` (`_pdf.py:794`) is the shared best-effort validity parser. energie.be's
 card carries no month name inside a validity-keyword window (the "juli 2026" sits in the
 page header, not after "geldig"), so `valid_until` resolves to `None`. That is the
 documented "treat as available" fallback and is correct for a dynamic contract, whose

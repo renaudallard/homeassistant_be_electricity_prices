@@ -107,10 +107,10 @@ The month suffix in `_document_url` is deliberately `dt_util.now()` (Brussels lo
 ### `probe` (freshness)
 
 `probe` (`bolt.py:169`) HEADs the listing page and returns the first present header, preferring
-`ETag` then `Last-Modified` via `head_freshness_key` (`_pdf.py:328`). Bolt is the reason
+`ETag` then `Last-Modified` via `head_freshness_key` (`_pdf.py:347`). Bolt is the reason
 `head_freshness_key` accepts a `prefer` order: its listing returns a stable `ETag` while
 `Last-Modified` flips on every CDN edge cache, so every other supplier prefers `Last-Modified` and
-Bolt inverts it (`_pdf.py:342`). The probe returns a single key for the whole listing (it ignores
+Bolt inverts it (`_pdf.py:361`). The probe returns a single key for the whole listing (it ignores
 `region`, and returns `None` for an unknown contract id). When the HEAD fails or carries neither
 header, `head_freshness_key` returns `None` and the coordinator's time-based TTL takes over.
 
@@ -135,7 +135,7 @@ monthly by `YYYYMM` like `bolt_fix`, but the slug gate still declines it. All of
 Because a `fix` card carries no parseable `valid_until`, `fetch_for_month` cannot trust the URL
 alone: the CDN could serve a current card under a historical URL and silently bill a past month at
 today's rates. So after parsing it runs `archive_validity_check` (`bolt.py:306`,
-`_pdf.py:734`) with `month_names=_FR_MONTH_NAMES`. Since `valid_until` is `None` for Bolt, that
+`_pdf.py:755`) with `month_names=_FR_MONTH_NAMES`. Since `valid_until` is `None` for Bolt, that
 check falls through to `text_mentions_month`, which requires the printed `<Month> <Year>` header (or
 `MM/YYYY` / `YYYY-MM`) to reference the requested month inside an anchored window; a mismatch
 returns `None` and the caller uses the proxy. `test_fetch_for_month_rejects_mismatched_month`
@@ -160,7 +160,7 @@ newline is expected, replacing them with `\n` so one set of regexes covers every
 | `taxes.energy_fund_eur_per_month` | `_extract_energy_fund` (`bolt.py:587`) | Flanders only, usually `-` (0) |
 | `taxes.{flanders,wallonia,brussels}_renewables` | `_extract_renewables` (`bolt.py:598`) | certificats verts + Flanders WKK; zeroed outside the active region |
 | `dsos` | `_extract_flanders_dsos` / `_extract_wallonia_dsos` / `_extract_brussels_dsos` | picked by region |
-| `valid_until` | `parse_valid_until` (`_pdf.py:773`) | always `None` in practice; Bolt prints no parseable validity date |
+| `valid_until` | `parse_valid_until` (`_pdf.py:794`) | always `None` in practice; Bolt prints no parseable validity date |
 
 The region argument slices the multi-region document: `parse_snapshot` zeroes the two non-active
 regional renewables columns (`bolt.py:331`) and calls exactly one of the three DSO parsers. The
@@ -304,7 +304,7 @@ The exclusive-night column (group 4) is wired into `distribution_exclusive_night
 night meter fall back to off-peak, correct only while the two columns happened to be equal. The
 Sibelga overlay also carries the Brussels Brugel OSP annual-fee table via `parse_brussels_osp`
 (`bolt.py:816`,
-`_pdf.py:532`); Bolt prints `Obligations de service publique` with a lowercase `s`, which the
+`_pdf.py:553`); Bolt prints `Obligations de service publique` with a lowercase `s`, which the
 case-insensitive helper handles. A missing Sibelga row returns an empty dict (permitted).
 `test_brussels_extracts_sibelga` (`tests/test_bolt.py:204`) checks distribution 0.0996, off-peak
 0.0753, exclusive-night 0.0753, transport 0.0227 (all illustrative).
@@ -323,8 +323,10 @@ case-insensitive helper handles. A missing Sibelga row returns an empty dict (pe
 - **U+2028 line separators.** Normalized to `\n` at the top of `parse_snapshot` (`bolt.py:316`);
   every downstream regex depends on that.
 - **5 MB PDFs, slow CDN.** 60 s timeout to survive a 2-3x slowdown (issue #13, `bolt.py:225`).
-  The CDN-slowness signature (empty error after `:` plus a missing per-supplier metrics row) is a
-  transient aiohttp `TimeoutError`, not a regression.
+  The CDN-slowness signature is a detail ending in `: TimeoutError` plus a missing per-supplier
+  metrics row: a transient aiohttp timeout, not a regression. (Before `error_text`
+  (`_pdf.py:86`) the same failure printed nothing after the colon, so an empty tail in an old
+  run log means the same thing.)
 - **First-of-month fixed fallback.** Missing current-month fix card falls back to the previous month
   with a warning; Brussels-local month math avoids the UTC seam (`bolt.py:231`).
 - **RESA/REW swap.** Compensating label inversion plus a self-disarming ERROR invariant; re-validate

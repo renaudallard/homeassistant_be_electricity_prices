@@ -47,6 +47,7 @@ from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped
 import aiohttp
 
 from .const import ENTSOE_BASE_URL, ENTSOE_BE_DOMAIN
+from .providers._pdf import error_text
 
 _NS = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
 
@@ -123,7 +124,7 @@ class EntsoeClient:
             # alternative, a slow ENTSO-E response would bubble a bare
             # TimeoutError through the wizard and the coordinator
             # categorisation paths.
-            raise EntsoeError(self._redact(str(err))) from err
+            raise EntsoeError(self._redact(error_text(err))) from err
 
         # ENTSO-E's A44 doc is small today (~100 KB hourly, larger if
         # the bidding zone moves to PT15M). Offload XML parsing to a

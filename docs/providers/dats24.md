@@ -135,12 +135,12 @@ fetch(session, contract_id, region)          dats24.py:202
 ```
 
 `fetch` downloads the PDF and runs it through `fetch_pdf_text_layout`
-(`_pdf.py:315`), the layout-preserving pdfplumber path. Layout mode is required
+(`_pdf.py:334`), the layout-preserving pdfplumber path. Layout mode is required
 because the card lays out DSO and tax data as multi-column tables; the plain text
 extractor would collapse the columns. `fetch_pdf_text_layout` also guards against
 CDNs that return HTTP 200 `text/html` for a missing PDF and rejects a
-pages-present-but-no-text document as a hard error (`_pdf.py:318-325`,
-`extract_pdf_text_layout` at `_pdf.py:225-232`).
+pages-present-but-no-text document as a hard error (`_pdf.py:337-344`,
+`extract_pdf_text_layout` at `_pdf.py:244-251`).
 
 ### Probe
 
@@ -184,10 +184,10 @@ so the payoff would be one month of more accurate YTD backfill.
 | `taxes` | `_extract_taxes` | `dats24.py:382-453` |
 | `injection` | `_extract_injection` | `dats24.py:459-502` |
 | `publication_label` | `_extract_publication` | `dats24.py:508-510` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:773` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:794` |
 | `supplier` / `contract` | literals | `dats24.py:236-237` |
 
-Every numeric value is parsed with `to_float` (`_pdf.py:486-497`), which strips
+Every numeric value is parsed with `to_float` (`_pdf.py:507-518`), which strips
 Unicode thousands separators and accepts both the Belgian comma decimal and a dot
 decimal. This dot tolerance is not cosmetic: the May 2026 card switched its
 separator from `,` to `.` (see Quirks).
@@ -380,7 +380,7 @@ Two hard invariants encoded in tests:
   `test_dats24.py:173-182`).
 - **Negative-safe sign parsing.** The indicative regex captures an optional leading
   sign, `Teruglevering2?\s*\(c€/kWh\)\s+([SIGN_CHARS]?)\s*(...)` (`dats24.py:487-489`),
-  and applies `parse_sign` (`_pdf.py:511`). When `BE_spotSPP` is low the monthly
+  and applies `parse_sign` (`_pdf.py:532`). When `BE_spotSPP` is low the monthly
   indicative goes negative (the producer pays to inject); an earlier version without
   the sign group silently dropped the credit (`dats24.py:484-486`,
   `test_injection_indicative_handles_negative_value` `test_dats24.py:185-203`, which
@@ -400,7 +400,7 @@ only prosumer charge, and it lives on the DSO overlay, not the supplier snapshot
 `TARIEFKAART\s+(\w+\s+20\d{2})` case-insensitive, lowercased. Illustrative:
 `april 2026` (`test_dats24.py:91`), `mei 2026` (`test_dats24.py:257`). Empty string
 on miss (non-fatal). `valid_until` is parsed separately by the shared
-`parse_valid_until` (`_pdf.py:773`), which catches the explicit `GELDIG VAN 1 APRIL
+`parse_valid_until` (`_pdf.py:794`), which catches the explicit `GELDIG VAN 1 APRIL
 2026 T.E.M 30 APRIL 2026` header (`test_dats24.py:92-94`, expects `date(2026, 4, 30)`).
 
 ## Quirks and historical bugs
@@ -481,6 +481,6 @@ pure parsers are the unit under test.
 | `DATS 24: Wallonia CV / connection fee not found` | `_extract_taxes` (`dats24.py:430-441`) | `Waals Gewest: CV` or the `Aansluitingsvergoeding Wallonië` footnote changed |
 | `could not parse DATS 24 federal tax block` | `_extract_taxes` (`dats24.py:399-404`) | `Energiebijdrage` or `Verbruik tussen 0 kWh en 3.000 kWh` moved |
 | `DATS 24 injection: monthly indicative missing` | `_extract_injection` (`dats24.py:487-494`) | the `Teruglevering2 (c€/kWh)` label changed, or the card went spot-formula |
-| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:508-510`), `parse_valid_until` (`_pdf.py:773`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
+| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:508-510`), `parse_valid_until` (`_pdf.py:794`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
 | Values off by 100x | the per-column `/100.0` divisions in the DSO/energy/tax parsers | a c€/kWh column became EUR/kWh (or a EUR/yr column got divided) |
-| `PDF layout parse error` / html-not-pdf | `_pdf.py:225-232`, `335-345` | the CDN returned HTML (file moved) or an undecodable PDF |
+| `PDF layout parse error` / html-not-pdf | `_pdf.py:244-251`, `335-345` | the CDN returned HTML (file moved) or an undecodable PDF |

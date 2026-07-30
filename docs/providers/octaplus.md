@@ -95,7 +95,7 @@ The `x_join_threshold=1.0` is load-bearing. OCTA+'s tax block renders each glyph
 as its own pdfplumber word with sub-point gaps (`"5 ,0 3 2 9 0 ,2 0 4 2"`); a
 1.0pt merge threshold reassembles them into `"5,0329 0,2042"` while keeping real
 inter-word spacing intact (`octaplus.py:185-188`,
-`extract_pdf_text_aligned` at `_pdf.py:249-299`, exercised by
+`extract_pdf_text_aligned` at `_pdf.py:268-318`, exercised by
 `test_federal_taxes_use_first_tier`). The aligned extractor also exists because
 pdfplumber's default text extractor returns OCTA+'s DSO block in column-major
 order (one number per line); bucketing words by y coordinate reassembles each
@@ -104,7 +104,7 @@ visual row into a single line like `AIEG 10,87 12,05 ...`
 
 ### `probe` (`octaplus.py:140-153`)
 
-The freshness key is `head_freshness_key(session, url)` (`_pdf.py:328-365`),
+The freshness key is `head_freshness_key(session, url)` (`_pdf.py:347-384`),
 which HEADs the per-(contract, region) PDF and returns its `Last-Modified` (or
 `ETag`) header. This works because OCTA+ overwrites cards in place under stable
 filenames, so the file's modification time is the correct freshness signal. The
@@ -143,7 +143,7 @@ unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 | `taxes.flanders_renewables` | `_extract_flanders_renewables` (`:537`) | Flanders only, green + cogen |
 | `taxes.wallonia_renewables` | `_extract_wallonia_renewables` (`:522`) | Wallonia only |
 | `dsos` | `_extract_flanders_dsos` (`:639`) or `_extract_wallonia_dsos` (`:578`) | region-branched |
-| `valid_until` | `parse_valid_until` (`_pdf.py:773`) | shared helper |
+| `valid_until` | `parse_valid_until` (`_pdf.py:794`) | shared helper |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` (`:245`) | PV forfait, annualised |
 
 ### Energy block (`_extract_energy`, `octaplus.py:321-389`)

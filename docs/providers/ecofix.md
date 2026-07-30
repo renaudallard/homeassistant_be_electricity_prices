@@ -81,7 +81,7 @@ Notes:
 1. Validates `contract_id` against `_CONTRACTS_BY_ID`, raising `ExtractorError` on
    an unknown id.
 2. Builds the URL with `_document_url` and downloads the PDF as
-   **layout-preserving text** via `fetch_pdf_text_layout` (`_pdf.py:315`). Layout
+   **layout-preserving text** via `fetch_pdf_text_layout` (`_pdf.py:334`). Layout
    mode is mandatory here: pdfplumber's row reconstruction keeps each DSO row on
    one line, whereas pypdf returns the Wallonia DSO block in column-major order
    that the row-anchored regexes cannot match (`ecofix.py:42`). `fetch_pdf_text_layout`
@@ -91,7 +91,7 @@ Notes:
 ### probe()
 
 `probe()` (`ecofix.py:154`) returns a freshness key via `head_freshness_key`
-(`_pdf.py:328`), which HEADs the per-contract PDF and returns its `Last-Modified`
+(`_pdf.py:347`), which HEADs the per-contract PDF and returns its `Last-Modified`
 (preferred) or `ETag`. Ecofix overwrites the card in place under a stable filename,
 so that header flips when a new month is published, and the coordinator re-runs
 `fetch()` only when the key changes. `head_freshness_key` returns `None` on any
@@ -168,10 +168,10 @@ Notable parsing hurdles:
   `base` (cents to EUR, /100), then applies the VAT multiplier read from the card
   banner (`ecofix.py:363`). Belgian residential VAT is currently 6% and the card
   prints "Prijzen inclusief X% BTW"; `vat_multiplier` reads X so a future VAT change
-  needs no code edit (`ecofix.py:364`, helper at `_pdf.py:392`).
+  needs no code edit (`ecofix.py:364`, helper at `_pdf.py:411`).
 - **Sign handling.** The `<sign>` between factor and base is matched against
   `SIGN_CHARS` and resolved with `parse_sign`, which treats every hyphen/dash/minus
-  variant as negative (`_pdf.py:507`). Supplier PDFs flip between these silently on
+  variant as negative (`_pdf.py:528`). Supplier PDFs flip between these silently on
   re-renders.
 - **DSO-name to canonical-key mapping.** Flanders labels map through
   `_FLANDERS_LABELS` (`ecofix.py:577`); note "Fluvius Kempen" maps to the
@@ -349,7 +349,7 @@ test in the source.
   consumption and injection (`ecofix.py:429`).
 - **VAT read from banner, not hardcoded.** `vat_multiplier` reads the `inclusief X%
   BTW` banner so a VAT change needs no code edit; the default is 1.06 if the banner
-  is absent (`ecofix.py:364`, `_pdf.py:392`).
+  is absent (`ecofix.py:364`, `_pdf.py:411`).
 - **Publication label scan skips a colliding version token.** The product name
   prints on the line above the month; `_extract_publication` scans the first 1000
   chars for a word+year token that is actually a Dutch month, so a future

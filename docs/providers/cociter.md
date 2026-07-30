@@ -112,7 +112,7 @@ proxy) in every soft-failure case:
 - `archive_validity_check` rejects the card as not covering the month
   (`cociter.py:169`).
 
-`archive_validity_check` (`_pdf.py:734-770`) is two-tier: if the parsed
+`archive_validity_check` (`_pdf.py:755-791`) is two-tier: if the parsed
 `valid_until` is present it must fall in the requested month; if it is missing
 it falls back to a textual month-name mention via `text_mentions_month`, using
 the French month names `_FR_MONTHS` (`cociter.py:85-94`). This guards against a
@@ -147,13 +147,13 @@ field to helper:
 | `taxes` | `_extract_taxes` | `cociter.py:466-512` |
 | `injection` | `_extract_injection` | `cociter.py:263-313` |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` | `cociter.py:240-260` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:773` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:794` |
 
-Shared numeric helpers: `to_float` (`_pdf.py:486-497`) parses Belgian decimals
+Shared numeric helpers: `to_float` (`_pdf.py:507-518`) parses Belgian decimals
 (`15,93`) and strips every Unicode space variant used as a thousands separator;
-`parse_sign` (`_pdf.py:511-518`) turns any hyphen/dash/Unicode-minus into
-`-1.0`; `SIGN_CHARS` (`_pdf.py:507`) is the character class of accepted sign
-glyphs. `fetch_pdf_text` (`_pdf.py:160-167`) downloads the PDF and extracts
+`parse_sign` (`_pdf.py:532-539`) turns any hyphen/dash/Unicode-minus into
+`-1.0`; `SIGN_CHARS` (`_pdf.py:528`) is the character class of accepted sign
+glyphs. `fetch_pdf_text` (`_pdf.py:179-186`) downloads the PDF and extracts
 text with pypdf off the event loop.
 
 ### Energy: `_extract_energy`
@@ -403,14 +403,14 @@ comment:
   `base.py:139-148`). YTD statistics still aggregate to hourly.
 - **Split-glyph spellings.** pypdf can split "HOURLY" into `HOURL Y` and emit
   several apostrophe/quote/dash glyphs; the regexes tolerate all of these
-  (`cociter.py:288-294`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:507`).
+  (`cociter.py:288-294`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:528`).
 - **Injection has no indicative fallback.** `current=None` always; the credit
   is spot-only, gated on `spot_indexed_injection` (`cociter.py:546-548`).
   Losing the gate zeros or drifts the solar credit.
 - **Archive validity cross-check.** `fetch_for_month` runs
   `archive_validity_check` with the French month names so a CDN-substituted
   current card served under an archived URL is rejected rather than mis-billed
-  (`cociter.py:169`, `_pdf.py:734-770`).
+  (`cociter.py:169`, `_pdf.py:755-791`).
 - **DSO map / const lockstep assertion.** `_DSO_KEY` must equal
   `WALLONIA_DSO_KEYS` or import fails (`cociter.py:110-112`).
 
@@ -454,7 +454,7 @@ Ordered by likelihood of breaking when Cociter re-renders its cards:
 7. **PV forfait footnote rewording** -> `_extract_supplier_prosumer`
    (`cociter.py:240-260`): the `EUR/kVA/an TVAC` anchor.
 8. **Validity-header format change** -> shared `parse_valid_until`
-   (`_pdf.py:773`) and the `_FR_MONTHS` fallback used by
+   (`_pdf.py:794`) and the `_FR_MONTHS` fallback used by
    `archive_validity_check`.
 
 When a card changes, capture the new PDF into `tests/fixtures/` and update the

@@ -98,13 +98,13 @@ hot path: the `/latest/` segment guarantees the URL always points at the current
 month (`totalenergies.py:26-36`). `fetch_pdf_text_layout` treats an HTTP 200 that
 returns `text/html` (a disguised 404) as a fetch failure, so a product that is
 not actually published in a region raises rather than parsing an HTML error page
-(`_pdf.py:318-325`).
+(`_pdf.py:337-344`).
 
 ### Probe (freshness key)
 
 `probe` (`totalenergies.py:193`) issues a HEAD against the same per (contract,
 region) URL and returns `head_freshness_key`'s first present header
-(`Last-Modified`, then `ETag`; `_pdf.py:328`). Because TotalEnergies overwrites
+(`Last-Modified`, then `ETag`; `_pdf.py:347`). Because TotalEnergies overwrites
 each card in place under `/latest/`, `Last-Modified` is the correct freshness
 signal, and the coordinator only re-runs `fetch` when it changes. `probe` returns
 `None` for an unknown contract, an unknown region, or a region the contract does
@@ -151,7 +151,7 @@ Fields pulled and their helpers:
 | DSO overlay (Flanders) | `_extract_flanders_dsos` | `totalenergies.py:678` |
 | DSO overlay (Wallonia) | `_extract_wallonia_dsos` | `totalenergies.py:722` |
 | DSO overlay (Brussels) | `_extract_brussels_dsos` | `totalenergies.py:766` |
-| Validity date | `parse_valid_until` (shared) | `_pdf.py:773` |
+| Validity date | `parse_valid_until` (shared) | `_pdf.py:794` |
 
 Notable parsing hurdles:
 
@@ -174,7 +174,7 @@ Notable parsing hurdles:
   handles both (`totalenergies.py:331`).
 - **Sign character variance.** Formula signs are parsed with `parse_sign` over the
   shared `SIGN_CHARS` class, which covers ASCII `+`/`-` plus several Unicode dashes
-  that TotalEnergies flips between on re-renders (`_pdf.py:500-518`).
+  that TotalEnergies flips between on re-renders (`_pdf.py:521-539`).
 - **DSO name to canonical key mapping.** Card labels are mapped to `DSO_*`
   constants via `_FLANDERS_LABELS` (`totalenergies.py:675`) and `_WALLONIA_LABELS`
   (`totalenergies.py:713`). Note the non-obvious ones: `Fluvius Kempen` maps to
@@ -202,7 +202,7 @@ EUR/MWh) into a VAT-incl EUR/kWh formula against a EUR/kWh spot. The derivation
 is in the source (`totalenergies.py:377-385`): factor gains `vat * 10`, base gains
 `vat / 100`. The VAT multiplier is read from the card header pattern `TVA\s*(\d+)\s*%`
 via `_vat_multiplier` (`totalenergies.py:365`), defaulting to 1.06 when absent
-(`_pdf.py:392-419`). The illustrative test pins Wallonia myDynamic
+(`_pdf.py:411-438`). The illustrative test pins Wallonia myDynamic
 `0.1034 * BELPEXH + 1.75` (HTVA, 6% VAT) to `factor == 1.09604`, `base == 0.01855`
 (`tests/test_totalenergies.py:58-69`); Brussels resolves the same factor with
 `base == 0.04081` from the split layout (`tests/test_totalenergies.py:72-87`).
@@ -234,7 +234,7 @@ Region specifics:
   `<=13kVA` "Terme de puissance mise a disposition" power term are folded together
   into `data_management_per_year` (`totalenergies.py:787-805`). The OSP annual fee
   table is parsed by the shared `parse_brussels_osp` into `brussels_osp_by_tier`
-  (`_pdf.py:532`). The test pins `data_management_per_year == 14.73 + 50.07`
+  (`_pdf.py:553`). The test pins `data_management_per_year == 14.73 + 50.07`
   (illustrative, `tests/test_totalenergies.py:218-235`).
 
 ### Tax overlay
@@ -388,7 +388,7 @@ Ordered by how likely a card change is to break them:
    new DSO name, a renamed sub-area, or a changed column order needs the label map
    and the fixed group indices updated together.
 8. **Publication label + validity**: `_extract_publication_month`
-   (`totalenergies.py:468`) and the shared `parse_valid_until` (`_pdf.py:773`) drive
+   (`totalenergies.py:468`) and the shared `parse_valid_until` (`_pdf.py:794`) drive
    the `publication_label` and `valid_until` diagnostics.
 9. **Discovery (CI)**: `discover` (`totalenergies.py:214`). If the listing markup or
    the `tariff-card/latest/<SLUG>_ELECTRICITY_<REGION>_FR` link format changes,

@@ -145,7 +145,7 @@ After parsing, the result is passed through `archive_validity_check(snap, text,
 year_month, month_names=_NL_MONTHS)` (`providers/frank.py:240`). Because Frank cards carry
 a parseable `valid_until` (see below), that check authoritatively rejects any snapshot
 whose validity does not fall in the requested month, guarding against a CDN substituting
-the wrong card (`_pdf.py:760`). Because `month_names` is supplied, a snapshot with no
+the wrong card (`_pdf.py:781`). Because `month_names` is supplied, a snapshot with no
 `valid_until` still gets the textual month cross-check. Any `ExtractorError` during
 resolution or parsing is swallowed and `fetch_for_month` returns `None`
 (`providers/frank.py:238`), letting the coordinator fall back to the current snapshot as a
@@ -163,7 +163,7 @@ sub-parsers. All five run against the layout-preserving text from
 | `injection` (`InjectionRates`) | `_extract_injection` | `providers/frank.py:382` |
 | `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/frank.py:419` |
 | `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/frank.py:447` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:773` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:794` |
 
 ### Number format
 
@@ -326,7 +326,7 @@ nacht 4,81 ct/kWh, capacity 52,37 EUR/kW/yr, databeheer 18,92 EUR/yr).
 
 ## valid_until
 
-`parse_valid_until` (`_pdf.py:773`) is the shared best-effort validity parser; Frank cards
+`parse_valid_until` (`_pdf.py:794`) is the shared best-effort validity parser; Frank cards
 resolve to the last day of the pricing month. `test_valid_until_is_end_of_april`
 (`tests/test_frank.py:265`) pins the April fixture to a date in month 4, year 2026. This
 parsed date is what makes `archive_validity_check` authoritative in `fetch_for_month`.

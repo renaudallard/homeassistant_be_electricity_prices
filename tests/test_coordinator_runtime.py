@@ -1235,7 +1235,7 @@ async def test_transient_failure_defers_extractor_issue_until_threshold(
 
     async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
         if fail:
-            raise ExtractorError("network error fetching https://x.pdf: ")
+            raise ExtractorError("network error fetching https://x.pdf: TimeoutError")
         return _fake_snapshot()
 
     extractor = make_stub_extractor(fetch=_fake_fetch)

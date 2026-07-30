@@ -98,7 +98,7 @@ every region the contract is sold in (`eneco.py:149`).
 fetch(session, contract_id, region)
   |-> _fetch_listing            GET the tariefkaarten HTML  (eneco.py:248-249)
   |-> _resolve_url              regex the live PDF URL      (eneco.py:252-274)
-  |-> fetch_pdf_text            download + pypdf text       (_pdf.py:160-167)
+  |-> fetch_pdf_text            download + pypdf text       (_pdf.py:179-186)
   '-> parse_snapshot            build the SupplierSnapshot  (eneco.py:277-291)
 ```
 
@@ -142,7 +142,7 @@ candidate:
    (`eneco.py:196-199`).
 3. `parse_snapshot` parses; an `ExtractorError` skips the volume
    (`eneco.py:200-203`).
-4. `archive_validity_check` (`_pdf.py:734-770`) confirms the snapshot actually
+4. `archive_validity_check` (`_pdf.py:755-791`) confirms the snapshot actually
    covers `year_month`, passing `month_names=_NL_MONTHS` (`eneco.py:204`). This
    guards against the CDN silently substituting the current card at a historical
    URL: when `valid_until` parses, it must fall in the requested month; when it is
@@ -176,7 +176,7 @@ SupplierSnapshot(
     taxes=_extract_taxes(text),                      # eneco.py:503-560
     source_url=source_url,
     publication_label=_extract_publication_month(text),  # eneco.py:294-296
-    valid_until=parse_valid_until(text),             # _pdf.py:773
+    valid_until=parse_valid_until(text),             # _pdf.py:794
     injection=_extract_injection(text, contract_id), # eneco.py:563-638
 )
 ```
@@ -200,14 +200,14 @@ mis-parsed. `test_num_parses_thousands_grouped_and_four_digit_values`
 (`tests/test_eneco.py:194-207`) locks both the NBSP-grouped and ungrouped
 four-digit round-trips. `_WS` (`eneco.py:143`) matches ASCII whitespace or NBSP
 and is used to span line wraps in the tax block. All numeric values are parsed via
-`to_float` (`_pdf.py:486-497`), which strips every Unicode space variant before
+`to_float` (`_pdf.py:507-518`), which strips every Unicode space variant before
 swapping comma for dot.
 
 ### Publication label and validity
 
 `_extract_publication_month` (`eneco.py:294-296`) captures `Tariefkaart <month>
 <year>` (for example `mei 2026`). `valid_until` comes from the shared
-`parse_valid_until` (`_pdf.py:773`), which reads the "Geldig van ... t.e.m. ..."
+`parse_valid_until` (`_pdf.py:794`), which reads the "Geldig van ... t.e.m. ..."
 line. `test_extracts_valid_until_from_geldig_line` (`tests/test_eneco.py:231-243`)
 pins April 30 2026 on all three fixtures so the `tomorrow_prices_available` binary
 sensor flips off at month end.
@@ -236,7 +236,7 @@ the earlier rigid four-newline skip and took Power Flex offline.
 `test_flex_yearly_fee_survives_extra_header_line` (`tests/test_eneco.py:182-191`)
 injects an extra header line to guard the anchor. The current rate is the first of
 four numbers before `Maandprijs`; the formula string accepts any sign character
-between the Belpex factor and the base (`SIGN_CHARS`, `_pdf.py:507`) so a polarity
+between the Belpex factor and the base (`SIGN_CHARS`, `_pdf.py:528`) so a polarity
 flip does not drop the display string. Illustrative:
 `current = 0.1390`, `yearly_fixed_fee = 65.0`
 (`test_flex_extracts_current_monthly_rate`, `tests/test_eneco.py:174-179`).
@@ -405,7 +405,7 @@ Injection taxonomy (the three-shape rule, `base.py:254-234`):
   `0,1 X BELPEX-H -1,188` yields `factor = 1.0`, `base = -0.01188`, and (no
   `Maandprijs`) `current = 0.0592` from the yearly estimate. The negative base is a
   real Belgian outcome (the producer can pay to inject at low spot), preserved via
-  `parse_sign` (`_pdf.py:511-518`).
+  `parse_sign` (`_pdf.py:532-539`).
 
 No Eneco contract is the spot-indexed-variable shape (Cociter Variable), so
 `spot_indexed_injection` is `False` everywhere.
@@ -450,7 +450,7 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
 - **Archive substitution guard**: `archive_validity_check` rejects a snapshot whose
   `valid_until` does not fall in the requested month, so a CDN that overwrites a
   historical URL with the current card cannot mis-bill past consumption
-  (`_pdf.py:734-770`, `tests/test_eneco.py:329-347`).
+  (`_pdf.py:755-791`, `tests/test_eneco.py:329-347`).
 - **Sign flexibility**: every Belpex formula match (consumption and injection)
   accepts the full `SIGN_CHARS` class so a card that flips to a Unicode minus does
   not silently drop the formula or the base (`eneco.py:347-359`, `380-383`,
