@@ -395,7 +395,7 @@ step on the injection regime (`providers/base.py:71-77`). At runtime,
 `_injection_needs_spot` detects it (`coordinator.py:2524-2546`):
 
 ```python
-def _injection_needs_spot(snapshot, entry) -> bool:   # coordinator.py:1890
+def _injection_needs_spot(snapshot, entry) -> bool:   # coordinator.py:2524
     if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
         return False
     inj = snapshot.injection
@@ -410,7 +410,7 @@ def _injection_needs_spot(snapshot, entry) -> bool:   # coordinator.py:1890
 
 The coordinator uses this to fetch spots for a static-energy card too (soft fetch:
 falls back to cached curve, then to no injection price) so the credit does not go
-unavailable (`coordinator.py:1141-1154`, `coordinator.py:1033`). This is the
+unavailable (`coordinator.py:1141-1154`, `coordinator.py:1230`). This is the
 spot-indexed injection invariant: shape (c) must be gated on `_injection_needs_spot`
 in the live, backfill and compare paths, or the credit drifts.
 
@@ -431,7 +431,7 @@ data (`coordinator.py:2649-2672`). Priority:
 3. **Monthly indicative** `inj.current` otherwise, including static-energy cards
    whose injection carries a monthly index but also a printed `current` (Ecofix
    Flexy, EBEM Groen Variabel / B@sic+) (`coordinator.py:2596-2604`,
-   `coordinator.py:1730-1758`).
+   `coordinator.py:2612-2617`).
 
 This scalar is resolved once per coordinator tick, so it is not what the
 `injection_price` sensor publishes when the injection varies intra-day. There the
@@ -453,7 +453,7 @@ energy is `TimeOfUseRates` and `inj.peak` is set (Engie Empower Flextime publish
 a peak/transition/super-off-peak feed-in triplet, monthly-realized)
 (`coordinator.py:2549-2568`, fields at `providers/base.py:304-306`). It reuses the
 energy contract's own `weekend_rule` via `tou_slot` so injection and consumption
-agree on the slot for a given hour (`coordinator.py:2253`). Returns `None`
+agree on the slot for a given hour (`coordinator.py:2563`). Returns `None`
 otherwise so the caller falls back to the current / factor+base path.
 
 ### Historical injection: `_historical_injection_rate`
@@ -474,8 +474,8 @@ EnergyVision 3 jaar vast / 1 an fixe) must
 emit only the realized monthly `current`, never an hourly `factor*spot+base`,
 because the indicative is the actual credit. The guard that keeps shape (b)/(c)
 from swallowing these cards is the `inj.current is None` clause in both
-`_injection_needs_spot` (`coordinator.py:1908`) and `_compute_injection_price`
-(`coordinator.py:1972`): when a card prints a monthly `current`, the spot branch
+`_injection_needs_spot` (`coordinator.py:2542`) and `_compute_injection_price`
+(`coordinator.py:2612`): when a card prints a monthly `current`, the spot branch
 is skipped and the realized rate is used, keeping the live sensor consistent with
 the YTD credit for the same hour (`coordinator.py:2596-2604`). A latent mis-price
 here is masked whenever the indicative prints, which is why it was fixed
@@ -492,7 +492,7 @@ context):
   from `_historical_injection_rate` (`coordinator.py:3522-3540`).
 
 Shape (c) has a dedicated YTD helper `_ytd_spot_injection_credit`
-(`coordinator.py:2767`) that credits a static-energy contract whose injection is a
+(`coordinator.py:3550`) that credits a static-energy contract whose injection is a
 pure BELPEX formula with no fixed credit; it is a no-op unless the injection is
 exactly that shape and an injection sensor is wired, and it skips hours with no
 cached spot (`coordinator.py:3572-3590`).
@@ -603,10 +603,10 @@ overlay, gated the same Walloon-only way (`coordinator.py:3235-3271`).
 
 The Brussels Brugel OSP (Obligations de Service Public) fee is a flat annual
 Sibelga charge scaled by contractual connection power
-(`_brussels_osp_fee`, `coordinator.py:2076-2079`):
+(`_brussels_osp_fee`, `coordinator.py:2332-2341`):
 
 ```python
-def _brussels_osp_fee(overlay, entry) -> float:      # coordinator.py:2076
+def _brussels_osp_fee(overlay, entry) -> float:      # coordinator.py:2332
     if overlay is None or overlay.brussels_osp_by_tier is None:
         return 0.0
     tier = entry.data.get(CONF_CONNECTION_KVA_TIER, DEFAULT_CONNECTION_KVA_TIER)
@@ -619,4 +619,4 @@ config flow; the four residential tiers are `le1_44`, `le6`, `le9_6`, `le13`
 (residential connections are <=13 kVA), default `le6`
 (`const.py:180-195`). Returns `0.0` outside Brussels or when the card omits the
 OSP table. The fee is added to the Brussels annual cost in `_annual_static_fees`
-(`coordinator.py:2105`), not to the per-kWh all-in.
+(`coordinator.py:2361`), not to the per-kWh all-in.

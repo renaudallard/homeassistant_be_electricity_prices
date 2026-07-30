@@ -87,7 +87,7 @@ post-2024 injection tariff yields a per-kWh injection credit sensor.
 `unique_id suffix` is the description `key`; the full unique id is
 `{entry_id}_{key}`. `device_class` is blank where none is set. Unit is
 `EUR/kWh` unless noted. "Reads" is the `CoordinatorData` field the `value_fn`
-pulls (all fields defined at `coordinator.py:472`).
+pulls (all fields defined at `coordinator.py:729`).
 
 | Name | key / suffix | device_class | state_class | unit | Reads (`CoordinatorData` field) |
 | --- | --- | --- | --- | --- | --- |
