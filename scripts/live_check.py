@@ -185,7 +185,14 @@ _CURRENT_SUPPLIER: ContextVar[str | None] = ContextVar(
 
 def _metrics_bucket(supplier: str) -> dict[str, float]:
     return METRICS.setdefault(
-        supplier, {"fetches": 0.0, "elapsed_s": 0.0, "bytes": 0.0}
+        supplier,
+        {
+            "fetches": 0.0,
+            "elapsed_s": 0.0,
+            "bytes": 0.0,
+            "failed": 0.0,
+            "failed_s": 0.0,
+        },
     )
 
 
@@ -208,11 +215,14 @@ async def _on_request_end(
     bucket = _metrics_bucket(supplier)
     bucket["fetches"] += 1.0
     bucket["elapsed_s"] += time.monotonic() - getattr(ctx, "start", time.monotonic())
-    # Bytes are accumulated per-chunk in `_on_response_chunk_received`
-    # because aiohttp's `response.content_length` is just the
-    # ``Content-Length`` header verbatim and is None on
-    # ``Transfer-Encoding: chunked`` responses (verified against
-    # aiohttp.helpers.HeadersMixin.content_length).
+    # Two things this hook does NOT cover, both counted elsewhere:
+    #  - Body bytes. `response.content_length` is just the ``Content-Length``
+    #    header verbatim and is None on ``Transfer-Encoding: chunked``
+    #    (aiohttp.helpers.HeadersMixin.content_length), so bytes are summed
+    #    in `_on_response_chunk_received` instead. Note this hook fires
+    #    BEFORE the body is read, so `elapsed_s` is time-to-headers only.
+    #  - Failed requests. aiohttp fires `on_request_exception` for those, so
+    #    they never reach here: see `_on_request_exception`.
 
 
 async def _on_response_chunk_received(
@@ -222,12 +232,16 @@ async def _on_response_chunk_received(
 ) -> None:
     """Accumulate actual response body bytes per supplier.
 
-    `on_response_chunk_received` fires once per chunk of body data
-    aiohttp delivers to the application, regardless of whether the
-    server set Content-Length or used Transfer-Encoding: chunked.
-    Summing `len(chunk)` here gives an honest byte total even for
-    chunked responses, which the previous Content-Length-only path
-    silently counted as zero.
+    `on_response_chunk_received` fires regardless of whether the server set
+    Content-Length or used Transfer-Encoding: chunked, so summing
+    `len(chunk)` gives an honest byte total even for chunked responses,
+    which the previous Content-Length-only path silently counted as zero.
+
+    It is not one call per network chunk: `ClientResponse.read()` buffers
+    the whole body and then fires this hook ONCE with all of it. So a
+    transfer that stalls halfway records zero bytes, not a partial count --
+    which is why an all-or-nothing byte total plus a counted fetch means
+    "headers arrived, body never finished".
     """
     supplier = _CURRENT_SUPPLIER.get()
     if supplier is None:
@@ -235,11 +249,48 @@ async def _on_response_chunk_received(
     _metrics_bucket(supplier)["bytes"] += float(len(params.chunk))
 
 
+async def _on_request_exception(
+    _session: aiohttp.ClientSession,
+    ctx: SimpleNamespace,
+    params: aiohttp.TraceRequestExceptionParams,
+) -> None:
+    """Count a request that never produced a response.
+
+    Without this hook a failed request is invisible in the metrics table: it
+    fires neither `on_request_end` nor `on_response_chunk_received`, so it
+    contributes 0 fetches, 0 s and 0 bytes, and a supplier whose every
+    attempt died read as though it had barely been tried. Failures are kept
+    in their OWN counters rather than folded into `fetches` / `elapsed_s`,
+    because the drift budgets in `_LATENCY_BUDGET_OVERRIDES` are calibrated
+    against successful-fetch latency and must not start tripping on time
+    burnt by an unreachable endpoint.
+
+    ``params.url`` is the url of the hop that actually failed, which the
+    wrapped ExtractorError cannot tell us: the providers pass the original
+    url to the fetch helper, so a supplier fetched through a redirect (for
+    example energie.be's document API, which 302s to an Azure blob) reports
+    only that first url no matter which hop timed out.
+    """
+    supplier = _CURRENT_SUPPLIER.get()
+    if supplier is None:
+        return
+    elapsed = time.monotonic() - getattr(ctx, "start", time.monotonic())
+    bucket = _metrics_bucket(supplier)
+    bucket["failed"] += 1.0
+    bucket["failed_s"] += elapsed
+    print(
+        f"warning: {supplier}: request failed after {elapsed:.2f}s: "
+        f"{type(params.exception).__name__} on {params.url}",
+        file=sys.stderr,
+    )
+
+
 def _trace_config() -> aiohttp.TraceConfig:
     tc = aiohttp.TraceConfig()
     tc.on_request_start.append(_on_request_start)
     tc.on_request_end.append(_on_request_end)
     tc.on_response_chunk_received.append(_on_response_chunk_received)
+    tc.on_request_exception.append(_on_request_exception)
     return tc
 
 
@@ -1402,13 +1453,22 @@ def _render_metrics(metrics: dict[str, dict[str, float]]) -> str:
     if not metrics:
         return ""
     rows = ["", "## Per-supplier latency / size", ""]
-    rows.append("| Supplier | Fetches | Fetch time (s) | Bytes received |")
-    rows.append("| --- | ---: | ---: | ---: |")
+    rows.append(
+        "| Supplier | Fetches | Fetch time (s) | Bytes received | Failed (n / s) |"
+    )
+    rows.append("| --- | ---: | ---: | ---: | ---: |")
     for supplier, m in sorted(metrics.items()):
         bytes_str = f"{int(m['bytes']):,}" if m["bytes"] else "-"
+        # Failed attempts are counted separately from Fetches: a request that
+        # raised produced no response, so folding it into the success columns
+        # would corrupt the latency the drift budgets are calibrated on. A
+        # supplier with fetches but no bytes and no failures got its headers
+        # and then stalled mid-body.
+        failed = m.get("failed", 0.0)
+        failed_str = f"{int(failed)} / {m.get('failed_s', 0.0):.2f}" if failed else "-"
         rows.append(
             f"| `{supplier}` | {int(m['fetches'])} | "
-            f"{m['elapsed_s']:.2f} | {bytes_str} |"
+            f"{m['elapsed_s']:.2f} | {bytes_str} | {failed_str} |"
         )
     return "\n".join(rows) + "\n"
 

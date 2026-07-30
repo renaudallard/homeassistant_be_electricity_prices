@@ -169,7 +169,7 @@ loaded `base` module.
 main()                       scripts/live_check.py:1486  asyncio.run(_run()); rc=8 on harness crash
   _run()                     scripts/live_check.py:1292  load providers, gather checks, render, exit code
     _load_providers()        scripts/live_check.py:62    file-path import of every provider (no HA)
-    _attributed_check(...)   scripts/live_check.py:265   per-supplier wait_for + trace attribution
+    _attributed_check(...)   scripts/live_check.py:317   per-supplier wait_for + trace attribution
       _check_eneco ...       scripts/live_check.py:345   one _check_<supplier> per registered extractor
       _check_frank                                       (cociter, dats24, ebem, ecofix, ecopower,
       _check_bolt                                         engie, luminus, mega, totalenergies,
@@ -178,7 +178,7 @@ main()                       scripts/live_check.py:1486  asyncio.run(_run()); rc
     _check_catalogs(...)     scripts/live_check.py:997   run each discover(), flag new product ids
     _fetch_with_retry(...)   scripts/live_check.py:306   transient-only retry with backoff
     _validate_snapshot(...)  scripts/live_check.py:1148  energy + injection shape gates
-    _drift_warnings(...)     scripts/live_check.py:1451  latency / byte budget checks
+    _drift_warnings(...)     scripts/live_check.py:1683  latency / byte budget checks
     _render_report(...)      scripts/live_check.py:1263  markdown pass/fail report
 ```
 
@@ -209,23 +209,40 @@ positive, and then calls `_validate_snapshot`.
 
 ### Per-supplier byte and wallclock budgets, and drift issues
 
-An aiohttp `TraceConfig` (`scripts/live_check.py:232`) tags every request with the supplier
+An aiohttp `TraceConfig` (`scripts/live_check.py:282`) tags every request with the supplier
 currently being checked (via a `ContextVar` set by the `_attributed()` context manager,
-`scripts/live_check.py:240`) and accumulates per-supplier fetch count, summed request duration,
-and body bytes into `METRICS`. Bytes are summed per received chunk in
-`_on_response_chunk_received` (`scripts/live_check.py:212`) rather than read from `Content-Length`,
-because that header is None on chunked responses and would silently count as zero. These metrics
+`scripts/live_check.py:292`) and accumulates per-supplier fetch count, summed request duration,
+body bytes, and failed-attempt count / duration into `METRICS`. These metrics
 surface silent slowdowns and PDF-size jumps, both leading indicators that a supplier reworked its
 publication, and are appended to the daily report by `_render_metrics`
-(`scripts/live_check.py:1240`).
+(`scripts/live_check.py:1438`).
+
+Reading a row correctly needs three facts about which hook feeds which column:
+
+- **Fetches / Fetch time** come from `on_request_end`, which fires once per request that reached
+  its final response headers, after the redirect chain and **before** the body is read. So the
+  latency figure is time-to-headers, and a 302-to-CDN fetch counts as one.
+- **Bytes received** are summed in `_on_response_chunk_received` (`scripts/live_check.py:222`)
+  rather than read from `Content-Length`, because that header is None on chunked responses and
+  would silently count as zero. `ClientResponse.read()` fires that hook once with the whole body,
+  so the count is all-or-nothing: a fetch with a counted request but `-` bytes got its headers and
+  then stalled mid-body.
+- **Failed (n / s)** comes from `_on_request_exception` (`scripts/live_check.py:246`), which is the
+  only hook a request that never produced a response fires. Failures are kept out of the success
+  columns deliberately, so the latency budgets below stay calibrated on successful fetches; before
+  this counter existed a supplier whose every attempt timed out reported 0 fetches and 0 s and read
+  as though it had barely been tried. The hook also prints a `warning:` line naming the exception
+  and the url of the hop that actually failed -- which the wrapped `ExtractorError` cannot, since
+  providers pass the original url to the fetch helper and a redirected fetch therefore reports only
+  that first url whichever hop died.
 
 Two safety caps bound runtime. Each supplier check runs under
 `asyncio.wait_for(..., timeout=_SUPPLIER_HARD_TIMEOUT_S)` with a 240s hard cap
-(`scripts/live_check.py:262`), recorded as an extractor failure rather than propagating so one hung
+(`scripts/live_check.py:317`), recorded as an extractor failure rather than propagating so one hung
 supplier cannot starve the `gather()`. The session-level `aiohttp.ClientTimeout(total=60)`
-(`scripts/live_check.py:1323`) bounds individual requests.
+(`scripts/live_check.py:1539`) bounds individual requests.
 
-`_drift_warnings` (`scripts/live_check.py:1451`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:1683`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1390`), with per-supplier overrides in
 `_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1408`) and `_LATENCY_BUDGET_OVERRIDES`
