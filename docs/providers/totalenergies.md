@@ -223,7 +223,7 @@ Region specifics:
 
 - **Flanders** distribution already includes transport, so `transport=0.0` and the
   c€/kWh lands in `distribution_single` (same convention as Engie/Luminus/Mega
-  Flanders, `totalenergies.py:706-687`, `tests/test_totalenergies.py:257-270`).
+  Flanders, `totalenergies.py:678-710`, `tests/test_totalenergies.py:257-270`).
   The Flanders row's 9th column is surfaced into `prosumer_eur_per_kva_year`
   (`totalenergies.py:702`); capacity is a Flanders only field.
 - **Wallonia** rows carry 12 numbers; the extractor surfaces mono/jour/nuit/excl,

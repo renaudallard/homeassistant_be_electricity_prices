@@ -250,7 +250,7 @@ Three energy paths, chosen by contract shape:
 
 ### 7.1 Day/night register vs single-total reconstruction
 
-`_resolve_daily_kwh` resolves the consumption and injection sides independently from one of three wirings (`const.py:197-193`):
+`_resolve_daily_kwh` resolves the consumption and injection sides independently from one of three wirings (`const.py:197-216`):
 
 - **Day + night register pair** (`CONF_DAY_*_KWH` + `CONF_NIGHT_*_KWH`): one recorder delta per day per register, fanned into band slots.
 - **Single totals sensor** (`CONF_CONSUMPTION_KWH` / `CONF_INJECTION_KWH`): for mono meters the total goes to the day slot and the math sums it; for bi/dynamic meters `_recorder_daily_band_ratio` (`coordinator.py:1976`) recovers the day/night split from hourly recorder statistics binned on `is_offpeak`, defaulting to a time-weighted `_default_band_ratio_for` (`coordinator.py:2440`) for days with no accumulation so a flat Sunday isn't billed all-peak.

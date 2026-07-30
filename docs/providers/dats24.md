@@ -284,7 +284,7 @@ but the integration has one `ores` key, so the extractor matches only the Braban
 Wallon row (`dats24.py:126-129`, `357-360`). The regex is anchored at start of
 line with `re.escape(label)`, so `ORES (Brabant Wallon)` only matches that one row.
 
-Ten columns per row (`dats24.py:351-348`):
+Ten columns per row (`dats24.py:347-350`):
 
 ```
 single | day | night | PIC | MEDIUM | ECO | excl_nacht
