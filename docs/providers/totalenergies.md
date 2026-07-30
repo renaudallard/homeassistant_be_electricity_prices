@@ -20,7 +20,7 @@ Related reading:
 
 TotalEnergies is a full-service supplier that sells residential electricity in
 all three Belgian regions: Flanders, Wallonia and Brussels. `EXTRACTOR.regions()`
-(the union over every contract's `regions`, `providers/base.py:541`) therefore
+(the union over every contract's `regions`, `providers/base.py:560`) therefore
 resolves to all three. Only one product, Impact, is region limited (Wallonia
 only, see the contracts table).
 
@@ -115,7 +115,7 @@ not serve; the coordinator then falls back to its time based TTL.
 There is **no** `fetch_for_month` on the extractor (`EXTRACTOR`,
 `totalenergies.py:811`, only sets `fetch` and `probe`). TotalEnergies is an
 overwrite-in-place supplier: the `/latest/` URL exposes only the current month
-and no dated archive is reachable (`providers/base.py:465-469`). The yearly cost
+and no dated archive is reachable (`providers/base.py:519-524`). The yearly cost
 backfill therefore bills every past month with the current snapshot as a proxy.
 
 ### Discovery (CI only)
@@ -258,7 +258,7 @@ Region specifics:
 - `energy_fund_eur_per_month`: Flanders only ("Résidence principale sans tarif
   social" line, `_extract_energy_fund`, `totalenergies.py:653`).
 - `vat_rate` is set to `0.0`, meaning the snapshot's consumption prices are already
-  VAT-incl and must not be rescaled by the pricing engine (`providers/base.py:305-313`).
+  VAT-incl and must not be rescaled by the pricing engine (`providers/base.py:471-474`).
   The dynamic path applies VAT during parsing (see above); the fixed/variable table
   and realized values are stored as printed.
 
@@ -271,7 +271,7 @@ Two shapes, selected on `kind` in `_extract_injection` (`totalenergies.py:538`):
   after the `Injection` header so the consumption formula above is never captured
   (`totalenergies.py:552-571`). `factor = f_pdf * 10.0`, `base = b_cents / 100.0`,
   with **no VAT scaling** because residential injection is VAT-exempt
-  (`providers/base.py:268-276`). Illustrative Wallonia: `0.1 * BELPEXH - 1.3` ->
+  (`providers/base.py:271-273`). Illustrative Wallonia: `0.1 * BELPEXH - 1.3` ->
   `factor == 1.0`, `base == -0.013` (`tests/test_totalenergies.py:89-103`). A
   dynamic card whose injection block is missing the BELPEXH formula raises rather
   than silently pricing feed-in at the flat monthly rate every hour
@@ -289,7 +289,7 @@ other product. Shape (c) spot-indexed-variable is not used; no contract sets
 `spot_indexed_injection`.
 
 There is **no supplier-side prosumer/PV forfait**: `supplier_prosumer_eur_per_kva_year`
-is left `None` (`SupplierSnapshot` default, `providers/base.py:337`). The only
+is left `None` (`SupplierSnapshot` default, `providers/base.py:498`). The only
 prosumer charge is the DSO tariff (`DsoOverlay.prosumer_eur_per_kva_year`), surfaced
 for both the Flanders and Wallonia rows where the card publishes it.
 

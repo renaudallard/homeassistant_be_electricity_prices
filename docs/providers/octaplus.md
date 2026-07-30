@@ -25,7 +25,7 @@ OCTA+ (extractor `id="octaplus"`, label `"OCTA+"`, `octaplus.py:672-686`) sells
 residential electricity only in Wallonia and Flanders. Brussels is rejected: the
 Brussels offers on OCTA+'s site are professional-only, so `_OCTAPLUS_REGIONS`
 (`octaplus.py:670`) is `frozenset({REGION_FLANDERS, REGION_WALLONIA})` and
-`EXTRACTOR.regions()` (the union over contracts, `base.py:541-546`) is those two
+`EXTRACTOR.regions()` (the union over contracts, `base.py:560-565`) is those two
 regions. `fetch` raises `ExtractorError("... not available in region ...")` for
 any other region (`octaplus.py:182-183`, exercised by
 `test_brussels_region_rejected`).
@@ -74,7 +74,7 @@ Notes:
   it the live price table would aggregate to hourly and the current / next-slot
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
-  long-term statistics). See `DynamicRates` docs in `base.py:139-148`.
+  long-term statistics). See `DynamicRates` docs in `base.py:141-154`.
 - No product carries `spot_indexed_injection=True`. Non-dynamic OCTA+ cards
   print a flat monthly indicative injection rate, so no ENTSO-E spot is needed
   for the injection regime (contrast Cociter Variable).
@@ -118,7 +118,7 @@ OCTA+ declares no `fetch_for_month` (the `SupplierExtractor` is built with only
 `fetch` and `probe`, `octaplus.py:684-685`). There is no accessible archive:
 cards are overwrite-in-place, so past months fall back to the current snapshot
 as a proxy. This is the documented behaviour for overwrite-in-place suppliers in
-`base.py:511-519`.
+`base.py:519-524`.
 
 ### `discover` (`octaplus.py:156-167`)
 
@@ -209,7 +209,7 @@ non-matching separator to force the raise). Wallonia adds
 
 The `TaxOverlay` sets `vat_rate=0.0` (`octaplus.py:228`): OCTA+ snapshots ship
 VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
-`vat_rate` convention in `base.py:305-466`.
+`vat_rate` convention in `base.py:471-474`.
 
 ### Regional renewables
 
@@ -232,7 +232,7 @@ monohoraire` line (the injection column next to the consumption rate), divided b
 100. Pinned illustrative `0.0472` with `factor`/`base` `None`
 (`test_fixed_wallonia_extracts_meter_rates`). For `dynamic`, the injection
 formula is found after the `_INJECTION_LEAD` prose and yields `factor` and `base`
-that are NOT VAT-adjusted (injection is VAT-exempt, `base.py:254-276`);
+that are NOT VAT-adjusted (injection is VAT-exempt, `base.py:269-289`);
 `base = b_eur_mwh / 1000`. Pinned illustrative `factor 1.0`, `base -0.01389` for
 `Epex 15' * 1 - 13,89 €/MWh` (`test_dynamic_extracts_injection_formula`). Returns
 `None` only when both `current` and `factor` are absent.

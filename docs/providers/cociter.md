@@ -25,7 +25,7 @@ so both contracts set `regions=_COCITER_REGIONS`, defined as
 `frozenset({REGION_WALLONIA})` (`cociter.py:535`, `cociter.py:545`,
 `cociter.py:554`) and
 `EXTRACTOR.regions()` (the union over contracts, see
-`base.py:541`) resolves to Wallonia alone.
+`base.py:560`) resolves to Wallonia alone.
 
 Cociter publishes one PDF card per (product, month) under predictable
 filenames on a single listing page (`cociter.py:28-38`, `cociter.py:80`):
@@ -199,7 +199,7 @@ result literally: from `(0.103 x BELPEX + 3) x 1.06`, `factor == 1.0918` and
 `base == 0.0318` (illustrative), and it checks `factor*0.10 + base == 0.14098`
 at a spot of 100 EUR/MWh so a unit-conversion swap cannot cancel out. The
 `quarter_hourly=True` flag (`cociter.py:400`) keeps the native 15-minute slots
-(see `DynamicRates`, `base.py:139-148`).
+(see `DynamicRates`, `base.py:140-159`).
 
 ### DSO overlay: `_extract_dsos`
 
@@ -242,7 +242,7 @@ number, while distribution rates still parse. The variable DSO test
 0.1087`, `distribution_peak 0.1205`, `distribution_offpeak 0.0666`, `transport
 0.0274252`, `data_management_per_year 19.49`, `prosumer_eur_per_kva_year 81.03`.
 
-Each row produces a `DsoOverlay` (`base.py:303-340`) with the four distribution
+Each row produces a `DsoOverlay` (`base.py:310-347`) with the four distribution
 rates, the shared transport rate, `data_management_per_year` (column 1, not
 divided), the optional prosumer forfait, and the optional Impact triplet.
 
@@ -277,7 +277,7 @@ Mapping into `TaxOverlay` (`cociter.py:506-512`): `energy_contribution`
 
 Critically `vat_rate=0.0` (`cociter.py:511`): the whole card is TVAC, so the
 snapshot's prices are already VAT-inclusive and the pricing engine must not
-re-apply VAT (see `TaxOverlay` comment, `base.py:464-466`). The tax test
+re-apply VAT (see `TaxOverlay` comment, `base.py:471-474`). The tax test
 (`test_cociter.py:161-174`) pins illustrative Wallonian values and asserts
 `vat_rate == 0.0` and `flanders_renewables == 0.0`.
 
@@ -298,7 +298,7 @@ TVAC (illustrative, pinned by `test_variable_extracts_supplier_prosumer_forfait`
 `test_cociter.py:97-106`). The anchor is deliberately the "EUR/kVA/an TVAC"
 footnote wording, not the bare "(EUR/kVA/an)" DSO prosumer column header, so the
 two do not collide. The value is already TVAC and must NOT be VAT-scaled
-(`SupplierSnapshot` comment, `base.py:485-490`). A miss on the variable card is
+(`SupplierSnapshot` comment, `base.py:493-498`). A miss on the variable card is
 fatal (`cociter.py:258-259`): every variable card prints it, so absence is a
 layout drift, not a fee-free contract.
 
@@ -324,7 +324,7 @@ the shared ELIA transport rate, `data_management_per_year`, and either the
 compensation-regime prosumer forfait (variable) or the three Tarif Impact
 distribution bands PIC/MEDIUM/ECO (dynamic SMR3). The Impact bands feed the
 CWaPE 3-band pricing when a customer opts into the DSO Impact tariff (see
-`DsoOverlay` and `ImpactRates`, `base.py:225-248`, `base.py:329-339`).
+`DsoOverlay` and `ImpactRates`, `base.py:310-347`, `base.py:232-254`).
 
 ## Tax overlay
 
@@ -344,7 +344,7 @@ and compare paths, all gated on the contract's `spot_indexed_injection` flag
 credit.
 
 Injection is VAT-exempt for residential, so `factor`/`base` are never VAT-scaled
-(`InjectionRates` comment, `base.py:216-276`). Unit handling mirrors the dynamic
+(`InjectionRates` comment, `base.py:269-289`). Unit handling mirrors the dynamic
 consumption side: the PDF factor (against BELPEX in EUR/MWh) is multiplied by 10
 to work against a EUR/kWh spot, and the base (c€/kWh) is divided by 100
 (`cociter.py:306-311`). From the printed `(0,097 x BELPEX - 2,1)` the tests pin
@@ -382,7 +382,7 @@ The land mines a future maintainer must know, each traceable to a source
 comment:
 
 - **Everything is TVAC.** Prices are VAT-inclusive, so `vat_rate=0.0`
-  (`cociter.py:511`, `base.py:464-466`). The supplier PV forfait is likewise
+  (`cociter.py:511`, `base.py:471-474`). The supplier PV forfait is likewise
   already TVAC and must never be VAT-scaled (`cociter.py:249-250`).
 - **Fail-loud parsers.** The abonnement (`cociter.py:322`), ELIA transport
   (`cociter.py:462`), taxes block (`cociter.py:492`), Walloon renewables
@@ -400,7 +400,7 @@ comment:
   a VAT change tracks automatically.
 - **quarter_hourly=True.** Cociter Dynamique bills on the 15-minute Belpex grid;
   keep native quarter-hour slots, not the hourly mean (`cociter.py:394-400`,
-  `base.py:139-148`). YTD statistics still aggregate to hourly.
+  `base.py:140-159`). YTD statistics still aggregate to hourly.
 - **Split-glyph spellings.** pypdf can split "HOURLY" into `HOURL Y` and emit
   several apostrophe/quote/dash glyphs; the regexes tolerate all of these
   (`cociter.py:288-294`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:528`).

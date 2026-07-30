@@ -24,7 +24,7 @@ Related reading:
 | --- | --- |
 | Registry id | `mega` (`mega.py:1031`) |
 | Label | `Mega` (`mega.py:1032`) |
-| Regions served | Flanders, Wallonia, Brussels (union across contracts, `base.py:541`) |
+| Regions served | Flanders, Wallonia, Brussels (union across contracts, `base.py:560`) |
 | Publication | Monthly per-region PDF cards, one file per (product, region) |
 | Discovery | Scrape the public listing page, regex the `data-product-element` anchor to its PDF URL |
 | Probe | Listing GET + filename match (the URL month rotates monthly) |

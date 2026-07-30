@@ -98,7 +98,7 @@ fit the energy-plus-network-plus-tax model.
 (`engie.py:474`). Engie bills the dynamic consumer formula against `eSpot_15`,
 the Belgian day-ahead EPEX price for that specific quarter-hour, so the
 integration keeps the native 15-minute slots rather than aggregating to hourly
-(`engie.py:466`, framework note `base.py:139`). Billing of long-term YTD
+(`engie.py:466`, framework note `base.py:140`). Billing of long-term YTD
 statistics still collapses to hourly because Home Assistant only retains hourly
 long-term statistics.
 
@@ -118,18 +118,18 @@ long-term statistics.
 ### `probe`: none
 
 `EXTRACTOR` declares no `probe` (`engie.py:854` has no `probe=` argument, so it
-defaults to `None`, `base.py:375`). Engie's tariff API has no cheap freshness
+defaults to `None`, `base.py:541`). Engie's tariff API has no cheap freshness
 key: the endpoint always serves "the current month" for a slug with no ETag or
-listing to diff. Per the framework contract (`base.py:505`), a `None` probe means
+listing to diff. Per the framework contract (`base.py:513`), a `None` probe means
 the coordinator's time-based TTL governs refresh instead.
 
 ### `fetch_for_month`: none
 
 `EXTRACTOR` declares no `fetch_for_month` (`engie.py:854`), so it defaults to
-`None` (`base.py:539`). The API is overwrite-in-place / API-only: `monthOffset=0`
+`None` (`base.py:547`). The API is overwrite-in-place / API-only: `monthOffset=0`
 is hardcoded in the URL (`engie.py:243`) and there is no accessible archive of
 past months. The framework lists Engie explicitly as an API-only supplier with no
-month archive (`base.py:515`). For historical billing the coordinator falls back
+month archive (`base.py:523`). For historical billing the coordinator falls back
 to the current snapshot as a proxy.
 
 ### `discover(session)` (`engie.py:298`)
@@ -341,7 +341,7 @@ term (column 6), into `data_management_per_year` (`engie.py:841`, test
 | `energy_fund_eur_per_month` | `_extract_energy_fund` | Flanders only (`engie.py:370`). |
 | `vat_rate` | hardcoded `0.0` (`engie.py:394`) | Card is 6% VAT inclusive. |
 
-`vat_rate=0.0` is the "prices are already VAT-incl" convention (`base.py:465`).
+`vat_rate=0.0` is the "prices are already VAT-incl" convention (`base.py:471`).
 Engie's cards print 6% VAT inclusive (`engie.py:42`), so the extracted energy /
 network / tax numbers are post-VAT and must not be re-scaled; the one exception is
 the dynamic formula, which is printed pre-VAT and is scaled locally in
@@ -374,13 +374,13 @@ contract:
 - Per-slot TOU triplet (`peak`/`transition`/`offpeak`): only for `kind == "tou"`
   when the row has >=6 numbers (`engie.py:562`), reading columns 4/5/6. Engie
   Empower Flextime's feed-in tariff varies by slot, so the pricing engine selects
-  the slot with the same `tou_slot()` rule as consumption (`base.py:248`). Issue
+  the slot with the same `tou_slot()` rule as consumption (`base.py:296`). Issue
   #34; test `test_empower_flextime_injection_varies_by_slot`
   (`tests/test_engie.py:93`).
 - Hourly `factor * spot + base`: only for `kind == "dynamic"` when the card
   carries a second BELPEX formula (`engie.py:579`). The second `_FORMULA_RE`
   match is the injection formula. Residential injection is VAT-exempt
-  (`base.py:216`), so it is not VAT-scaled: `factor = factor_pdf * 10` and
+  (`base.py:271`), so it is not VAT-scaled: `factor = factor_pdf * 10` and
   `base = base_pdf_cents / 100` (`engie.py:589`, no `vat` multiplier, contrast the
   consumption path). Test `test_dynamic_extracts_injection_formula`
   (`tests/test_engie.py:166`): illustrative `-1,3135 + (0,1000 x eSpot_15)` gives
@@ -395,7 +395,7 @@ none of `current`, `factor`, or `peak` is set, injection is `None`
 
 No supplier-side PV / prosumer forfait: Engie does not populate
 `supplier_prosumer_eur_per_kva_year` (the field stays at its `None` default,
-`base.py:490`). The Wallonia DSO overlay carries the DSO-side
+`base.py:498`). The Wallonia DSO overlay carries the DSO-side
 `prosumer_eur_per_kva_year` on static contracts only.
 
 ## Quirks and historical bugs (land mines)

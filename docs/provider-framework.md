@@ -24,7 +24,7 @@ Related docs:
 
 Each supplier is a self-contained module (for example `providers/bolt.py`) that
 exposes exactly one top-level name, `EXTRACTOR`, of type `SupplierExtractor`
-(`providers/base.py:509`, `SupplierProtocol`). The module's job is to turn the
+(`providers/base.py:568`, `SupplierProtocol`). The module's job is to turn the
 supplier's live publication (a PDF card, an HTML listing, or a small API) into a
 `SupplierSnapshot`: the energy formula plus a network/tax/capacity overlay for
 every DSO sub-area the supplier operates in. The coordinator then picks the one
@@ -54,7 +54,7 @@ integration uses.
 
 ### SupplierExtractor
 
-The registry entry for one supplier (`providers/base.py:482`). It is a frozen,
+The registry entry for one supplier (`providers/base.py:531`). It is a frozen,
 keyword-only dataclass.
 
 ```python
@@ -87,7 +87,7 @@ react. Do NOT filter withdrawn suppliers out of `EXTRACTORS` or
 `all_extractors()` -- that would also hide them from the live-check's registry
 diff and from every entry that still needs to price.
 
-`regions()` (`providers/base.py:501`) returns the union of `Contract.regions`
+`regions()` (`providers/base.py:560`) returns the union of `Contract.regions`
 across all this supplier's contracts. The config flow uses it to decide whether
 a supplier should be offered for the region the user picked.
 
@@ -109,9 +109,9 @@ SnapshotFetcher = Callable[
 ]
 ```
 
-Defined at `providers/base.py:461`. The mandatory current-card fetch. It must
+Defined at `providers/base.py:509`. The mandatory current-card fetch. It must
 return a fully populated `SupplierSnapshot` or raise `ExtractorError`
-(`providers/base.py:515`) on any fetch or parse failure. It never returns
+(`providers/base.py:574`) on any fetch or parse failure. It never returns
 `None`: a missing current card is an error, not an absence.
 
 #### SnapshotProbe
@@ -122,7 +122,7 @@ SnapshotProbe = Callable[
 ]
 ```
 
-Defined at `providers/base.py:469`. A cheap freshness key. The coordinator calls
+Defined at `providers/base.py:517`. A cheap freshness key. The coordinator calls
 it hourly and only re-runs `fetch` when the returned key changes from the cached
 one. Semantics of the return value:
 
@@ -145,7 +145,7 @@ ArchivedSnapshotFetcher = Callable[
 ]
 ```
 
-Defined at `providers/base.py:467`. Fetches the card that was published for a
+Defined at `providers/base.py:525`. Fetches the card that was published for a
 specific `(year, month)` (passed as a `datetime.date`), so the yearly-cost flow
 can bill each past month at its own historical rate rather than proxying every
 month at the current rate. Return-value semantics:
@@ -166,7 +166,7 @@ months.
 ## Contract and rate dataclasses
 
 A `SupplierSnapshot.energy` is one of six `EnergyRates` variants
-(`providers/base.py:232`) chosen by the contract's `kind`. All rate dataclasses
+(`providers/base.py:257`) chosen by the contract's `kind`. All rate dataclasses
 are `frozen=True, kw_only=True`. EUR values are always populated from a live
 fetch, never hardcoded — the one exception is the expert **custom** supplier
 (`providers/custom.py`), whose snapshot is built from the config entry the user
@@ -174,7 +174,7 @@ filled in rather than a scraped card.
 
 ### Contract
 
-`providers/base.py:60`. One product sold by a supplier.
+`providers/base.py:61`. One product sold by a supplier.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -190,7 +190,7 @@ compare paths, all gated on this flag, or the injection credit drifts.
 
 ### FixedRates
 
-`providers/base.py:80`. Fixed energy contract: constant EUR/kWh, optionally
+`providers/base.py:81`. Fixed energy contract: constant EUR/kWh, optionally
 bi-hourly.
 
 | Field | Type | Default | Meaning |
@@ -204,7 +204,7 @@ bi-hourly.
 
 ### VariableRates
 
-`providers/base.py:102`. Variable energy contract: the current month's effective
+`providers/base.py:103`. Variable energy contract: the current month's effective
 EUR/kWh, re-published monthly.
 
 | Field | Type | Default | Meaning |
@@ -219,7 +219,7 @@ EUR/kWh, re-published monthly.
 
 ### DynamicRates
 
-`providers/base.py:139`. Dynamic energy contract: `factor * spot + base` per
+`providers/base.py:140`. Dynamic energy contract: `factor * spot + base` per
 price slot, against the ENTSO-E BE day-ahead spot.
 
 | Field | Type | Default | Meaning |
@@ -237,11 +237,11 @@ Ecopower (Dynamische Burgerstroom), Bolt (Dynamisch), energie.be and EnergyVisio
 the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot) and set it `True`;
 that keeps the live price table, current/next-slot sensors and cheapest-window
 service on native 15-minute slots. Year-to-date billing stays hourly regardless,
-because HA only retains hourly long-term statistics (`providers/base.py:147`).
+because HA only retains hourly long-term statistics (`providers/base.py:152`).
 
 ### TimeOfUseRates and WeekendRule
 
-`providers/base.py:163`. Time-of-use energy contract: three slots by hour-of-day
+`providers/base.py:194`. Time-of-use energy contract: three slots by hour-of-day
 (`kind = "tou"`). Requires an SMR3 smart meter.
 
 The weekday schedule is shared across products:
@@ -273,7 +273,7 @@ schedule:
 
 ### ImpactRates
 
-`providers/base.py:200`. Wallonia Tarif Impact energy contract: three slots on
+`providers/base.py:232`. Wallonia Tarif Impact energy contract: three slots on
 CWaPE bands (`kind = "tou_impact"`). Distinct from `TimeOfUseRates` because the
 schedule is the CWaPE-defined Impact one (every day, no weekend exception),
 matching the DSO Impact tariff that gates eligibility. Requires an SMR3
@@ -295,7 +295,7 @@ eco    : 01:00-07:00 + 11:00-17:00      (lowest)
 
 ### SpotMonthlyRates
 
-`providers/base.py:162`. Monthly-indexed energy contract (`kind = "spot_monthly"`):
+`providers/base.py:163`. Monthly-indexed energy contract (`kind = "spot_monthly"`):
 a single flat rate for the whole delivery month, `factor * monthly_mean(spot) +
 base`, where the mean is the arithmetic average of that month's hourly ENTSO-E
 day-ahead spots. Used by the expert **custom** monthly-average mode for
@@ -315,14 +315,14 @@ closes.
 
 ### InjectionRates
 
-`providers/base.py:219`. Solar feed-in compensation, in EUR/kWh. Belgian
+`providers/base.py:268`. Solar feed-in compensation, in EUR/kWh. Belgian
 residential injection is exempt from VAT, so these values are NEVER VAT-incl
 regardless of the consumption snapshot's `vat_rate`. At least one of (`current`,
 `factor`+`base`) must be populated.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py:271`; illustrative only). |
+| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py:276`; illustrative only). |
 | `factor` | `float \| None` | `None` | Multiplier for the hourly formula `injection = factor * spot + base`. |
 | `base` | `float \| None` | `None` | Additive term for that formula. Belgian formulas can produce negative values at low spot (the producer pays to inject) and the engine respects that. |
 | `formula` | `str \| None` | `None` | Formula text for diagnostics. |
@@ -342,7 +342,7 @@ indicative prints.
 
 ### DsoOverlay
 
-`providers/base.py:263`. Network + capacity costs for one DSO sub-area, in
+`providers/base.py:310`. Network + capacity costs for one DSO sub-area, in
 EUR/kWh and EUR/kW/yr. One of these is keyed under each DSO in
 `SupplierSnapshot.dsos`.
 
@@ -371,7 +371,7 @@ stable forever because they are stored verbatim in every user's `CONF_DSO`.
 
 ### TaxOverlay
 
-`providers/base.py:302`. Federal and regional levies, all in EUR/kWh except the
+`providers/base.py:454`. Federal and regional levies, all in EUR/kWh except the
 energy fund.
 
 | Field | Type | Default | Meaning |
@@ -392,7 +392,7 @@ gotcha: it does not mean "no VAT", it means "prices already include VAT".
 
 ### SupplierSnapshot
 
-`providers/base.py:326`. Everything extracted from one supplier's card, per
+`providers/base.py:478`. Everything extracted from one supplier's card, per
 `(supplier, contract)`. The coordinator combines it with the user's selected DSO
 to produce the all-in price.
 
@@ -426,7 +426,7 @@ class SupplierSnapshot:
 
 `valid_until` feeds the `tomorrow_prices_available` binary sensor, which checks
 `date.today() <= valid_until`; `None` means "we do not know", so callers fall
-back to treating tomorrow's rates as available (`providers/base.py:491`).
+back to treating tomorrow's rates as available (`providers/base.py:506`).
 
 ## The registry (providers/__init__.py)
 

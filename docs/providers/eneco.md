@@ -32,7 +32,7 @@ Related reading:
 | Probe | listing scrape returning the resolved PDF URL | `eneco.py:210-228` |
 | Archive | per-month issues kept on the CDN, resolved by volume walk | `eneco.py:164-207` |
 
-`EXTRACTOR.regions()` (the union over its contracts, `base.py:541`) is
+`EXTRACTOR.regions()` (the union over its contracts, `base.py:560`) is
 `{flanders, wallonia}`. Power Fix and Power Flex cover both regions; Power Dynamic
 is Flanders-only (see the contracts table). Brussels (Sibelga) is never served, so
 `TaxOverlay.brussels_renewables` stays 0 and no Sibelga overlay is emitted.
@@ -389,7 +389,7 @@ Steps (`eneco.py:583-638`):
    coefficients (`eneco.py:621-629`): `factor = factor_pdf * 10`,
    `base = base_cents / 100` (VAT-exempt for residential, so no VAT scaling).
 
-Injection taxonomy (the three-shape rule, `base.py:254-234`):
+Injection taxonomy (the three-shape rule, `base.py:268-306`):
 
 - **Power Fix and Power Flex are monthly-indicative-only**: the extractor surfaces
   `current` (the `Maandprijs`) and leaves `factor` / `base` `None`
@@ -417,7 +417,7 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
 ## Quirks and historical bugs
 
 - **VAT-inclusive cards**: all prices are 6 % VAT-incl, so `vat_rate = 0.0` and the
-  pricing engine does not rescale (`eneco.py:36`, `eneco.py:559`, `base.py:305-466`).
+  pricing engine does not rescale (`eneco.py:36`, `eneco.py:559`, `base.py:471-474`).
   Dynamic is the exception where a VAT multiplier is read from the card and folded
   into `factor` / `base` (`eneco.py:385-407`).
 - **`AFNAME EN INJECTIE / VALORISATIE` rename (issue #35)**: the July 2026 cards

@@ -219,7 +219,7 @@ terugleveringsvergoeding: (<factor_pdf> x BELPEX per uur* <sign> <base_cents>)
 ```
 
 Injection is VAT-exempt (Belgian residential feed-in is never VAT-incl,
-`base.py:216`), so no `vat_mult` is applied (`providers/frank.py:396`):
+`base.py:271`), so no `vat_mult` is applied (`providers/frank.py:396`):
 
 ```
 factor = factor_pdf * 10.0

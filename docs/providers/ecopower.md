@@ -71,7 +71,7 @@ Notes:
   multiplies the 15-minute EPEX DA spot, so the live price table, current / next-slot sensors and
   the cheapest-window service keep the native 15-minute slots. YTD billing stays hourly regardless
   (Home Assistant only retains hourly long-term statistics). See `DynamicRates` docstring,
-  `base.py:139-148`.
+  `base.py:141-154`.
 - Neither contract sets `spot_indexed_injection`. The dynamic contract already collects the
   ENTSO-E key via its energy formula, and the variable contract publishes a monthly indicative
   injection credit, so no separate spot key step is needed.
@@ -337,7 +337,7 @@ VAT-exempt). Sets `current=None`, `factor`, `base`, and a diagnostic `formula` s
 
 There is no supplier-side PV/prosumer forfait: `supplier_prosumer_eur_per_kva_year` stays `None`.
 Flanders digital meters (post-2024 SMR3) do not carry the compensation-regime prosumer tariff
-(`DsoOverlay.prosumer_eur_per_kva_year` docstring, `base.py:325-328`), so the extractor never sets
+(`DsoOverlay.prosumer_eur_per_kva_year` docstring, `base.py:330-336`), so the extractor never sets
 it. No Wallonia Tarif Impact or Brussels OSP applies (Flanders-only).
 
 ### VAT scaling: the recurring Ecopower gotcha

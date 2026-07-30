@@ -90,7 +90,7 @@ the Brussels exclusion above.
 returned by `_extract_energy` leaves `quarter_hourly` at its default `False`
 (`luminus.py:334-338`), which is what routes the coordinator to aggregate
 ENTSO-E's 15-minute day-ahead curve to hourly. See the `DynamicRates` docstring
-(`base.py:139-148`): Luminus is listed among the hourly-billing dynamic
+(`base.py:141-154`): Luminus is listed among the hourly-billing dynamic
 suppliers (Frank default, Mega, TotalEnergies, Eneco).
 
 ## Fetch strategy
@@ -109,17 +109,17 @@ suppliers (Frank default, Mega, TotalEnergies, Eneco).
 ### Probe
 
 There is no probe. `EXTRACTOR` does not set `probe`, so it defaults to `None`
-(`base.py:375`). Per the `SnapshotProbe` contract (`base.py:505-509`), the
+(`base.py:541`). Per the `SnapshotProbe` contract (`base.py:513-517`), the
 `api-next/get-pricelist/` endpoint mints a fresh PDF per request with no cheap
 freshness key the coordinator can rely on, so the time-based TTL takes over.
 
 ### Archive
 
 There is no historical fetch. `EXTRACTOR` does not set `fetch_for_month`, so it
-defaults to `None` (`base.py:539`). The endpoint is API-only and overwrite-in-
+defaults to `None` (`base.py:547`). The endpoint is API-only and overwrite-in-
 place (each slug always returns the current month), with no accessible archive
 per past month, exactly the case the `ArchivedSnapshotFetcher` docstring names
-Luminus for (`base.py:517-519`). The coordinator therefore bills past months at
+Luminus for (`base.py:519-524`). The coordinator therefore bills past months at
 the current snapshot as a proxy.
 
 ### `discover()`
@@ -176,7 +176,7 @@ Printed energy rows are in `c€/kWh`; the extractor divides by 100 to store
 EUR/kWh (`luminus.py:306-308`, `353-356`). Prices are 6% VAT inclusive as printed
 (`luminus.py:42-44`), so the snapshot's `TaxOverlay.vat_rate` is set to `0.0`
 (`luminus.py:222`) meaning "already VAT-incl" per the `TaxOverlay` convention
-(`base.py:464-466`). The one exception is the Dynamic formula, printed `hors TVA`
+(`base.py:471-474`). The one exception is the Dynamic formula, printed `hors TVA`
 (ex-VAT), handled below.
 
 ### Publication label
@@ -289,7 +289,7 @@ Two column layouts are handled by the same row regex (`luminus.py:597-604`):
   dist_normal, dist_excl_night, no analog or prosumer columns. `prosumer` stays
   `None` (`luminus.py:607`), because post-2024 SMR3 connections carry no
   compensation regime (see `DsoOverlay.prosumer_eur_per_kva_year`,
-  `base.py:325-328`).
+  `base.py:330-336`).
 
 The SMR3 data-management gotcha: the dynamic product meters quarter-hourly, so
 its data-management fee is the reduced value from the

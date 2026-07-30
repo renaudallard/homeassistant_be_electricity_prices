@@ -187,7 +187,7 @@ that month (`calendar.monthrange`). Two hurdles:
 ### VAT convention
 
 The registry convention is that stored snapshot values are VAT-inclusive
-(`TaxOverlay.vat_rate=0.0` means "already VAT-incl"; `providers/base.py:465`).
+(`TaxOverlay.vat_rate=0.0` means "already VAT-incl"; `providers/base.py:474`).
 EBEM cards print both ex-VAT and incl-VAT columns:
 
 - `_vat_multiplier` (`ebem.py:322`) reads the percentage from the card header
@@ -199,7 +199,7 @@ EBEM cards print both ex-VAT and incl-VAT columns:
 - Variable indicative rates, yearly fees, and the Flanders renewables total are
   read from the *incl-VAT* column directly so VAT is not double-applied.
 - Injection is VAT-exempt (Belgian residential injection is never VAT-incl,
-  `providers/base.py:216`), so injection factor / base skip the VAT multiplier.
+  `providers/base.py:271`), so injection factor / base skip the VAT multiplier.
 
 ## Energy formula per TariffKind
 
@@ -392,7 +392,7 @@ feed-in credit (`ebem.py:529`, `ebem.py:562`, `tests/test_ebem.py:194`).
   (`ebem.py:298`).
 - **VAT columns**: cards print both ex-VAT and incl-VAT; the extractor stores
   incl-VAT for consumption, ex-VAT-based factors are VAT-scaled, injection is
-  never VAT-scaled (`providers/base.py:216`).
+  never VAT-scaled (`providers/base.py:271`).
 - **`MWH` vs `MWh` casing**: the residential federal-excise band is the only row
   with capital `MWH` (`ebem.py:592`).
 - **Sign flexibility everywhere**: every formula and indicative regex accepts

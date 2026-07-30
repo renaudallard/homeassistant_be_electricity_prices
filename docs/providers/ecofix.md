@@ -63,7 +63,7 @@ Notes:
 - Both dynamic products set `quarter_hourly=True` (`ecofix.py:374`): the cards bill
   on the 15-minute Belpex spot ("Belpex 15M"), so the integration keeps the native
   quarter-hour slots rather than the hourly mean, like Engie and OCTA+ (see the
-  `DynamicRates.quarter_hourly` docstring at `providers/base.py:139`). YTD billing
+  `DynamicRates.quarter_hourly` docstring at `providers/base.py:140`). YTD billing
   is still hourly because HA only retains hourly long-term statistics.
 - Motion vs Motion Online differ only in the energy formula and the yearly fixed
   fee; the yearly fee is the sole reason two dynamic products exist. Motion Online
@@ -106,7 +106,7 @@ constructs `SupplierExtractor` with only `fetch` and `probe`). Filenames are
 overwrite-in-place and Ecofix publishes no public archive of past months
 (`ecofix.py:45`), so the coordinator's proxy-forward fallback bills past
 consumption windows at the current snapshot's rates. If Ecofix ever exposes a
-dated archive, add an `ArchivedSnapshotFetcher` (see `providers/base.py:467`).
+dated archive, add an `ArchivedSnapshotFetcher` (see `providers/base.py:525`).
 
 ### discover()
 
@@ -271,7 +271,7 @@ from the 0-3.000 kWh band (`Verbruik tussen 0 & 3.000 kWh`) and the single-rate
 | `vat_rate` | 0.0 | 0.0 |
 
 `vat_rate = 0.0` does **not** mean tax-free; per the `TaxOverlay` convention
-(`providers/base.py:305`) it means the snapshot's prices are already handled for
+(`providers/base.py:471`) it means the snapshot's prices are already handled for
 VAT. The dynamic energy formula applies the VAT multiplier inline, so the emitted
 rates are VAT-incl and `vat_rate` is left at 0 so the pricing engine does not
 re-scale. Illustrative Flanders values (`test_motion_online_taxes_flanders`,

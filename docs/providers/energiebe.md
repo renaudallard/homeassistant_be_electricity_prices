@@ -67,7 +67,7 @@ One contract is declared in the `EXTRACTOR` (`providers/energiebe.py:306`):
 
 `quarter_hourly=True` (`providers/energiebe.py:227`): the card bills "op kwartierbasis" on
 the Day-Ahead EPEX SPOT Belgium 15-minute curve, so the live price table, next-slot sensor
-and cheapest-window service keep the native 15-minute slots (`base.py:144`). YTD billing
+and cheapest-window service keep the native 15-minute slots (`base.py:149`). YTD billing
 stays hourly. `spot_indexed_injection` is left at its default `False`: a dynamic contract
 already collects the ENTSO-E key via its energy formula, so the injection regime does not
 need to gate it (`base.py:71`).

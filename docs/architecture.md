@@ -133,7 +133,7 @@ onto these canonical keys.
 
 ### Supplier and contract
 
-A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:523`). It declares
+A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:531`). It declares
 the `Contract`s it sells (`providers/base.py:61`), each carrying a `TariffKind`
 (`providers/base.py:53`):
 
@@ -142,9 +142,9 @@ the `Contract`s it sells (`providers/base.py:61`), each carrying a `TariffKind`
 | `fixed` | Constant EUR/kWh, optionally bi-hourly | `FixedRates` (`providers/base.py:81`) | Optional `exclusive_night` rate for a dedicated night circuit. |
 | `variable` | Current month's effective EUR/kWh (monthly-indexed) | `VariableRates` (`providers/base.py:103`) | May carry per-meter peak/offpeak; `formula` for diagnostics. |
 | `dynamic` | `factor x spot + base` per slot | `DynamicRates` (`providers/base.py:140`) | `quarter_hourly` picks the 15-minute vs hourly billing grid. |
-| `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/base.py:164`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
-| `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/base.py:226`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. |
-| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py:162`) | Expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. |
+| `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/base.py:194`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
+| `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/base.py:232`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. |
+| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py:163`) | Expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. |
 
 A `Contract` also carries the `regions` it is actually published in (some products 404 outside
 their home region) and `spot_indexed_injection` (`providers/base.py:77`), a flag for the one
@@ -176,7 +176,7 @@ The solar regime (`CONF_SOLAR_REGIME`, `const.py:220`) is independent again: `no
 `compensation` (the Walloon "meter runs backwards" regime, valid for pre-2024 installs until
 2030-12-31), or `injection` (feed-in credited at the injection tariff). Belgian residential
 injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
-(`providers/base.py:216`).
+(`providers/base.py:271`).
 
 ## End-to-end data flow
 
@@ -196,7 +196,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |     |                     no : EXTRACTOR.fetch(session, contract, region)
    |     |        |
    |     |        v
-   |     |   SupplierSnapshot (energy, dsos, taxes, injection, ...)  providers/base.py:327
+   |     |   SupplierSnapshot (energy, dsos, taxes, injection, ...)  providers/base.py:478
    |     |     |
    |     |     |  dynamic / spot-indexed?  ->  EntsoeClient spot curve   api.py
    |     |     v
@@ -228,7 +228,7 @@ Numbered walkthrough:
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:141`),
    so the coordinator must not read `runtime_data` during first refresh.
-5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:327`):
+5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:478`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
    `InjectionRates`.
 6. For a dynamic contract (or a spot-indexed-injection one) the coordinator fetches the ENTSO-E
@@ -256,7 +256,7 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
 - Probe: each tick runs the supplier's cheap `probe()` (a HEAD or listing GET returning a
   freshness key like `Last-Modified`, `ETag`, or the resolved PDF URL). The full `fetch` runs
   only when the key changes, so a new publication is caught within an hour at near-zero
-  bandwidth (`providers/base.py:465`).
+  bandwidth (`providers/base.py:541`).
 - TTL fallback: suppliers with no usable probe (Engie, Luminus, DATS 24, where the only cheap
   response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
   `coordinator.py:177`).
@@ -284,7 +284,7 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:523`, `SupplierProtocol` at `providers/base.py:509`). It declares the
+   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:568`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.
@@ -298,7 +298,7 @@ A new supplier is a self-contained change; the contract is in
 The extractor maps the card's own DSO labels onto the canonical DSO keys (`const.py:49`), sets a
 per-contract `regions` set for products that are not sold everywhere, and, if the card ships
 ex-VAT numbers, sets `TaxOverlay.vat_rate` explicitly (the default `0.0` means "already
-VAT-inclusive", `providers/base.py:323`).
+VAT-inclusive", `providers/base.py:474`).
 
 ## Where to go next
 

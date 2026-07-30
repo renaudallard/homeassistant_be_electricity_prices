@@ -20,12 +20,12 @@ Related reading:
 | Property | Value | Source |
 | --- | --- | --- |
 | Extractor id / label | `bolt` / `Bolt` | `bolt.py:822` |
-| Regions served | Flanders, Wallonia, Brussels (all three) | every `Contract` uses the default `regions`; `EXTRACTOR.regions()` unions them, `base.py:541` |
+| Regions served | Flanders, Wallonia, Brussels (all three) | every `Contract` uses the default `regions`; `EXTRACTOR.regions()` unions them, `base.py:560` |
 | Publication shape | Monthly PDF card per contract, at a predictable CDN URL; a public HTML listing page links every current PDF | `bolt.py:28`, `bolt.py:114` |
 | Fetch transport | `fetch_pdf_text_layout` (pdfplumber, layout-aware) | `bolt.py:230` |
 | Probe | HEAD the listing page, prefer `ETag` then `Last-Modified` | `bolt.py:169` |
 | Archive | Only `bolt_fix` (slug `fix`) is monthly-archived back to 2024-01; everything else falls back to the current snapshot | `bolt.py:270` |
-| VAT convention | Prices are VAT-incl; `vat_rate=0.0` | `bolt.py:358`, `base.py:465` |
+| VAT convention | Prices are VAT-incl; `vat_rate=0.0` | `bolt.py:358`, `base.py:474` |
 
 Bolt's PDFs are the reason this extractor exists in its current form. They are around 5 MB each,
 with rotated columns and a column-major text layout that `pypdf` cannot read, so the module fetches
