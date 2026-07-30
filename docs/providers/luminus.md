@@ -101,7 +101,7 @@ suppliers (Frank default, Mega, TotalEnergies, Eneco).
 2. Reject a region other than Flanders/Wallonia (`not available in region`).
 3. Build the URL with `_document_url(contract.slug, region)`.
 4. `fetch_pdf_text(session, url)` downloads and pypdf-extracts the PDF text
-   (`_pdf.py:179-185`); the payload is magic-byte-validated as a real PDF, so a
+   (`_pdf.py:179-186`); the payload is magic-byte-validated as a real PDF, so a
    CDN 404-disguised-as-HTML fails loud (`_pdf.py:168-176`).
 5. Hand the text to `parse_snapshot` (the pure parser exposed for unit tests,
    `luminus.py:186-227`).
@@ -173,9 +173,9 @@ Belgian comma decimals and every Unicode space variant, `_pdf.py:507-518`).
 ### Units
 
 Printed energy rows are in `c€/kWh`; the extractor divides by 100 to store
-EUR/kWh (`luminus.py:306-308`, `353-356`). Prices are 6% VAT inclusive as printed
+EUR/kWh (`luminus.py:306-308`, `346-349`). Prices are 6% VAT inclusive as printed
 (`luminus.py:42-44`), so the snapshot's `TaxOverlay.vat_rate` is set to `0.0`
-(`luminus.py:222`) meaning "already VAT-incl" per the `TaxOverlay` convention
+(`luminus.py:221`) meaning "already VAT-incl" per the `TaxOverlay` convention
 (`base.py:471-474`). The one exception is the Dynamic formula, printed `hors TVA`
 (ex-VAT), handled below.
 
@@ -353,7 +353,7 @@ BTR, excise, contribution, and (Wallonia only) connection.
 | `energy_fund_eur_per_month` | `_extract_energy_fund` BTR row | Flanders only, `values[1]` |
 | `flanders_renewables` | `_extract_flanders_renewables` | Flanders only |
 | `wallonia_renewables` | `_extract_wallonia_renewables` | Wallonia only |
-| `vat_rate` | `0.0` (prices already VAT-incl) | `luminus.py:222` |
+| `vat_rate` | `0.0` (prices already VAT-incl) | `luminus.py:221` |
 
 `_extract_per_kwh_taxes` raises on a short block (`< 4` values) or a missing
 Walloon connection row, rather than silently zeroing a regulated tax and
@@ -393,7 +393,7 @@ injection shapes in the project taxonomy, selected by contract kind:
 Illustrative: dynamic Wallonia injection `0,1019 x Belpex H - 1,2737` yields
 `factor == 1.019`, `base == -0.012737` (negative base preserved,
 `test_dynamic_extracts_injection_formula_with_negative_base`,
-`test_luminus.py:110-117`). Non-dynamic indicative
+`test_luminus.py:110-116`). Non-dynamic indicative
 (`test_injection_uses_applicable_rate_not_annual_estimate`): comfy Wallonia
 `0.0381`, comfyflex Flanders `0.0396`.
 
@@ -446,7 +446,7 @@ print a single value and offer no exclusive-night), so the standard fee applies.
 - **6% VAT-inclusive prices, ex-VAT dynamic formula.** Everything printed is 6%
   VAT-incl, but the Dynamic `Prélèvement` formula is `hors TVA`, so its factor
   and base are scaled by the parsed VAT multiplier (`luminus.py:42-44`,
-  `337-345`). Injection is always VAT-exempt and is never scaled
+  `330-338`). Injection is always VAT-exempt and is never scaled
   (`luminus.py:413-415`).
 - **Region-specific dynamic base.** Flanders and Wallonia have different bases
   in the same formula; never merge regions into one snapshot
@@ -455,12 +455,12 @@ print a single value and offer no exclusive-night), so the standard fee applies.
   `Estimation annuelle de l'énergie fournie`) and injection (`Tarif` vs
   `Estimation annuelle du tarif`) sides. Always take the current-month
   applicable row (`test_comfyflex_flanders_uses_current_monthly_not_annual_estimate`,
-  `test_luminus.py:158-167`; injection at `test_luminus.py:260-278`).
+  `test_luminus.py:158-166`; injection at `test_luminus.py:260-278`).
 - **SMR3 reduced data-management fee** from the `quart d'heure` footnote on
   dynamic Flanders cards, not the table's monthly column (`luminus.py:585-593`).
 - **Two DSO column widths** per region (static wide, dynamic narrow); the same
   row regex must match both, with prosumer present only on static
-  (`luminus.py:567-618`, `646-699`).
+  (`luminus.py:567-618`, `630-683`).
 - **Wallonia Impact triplet is ECO/MEDIUM/PIC ascending**, opposite to OCTA+/Bolt
   (`luminus.py:655-658`).
 - **Label-to-key remaps**: Fluvius Kempen -> IVEKA, Fluvius Midden-Vlaanderen ->
@@ -475,7 +475,7 @@ print a single value and offer no exclusive-night), so the standard fee applies.
   below (`luminus.py:300-308`).
 - **Fail-loud policy**: yearly fee, injection, per-kWh taxes, and both regional
   renewables all raise on a miss rather than defaulting to 0 and silently
-  mispricing (`luminus.py:269`, `431`, `492-502`, `547-549`, `561-564`).
+  mispricing (`luminus.py:269`, `424`, `485-495`, `540-542`, `554-557`).
 
 ## Test fixtures
 
@@ -500,16 +500,16 @@ variable parse paths already covered by the fixtures above.
 
 | Symptom | First place to look | Why |
 | --- | --- | --- |
-| Every field misses / fetch fails | `fetch` + `fetch_pdf_text` (`luminus.py:168-183`, `_pdf.py:179-185`) | URL construction, slug/tabValue, PDF magic-byte validation |
+| Every field misses / fetch fails | `fetch` + `fetch_pdf_text` (`luminus.py:168-183`, `_pdf.py:179-186`) | URL construction, slug/tabValue, PDF magic-byte validation |
 | Energy rates wrong / missing | `_extract_energy` (`luminus.py:293-368`) | four-column vs three-column row, unit /100, TOU lookahead |
 | Dynamic factor/base off by ~1.06 or ~10 | dynamic branch (`luminus.py:323-338`) | VAT multiplier + mWh->kWh + c->EUR conversion |
 | Injection wrong or raising | `_extract_injection` (`luminus.py:383-425`) | applicable-vs-estimate `Tarif` capitalisation, VAT-exempt scaling |
-| A DSO row missing | `_FLANDERS_LABELS` / `_WALLONIA_LABELS` + row regexes (`luminus.py:564-627`, `583-634`, `637-643`, `646-699`) | printed label renamed, or column count changed |
+| A DSO row missing | `_FLANDERS_LABELS` / `_WALLONIA_LABELS` + row regexes (`luminus.py:564-627`, `567-618`, `621-627`, `630-683`) | printed label renamed, or column count changed |
 | Dynamic data-management fee wrong (Flanders) | footnote regex (`luminus.py:585-593`) | `quart d'heure ... gestion des données` phrasing drift |
 | Tax value zeroed / block too short | `_tax_block_values` + `_extract_per_kwh_taxes` (`luminus.py:428-497`) | colon anchor, value-run boundary, BTNR/BTR ordering |
 | Yearly / exclusive-night fee wrong | `_extract_yearly_fee` / `_extract_excl_night_fee` (`luminus.py:258-290`) | `Redevance fixe` line format, third-column `-` handling |
 | Publication label empty | `_extract_publication_month` (`luminus.py:371-380`) | parens padding / month spelling |
-| A new product appears / a slug 404s | `_CONTRACTS` + `discover` (`luminus.py:105-122`, `155-169`) | add a `_ContractDef`; sitemap slug directory |
+| A new product appears / a slug 404s | `_CONTRACTS` + `discover` (`luminus.py:105-122`, `148-162`) | add a `_ContractDef`; sitemap slug directory |
 
 When the layout drifts, refresh the affected fixture PDF under `tests/fixtures/`
 and re-run `pytest tests/test_luminus.py`; the test assertions encode the

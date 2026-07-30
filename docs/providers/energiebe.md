@@ -167,7 +167,7 @@ The yearly fixed fee ("vaste vergoeding") is parsed by `_FEE_RE` matching
 `Vaste vergoeding <num> (.../jaar)` (`providers/energiebe.py:137`). Unlike Frank's
 per-month "Abonnementskost", energie.be quotes it already annual (25 EUR/jaar), so it is
 carried through unscaled - no x12 (`test_yearly_fixed_fee_is_already_annual`). A missing row
-is fatal: "energie.be: vaste vergoeding row not found" (`providers/energiebe.py:225`,
+is fatal: "energie.be: vaste vergoeding row not found" (`providers/energiebe.py:222`,
 `test_missing_fee_is_fatal`).
 
 ## Injection
@@ -195,7 +195,7 @@ base   = base_cents / 100.0
 ```
 
 A missing formula is fatal: "energie.be: injection formula row not found"
-(`providers/energiebe.py:236`, `test_missing_injection_is_fatal`). The July fixture yields
+(`providers/energiebe.py:237`, `test_missing_injection_is_fatal`). The July fixture yields
 factor `1.0` and base `-0,98 / 100` (`test_injection_factor`, `test_injection_base`).
 energie.be publishes no supplier-side prosumer / PV forfait, so
 `supplier_prosumer_eur_per_kva_year` stays `None`.
@@ -287,9 +287,9 @@ tomorrow prices come from the ENTSO-E day-ahead publication rather than the card
   injection formula, so `_INJECTION_RE` anchors on "injectievergoeding" and skips to the
   first parenthesised formula (`providers/energiebe.py:132`).
 - **Yearly fee is already annual.** No x12, unlike Frank's per-month Abonnementskost
-  (`providers/energiebe.py:224`).
+  (`providers/energiebe.py:226`).
 - **Wrapped DSO labels.** Halle-Vilvoorde and Midden-Vlaanderen wrap across the number row;
-  the `[^\d]*` gap in the row regex absorbs it (`providers/energiebe.py:279`).
+  the `[^\d]*` gap in the row regex absorbs it (`providers/energiebe.py:282`).
 - **Label differences from Frank.** Unit `(c€/kWh)` not `(EURct/kWh)`; "Bijdrage op de
   Energie" not "Bijdrage op Energie"; the tax regexes are energie.be-specific.
 - **No probe, no archive.** HEAD is 405 and the API overwrites in place; the coordinator
@@ -318,5 +318,5 @@ layout-preserving extraction used in production.
 | Solar credit wrong or "injection formula row not found" | `_INJECTION_RE` (`:132`) | "injectievergoeding" reworded or the sign dropped |
 | Tax under/over-billing or "tax block"/"GSC/WKK" errors | `_extract_taxes` regexes (`:140`-146) | a levy row label or unit changed; energy fund is the only optional one |
 | Professional rows leaking into the snapshot | `_PROF_MARKER` / `_residential` (`:103`, `:193`) | the professional section header wording changed |
-| A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row regex in `_extract_dsos` (`:109`, `:279`); the "Nettarieven" anchor | a label renamed, a new wrap artifact, or the section header changed |
+| A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row regex in `_extract_dsos` (`:109`, `:282`); the "Nettarieven" anchor | a label renamed, a new wrap artifact, or the section header changed |
 | Coordinator never refreshes | none - there is no probe; the time-based TTL drives refetch | expected for this supplier |

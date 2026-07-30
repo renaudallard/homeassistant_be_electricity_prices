@@ -68,7 +68,7 @@ class PriceBreakdown:      # pricing.py:74-81
 | `static_energy_eur_per_kwh(energy, band)` | `pricing.py:332` | `float | None` | Stable (no time-of-day) rate for a band. |
 | `static_breakdown(snapshot, dso_key, region, band, dso_tariff_mode)` | `pricing.py:424` | `PriceBreakdown | None` | All-in for a static band, used by the YTD/current-year path. |
 | `yearly_fixed_fee_for_meter(energy, meter)` | `pricing.py:358` | `float` | Supplier yearly fixed fee for the meter type. |
-| `slots_per_hour(resolution)` / `slot_delta(resolution)` / `slot_start(when, resolution)` | `pricing.py:84`,`88`,`95` | `int`/`timedelta`/`datetime` | Quarter-hour vs hourly grid helpers. |
+| `slots_per_hour(resolution)` / `slot_delta(resolution)` / `slot_start(when, resolution)` | `pricing.py:84`,`89`,`96` | `int`/`timedelta`/`datetime` | Quarter-hour vs hourly grid helpers. |
 
 The injection, capacity, prosumer and Brussels-OSP arithmetic is not in
 `pricing.py`; it lives in `coordinator.py` and is documented in the later sections.
@@ -100,7 +100,7 @@ Note what is deliberately absent from the per-kWh formula:
   levies (`pricing.py:566-575`); `energy_fund_eur_per_month` is defined on the
   `TaxOverlay` (`providers/base.py:470`) but is not touched here.
 - The Wallonia `region_connection_fee` is a per-kWh term and IS included in
-  `taxes_eur_per_kwh` for Wallonia (`pricing.py:569-571`).
+  `taxes_eur_per_kwh` for Wallonia (`pricing.py:569-570`).
 
 ### Regional renewables selection
 
@@ -124,7 +124,7 @@ roughly 2.7 c/kWh (`providers/base.py:457-459`, illustrative).
 Belgian residential electricity is billed at 6% VAT, but every current extractor
 parses numbers that are already VAT-inclusive, so the snapshot convention is
 `vat_rate = 0.0`, and the multiplier `1.0 + vat_rate` is `1.0`
-(`providers/base.py:471-474`, `pricing.py:580-589`). Under that convention the
+(`providers/base.py:471-474`, `pricing.py:589-595`). Under that convention the
 reported components match what the PDF prints exactly.
 
 The multiplier exists only as forward-compatibility: if a future extractor parses
@@ -251,7 +251,7 @@ discount and is out of scope (`pricing.py:204-209`).
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
 (`providers/base.py:235-238`). Fields: `pic`, `medium`, `eco`
-(`providers/base.py:250-252`). `dso_impact_band` (`pricing.py:468-477`):
+(`providers/base.py:250-252`). `dso_impact_band` (`pricing.py:468-484`):
 
 | Band | Hours (every day) |
 | --- | --- |
@@ -267,7 +267,7 @@ quarter-hourly meter and an opt-in to the DSO Impact tariff
 ## Meter routing
 
 `MeterType` is `"mono" | "bi" | "dynamic" | "exclusive_night"`
-(`pricing.py:70`, `const.py:152-163`). A digital (SMR3) meter registers
+(`pricing.py:71`, `const.py:152-163`). A digital (SMR3) meter registers
 peak/offpeak just like a bi-hourly meter, so `bi_capable = meter in ("bi",
 "dynamic")` on both the energy and network sides (`pricing.py:281`,
 `pricing.py:552`). The Belgian meter conventions are documented at
@@ -343,7 +343,7 @@ mono/bi/dynamic (`const.py:155-161`).
 
 `static_energy_eur_per_kwh` and `static_breakdown` produce a stable, no-time-of-day
 rate for the current-year-cost / YTD sensor when the contract has one
-(`pricing.py:332-421`).
+(`pricing.py:332-461`).
 
 `static_energy_eur_per_kwh(energy, band)` returns a rate for `band in
 ("single","peak","offpeak")` for Fixed and Variable, falling back to

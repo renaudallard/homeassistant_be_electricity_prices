@@ -247,15 +247,15 @@ stays `None` too.
 
 `_extract_taxes` (`providers/frank.py:419`) parses five levy rows and builds a `TaxOverlay`.
 All card values are VAT-inclusive (6% BTW), so `vat_rate=0.0` is set explicitly
-(`providers/frank.py:440`, comment at :453) and pinned by `test_taxes_vat_rate_zero`
+(`providers/frank.py:440`, comment at :432) and pinned by `test_taxes_vat_rate_zero`
 (`tests/test_frank.py:184`).
 
 | overlay field | card row | regex | required |
 | --- | --- | --- | --- |
-| `federal_excise` | Bijzondere accijns op Energie (EURct/kWh) | `_EXCISE_RE` (`:429`) | yes |
-| `energy_contribution` | Bijdrage op Energie (EURct/kWh) | `_ENERGY_CONTRIB_RE` (`:432`) | yes |
-| `flanders_renewables` | GSC + WKK (EURct/kWh) | `_GSC_RE` (`:433`), `_WKK_RE` (`:434`) | yes (both) |
-| `energy_fund_eur_per_month` | Bijdrage Energiefonds Residentieel (EUR/maand) | `_FUND_RE` (`:435`) | no (0.0 default) |
+| `federal_excise` | Bijzondere accijns op Energie (EURct/kWh) | `_EXCISE_RE` (`:408`) | yes |
+| `energy_contribution` | Bijdrage op Energie (EURct/kWh) | `_ENERGY_CONTRIB_RE` (`:411`) | yes |
+| `flanders_renewables` | GSC + WKK (EURct/kWh) | `_GSC_RE` (`:412`), `_WKK_RE` (`:413`) | yes (both) |
+| `energy_fund_eur_per_month` | Bijdrage Energiefonds Residentieel (EUR/maand) | `_FUND_RE` (`:414`) | no (0.0 default) |
 
 `flanders_renewables` is the sum of the GSC (green-certificate) and WKK
 (cogeneration) surcharges (`providers/frank.py:436`). Because Frank is Flanders-only, both
@@ -346,7 +346,7 @@ parsed date is what makes `archive_validity_check` authoritative in `fetch_for_m
   (`providers/frank.py:440`).
 - Fail-loud on missing mandatory rows: energy formula, monthly fee, injection formula,
   federal tax block, and GSC/WKK all raise `ExtractorError` rather than silently zeroing.
-  Four fatal-miss tests guard these (`tests/test_frank.py:150`-179, :165, :173).
+  Four fatal-miss tests guard these (`tests/test_frank.py:150`-170, :157, :165).
 - Mismatched bracket artifact in the DSO table (`Fluvius [Kempen)`) is tolerated by the
   character-class brackets (`providers/frank.py:458`).
 - Kempen and Midden-Vlaanderen map to non-obvious canonical keys (`fluvius_iveka`,
@@ -371,19 +371,19 @@ Fixtures live under `tests/fixtures/`. Each is a real Frank PDF for one tier and
 The five tiers share one PDF layout, but only the default tier had a fixture originally;
 `test_non_default_tiers_extract_energy_and_injection` (`tests/test_frank.py:204`) was added
 with the other four fixtures to catch a tier-specific card regression. Tests load fixtures
-through `fixture_text(name, layout=True)` (`tests/test_frank.py:43`), matching the
+through `fixture_text(name, layout=True)` (`tests/test_frank.py:47`), matching the
 layout-preserving extraction used in production.
 
 ## When the card changes, look here
 
 | symptom | likely culprit | why |
 | --- | --- | --- |
-| A tier stops fetching, or a new sixth tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py:94`-149) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
-| "could not parse Frank Energie energy formula" | `_FORMULA_RE` (`:351`) | BELPEX wording, sign chars, or the `x 1,06` multiplier changed on the card |
-| Wrong per-kWh price after a card update | the EURct->EUR conversion in `_extract_dynamic` (`:375`) | Frank switched units or dropped the VAT multiplier |
-| "monthly fixed fee row not found" | `_MONTHLY_FEE_RE` (`:357`) | "Abonnementskost (EUR/maand)" label reworded |
-| Solar credit wrong or "injection formula row not found" | `_INJECTION_RE` (`:395`) | "terugleveringsvergoeding" reworded or the sign dropped |
-| Tax under/over-billing or "tax block"/"GSC/WKK" errors | `_extract_taxes` regexes (`:429`-437) | a levy row label changed; energy fund is the only optional one |
-| A DSO sub-area missing, or all DSOs missing | `_FLUVIUS_LABELS` and the row regex in `_extract_dsos` (`:124`, `:478`); the "Digitale meter"/"Klassieke meter" section markers (`:469`) | a label renamed, a new bracket artifact, or the section headers changed |
-| Historical months mis-billed | `_resolve_pdf_url` month query (`:190`) and `archive_validity_check` call (`:261`) | the filename month/year tokens or validity text changed |
-| Coordinator never refreshes, or refreshes constantly | `probe` GROQ and the `[0]` dict handling in `_sanity_query` (`:264`, `:170`) | Sanity changed the response shape |
+| A tier stops fetching, or a new sixth tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py:94`-139) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
+| "could not parse Frank Energie energy formula" | `_FORMULA_RE` (`:330`) | BELPEX wording, sign chars, or the `x 1,06` multiplier changed on the card |
+| Wrong per-kWh price after a card update | the EURct->EUR conversion in `_extract_dynamic` (`:354`) | Frank switched units or dropped the VAT multiplier |
+| "monthly fixed fee row not found" | `_MONTHLY_FEE_RE` (`:336`) | "Abonnementskost (EUR/maand)" label reworded |
+| Solar credit wrong or "injection formula row not found" | `_INJECTION_RE` (`:374`) | "terugleveringsvergoeding" reworded or the sign dropped |
+| Tax under/over-billing or "tax block"/"GSC/WKK" errors | `_extract_taxes` regexes (`:408`-416) | a levy row label changed; energy fund is the only optional one |
+| A DSO sub-area missing, or all DSOs missing | `_FLUVIUS_LABELS` and the row regex in `_extract_dsos` (`:114`, `:457`); the "Digitale meter"/"Klassieke meter" section markers (`:448`) | a label renamed, a new bracket artifact, or the section headers changed |
+| Historical months mis-billed | `_resolve_pdf_url` month query (`:169`) and `archive_validity_check` call (`:240`) | the filename month/year tokens or validity text changed |
+| Coordinator never refreshes, or refreshes constantly | `probe` GROQ and the `[0]` dict handling in `_sanity_query` (`:243`, `:149`) | Sanity changed the response shape |

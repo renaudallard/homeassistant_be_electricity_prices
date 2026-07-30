@@ -115,7 +115,7 @@ proxy) in every soft-failure case:
 `archive_validity_check` (`_pdf.py:755-791`) is two-tier: if the parsed
 `valid_until` is present it must fall in the requested month; if it is missing
 it falls back to a textual month-name mention via `text_mentions_month`, using
-the French month names `_FR_MONTHS` (`cociter.py:85-94`). This guards against a
+the French month names `_FR_MONTHS` (`cociter.py:82-85`). This guards against a
 CDN serving a substituted current card under an archived URL, which would
 otherwise mis-bill past consumption.
 
@@ -218,7 +218,7 @@ An assertion (`cociter.py:110-112`) enforces that this key set equals
 `const.WALLONIA_DSO_KEYS`; if Cociter starts or stops serving a Wallonian DSO,
 update `_DSO_KEY` and `const.WALLONIA_DSO_KEYS` in lockstep or import fails.
 
-The two card layouts differ by column 6 onward (`cociter.py:398-419`):
+The two card layouts differ by column 6 onward (`cociter.py:407-418`):
 
 - Variable card: 6 numbers per row.
   `yearly | mono | dag | nacht | uitsl_nacht | tarif_prosumer`.

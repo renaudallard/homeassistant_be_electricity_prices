@@ -113,7 +113,7 @@ long-term statistics.
 3. Reject regions the contract has no document for (`engie.py:336`).
 4. Build the slug and query URL (`_document_url`, `engie.py:240`), download and
    extract the PDF text with `fetch_pdf_text` (`_pdf.py:179`), and delegate to
-   `parse_snapshot` with a single-region text map (`engie.py:339`).
+   `parse_snapshot` with a single-region text map (`engie.py:340`).
 
 ### `probe`: none
 
@@ -297,7 +297,7 @@ Five DSOs mapped via `_WALLONIA_LABELS` (`engie.py:735`): AIEG, AIESH,
 `ORES (Brab. Wal.)` -> `ores`, `REGIE DE WAVRE` -> `rew`, `TECTEO - RESA` ->
 `resa`. Rows carry 10 numbers on static contracts (with a prosumer column) and 9
 on dynamic contracts (the prosumer column is replaced by nothing, since dynamic
-SMR3 contracts have no compensation regime; `engie.py:757`, test
+SMR3 contracts have no compensation regime; `engie.py:773`, test
 `test_dynamic_wallonia_dso_has_separate_transport_no_prosumer`
 `tests/test_engie.py:202`). The last column is always the c€/kWh transport rate,
 so it is billed separately (unlike Flanders).
@@ -427,7 +427,7 @@ No supplier-side PV / prosumer forfait: Engie does not populate
 - ORES sub-area divergence guard raises on a future tariff split (`engie.py:799`).
 - Brussels folds metering + <=13kVA power term into the DSO fee (`engie.py:841`).
 - Dynamic Wallonia rows have no prosumer column (9 numbers, not 10),
-  `engie.py:757`.
+  `engie.py:773`.
 - Tarif Social is intentionally excluded (`engie.py:225`).
 - Partial-region resilience: `parse_snapshot` accepts a single-region map so a
   snapshot still builds if Engie's API is down for one region (test

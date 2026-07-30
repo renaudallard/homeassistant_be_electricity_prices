@@ -138,7 +138,7 @@ of narrowly-anchored helpers. The fields it pulls out:
 The overlay is region-selected: `parse_snapshot` computes the Wallonia connection
 fee and Wallonia renewables only for `wallonia`, the Flanders renewables only for
 `flanders`, and picks `_extract_flanders_dsos` vs `_extract_wallonia_dsos`
-accordingly (`ecofix.py:205`). A `brussels` region yields an empty `dsos` dict and
+accordingly (`ecofix.py:206`). A `brussels` region yields an empty `dsos` dict and
 zeroed regional levies, kept well-formed even though the registry filter should
 never let a Brussels config reach here (`ecofix.py:220`).
 
@@ -150,7 +150,7 @@ Notable parsing hurdles:
   disambiguates by magnitude, not position: renewables on Belgian residential
   cards are `< 5` c/kWh and yearly fees are `>= 10` EUR/jaar, so the smaller of the
   two tokens is always the renewable and the larger is the fee (`ecofix.py:263`,
-  `ecofix.py:321`).
+  `ecofix.py:322`).
 - **Vlaanderen block slice.** `_flanders_energy_block` (`ecofix.py:249`) carves the
   text from the `Vlaanderen` heading to `Wallonië`; both the fee and the FL
   renewable live in that slice. Scoping the renewable regex to this block stops the
@@ -402,7 +402,7 @@ Ranked by how likely a card re-render is to break them:
 3. `_extract_flanders_dsos` (`ecofix.py:589`) and `_FLANDERS_LABELS` (`ecofix.py:577`):
    a Fluvius rename (labels are matched literally) or a change in the number of
    columns per row, especially if Fluvius diverges the two data-management regimes.
-4. `_extract_wallonia_dsos` / `_extract_ores` / `_ORES_PATTERN` (`ecofix.py:660`):
+4. `_extract_wallonia_dsos` / `_extract_ores` / `_ORES_PATTERN` (`ecofix.py:666`):
    a Walloon column reorder or an ORES sub-area split (the latter raises by design).
 5. `_extract_publication` (`ecofix.py:485`): a new header token near the month, or a
    language switch away from Dutch month names in `_DUTCH_MONTHS` (`ecofix.py:130`).

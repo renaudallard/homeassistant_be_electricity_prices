@@ -31,10 +31,10 @@ decorator and each test gets a fresh event loop.
 The integration is a Home Assistant custom component, so the suite depends on
 `pytest-homeassistant-custom-component` (which supplies the `hass` fixture and `MockConfigEntry`)
 and, for time-pinned tests, `pytest-freezer` (the `freezer` fixture). `tests/conftest.py`
-inserts the repo root onto `sys.path` (`tests/conftest.py:39`) so
+inserts the repo root onto `sys.path` (`tests/conftest.py:40`) so
 `custom_components.be_electricity_prices` imports without an installed package, and an autouse
 fixture enables custom-component loading for every test that requests `hass`
-(`tests/conftest.py:43`).
+(`tests/conftest.py:44`).
 
 ### Layout: one module per provider plus cross-cutting modules
 
@@ -105,27 +105,27 @@ publication label). This is why the tests are deterministic and fast while the e
 still exercised end-to-end against genuine supplier output.
 
 `tests/test_discover.py` drives each supplier's `discover()` against its saved listing snippet
-through a minimal `aiohttp.ClientResponse` stand-in, `_FakeResponse` (`tests/test_discover.py:65`),
+through a minimal `aiohttp.ClientResponse` stand-in, `_FakeResponse` (`tests/test_discover.py:68`),
 and asserts the discovered product set matches the registry exactly. A regex regression that drops
 a product, or a fixture refresh that grows the catalogue, fails fast.
 
 ### Europe/Brussels timezone pin
 
 `tests/conftest.py` has an autouse fixture `_force_brussels_timezone` that pins every test to
-`Europe/Brussels` (`tests/conftest.py:51`). This is load-bearing, not cosmetic. The
+`Europe/Brussels` (`tests/conftest.py:52`). This is load-bearing, not cosmetic. The
 `pytest-homeassistant-custom-component` `hass` fixture defaults to `US/Pacific`; for a
 Belgian-electricity integration that default hides DST transitions, off-peak window boundaries,
 and per-month archive bugs that would surface in production. The fixture has two branches:
 
 - If the test requests `hass`, it sets the timezone on the running Home Assistant instance via
   `hass.config.async_set_time_zone("Europe/Brussels")` on the loop `hass` owns
-  (`tests/conftest.py:66`).
+  (`tests/conftest.py:68`).
 - Otherwise it swaps `homeassistant.util.dt`'s default timezone for the duration of the test and
   restores it afterwards (`tests/conftest.py:71`).
 
 The fixture stays synchronous on purpose: pytest-asyncio auto mode would otherwise wrap an async
 autouse fixture in a second `asyncio.Runner` that cannot run while the `hass` loop is already up.
-The comment at `tests/conftest.py:52` documents this constraint. When you write time-sensitive
+The comment at `tests/conftest.py:58` documents this constraint. When you write time-sensitive
 tests (offpeak windows, YTD backfill boundaries, monthly archive keys), assume Brussels local
 time and do not reintroduce a US default.
 
@@ -137,7 +137,7 @@ non-strict (see the workflows below). Several entity and coordinator tests subst
 are read (for example `entry.runtime_data = SimpleNamespace(data=...)` in
 `tests/test_diagnostics.py:81`). That stub does not match the production signature, so the call
 site is annotated with `# type: ignore[arg-type]` to keep the non-strict mypy pass clean, as in
-`tests/test_button.py:62` and `tests/test_ecopower.py:359`. The convention is to suppress at the
+`tests/test_button.py:62` and `tests/test_ecopower.py:409`. The convention is to suppress at the
 call site with `# type: ignore[arg-type]`, never to relax the production function signature to
 accept the stub. `pyproject.toml` sets `explicit_package_bases = true` (`pyproject.toml:12`) so
 mypy treats `custom_components/be_electricity_prices` and `tests/` as separate package roots
@@ -153,7 +153,7 @@ registered `(supplier, contract, region)` tuple, fetches the supplier's real pub
 network, parses it, and asserts the resulting snapshot is structurally sane (energy populated,
 expected DSO keys present, taxes populated, rates inside loose plausibility bounds). It prints a
 markdown report to stdout and encodes the outcome in its exit code. It is run daily by
-`.github/workflows/live_check.yml` (`scripts/live_check.py:27`).
+`.github/workflows/live_check.yml` (`scripts/live_check.py:35`).
 
 The script deliberately does not import Home Assistant. `_load_providers()`
 (`scripts/live_check.py:62`) synthesises a `be_pkg.providers` package and loads each provider
@@ -166,68 +166,68 @@ loaded `base` module.
 ### Structure and main functions
 
 ```
-main()                       scripts/live_check.py:1486  asyncio.run(_run()); rc=8 on harness crash
-  _run()                     scripts/live_check.py:1292  load providers, gather checks, render, exit code
+main()                       scripts/live_check.py:1748  asyncio.run(_run()); rc=8 on harness crash
+  _run()                     scripts/live_check.py:1529  load providers, gather checks, render, exit code
     _load_providers()        scripts/live_check.py:62    file-path import of every provider (no HA)
-    _attributed_check(...)   scripts/live_check.py:317   per-supplier wait_for + trace attribution
-      _check_eneco ...       scripts/live_check.py:345   one _check_<supplier> per registered extractor
+    _attributed_check(...)   scripts/live_check.py:322   per-supplier wait_for + trace attribution
+      _check_eneco ...       scripts/live_check.py:413   one _check_<supplier> per registered extractor
       _check_frank                                       (cociter, dats24, ebem, ecofix, ecopower,
       _check_bolt                                         engie, luminus, mega, totalenergies,
       ...                                                 bolt, octaplus, frank, energiebe,
                                                           energyvision)
-    _check_catalogs(...)     scripts/live_check.py:997   run each discover(), flag new product ids
-    _fetch_with_retry(...)   scripts/live_check.py:306   transient-only retry with backoff
-    _validate_snapshot(...)  scripts/live_check.py:1148  energy + injection shape gates
-    _drift_warnings(...)     scripts/live_check.py:1683  latency / byte budget checks
-    _render_report(...)      scripts/live_check.py:1263  markdown pass/fail report
+    _check_catalogs(...)     scripts/live_check.py:1180   run each discover(), flag new product ids
+    _fetch_with_retry(...)   scripts/live_check.py:374   transient-only retry with backoff
+    _validate_snapshot(...)  scripts/live_check.py:1357  energy + injection shape gates
+    _drift_warnings(...)     scripts/live_check.py:1713  latency / byte budget checks
+    _render_report(...)      scripts/live_check.py:1500  markdown pass/fail report
 ```
 
 Each `_check_<supplier>` derives its contract list from the runtime registry (for example
-`for cid in (c.id for c in eneco.EXTRACTOR.contracts)`, `scripts/live_check.py:349`) so adding a
+`for cid in (c.id for c in eneco.EXTRACTOR.contracts)`, `scripts/live_check.py:417`) so adding a
 product to `EXTRACTOR.contracts` gets it validated here without editing the harness. Every check
 asserts the publication label is non-empty, the expected DSO keys for the region are present
 (`_FLUVIUS_KEYS`, `_WALLONIA_DSO_KEYS`, or `sibelga` for Brussels), the relevant taxes are
 positive, and then calls `_validate_snapshot`.
 
-`_validate_snapshot` (`scripts/live_check.py:1148`) runs two gates:
+`_validate_snapshot` (`scripts/live_check.py:1357`) runs two gates:
 
-- `_validate_energy` (`scripts/live_check.py:1161`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:1389`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
   additionally assert band ordering (peak >= transition >= offpeak; pic >= medium >= eco). An
   unrecognised energy class is a failure.
-- `_validate_injection` (`scripts/live_check.py:1065`) gates that the feed-in credit parsed and
+- `_validate_injection` (`scripts/live_check.py:1249`) gates that the feed-in credit parsed and
   kept the right shape. This exists because the coordinator drops the credit entirely when
   `injection` is None, so a relabelled injection row silently zeroes a solar user's credit and
   used to pass CI green (issues #31, F53). The `shape` argument pins expectations: `"none"`
   (region pays no feed-in, injection must be absent), `"monthly"` (`current` set, `factor`/`base`
   None), `"spot"` (`factor`/`base` set), or `"present"` (present, shape unconstrained). Per-contract
-  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1133`); the DATS 24 check passes
+  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1317`); the DATS 24 check passes
   `injection_shape` explicitly because its Wallonia card pays no feed-in while its Flanders card is
   monthly-indexed.
 
 ### Per-supplier byte and wallclock budgets, and drift issues
 
-An aiohttp `TraceConfig` (`scripts/live_check.py:282`) tags every request with the supplier
+An aiohttp `TraceConfig` (`scripts/live_check.py:288`) tags every request with the supplier
 currently being checked (via a `ContextVar` set by the `_attributed()` context manager,
-`scripts/live_check.py:292`) and accumulates per-supplier fetch count, summed request duration,
+`scripts/live_check.py:298`) and accumulates per-supplier fetch count, summed request duration,
 body bytes, and failed-attempt count / duration into `METRICS`. These metrics
 surface silent slowdowns and PDF-size jumps, both leading indicators that a supplier reworked its
 publication, and are appended to the daily report by `_render_metrics`
-(`scripts/live_check.py:1438`).
+(`scripts/live_check.py:1468`).
 
 Reading a row correctly needs three facts about which hook feeds which column:
 
 - **Fetches / Fetch time** come from `on_request_end`, which fires once per request that reached
   its final response headers, after the redirect chain and **before** the body is read. So the
   latency figure is time-to-headers, and a 302-to-CDN fetch counts as one.
-- **Bytes received** are summed in `_on_response_chunk_received` (`scripts/live_check.py:222`)
+- **Bytes received** are summed in `_on_response_chunk_received` (`scripts/live_check.py:228`)
   rather than read from `Content-Length`, because that header is None on chunked responses and
   would silently count as zero. `ClientResponse.read()` fires that hook once with the whole body,
   so the count is all-or-nothing: a fetch with a counted request but `-` bytes got its headers and
   then stalled mid-body.
-- **Failed (n / s)** comes from `_on_request_exception` (`scripts/live_check.py:246`), which is the
+- **Failed (n / s)** comes from `_on_request_exception` (`scripts/live_check.py:252`), which is the
   only hook a request that never produced a response fires. Failures are kept out of the success
   columns deliberately, so the latency budgets below stay calibrated on successful fetches; before
   this counter existed a supplier whose every attempt timed out reported 0 fetches and 0 s and read
@@ -238,32 +238,32 @@ Reading a row correctly needs three facts about which hook feeds which column:
 
 Two safety caps bound runtime. Each supplier check runs under
 `asyncio.wait_for(..., timeout=_SUPPLIER_HARD_TIMEOUT_S)` with a 240s hard cap
-(`scripts/live_check.py:317`), recorded as an extractor failure rather than propagating so one hung
+(`scripts/live_check.py:341`), recorded as an extractor failure rather than propagating so one hung
 supplier cannot starve the `gather()`. The session-level `aiohttp.ClientTimeout(total=60)`
-(`scripts/live_check.py:1539`) bounds individual requests.
+(`scripts/live_check.py:1569`) bounds individual requests.
 
-`_drift_warnings` (`scripts/live_check.py:1683`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:1713`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
-`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1390`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1408`) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py:1428`) for the known-large catalogues (Bolt, TotalEnergies, Engie, Ecofix,
+`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1652`), with per-supplier overrides in
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1670`) and `_LATENCY_BUDGET_OVERRIDES`
+(`scripts/live_check.py:1690`) for the known-large catalogues (Bolt, TotalEnergies, Engie, Ecofix,
 Mega, OCTA+). Note that `elapsed_s` is the sum of per-request durations, not true wallclock, so a
 supplier that fetches concurrently (Bolt fetches its six PDFs with `asyncio.gather`,
-`scripts/live_check.py:715`) records the sum of its parallel fetches; the budgets are sized around
+`scripts/live_check.py:898`) records the sum of its parallel fetches; the budgets are sized around
 that. The synthetic `_catalog` bucket is skipped in drift analysis because it aggregates every
-supplier's discovery fetch under one name (`scripts/live_check.py:1455`). When a budget is blown,
+supplier's discovery fetch under one name (`scripts/live_check.py:1717`). When a budget is blown,
 `live_check.yml` opens or updates a dedicated drift issue (see below). Tuning a false-firing drift
 alert means adjusting the override, not the code.
 
 ### Exit codes and the two report side-channels
 
-`_run()` (`scripts/live_check.py:1292`) splits checks into `extractor` and `catalog` kinds. The
+`_run()` (`scripts/live_check.py:1529`) splits checks into `extractor` and `catalog` kinds. The
 extractor report (with the metrics block) is printed to stdout, which the workflow captures. The
 catalog diff is written to `catalog_report.md` and the drift warnings to `drift_report.md` at the
-repo root (`scripts/live_check.py:1368`), each a side-channel the workflow reads to file a separate
+repo root (`scripts/live_check.py:1630`), each a side-channel the workflow reads to file a separate
 issue so the three failure modes never conflate in one thread.
 
-The exit code is bit-encoded (`scripts/live_check.py:1378`):
+The exit code is bit-encoded (`scripts/live_check.py:1640`):
 
 | Bit | Value | Meaning | Retried by workflow? |
 | --- | --- | --- | --- |
@@ -272,12 +272,12 @@ The exit code is bit-encoded (`scripts/live_check.py:1378`):
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
 | - | 8 | harness crash (top-level Python exception in the script) | no |
 
-`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:1489`) so the workflow
+`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:1756`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
 
 ### The transient-only retry helper
 
-`_fetch_with_retry(factory, *, attempts=3)` (`scripts/live_check.py:306`) calls `factory()`, and on
+`_fetch_with_retry(factory, *, attempts=3)` (`scripts/live_check.py:374`) calls `factory()`, and on
 a transient network failure retries with a short backoff (`_RETRY_BACKOFF_S = (1.0, 3.0)`). A
 failure is "transient" only if it is a bare `TimeoutError` or an `ExtractorError` whose message the
 shared `providers/_pdf.is_transient_fetch_error` predicate classifies as transient (a wrapped

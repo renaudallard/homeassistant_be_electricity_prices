@@ -431,7 +431,7 @@ back to treating tomorrow's rates as available (`providers/base.py:506`).
 ## The registry (providers/__init__.py)
 
 The registry is the single list of suppliers the integration knows about
-(`providers/__init__.py:63`).
+(`providers/__init__.py:65`).
 
 ```python
 EXTRACTORS: dict[str, SupplierExtractor] = {
@@ -455,7 +455,7 @@ Each value's `EXTRACTOR` is imported under a private alias and keyed by its own
 `.id`. The id is the stable key: it is what gets stored in every user's config
 entry, so it must never change after a supplier ships.
 
-Two lookups are exported (`providers/__init__.py:83` and `:87`):
+Two lookups are exported (`providers/__init__.py:87` and `:96`):
 
 | Function | Signature | Behaviour |
 | --- | --- | --- |
@@ -503,7 +503,7 @@ Internals worth knowing:
   that is empty, its class name. aiohttp raises its timeouts argless, so without
   it the message ended in a bare colon -- and that message is user-visible on the
   `snapshot_stale` Repairs card, the `last_error` sensor attribute, and in
-  diagnostics. The ENTSO-E client uses it for the same reason (`api.py:126`).
+  diagnostics. The ENTSO-E client uses it for the same reason (`api.py:127`).
 - `_is_pdf_payload` (`_pdf.py:126`) validates by magic bytes (`%PDF`, allowing a
   leading UTF-8 BOM that OCTA+ prepends), not Content-Type, because some CDNs
   return 200 + text/html for a missing PDF, and Engie's API returns

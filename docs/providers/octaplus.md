@@ -31,7 +31,7 @@ any other region (`octaplus.py:182-183`, exercised by
 `test_brussels_region_rejected`).
 
 OCTA+ publishes one PDF per (product, region) at a stable, predictable URL
-(`octaplus.py:28-31, 93, 142-143`):
+(`octaplus.py:28-31, 87, 136-137`):
 
 ```
 https://files.octaplus.be/tariffs/E_OCTA_<SLUG>_RE_<VL|WL>_FR.pdf
@@ -135,20 +135,20 @@ unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 
 | snapshot field | source function | notes |
 | --- | --- | --- |
-| `energy` | `_extract_energy` (`:327`) | shape depends on kind (see below) |
-| `injection` | `_extract_injection` (`:452`) | flat current on non-dynamic, factor/base on dynamic |
-| `publication_label` | `_extract_publication_month` (`:428`) | MM/YYYY |
-| `taxes.federal_excise`, `taxes.energy_contribution` | `_extract_taxes` (`:485`) | first federal tier (0-3.000 kWh) |
+| `energy` | `_extract_energy` (`:321`) | shape depends on kind (see below) |
+| `injection` | `_extract_injection` (`:431`) | flat current on non-dynamic, factor/base on dynamic |
+| `publication_label` | `_extract_publication_month` (`:407`) | MM/YYYY |
+| `taxes.federal_excise`, `taxes.energy_contribution` | `_extract_taxes` (`:464`) | first federal tier (0-3.000 kWh) |
 | `taxes.region_connection_fee` | `_extract_taxes` | Wallonia only |
-| `taxes.flanders_renewables` | `_extract_flanders_renewables` (`:537`) | Flanders only, green + cogen |
-| `taxes.wallonia_renewables` | `_extract_wallonia_renewables` (`:522`) | Wallonia only |
-| `dsos` | `_extract_flanders_dsos` (`:639`) or `_extract_wallonia_dsos` (`:578`) | region-branched |
+| `taxes.flanders_renewables` | `_extract_flanders_renewables` (`:516`) | Flanders only, green + cogen |
+| `taxes.wallonia_renewables` | `_extract_wallonia_renewables` (`:501`) | Wallonia only |
+| `dsos` | `_extract_flanders_dsos` (`:609`) or `_extract_wallonia_dsos` (`:557`) | region-branched |
 | `valid_until` | `parse_valid_until` (`_pdf.py:794`) | shared helper |
-| `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` (`:245`) | PV forfait, annualised |
+| `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` (`:239`) | PV forfait, annualised |
 
 ### Energy block (`_extract_energy`, `octaplus.py:321-389`)
 
-`_extract_yearly_fee` (`:273-285`) always runs first and matches `Redevance
+`_extract_yearly_fee` (`:267-279`) always runs first and matches `Redevance
 fixe (€/an) <value>` (illustrative ~65 EUR/year per the comment and
 `test_fixed_wallonia_extracts_meter_rates`). A miss raises rather than defaulting
 to 0, so a layout drift surfaces instead of silently dropping the annual fee.
@@ -156,24 +156,24 @@ to 0, so a layout drift surfaces instead of silently dropping the annual fee.
 By kind:
 
 - **`dynamic`**: parses the prose formula `Epex 15' * <factor> <sign> <base>`
-  (`_EPEX_FORMULA`, `:293-295`). The consumption formula is picked by
-  `_dynamic_consumption_formula` (`:305-324`), which first locates the injection
+  (`_EPEX_FORMULA`, `:287-289`). The consumption formula is picked by
+  `_dynamic_consumption_formula` (`:299-318`), which first locates the injection
   formula (the one after the `Le prix de votre injection` lead-in) and skips it,
   so reordering the two paragraphs cannot bind the injection formula as the
   consumption rate (`test_dynamic_consumption_formula_skips_injection_on_reorder`).
   The card formula is HTVA and in EUR/MWh, so it is converted to the model's
   TVAC EUR/kWh: `factor = factor_pdf * vat`, `base = base_eur_mwh / 1000 * vat`
-  (`:342-348`). VAT comes from `_vat_multiplier` reading `Tarifs N% TVAC`
-  (`:288-290`). `test_dynamic_parses_smr3_formula` pins illustrative
+  (`:336-342`). VAT comes from `_vat_multiplier` reading `Tarifs N% TVAC`
+  (`:282-284`). `test_dynamic_parses_smr3_formula` pins illustrative
   `factor == 1.14798` and `base == 0.0044202` for `Epex 15' * 1,083 + 4,17` at
   6% VAT.
 - **`tou_impact`**: reads three CWaPE-band supplier rates `Impact Pic`,
   `Impact Medium`, `Impact Eco` (c€/kWh) off the Fixed card and returns
-  `ImpactRates` (`:358-367`). Missing any band raises. Illustrative expected
+  `ImpactRates` (`:352-361`). Missing any band raises. Illustrative expected
   values in `test_fixed_impact_extracts_three_cwape_bands`: eco 0.1284, medium
   0.1683, pic 0.1972.
 - **`fixed` / `variable`**: reads the aligned meter table via `_meter_value`
-  (`:405-409`), which matches `<label> <value>` and divides by 100 (c€ to EUR):
+  (`:392-396`), which matches `<label> <value>` and divides by 100 (c€ to EUR):
   `Compteur monohoraire` (single/current), `Heures pleines` (peak), `Heures
   creuses` (offpeak), `Compteur exclusif nuit` (exclusive_night). `mono` is
   mandatory; `peak` and `offpeak` are mandatory too (OCTA+ always prints the
@@ -189,7 +189,7 @@ Two layouts are handled. Pre-2026 cards print `Clients résidentiels en <region>
 `-MM/YYYY-` cannot shadow the title date. The 2026 redesign dropped that line
 and moved the date to a `FICHE TARIFAIRE <MOIS> <YYYY>` banner with the French
 month spelled out and accented; the fallback maps the folded month name through
-`_FRENCH_MONTHS` (`:412-425`). `test_publication_month_reads_fiche_tarifaire_banner`
+`_FRENCH_MONTHS` (`:402-404`). `test_publication_month_reads_fiche_tarifaire_banner`
 exercises both, including accented `FÉVRIER` and `AOÛT`.
 
 ### Taxes (`_extract_taxes`, `octaplus.py:464-498`)
@@ -203,7 +203,7 @@ group 2 is `energy_contribution`, both divided by 100. A miss raises
 (`test_missing_federal_tax_tier_raises`; note that test's fixture text uses a
 non-matching separator to force the raise). Wallonia adds
 `region_connection_fee` from `Redevance raccordement Wallonie <value>`
-(`:511-518`). Illustrative pinned values: `federal_excise 0.050329`,
+(`:490-497`). Illustrative pinned values: `federal_excise 0.050329`,
 `energy_contribution 0.002042` (`test_federal_taxes_use_first_tier`),
 `region_connection_fee 0.00075` (`test_taxes_split_correctly_per_region`).
 
@@ -213,11 +213,11 @@ VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
 
 ### Regional renewables
 
-- **Wallonia** (`_extract_wallonia_renewables`, `:522-534`): anchors on `Région
+- **Wallonia** (`_extract_wallonia_renewables`, `:501-513`): anchors on `Région
   wallonne` and takes its first numeric neighbour, bounding the non-digit run to
   80 chars so a far-away digit cannot be grabbed. Mandatory; raises on a miss.
   Illustrative ~3.1 c€/kWh; pinned `0.03095`.
-- **Flanders** (`_extract_flanders_renewables`, `:537-553`): sums two rows,
+- **Flanders** (`_extract_flanders_renewables`, `:516-532`): sums two rows,
   `Coûts énergie verte` (green energy) and `Coûts cogénération` (WKK). Raises
   only if both are absent. Pinned illustrative `(1.166 + 0.430) / 100`
   (`test_taxes_split_correctly_per_region`).
@@ -237,7 +237,7 @@ that are NOT VAT-adjusted (injection is VAT-exempt, `base.py:269-289`);
 `Epex 15' * 1 - 13,89 €/MWh` (`test_dynamic_extracts_injection_formula`). Returns
 `None` only when both `current` and `factor` are absent.
 
-`_INJECTION_LEAD` (`:299-302`) accepts either the pre-2026 lead-in `Le prix de
+`_INJECTION_LEAD` (`:293-296`) accepts either the pre-2026 lead-in `Le prix de
 votre injection` or the 2026 rewording `les prix de l'électricité injectée sont
 indexés`, with the curly apostrophe the card uses.
 `test_dynamic_injection_survives_reworded_lead_in` guards this.
@@ -264,13 +264,13 @@ Region-branched in `parse_snapshot` (`octaplus.py:208-213`).
 
 ### Wallonia (`_extract_wallonia_dsos`, `octaplus.py:557-603`)
 
-Five DSO keys via `_WALLONIA_LABELS` (`:562-575`): `AIEG` -> `DSO_AIEG`,
+Five DSO keys via `_WALLONIA_LABELS` (`:541-554`): `AIEG` -> `DSO_AIEG`,
 `AIESH` -> `DSO_AIESH`, `ORES\(` -> `DSO_ORES` (eight ORES sub-areas share one
 tariff line, match the first), `RESA` -> `DSO_RESA` (bare token anchors both
 `RESA` and the older `TECTEO - RESA`), `Régie de Wavre` -> `DSO_REW` (accent
 class + optional spacing anchors both the old `REGIEDEWAVRE` and the spaced
 `REGIE DE WAVRE`). Labels are matched case-insensitively because the 2026
-template recased ALLCAPS to title case (`:559-561`).
+template recased ALLCAPS to title case (`:538-540`).
 
 Each Wallonia row carries 10 numbers: `mono | jour | nuit | PIC | MEDIUM | ECO |
 excl_nuit | terme_fixe (€/an) | col_a | col_b`. The last two columns are the
@@ -278,7 +278,7 @@ prosumer forfait (€/kVA/an) and transport rate (c€/kWh), but the 2026 templa
 swapped their order. The parser disambiguates by magnitude:
 `prosumer = max(col_a, col_b)`, `transport = min(col_a, col_b)`, because the
 forfait (~80-100) always dwarfs the transport rate (~2-3 c€/kWh)
-(`:604-611`). The three PIC/MEDIUM/ECO bands populate
+(`:583-590`). The three PIC/MEDIUM/ECO bands populate
 `distribution_pic/medium/eco`, feeding the Impact product's DSO side. Pinned
 illustrative for `aieg`: single 0.1087, peak 0.1205, offpeak 0.0667, transport
 0.0275, data_management 19.49, prosumer 81.04
@@ -295,7 +295,7 @@ Flanders cards carry two rows per DSO. The digital-meter row has
 `dist_normal | dist_excl_night | data_mgmt_qh (€/an) | data_mgmt_year (€/an) |
 capacity (€/kW/yr) | - | -`; a second analog-meter row carries the prosumer rate
 as its last column. The parser first collects prosumer rates from the analog row
-(`:652-662`), then reads the digital row per DSO (`:664-697`). The digital regex
+(`:622-632`), then reads the digital row per DSO (`:634-667`). The digital regex
 is anchored on the sub-area suffix (label with `Fluvius ` stripped) rather than
 the full label, and tolerates multi-glyph cell separators (`-------- --------`),
 because some cards (Dynamic Flanders) prepend header glyphs to one digital row
@@ -307,7 +307,7 @@ data-management fee (~18,56 EUR per the Luminus card footnote); billing the
 dynamic at it would over-charge ~42 EUR/yr. The mensuel/annuel value (group 4,
 ~18,92 EUR) matches the standard databeheer the rest of the integration uses, so
 it is used for all meter regimes pending an authoritative Fluvius quart-horaire
-rate (`:679-687`). Flanders `transport` is set to 0.0 (`:692`). Pinned
+rate (`:649-657`). Flanders `transport` is set to 0.0 (`:662`). Pinned
 illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
 52.37, prosumer 54.63 (`test_flanders_dsos_extract_full_set`).
 
@@ -316,35 +316,35 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
 - **VAT convention**: snapshot prices are TVAC, so `vat_rate=0.0`
   (`octaplus.py:228`). The dynamic formula is the exception: it is HTVA on the
   card and is scaled by the parsed VAT multiplier before storage
-  (`:341-348`).
+  (`:335-342`).
 - **Injection is VAT-exempt**: dynamic injection factor/base are stored
-  un-scaled (`:473-474`); a regression that VAT-scaled them would mis-credit
+  un-scaled (`:452-453`); a regression that VAT-scaled them would mis-credit
   feed-in.
 - **Fixed-card injection column index**: `current` is the *second* number on the
   `Compteur monohoraire` line; a column-index slip that grabbed the consumption
   rate would over-credit feed-in ~3.4x (`test_fixed_wallonia_extracts_meter_rates`).
 - **Consumption vs injection formula collision**: both dynamic formulas share the
   `Epex 15'` shape; `_dynamic_consumption_formula` must skip the injection one by
-  offset, robust to paragraph reordering (`:305-324`).
+  offset, robust to paragraph reordering (`:299-318`).
 - **Reworded 2026 injection lead-in and curly apostrophe**: `_INJECTION_LEAD`
-  accepts both phrasings (`:299-302`).
+  accepts both phrasings (`:293-296`).
 - **Wallonia column swap (2026)**: prosumer and transport columns swapped order;
-  disambiguated by magnitude, not position (`:604-611`).
+  disambiguated by magnitude, not position (`:583-590`).
 - **Wallonia label recasing/renaming (2026)**: case-insensitive match,
   `TECTEO - RESA` -> `RESA`, `REGIEDEWAVRE`/`REGIE DE WAVRE` -> Régie de Wavre
-  (`:559-575`, `test_dynamic_pdf_uses_spaced_dso_label`).
+  (`:538-554`, `test_dynamic_pdf_uses_spaced_dso_label`).
 - **Flanders glyph corruption**: digital rows can lose the leading `F` and gain
   header glyphs; the suffix-anchored regex and multi-glyph separator tolerance
-  work around it (`:648-651, 664-674`).
+  work around it (`:618-621, 634-644`).
 - **Flanders quart-horaire data-management trap**: use group 4 (~18,92), not the
-  ~61 EUR group 3, or the dynamic over-charges ~42 EUR/yr (`:679-687`).
+  ~61 EUR group 3, or the dynamic over-charges ~42 EUR/yr (`:649-657`).
 - **Tax glyph explosion**: page 2 renders each character as its own word;
-  `x_join_threshold=1.0` reassembles values (`:191-194`,
+  `x_join_threshold=1.0` reassembles values (`:185-188`,
   `test_federal_taxes_use_first_tier`).
 - **Federal-tier anchor**: match on `0 & 3.000 kWh`, not the mangleable
-  `Consommation` word (`:496-502`).
+  `Consommation` word (`:475-481`).
 - **PV forfait `HTVA` trap**: the regex must exclude the AMR `HTVA` rate to avoid
-  binding `1,50` instead of `4,77` (`:263-267`).
+  binding `1,50` instead of `4,77` (`:257-261`).
 - **Fail-loud policy**: yearly fee, federal tier, regional renewables, and the
   bi-hourly rows all raise on a miss instead of defaulting to 0, so a layout
   drift surfaces (the coordinator then serves the cached snapshot).
@@ -367,25 +367,25 @@ fetch path.
 
 ## When the card changes, look here
 
-- URL / slug / region change: `_document_url` (`:142-143`), `_CONTRACTS`
-  (`:112-134`), `_REGION_TO_CODE` (`:95-98`), and `discover` (`:162-173`) if the
+- URL / slug / region change: `_document_url` (`:136-137`), `_CONTRACTS`
+  (`:106-128`), `_REGION_TO_CODE` (`:89-92`), and `discover` (`:156-167`) if the
   listing markup changes.
 - Meter-rate rows renamed or reordered: `_meter_value` label patterns in
-  `_extract_energy` (`:375-378`).
-- Dynamic formula wording / unit change: `_EPEX_FORMULA` (`:293-295`),
-  `_dynamic_consumption_formula` (`:305-324`), the VAT/unit conversion
-  (`:341-348`), and `_INJECTION_LEAD` (`:299-302`).
-- Impact bands relabelled: `_extract_energy` Impact branch (`:358-367`).
-- Tax tier / connection fee moved: `_extract_taxes` (`:485-519`); if the glyph
-  spacing changes, revisit `x_join_threshold` in `fetch` (`:194`).
-- Regional renewables rows renamed: `_extract_wallonia_renewables` (`:522-534`)
-  and `_extract_flanders_renewables` (`:537-553`).
-- Wallonia DSO labels/columns change: `_WALLONIA_LABELS` (`:562-575`) and the
+  `_extract_energy` (`:369-372`).
+- Dynamic formula wording / unit change: `_EPEX_FORMULA` (`:287-289`),
+  `_dynamic_consumption_formula` (`:299-318`), the VAT/unit conversion
+  (`:335-342`), and `_INJECTION_LEAD` (`:293-296`).
+- Impact bands relabelled: `_extract_energy` Impact branch (`:352-361`).
+- Tax tier / connection fee moved: `_extract_taxes` (`:464-498`); if the glyph
+  spacing changes, revisit `x_join_threshold` in `fetch` (`:188`).
+- Regional renewables rows renamed: `_extract_wallonia_renewables` (`:501-513`)
+  and `_extract_flanders_renewables` (`:516-532`).
+- Wallonia DSO labels/columns change: `_WALLONIA_LABELS` (`:541-554`) and the
   10-number row regex + magnitude disambiguation in `_extract_wallonia_dsos`
-  (`:585-611`).
+  (`:564-590`).
 - Flanders DSO rows change: `_FLANDERS_LABELS` (`:627-636`) and the two-row
-  logic in `_extract_flanders_dsos` (`:652-697`), especially the group-index
+  logic in `_extract_flanders_dsos` (`:622-667`), especially the group-index
   choice for data-management.
-- Publication banner reworded: `_extract_publication_month` (`:428-449`) and
-  `_FRENCH_MONTHS` (`:412-425`).
-- PV forfait wording change: `_extract_supplier_prosumer` (`:245-267`).
+- Publication banner reworded: `_extract_publication_month` (`:407-428`) and
+  `_FRENCH_MONTHS` (`:402-404`).
+- PV forfait wording change: `_extract_supplier_prosumer` (`:239-261`).

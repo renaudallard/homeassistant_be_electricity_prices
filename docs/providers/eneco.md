@@ -49,7 +49,7 @@ https://cdn.eneco.be/downloads/nl/general/tk/BC_032_<ISSUE>_NL_ENECO_POWER_<NAME
 `<NAME>` is the product slug (`FIX`, `FLEX`, `DYNAMIC`, `eneco.py:101-105`).
 `<ISSUE>` is `<VOL><YY><MM>`: a 2-digit volume (usually `01`, higher on re-issues)
 followed by the 2-digit year and month. Stale issues stay served, so the live URL
-is never hardcoded; it is resolved from the listing page (`eneco.py:31-35`):
+is never hardcoded; it is resolved from the listing page (`eneco.py:33-35`):
 
 ```
 https://eneco.be/nl/elektriciteit-gas/tariefkaarten
@@ -339,17 +339,17 @@ Illustrative Antwerpen values: `distribution_single = 0.0535`,
 | --- | --- | --- |
 | `federal_excise` | first number in the "Verbruik tussen 0 en 3.000 kWh" tier | `eneco.py:504-513` |
 | `energy_contribution` | second number in that tier | `eneco.py:507-514` |
-| `flanders_renewables` | "Bijdrage groene stroom en WKK ... (€cent/kWh)" | `eneco.py:520-524`, `542` |
-| `wallonia_renewables` | "Bijdrage groene stroom Wallonie ... (€cent/kWh)" | `eneco.py:525-529`, `543-547` |
-| `region_connection_fee` | "Aansluitingsvergoeding elektriciteit ... (€cent/kWh)" | `eneco.py:530-543`, `548` |
-| `energy_fund_eur_per_month` | "Standaard tarief (domicilieadres)" | `eneco.py:544-547`, `549` |
+| `flanders_renewables` | "Bijdrage groene stroom en WKK ... (€cent/kWh)" | `eneco.py:520-524`, `551` |
+| `wallonia_renewables` | "Bijdrage groene stroom Wallonie ... (€cent/kWh)" | `eneco.py:525-529`, `552-556` |
+| `region_connection_fee` | "Aansluitingsvergoeding elektriciteit ... (€cent/kWh)" | `eneco.py:530-543`, `557` |
+| `energy_fund_eur_per_month` | "Standaard tarief (domicilieadres)" | `eneco.py:544-547`, `558` |
 
 The renewables and connection-fee matches anchor on the `(€cent/kWh)` unit token
 rather than the first number after the label, because sibling rows carry `(2)(4)`
 footnote markers that a lazy `_NUM` would otherwise capture (`eneco.py:516-519`).
 Both regional renewables are populated from every card; the pricing engine selects
 the right one per region (`tests/test_eneco.py:150-154`). Illustrative values from
-`test_fix_extracts_taxes` (`tests/test_eneco.py:146-155`):
+`test_fix_extracts_taxes` (`tests/test_eneco.py:146-171`):
 `federal_excise = 0.050329`, `energy_contribution = 0.002042`,
 `flanders_renewables = 0.0152`, `wallonia_renewables = 0.0313`,
 `region_connection_fee = 0.00075`.
@@ -398,7 +398,7 @@ Injection taxonomy (the three-shape rule, `base.py:268-306`):
   factor / base, because the pricing engine would then apply monthly coefficients
   to the hourly spot if the `Maandprijs` ever stopped printing (`eneco.py:616-620`).
   Illustrative: `current = 0.0476`, `factor = None`, `base = None`
-  (`tests/test_eneco.py:246-277`).
+  (`tests/test_eneco.py:246-268`).
 - **Power Dynamic is hourly `factor * spot + base`**: it indexes on Belpex-H, so it
   is the only contract that surfaces spot coefficients. Illustrative, from
   `test_dynamic_extracts_injection_rates` (`tests/test_eneco.py:271-279`): formula
@@ -436,12 +436,12 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
   `tests/test_eneco.py:182-191`).
 - **Fail-loud excise and connection fee**: unlike the gated renewables, these two
   raise on a regex miss to avoid silent under-billing (`eneco.py:511-512`,
-  `527-534`).
+  `536-543`).
 - **Eneco Impact column order is `MEDIUM | PIC | ECO`**, not `PIC | MEDIUM | ECO`
   like OCTA+ / Bolt; mapping the wrong order swaps the CWaPE bands
   (`eneco.py:447-454`).
 - **Fluvius transport is 0**: the Flemish Afnametarief bundles Elia transmission;
-  do not add a transport term (`eneco.py:121-123`, `468-469`).
+  do not add a transport term (`eneco.py:121-123`, `475-477`).
 - **Flemish digital meters have no peak / offpeak split and no prosumer rate**
   (`eneco.py:492-500`, `tests/test_eneco.py:93-97`).
 - **`fetch_for_month` HEAD-before-GET budget**: HEAD-probing each volume keeps the
@@ -453,8 +453,8 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
   (`_pdf.py:755-791`, `tests/test_eneco.py:329-347`).
 - **Sign flexibility**: every Belpex formula match (consumption and injection)
   accepts the full `SIGN_CHARS` class so a card that flips to a Unicode minus does
-  not silently drop the formula or the base (`eneco.py:347-359`, `380-383`,
-  `590-593`).
+  not silently drop the formula or the base (`eneco.py:347-349`, `389-392`,
+  `599-602`).
 - **Power Dynamic is Flanders-only**: its Walloon DSO rows are vestigial reference;
   do not offer the product in Wallonia (`eneco.py:660-669`,
   `tests/test_eneco.py:55-62`).
@@ -478,7 +478,7 @@ Fixtures live under `tests/fixtures/` and are loaded via `fixture_text(...)`.
 | fixed energy parse error | `_extract_fixed` (`DAG NACHT` header or column count changed) | `eneco.py:309-327` |
 | variable energy or yearly fee wrong | `_extract_variable` anchors (`(€/jaar)`, `Geschatte jaarprijs`, `Maandprijs`) | `eneco.py:330-376` |
 | dynamic factor / base wrong | `_extract_dynamic` formula regex or VAT multiplier | `eneco.py:379-412` |
-| a DSO row missing | its label string in `_WALLONIA_LABELS` / `_FLUVIUS_LABELS`, or the row column count | `eneco.py:110-133`, `421-491` |
+| a DSO row missing | its label string in `_WALLONIA_LABELS` / `_FLUVIUS_LABELS`, or the row column count | `eneco.py:110-133`, `430-500` |
 | Impact bands swapped | column-order mapping in `_find_wallonia_row` | `eneco.py:447-454` |
 | tax value wrong or fatal error | `_extract_taxes` anchors (tier label, `(€cent/kWh)`, `Aansluitingsvergoeding`) | `eneco.py:503-560` |
 | injection credit zeroed | `_extract_injection` heading anchor / section cutoff | `eneco.py:583-602` |

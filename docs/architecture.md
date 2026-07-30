@@ -106,7 +106,7 @@ region  (flanders | wallonia | brussels)                     const.py:43
   |     wallonia : AIEG | AIESH | ORES | RESA | REW
   |     brussels : Sibelga (only one)
   |
-  +-- supplier   (which extractor's EXTRACTOR is used)        providers/__init__.py:63
+  +-- supplier   (which extractor's EXTRACTOR is used)        providers/__init__.py:65
         |
         +-- contract  (a Contract with a TariffKind)          providers/base.py:53
         |     fixed | variable | dynamic | tou | tou_impact | spot_monthly
@@ -184,7 +184,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
  config entry (region, dso, supplier, contract, meter, solar, api key)
         |
         v
- async_setup_entry            __init__.py:164
+ async_setup_entry            __init__.py:165
    |  _migrate_current_year_cost_unique_id(hass, entry)  # 0.5.2 key rename carry-over
    |  BePricesCoordinator(hass, entry)
    |  await coordinator.async_load_persistent()      # warm cache from .storage
@@ -205,9 +205,9 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |     |     v
    |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:729
    |
-   entry.runtime_data = coordinator                  __init__.py:171
+   entry.runtime_data = coordinator                  __init__.py:172
    async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor, button
-   async_track_time_change(...) -> push at slot boundaries   __init__.py:162
+   async_track_time_change(...) -> push at slot boundaries   __init__.py:194
    async_create_background_task(backfill_if_missing) # one-shot recorder backfill
         |
         v
@@ -217,7 +217,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
 Numbered walkthrough:
 
 1. The user completes the config flow; HA stores the selections in `entry.data` and calls
-   `async_setup_entry` (`__init__.py:135`).
+   `async_setup_entry` (`__init__.py:165`).
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
    tuple (`coordinator.py:836`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
@@ -226,7 +226,7 @@ Numbered walkthrough:
 4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:1013`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
-   `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:141`),
+   `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:172`),
    so the coordinator must not read `runtime_data` during first refresh.
 5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:478`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
@@ -241,11 +241,11 @@ Numbered walkthrough:
    suppliers, `coordinator.py:1256`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
 9. `entry.runtime_data` is set to the coordinator, the three platforms are forwarded, and a
-   slot-boundary push is registered (`__init__.py:162`). Because `current_price` and
+   slot-boundary push is registered (`__init__.py:194`). Because `current_price` and
    `next_hour_price` read the wall clock live, the push at each `:00` (and `:15/:30/:45` for a
    quarter-hourly supplier) re-evaluates the sensors without a re-fetch, keeping them aligned to
    the slot the user is actually billed for.
-10. A one-shot backfill background task (`__init__.py:171`) populates the recorder only if it has
+10. A one-shot backfill background task (`__init__.py:233`) populates the recorder only if it has
     no statistics at the Jan 1 anchor, so a normal restart adds no work.
 
 ## Freshness and caching, at a glance
@@ -269,7 +269,7 @@ Two further caching behaviors are worth knowing at the architecture level. First
 shared process-wide across config entries keyed by `(supplier, contract, region)`
 (`coordinator.py:298`), so two entries on the same product never poll the same card twice; the
 shared rows are evicted on unload only when no sibling entry still references the tuple
-(`__init__.py:222`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
+(`__init__.py:286`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
 (`coordinator.py:242`) and the user-facing "extractor failed" repair issue is raised only after
 the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator.py:252`), so
 a single transient CDN timeout does not false-alarm.
@@ -289,7 +289,7 @@ A new supplier is a self-contained change; the contract is in
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.
 2. Register it in `providers/__init__.py` by importing its `EXTRACTOR` and adding it to the
-   `EXTRACTORS` dict (`providers/__init__.py:63`). The `Eneco` module is the reference
+   `EXTRACTORS` dict (`providers/__init__.py:65`). The `Eneco` module is the reference
    implementation.
 3. Ship a fixture-driven unit test against a real card sample (`tests/fixtures/*.pdf`), and add
    the supplier to the weekly `scripts/live_check.py` harness that fetches every real card and

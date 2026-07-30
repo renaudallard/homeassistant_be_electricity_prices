@@ -144,7 +144,7 @@ Fields pulled and their helpers:
 | Injection | `_extract_injection` | `totalenergies.py:538` |
 | Publication label | `_extract_publication_month` | `totalenergies.py:468` |
 | Federal excise (0-3000 kWh tier) | `_extract_federal_excise` | `totalenergies.py:588` |
-| Federal energy contribution | `_extract_energy_contribution` + `_energy_contribution_from_table` | `totalenergies.py:606`, `:623` |
+| Federal energy contribution | `_extract_energy_contribution` + `_energy_contribution_from_table` | `totalenergies.py:606`, `:611` |
 | Yearly fee + regional renewables | `_extract_fee_and_renewables` | `totalenergies.py:435` |
 | Wallonia connection fee | `_extract_connection_fee` | `totalenergies.py:644` |
 | Flanders energy fund | `_extract_energy_fund` | `totalenergies.py:653` |
@@ -205,7 +205,7 @@ via `_vat_multiplier` (`totalenergies.py:365`), defaulting to 1.06 when absent
 (`_pdf.py:411-438`). The illustrative test pins Wallonia myDynamic
 `0.1034 * BELPEXH + 1.75` (HTVA, 6% VAT) to `factor == 1.09604`, `base == 0.01855`
 (`tests/test_totalenergies.py:58-69`); Brussels resolves the same factor with
-`base == 0.04081` from the split layout (`tests/test_totalenergies.py:72-87`).
+`base == 0.04081` from the split layout (`tests/test_totalenergies.py:72-86`).
 
 The `yearly_fixed_fee` (~90 EUR/yr, illustrative) comes from
 `_extract_fee_and_renewables` and is shared across all kinds
@@ -303,7 +303,7 @@ The land mines a future maintainer must know, each traceable to a source comment
 - **Realized monthly indicative vs annual estimate.** For variable/fixed cards the
   table row is the regulator's annual estimate; billing uses the realized monthly
   indicative block. Prefer the realized block on both the consumption and injection
-  sides (`totalenergies.py:391-403`, `:584-590`).
+  sides (`totalenergies.py:391-403`, `:572-578`).
 - **Wrapped "Cotisation sur l'énergie" header (Brussels + Flanders).** These cards
   wrap the label across two lines, so the labelled `_extract_energy_contribution`
   regex misses. The fallback `_energy_contribution_from_table` reads the levy from a
@@ -311,7 +311,7 @@ The land mines a future maintainer must know, each traceable to a source comment
   Flanders Fluvius row (it is federal and identical across rows). Without this the
   all-in price silently dropped the contribution (~0.20 c€/kWh);
   `parse_snapshot` now raises when both attempts fail
-  (`totalenergies.py:275-279`, `:623-653`; tests `:171`, `:235`).
+  (`totalenergies.py:275-279`, `:611-641`; tests `:171`, `:235`).
 - **3-column card must fail loud.** The old 4-value regex used `\s+` between groups,
   spanning the line break and grabbing the 90,00 yearly fee as the exclusive-night
   rate (0.90 EUR/kWh) with no error. The row now ends at the line break, so a card
@@ -320,10 +320,10 @@ The land mines a future maintainer must know, each traceable to a source comment
 - **Impact is flat supplier energy with DSO-side bands.** It used to fail to parse
   as a standard variable card. The PIC value under `Heures PIC/MEDIUM/ECO` is the
   single supplier rate; the band variation comes from the DSO Impact distribution
-  (`totalenergies.py:499-514`, `tests/test_totalenergies.py:194-216`).
+  (`totalenergies.py:510-513`, `tests/test_totalenergies.py:194-215`).
 - **Distinct anchors for the two BELPEX formulas.** Both consumption and injection
   print `factor * BELPEXH`. Consumption always appears first (so the first match is
-  consumption, `totalenergies.py:338-340`); injection is anchored after the
+  consumption, `totalenergies.py:334-336`); injection is anchored after the
   `Injection` header so the consumption formula cannot be mistaken for it
   (`totalenergies.py:550-556`).
 - **Same-line base regex guards against back-off.** The tail regex uses `(?=\s|$)`
@@ -335,7 +335,7 @@ The land mines a future maintainer must know, each traceable to a source comment
 - **Mandatory levies fail loud.** Federal excise, energy contribution, Wallonia
   connection fee and the Sibelga power term all raise rather than defaulting to 0,
   so a layout drift surfaces as an extractor failure instead of an undercounted bill
-  (`totalenergies.py:278`, `:611`, `:660`, `:817`).
+  (`totalenergies.py:600`, `:279`, `:649`, `:796`).
 - **200-OK HTML 404s.** Some products only publish a Wallonia PDF; the others return
   a "200 OK" HTML 404, which `fetch_pdf_text_layout` rejects. The per-contract
   `regions` override (e.g. Impact = Wallonia only) keeps the extractor from ever
@@ -359,19 +359,19 @@ The tests exercise six real April 2026 fixture PDFs under `tests/fixtures/`
 
 Ordered by how likely a card change is to break them:
 
-1. **URL pattern**: `_BASE_URL` / `_document_url` (`totalenergies.py:96`, `:193`)
+1. **URL pattern**: `_BASE_URL` / `_document_url` (`totalenergies.py:96`, `:188`)
    and `_REGION_TO_CODE`. If TotalEnergies renames the `/latest/` path, a product
    slug, or a `_FR` suffix, every fetch and probe 404s.
 2. **Consumption table regex**: `_extract_energy` (`totalenergies.py:414-418`). New
    asterisk counts, a new intervening label, or a changed column count breaks fixed
    and variable parsing.
 3. **Realized monthly block**: `_MONTHLY_BLOCK_RE` and `_realized_monthly_consumption`
-   / `_realized_monthly_injection` (`totalenergies.py:480`, `:495`, `:529`). A
+   / `_realized_monthly_injection` (`totalenergies.py:480`, `:483`, `:517`). A
    reworded "prix mensuels ... BELPEX_M_RLP" heading or changed meter labels
    (`Compteur Simple`, `Heures Pleines/Creuses`, `Compteur Excl. Nuit`, `Heures PIC`)
    silently reverts the extractor to the annual estimate.
 4. **Dynamic formula**: `_resolve_consumption_formula` and the injection regex
-   (`totalenergies.py:331`, `:564`). A layout change to `factor * BELPEXH + base`,
+   (`totalenergies.py:331`, `:552`). A layout change to `factor * BELPEXH + base`,
    or a swap of `BELPEXH` for another spot token, breaks myDynamic. Re-check the
    split-line Brussels path too.
 5. **Fee + renewables line**: `_extract_fee_and_renewables` (`totalenergies.py:435`).
@@ -379,12 +379,12 @@ Ordered by how likely a card change is to break them:
    raises.
 6. **Tax anchors**: `_extract_federal_excise` ("Consommation entre 0 et 3.000 kWh"),
    `_extract_energy_contribution` + `_energy_contribution_from_table`,
-   `_extract_connection_fee`, `_extract_energy_fund` (`totalenergies.py:588`-`:671`).
+   `_extract_connection_fee`, `_extract_energy_fund` (`totalenergies.py:588`-`:659`).
    Watch especially for the wrapped-header fallback column indices if the DSO table
    width changes.
 7. **DSO row parsers**: `_FLANDERS_LABELS` / `_extract_flanders_dsos` (9 cols),
    `_WALLONIA_LABELS` / `_extract_wallonia_dsos` (12 cols),
-   `_extract_brussels_dsos` (7 cols + power term) (`totalenergies.py:675`-`:829`). A
+   `_extract_brussels_dsos` (7 cols + power term) (`totalenergies.py:675`-`:808`). A
    new DSO name, a renamed sub-area, or a changed column order needs the label map
    and the fixed group indices updated together.
 8. **Publication label + validity**: `_extract_publication_month`

@@ -157,7 +157,7 @@ Returns the contract ids visible on the listing:
 `parse_snapshot` (`ebem.py:259`) assembles a `SupplierSnapshot` from six
 sub-parsers over the layout text. All rates are read from the card, never
 hardcoded; the VAT multiplier is read from the card header too so a
-regulator-driven rate change propagates without a code change (`ebem.py:338`).
+regulator-driven rate change propagates without a code change (`ebem.py:322`).
 
 | Field | Parser | Notes |
 | --- | --- | --- |
@@ -337,7 +337,7 @@ every bill.
 
 The remaining `TaxOverlay` fields are zeroed because EBEM is Flanders-only:
 `wallonia_renewables`, `brussels_renewables`, `region_connection_fee`,
-`energy_fund_eur_per_month`, and `vat_rate` are all `0.0` (`ebem.py:281`,
+`energy_fund_eur_per_month`, and `vat_rate` are all `0.0` (`ebem.py:282`,
 `tests/test_ebem.py:136`). The residential energy-fund tariff is EUR 0; the
 non-residential EUR 10.07/month tier is not modelled (`tests/test_ebem.py:140`).
 
