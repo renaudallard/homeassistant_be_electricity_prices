@@ -139,20 +139,21 @@ Injection is the exception: it is VAT-exempt and never VAT-scaled (see
 ## Energy rate by contract kind
 
 `energy_eur_per_kwh` dispatches on the runtime type of `snapshot.energy`
-(`pricing.py:263-326`). The five `EnergyRates` subtypes are
-`FixedRates | VariableRates | DynamicRates | TimeOfUseRates | ImpactRates`
+(`pricing.py:263-326`). The six `EnergyRates` subtypes are
+`FixedRates | VariableRates | DynamicRates | SpotMonthlyRates | TimeOfUseRates | ImpactRates`
 (`providers/base.py:257`). The `TariffKind` string on a `Contract` is
-`"fixed" | "variable" | "dynamic" | "tou" | "tou_impact"`
+`"fixed" | "variable" | "dynamic" | "tou" | "tou_impact" | "spot_monthly"`
 (`providers/base.py:53`).
 
 ```
 energy_eur_per_kwh(energy, when, spot, meter, region, dso_tariff_mode)
         |
-        +-- FixedRates    --> _routed_rate(energy.single,  ...)
-        +-- VariableRates --> _routed_rate(energy.current, ...)
-        +-- DynamicRates  --> factor * spot + base          (spot required)
-        +-- TimeOfUseRates--> tou_slot(when, weekend_rule) -> peak/transition/offpeak
-        +-- ImpactRates   --> dso_impact_band(when)        -> pic/medium/eco
+        +-- FixedRates       --> _routed_rate(energy.single,  ...)
+        +-- VariableRates    --> _routed_rate(energy.current, ...)
+        +-- DynamicRates     --> factor * spot + base          (live slot spot required)
+        +-- SpotMonthlyRates --> factor * spot + base          (MONTHLY MEAN spot required)
+        +-- TimeOfUseRates   --> tou_slot(when, weekend_rule) -> peak/transition/offpeak
+        +-- ImpactRates      --> dso_impact_band(when)        -> pic/medium/eco
 ```
 
 ### Fixed and Variable: `_routed_rate`
@@ -191,6 +192,28 @@ TotalEnergies, Eneco); YTD billing stays hourly regardless
 (`providers/base.py:139-159`). See [data-sources.md](data-sources.md) for how the
 curve is fetched and the grid helpers `slots_per_hour` / `slot_delta` /
 `slot_start` (`pricing.py:84-105`).
+
+### Spot-monthly: `factor * monthly_mean(spot) + base`
+
+`SpotMonthlyRates` runs the exact same formula as `DynamicRates`, and raises
+`ValueError("spot-monthly tariff needs a monthly mean spot")` when `spot` is
+`None` (`pricing.py:306-311`). What differs is what the caller threads through
+the `spot_eur_per_kwh` parameter: not the live slot price, but the arithmetic
+mean of the delivery month's hourly Day-Ahead spot, which the coordinator
+computes off its ENTSO-E cache. Reusing the one parameter keeps pricing a pure
+formula with no month arithmetic of its own.
+
+The rate is therefore a single flat value for the whole month, so the contract
+always bills on the hourly grid and carries no `quarter_hourly` flag. The
+current month's mean is a running estimate until the month closes
+(`providers/base.py:163-187`).
+
+Used by group-purchase style products that index the commodity to the realized
+monthly average (the Mega iChoosr / Samen Overstappen groepsaankoop shape), and
+by the expert **custom** supplier. It is also the leg a variable card is
+re-priced onto for a signing cohort, which is why it carries
+`yearly_fixed_fee_exclusive_night`: the variable cards it inherits from (EBEM
+Groen Variabel / B@sic+) print a separate exclusive-night standing charge.
 
 ### Time-of-use: `tou_slot`
 
@@ -308,10 +331,13 @@ path (`pricing.py:108-113`).
 `yearly_fixed_fee_for_meter` bills the dedicated `yearly_fixed_fee_exclusive_night`
 on an exclusive-night config entry when the card prints one (EBEM Groen Variabel),
 otherwise the standard `yearly_fixed_fee` for every meter type
-(`pricing.py:358-372`, fields at `providers/base.py:94-99` and
-`providers/base.py:121-125`). An exclusive-night circuit is configured as a
-SECOND config entry pointing at the night kWh sensor; the primary day meter stays
-mono/bi/dynamic (`const.py:155-138`).
+(`pricing.py:358-372`). Three rate shapes carry the dedicated field: `FixedRates`
+(`providers/base.py:94-99`), `VariableRates` (`providers/base.py:121-125`) and
+`SpotMonthlyRates` (`providers/base.py:182-187`), the last because a variable card
+re-priced onto a monthly-mean leg for a signing cohort keeps the separate charge
+its card printed. An exclusive-night circuit is configured as a SECOND config
+entry pointing at the night kWh sensor; the primary day meter stays
+mono/bi/dynamic (`const.py:155-161`).
 
 ## The static path
 
