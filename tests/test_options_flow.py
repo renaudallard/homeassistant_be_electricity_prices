@@ -109,7 +109,9 @@ async def test_edit_branch_offers_a_withdrawn_supplier_it_already_has(
     entry.add_to_hass(hass)
 
     result = await _enter_edit_branch(hass, entry)
-    schema = result["data_schema"].schema
+    data_schema = result["data_schema"]
+    assert data_schema is not None
+    schema = data_schema.schema
     marker = next(k for k in schema if str(k) == "supplier")
     selector = schema[marker]
     assert marker.default() == "dats24"
