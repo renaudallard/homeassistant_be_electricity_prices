@@ -550,6 +550,10 @@
     "entsoe_auth_failed": {
       "title": "ENTSO-E a refuse la cle API pour {supplier} ({contract})",
       "description": "transparency.entsoe.eu a renvoye 401 pour la cle configuree : {error}. Modifiez les options de l'entree et remplacez la cle par un nouveau jeton via votre compte transparency.entsoe.eu (My Account Settings -> Web API Security Token). En attendant, les capteurs de prix dynamiques resteront inconnus."
+    },
+    "supplier_deprecated": {
+      "title": "{supplier} transfere votre contrat a {successor} le {ends_on}",
+      "description": "{supplier} quitte le marche de l'energie residentielle : votre contrat sera transfere automatiquement a {successor} le {ends_on}. Les prix restent corrects jusqu'a ce que {supplier} cesse de publier sa carte tarifaire, donc rien n'est casse pour l'instant -- mais cette entree cessera ensuite de se mettre a jour. Modifiez l'entree et selectionnez {successor} comme fournisseur des que votre transfert est confirme."
     }
   },
   "entity": {

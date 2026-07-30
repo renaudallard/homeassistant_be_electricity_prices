@@ -226,6 +226,37 @@ def test_custom_listed_last_in_supplier_dropdown() -> None:
     assert values[-1] == const.SUPPLIER_CUSTOM
 
 
+# ---- withdrawn suppliers -----------------------------------------------------
+
+
+def test_withdrawn_supplier_not_offered_to_new_setups() -> None:
+    from custom_components.be_electricity_prices.config_flow import _supplier_options
+
+    assert "dats24" not in {o["value"] for o in _supplier_options()}
+    assert "dats24" not in {
+        o["value"] for o in _supplier_options(const.REGION_FLANDERS)
+    }
+
+
+def test_withdrawn_supplier_still_editable_on_an_existing_entry() -> None:
+    """The load-bearing half: a SelectSelector rejects a default that is not
+    among its options, so an entry already on a withdrawn supplier would
+    become impossible to edit if the filter had no ``keep`` escape hatch."""
+    from custom_components.be_electricity_prices.config_flow import _supplier_options
+
+    assert "dats24" in {o["value"] for o in _supplier_options(keep="dats24")}
+    # keep= is an exception for one entry, not a global switch-off.
+    assert "dats24" not in {o["value"] for o in _supplier_options(keep="eneco")}
+
+
+def test_withdrawn_supplier_not_a_comparison_target() -> None:
+    for region in (const.REGION_FLANDERS, const.REGION_WALLONIA):
+        for kind in ("variable", "dynamic"):
+            assert "dats24" not in {
+                o["value"] for o in _compare_supplier_options(region, kind)
+            }
+
+
 # ---- coordinator: flat monthly live table ------------------------------------
 
 

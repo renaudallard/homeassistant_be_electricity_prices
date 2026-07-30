@@ -531,4 +531,9 @@ EXTRACTOR = SupplierExtractor(
         ),
     ),
     fetch=fetch,
+    # DATS 24's own site: contracts transfer automatically to EnergyVision on
+    # 31 August 2026. Existing entries keep pricing off the monthly card until
+    # it stops publishing; new setups are steered to the successor instead.
+    deprecated_until=date(2026, 8, 31),
+    deprecated_successor="energyvision",
 )

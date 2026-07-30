@@ -306,6 +306,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         "extractor_failed",
         "extractor_unreachable",
         "entsoe_auth_failed",
+        "supplier_deprecated",
     ):
         issue_registry.async_delete_issue(
             hass, DOMAIN, f"{issue_kind}_{entry.entry_id}"

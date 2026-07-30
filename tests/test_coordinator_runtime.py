@@ -52,7 +52,7 @@ from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
     SupplierSnapshot,
 )
-from tests import make_entry, make_snapshot
+from tests import make_entry, make_snapshot, make_stub_extractor
 
 
 def _entry() -> MockConfigEntry:
@@ -457,7 +457,7 @@ async def test_two_coordinators_share_snapshot_and_only_fetch_once(
         fetch_calls += 1
         return fetched
 
-    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
         "custom_components.be_electricity_prices.coordinator.get_extractor",
         return_value=extractor,
@@ -488,7 +488,7 @@ async def test_force_refresh_keeps_snapshot_when_refetch_fails(
             return _fake_snapshot()
         raise ExtractorError("boom")
 
-    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
         "custom_components.be_electricity_prices.coordinator.get_extractor",
         return_value=extractor,
@@ -535,7 +535,7 @@ async def test_force_refresh_evicts_shared_cache_for_other_coordinator(
         fetch_calls += 1
         return _fake_snapshot()
 
-    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
         "custom_components.be_electricity_prices.coordinator.get_extractor",
         return_value=extractor,
@@ -574,7 +574,7 @@ async def test_force_refresh_not_defeated_by_sibling_cache(
         fetch_calls += 1
         return _fake_snapshot()
 
-    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
         "custom_components.be_electricity_prices.coordinator.get_extractor",
         return_value=extractor,
@@ -624,7 +624,7 @@ async def test_force_refresh_not_defeated_by_sibling_failure_marker(
         fetch_calls += 1
         return _fake_snapshot()
 
-    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
         "custom_components.be_electricity_prices.coordinator.get_extractor",
         return_value=extractor,
@@ -661,7 +661,7 @@ async def test_shared_cache_expires_after_ttl(hass: HomeAssistant) -> None:
         fetch_calls += 1
         return _fake_snapshot()
 
-    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
         "custom_components.be_electricity_prices.coordinator.get_extractor",
         return_value=extractor,
@@ -989,6 +989,40 @@ async def test_sync_stale_issue_creates_and_clears(hass: HomeAssistant) -> None:
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_sync_deprecated_supplier_issue_creates_and_clears(
+    hass: HomeAssistant,
+) -> None:
+    """An entry on a supplier that has announced its exit gets a Repairs
+    card naming the successor and the date, and an entry on any other
+    supplier gets none. Driven by the registry flag, never by the clock."""
+    entry = make_entry(
+        supplier="dats24", contract="dats24_groen_variabel", region="flanders"
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"supplier_deprecated_{entry.entry_id}"
+
+    coord._sync_deprecated_supplier_issue()
+    registry = ir.async_get(hass)
+    issue = registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    # Labels, not registry ids: the card tells the user which entry to pick
+    # from the config flow's label-based supplier dropdown.
+    assert issue.translation_placeholders == {
+        "supplier": "DATS 24",
+        "successor": "EnergyVision",
+        "ends_on": "2026-08-31",
+    }
+
+    # A supplier with no lifecycle flag must not raise the card, and must
+    # clear one left behind by a previous supplier on the same entry.
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "supplier": "eneco", "contract": "power_fix"}
+    )
+    coord._sync_deprecated_supplier_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
 async def test_sync_extractor_failed_issue_creates_and_clears(
     hass: HomeAssistant,
 ) -> None:
@@ -1204,7 +1238,7 @@ async def test_transient_failure_defers_extractor_issue_until_threshold(
             raise ExtractorError("network error fetching https://x.pdf: ")
         return _fake_snapshot()
 
-    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
         "custom_components.be_electricity_prices.coordinator.get_extractor",
         return_value=extractor,
@@ -1251,7 +1285,7 @@ async def test_actionable_failure_raises_extractor_failed_immediately(
     async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
         raise ExtractorError("could not parse Eneco fixed energy block")
 
-    extractor = type("E", (), {"fetch": staticmethod(_fake_fetch)})
+    extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
         "custom_components.be_electricity_prices.coordinator.get_extractor",
         return_value=extractor,
@@ -1699,16 +1733,7 @@ async def test_first_refresh_end_to_end_does_not_crash(hass: HomeAssistant) -> N
     async def _fake_fetch(*_args: object, **_kwargs: object) -> SupplierSnapshot:
         return snap
 
-    extractor = type(
-        "E",
-        (),
-        {
-            "id": "eneco",
-            "fetch": staticmethod(_fake_fetch),
-            "probe": None,
-            "fetch_for_month": None,
-        },
-    )
+    extractor = make_stub_extractor(extractor_id="eneco", fetch=_fake_fetch)
     # entry.runtime_data is intentionally NOT assigned -- this is the
     # state HA core is in before async_setup_entry's coordinator =
     # ... line completes.

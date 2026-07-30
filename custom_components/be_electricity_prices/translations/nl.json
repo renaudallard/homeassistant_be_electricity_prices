@@ -550,6 +550,10 @@
     "entsoe_auth_failed": {
       "title": "ENTSO-E weigerde de API-sleutel voor {supplier} ({contract})",
       "description": "transparency.entsoe.eu antwoordde 401 op de geconfigureerde sleutel: {error}. Bewerk de opties van deze entry en vervang de sleutel door een nieuwe op transparency.entsoe.eu (My Account Settings -> Web API Security Token). Tot dan zullen de dynamische prijssensoren onbekend zijn."
+    },
+    "supplier_deprecated": {
+      "title": "{supplier} draagt je contract op {ends_on} over aan {successor}",
+      "description": "{supplier} stopt met de levering van energie aan particulieren: je contract gaat op {ends_on} automatisch over naar {successor}. De prijzen blijven correct tot {supplier} zijn tariefkaart niet langer publiceert, dus er is nog niets stuk -- maar daarna stopt deze entry met bijwerken. Bewerk de entry en kies {successor} als leverancier zodra je overdracht bevestigd is."
     }
   },
   "entity": {

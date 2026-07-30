@@ -153,6 +153,19 @@ from .providers.base import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def _supplier_label(supplier_id: str | None) -> str:
+    """The supplier's human-facing label, falling back to its raw id.
+
+    Anything user-facing should name a supplier the way the config flow's
+    dropdown does; the fallback keeps an entry on an unknown or renamed
+    supplier readable instead of blank.
+    """
+    try:
+        return get_extractor(str(supplier_id)).label
+    except ExtractorError:
+        return str(supplier_id or "") or "Belgian Electricity"
+
+
 def supplier_device_info(coordinator: "BePricesCoordinator") -> DeviceInfo:
     """Build the HA DeviceInfo block shared by every entity on this entry.
 
@@ -164,15 +177,10 @@ def supplier_device_info(coordinator: "BePricesCoordinator") -> DeviceInfo:
     supplier id (or a generic label) when the registry lookup fails so
     the entity still surfaces in HA's UI.
     """
-    supplier_id = coordinator.entry.data.get(CONF_SUPPLIER, "")
-    try:
-        supplier_label = get_extractor(str(supplier_id)).label
-    except ExtractorError:
-        supplier_label = str(supplier_id) or "Belgian Electricity"
     return DeviceInfo(
         identifiers={(DOMAIN, coordinator.entry.entry_id)},
         name=coordinator.entry.title,
-        manufacturer=supplier_label,
+        manufacturer=_supplier_label(coordinator.entry.data.get(CONF_SUPPLIER, "")),
         entry_type=None,
     )
 
@@ -1034,6 +1042,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._last_error = ""
 
     async def _update_body(self) -> CoordinatorData:
+        self._sync_deprecated_supplier_issue()
         if self.entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
             self._refresh_custom_snapshot()
         else:
@@ -1349,6 +1358,53 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             )
         else:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+    def _sync_deprecated_supplier_issue(self) -> None:
+        """Raise or clear the 'this supplier is leaving the market' issue.
+
+        Driven purely by the registry's ``deprecated_until`` /
+        ``deprecated_successor`` (``providers/base.py``), never by comparing
+        a date to the clock: the card is an instruction to switch supplier,
+        and it stays up for as long as the entry points at a supplier that
+        has announced its exit. Clears by itself when the user re-points the
+        entry, and on any release that drops the registry flag.
+
+        Kept separate from the extractor / staleness cards on purpose. Those
+        say "the fetch is failing"; this one says "the fetch will keep
+        working and then stop, and here is what to do about it". Prices are
+        untouched -- a user still supplied by DATS 24 in August must still be
+        billed August's rates.
+        """
+        if self._unloaded:
+            return
+        issue_id = f"supplier_deprecated_{self.entry.entry_id}"
+        supplier_id = str(self.entry.data.get(CONF_SUPPLIER, ""))
+        try:
+            extractor = get_extractor(supplier_id)
+        except ExtractorError:
+            # An entry on a supplier this build no longer ships: the
+            # extractor cards already cover that, nothing to add here.
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            return
+        if extractor.deprecated_until is None:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            return
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="supplier_deprecated",
+            # Labels, not registry ids: the card tells the user to pick a
+            # supplier from a label-based dropdown, so "DATS 24" and
+            # "EnergyVision" are what they will actually look for.
+            translation_placeholders={
+                "supplier": extractor.label,
+                "successor": _supplier_label(extractor.deprecated_successor),
+                "ends_on": extractor.deprecated_until.isoformat(),
+            },
+        )
 
     async def async_force_refresh(self) -> None:
         """Force the next coordinator tick to re-fetch the supplier.

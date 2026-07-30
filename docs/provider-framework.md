@@ -77,6 +77,15 @@ class SupplierExtractor:
 | `fetch` | `SnapshotFetcher` | Mandatory. Fetches and parses the current card into a `SupplierSnapshot`. |
 | `probe` | `SnapshotProbe \| None` | Optional cheap freshness check; `None` means "no probe, use TTL only". |
 | `fetch_for_month` | `ArchivedSnapshotFetcher \| None` | Optional historical fetch for time-correct yearly-cost billing; `None` means "no archive". |
+| `deprecated_until` | `date \| None` | Set when the supplier has announced it is leaving the residential market: the date its contracts stop being supplied. Drops the supplier from the config flow's new-setup and compare pickers, and raises the `supplier_deprecated` Repairs card on every entry using it. Purely declarative -- nothing compares it to the clock, so hiding takes effect as soon as the flag ships (you cannot sign up today for a contract being transferred away), and the date is text for the card. |
+| `deprecated_successor` | `str \| None` | Registry id of the supplier taking the contracts over; named in the Repairs card so the user knows what to switch to. |
+
+A withdrawn supplier keeps working: `fetch` and `probe` are untouched, and
+`providers.get()` still resolves it, so existing entries carry on pricing off the
+supplier's card until it stops publishing. Only the pickers and the Repairs card
+react. Do NOT filter withdrawn suppliers out of `EXTRACTORS` or
+`all_extractors()` -- that would also hide them from the live-check's registry
+diff and from every entry that still needs to price.
 
 `regions()` (`providers/base.py:501`) returns the union of `Contract.regions`
 across all this supplier's contracts. The config flow uses it to decide whether

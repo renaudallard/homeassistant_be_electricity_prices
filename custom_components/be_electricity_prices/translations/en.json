@@ -550,6 +550,10 @@
     "entsoe_auth_failed": {
       "title": "ENTSO-E rejected the API key for {supplier} ({contract})",
       "description": "transparency.entsoe.eu returned 401 for the configured API key: {error}. Edit the entry's options and replace the key with a fresh token from your transparency.entsoe.eu account (My Account Settings -> Web API Security Token). Until then this entry's dynamic price sensors will go unknown."
+    },
+    "supplier_deprecated": {
+      "title": "{supplier} is transferring your contract to {successor} on {ends_on}",
+      "description": "{supplier} is leaving the residential energy market: your contract transfers automatically to {successor} on {ends_on}. Prices stay correct until {supplier} stops publishing its tariff card, so nothing is broken yet -- but this entry will stop updating afterwards. Edit the entry and select {successor} as the supplier once your transfer is confirmed."
     }
   },
   "entity": {

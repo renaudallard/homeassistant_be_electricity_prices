@@ -300,10 +300,19 @@ Repairs issues, all keyed by `entry_id`:
 
 | Issue | Raised by | When | Line |
 |-------|-----------|------|------|
-| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d) | 849 |
-| `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure | 870 |
-| `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures | 870 |
-| `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 915 |
+| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d) | 1263 |
+| `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure | 1286 |
+| `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures | 1286 |
+| `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 1333 |
+| `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) | 1362 |
+
+The first four are failure states and clear on a successful refresh.
+`supplier_deprecated` is not: it is a lifecycle notice, evaluated first on every
+tick (`coordinator.py:1045`) straight off the registry flag and never against the
+clock, and it clears only when the entry is re-pointed at a supplier that has not
+announced its exit. Prices are deliberately untouched while it is up -- a user
+still being supplied must still be billed correctly for the months they are
+supplied.
 
 `_EXTRACTOR_ISSUE_THRESHOLD` is `2` (`coordinator.py:214`): a lone transient CDN timeout does not raise the softer "unreachable" card, because a single failure almost always recovers on the next hourly tick and a false alarm wrongly tells the user the supplier changed its layout. `is_transient_fetch_error` (from `providers._pdf`) classifies the failure (`coordinator.py:1420`); actionable failures raise on the first occurrence, transient ones only after the threshold. The consecutive count rides the shared negative-cache row and resets to zero on the first success (`failed.pop`, `coordinator.py:1393`). The `extractor_failed`/`extractor_unreachable` slots are mutually exclusive; raising one clears the other (`coordinator.py:928`).
 
@@ -320,4 +329,4 @@ Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`coordinator.py:188`, d
 - **Identity guard** (`coordinator.py:1757`): skip when `runtime_data` is a *different* coordinator (must not skip during first refresh, when it is `UNDEFINED`).
 - **Tuple guard** (`coordinator.py:1778`): skip when live `entry.data` has drifted from `_supplier_tuple` (the OptionsFlow window where `entry.data` changed but `runtime_data` is still swapping).
 
-Serialization is `_snapshot_to_dict` / `_snapshot_from_dict` (`coordinator.py:3495`, `3302`), which stamp and check `_SNAPSHOT_SCHEMA_VERSION` as described in section 2.3. Historical spots are pruned with a local-midnight Jan 1 anchor (`coordinator.py:1819`) so a Brussels restart in early January doesn't drop the first hour or two of YTD. On entry removal, `async_remove_entry` (`__init__.py:243`) deletes the four Repairs issues and removes the Store file so nothing outlives the entry.
+Serialization is `_snapshot_to_dict` / `_snapshot_from_dict` (`coordinator.py:3495`, `3302`), which stamp and check `_SNAPSHOT_SCHEMA_VERSION` as described in section 2.3. Historical spots are pruned with a local-midnight Jan 1 anchor (`coordinator.py:1819`) so a Brussels restart in early January doesn't drop the first hour or two of YTD. On entry removal, `async_remove_entry` (`__init__.py:293`) deletes the five Repairs issues and removes the Store file so nothing outlives the entry.

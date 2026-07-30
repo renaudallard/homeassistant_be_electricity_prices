@@ -545,6 +545,17 @@ class SupplierExtractor:
     # means "no archive for this month" - the coordinator falls back to
     # using the current snapshot as a proxy.
     fetch_for_month: ArchivedSnapshotFetcher | None = None
+    # Set when the supplier has announced it is leaving the residential
+    # market: the date its contracts stop being supplied, and the registry
+    # id of the supplier taking them over. Two effects, both deliberate:
+    # the config flow stops OFFERING the supplier to new users, and every
+    # existing entry raises a Repairs card telling the user where their
+    # contract is going. Existing entries keep pricing normally until the
+    # supplier stops publishing - a withdrawal announcement is not a reason
+    # to stop billing someone correctly for the months they are still
+    # supplied. Purely declarative: nothing compares these to the clock.
+    deprecated_until: date | None = None
+    deprecated_successor: str | None = None
 
     def regions(self) -> frozenset[str]:
         """Union of regions across this supplier's contracts."""

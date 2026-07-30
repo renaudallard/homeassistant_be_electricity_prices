@@ -418,6 +418,16 @@ def test_discover_accepts_either_candidate_month() -> None:
         }
 
 
+def test_withdrawal_metadata_points_at_a_real_successor() -> None:
+    """``deprecated_successor`` is a free-form registry id; a typo would
+    render as a raw id in the Repairs card instead of a supplier name."""
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers.dats24 import EXTRACTOR
+
+    assert EXTRACTOR.deprecated_until == date(2026, 8, 31)
+    assert EXTRACTOR.deprecated_successor in EXTRACTORS
+
+
 def test_discover_reports_nothing_once_publication_stops() -> None:
     # After the 2026-08-31 transfer to EnergyVision no further card is
     # published; discover() must go empty rather than raise.

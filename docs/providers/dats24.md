@@ -50,6 +50,14 @@ indicative values rather than a spot formula (see Injection below).
 > (`dats24.py:41-44`). The successor products live in
 > [energyvision.md](./energyvision.md). After the transfer the CDN stops
 > publishing and `discover` goes empty rather than raising.
+>
+> This is declared on the registry entry as `deprecated_until=date(2026, 8, 31)`
+> and `deprecated_successor="energyvision"` (`dats24.py:537-538`), which drops
+> DATS 24 from the config flow's new-setup and compare pickers and raises the
+> `supplier_deprecated` Repairs card on every entry still using it. Existing
+> entries keep pricing normally -- see
+> [../provider-framework.md](../provider-framework.md) for what the two fields
+> do and do not affect.
 
 ### Source URL
 

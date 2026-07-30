@@ -97,6 +97,29 @@ async def _enter_edit_branch(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_edit_branch_offers_a_withdrawn_supplier_it_already_has(
+    hass: HomeAssistant,
+) -> None:
+    """A withdrawn supplier is hidden from new setups but must stay in the
+    dropdown of an entry that already uses it: HA's SelectSelector rejects a
+    default outside its options, which would make the entry uneditable."""
+    entry = make_entry(
+        supplier="dats24", contract="dats24_groen_variabel", region="flanders"
+    )
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    schema = result["data_schema"].schema
+    marker = next(k for k in schema if str(k) == "supplier")
+    selector = schema[marker]
+    assert marker.default() == "dats24"
+    assert "dats24" in {o["value"] for o in selector.config["options"]}
+    # The selector must accept its own default. This is the real failure
+    # mode: an out-of-options default raises InInvalid and the step dies.
+    assert selector(marker.default()) == "dats24"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)

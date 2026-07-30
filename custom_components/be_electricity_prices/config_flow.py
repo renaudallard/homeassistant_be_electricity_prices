@@ -175,11 +175,24 @@ from .providers.base import Contract
 # ---- shared schema builders ---------------------------------------------------
 
 
-def _supplier_options(region: str | None = None) -> list[SelectOptionDict]:
+def _supplier_options(
+    region: str | None = None, keep: str | None = None
+) -> list[SelectOptionDict]:
+    """Selectable suppliers, dropping any that has announced its exit.
+
+    ``keep`` is the supplier already stored on the entry being edited. It
+    must be passed on every edit path: a SelectSelector rejects a default
+    that is not among its options, so filtering unconditionally would make
+    an existing entry on a withdrawn supplier impossible to edit.
+    """
     extractors = all_extractors()
     if region is not None:
         extractors = tuple(e for e in extractors if region in e.regions())
-    return [SelectOptionDict(value=e.id, label=e.label) for e in extractors]
+    return [
+        SelectOptionDict(value=e.id, label=e.label)
+        for e in extractors
+        if e.deprecated_until is None or e.id == keep
+    ]
 
 
 def _contracts_for(supplier_id: str, region: str | None = None) -> tuple[Contract, ...]:
@@ -244,6 +257,10 @@ def _compare_supplier_options(region: str, current_kind: str) -> list[SelectOpti
         # comparison target (only the current side of a quote).
         if ext.id == SUPPLIER_CUSTOM:
             continue
+        # Nor can a supplier that is leaving the market: quoting a user into
+        # a contract that is about to be transferred away is never useful.
+        if ext.deprecated_until is not None:
+            continue
         if region not in ext.regions():
             continue
         if not any(region in c.regions for c in ext.contracts):
@@ -279,7 +296,11 @@ def _user_schema(defaults: dict[str, Any]) -> vol.Schema:
         {
             vol.Required(CONF_SUPPLIER, default=supplier_default): SelectSelector(
                 SelectSelectorConfig(
-                    options=_supplier_options(), mode=SelectSelectorMode.DROPDOWN
+                    # keep= so an entry already on a withdrawn supplier can
+                    # still be edited; a fresh setup passes no default and
+                    # therefore is not offered it.
+                    options=_supplier_options(keep=defaults.get(CONF_SUPPLIER)),
+                    mode=SelectSelectorMode.DROPDOWN,
                 )
             ),
             vol.Required(CONF_REGION, default=region_default): SelectSelector(

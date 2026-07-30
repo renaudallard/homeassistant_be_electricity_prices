@@ -118,13 +118,22 @@ in the mixin: `_after_meter` (`config_flow.py:1304`), `_after_dso_tariff_mode`
 
 ### `user` / `edit`: supplier + region
 
-Schema `_user_schema` (`config_flow.py:228`). Two dropdowns:
+Schema `_user_schema` (`config_flow.py:292`). Two dropdowns:
 
-- Supplier: `_supplier_options()` (`config_flow.py:135`) lists every registered
-  extractor by `id`/`label`. The install step lists all suppliers unfiltered;
-  region filtering happens at the *contract* step instead, so a supplier with no
-  product in the chosen region aborts there with a clear message rather than being
-  hidden.
+- Supplier: `_supplier_options()` (`config_flow.py:178`) lists every registered
+  extractor by `id`/`label`, minus any carrying `deprecated_until` (a supplier that
+  has announced it is leaving the residential market -- you cannot sign up for a
+  contract being transferred away). Region filtering happens at the *contract* step
+  instead, so a supplier with no product in the chosen region aborts there with a
+  clear message rather than being hidden.
+
+  `_user_schema` serves BOTH the install step and the options-flow `edit` step, so
+  it passes `keep=defaults.get(CONF_SUPPLIER)` and the filter re-admits the entry's
+  own stored supplier. This is load-bearing, not defensive: HA's `SelectSelector`
+  validates with `vol.In(options)`, so a default outside the option list makes every
+  submit of the edit form fail and an existing entry on a withdrawn supplier becomes
+  impossible to edit at all (`tests/test_options_flow.py`,
+  `test_edit_branch_offers_a_withdrawn_supplier_it_already_has`).
 - Region: the `REGIONS` tuple (`const.py:43`), rendered with `translation_key="region"`
   so `selector.region.options` in `strings.json:230` supplies the localized labels.
 
@@ -463,7 +472,7 @@ apples-to-apples; only supplier, contract, and (for static targets) meter vary.
 
 | Step | Method | Notes |
 | --- | --- | --- |
-| `compare` | `config_flow.py:1531` | Supplier picker via `_compare_supplier_options` (`config_flow.py:234`): suppliers with at least one contract in the user's region. Aborts `compare_no_alternative` if none |
+| `compare` | `config_flow.py:1594` | Supplier picker via `_compare_supplier_options` (`config_flow.py:247`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
 | `compare_contract` | `config_flow.py:1160` | Contract picker via `_compare_contract_schema` (`config_flow.py:208`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
 | `compare_meter` | `config_flow.py:1323` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`config_flow.py:1189`) |
 | `compare_api_key` | `config_flow.py:1667` | Shown when `_after_compare_meter` (`config_flow.py:1639`) finds the quote needs spot data the entry lacks: a dynamic target, or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved (`strings.json:141`) |
