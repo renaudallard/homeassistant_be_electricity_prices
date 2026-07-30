@@ -304,13 +304,16 @@ Repairs issues, all keyed by `entry_id`:
 | `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure | 1286 |
 | `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures | 1286 |
 | `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 1333 |
-| `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) | 1362 |
+| `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) AND the successor has a contract in the entry's region | 1383 |
+| `supplier_deprecated_no_successor` | `_sync_deprecated_supplier_issue` | same, but the successor is unset, unknown to this build, or has no contract in the entry's region | 1383 |
 
 The first four are failure states and clear on a successful refresh.
 `supplier_deprecated` is not: it is a lifecycle notice, evaluated first on every
 tick (`coordinator.py:1045`) straight off the registry flag and never against the
 clock, and it clears only when the entry is re-pointed at a supplier that has not
-announced its exit. Prices are deliberately untouched while it is up -- a user
+announced its exit. Both variants share one issue id, so an entry only ever
+carries one of them; `_successor_for` decides which by checking that the named
+successor actually serves the entry's region. Prices are deliberately untouched while it is up -- a user
 still being supplied must still be billed correctly for the months they are
 supplied.
 

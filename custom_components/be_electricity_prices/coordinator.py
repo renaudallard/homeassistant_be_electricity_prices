@@ -166,6 +166,27 @@ def _supplier_label(supplier_id: str | None) -> str:
         return str(supplier_id or "") or "Belgian Electricity"
 
 
+def _successor_for(supplier_id: str | None, region: str) -> SupplierExtractor | None:
+    """The successor supplier, but only when it can serve ``region``.
+
+    A withdrawal announcement names one successor for the whole country,
+    while our coverage is per region: EnergyVision took over DATS 24's
+    Flemish and Walloon customers alike, but only its Flanders cards are
+    modelled. Returns ``None`` when the successor is unset, unknown to this
+    build, or has no contract in the region, so the caller can avoid telling
+    a user to pick a supplier the config flow would then refuse.
+    """
+    if not supplier_id:
+        return None
+    try:
+        successor = get_extractor(supplier_id)
+    except ExtractorError:
+        return None
+    if not any(region in c.regions for c in successor.contracts):
+        return None
+    return successor
+
+
 def supplier_device_info(coordinator: "BePricesCoordinator") -> DeviceInfo:
     """Build the HA DeviceInfo block shared by every entity on this entry.
 
@@ -1389,21 +1410,35 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         if extractor.deprecated_until is None:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
             return
+        placeholders = {
+            "supplier": extractor.label,
+            "ends_on": extractor.deprecated_until.isoformat(),
+        }
+        successor = _successor_for(
+            extractor.deprecated_successor, str(self.entry.data.get(CONF_REGION, ""))
+        )
+        if successor is not None:
+            placeholders["successor"] = successor.label
         ir.async_create_issue(
             self.hass,
             DOMAIN,
             issue_id,
             is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
-            translation_key="supplier_deprecated",
+            # Only tell the user to switch to the successor when we can
+            # actually price it for their region. Naming a supplier the
+            # config flow will refuse (it aborts at the contract step with
+            # supplier_region_unavailable) sends them down a dead end;
+            # the fallback card states the situation without the bad advice.
+            translation_key=(
+                "supplier_deprecated"
+                if successor is not None
+                else "supplier_deprecated_no_successor"
+            ),
             # Labels, not registry ids: the card tells the user to pick a
             # supplier from a label-based dropdown, so "DATS 24" and
             # "EnergyVision" are what they will actually look for.
-            translation_placeholders={
-                "supplier": extractor.label,
-                "successor": _supplier_label(extractor.deprecated_successor),
-                "ends_on": extractor.deprecated_until.isoformat(),
-            },
+            translation_placeholders=placeholders,
         )
 
     async def async_force_refresh(self) -> None:

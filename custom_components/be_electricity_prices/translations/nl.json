@@ -554,6 +554,10 @@
     "supplier_deprecated": {
       "title": "{supplier} draagt je contract op {ends_on} over aan {successor}",
       "description": "{supplier} stopt met de levering van energie aan particulieren: je contract gaat op {ends_on} automatisch over naar {successor}. De prijzen blijven correct tot {supplier} zijn tariefkaart niet langer publiceert, dus er is nog niets stuk -- maar daarna stopt deze entry met bijwerken. Bewerk de entry en kies {successor} als leverancier zodra je overdracht bevestigd is."
+    },
+    "supplier_deprecated_no_successor": {
+      "title": "{supplier} stopt op {ends_on} met de levering van energie aan particulieren",
+      "description": "{supplier} verlaat op {ends_on} de markt voor energie aan particulieren. De prijzen blijven correct tot de tariefkaart niet langer gepubliceerd wordt, maar daarna stopt deze entry met bijwerken. Je contract wordt overgedragen aan een andere leverancier: kijk in de brief die je ontvangt, bewerk daarna deze entry en kies die leverancier. Staat hij niet in de lijst, dan ondersteunt deze integratie hem nog niet in jouw gewest -- open dan een issue op GitHub."
     }
   },
   "entity": {

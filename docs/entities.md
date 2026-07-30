@@ -508,7 +508,7 @@ Top-level keys in `strings.json`:
 | `selector` | option labels for `region`, `capacity_mode`, `meter`, `dso_tariff_mode`, `connection_kva_tier`, `solar_regime` |
 | `services` | names and field descriptions for the four services |
 | `exceptions` | `ServiceValidationError` messages |
-| `issues` | Repairs cards: `snapshot_stale`, `extractor_failed`, `extractor_unreachable`, `entsoe_auth_failed`, `supplier_deprecated` |
+| `issues` | Repairs cards: `snapshot_stale`, `extractor_failed`, `extractor_unreachable`, `entsoe_auth_failed`, `supplier_deprecated`, `supplier_deprecated_no_successor` |
 | `entity` | entity names under `sensor.*`, `binary_sensor.*`, `button.*` |
 
 Entity names are resolved by `translation_key`, which each description sets equal

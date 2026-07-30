@@ -406,7 +406,10 @@ inspecting attributes; each auto-clears on the next successful refresh:
   correct until the supplier stops publishing its card; edit the entry and
   select the successor once your transfer is confirmed. Unlike the four
   above, this one is not a failure and does not clear on a refresh — it
-  clears when the entry points at a supplier that is still selling.
+  clears when the entry points at a supplier that is still selling. The
+  successor is only named when this integration can actually price it in
+  your region; otherwise the card says the entry will stop updating and
+  asks you to check the letter your supplier sends.
 
 ### `be_electricity_prices.refresh` service
 

@@ -554,6 +554,10 @@
     "supplier_deprecated": {
       "title": "{supplier} transfere votre contrat a {successor} le {ends_on}",
       "description": "{supplier} quitte le marche de l'energie residentielle : votre contrat sera transfere automatiquement a {successor} le {ends_on}. Les prix restent corrects jusqu'a ce que {supplier} cesse de publier sa carte tarifaire, donc rien n'est casse pour l'instant -- mais cette entree cessera ensuite de se mettre a jour. Modifiez l'entree et selectionnez {successor} comme fournisseur des que votre transfert est confirme."
+    },
+    "supplier_deprecated_no_successor": {
+      "title": "{supplier} cesse de fournir l'energie residentielle le {ends_on}",
+      "description": "{supplier} quitte le marche de l'energie residentielle le {ends_on}. Les prix restent corrects jusqu'a ce que la carte tarifaire ne soit plus publiee, mais cette entree cessera ensuite de se mettre a jour. Votre contrat est transfere a un autre fournisseur : consultez le courrier que vous recevrez, puis modifiez cette entree et selectionnez ce fournisseur. S'il ne figure pas dans la liste, cette integration ne le couvre pas encore dans votre region -- ouvrez alors une issue sur GitHub."
     }
   },
   "entity": {

@@ -78,7 +78,7 @@ class SupplierExtractor:
 | `probe` | `SnapshotProbe \| None` | Optional cheap freshness check; `None` means "no probe, use TTL only". |
 | `fetch_for_month` | `ArchivedSnapshotFetcher \| None` | Optional historical fetch for time-correct yearly-cost billing; `None` means "no archive". |
 | `deprecated_until` | `date \| None` | Set when the supplier has announced it is leaving the residential market: the date its contracts stop being supplied. Drops the supplier from the config flow's new-setup and compare pickers, and raises the `supplier_deprecated` Repairs card on every entry using it. Purely declarative -- nothing compares it to the clock, so hiding takes effect as soon as the flag ships (you cannot sign up today for a contract being transferred away), and the date is text for the card. |
-| `deprecated_successor` | `str \| None` | Registry id of the supplier taking the contracts over; named in the Repairs card so the user knows what to switch to. |
+| `deprecated_successor` | `str \| None` | Registry id of the supplier taking the contracts over; named in the Repairs card so the user knows what to switch to. It is only named when it has a contract in the entry's own region: a withdrawal names one successor nationally, while our coverage is per region, so an entry we cannot route anywhere gets the `supplier_deprecated_no_successor` variant instead of advice the config flow would refuse. |
 
 A withdrawn supplier keeps working: `fetch` and `probe` are untouched, and
 `providers.get()` still resolves it, so existing entries carry on pricing off the

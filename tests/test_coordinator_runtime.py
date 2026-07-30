@@ -1023,6 +1023,32 @@ async def test_sync_deprecated_supplier_issue_creates_and_clears(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_deprecated_supplier_issue_omits_an_out_of_region_successor(
+    hass: HomeAssistant,
+) -> None:
+    """The successor is named for the whole country, our coverage is per
+    region: EnergyVision took over DATS 24's Walloon customers too, but only
+    its Flanders cards are modelled. Naming it to a Walloon entry would send
+    the user to a supplier the contract step then refuses."""
+    entry = make_entry(
+        supplier="dats24", contract="dats24_groen_variabel", region="wallonia"
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    coord._sync_deprecated_supplier_issue()
+    issue = ir.async_get(hass).async_get_issue(
+        DOMAIN, f"supplier_deprecated_{entry.entry_id}"
+    )
+    assert issue is not None
+    # Same card slot, but the variant that gives no unfollowable advice.
+    assert issue.translation_key == "supplier_deprecated_no_successor"
+    assert issue.translation_placeholders == {
+        "supplier": "DATS 24",
+        "ends_on": "2026-08-31",
+    }
+
+
 async def test_sync_extractor_failed_issue_creates_and_clears(
     hass: HomeAssistant,
 ) -> None:
