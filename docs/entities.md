@@ -333,7 +333,7 @@ waiting for the next hourly tick.
 ### `cheapest_window` and `most_expensive_window`
 
 Same shape; one minimizes the window average, the other maximizes. Fields
-(`services.yaml:17`, `services.yaml:115`):
+(`services.yaml:17`, `services.yaml:116`):
 
 | Field | Required | Selector | Meaning |
 | --- | --- | --- | --- |
@@ -415,7 +415,7 @@ changed; for a narrower window leave `clear` off and rely on the upsert.
 ### Service exceptions
 
 All handlers raise localized `ServiceValidationError`s keyed under
-`exceptions.*` in `strings.json` (`strings.json:346`):
+`exceptions.*` in `strings.json` (`strings.json:514`):
 
 | translation_key | Raised when |
 | --- | --- |
@@ -513,6 +513,6 @@ Top-level keys in `strings.json`:
 
 Entity names are resolved by `translation_key`, which each description sets equal
 to its `key`, so a new sensor `key` must have a matching entry under
-`entity.sensor.<key>.name` (`strings.json:388`) or HA falls back to the raw key.
+`entity.sensor.<key>.name` (`strings.json:564`) or HA falls back to the raw key.
 The `entity.sensor` block lists all eighteen possible sensors even though a given
 entry only instantiates the subset its region and solar regime allow.

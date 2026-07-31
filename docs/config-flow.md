@@ -135,7 +135,7 @@ Schema `_user_schema` (`config_flow.py:292`). Two dropdowns:
   impossible to edit at all (`tests/test_options_flow.py`,
   `test_edit_branch_offers_a_withdrawn_supplier_it_already_has`).
 - Region: the `REGIONS` tuple (`const.py:43`), rendered with `translation_key="region"`
-  so `selector.region.options` in `strings.json:230` supplies the localized labels.
+  so `selector.region.options` in `strings.json:393` supplies the localized labels.
 
 `async_step_user` seeds `self._data = {}` on first entry (`config_flow.py:1482`).
 The OptionsFlow's `edit` step seeds instead from `{**entry.data, **entry.options}`
@@ -202,7 +202,7 @@ Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:174`)
 
 Reached only when region is Wallonia (`_after_meter`, `config_flow.py:1371`). Tarif
 Impact is the CWaPE 3-band hour-of-day distribution tariff (PIC 17-22, MEDIUM 7-11
-+ 22-1, ECO 1-7 + 11-17, per `strings.json:34`) and needs a smart meter. Outside
++ 22-1, ECO 1-7 + 11-17, per `strings.json:52`) and needs a smart meter. Outside
 Wallonia only `simple`/`bi_horaire` are meaningful and the coordinator falls back
 automatically when the DSO does not publish Impact rates (`const.py:165`), so the
 step is skipped entirely (Brussels has only Sibelga, Flanders bills via the
@@ -228,7 +228,7 @@ zone effectively never goes a full local day with no publication, so an empty 24
 response reliably means "key not usable" (quota or maintenance). This blocks the
 user from finalizing an entry that would fail on its first refresh. The two error
 strings map to `config.error.invalid_api_key` / `config.error.cannot_connect`
-(`strings.json:96`).
+(`strings.json:170`).
 
 ### `capacity`: Flanders capacity-tariff peak source
 
@@ -339,7 +339,7 @@ per side, both feeding the `current_year_cost` computation:
 When both are filled for the same side, the day/night registers win (more accurate;
 `config_flow.py:767`). Each side (consumption, injection) is resolved independently,
 so the user can mix one side as registers and the other as a total
-(`strings.json:79`).
+(`strings.json:323`).
 
 Energy-dashboard defaults: `async_step_meters` copies `self._data` and calls
 `_apply_energy_manager_defaults` (`config_flow.py:903`) before rendering, but only
@@ -362,7 +362,7 @@ helper:
   two children mapping to the same slot), because a wrong day/night pick mis-bills
   the year cost (`config_flow.py:842` comment).
 
-Anything pre-filled stays editable (`strings.json:79`).
+Anything pre-filled stays editable (`strings.json:199`).
 
 ## Validation and rejection rules
 
@@ -395,7 +395,7 @@ own coordinator would double-poll the supplier and break shared-snapshot dedup. 
 OptionsFlow enforces the same at finalize (`config_flow.py:1544`): if the edited
 tuple differs from the entry's current unique id, it scans other `DOMAIN` entries and
 aborts `already_configured` on a collision. The abort strings are
-`config.abort.supplier_region_unavailable` / `already_configured` (`strings.json:90`).
+`config.abort.supplier_region_unavailable` / `already_configured` (`strings.json:164`).
 
 ### Defaults selection pattern
 
@@ -421,7 +421,7 @@ stale stored value never renders as an invalid pre-selection:
 | `edit` | `async_step_edit` (`config_flow.py:1532`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
 | `compare` | `async_step_compare` (`config_flow.py:1594`) | One-off quote against another supplier; nothing saved |
 
-Menu labels live in `options.step.init.menu_options` (`strings.json:103`).
+Menu labels live in `options.step.init.menu_options` (`strings.json:193`).
 
 ### Edit path
 
@@ -460,7 +460,7 @@ mutates `entry.data` in place (same entry id, entities preserved unless supplier
 contract/region/DSO changed enough to force a reload via the update listener).
 Adding a brand new entry from scratch goes through `BePricesConfigFlow` and is
 rejected as a duplicate if it collides with an existing tuple; the message tells the
-user to edit the existing entry instead (`strings.json:92`).
+user to edit the existing entry instead (`strings.json:166`).
 
 ### Compare path (one-off quote, nothing saved)
 
@@ -475,7 +475,7 @@ apples-to-apples; only supplier, contract, and (for static targets) meter vary.
 | `compare` | `config_flow.py:1594` | Supplier picker via `_compare_supplier_options` (`config_flow.py:247`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
 | `compare_contract` | `config_flow.py:1622` | Contract picker via `_compare_contract_schema` (`config_flow.py:272`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
 | `compare_meter` | `config_flow.py:1660` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`config_flow.py:1683`) |
-| `compare_api_key` | `config_flow.py:1730` | Shown when `_after_compare_meter` (`config_flow.py:1702`) finds the quote needs spot data the entry lacks: a dynamic target, or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved (`strings.json:141`) |
+| `compare_api_key` | `config_flow.py:1730` | Shown when `_after_compare_meter` (`config_flow.py:1702`) finds the quote needs spot data the entry lacks: a dynamic target, or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved (`strings.json:227`) |
 | `compare_result` | `config_flow.py:1758` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`config_flow.py:1771`); submit aborts `compare_done` |
 
 The compare-meter narrowing mirrors the install `_meter_schema` exactly (dynamic/
@@ -483,7 +483,7 @@ tou/tou_impact all require a smart meter; `config_flow.py:1678` comment). The
 compare result never mutates coordinator state: when it must borrow the historical
 spot cache for a spot-indexed injection it saves and restores
 `coord._historical_spots` around the fetch (`config_flow.py:2106`). Placeholder
-tokens map to `options.step.compare_result.description` (`strings.json:146`), which
+tokens map to `options.step.compare_result.description` (`strings.json:236`), which
 references `{meter_used}`, `{current_annual}`, `{delta_ytd}`, the ASCII bar charts
 `{annual_chart}`/`{ytd_chart}`, and so on; `_build_compare_placeholders` always
 populates every token (even the reloading-entry fallback at `config_flow.py:1793`)
@@ -499,18 +499,18 @@ emits has a matching entry under `config.step.*` / `config.abort.*` / `config.er
 | --- | --- |
 | `step_id="user"` + fields | `config.step.user` (`strings.json:4`) |
 | Each `async_step_<x>` | `config.step.<x>` (title, description, `data.<CONF>`) |
-| `errors[CONF_API_KEY]="invalid_api_key"` | `config.error.invalid_api_key` (`strings.json:97`) |
-| `async_abort(reason="...")` | `config.abort.<reason>` (`strings.json:90`) |
-| `translation_key=` on a selector | `selector.<key>.options.*` (`strings.json:229`) |
-| Options menu + every options step | `options.step.*` (`strings.json:101`) |
+| `errors[CONF_API_KEY]="invalid_api_key"` | `config.error.invalid_api_key` (`strings.json:171`) |
+| `async_abort(reason="...")` | `config.abort.<reason>` (`strings.json:164`) |
+| `translation_key=` on a selector | `selector.<key>.options.*` (`strings.json:391`) |
+| Options menu + every options step | `options.step.*` (`strings.json:190`) |
 
 The `translation_key` selectors (`region`, `capacity_mode`, `meter`,
 `dso_tariff_mode`, `connection_kva_tier`, `solar_regime`, and `supplier` in the
 compare step) resolve their option labels from `selector.<key>.options`
-(`strings.json:229`), not from the raw enum values. The options-flow steps reuse the
+(`strings.json:391`), not from the raw enum values. The options-flow steps reuse the
 config-flow strings through `[%key:component::be_electricity_prices::config::step::...%]`
 references (for example `options.step.edit.title` -> `config.step.user.title`,
-`strings.json:111`), so the same text is not duplicated.
+`strings.json:199`), so the same text is not duplicated.
 
 `translations/en.json` is the compiled/expanded form of `strings.json`: identical
 except that the `[%key:...%]` cross-references in the options section are resolved to

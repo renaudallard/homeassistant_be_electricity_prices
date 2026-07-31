@@ -383,15 +383,15 @@ production, `pytest tests/ -q`) and separate `hacs`/`hassfest` jobs mirror `vali
 (`.github/workflows/autorelease.yml:72`), then:
 
 1. Extracts the version from `manifest.json` via `jq` and derives `tag=v<version>`
-   (`.github/workflows/autorelease.yml:79`).
-2. Skips if the tag already exists (`.github/workflows/autorelease.yml:90`), making the workflow
+   (`.github/workflows/autorelease.yml:81`).
+2. Skips if the tag already exists (`.github/workflows/autorelease.yml:92`), making the workflow
    idempotent against re-pushes.
 3. Builds `dist/be_electricity_prices.zip` from the component directory, excluding `*.pyc` and
-   `__pycache__` (`.github/workflows/autorelease.yml:99`).
+   `__pycache__` (`.github/workflows/autorelease.yml:101`).
 4. Tags, pushes the tag, and runs `gh release create --generate-notes` with the zip attached,
    retrying up to five times with exponential backoff (a past release, v0.5.28, was lost to a 504
    from GitHub's REST API) and treating an already-created release as success
-   (`.github/workflows/autorelease.yml:109`).
+   (`.github/workflows/autorelease.yml:111`).
 
 The practical consequence: tagging and publishing a GitHub release is fully automatic once a
 manifest version bump lands on `main`. Do not tag or create releases by hand.
