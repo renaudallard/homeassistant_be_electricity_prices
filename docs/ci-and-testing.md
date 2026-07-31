@@ -166,44 +166,51 @@ loaded `base` module.
 ### Structure and main functions
 
 ```
-main()                       scripts/live_check.py:1748  asyncio.run(_run()); rc=8 on harness crash
-  _run()                     scripts/live_check.py:1529  load providers, gather checks, render, exit code
+main()                       scripts/live_check.py:1756  asyncio.run(_run()); rc=8 on harness crash
+  _run()                     scripts/live_check.py:1537  load providers, gather checks, render, exit code
     _load_providers()        scripts/live_check.py:62    file-path import of every provider (no HA)
     _attributed_check(...)   scripts/live_check.py:322   per-supplier wait_for + trace attribution
-      _check_eneco ...       scripts/live_check.py:413   one _check_<supplier> per registered extractor
+      _check_eneco ...       scripts/live_check.py:437   one _check_<supplier> per registered extractor
       _check_frank                                       (cociter, dats24, ebem, ecofix, ecopower,
       _check_bolt                                         engie, luminus, mega, totalenergies,
       ...                                                 bolt, octaplus, frank, energiebe,
                                                           energyvision)
-    _check_catalogs(...)     scripts/live_check.py:1180   run each discover(), flag new product ids
-    _fetch_with_retry(...)   scripts/live_check.py:374   transient-only retry with backoff
-    _validate_snapshot(...)  scripts/live_check.py:1357  energy + injection shape gates
-    _drift_warnings(...)     scripts/live_check.py:1713  latency / byte budget checks
-    _render_report(...)      scripts/live_check.py:1500  markdown pass/fail report
+    _check_catalogs(...)     scripts/live_check.py:1188   run each discover(), flag new product ids
+    _fetch_with_retry(...)   scripts/live_check.py:398   transient-only retry with backoff
+    _validate_snapshot(...)  scripts/live_check.py:1365  energy + injection shape gates
+    _drift_warnings(...)     scripts/live_check.py:1721  latency / byte budget checks
+    _render_report(...)      scripts/live_check.py:1508  markdown pass/fail report
 ```
 
 Each `_check_<supplier>` derives its contract list from the runtime registry (for example
-`for cid in (c.id for c in eneco.EXTRACTOR.contracts)`, `scripts/live_check.py:417`) so adding a
+`for cid in (c.id for c in eneco.EXTRACTOR.contracts)`, `scripts/live_check.py:441`) so adding a
 product to `EXTRACTOR.contracts` gets it validated here without editing the harness. Every check
 asserts the publication label is non-empty, the expected DSO keys for the region are present
 (`_FLUVIUS_KEYS`, `_WALLONIA_DSO_KEYS`, or `sibelga` for Brussels), the relevant taxes are
 positive, and then calls `_validate_snapshot`.
 
-`_validate_snapshot` (`scripts/live_check.py:1357`) runs two gates:
+The federal energy contribution is the exception to "taxes are positive". It is bounds-checked by
+`_expect_energy_contribution` (`scripts/live_check.py:376`) instead, which accepts
+`[0, 0.01]` EUR/kWh. A `> 0` gate on four suppliers used to enforce it, but the levy was abolished
+on 2026-08-01: EBEM's August card failed CI three times over for reporting the zero it actually
+prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
+that reads the value 100x too large — and that part still holds.
 
-- `_validate_energy` (`scripts/live_check.py:1389`) dispatches on the energy dataclass type and
+`_validate_snapshot` (`scripts/live_check.py:1365`) runs two gates:
+
+- `_validate_energy` (`scripts/live_check.py:1397`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
   additionally assert band ordering (peak >= transition >= offpeak; pic >= medium >= eco). An
   unrecognised energy class is a failure.
-- `_validate_injection` (`scripts/live_check.py:1249`) gates that the feed-in credit parsed and
+- `_validate_injection` (`scripts/live_check.py:1257`) gates that the feed-in credit parsed and
   kept the right shape. This exists because the coordinator drops the credit entirely when
   `injection` is None, so a relabelled injection row silently zeroes a solar user's credit and
   used to pass CI green (issues #31, F53). The `shape` argument pins expectations: `"none"`
   (region pays no feed-in, injection must be absent), `"monthly"` (`current` set, `factor`/`base`
   None), `"spot"` (`factor`/`base` set), or `"present"` (present, shape unconstrained). Per-contract
-  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1317`); the DATS 24 check passes
+  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1325`); the DATS 24 check passes
   `injection_shape` explicitly because its Wallonia card pays no feed-in while its Flanders card is
   monthly-indexed.
 
@@ -215,7 +222,7 @@ currently being checked (via a `ContextVar` set by the `_attributed()` context m
 body bytes, and failed-attempt count / duration into `METRICS`. These metrics
 surface silent slowdowns and PDF-size jumps, both leading indicators that a supplier reworked its
 publication, and are appended to the daily report by `_render_metrics`
-(`scripts/live_check.py:1468`).
+(`scripts/live_check.py:1476`).
 
 Reading a row correctly needs three facts about which hook feeds which column:
 
@@ -240,30 +247,30 @@ Two safety caps bound runtime. Each supplier check runs under
 `asyncio.wait_for(..., timeout=_SUPPLIER_HARD_TIMEOUT_S)` with a 240s hard cap
 (`scripts/live_check.py:341`), recorded as an extractor failure rather than propagating so one hung
 supplier cannot starve the `gather()`. The session-level `aiohttp.ClientTimeout(total=60)`
-(`scripts/live_check.py:1569`) bounds individual requests.
+(`scripts/live_check.py:1577`) bounds individual requests.
 
-`_drift_warnings` (`scripts/live_check.py:1713`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:1721`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
-`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1652`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1670`) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py:1690`) for the known-large catalogues (Bolt, TotalEnergies, Engie, Ecofix,
+`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1660`), with per-supplier overrides in
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1678`) and `_LATENCY_BUDGET_OVERRIDES`
+(`scripts/live_check.py:1698`) for the known-large catalogues (Bolt, TotalEnergies, Engie, Ecofix,
 Mega, OCTA+). Note that `elapsed_s` is the sum of per-request durations, not true wallclock, so a
 supplier that fetches concurrently (Bolt fetches its six PDFs with `asyncio.gather`,
-`scripts/live_check.py:898`) records the sum of its parallel fetches; the budgets are sized around
+`scripts/live_check.py:910`) records the sum of its parallel fetches; the budgets are sized around
 that. The synthetic `_catalog` bucket is skipped in drift analysis because it aggregates every
-supplier's discovery fetch under one name (`scripts/live_check.py:1717`). When a budget is blown,
+supplier's discovery fetch under one name (`scripts/live_check.py:1725`). When a budget is blown,
 `live_check.yml` opens or updates a dedicated drift issue (see below). Tuning a false-firing drift
 alert means adjusting the override, not the code.
 
 ### Exit codes and the two report side-channels
 
-`_run()` (`scripts/live_check.py:1529`) splits checks into `extractor` and `catalog` kinds. The
+`_run()` (`scripts/live_check.py:1537`) splits checks into `extractor` and `catalog` kinds. The
 extractor report (with the metrics block) is printed to stdout, which the workflow captures. The
 catalog diff is written to `catalog_report.md` and the drift warnings to `drift_report.md` at the
-repo root (`scripts/live_check.py:1630`), each a side-channel the workflow reads to file a separate
+repo root (`scripts/live_check.py:1638`), each a side-channel the workflow reads to file a separate
 issue so the three failure modes never conflate in one thread.
 
-The exit code is bit-encoded (`scripts/live_check.py:1640`):
+The exit code is bit-encoded (`scripts/live_check.py:1648`):
 
 | Bit | Value | Meaning | Retried by workflow? |
 | --- | --- | --- | --- |
@@ -272,12 +279,12 @@ The exit code is bit-encoded (`scripts/live_check.py:1640`):
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
 | - | 8 | harness crash (top-level Python exception in the script) | no |
 
-`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:1756`) so the workflow
+`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:1764`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
 
 ### The transient-only retry helper
 
-`_fetch_with_retry(factory, *, attempts=3)` (`scripts/live_check.py:374`) calls `factory()`, and on
+`_fetch_with_retry(factory, *, attempts=3)` (`scripts/live_check.py:398`) calls `factory()`, and on
 a transient network failure retries with a short backoff (`_RETRY_BACKOFF_S = (1.0, 3.0)`). A
 failure is "transient" only if it is a bare `TimeoutError` or an `ExtractorError` whose message the
 shared `providers/_pdf.is_transient_fetch_error` predicate classifies as transient (a wrapped

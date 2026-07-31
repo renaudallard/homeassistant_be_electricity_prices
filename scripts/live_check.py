@@ -367,6 +367,30 @@ def _expect(label: str, condition: bool, detail: str = "") -> bool:
     return condition
 
 
+# Upper bound for the federal "bijdrage op de energie" / "cotisation sur
+# l'energie". It was 0,0020417 EUR/kWh until it was abolished on 2026-08-01,
+# so anything above a cent per kWh is a unit slip rather than a real rate.
+_MAX_ENERGY_CONTRIBUTION = 0.01
+
+
+def _expect_energy_contribution(prefix: str, taxes: object) -> None:
+    """Bounds-check the federal energy contribution on a fetched snapshot.
+
+    This used to assert ``> 0`` on four suppliers. The levy fell to zero on
+    2026-08-01, so EBEM's August card failed CI three times over for
+    reporting the rate the card actually prints (issue #49). Zero is now a
+    valid value; the useful assertion is that the number is non-negative and
+    still of a plausible magnitude, which keeps catching the unit slip the
+    original gate was really there for.
+    """
+    value = getattr(taxes, "energy_contribution", None)
+    _expect(
+        f"{prefix}: energy contribution in [0, {_MAX_ENERGY_CONTRIBUTION}] EUR/kWh",
+        value is not None and 0.0 <= value <= _MAX_ENERGY_CONTRIBUTION,
+        detail=str(taxes),
+    )
+
+
 _RETRY_BACKOFF_S: tuple[float, ...] = (1.0, 3.0)
 _RetryT = TypeVar("_RetryT")
 
@@ -567,11 +591,7 @@ async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) ->
             snap.taxes.federal_excise > 0,
             detail=str(snap.taxes),
         )
-        _expect(
-            f"{prefix}: energy contribution > 0",
-            snap.taxes.energy_contribution > 0,
-            detail=str(snap.taxes),
-        )
+        _expect_energy_contribution(prefix, snap.taxes)
         _validate_snapshot(prefix, cid, snap)
 
 
@@ -614,11 +634,7 @@ async def _check_ecofix(
                 snap.taxes.federal_excise > 0,
                 detail=str(snap.taxes),
             )
-            _expect(
-                f"{prefix}: energy contribution > 0",
-                snap.taxes.energy_contribution > 0,
-                detail=str(snap.taxes),
-            )
+            _expect_energy_contribution(prefix, snap.taxes)
             _validate_snapshot(prefix, cid, snap)
 
 
@@ -867,11 +883,7 @@ async def _check_luminus(
                 snap.taxes.federal_excise > 0,
                 detail=str(snap.taxes),
             )
-            _expect(
-                f"{prefix}: energy contribution > 0",
-                snap.taxes.energy_contribution > 0,
-                detail=str(snap.taxes),
-            )
+            _expect_energy_contribution(prefix, snap.taxes)
             _validate_snapshot(prefix, cid, snap)
 
 
@@ -1121,11 +1133,7 @@ async def _check_octaplus(
                 snap.taxes.federal_excise > 0,
                 detail=str(snap.taxes),
             )
-            _expect(
-                f"{prefix}: energy contribution > 0",
-                snap.taxes.energy_contribution > 0,
-                detail=str(snap.taxes),
-            )
+            _expect_energy_contribution(prefix, snap.taxes)
             _validate_snapshot(prefix, cid, snap)
 
 
