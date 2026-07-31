@@ -235,6 +235,28 @@ def test_brussels_extracts_sibelga_row() -> None:
     assert snap.taxes.energy_contribution == pytest.approx(0.002)
 
 
+def test_zero_energy_contribution_is_accepted() -> None:
+    # The federal levy fell to zero on 2026-08-01. A card that prints the
+    # row with a zero value is reporting a real rate, so it must parse
+    # rather than trip the "not found" drift guard.
+    text = fixture_text("totalenergies_dynamic_w.pdf", layout=True).replace(
+        "Cotisation sur l’énergie 0,20", "Cotisation sur l’énergie 0,00"
+    )
+    snap = parse_snapshot("totalenergies_mydynamic", text, "wallonia")
+    assert snap.taxes.energy_contribution == 0.0
+
+
+def test_missing_energy_contribution_is_fatal() -> None:
+    # A row that is absent altogether is still drift: neither the labelled
+    # line nor (in Wallonia) any table fallback exposes the value, so the
+    # fetch must fail loud instead of billing a silent zero.
+    text = fixture_text("totalenergies_dynamic_w.pdf", layout=True).replace(
+        "Cotisation sur l’énergie", "XXX"
+    )
+    with pytest.raises(ExtractorError, match="energy contribution not found"):
+        parse_snapshot("totalenergies_mydynamic", text, "wallonia")
+
+
 def test_wallonia_dso_carries_full_row() -> None:
     # TotalEnergies's Wallonia rows have 12 numbers; the parser pulls
     # mono / jour / nuit (cols 0-2), data_mgmt (col 7), transport (col 8)

@@ -269,13 +269,15 @@ def parse_snapshot(
     injection = _extract_injection(text, contract.kind)
     publication_label = _extract_publication_month(text)
     federal_excise = _extract_federal_excise(text)
-    energy_contribution = _extract_energy_contribution(
-        text
-    ) or _energy_contribution_from_table(text, region)
-    if energy_contribution == 0.0:
-        # Mandatory federal levy; neither the labelled line nor the DSO
-        # table fallback matched, so the card drifted. Fail loud rather
-        # than silently dropping the contribution.
+    energy_contribution = _extract_energy_contribution(text)
+    if energy_contribution is None:
+        energy_contribution = _energy_contribution_from_table(text, region)
+    if energy_contribution is None:
+        # Neither the labelled line nor the DSO table fallback exposed the
+        # row, so the card drifted. Fail loud rather than silently dropping
+        # the contribution. A row that is PRESENT and reads zero is a valid
+        # value since the levy fell to zero on 2026-08-01, so only a real
+        # miss (None) raises here.
         raise ExtractorError("TotalEnergies: federal energy contribution not found")
     region_connection_fee = (
         _extract_connection_fee(text) if region == REGION_WALLONIA else 0.0
@@ -603,12 +605,19 @@ def _extract_federal_excise(text: str) -> float:
     return to_float(match.group(1)) / 100.0
 
 
-def _extract_energy_contribution(text: str) -> float:
+def _extract_energy_contribution(text: str) -> float | None:
+    """The labelled "Cotisation sur l'énergie" line, or None when absent.
+
+    Returns ``None`` (not ``0.0``) on a miss so the caller can tell a card
+    that omits the row from one that prints a genuine zero: the federal
+    levy fell to zero on 2026-08-01, so a zero is now a real value and
+    must not trigger the DSO-table fallback or the drift error.
+    """
     match = re.search(r"Cotisation sur l[\"'’]\s*énergie\s+([\d.,]+)", text)
-    return to_float(match.group(1)) / 100.0 if match else 0.0
+    return to_float(match.group(1)) / 100.0 if match else None
 
 
-def _energy_contribution_from_table(text: str, region: str) -> float:
+def _energy_contribution_from_table(text: str, region: str) -> float | None:
     """Fallback: read the federal energy contribution from the DSO table.
 
     The Wallonia card prints "Cotisation sur l'énergie <value>" on a
@@ -617,7 +626,7 @@ def _energy_contribution_from_table(text: str, region: str) -> float:
     the only machine-readable copy of the value is the cotisation
     column of the DSO table: the 7th SIBELGA number on Brussels, the
     8th of nine on each Flanders Fluvius row. It is a federal levy,
-    identical across rows, so any one row yields it. Returns 0.0 when
+    identical across rows, so any one row yields it. Returns ``None`` when
     the layout doesn't expose it. Without this the Brussels / Flanders
     all-in price silently drops the contribution (~0.20 c€/kWh).
     """
@@ -627,7 +636,7 @@ def _energy_contribution_from_table(text: str, region: str) -> float:
             r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)",
             text,
         )
-        return to_float(match.group(7)) / 100.0 if match else 0.0
+        return to_float(match.group(7)) / 100.0 if match else None
     if region == REGION_FLANDERS:
         for label in _FLANDERS_LABELS:
             match = re.search(
@@ -638,7 +647,7 @@ def _energy_contribution_from_table(text: str, region: str) -> float:
             )
             if match:
                 return to_float(match.group(8)) / 100.0
-    return 0.0
+    return None
 
 
 def _extract_connection_fee(text: str) -> float:
