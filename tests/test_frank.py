@@ -147,6 +147,33 @@ def test_dot_decimal_render_matches_comma() -> None:
     assert dot.energy.base == pytest.approx(comma.energy.base)
 
 
+def test_august_card_drops_the_energy_contribution_row() -> None:
+    # The federal "bijdrage op de energie" fell to zero on 2026-08-01 and
+    # Frank deleted the row from the card. Parsing must still succeed and
+    # report a zero contribution instead of taking the supplier offline.
+    snap = parse_snapshot(
+        fixture_text("frank_dynamic_aug.pdf", layout=True),
+        "test://frank-aug",
+        "frank_dynamic",
+        "augustus 2026",
+    )
+    assert "Bijdrage op Energie" not in fixture_text(
+        "frank_dynamic_aug.pdf", layout=True
+    )
+    assert snap.taxes.energy_contribution == 0.0
+    # The excise moved in the same reform and is still billed.
+    assert snap.taxes.federal_excise == pytest.approx(4.876 / 100.0)
+    assert snap.taxes.flanders_renewables == pytest.approx((1.166 + 0.371) / 100.0)
+
+
+def test_missing_federal_excise_is_fatal() -> None:
+    # The excise is still billed, so a miss there is a real layout drift
+    # and must not be softened along with the abolished contribution.
+    text = _text().replace("Bijzondere accijns", "XXX")
+    with pytest.raises(ExtractorError, match="tax block"):
+        parse_snapshot(text, "test://frank-apr", "frank_dynamic", "april 2026")
+
+
 def test_missing_monthly_fee_is_fatal() -> None:
     # The Abonnementskost standing charge is mandatory; a miss must raise.
     text = _text().replace("Abonnementskost", "XXX")
