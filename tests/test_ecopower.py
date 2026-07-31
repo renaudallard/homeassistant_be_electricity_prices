@@ -233,6 +233,48 @@ def test_energy_regex_tolerates_a_bullet_prefix() -> None:
     assert energy.current == pytest.approx(0.1341)
 
 
+def _july_snap() -> SupplierSnapshot:
+    return parse_snapshot(
+        _text("ecopower_burgerstroom_jul.pdf"),
+        "test://ecopower-jul",
+        "juli 2026",
+    )
+
+
+def test_variabel_layout_card_parses_energy_and_injection() -> None:
+    """The July 2026 card broke the 50/50 split onto its own VAST and
+    VARIABEL lines, with the resolved rate trailing the VARIABEL half
+    instead of sitting on the label line or the one below it. Both the
+    same-line and next-line regexes missed: energy raised and took the
+    whole supplier offline, while injection quietly returned None, which
+    costs a solar user their entire feed-in credit without any error."""
+    snap = _july_snap()
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current == pytest.approx(0.1422)
+    assert snap.injection is not None
+    # Injection went 50% variable from 1 July, so the resolved -0,0332
+    # printed as a negative cost is credited as +0.0332.
+    assert snap.injection.current == pytest.approx(0.0332)
+    assert set(snap.dsos) == set(FLUVIUS_KEYS)
+
+
+def test_variabel_layout_does_not_capture_the_wkk_levy() -> None:
+    """The VARIABEL fallback must anchor on the literal VAST / VARIABEL
+    rows, not merely skip a line. A looser 'label, then one or two lines'
+    pattern matched 'Kost WKK 0,00392 euro/kWh' two lines under the label
+    on the same-line cards, which would bill the cogeneration levy as the
+    commodity rate the moment the same-line regex missed."""
+    for fixture, expected in (
+        ("ecopower_burgerstroom_feb.pdf", 0.1287),
+        ("ecopower_burgerstroom_apr.pdf", 0.1274),
+        ("ecopower_burgerstroom_may.pdf", 0.1341),
+        ("ecopower_burgerstroom_jun_split.pdf", 0.1378),
+    ):
+        energy = _extract_energy(_text(fixture))
+        assert isinstance(energy, VariableRates)
+        assert energy.current == pytest.approx(expected)
+
+
 def test_stale_fixed_injection_note_is_ignored_on_a_later_card() -> None:
     """The '100% vast' note declares its own expiry (t.e.m. 30 juni). If a
     later month's card still carries the stale note while already printing

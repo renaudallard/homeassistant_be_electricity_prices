@@ -333,6 +333,23 @@ _ENERGY_SPLIT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# The July 2026 card broke the 50/50 split onto its own two lines, with the
+# resolved rate trailing the VARIABEL half:
+#     Afname Groene Burgerstroom
+#     VAST 50% x 0,17 euro
+#     VARIABEL +50% x 0,11444616 euro deze waarde is gelijk aan [EPEX RLP]. 0,1422 euro/kWh
+# Anchor on the literal VAST / VARIABEL rows rather than "skip a line": a
+# looser next-line-or-two fallback matched the "Kost WKK 0,00392 euro/kWh"
+# row two lines below the label on the older same-line cards, which would
+# bill the cogeneration levy as the commodity rate if the same-line regex
+# ever missed on one of them.
+_ENERGY_VARIABEL_RE = re.compile(
+    r"Afname\s+Groene\s+burgerstroom[^\n]*\n"
+    r"\s*VAST[^\n]*\n"
+    r"\s*VARIABEL[^\n]*?([\d,]+)\s*euro/kWh",
+    re.IGNORECASE,
+)
+
 
 def _extract_energy(text: str) -> EnergyRates:
     """Parse the "Groene burgerstroom" effective rate (HTVA, EUR/kWh).
@@ -344,7 +361,11 @@ def _extract_energy(text: str) -> EnergyRates:
     time, and (b) supporting Ecopower's variable cost without a live
     spot is exactly what ``VariableRates`` is for.
     """
-    match = _ENERGY_RE.search(text) or _ENERGY_SPLIT_RE.search(text)
+    match = (
+        _ENERGY_RE.search(text)
+        or _ENERGY_VARIABEL_RE.search(text)
+        or _ENERGY_SPLIT_RE.search(text)
+    )
     if not match:
         raise ExtractorError("could not parse Ecopower 'Groene burgerstroom' rate")
     return VariableRates(current=to_float(match.group(1)))
@@ -615,6 +636,19 @@ _INJECTION_SPLIT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# The July 2026 layout, mirroring _ENERGY_VARIABEL_RE on the injection side:
+#     Injectie Groene Burgerstroom (terugleververgoeding)
+#     VAST 50% x 0,02 euro
+#     VARIABEL +50% x 0,04638137 euro ... 0,9 x ... [EPEX SPP] - 0,01. -0,0332 euro/kWh
+# Without this the whole block missed and _extract_injection returned None,
+# which costs a solar user their entire feed-in credit without raising.
+_INJECTION_VARIABEL_RE = re.compile(
+    r"Injectie\s+Groene\s+Burgerstroom\s*\(terugleververgoeding\)[^\n]*\n"
+    r"\s*VAST[^\n]*\n"
+    rf"\s*VARIABEL[^\n]*?([{SIGN_CHARS}]?\s*[\d,]+)\s*euro/kWh",
+    re.IGNORECASE,
+)
+
 # Authoritative current-month statement on the split-layout cards that
 # show a 50% fixed + 50% variable injection formula: an
 # "OPGELET t.e.m. <date> is de terugleververgoeding <value> euro/kWh en
@@ -674,7 +708,11 @@ def _extract_injection(text: str) -> InjectionRates | None:
     fixed = _INJECTION_FIXED_RE.search(text)
     if fixed is not None and _fixed_note_in_effect(text):
         return InjectionRates(current=abs(to_float(fixed.group(1))))
-    match = _INJECTION_RE.search(text) or _INJECTION_SPLIT_RE.search(text)
+    match = (
+        _INJECTION_RE.search(text)
+        or _INJECTION_VARIABEL_RE.search(text)
+        or _INJECTION_SPLIT_RE.search(text)
+    )
     if not match:
         return None
     # The credit is never negative (Ecopower states this); the card merely
