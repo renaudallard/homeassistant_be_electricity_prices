@@ -102,10 +102,17 @@ Two subtleties are load-bearing:
 ### Why `defusedxml`
 
 XML parsing goes through `defusedxml.ElementTree` rather than the stdlib
-`xml.etree` (`api.py:44`). `defusedxml` disables entity expansion and
-external-entity loading. The endpoint is HTTPS-trusted, but a bare stdlib parse
-leaves a TLS-man-in-the-middle-exposed XXE surface for free, so the hardened
-parser is used. `defusedxml>=0.7` is declared in `manifest.json` requirements.
+`xml.etree`, in BOTH `api.py` (`api.py:44`) and `synergrid.py`, which parses a
+remote workbook. `defusedxml>=0.7` is declared in `manifest.json` requirements.
+
+Be precise about what this buys, because it is easy to overstate: the stdlib
+parser already refuses an EXTERNAL entity, raising `ParseError` rather than
+fetching the URL, so the classic XXE file-read is not the exposure. What the
+stdlib DOES do is expand nested INTERNAL entities, which is a memory DoS on a
+document we do not control. `defusedxml` refuses the DTD outright.
+`test_workbook_xml_entity_expansion_is_refused` pins that distinction: on the
+stdlib parser the payload expands and parsing continues, so a test written
+against an external entity would have passed either way and proved nothing.
 `defusedxml` rejects hostile constructs with `DefusedXmlException`, which is not
 a `ParseError` subclass, so `parse_day_ahead_xml` catches it separately and wraps
 it as `EntsoeError` (`api.py:155`) so a hostile payload surfaces as a categorised

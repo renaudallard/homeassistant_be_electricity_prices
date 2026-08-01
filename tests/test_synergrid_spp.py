@@ -478,3 +478,57 @@ async def test_ytd_injection_uses_spp_not_flat_mean(
     # 1 kWh injected, no consumption: cost = -(1 * 0.5 * spp_mean).
     # spp_mean = 0.15 -> -0.075; the flat mean 0.20 would give -0.10.
     assert cost == pytest.approx(-(0.5 * 0.15))
+
+
+def test_workbook_xml_entity_expansion_is_refused() -> None:
+    """The four parses here run over a REMOTE workbook.
+
+    Note what the risk actually is: the stdlib parser already refuses an
+    EXTERNAL entity (ParseError, it never fetches the URL), so swapping to
+    defusedxml buys nothing there. What the stdlib DOES do is expand nested
+    INTERNAL entities, which is a memory DoS on a file we do not control.
+    This pins that the parse refuses such a payload rather than expanding it.
+    """
+    bomb = (
+        '<?xml version="1.0"?><!DOCTYPE r ['
+        '<!ENTITY a "AAAAAAAAAA">'
+        '<!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">'
+        '<!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">'
+        '<!ENTITY d "&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;">'
+        "]><r>&d;</r>"
+    )
+    buf = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("xl/workbook.xml", bomb)
+    buf.close()
+    path = Path(buf.name)
+    try:
+        with pytest.raises(Exception) as excinfo:
+            synergrid._resolve_sheet_path(zipfile.ZipFile(path))
+        assert "Entities" in type(excinfo.value).__name__, (
+            f"expansion must be refused, got {type(excinfo.value).__name__}"
+        )
+    finally:
+        path.unlink(missing_ok=True)
+
+
+async def test_fetch_spp_weights_still_never_raises_on_a_hostile_payload() -> None:
+    """fetch_spp_weights promises it never raises. defusedxml's exceptions are
+    not ParseError subclasses, so confirm a hostile workbook still degrades to
+    an empty mapping and the coordinator falls back to the plain mean."""
+    buf = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr(
+            "xl/workbook.xml",
+            '<?xml version="1.0"?>'
+            '<!DOCTYPE r [<!ENTITY a "AA"><!ENTITY b "&a;&a;&a;">]><r>&b;</r>',
+        )
+    buf.close()
+    path = Path(buf.name)
+
+    async def _fake_download(_session: object, _url: str) -> Path:
+        return path
+
+    with patch.object(synergrid, "_download", _fake_download):
+        out = await synergrid.fetch_spp_weights(MagicMock(), 2026)
+    assert out == {}

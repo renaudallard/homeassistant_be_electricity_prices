@@ -53,7 +53,17 @@ import tempfile
 import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from xml.etree import ElementTree as ET
+
+# The four parses below run over a REMOTE workbook. The stdlib parser
+# already refuses an EXTERNAL entity (it raises ParseError rather than
+# fetching the URL), so the exposure that matters here is entity
+# EXPANSION: a bare xml.etree parse happily expands a nested-entity
+# payload, which is a memory DoS on a file we do not control. defusedxml
+# refuses the DTD outright. It is a declared requirement already, and its
+# iterparse streams incrementally with el.clear() exactly like the stdlib
+# one, so peak memory on the 52 MB file is unchanged.
+from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
+from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
 
 import aiohttp
 
@@ -103,6 +113,11 @@ async def fetch_spp_weights(session: aiohttp.ClientSession, year: int) -> SppWei
     except (
         zipfile.BadZipFile,
         ET.ParseError,
+        # defusedxml rejects entity expansion / external references with its
+        # own exceptions, which are NOT ParseError subclasses. They do inherit
+        # ValueError below, but name them so this stays covered if that ever
+        # changes -- the docstring promises this function never raises.
+        DefusedXmlException,
         LookupError,  # KeyError (missing column) or IndexError (bad string index)
         ValueError,
         ArithmeticError,  # OverflowError from an out-of-range date serial
