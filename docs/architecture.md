@@ -191,7 +191,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |  await coordinator.async_config_entry_first_refresh()
    |        |
    |        v
-   |   _async_update_data                            coordinator.py:1013
+   |   _async_update_data                            coordinator.py:1022
    |     |  probe() -> fresh?  yes: reuse cached snapshot
    |     |                     no : EXTRACTOR.fetch(session, contract, region)
    |     |        |
@@ -203,7 +203,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |     |   for each slot: compute_breakdown(snapshot, dso_overlay,
    |     |                    taxes, meter, dso_mode, spot)  ->  PriceBreakdown   pricing.py
    |     |     v
-   |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:729
+   |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:738
    |
    entry.runtime_data = coordinator                  __init__.py:172
    async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor, button
@@ -219,11 +219,11 @@ Numbered walkthrough:
 1. The user completes the config flow; HA stores the selections in `entry.data` and calls
    `async_setup_entry` (`__init__.py:165`).
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
-   tuple (`coordinator.py:836`) so a later options edit that mutates `entry.data` can still evict
+   tuple (`coordinator.py:845`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
-3. `async_load_persistent` (`coordinator.py:912`) loads the last snapshot from `.storage` so an
+3. `async_load_persistent` (`coordinator.py:921`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
-4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:1013`). It runs
+4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:1022`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:172`),
@@ -236,9 +236,9 @@ Numbered walkthrough:
 7. For each slot the coordinator calls `compute_breakdown` (`pricing.py`), which fuses the chosen
    DSO overlay, the taxes, the meter type, the DSO tariff mode, and (for dynamic) the slot spot
    into a `PriceBreakdown`. See [pricing-model.md](pricing-model.md).
-8. The result is packed into `CoordinatorData` (`coordinator.py:729`): the `hourly` table keyed by
+8. The result is packed into `CoordinatorData` (`coordinator.py:738`): the `hourly` table keyed by
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
-   suppliers, `coordinator.py:1269`), plus snapshot metadata, the injection price, fees, and the
+   suppliers, `coordinator.py:1278`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
 9. `entry.runtime_data` is set to the coordinator, the three platforms are forwarded, and a
    slot-boundary push is registered (`__init__.py:194`). Because `current_price` and
@@ -263,7 +263,7 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
 - On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:260`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
-  `coordinator.py:805`).
+  `coordinator.py:814`).
 
 Two further caching behaviors are worth knowing at the architecture level. First, snapshots are
 shared process-wide across config entries keyed by `(supplier, contract, region)`

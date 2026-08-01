@@ -563,16 +563,23 @@ def _manual_energy_leg(
     nor dynamic.
     """
     energy = current_snapshot.energy
+    # Every box on the signed_rate step is optional and the step tells the
+    # user "leave blank to keep using the current published card". Honour
+    # that PER FIELD: a blank box falls back to the current card's value,
+    # not to zero. Only the headline field (single / factor) means "no
+    # override at all" and returns None. Substituting 0.0 made a user who
+    # typed just their locked energy rate lose the standing charge entirely,
+    # and on a dynamic contract silently zeroed the formula's base.
     fee_raw = entry.data.get(CONF_MANUAL_YEARLY_FEE)
-    fee = float(fee_raw) if fee_raw is not None else 0.0
+    fee = float(fee_raw) if fee_raw is not None else energy.yearly_fixed_fee
     if isinstance(energy, DynamicRates):
         factor = entry.data.get(CONF_MANUAL_ENERGY_FACTOR)
         base = entry.data.get(CONF_MANUAL_ENERGY_BASE)
         if factor is None and base is None:
             return None
         return DynamicRates(
-            factor=float(factor) if factor is not None else 0.0,
-            base=float(base) if base is not None else 0.0,
+            factor=float(factor) if factor is not None else energy.factor,
+            base=float(base) if base is not None else energy.base,
             yearly_fixed_fee=fee,
             quarter_hourly=energy.quarter_hourly,
         )
@@ -584,9 +591,11 @@ def _manual_energy_leg(
         offpeak = entry.data.get(CONF_MANUAL_ENERGY_OFFPEAK)
         return FixedRates(
             single=float(single),
-            peak=float(peak) if peak is not None else None,
-            offpeak=float(offpeak) if offpeak is not None else None,
+            peak=float(peak) if peak is not None else energy.peak,
+            offpeak=float(offpeak) if offpeak is not None else energy.offpeak,
+            exclusive_night=energy.exclusive_night,
             yearly_fixed_fee=fee,
+            yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
         )
     return None
 

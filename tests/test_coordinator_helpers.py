@@ -2575,3 +2575,48 @@ async def test_ytd_capacity_prorates_the_running_month(hass: HomeAssistant) -> N
         )
     monthly = 4.0 * 52.37 / 12.0
     assert total == pytest.approx(monthly * (1 + 14 / 28))
+
+
+def test_manual_signing_rate_blank_fields_keep_the_current_card() -> None:
+    """The signed_rate step is all-optional and tells the user "leave blank to
+    keep using the current published card". Only the headline field means "no
+    override"; every other blank box must fall back to the card's own value,
+    not to zero. Substituting 0.0 wiped the standing charge for a user who
+    typed only their locked energy rate, and zeroed a dynamic formula's base."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.coordinator import _manual_energy_leg
+    from custom_components.be_electricity_prices.providers.base import (
+        DynamicRates,
+        FixedRates,
+    )
+    from tests import make_snapshot
+
+    card = make_snapshot(
+        energy=FixedRates(single=0.20, peak=0.22, offpeak=0.18, yearly_fixed_fee=95.0)
+    )
+    entry = SimpleNamespace(data={"manual_energy_single": 0.17})
+    leg = _manual_energy_leg(entry, card)  # type: ignore[arg-type]
+    assert isinstance(leg, FixedRates)
+    assert leg.single == pytest.approx(0.17)  # the override
+    assert leg.yearly_fixed_fee == pytest.approx(95.0)  # kept, not zeroed
+    assert leg.peak == pytest.approx(0.22)
+    assert leg.offpeak == pytest.approx(0.18)
+
+    dyn = make_snapshot(
+        energy=DynamicRates(factor=1.05, base=0.017, yearly_fixed_fee=60.0)
+    )
+    entry = SimpleNamespace(data={"manual_energy_factor": 1.12})
+    leg = _manual_energy_leg(entry, dyn)  # type: ignore[arg-type]
+    assert isinstance(leg, DynamicRates)
+    assert leg.factor == pytest.approx(1.12)
+    assert leg.base == pytest.approx(0.017)  # kept, not zeroed
+    assert leg.yearly_fixed_fee == pytest.approx(60.0)
+
+    # An explicit 0 is still an override, distinct from a blank box.
+    entry = SimpleNamespace(
+        data={"manual_energy_single": 0.17, "manual_yearly_fee": 0.0}
+    )
+    leg = _manual_energy_leg(entry, card)  # type: ignore[arg-type]
+    assert isinstance(leg, FixedRates)
+    assert leg.yearly_fixed_fee == 0.0
