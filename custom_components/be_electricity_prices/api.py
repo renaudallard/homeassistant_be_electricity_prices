@@ -133,6 +133,16 @@ class EntsoeClient:
         return await asyncio.to_thread(parse_day_ahead_xml, payload, quarter_hourly)
 
 
+def _MAX_PERIOD_SLOTS(step: timedelta) -> int:  # noqa: N802 - reads as a bound
+    """Most points one Period may contribute, for a resolution step.
+
+    Bounds the forward-fill by 31 days' worth of slots. The document's own
+    ``timeInterval`` end drives that loop, so an out-of-range end would
+    otherwise allocate without limit.
+    """
+    return math.ceil(timedelta(days=31).total_seconds() / step.total_seconds())
+
+
 def parse_day_ahead_xml(
     xml: str, quarter_hourly: bool = False
 ) -> dict[datetime, float]:
@@ -187,80 +197,105 @@ def parse_day_ahead_xml(
     counts: dict[float, dict[datetime, int]] = {}
 
     for ts in root.findall("ns:TimeSeries", _NS):
-        period = ts.find("ns:Period", _NS)
-        if period is None:
-            continue
-        interval = period.find("ns:timeInterval", _NS)
-        resolution = period.findtext("ns:resolution", default="", namespaces=_NS)
-        if interval is None or not resolution.startswith("PT"):
-            continue
-        start_text = interval.findtext("ns:start", default="", namespaces=_NS)
-        end_text = interval.findtext("ns:end", default="", namespaces=_NS)
-        if not start_text:
-            continue
-        start = _parse_iso_utc(start_text)
-        step = _resolution_to_timedelta(resolution)
-        if step is None:
-            # Skip series at a resolution we don't know how to bucket
-            # (e.g. PT5M) instead of aborting the whole document; other
-            # series in the same publication may still be hourly.
-            continue
-        step_s = step.total_seconds()
-        bucket_sum = sums.setdefault(step_s, {})
-        bucket_count = counts.setdefault(step_s, {})
-        # IEC 62325-451-3 / A44 lets a publication document omit any
-        # Point whose price is unchanged from the previous position
-        # ("carry forward" semantics). Collect only the explicit points
-        # first, then forward-fill across the whole interval so the
-        # caller never sees a gap that they'd interpolate as a stale
-        # neighbour hour.
-        explicit: dict[int, float] = {}
-        for point in period.findall("ns:Point", _NS):
-            position_text = point.findtext("ns:position", default="0", namespaces=_NS)
-            price_text = point.findtext("ns:price.amount", default="", namespaces=_NS)
-            if not price_text:
+        # Iterate EVERY Period, not just the first. `find` returned one, so a
+        # TimeSeries carrying consecutive Periods (a publication that splits
+        # the window per day) silently lost every slot after the first block.
+        for period in ts.findall("ns:Period", _NS):
+            interval = period.find("ns:timeInterval", _NS)
+            resolution = period.findtext("ns:resolution", default="", namespaces=_NS)
+            if interval is None or not resolution.startswith("PT"):
                 continue
-            try:
-                position = int(position_text)
-                price = float(price_text)
-            except ValueError as err:
-                raise EntsoeError(f"malformed point in document: {err}") from err
-            explicit[position] = price / 1000.0
-        if not explicit:
-            continue
-        if end_text:
-            end = _parse_iso_utc(end_text)
-            # Round up so a window that isn't an exact multiple of the
-            # resolution doesn't drop its trailing sub-hour slot. Use
-            # max() with the explicit positions as a floor in case the
-            # publication shrinks the interval relative to the points.
-            span_s = max(0.0, (end - start).total_seconds())
-            inferred = math.ceil(span_s / step.total_seconds())
-            total = max(inferred, max(explicit))
-        else:
-            total = max(explicit)
-        # Carry-forward only: ENTSO-E documents fill *forward* from the
-        # previous explicit point, never backward. If position 1 itself
-        # is missing, every position before the first explicit one
-        # contributes nothing to the hourly buckets and the affected
-        # hours simply don't appear in the output dict. Downstream
-        # callers treat a missing key as "no data for that hour"
-        # (current_price falls back to the nearest hour, sensors go
-        # unknown), which is the correct degradation when the upstream
-        # document is genuinely unspecified for the slot.
-        last: float | None = None
-        for position in range(1, total + 1):
-            if position in explicit:
-                last = explicit[position]
-            if last is None:
+            start_text = interval.findtext("ns:start", default="", namespaces=_NS)
+            end_text = interval.findtext("ns:end", default="", namespaces=_NS)
+            if not start_text:
                 continue
-            point_start = start + step * (position - 1)
-            if quarter_hourly:
-                key = point_start
+            start = _parse_iso_utc(start_text)
+            step = _resolution_to_timedelta(resolution)
+            if step is None:
+                # Skip series at a resolution we don't know how to bucket
+                # (e.g. PT5M) instead of aborting the whole document; other
+                # series in the same publication may still be hourly.
+                continue
+            step_s = step.total_seconds()
+            bucket_sum = sums.setdefault(step_s, {})
+            bucket_count = counts.setdefault(step_s, {})
+            # IEC 62325-451-3 / A44 lets a publication document omit any
+            # Point whose price is unchanged from the previous position
+            # ("carry forward" semantics). Collect only the explicit points
+            # first, then forward-fill across the whole interval so the
+            # caller never sees a gap that they'd interpolate as a stale
+            # neighbour hour.
+            explicit: dict[int, float] = {}
+            for point in period.findall("ns:Point", _NS):
+                position_text = point.findtext(
+                    "ns:position", default="0", namespaces=_NS
+                )
+                price_text = point.findtext(
+                    "ns:price.amount", default="", namespaces=_NS
+                )
+                if not price_text:
+                    continue
+                try:
+                    position = int(position_text)
+                    price = float(price_text)
+                except ValueError as err:
+                    raise EntsoeError(f"malformed point in document: {err}") from err
+                # float() accepts "NaN" / "Infinity" / "-Infinity", and overflows a
+                # long literal like "1e400" to inf, so a malformed price reached
+                # the spot cache as a real-looking number. From there it spreads:
+                # factor*spot + base is nan, _mean_of_month propagates it so a
+                # spot-monthly contract's whole flat rate goes nan, and the
+                # backfill writes it into recorder statistics where it outlives
+                # the document. Reject it like any other unparseable point; the
+                # coordinator already degrades that to the cached curve.
+                if not math.isfinite(price):
+                    raise EntsoeError(
+                        f"malformed point in document: non-finite price {price_text!r}"
+                    )
+                explicit[position] = price / 1000.0
+            if not explicit:
+                continue
+            if end_text:
+                end = _parse_iso_utc(end_text)
+                # Round up so a window that isn't an exact multiple of the
+                # resolution doesn't drop its trailing sub-hour slot. Use
+                # max() with the explicit positions as a floor in case the
+                # publication shrinks the interval relative to the points.
+                span_s = max(0.0, (end - start).total_seconds())
+                inferred = math.ceil(span_s / step.total_seconds())
+                # Cap the span before it becomes a point count. `end` is taken
+                # from the document, so a malformed one drives the forward-fill
+                # loop below directly: a 100-year PT15M interval produced 3.5M
+                # slots, 1 GB of RSS and eight seconds of CPU, which is an OOM on
+                # the hardware this usually runs on. A day-ahead publication
+                # covers a day or two; 31 days is far past anything legitimate
+                # and far short of doing damage.
+                inferred = min(inferred, _MAX_PERIOD_SLOTS(step))
+                total = max(inferred, max(explicit))
             else:
-                key = point_start.replace(minute=0, second=0, microsecond=0)
-            bucket_sum[key] = bucket_sum.get(key, 0.0) + last
-            bucket_count[key] = bucket_count.get(key, 0) + 1
+                total = max(explicit)
+            # Carry-forward only: ENTSO-E documents fill *forward* from the
+            # previous explicit point, never backward. If position 1 itself
+            # is missing, every position before the first explicit one
+            # contributes nothing to the hourly buckets and the affected
+            # hours simply don't appear in the output dict. Downstream
+            # callers treat a missing key as "no data for that hour"
+            # (current_price falls back to the nearest hour, sensors go
+            # unknown), which is the correct degradation when the upstream
+            # document is genuinely unspecified for the slot.
+            last: float | None = None
+            for position in range(1, total + 1):
+                if position in explicit:
+                    last = explicit[position]
+                if last is None:
+                    continue
+                point_start = start + step * (position - 1)
+                if quarter_hourly:
+                    key = point_start
+                else:
+                    key = point_start.replace(minute=0, second=0, microsecond=0)
+                bucket_sum[key] = bucket_sum.get(key, 0.0) + last
+                bucket_count[key] = bucket_count.get(key, 0) + 1
 
     # Prefer the native resolution for the requested grid: the hourly
     # product (largest step) in hourly mode, the 15-minute series

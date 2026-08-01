@@ -64,7 +64,7 @@ periodEnd    = YYYYMMDDhhmm  (UTC)
 securityToken = <api key>
 ```
 
-`_fmt` (`api.py:300`) converts the caller's datetimes to UTC and formats them as
+`_fmt` (`api.py:335`) converts the caller's datetimes to UTC and formats them as
 `%Y%m%d%H%M`, the compact stamp ENTSO-E expects. The request carries a 30-second
 total timeout (`api.py:111`).
 
@@ -115,7 +115,7 @@ stdlib parser the payload expands and parsing continues, so a test written
 against an external entity would have passed either way and proved nothing.
 `defusedxml` rejects hostile constructs with `DefusedXmlException`, which is not
 a `ParseError` subclass, so `parse_day_ahead_xml` catches it separately and wraps
-it as `EntsoeError` (`api.py:155`) so a hostile payload surfaces as a categorised
+it as `EntsoeError` (`api.py:165`) so a hostile payload surfaces as a categorised
 error instead of an unhandled exception out of the coordinator tick.
 
 ### The SPP download never touches the loop
@@ -146,14 +146,14 @@ here would silently blank the dynamic price table with no Repairs guidance. The
 runtime always requests a window that includes today, and the BE zone always
 publishes today's curve, so a document carrying zero matching data really means
 the request was refused. `parse_day_ahead_xml` detects the acknowledgement root
-(`api.py:170`) and raises `EntsoeAuthError` with a best-effort reason extracted
-from the document's `Reason` block by `_ack_reason` (`api.py:283`).
+(`api.py:180`) and raises `EntsoeAuthError` with a best-effort reason extracted
+from the document's `Reason` block by `_ack_reason` (`api.py:318`).
 
 ### Resolution handling: PT60M vs PT15M and aggregation
 
 ENTSO-E publishes the Belgian curve at 15-minute granularity since the SDAC
 15-minute MTU go-live (2025-10-01; see the note at `const.py:247`). The parser
-handles three resolutions via `_resolution_to_timedelta` (`api.py:322`):
+handles three resolutions via `_resolution_to_timedelta` (`api.py:357`):
 
 | Token | Step |
 | --- | --- |
@@ -166,10 +166,10 @@ rather than aborting the whole document, because other series in the same
 publication may still be usable (`api.py:203`).
 
 Points are accumulated into `(sum, count)` buckets keyed first by the resolution
-step in seconds, then by slot key (`api.py:186`). Bucketing per resolution is
+step in seconds, then by slot key (`api.py:196`). Bucketing per resolution is
 critical: in 15-minute day-ahead zones ENTSO-E returns both a PT60M and a PT15M
 series for the same delivery period, and blending "1 hourly point + 4 quarter
-points" into one unweighted mean would mis-price every hour (`api.py:179`).
+points" into one unweighted mean would mis-price every hour (`api.py:189`).
 Within a single resolution, duplicate points still average, which is the correct
 handling of a corrected re-publication.
 
@@ -184,7 +184,7 @@ The slot key depends on the caller's `quarter_hourly` flag (`api.py:258`):
   still yields hourly keys either way.
 
 Final assembly prefers the native resolution for the requested grid
-(`api.py:270`): in hourly mode it iterates resolutions largest-step-first and
+(`api.py:305`): in hourly mode it iterates resolutions largest-step-first and
 uses `dict.setdefault`, so the hourly product wins and a finer series only fills
 keys the hourly one does not cover; in quarter mode it iterates smallest-step
 first. Overlapping series therefore never blend into one key.
@@ -202,19 +202,38 @@ missing key as "no data for that hour" (`current_price` falls back to the
 nearest hour; sensors go unknown), which is the correct degradation when the
 upstream document is genuinely unspecified for the slot.
 
+Three things bound what a document can make the parser do, because both the
+point count and the prices come from the document itself:
+
+- **Every `Period` is read.** `findall`, not `find`: a `TimeSeries` that splits
+  its window into consecutive `Period` blocks used to lose every slot after the
+  first one.
+- **The span is capped** at 31 days' worth of slots for the resolution
+  (`_MAX_PERIOD_SLOTS`). The `timeInterval` end drives the forward-fill loop, so
+  an out-of-range end allocated without limit: a 100-year PT15M interval
+  produced 3.5 million slots and about a gigabyte of RSS, an OOM on typical
+  hardware. A day-ahead publication covers a day or two.
+- **Non-finite prices are rejected.** `float()` accepts `NaN`, `Infinity` and
+  `-Infinity`, and overflows a long literal such as `1e400` to `inf`, so a
+  malformed price entered the spot cache looking real. It then spreads:
+  `factor*spot + base` is `nan`, the month mean propagates it so a spot-monthly
+  contract's flat rate goes `nan`, and the backfill writes it into recorder
+  statistics where it outlives the document. `1e400` is the case to care about:
+  a plausible upstream typo rather than a hostile literal.
+
 The interval length is inferred from `timeInterval` end minus start, rounded up
 so a window that is not an exact multiple of the resolution keeps its trailing
 sub-hour slot, with the explicit positions used as a floor (`api.py:231`).
 
 ### Timezone handling
 
-`_parse_iso_utc` (`api.py:304`) parses each `timeInterval` boundary with
+`_parse_iso_utc` (`api.py:339`) parses each `timeInterval` boundary with
 `datetime.fromisoformat` (after normalising a trailing `Z`). A44 timestamps are
 UTC by spec, but if a document ever omits the zone, a naive value is treated as
-UTC rather than the HA host's local time (`api.py:317`). Everything in this
+UTC rather than the HA host's local time (`api.py:352`). Everything in this
 module works in UTC; conversion to Europe/Brussels local time (and the DST-aware
 day boundaries) happens in the coordinator and backfill, never here. A malformed
-timestamp is wrapped as `EntsoeError` (`api.py:311`) so the coordinator keeps
+timestamp is wrapped as `EntsoeError` (`api.py:346`) so the coordinator keeps
 serving cached spots instead of the `ValueError` escaping uncategorised.
 
 ### Unit conversion and return shape

@@ -274,3 +274,70 @@ def test_unknown_resolution_skips_series_instead_of_aborting() -> None:
     parsed = parse_day_ahead_xml(xml)
     assert datetime(2026, 4, 30, 22, 0, tzinfo=UTC) in parsed
     assert datetime(2026, 4, 29, 22, 0, tzinfo=UTC) not in parsed
+
+
+_NS_URL = "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"
+
+
+@pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e400"])
+def test_non_finite_price_is_rejected(bad: str) -> None:
+    """float() accepts NaN / Infinity / -Infinity and overflows a long literal
+    like 1e400 to inf, so a malformed price reached the spot cache looking like
+    a real number. From there it spreads: factor*spot + base is nan, the
+    month-mean propagates it so a spot-monthly contract's whole flat rate goes
+    nan, and the backfill writes it into recorder statistics where it outlives
+    the document. 1e400 matters most: that is a plausible upstream typo rather
+    than a hostile literal."""
+    doc = _doc(
+        f"<Point><position>1</position><price.amount>{bad}</price.amount></Point>"
+    )
+    with pytest.raises(EntsoeError, match="non-finite price"):
+        parse_day_ahead_xml(doc)
+
+
+def test_finite_prices_including_negative_zero_still_parse() -> None:
+    """Belgian day-ahead genuinely goes to and below zero, so the guard must
+    only reject non-finite values."""
+    for raw, want in (("85.5", 0.0855), ("-0.0", 0.0), ("-12.34", -0.01234)):
+        doc = _doc(
+            f"<Point><position>1</position><price.amount>{raw}</price.amount></Point>"
+        )
+        assert list(parse_day_ahead_xml(doc).values())[0] == pytest.approx(want)
+
+
+def test_out_of_range_period_end_cannot_allocate_without_bound() -> None:
+    """The document's own timeInterval end drives the carry-forward loop, so a
+    malformed end allocated without limit: a 100-year PT15M interval produced
+    3.5 million slots and about a gigabyte of RSS, an OOM on the hardware this
+    usually runs on. The span is capped at 31 days' worth of slots, far past
+    any legitimate day-ahead publication."""
+    doc = f"""<?xml version="1.0"?><Publication_MarketDocument xmlns="{_NS_URL}">
+<TimeSeries><Period><timeInterval><start>2026-08-01T00:00Z</start>
+<end>2126-08-01T00:00Z</end></timeInterval><resolution>PT15M</resolution>
+<Point><position>1</position><price.amount>50</price.amount></Point>
+</Period></TimeSeries></Publication_MarketDocument>"""
+    out = parse_day_ahead_xml(doc, quarter_hourly=True)
+    assert len(out) == 31 * 24 * 4
+    # A normal two-day window is untouched by the cap.
+    doc = doc.replace("2126-08-01", "2026-08-03")
+    assert len(parse_day_ahead_xml(doc, quarter_hourly=True)) == 192
+
+
+def test_every_period_in_a_timeseries_is_read() -> None:
+    """`find` returned only the first Period, so a TimeSeries that splits its
+    window into consecutive Periods silently lost every slot after the first
+    block."""
+    doc = f"""<?xml version="1.0"?><Publication_MarketDocument xmlns="{_NS_URL}">
+<TimeSeries>
+<Period><timeInterval><start>2026-08-01T00:00Z</start><end>2026-08-01T02:00Z</end>
+</timeInterval><resolution>PT60M</resolution>
+<Point><position>1</position><price.amount>10</price.amount></Point>
+<Point><position>2</position><price.amount>20</price.amount></Point></Period>
+<Period><timeInterval><start>2026-08-02T00:00Z</start><end>2026-08-02T02:00Z</end>
+</timeInterval><resolution>PT60M</resolution>
+<Point><position>1</position><price.amount>30</price.amount></Point>
+<Point><position>2</position><price.amount>40</price.amount></Point></Period>
+</TimeSeries></Publication_MarketDocument>"""
+    out = parse_day_ahead_xml(doc)
+    assert len(out) == 4
+    assert out[datetime(2026, 8, 2, 0, tzinfo=UTC)] == pytest.approx(0.03)
