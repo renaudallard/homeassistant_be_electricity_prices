@@ -2599,10 +2599,17 @@ def _annual_bill(
         # swap in the per-month proration the live sensor and backfill use so
         # the YTD absolute matches. The delta is zero for a non-compensation
         # entry (prosumer fee is 0 there).
+        #
+        # ``prosumer_proration`` counts MONTHS (0..12) while ``fee_proration``
+        # is a fraction of a year (0..1), so it has to be divided by 12 before
+        # the two can be subtracted. Without that the correction multiplied an
+        # already-annual fee by a month count and quoted the prosumer term 12x
+        # over on every date. No test caught it because the options-flow stub
+        # DSO publishes no prosumer rate, which zeroes the whole term.
         from .coordinator import _compute_prosumer
 
         prosumer_annual = 12.0 * _compute_prosumer(snapshot, entry)
-        fees += prosumer_annual * (prosumer_proration - fee_proration)
+        fees += prosumer_annual * (prosumer_proration / 12.0 - fee_proration)
     regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     if regime == "compensation":
         billable = max(consumption_kwh - injection_kwh, 0.0)

@@ -1757,3 +1757,79 @@ async def test_options_flow_clears_contract_dates_when_blanked(
 
     assert "contract_start_date" not in entry.data
     assert "contract_end_date" not in entry.data
+
+
+async def test_compare_prosumer_term_matches_the_live_ytd_sensor(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The compare quote pro-rates every EUR/year fee by a fraction of a year,
+    then corrects the prosumer term onto the per-month shape the live sensor
+    uses. ``prosumer_proration`` counts MONTHS, so it has to be scaled to a
+    year fraction first; without that the already-annual prosumer fee was
+    multiplied by a month count and the quote came out 12x over.
+
+    Pinned against ``_ytd_prosumer`` itself rather than a hardcoded number, so
+    the two stay tied together. The stub DSO must publish a prosumer rate:
+    the pre-existing options-flow stubs leave it None, which zeroes the whole
+    term and is exactly why this went unnoticed.
+    """
+    from custom_components.be_electricity_prices.config_flow import _annual_bill
+    from custom_components.be_electricity_prices.coordinator import _ytd_prosumer
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        FixedRates,
+        TaxOverlay,
+    )
+    from tests import make_snapshot
+
+    freezer.move_to("2026-07-31 12:00:00+02:00")
+    today = date(2026, 7, 31)
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_kva": 5.0,
+            "solar_regime": "compensation",
+        },
+        title="prosumer compare",
+    )
+    entry.add_to_hass(hass)
+
+    snapshot = make_snapshot(
+        energy=FixedRates(single=0.18, yearly_fixed_fee=0.0),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                prosumer_eur_per_kva_year=82.0,
+            )
+        },
+        taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0),
+    )
+
+    jan1 = date(2026, 1, 1)
+    days_in_year = (date(2027, 1, 1) - jan1).days
+    fee_proration = ((today - jan1).days + 1) / days_in_year
+    prosumer_proration = (today.month - 1) + today.day / 31
+
+    # No consumption and no other fee, so the quote is the prosumer term alone.
+    quoted = _annual_bill(
+        snapshot,
+        entry,
+        per_kwh=0.0,
+        consumption_kwh=0.0,
+        injection_kwh=0.0,
+        peak_kw=0.0,
+        meter="mono",
+        fee_proration=fee_proration,
+        prosumer_proration=prosumer_proration,
+    )
+
+    live = await _ytd_prosumer(hass, MagicMock(), MagicMock(), snapshot, entry, today)
+    assert live > 0.0
+    assert quoted == pytest.approx(live, rel=1e-9)
