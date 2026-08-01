@@ -771,12 +771,27 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
 
 
 def _extract_federal_excise(text: str) -> float:
-    """First excise tier (0-3000 kWh), uniform across regions.
+    """Federal excise, uniform across regions.
 
-    Federal excise is mandatory on every Belgian residential card; a
-    miss is a layout drift that would silently undercount the bill by
-    ~5 c€/kWh (50 EUR/year at 1000 kWh). Raise rather than default to 0.
+    Two card shapes. Until July 2026 the excise was degressive and printed
+    as consumption tiers, of which 0-3000 kWh is the residential one. From
+    1 August 2026 the federal scheme folded the separate energy
+    contribution into the excise and flattened it, so the card prints a
+    single value under an "Accise speciale (c€/kWh)" heading. Mega renders
+    that one with a DOT decimal ("4.876") where the tiered rows used
+    commas, which to_float handles either way.
+
+    Federal excise is mandatory on every Belgian residential card; a miss
+    on both shapes is a layout drift that would silently undercount the
+    bill by ~5 c€/kWh (50 EUR/year at 1000 kWh). Raise rather than
+    default to 0.
     """
+    flat = re.search(
+        r"Accise\s+sp[ée]ciale\s*\n?\s*\(c€/kWh\)\s*\n?\s*([\d.,]+)",
+        text,
+    )
+    if flat is not None:
+        return to_float(flat.group(1)) / 100.0
     match = re.search(
         r"Consommation entre\s*\n?\s*0\s*et\s*3000\s*kWh\s*\n\s*([\d.,]+)",
         text,
@@ -789,15 +804,18 @@ def _extract_federal_excise(text: str) -> float:
 def _extract_energy_contribution(text: str) -> float:
     """Federal energy contribution; same row as the excise.
 
-    Mandatory across regions; raise on miss for the same reason as the
-    excise above.
+    The levy went to zero on 2026-08-01 and was folded into the special
+    excise, so the August cards drop the row along with the whole tier
+    table. An absent row is the abolished levy, not a layout drift:
+    return 0 rather than failing the fetch and taking every Mega contract
+    offline.
     """
     match = re.search(
         r"Consommation entre\s*\n?\s*0\s*et\s*3000\s*kWh\s*\n\s*[\d.,]+\s*\n\s*([\d.,]+)",
         text,
     )
     if match is None:
-        raise ExtractorError("Mega: energy contribution not found")
+        return 0.0
     return to_float(match.group(1)) / 100.0
 
 

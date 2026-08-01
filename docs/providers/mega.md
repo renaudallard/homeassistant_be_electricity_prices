@@ -22,8 +22,8 @@ Related reading:
 
 | Property | Value |
 | --- | --- |
-| Registry id | `mega` (`mega.py:1031`) |
-| Label | `Mega` (`mega.py:1032`) |
+| Registry id | `mega` (`mega.py:1049`) |
+| Label | `Mega` (`mega.py:1050`) |
 | Regions served | Flanders, Wallonia, Brussels (union across contracts, `base.py:560`) |
 | Publication | Monthly per-region PDF cards, one file per (product, region) |
 | Discovery | Scrape the public listing page, regex the `data-product-element` anchor to its PDF URL |
@@ -206,10 +206,10 @@ Fields pulled and their helpers:
 | Publication label | `_extract_publication_month` | `mega.py:703` |
 | Valid until | `parse_valid_until` then `_extract_valid_until` | `_pdf.py:794`, `mega.py:722` |
 | Federal excise | `_extract_federal_excise` | `mega.py:773` |
-| Energy contribution | `_extract_energy_contribution` | `mega.py:789` |
-| Wallonia connection fee | `_extract_connection_fee` (Wallonia only) | `mega.py:804` |
-| Regional renewables | `_extract_flanders_renewables` / `_extract_renewables` | `mega.py:816`, `mega.py:835` |
-| DSO overlay | `_extract_flanders_dsos` / `_extract_wallonia_dsos` / `_extract_brussels_dsos` | `mega.py:859`, `mega.py:932`, `mega.py:990` |
+| Energy contribution | `_extract_energy_contribution` | `mega.py:804` |
+| Wallonia connection fee | `_extract_connection_fee` (Wallonia only) | `mega.py:822` |
+| Regional renewables | `_extract_flanders_renewables` / `_extract_renewables` | `mega.py:834`, `mega.py:853` |
+| DSO overlay | `_extract_flanders_dsos` / `_extract_wallonia_dsos` / `_extract_brussels_dsos` | `mega.py:877`, `mega.py:950`, `mega.py:1008` |
 | Supplier PV forfait | `_extract_supplier_prosumer` | `mega.py:491` |
 
 ### Energy block
@@ -270,7 +270,7 @@ EUR (`test_mega.py:164`).
 The region dispatch in `parse_snapshot` (`mega.py:456`) selects exactly one DSO
 parser and one renewables levy per snapshot.
 
-Flanders (`_extract_flanders_dsos`, `mega.py:859`, `_FLANDERS_LABELS` `mega.py:856`)
+Flanders (`_extract_flanders_dsos`, `mega.py:877`, `_FLANDERS_LABELS` `mega.py:874`)
 maps the eight Fluvius sub-areas. Note the label-to-key gotchas: `Fluvius Kempen`
 maps to `DSO_FLUVIUS_IVEKA` and `Fluvius Midden-Vlaanderen` to
 `DSO_FLUVIUS_INTERGEM`. Static cards print 6 numbers per row (digital + classic
@@ -284,7 +284,7 @@ same convention as Engie / Luminus Flanders. Compensation-regime Flanders cards 
 carry a Fluvius `Tarif Prosumer` (EUR/kW/an) table, scoped to its own block to avoid
 picking up a distribution rate; dynamic cards omit it.
 
-Wallonia (`_extract_wallonia_dsos`, `mega.py:932`, `_WALLONIA_LABELS` `mega.py:923`)
+Wallonia (`_extract_wallonia_dsos`, `mega.py:950`, `_WALLONIA_LABELS` `mega.py:941`)
 maps AIEG, AIESH, ORES (Brabant wallon), RESA, and Régie de Wavre (`DSO_REW`). Each
 row is a 9-number vertical block: mono, jour, nuit, excl_nuit, terme_fixe (€/an),
 PIC, MEDIUM, ECO, transport. The Impact triplet (`distribution_pic` / `_medium` /
@@ -293,7 +293,7 @@ bands. Prosumer rates come from a separate small `Tarif Prosumer (€/kW/an)` ta
 further down and are cross-referenced onto each overlay
 (`test_wallonia_dso_carries_prosumer_rate_from_separate_table`, `test_mega.py:230`).
 
-Brussels (`_extract_brussels_dsos`, `mega.py:990`) maps the single Sibelga row, an
+Brussels (`_extract_brussels_dsos`, `mega.py:1008`) maps the single Sibelga row, an
 8-number block: mono, jour, nuit, excl_nuit, transport, mesure_comptage (€/an),
 terme_fixe <=13kVA (€/an), terme_fixe >13kVA (€/an). Brussels has no capacity charge
 (capacity is Flanders-only), so both flat annual euros (the metering fee and the
@@ -319,18 +319,25 @@ month (Mega cards are valid for the printed month).
 
 `TaxOverlay` (`mega.py:471`) is assembled from:
 
-- Federal excise: first tier `Consommation entre 0 et 3000 kWh`
-  (`_extract_federal_excise`, `mega.py:773`), uniform across regions. Mandatory;
-  raises on a miss because dropping it would silently undercount the bill by roughly
-  5 c€/kWh (about 50 EUR/year at 1000 kWh, `mega.py:778`, illustrative).
+- Federal excise: the flat `Accise speciale (c€/kWh)` value when the card prints
+  one, else the first tier `Consommation entre 0 et 3000 kWh`
+  (`_extract_federal_excise`, `mega.py:773`), uniform across regions. On
+  2026-08-01 the federal scheme folded the energy contribution into the special
+  excise and flattened it, so the August card dropped the tier table; Mega renders
+  the flat value with a DOT decimal (`4.876`) where the tiered rows used commas.
+  Still mandatory: a miss on BOTH shapes raises, because dropping it would silently
+  undercount the bill by roughly 5 c€/kWh (about 50 EUR/year at 1000 kWh,
+  `mega.py:778`, illustrative).
 - Energy contribution: the next number on the same `0 et 3000 kWh` row
-  (`_extract_energy_contribution`, `mega.py:789`). Mandatory, raises on a miss.
+  (`_extract_energy_contribution`, `mega.py:804`). No longer mandatory: the levy
+  was abolished on 2026-08-01 and the row went with the tier table, so an absent
+  row returns 0 rather than raising.
 - Regional renewables: exactly one of `flanders_renewables` (a single
   `Cotisation Verte` line that already folds in cogeneration, so no separate
-  cogénération row appears, `mega.py:816`), `wallonia_renewables`, or
+  cogénération row appears, `mega.py:834`), `wallonia_renewables`, or
   `brussels_renewables`, per region. Each raises on a miss in its own region.
 - `region_connection_fee`: the Wallonia raccordement
-  (`Redevance de raccordement`, `mega.py:804`), 0.0 outside Wallonia. Mandatory in
+  (`Redevance de raccordement`, `mega.py:822`), 0.0 outside Wallonia. Mandatory in
   Wallonia, raises on a miss.
 - `energy_fund_eur_per_month`: 0.0.
 - `vat_rate`: **0.0**, meaning the snapshot's prices are already VAT-incl (`mega.py:479`).
@@ -401,23 +408,24 @@ The land mines a future maintainer must know, drawn from the module comments:
   `PIC` (not `Tarif PIC`) on the last row; the tier regex is permissive on the
   prefix (`mega.py:650`).
 - **DSO label-to-key is not one-to-one:** `Fluvius Kempen` maps to IVEKA,
-  `Fluvius Midden-Vlaanderen` to INTERGEM (`mega.py:856`).
+  `Fluvius Midden-Vlaanderen` to INTERGEM (`mega.py:874`).
 - **Prosumer rates live in a separate table** from the main DSO row in both Flanders
   and Wallonia; scope the match to the `Tarif Prosumer` block to avoid grabbing a
-  distribution rate (`mega.py:881`, `mega.py:940`).
+  distribution rate (`mega.py:899`, `mega.py:958`).
 - **Dynamic cards carry no compensation regime:** no supplier forfait, no
   DSO prosumer table, only 2 Fluvius columns (digital), and the data-management fee
-  is broken out into a separate paragraph (`mega.py:518`, `mega.py:873`).
+  is broken out into a separate paragraph (`mega.py:518`, `mega.py:891`).
 - **Brussels folds two flat annual euros** (metering fee + Sibelga <=13kVA term) into
   `data_management_per_year`; the >13kVA term is intentionally dropped
-  (`mega.py:1010`).
+  (`mega.py:1028`).
 - **Off-peak Fixed retired (July 2026);** `discover()` re-surfaces it if revived
   (`mega.py:171`).
-- **Mandatory-line policy:** the yearly fee, federal excise, energy contribution,
-  Wallonia raccordement, regional renewables, and the (non-Brussels, non-dynamic) PV
-  forfait all raise on a miss rather than silently defaulting to 0, so a layout drift
-  fails loudly instead of mis-billing (`mega.py:520`, `mega.py:696`, `mega.py:785`,
-  `mega.py:812`, `mega.py:831`).
+- **Mandatory-line policy:** the yearly fee, federal excise, Wallonia raccordement,
+  regional renewables, and the (non-Brussels, non-dynamic) PV forfait all raise on a
+  miss rather than silently defaulting to 0, so a layout drift fails loudly instead
+  of mis-billing (`mega.py:520`, `mega.py:696`, `mega.py:800`, `mega.py:830`,
+  `mega.py:849`). The energy contribution left that set on 2026-08-01: the levy is
+  abolished, so an absent row is a real zero rather than drift.
 - **`fetch_for_month` must rotate two month placeholders and preserve the effective
   day**, and reject the CDN HTML stub via the PDF magic-byte check plus
   `archive_validity_check` (`mega.py:345`).
@@ -452,7 +460,7 @@ Ranked by how likely each is to break when Mega restyles or rotates its card, an
 3. `_CONSUMPTION_FORMULA_RE` / `_INJECTION_FORMULA_RE` (`mega.py:539`). A reworded
    `Day Ahead Epex Spot` formula, a swapped decimal separator, or a new dash glyph
    breaks the Dynamic snapshot; check the label prefixes and `_FORMULA_TAIL` first.
-4. The DSO row parsers (`mega.py:859`, `mega.py:932`, `mega.py:990`). A changed
+4. The DSO row parsers (`mega.py:877`, `mega.py:950`, `mega.py:1008`). A changed
    column count, a renamed Fluvius sub-area, or a moved prosumer table breaks the
    overlay; the fixed vs dynamic column-count difference in Flanders is the subtle
    one.

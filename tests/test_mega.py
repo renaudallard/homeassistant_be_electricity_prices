@@ -512,3 +512,23 @@ def test_flex_extracts_cohort_coefficients() -> None:
     # factor 1,1095 * 1.06, base 3,6 * 1.06 / 100.
     assert snap.energy.formula_factor == pytest.approx(1.17607, rel=1e-4)
     assert snap.energy.formula_base == pytest.approx(0.038160, rel=1e-4)
+
+
+def test_august_2026_flat_excise_replaces_the_tier_table() -> None:
+    """On 2026-08-01 the federal scheme folded the separate energy
+    contribution into the special excise and flattened it, so Mega's card
+    dropped the consumption-tier table for a single "Accise speciale" value
+    and deleted the contribution column. Mega renders the flat value with a
+    DOT decimal where the tiered rows used commas."""
+    from custom_components.be_electricity_prices.providers.mega import (
+        _extract_energy_contribution,
+        _extract_federal_excise,
+    )
+
+    august = "Accise spéciale\n(c€/kWh)\n4.876\n*\n"
+    assert _extract_federal_excise(august) == pytest.approx(0.04876)
+    assert _extract_energy_contribution(august) == 0.0
+
+    july = "Consommation entre\n0 et 3000 kWh\n5,0329\n0,20417\n"
+    assert _extract_federal_excise(july) == pytest.approx(0.050329)
+    assert _extract_energy_contribution(july) == pytest.approx(0.0020417)
