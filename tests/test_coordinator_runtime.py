@@ -2337,3 +2337,74 @@ async def test_exclusive_night_gap_raises_a_repair_issue(hass: HomeAssistant) ->
     )
     coord._sync_exclusive_night_gap_issue()
     assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_impact_mode_without_impact_rates_raises_a_repair_issue(
+    hass: HomeAssistant,
+) -> None:
+    """Only Luminus' Wallonia DYNAMIC card prints the CWaPE Tarif Impact block;
+    its static / variable / TOU Wallonia cards omit it. network_eur_per_kwh
+    then falls back to bi-horaire while the energy side keeps routing through
+    dso_impact_band, and the two disagree from 22:00 to 01:00 where Impact
+    bills MEDIUM. Not the mono-rate fallback the overlay alone suggests (those
+    cards do publish peak/offpeak), but the user opted into Impact and is not
+    being billed on it, so surface it."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "luminus",
+            "contract": "luminus_comfy",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "dso_tariff_mode": "impact",
+        },
+        title="Luminus impact",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"impact_rates_missing_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    # Static Wallonia card: peak/offpeak present, Impact triplet absent.
+    coord._snapshot = make_snapshot(
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.1087,
+                distribution_peak=0.1205,
+                distribution_offpeak=0.0666,
+                transport=0.002,
+            )
+        }
+    )
+    coord._sync_impact_gap_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    # The dynamic card publishes the triplet, so it clears.
+    coord._snapshot = make_snapshot(
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.1087,
+                distribution_pic=0.1508,
+                distribution_medium=0.0982,
+                distribution_eco=0.0456,
+                transport=0.002,
+            )
+        }
+    )
+    coord._sync_impact_gap_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+    # A user not on Impact mode never sees it.
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "dso_tariff_mode": "bi_horaire"}
+    )
+    coord._snapshot = make_snapshot(
+        dsos={"ores": DsoOverlay(distribution_single=0.1087, transport=0.002)}
+    )
+    coord._sync_impact_gap_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None

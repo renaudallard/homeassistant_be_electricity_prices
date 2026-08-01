@@ -238,7 +238,7 @@ Numbered walkthrough:
    into a `PriceBreakdown`. See [pricing-model.md](pricing-model.md).
 8. The result is packed into `CoordinatorData` (`coordinator.py:738`): the `hourly` table keyed by
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
-   suppliers, `coordinator.py:1279`), plus snapshot metadata, the injection price, fees, and the
+   suppliers, `coordinator.py:1280`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
 9. `entry.runtime_data` is set to the coordinator, the three platforms are forwarded, and a
    slot-boundary push is registered (`__init__.py:194`). Because `current_price` and

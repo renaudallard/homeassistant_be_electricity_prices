@@ -562,6 +562,10 @@
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) ne publie pas de tarif de distribution exclusif nuit",
       "description": "Votre entree est configuree pour un compteur exclusif nuit separe, mais la carte tarifaire que {supplier} publie pour {dso} ne comporte ni tarif de distribution exclusif nuit ni tarif heures creuses. L'integration facture ce circuit au tarif de distribution de jour, donc la part reseau de son prix est plus elevee que ce qui vous est reellement facture. La part energie n'est pas affectee.\n\nRien ne peut etre substitue automatiquement : l'integration ne stocke jamais de prix dans son propre code, et reprendre le chiffre d'un autre fournisseur serait une supposition. Demandez a {supplier} d'imprimer la colonne exclusif nuit, ou choisissez un fournisseur dont la carte la publie."
+    },
+    "impact_rates_missing": {
+      "title": "{supplier} ({contract}) ne publie pas les tarifs Tarif Impact pour {dso}",
+      "description": "Cette entree utilise le mode de facturation Tarif Impact (Wallonie), mais la carte tarifaire que {supplier} publie pour {contract} ne comporte pas de tarifs de distribution PIC / MEDIUM / ECO. La part reseau du prix revient a la grille bi-horaire tandis que la part energie suit toujours les plages Impact ; les deux divergent donc entre 22h00 et 01h00, ou Impact facture MEDIUM.\n\nLa facture reste proche, mais vous n'etes pas facture sur le tarif choisi. Passez le mode de facturation de cette entree en bi-horaire, ou choisissez un contrat dont la carte publie le bloc Impact."
     }
   },
   "entity": {

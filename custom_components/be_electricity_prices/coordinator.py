@@ -1273,6 +1273,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         stale = age > SNAPSHOT_STALE_DAYS * 24
         self._sync_stale_issue(stale)
         self._sync_exclusive_night_gap_issue()
+        self._sync_impact_gap_issue()
         return CoordinatorData(
             hourly=hourly,
             resolution=(
@@ -1367,6 +1368,53 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 is_fixable=False,
                 severity=ir.IssueSeverity.WARNING,
                 translation_key="exclusive_night_rate_missing",
+                translation_placeholders={
+                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
+                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
+                    "dso": str(self.entry.data.get(CONF_DSO, "")),
+                },
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+    def _sync_impact_gap_issue(self) -> None:
+        """Flag an Impact DSO mode the supplier's card cannot price.
+
+        Only Luminus' Wallonia DYNAMIC card prints the CWaPE Tarif Impact
+        block; its static, variable and TOU Wallonia cards omit it, so the
+        overlay's pic / medium / eco stay None. ``network_eur_per_kwh`` then
+        falls back to the bi-horaire branch while ``_routed_rate`` keeps
+        routing the ENERGY side through ``dso_impact_band``. The two schedules
+        agree for most of the day but not between 22:00 and 01:00, where the
+        Impact MEDIUM band bills the peak energy rate against an off-peak
+        distribution rate.
+
+        The bill stays close (this is a band mismatch, not the mono-rate
+        fallback it looks like from the overlay alone: the static cards do
+        publish peak / offpeak). Still worth telling the user, since they
+        explicitly opted into Impact and are not being billed on it.
+        """
+        if self._unloaded:
+            return
+        issue_id = f"impact_rates_missing_{self.entry.entry_id}"
+        overlay = (
+            self._snapshot.dsos.get(self.entry.data.get(CONF_DSO, ""))
+            if self._snapshot is not None
+            else None
+        )
+        gap = (
+            self.entry.data.get(CONF_DSO_TARIFF_MODE) == DSO_MODE_IMPACT
+            and overlay is not None
+            and overlay.distribution_pic is None
+        )
+        if gap:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="impact_rates_missing",
                 translation_placeholders={
                     "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
                     "contract": str(self.entry.data.get(CONF_CONTRACT, "")),

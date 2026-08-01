@@ -562,6 +562,10 @@
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) veroeffentlicht keinen Verteilungstarif fuer Exklusiv-Nacht",
       "description": "Dieser Eintrag ist fuer einen separaten Exklusiv-Nacht-Zaehler konfiguriert, aber die Tarifkarte, die {supplier} fuer {dso} veroeffentlicht, enthaelt weder einen Exklusiv-Nacht-Verteilungstarif noch einen Nebenzeittarif. Die Integration rechnet diesen Stromkreis zum normalen Tagtarif ab, der Netzanteil des Preises liegt also hoeher als der tatsaechlich berechnete. Der Energieanteil ist korrekt.\n\nEs kann nichts automatisch ersetzt werden: die Integration speichert nie einen Preis im eigenen Quellcode, und die Zahl eines anderen Anbieters zu uebernehmen waere geraten. Bitten Sie {supplier}, die Exklusiv-Nacht-Spalte zu drucken, oder waehlen Sie einen Anbieter, dessen Karte sie veroeffentlicht."
+    },
+    "impact_rates_missing": {
+      "title": "{supplier} ({contract}) veroeffentlicht keine Tarif-Impact-Saetze fuer {dso}",
+      "description": "Dieser Eintrag nutzt den wallonischen Abrechnungsmodus Tarif Impact, aber die Tarifkarte, die {supplier} fuer {contract} veroeffentlicht, enthaelt keine PIC / MEDIUM / ECO Verteilungstarife. Der Netzanteil faellt auf den Zweitarif-Zeitplan zurueck, waehrend der Energieanteil weiter den Impact-Baendern folgt; beide weichen zwischen 22:00 und 01:00 Uhr voneinander ab, wo Impact MEDIUM abrechnet.\n\nDie Rechnung bleibt nahe dran, aber Sie werden nicht nach dem gewaehlten Tarif abgerechnet. Stellen Sie den Verteilungsmodus dieses Eintrags auf Zweitarif um, oder waehlen Sie einen Vertrag, dessen Karte den Impact-Block veroeffentlicht."
     }
   },
   "entity": {

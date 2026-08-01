@@ -562,6 +562,10 @@
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) does not publish an exclusive-night distribution rate",
       "description": "Your entry is configured for a separate exclusive-night meter circuit, but the tariff card {supplier} publishes for {dso} carries no exclusive-night distribution rate and no off-peak rate either. The integration is billing that circuit at the normal day distribution rate, so the network part of its price is higher than what you are actually charged. The energy part is unaffected.\n\nNothing can be substituted automatically: the integration never stores a price in its own source, and copying the figure from another supplier's card would be a guess. Ask {supplier} to print the exclusive-night distribution column, or switch this entry to a supplier whose card publishes it."
+    },
+    "impact_rates_missing": {
+      "title": "{supplier} ({contract}) does not publish Tarif Impact rates for {dso}",
+      "description": "This entry is set to the Wallonia Tarif Impact billing mode, but the tariff card {supplier} publishes for {contract} carries no PIC / MEDIUM / ECO distribution rates. The network part of the price falls back to the bi-hourly schedule while the energy part still follows the Impact bands, so the two disagree between 22:00 and 01:00, where Impact bills MEDIUM.\n\nThe bill stays close, but you are not being billed on the tariff you opted into. Switch this entry's DSO billing mode to bi-hourly, or pick a contract whose card publishes the Impact block."
     }
   },
   "entity": {
