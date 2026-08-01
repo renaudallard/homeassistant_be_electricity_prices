@@ -53,6 +53,7 @@ import tempfile
 import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import IO
 
 # The four parses below run over a REMOTE workbook. The stdlib parser
 # already refuses an EXTERNAL entity (it raises ParseError rather than
@@ -126,13 +127,44 @@ async def fetch_spp_weights(session: aiohttp.ClientSession, year: int) -> SppWei
         _LOGGER.warning("Synergrid SPP parse failed (%s): %s", url, err)
         return {}
     finally:
-        path.unlink(missing_ok=True)
+        # Syscall: off the loop like every other filesystem call here.
+        await asyncio.to_thread(path.unlink, True)
+
+
+# Bytes buffered in memory before a write is handed to the executor. The file
+# is ~52 MB, so a 4 MB buffer is ~13 executor round-trips instead of ~800 at
+# the old 64 KB read size, while holding a bounded slice rather than the lot.
+_WRITE_BUFFER_BYTES = 4 * 1024 * 1024
 
 
 async def _download(session: aiohttp.ClientSession, url: str) -> Path:
-    """Stream ``url`` to a temp file (never into memory) and return its path."""
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+    """Stream ``url`` to a temp file (never into memory) and return its path.
+
+    Every filesystem call goes through the executor. This runs on the event
+    loop, the file is ~52 MB, and on the SD-card installs Home Assistant is
+    commonly deployed to a write can block for a long time once the kernel
+    starts throttling dirty pages -- long enough for HA to log a blocking-call
+    warning and for every other integration's callbacks to stall behind it.
+    Chunks are accumulated into a bounded buffer so the offload happens a few
+    times rather than once per network read.
+    """
+
+    def _open_temp() -> IO[bytes]:
+        # Named factory with a concrete return type: asyncio.to_thread cannot
+        # resolve NamedTemporaryFile's overloads, so it picked the text one.
+        return tempfile.NamedTemporaryFile(  # noqa: SIM115 - closed below
+            mode="w+b", delete=False, suffix=".xlsx"
+        )
+
+    tmp = await asyncio.to_thread(_open_temp)
     written = 0
+    buf = bytearray()
+
+    def _flush(data: bytes) -> None:
+        # Concrete signature: NamedTemporaryFile.write is overloaded, which
+        # asyncio.to_thread cannot resolve under --strict.
+        tmp.write(data)
+
     try:
         async with session.get(
             url,
@@ -150,12 +182,19 @@ async def _download(session: aiohttp.ClientSession, url: str) -> Path:
                 written += len(chunk)
                 if written > _MAX_BYTES:
                     raise ValueError(f"SPP file exceeds {_MAX_BYTES} bytes")
-                tmp.write(chunk)
+                buf += chunk
+                if len(buf) >= _WRITE_BUFFER_BYTES:
+                    await asyncio.to_thread(_flush, bytes(buf))
+                    buf.clear()
+            if buf:
+                await asyncio.to_thread(_flush, bytes(buf))
     except BaseException:
-        tmp.close()
-        Path(tmp.name).unlink(missing_ok=True)
+        # close() flushes, so it is a write too; unlink is a syscall. Both go
+        # through the executor like everything else on this path.
+        await asyncio.to_thread(tmp.close)
+        await asyncio.to_thread(Path(tmp.name).unlink, True)
         raise
-    tmp.close()
+    await asyncio.to_thread(tmp.close)
     return Path(tmp.name)
 
 

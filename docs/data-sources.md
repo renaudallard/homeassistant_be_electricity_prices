@@ -118,6 +118,19 @@ a `ParseError` subclass, so `parse_day_ahead_xml` catches it separately and wrap
 it as `EntsoeError` (`api.py:155`) so a hostile payload surfaces as a categorised
 error instead of an unhandled exception out of the coordinator tick.
 
+### The SPP download never touches the loop
+
+`synergrid._download` streams a ~52 MB workbook to a temp file. Every filesystem
+call on that path goes through `asyncio.to_thread`: creating the temp file,
+writing, closing (which flushes) and unlinking. Chunks accumulate into a 4 MB
+buffer first, so the offload happens roughly a dozen times rather than once per
+64 KB network read.
+
+This matters on the SD-card installs Home Assistant is commonly deployed to: once
+the kernel starts throttling dirty pages a write can block long enough for HA to
+log a blocking-call warning and for every other integration's callbacks to stall
+behind it.
+
 ### Parsing is offloaded to a thread
 
 After the HTTP body is read, parsing runs under `asyncio.to_thread`
