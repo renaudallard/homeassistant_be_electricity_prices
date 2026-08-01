@@ -58,9 +58,11 @@ def test_mega_is_registered() -> None:
     # Spot-check the flagship products.
     assert "mega_smart_fixed" in contract_ids
     assert "mega_smart_flex" in contract_ids
-    assert "mega_zen_fixed" in contract_ids
     assert "mega_dynamic" in contract_ids
-    assert len(contract_ids) == 11
+    # Zen Fixed was discontinued in August 2026 (listing block dropped in all
+    # three regions; Wallonia resolves to the CDN's HTML stub).
+    assert "mega_zen_fixed" not in contract_ids
+    assert len(contract_ids) == 10
 
 
 def test_listing_url_finder_picks_electricity_for_region() -> None:

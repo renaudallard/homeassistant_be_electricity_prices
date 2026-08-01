@@ -163,7 +163,12 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef(
         "mega_smart_flex", "Mega Smart Flex (2 years)", "variable", "Smart Flex"
     ),
-    _ContractDef("mega_zen_fixed", "Mega Zen Fixed (3 years)", "fixed", "Zen Fixed"),
+    # Mega discontinued "Zen Fixed" (August 2026): the listing dropped the
+    # product block in all three regions at once, so the sibling-region
+    # rewrite below has nothing to borrow from. The card is not simply
+    # mislaid - Wallonia resolves to the CDN's HTML stub, i.e. it was never
+    # published there this month. discover() re-surfaces it if Mega revives
+    # it. Same treatment as "Off-peak Fixed" below.
     _ContractDef("mega_online_fixed", "Mega Online Fixed", "fixed", "Online Fixed"),
     _ContractDef("mega_online_flex", "Mega Online Flex", "variable", "Online Flex"),
     _ContractDef("mega_cosy_fixed", "Mega Cosy Fixed", "fixed", "Cosy Fixed"),
