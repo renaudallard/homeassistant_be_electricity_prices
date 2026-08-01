@@ -837,3 +837,19 @@ async def test_clear_over_a_multiyear_window_spares_the_cost_series(
     ):
         await bf.backfill_range(hass, entry, start, end, clear=True)
     assert cleared and any("current_year_cost" in sid for sid in cleared[0])
+
+
+def test_normalize_window_clamps_a_future_end_to_now() -> None:
+    """compute_breakdown evaluates any hour for a static contract, so an end
+    date past now wrote phantom price rows and kept the cost accrual running
+    into hours that have not happened. The backfill_statistics schema has no
+    upper bound, so a mistyped year was enough. The None default already
+    stopped at now; an explicit end gets the same bound."""
+    now = dt_util.now()
+    _start, end = bf._normalize_window(None, now + timedelta(days=365))
+    assert end <= bf._floor_to_hour_utc(now)
+
+    # A past end is untouched.
+    past = now - timedelta(days=30)
+    _start, end = bf._normalize_window(None, past)
+    assert end == bf._floor_to_hour_utc(past)

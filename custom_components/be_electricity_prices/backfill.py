@@ -190,7 +190,14 @@ def _normalize_window(
             end, datetime.min.time(), tzinfo=dt_util.DEFAULT_TIME_ZONE
         )
     start_utc = _floor_to_hour_utc(start_local)
-    end_utc = _floor_to_hour_utc(end_local)
+    # Clamp the end to the current hour. compute_breakdown happily evaluates a
+    # future hour for a fixed / variable / TOU / Impact contract, so an end
+    # date past now (a mistyped year on the backfill_statistics service, whose
+    # schema has no upper bound) wrote a full year of phantom price rows and
+    # kept the cost sensor's fee, capacity and prosumer accrual running into
+    # hours that have not happened. The None default already stopped at now;
+    # an explicit end now gets the same bound.
+    end_utc = min(_floor_to_hour_utc(end_local), _floor_to_hour_utc(now_local))
     return start_utc, end_utc
 
 

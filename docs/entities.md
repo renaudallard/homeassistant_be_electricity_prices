@@ -397,7 +397,7 @@ The handler `_async_backfill_service` (`__init__.py:580`) resolves the target
 coordinator, then raises `ServiceValidationError` translation_key
 `snapshot_not_loaded` if `coordinator._snapshot is None`, before delegating to
 `backfill_range` (see [data-sources.md](data-sources.md)). It returns
-(`backfill.py:848`):
+(`backfill.py:855`):
 
 ```python
 { "rows_written": <int>, "sensors": { "<statistic_id>": <int>, ... },

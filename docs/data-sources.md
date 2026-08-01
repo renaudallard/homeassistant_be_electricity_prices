@@ -266,8 +266,8 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
-| `backfill_range` (`backfill.py:743`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py:855`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
+| `backfill_range` (`backfill.py:750`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
+| `backfill_if_missing` (`backfill.py:862`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py:41`). Backfill is reached either automatically
@@ -280,7 +280,7 @@ window services (`__init__.py:525`).
 `backfill_if_missing` tolerates entry removal mid-flight: because it runs as a
 background task the user can delete the entry between scheduling and execution,
 so it bails when `async_get_entry` returns `None` or `runtime_data` is no longer
-a coordinator (`backfill.py:872`).
+a coordinator (`backfill.py:879`).
 
 ### Statistic ids and the two statistic shapes
 
@@ -312,48 +312,48 @@ intra-hour spread to record.
 
 Only the price (`mean`) sensors are pure functions of the tariff and spot. The
 `current_year_cost` sensor also needs how many kWh the household consumed and
-injected each past hour. `_backfill_cost_sensor` (`backfill.py:492`) recovers
+injected each past hour. `_backfill_cost_sensor` (`backfill.py:499`) recovers
 that from the recorder: it reads hourly kWh for every configured consumption
 sensor (`_hourly_consumption_sensors`) and injection sensor
 (`_hourly_injection_sensors`) through `_recorder_hourly_kwh`, binned into
-UTC-hour totals (`backfill.py:579`). The recorder helpers treat their date
+UTC-hour totals (`backfill.py:586`). The recorder helpers treat their date
 arguments as local-day boundaries, so the code passes the local dates of the
 first and last UTC hour, keeping the query window aligned with the backfill's
-`_hour_iter` grid (`backfill.py:577`).
+`_hour_iter` grid (`backfill.py:584`).
 
 ### Billing each past hour at its historical rate
 
 Both backfill passes cache one `SupplierSnapshot` per month via
-`_month_snapshot_cache` (`backfill.py:403`, `backfill.py:586`), so a 365-day window
+`_month_snapshot_cache` (`backfill.py:410`, `backfill.py:593`), so a 365-day window
 touches at most 12 archive fetches. `_snapshot_for_month` reuses the extractor's
 `fetch_for_month` archive path (see [provider-framework.md](provider-framework.md)),
 falling back to the current live snapshot when a supplier publishes no archive.
 For each hour, the code converts the UTC hour to local time, picks that month's
 snapshot, looks up the hour's spot (or `None`), and calls
 `compute_breakdown(snap, dso, region, local, spot, meter, dso_mode)`
-(`backfill.py:433`, `backfill.py:625`). A dynamic supplier with no spot for the
+(`backfill.py:440`, `backfill.py:632`). A dynamic supplier with no spot for the
 hour is skipped, because `factor * spot + base` needs both terms
-(`backfill.py:430`). `KeyError` / `ValueError` (a missing DSO row for an archived
+(`backfill.py:437`). `KeyError` / `ValueError` (a missing DSO row for an archived
 month, or a non-static rate kind reaching the static path) skips just that hour
-rather than tearing the whole backfill down (`backfill.py:434`).
+rather than tearing the whole backfill down (`backfill.py:441`).
 
-The injection credit reuses `_historical_injection_rate` (`backfill.py:461`,
-`backfill.py:648`), the same coordinator helper the live YTD path uses, so a
+The injection credit reuses `_historical_injection_rate` (`backfill.py:468`,
+`backfill.py:655`), the same coordinator helper the live YTD path uses, so a
 monthly-indexed, spot-indexed, or fixed injection rate is resolved identically in
 both places.
 
 ### Spot provisioning for backfill
 
-`_ensure_dynamic_spots` (`backfill.py:262`) reuses the coordinator's
+`_ensure_dynamic_spots` (`backfill.py:269`) reuses the coordinator's
 `_ensure_historical_spots` so the bulk-fetch logic (week-sized chunks, present
 threshold, negative cache) stays in one place. It returns an empty dict when no
 spot is needed (static energy with a monthly or no injection). The gate is
 `isinstance(snap.energy, DynamicRates) or _injection_needs_spot(snap, entry)`
-(`backfill.py:305`): a static-energy contract whose injection is itself
+(`backfill.py:312`): a static-energy contract whose injection is itself
 spot-indexed (Cociter Variable) still needs spots so its feed-in credit lands in
 the backfilled rows and no sum-chain step appears at the backfill-to-live seam.
 It feeds `_ensure_historical_spots` local dates (`dt_util.as_local(...).date()`,
-`backfill.py:316`) to match the live coordinator's local-day anchoring.
+`backfill.py:323`) to match the live coordinator's local-day anchoring.
 
 ### The `current_year_cost` cumulative-sum invariant
 
@@ -365,35 +365,46 @@ cost. Two rules enforce this:
 
 - The cost series must stay within a single calendar year. `backfill_range`
   anchors the cost accumulation on Jan 1 of the end year (`cost_anchor_utc`,
-  `backfill.py:780`) and never crosses a year boundary; a multi-year request only
-  backfills the end year's cost (`backfill.py:807`). The price `mean` sensors are
+  `backfill.py:787`) and never crosses a year boundary; a multi-year request only
+  backfills the end year's cost (`backfill.py:814`). The price `mean` sensors are
   unaffected and keep the full requested window.
 - The accumulator starts from Jan 1 but only emits rows on or after
-  `emit_from` (`backfill.py:724`), so a mid-year `start` still carries the correct
+  `emit_from` (`backfill.py:731`), so a mid-year `start` still carries the correct
   year-to-date sum instead of restarting from zero and clashing with the existing
   head of the series.
 
-`_backfill_cost_sensor` runs one running total per hour (`backfill.py:719`)
+`_backfill_cost_sensor` runs one running total per hour (`backfill.py:726`)
 rather than one end-of-day number, so the recorder draws a smoothly growing YTD
 line. Fixed fees (the supplier's yearly fixed fee, the energy-fund monthly charge
 times 12, the DSO data-management annual charge, and the Brussels Brugel OSP fee)
 are prorated per hour as `annual_static / days_in_year / hours_per_local_date`
-(`backfill.py:664`, `backfill.py:666`). Dividing by that day's actual UTC-hour
+(`backfill.py:671`, `backfill.py:673`). Dividing by that day's actual UTC-hour
 count makes every local day, including the 23-hour and 25-hour DST seam days, sum
 to exactly `annual / days_in_year`, matching the live per-day proration at the
 seam. The Walloon prosumer fee (compensation regime, gated to Wallonia at
-`backfill.py:691`) is prorated the same way against `days_in_full_month`. The
-compensation regime clamps the displayed energy term at zero (`backfill.py:717`),
+`backfill.py:698`) is prorated the same way against `days_in_full_month`. The
+compensation regime clamps the displayed energy term at zero (`backfill.py:724`),
 because a Walloon reversing meter forfeits surplus injection past consumption.
+
+### The requested window is clamped to now
+
+`_normalize_window` floors both ends to whole hours and caps the end at the
+current hour. `compute_breakdown` evaluates any hour for a fixed / variable /
+TOU / Impact contract, so an end date in the future used to write real-looking
+price rows for hours that have not happened, and kept the cost sensor's fee,
+capacity and prosumer accrual running through them. The `backfill_statistics`
+service schema puts no upper bound on `end`, so a mistyped year was enough: an
+end one year out produced 8760 phantom hours. The `end=None` default always
+stopped at now; an explicit end now gets the same bound.
 
 ### Idempotency and replay
 
 `async_import_statistics` upserts on `(statistic_id, start)`, so re-running
 `backfill_range` over a window simply overwrites those hours; a re-run is always
-safe (`backfill.py:754`). `backfill_if_missing` avoids redundant work by probing
+safe (`backfill.py:761`). `backfill_if_missing` avoids redundant work by probing
 the recorder itself rather than persisting a separate "backfill done" flag that
 would go stale across DB resets or supplier changes. `_existing_stat_window`
-(`backfill.py:197`) queries `statistics_during_period` over a 2-day window from
+(`backfill.py:204`) queries `statistics_during_period` over a 2-day window from
 the Jan 1 anchor: a single-hour probe could read empty when a dynamic contract
 genuinely lacks the Jan 1 00:00 spot and would then re-run the whole-year
 backfill on every restart, whereas a short window still reads empty after a real
@@ -403,10 +414,10 @@ hour.
 ### `clear=True` is series-scoped and guarded
 
 The recorder's only public deletion primitive here is `clear_statistics`, which
-is series-scoped, not range-scoped: `_clear_all` (`backfill.py:240`) deletes the
+is series-scoped, not range-scoped: `_clear_all` (`backfill.py:247`) deletes the
 entire series for the given statistic ids. `backfill_range` therefore refuses the
 narrow-window-plus-clear combination: if `clear=True` and the window starts after
-Jan 1 of the end year, it raises `ServiceValidationError` (`backfill.py:793`),
+Jan 1 of the end year, it raises `ServiceValidationError` (`backfill.py:800`),
 because the wipe would remove the Jan 1 to start head of the year while the
 re-import only repopulates the requested range, leaving those rows gone for good.
 The `services.yaml` description and every locale's strings warn about this
@@ -432,13 +443,13 @@ matter to this module:
 
 - `recorder` provides every statistics primitive backfill uses:
   `async_import_statistics` and `StatisticData` / `StatisticMetaData` /
-  `StatisticMeanType` (`backfill.py:360`, `backfill.py:528`),
-  `statistics_during_period` for the missing-probe (`backfill.py:220`),
-  `clear_statistics` for the destructive path (`backfill.py:255`), and the
+  `StatisticMeanType` (`backfill.py:367`, `backfill.py:535`),
+  `statistics_during_period` for the missing-probe (`backfill.py:227`),
+  `clear_statistics` for the destructive path (`backfill.py:262`), and the
   hourly-kWh reconstruction that reads past consumption. Loading after the
   recorder ensures its statistics tables are ready when the one-shot backfill
   task fires at setup. The recorder imports are still wrapped in
-  `try/except ImportError` (`backfill.py:215`, `backfill.py:251`) so a bare HA
+  `try/except ImportError` (`backfill.py:222`, `backfill.py:258`) so a bare HA
   without the recorder degrades gracefully instead of crashing.
 - `energy` is the consumer: the Energy dashboard reads the `current_year_cost`
   sum series and the price means this module writes. Ordering after it keeps the
