@@ -775,3 +775,65 @@ async def test_ensure_dynamic_spots_empty_for_variable_without_start_date() -> N
     )
     assert spots == {}
     coordinator._ensure_historical_spots.assert_not_awaited()
+
+
+async def test_clear_over_a_multiyear_window_spares_the_cost_series(
+    hass: HomeAssistant,
+) -> None:
+    """clear=True wipes a whole series, but the cost sensor is deliberately
+    re-imported only over the END year. A window reaching back past 1 January
+    of that year therefore destroyed every prior year's cost history and never
+    put it back. The existing guard only caught windows starting AFTER the
+    anchor, so the multi-year case sailed through.
+
+    The price series stay in the wipe: they are re-imported over the whole
+    requested window, so their wipe is always matched."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    _register_sensors(hass, entry, ["current_price", "current_year_cost"])
+    entry.runtime_data = await _make_coordinator(entry)
+
+    cleared: list[list[str]] = []
+
+    async def _spy(_hass: object, ids: list[str]) -> None:
+        cleared.append(list(ids))
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+
+    def _noop_import(_hass: HomeAssistant, _meta: Any, _stats: Any) -> None:
+        return None
+
+    start = datetime(2025, 6, 1, 0, 0, tzinfo=BRUSSELS)
+    end = datetime(2026, 3, 1, 3, 0, tzinfo=BRUSSELS)
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch.object(bf, "_clear_all", _spy),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_noop_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        await bf.backfill_range(hass, entry, start, end, clear=True)
+
+    assert cleared, "clear=True should still wipe something"
+    wiped = cleared[0]
+    assert any("current_price" in sid for sid in wiped)
+    assert not any("current_year_cost" in sid for sid in wiped)
+
+    # A window that IS exactly the end year still wipes the cost series, since
+    # the re-import then covers every row the wipe removes.
+    cleared.clear()
+    start = datetime(2026, 1, 1, 0, 0, tzinfo=BRUSSELS)
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch.object(bf, "_clear_all", _spy),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_noop_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        await bf.backfill_range(hass, entry, start, end, clear=True)
+    assert cleared and any("current_year_cost" in sid for sid in cleared[0])

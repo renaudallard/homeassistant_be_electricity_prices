@@ -802,7 +802,19 @@ async def backfill_range(
 
     if clear:
         ids: list[str] = []
-        keys = list(_PRICE_SENSOR_KEYS) + [_COST_SENSOR_KEY]
+        keys = list(_PRICE_SENSOR_KEYS)
+        # The price series are re-imported over the WHOLE requested window, so
+        # wiping them is always matched by the re-import. The cost series is
+        # not: it is deliberately re-imported only over the end year
+        # (cost_hours above), while _clear_all is series-scoped and deletes
+        # every row it has. On a window that reaches back past 1 January of the
+        # end year that combination permanently destroyed prior years' cost
+        # history. Only wipe it when the request IS exactly the end year, which
+        # (given the guard above rejects a later start) means start == anchor.
+        # Skipping the wipe is safe: async_import_statistics upserts on
+        # (statistic_id, start), so the re-imported year still lands.
+        if start_utc == cost_anchor_utc:
+            keys.append(_COST_SENSOR_KEY)
         if entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION:
             keys.append(_INJECTION_PRICE_SENSOR_KEY)
         for key in keys:

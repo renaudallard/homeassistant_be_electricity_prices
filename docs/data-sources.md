@@ -267,7 +267,7 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
 | `backfill_range` (`backfill.py:736`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py:836`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
+| `backfill_if_missing` (`backfill.py:848`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py:41`). Backfill is reached either automatically
@@ -280,7 +280,7 @@ window services (`__init__.py:525`).
 `backfill_if_missing` tolerates entry removal mid-flight: because it runs as a
 background task the user can delete the entry between scheduling and execution,
 so it bails when `async_get_entry` returns `None` or `runtime_data` is no longer
-a coordinator (`backfill.py:853`).
+a coordinator (`backfill.py:865`).
 
 ### Statistic ids and the two statistic shapes
 
@@ -412,6 +412,16 @@ re-import only repopulates the requested range, leaving those rows gone for good
 The `services.yaml` description and every locale's strings warn about this
 destructive scope. Without `clear`, no deletion happens and the upsert alone
 overwrites the requested hours.
+
+That guard only covers windows starting AFTER the anchor. The mirror case is a
+window reaching back BEFORE it: the price series are re-imported over the whole
+requested range, but the cost series is deliberately re-imported over the end
+year only, so a series-scoped wipe destroyed every prior year of cost history
+and never put it back. The cost sensor is therefore excluded from the wipe
+unless the window IS exactly the end year (`start_utc == cost_anchor_utc`).
+Skipping it is safe: `async_import_statistics` upserts on
+`(statistic_id, start)`, so the re-imported year still lands over whatever was
+there.
 
 ### `after_dependencies` on `energy` and `recorder`
 
