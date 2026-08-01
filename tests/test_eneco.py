@@ -170,8 +170,11 @@ def test_fix_extracts_taxes() -> None:
         )
     )
 
+
 def test_august_card_drops_the_energy_contribution_row() -> None:
-    snap = parse_snapshot(fixture_text("eneco_flex_aug26.pdf"), "power_flex", "test://fix")
+    snap = parse_snapshot(
+        fixture_text("eneco_flex_aug26.pdf"), "power_flex", "test://fix"
+    )
     assert snap.taxes.federal_excise == pytest.approx(0.048760)
     assert snap.taxes.energy_contribution == pytest.approx(0.0)
 

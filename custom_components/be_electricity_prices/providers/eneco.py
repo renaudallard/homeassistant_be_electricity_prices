@@ -506,7 +506,7 @@ def _extract_taxes(text: str) -> TaxOverlay:
         + _NUM
         + rf"(?:{_WS}+"
         + _NUM
-        + rf")?",
+        + r")?",
         text,
     )
     if not tier_match:
