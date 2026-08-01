@@ -86,6 +86,7 @@ from .coordinator import (
     _hourly_injection_sensors,
     _injection_hourly_on_cohort,
     _injection_needs_spot,
+    _partial_register_pair,
     _mean_of_month,
     _month_snapshot_cache,
     _prosumer_monthly_fee,
@@ -566,7 +567,13 @@ async def _backfill_cost_sensor(
     # midnight and either drop or double-include the end-of-range hour.
     cons_per_hour: dict[datetime, float] = {}
     inj_per_hour: dict[datetime, float] = {}
-    if hours:
+    # Mirror the live paths: a half-wired day/night pair cannot be billed, so
+    # accrue fees only rather than bill the wired half and credit injection
+    # against a consumption side that silently resolved to nothing.
+    half_wired = _partial_register_pair(entry, "consumption") or (
+        _partial_register_pair(entry, "injection")
+    )
+    if hours and not half_wired:
         start_d = dt_util.as_local(hours[0]).date()
         end_d = dt_util.as_local(hours[-1]).date()
         cons_per_hour = await _sum_hourly_kwh(

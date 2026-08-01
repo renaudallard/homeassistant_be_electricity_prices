@@ -3452,6 +3452,23 @@ async def _ytd_capacity(
     return total
 
 
+def _partial_register_pair(entry: ConfigEntry, side: str) -> bool:
+    """True when exactly one half of ``side``'s day/night register pair is wired.
+
+    A half-wired pair cannot be billed: the missing band's kWh are simply
+    absent, so every path must refuse the whole computation and fall back to
+    the fees-only floor rather than quietly bill the wired half. The static
+    per-day path has always enforced this; the hourly path (TOU / Impact /
+    dynamic / exclusive-night) resolved each side independently and only
+    bailed when BOTH were empty, so a half-wired consumption pair collapsed to
+    "no consumption sensors" while a wired injection sensor kept crediting.
+    That billed the feed-in credit against zero consumption and drove the YTD
+    negative. Shared here so the two paths cannot drift apart again.
+    """
+    day_id, night_id, _total = _kwh_sensor_ids(entry, side)
+    return bool(day_id) ^ bool(night_id)
+
+
 def _kwh_sensor_ids(
     entry: ConfigEntry, side: str
 ) -> tuple[str | None, str | None, str | None]:
@@ -3618,6 +3635,14 @@ async def _ytd_hourly_energy(
     dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
 
+    if _partial_register_pair(entry, "consumption") or _partial_register_pair(
+        entry, "injection"
+    ):
+        # Same rule the static per-day path applies: a half-wired pair means
+        # the missing band's kWh are unavailable, so bill nothing rather than
+        # bill the wired half. Without this the empty side vanished silently
+        # and any wired injection was credited against zero consumption.
+        return None
     cons_ids = _hourly_consumption_sensors(entry)
     inj_ids = _hourly_injection_sensors(entry)
     if not cons_ids and not inj_ids:

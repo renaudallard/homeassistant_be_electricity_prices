@@ -2620,3 +2620,55 @@ def test_manual_signing_rate_blank_fields_keep_the_current_card() -> None:
     leg = _manual_energy_leg(entry, card)  # type: ignore[arg-type]
     assert isinstance(leg, FixedRates)
     assert leg.yearly_fixed_fee == 0.0
+
+
+async def test_half_wired_registers_bill_nothing_on_every_ytd_path() -> None:
+    """A day/night register pair with only one half wired cannot be billed: the
+    missing band's kWh are simply absent. The static per-day path has always
+    refused the whole year for that, but the hourly path (TOU / Impact /
+    dynamic / exclusive-night) resolved each side independently and only bailed
+    when BOTH were empty. So a half-wired consumption pair collapsed to "no
+    consumption sensors" while a wired injection sensor kept crediting, billing
+    the feed-in credit against zero consumption and driving the YTD negative.
+    """
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.be_electricity_prices import coordinator as co
+
+    entry = SimpleNamespace(
+        data={
+            "supplier": "test",
+            "contract": "test",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "injection",
+            "day_consumption_kwh": "sensor.day_cons",
+            # night register deliberately absent
+            "injection_kwh": "sensor.inj",
+        }
+    )
+
+    assert co._partial_register_pair(entry, "consumption") is True  # type: ignore[arg-type]
+    assert co._partial_register_pair(entry, "injection") is False  # type: ignore[arg-type]
+
+    today = date(2026, 8, 1)
+    with patch.object(co, "_recorder_daily_kwh", AsyncMock(return_value={})):
+        daily = await co._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
+    assert daily is None, "static path must refuse a half-wired pair"
+
+    hourly = await co._ytd_hourly_energy(
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        make_snapshot(),
+        entry,  # type: ignore[arg-type]
+        today,
+        meter="dynamic",
+    )
+    assert hourly is None, "hourly path must refuse it the same way"
+
+    # A fully wired pair is still accepted by the predicate.
+    entry.data["night_consumption_kwh"] = "sensor.night_cons"
+    assert co._partial_register_pair(entry, "consumption") is False  # type: ignore[arg-type]

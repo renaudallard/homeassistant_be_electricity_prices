@@ -386,6 +386,14 @@ coordinator's `current_year_cost` engine (each side needs *both* day and night, 
 falls back to the single total), not in the flow. The flow's job is only to collect
 entity ids; it does not couple the day and night fields.
 
+All three billing paths share one predicate for that rule,
+`_partial_register_pair` (`coordinator.py`). Only the static per-day path used to
+enforce it: the hourly path (TOU / Impact / dynamic / exclusive-night) and the
+backfill resolved each side independently and bailed only when BOTH were empty, so
+a half-wired consumption pair collapsed to "no consumption sensors" while a wired
+injection sensor kept crediting. That billed the feed-in credit against zero
+consumption and drove the YTD negative instead of resting on the fees-only floor.
+
 ### Unique id and duplicate rejection
 
 The unique id is the string `supplier:contract:region:dso`. On install,
