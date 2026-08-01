@@ -346,3 +346,28 @@ def test_parse_snapshot_with_partial_regions_still_works() -> None:
     assert snap.taxes.brussels_renewables == pytest.approx(0.02652)
     assert snap.taxes.flanders_renewables == 0.0
     assert snap.taxes.wallonia_renewables == 0.0
+
+
+def test_august_2026_flat_excise_replaces_the_tier_table() -> None:
+    """On 2026-08-01 the federal scheme folded the separate energy
+    contribution into the special excise and flattened it, so Engie's card
+    dropped the four-tier consumption table for a single "Toutes
+    consommations" row and deleted the cotisation line. Parsing must follow
+    both shapes: the flat rate when present, the 0-3.000 kWh tier otherwise.
+    """
+    from custom_components.be_electricity_prices.providers.engie import (
+        _extract_energy_contribution,
+        _extract_federal_excise,
+    )
+
+    august = "Accise fédérale(11) (c€/kWh)\nToutes consommations 4,87600\n"
+    assert _extract_federal_excise(august) == pytest.approx(0.048760)
+    # Row deleted because the levy is abolished, not because of drift.
+    assert _extract_energy_contribution(august) == 0.0
+
+    # The pre-August tiered card keeps working, contribution and all.
+    july = (
+        "Consommation entre 0 et 3.000 kWh 5,0329\nCotisation sur l'énergie 0,20417\n"
+    )
+    assert _extract_federal_excise(july) == pytest.approx(0.050329)
+    assert _extract_energy_contribution(july) == pytest.approx(0.0020417)

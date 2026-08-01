@@ -621,7 +621,22 @@ def _extract_consumption_renewables(text: str) -> float:
 
 
 def _extract_federal_excise(text: str) -> float:
-    """Federal excise on the 0-3000 kWh tier; mandatory across regions."""
+    """Federal excise, mandatory across regions.
+
+    Two card shapes. Until July 2026 the excise was degressive and printed
+    as four consumption tiers, of which the residential one is 0-3.000 kWh.
+    From 1 August 2026 the federal scheme folded the separate energy
+    contribution into the excise and flattened it, so the card prints one
+    rate under "Toutes consommations". Try the flat form first: a card that
+    carries both would be the tiered one being phased out, and the flat row
+    is the authoritative single rate when it is present.
+    """
+    flat = re.search(
+        r"Accise\s+f[ée]d[ée]rale[^\n]*\n\s*Toutes\s+consommations\s+([\d,.]+)",
+        text,
+    )
+    if flat:
+        return to_float(flat.group(1)) / 100.0
     match = re.search(
         r"Consommation entre\s+0\s+et\s+3\.000\s+kWh\s+([\d,.]+)",
         text,
@@ -637,14 +652,19 @@ def _extract_energy_contribution(text: str) -> float:
     Match either shape and reconstruct the decimal value as
     ``0.<digits>``. The regulated rate has 5-6 fractional digits so the
     quantifier ``\\d{4,6}`` covers it without picking up unrelated
-    integers. Mandatory across regions; raise on miss.
+    integers.
+
+    The levy went to zero on 2026-08-01 and was folded into the special
+    excise, so the August cards drop the row entirely. An absent row is the
+    abolished levy, not a layout drift: return 0 rather than failing the
+    fetch and taking every Engie contract offline.
     """
     match = re.search(
         r"Cotisation sur l['©]énergie\s+0\s*[,.]?\s*(\d{4,6})",
         text,
     )
     if not match:
-        raise ExtractorError("Engie: energy contribution row not found")
+        return 0.0
     return float(f"0.{match.group(1)}") / 100.0
 
 
