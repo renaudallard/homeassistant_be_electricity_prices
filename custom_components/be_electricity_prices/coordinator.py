@@ -3500,35 +3500,43 @@ def _hourly_consumption_sensors(entry: ConfigEntry) -> list[str]:
     """Recorder entity ids whose hourly kWh sums add up to total
     consumption.
 
-    Prefer the single totals sensor when wired; otherwise require the
-    full day + night register pair (both halves) so a partial wiring
-    can't silently undercount the night band. Returns an empty list
-    when nothing is wired or only one register half is wired (caller
-    surfaces the fees-only floor in that case).
+    Prefer the full day + night register pair when BOTH halves are wired,
+    matching ``_resolve_daily_kwh`` and the diagnostics roll-up and the
+    documented rule in ``const.py`` ("when both are configured, the
+    day/night registers win"). This helper used to check the totals sensor
+    first, so an entry with both wirings was billed off a different meter
+    on the hourly path (TOU / Impact / dynamic / exclusive-night and the
+    backfill) than on the static per-day path, and the two figures drifted
+    against each other for the same user.
+
+    Falls back to the single totals sensor. Returns an empty list when
+    nothing is wired, or when only one register half is wired and no total
+    covers it, so a partial wiring can't silently undercount the missing
+    band (caller surfaces the fees-only floor).
     """
-    total = entry.data.get(CONF_CONSUMPTION_KWH)
-    if total:
-        return [total]
     day = entry.data.get(CONF_DAY_CONSUMPTION_KWH)
     night = entry.data.get(CONF_NIGHT_CONSUMPTION_KWH)
     if day and night:
         return [day, night]
+    total = entry.data.get(CONF_CONSUMPTION_KWH)
+    if total:
+        return [total]
     return []
 
 
 def _hourly_injection_sensors(entry: ConfigEntry) -> list[str]:
     """Mirror of ``_hourly_consumption_sensors`` for the injection side.
 
-    Returns an empty list when neither a totals sensor nor the full
-    day+night pair is wired, so a partial register wiring doesn't get
-    counted as injection coverage."""
-    total = entry.data.get(CONF_INJECTION_KWH)
-    if total:
-        return [total]
+    Registers first when both halves are wired, then the totals sensor.
+    Returns an empty list when neither is available, so a partial register
+    wiring doesn't get counted as injection coverage."""
     day = entry.data.get(CONF_DAY_INJECTION_KWH)
     night = entry.data.get(CONF_NIGHT_INJECTION_KWH)
     if day and night:
         return [day, night]
+    total = entry.data.get(CONF_INJECTION_KWH)
+    if total:
+        return [total]
     return []
 
 

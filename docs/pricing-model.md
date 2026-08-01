@@ -483,19 +483,19 @@ explicitly rather than left to fall through.
 
 ### YTD injection paths
 
-Past-month YTD billing routes injection per regime (`coordinator.py:3588-3729`,
+Past-month YTD billing routes injection per regime (`coordinator.py:3596-3737`,
 context):
 
 - `compensation`: per-hour `(cons - inj) * all_in`, netting injection against
   consumption (per band when bi) and clamping at zero.
 - `injection`: per-hour `cons * all_in - inj * inj_rate`, where `inj_rate` comes
-  from `_historical_injection_rate` (`coordinator.py:3717-3735`).
+  from `_historical_injection_rate` (`coordinator.py:3725-3743`).
 
 Shape (c) has a dedicated YTD helper `_ytd_spot_injection_credit`
-(`coordinator.py:3752`) that credits a static-energy contract whose injection is a
+(`coordinator.py:3760`) that credits a static-energy contract whose injection is a
 pure BELPEX formula with no fixed credit; it is a no-op unless the injection is
 exactly that shape and an injection sensor is wired, and it skips hours with no
-cached spot (`coordinator.py:3774-3792`).
+cached spot (`coordinator.py:3782-3800`).
 
 ## Capacity tariff
 

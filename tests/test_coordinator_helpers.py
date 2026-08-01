@@ -2672,3 +2672,48 @@ async def test_half_wired_registers_bill_nothing_on_every_ytd_path() -> None:
     # A fully wired pair is still accepted by the predicate.
     entry.data["night_consumption_kwh"] = "sensor.night_cons"
     assert co._partial_register_pair(entry, "consumption") is False  # type: ignore[arg-type]
+
+
+def test_all_kwh_resolvers_agree_that_registers_win() -> None:
+    """Three helpers answer "which entity holds this side's kWh", and they
+    disagreed when BOTH wirings were configured: the static per-day path and
+    diagnostics took the day/night registers, the hourly path (TOU / Impact /
+    dynamic / exclusive-night) and the backfill took the totals sensor. The
+    same user was then billed off a different meter depending on their contract
+    kind, and the two figures drifted apart.
+
+    const.py states the rule: "when both are configured, the day/night
+    registers win"."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices import coordinator as co
+
+    both = SimpleNamespace(
+        data={
+            "day_consumption_kwh": "sensor.day",
+            "night_consumption_kwh": "sensor.night",
+            "consumption_kwh": "sensor.total",
+            "day_injection_kwh": "sensor.dinj",
+            "night_injection_kwh": "sensor.ninj",
+            "injection_kwh": "sensor.tinj",
+        }
+    )
+    # _kwh_sensor_ids feeds the daily path and diagnostics; registers first.
+    day, night, total = co._kwh_sensor_ids(both, "consumption")  # type: ignore[arg-type]
+    assert (day, night) == ("sensor.day", "sensor.night")
+    assert total == "sensor.total"
+    # The hourly path must pick the same meter.
+    assert co._hourly_consumption_sensors(both) == ["sensor.day", "sensor.night"]  # type: ignore[arg-type]
+    assert co._hourly_injection_sensors(both) == ["sensor.dinj", "sensor.ninj"]  # type: ignore[arg-type]
+
+    # Totals-only still resolves to the total.
+    totals_only = SimpleNamespace(
+        data={"consumption_kwh": "sensor.total", "injection_kwh": "sensor.tinj"}
+    )
+    assert co._hourly_consumption_sensors(totals_only) == ["sensor.total"]  # type: ignore[arg-type]
+    assert co._hourly_injection_sensors(totals_only) == ["sensor.tinj"]  # type: ignore[arg-type]
+
+    # Nothing wired stays empty.
+    empty = SimpleNamespace(data={})
+    assert co._hourly_consumption_sensors(empty) == []  # type: ignore[arg-type]
+    assert co._hourly_injection_sensors(empty) == []  # type: ignore[arg-type]

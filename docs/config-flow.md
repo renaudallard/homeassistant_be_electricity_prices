@@ -344,7 +344,12 @@ wirings per side, both feeding the `current_year_cost` computation:
 When both are filled for the same side, the day/night registers win (more accurate;
 `config_flow.py:785`). Each side (consumption, injection) is resolved independently,
 so the user can mix one side as registers and the other as a total
-(`strings.json:323`).
+(`strings.json:323`). All three resolvers enforce that precedence:
+`_kwh_sensor_ids` (daily path plus diagnostics), `_hourly_consumption_sensors`
+and `_hourly_injection_sensors` (hourly path plus backfill). The hourly pair
+used to check the totals sensor first, so a user with both wirings was billed
+off a different meter depending on their contract kind and the two figures
+drifted apart.
 
 Energy-dashboard defaults: `async_step_meters` copies `self._data` and calls
 `_apply_energy_manager_defaults` (`config_flow.py:921`) before rendering, but only
