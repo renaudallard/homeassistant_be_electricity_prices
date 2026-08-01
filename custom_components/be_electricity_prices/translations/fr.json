@@ -558,6 +558,10 @@
     "supplier_deprecated_no_successor": {
       "title": "{supplier} cesse de fournir l'energie residentielle le {ends_on}",
       "description": "{supplier} quitte le marche de l'energie residentielle le {ends_on}. Les prix restent corrects jusqu'a ce que la carte tarifaire ne soit plus publiee, mais cette entree cessera ensuite de se mettre a jour. Votre contrat est transfere a un autre fournisseur : consultez le courrier que vous recevrez, puis modifiez cette entree et selectionnez ce fournisseur. S'il ne figure pas dans la liste, cette integration ne le couvre pas encore dans votre region -- ouvrez alors une issue sur GitHub."
+    },
+    "exclusive_night_rate_missing": {
+      "title": "{supplier} ({contract}) ne publie pas de tarif de distribution exclusif nuit",
+      "description": "Votre entree est configuree pour un compteur exclusif nuit separe, mais la carte tarifaire que {supplier} publie pour {dso} ne comporte ni tarif de distribution exclusif nuit ni tarif heures creuses. L'integration facture ce circuit au tarif de distribution de jour, donc la part reseau de son prix est plus elevee que ce qui vous est reellement facture. La part energie n'est pas affectee.\n\nRien ne peut etre substitue automatiquement : l'integration ne stocke jamais de prix dans son propre code, et reprendre le chiffre d'un autre fournisseur serait une supposition. Demandez a {supplier} d'imprimer la colonne exclusif nuit, ou choisissez un fournisseur dont la carte la publie."
     }
   },
   "entity": {

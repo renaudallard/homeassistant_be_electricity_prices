@@ -1272,6 +1272,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         age = self._snapshot_age_hours()
         stale = age > SNAPSHOT_STALE_DAYS * 24
         self._sync_stale_issue(stale)
+        self._sync_exclusive_night_gap_issue()
         return CoordinatorData(
             hourly=hourly,
             resolution=(
@@ -1321,6 +1322,55 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
                     "days": str(SNAPSHOT_STALE_DAYS),
                     "last_error": self._last_error or "unknown",
+                },
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+    def _sync_exclusive_night_gap_issue(self) -> None:
+        """Flag an exclusive-night meter whose DSO overlay cannot price it.
+
+        ``network_eur_per_kwh`` bills an exclusive-night circuit at its own
+        distribution rate, falling back to off-peak and then to the single
+        (day) rate. When a supplier's card publishes neither, that last
+        fallback silently bills the dedicated night circuit at the day rate.
+        TotalEnergies' Flemish card is the case: its DSO table prints
+        digital/classic prelevement and capacitaire, metering, cotisation,
+        transport and prosumer, with no exclusive-night column at all - even
+        though it does publish an exclusive-night ENERGY rate, so the entry
+        looks fully configured.
+
+        The rate cannot be substituted from anywhere: no EUR value may live
+        in Python source, and borrowing another supplier's Fluvius figure
+        would be a guess. So price it as the engine already does and tell the
+        user, rather than hiding the meter type or silently over-billing.
+        """
+        if self._unloaded:
+            return
+        issue_id = f"exclusive_night_rate_missing_{self.entry.entry_id}"
+        overlay = (
+            self._snapshot.dsos.get(self.entry.data.get(CONF_DSO, ""))
+            if self._snapshot is not None
+            else None
+        )
+        gap = (
+            self.entry.data.get(CONF_METER) == METER_EXCLUSIVE_NIGHT
+            and overlay is not None
+            and overlay.distribution_exclusive_night is None
+            and overlay.distribution_offpeak is None
+        )
+        if gap:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="exclusive_night_rate_missing",
+                translation_placeholders={
+                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
+                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
+                    "dso": str(self.entry.data.get(CONF_DSO, "")),
                 },
             )
         else:

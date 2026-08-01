@@ -558,6 +558,10 @@
     "supplier_deprecated_no_successor": {
       "title": "{supplier} stopt op {ends_on} met de levering van energie aan particulieren",
       "description": "{supplier} verlaat op {ends_on} de markt voor energie aan particulieren. De prijzen blijven correct tot de tariefkaart niet langer gepubliceerd wordt, maar daarna stopt deze entry met bijwerken. Je contract wordt overgedragen aan een andere leverancier: kijk in de brief die je ontvangt, bewerk daarna deze entry en kies die leverancier. Staat hij niet in de lijst, dan ondersteunt deze integratie hem nog niet in jouw gewest -- open dan een issue op GitHub."
+    },
+    "exclusive_night_rate_missing": {
+      "title": "{supplier} ({contract}) publiceert geen distributietarief voor exclusief nacht",
+      "description": "Deze invoer is ingesteld voor een apart exclusief-nachtcircuit, maar de tariefkaart die {supplier} voor {dso} publiceert bevat geen distributietarief voor exclusief nacht en ook geen daltarief. De integratie rekent dat circuit aan het gewone dagtarief aan, dus het netgedeelte van de prijs ligt hoger dan wat u werkelijk betaalt. Het energiegedeelte klopt wel.\n\nEr kan niets automatisch worden ingevuld: de integratie bewaart nooit een prijs in haar eigen broncode, en het cijfer van een andere leverancier overnemen zou giswerk zijn. Vraag {supplier} om de kolom exclusief nacht af te drukken, of kies een leverancier waarvan de kaart die wel publiceert."
     }
   },
   "entity": {

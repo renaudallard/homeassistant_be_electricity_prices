@@ -558,6 +558,10 @@
     "supplier_deprecated_no_successor": {
       "title": "{supplier} stops supplying residential energy on {ends_on}",
       "description": "{supplier} is leaving the residential energy market on {ends_on}. Prices stay correct until it stops publishing its tariff card, but this entry will stop updating afterwards. Your contract is being transferred to another supplier: check the letter they send you, then edit this entry and select that supplier. If it is not in the list, this integration does not cover it in your region yet -- please open an issue on GitHub."
+    },
+    "exclusive_night_rate_missing": {
+      "title": "{supplier} ({contract}) does not publish an exclusive-night distribution rate",
+      "description": "Your entry is configured for a separate exclusive-night meter circuit, but the tariff card {supplier} publishes for {dso} carries no exclusive-night distribution rate and no off-peak rate either. The integration is billing that circuit at the normal day distribution rate, so the network part of its price is higher than what you are actually charged. The energy part is unaffected.\n\nNothing can be substituted automatically: the integration never stores a price in its own source, and copying the figure from another supplier's card would be a guess. Ask {supplier} to print the exclusive-night distribution column, or switch this entry to a supplier whose card publishes it."
     }
   },
   "entity": {

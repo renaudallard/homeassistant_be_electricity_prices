@@ -558,6 +558,10 @@
     "supplier_deprecated_no_successor": {
       "title": "{supplier} stellt die Belieferung von Haushalten am {ends_on} ein",
       "description": "{supplier} verlaesst am {ends_on} den Markt fuer Haushaltsenergie. Die Preise bleiben korrekt, bis die Tarifkarte nicht mehr veroeffentlicht wird, danach wird dieser Eintrag jedoch nicht mehr aktualisiert. Ihr Vertrag geht an einen anderen Anbieter ueber: pruefen Sie das Schreiben, das Sie erhalten, bearbeiten Sie dann diesen Eintrag und waehlen Sie diesen Anbieter aus. Steht er nicht in der Liste, unterstuetzt diese Integration ihn in Ihrer Region noch nicht -- oeffnen Sie dann bitte ein Issue auf GitHub."
+    },
+    "exclusive_night_rate_missing": {
+      "title": "{supplier} ({contract}) veroeffentlicht keinen Verteilungstarif fuer Exklusiv-Nacht",
+      "description": "Dieser Eintrag ist fuer einen separaten Exklusiv-Nacht-Zaehler konfiguriert, aber die Tarifkarte, die {supplier} fuer {dso} veroeffentlicht, enthaelt weder einen Exklusiv-Nacht-Verteilungstarif noch einen Nebenzeittarif. Die Integration rechnet diesen Stromkreis zum normalen Tagtarif ab, der Netzanteil des Preises liegt also hoeher als der tatsaechlich berechnete. Der Energieanteil ist korrekt.\n\nEs kann nichts automatisch ersetzt werden: die Integration speichert nie einen Preis im eigenen Quellcode, und die Zahl eines anderen Anbieters zu uebernehmen waere geraten. Bitten Sie {supplier}, die Exklusiv-Nacht-Spalte zu drucken, oder waehlen Sie einen Anbieter, dessen Karte sie veroeffentlicht."
     }
   },
   "entity": {

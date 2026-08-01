@@ -2264,3 +2264,76 @@ async def test_non_flanders_tick_clears_the_banked_peak_window(
     assert coord._peak_kw == 0.0
     assert coord._peak_month is None
     assert coord._peak_history == {}
+
+
+async def test_exclusive_night_gap_raises_a_repair_issue(hass: HomeAssistant) -> None:
+    """network_eur_per_kwh bills an exclusive-night circuit at its own rate,
+    then off-peak, then the day rate. TotalEnergies' Flemish card publishes an
+    exclusive-night ENERGY rate but no exclusive-night distribution column, so
+    the entry looks fully configured while the network side quietly falls all
+    the way through to the day rate. The rate cannot be substituted (no EUR
+    values in source), so surface it instead of hiding the meter type."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "totalenergies",
+            "contract": "totalenergies_mycomfort",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "exclusive_night",
+        },
+        title="TE exclusive night",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"exclusive_night_rate_missing_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    # No exclusive-night and no off-peak column -> the day rate is billed.
+    coord._snapshot = make_snapshot(
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(distribution_single=0.0535, transport=0.002)
+        }
+    )
+    coord._sync_exclusive_night_gap_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    # A card that publishes the dedicated rate clears it again.
+    coord._snapshot = make_snapshot(
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(
+                distribution_single=0.0535,
+                distribution_exclusive_night=0.0454,
+                transport=0.002,
+            )
+        }
+    )
+    coord._sync_exclusive_night_gap_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+    # So does an off-peak rate, which the engine prefers over the day rate.
+    coord._snapshot = make_snapshot(
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(
+                distribution_single=0.0535,
+                distribution_offpeak=0.0460,
+                transport=0.002,
+            )
+        }
+    )
+    coord._sync_exclusive_night_gap_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+    # And a normal meter never raises it at all.
+    hass.config_entries.async_update_entry(entry, data={**entry.data, "meter": "mono"})
+    coord._snapshot = make_snapshot(
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(distribution_single=0.0535, transport=0.002)
+        }
+    )
+    coord._sync_exclusive_night_gap_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
