@@ -1195,15 +1195,28 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # monthly mean rather than the live hourly spot: bake the mean-indexed
         # formula into a flat indicative for this tick (the stored snapshot
         # keeps factor/base so the YTD path recomputes each month's own mean).
-        # Gate on the EFFECTIVE (cohort) energy: a variable contract re-priced
-        # to a SpotMonthlyRates cohort must bake its spot-indexed injection at
-        # the month mean too, so the live credit matches the YTD walk (which
-        # dispatches on the cohort) and the backfill; self._snapshot.energy
-        # stays VariableRates for such a contract, so keying off it would skip
-        # the bake and leave live crediting at the per-hour spot. The bake is a
-        # no-op for a flat monthly-indicative injection (EBEM/Eneco/Mega).
+        # Gate on the EFFECTIVE (cohort) energy so a variable contract re-priced
+        # to a SpotMonthlyRates cohort bakes its mean-indexed injection too;
+        # self._snapshot.energy stays VariableRates for such a contract, so
+        # keying off it would skip the bake. The bake is a no-op for a flat
+        # monthly-indicative injection (EBEM/Eneco/Mega).
+        #
+        # EXCEPT when the injection carries its own PER-HOUR index. The cohort
+        # re-price is an energy-leg concept: it freezes the coefficients the
+        # customer signed for the commodity, which a variable card indexes
+        # monthly. Cociter Tarif Variable indexes the two legs differently and
+        # says so on the card - note (7) "le prix ... est indexe mensuellement
+        # ... moyenne arithmetique ... (BELIX) durant le mois de fourniture"
+        # for consumption, note (9) "le prix de l'injection varie chaque heure"
+        # for injection. Baking that hourly formula to a month mean prices the
+        # feed-in credit off an index the contract never mentions, and because
+        # PV output peaks exactly when the day-ahead price troughs, a flat mean
+        # systematically over-credits. _injection_needs_spot identifies that
+        # shape (factor/base with no printed indicative), so leave it alone.
         injection_snapshot = self._snapshot
-        if isinstance(priced.energy, SpotMonthlyRates):
+        if isinstance(
+            priced.energy, SpotMonthlyRates
+        ) and not _injection_hourly_on_cohort(self._snapshot, self.entry):
             inj_mean = monthly_mean
             if spp_weighted:
                 # SPP-weight the injection month-mean; keep the flat mean for
@@ -2546,6 +2559,26 @@ def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> boo
     )
 
 
+def _injection_hourly_on_cohort(snapshot: SupplierSnapshot, entry: ConfigEntry) -> bool:
+    """True when this entry's injection keeps a PER-HOUR spot index even though
+    its energy is being priced on a monthly mean.
+
+    That happens only through a signing-cohort re-price: a variable card whose
+    ENERGY is monthly-indexed gets a SpotMonthlyRates leg spliced on, while its
+    injection formula is untouched. Cociter Tarif Variable is the one such card
+    (note (7) "indexe mensuellement ... (BELIX)" for consumption against note
+    (9) "le prix de l'injection varie chaque heure").
+
+    A card that is ITSELF monthly-indexed (the custom monthly contract, the
+    Mega groepsaankoop) indexes its injection on the month too, so it must keep
+    the month mean - and the SPP weighting when the entry opted into it. That
+    is why the snapshot's own energy kind, not the effective one, decides.
+    """
+    return _injection_needs_spot(snapshot, entry) and not isinstance(
+        snapshot.energy, SpotMonthlyRates
+    )
+
+
 def _tou_injection_rate(
     inj: InjectionRates, energy: EnergyRates, when: datetime
 ) -> float | None:
@@ -3376,8 +3409,22 @@ def _spp_injection_spot(
     year: int,
     month: int,
     cache: dict[tuple[int, int], float | None],
+    hourly_spot: float | None = None,
+    hourly: bool = False,
 ) -> float | None:
     """The spot value to price mean-indexed injection at.
+
+    ``hourly`` short-circuits the whole month-mean question and returns
+    ``hourly_spot``: a card whose injection carries its own per-hour index
+    keeps it even when the ENERGY leg was re-priced to a monthly signing
+    cohort. Cociter Tarif Variable is the case - its card indexes the two
+    legs on different periods, note (7) "indexe mensuellement ... (BELIX)
+    durant le mois de fourniture" for consumption against note (9) "le prix
+    de l'injection varie chaque heure". The cohort re-price freezes the
+    commodity coefficients, not the feed-in formula, and because PV output
+    peaks exactly when the day-ahead price troughs, pricing that credit off
+    a flat month mean systematically over-pays. Deciding it here keeps the
+    live tick, the YTD walk and the backfill on one rule.
 
     Energy bills at the flat month-mean (``spot``); when the entry opted
     into SPP-weighted injection (a custom monthly contract) and the
@@ -3390,6 +3437,8 @@ def _spp_injection_spot(
     first miss for a month. Shared by the live YTD credit and the backfill
     accrual so the two price mean-indexed injection identically.
     """
+    if hourly:
+        return hourly_spot
     if not (monthly_mean and spp_weights is not None):
         return spot
     key = (year, month)
@@ -3491,6 +3540,11 @@ async def _ytd_hourly_energy(
         if monthly_mean and historical_spots
         else {}
     )
+    # A static card whose injection is a per-hour spot formula with no printed
+    # indicative (Cociter Tarif Variable) keeps that hourly index even on the
+    # monthly-mean path, which it reaches only via a signing-cohort re-price of
+    # the ENERGY leg. Same gate the live tick applies before baking.
+    hourly_injection = monthly_mean and _injection_hourly_on_cohort(snapshot, entry)
 
     energy_cost = 0.0
     # Iterate the union of both sides so an injection-only wiring
@@ -3524,6 +3578,7 @@ async def _ytd_hourly_energy(
             # Energy bills at the flat month-mean (spot); the injection credit
             # uses the SPP-weighted month-mean when the entry opted in, falling
             # back to the flat mean when the profile is missing for the month.
+            #
             inj_spot = _spp_injection_spot(
                 spot,
                 monthly_mean=monthly_mean,
@@ -3532,6 +3587,12 @@ async def _ytd_hourly_energy(
                 year=local.year,
                 month=local.month,
                 cache=month_spp,
+                hourly=hourly_injection,
+                hourly_spot=(
+                    historical_spots.get(utc_hour)
+                    if historical_spots is not None
+                    else None
+                ),
             )
             inj_rate = _historical_injection_rate(
                 snap_h.injection, inj_spot, energy=snap_h.energy, when=local

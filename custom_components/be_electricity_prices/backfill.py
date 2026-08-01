@@ -84,6 +84,7 @@ from .coordinator import (
     _historical_injection_rate,
     _hourly_consumption_sensors,
     _hourly_injection_sensors,
+    _injection_hourly_on_cohort,
     _injection_needs_spot,
     _mean_of_month,
     _month_snapshot_cache,
@@ -413,6 +414,11 @@ async def _backfill_price_sensors(
 
     rows_per_key: dict[str, list[Any]] = {key: [] for key in stat_ids}
     month_mean_cache: dict[tuple[int, int], float | None] = {}
+    # A card whose injection is a per-hour spot formula with no printed
+    # indicative (Cociter Tarif Variable) keeps that hourly index even when a
+    # signing cohort re-prices its ENERGY leg to a monthly mean. Same gate the
+    # live tick and the YTD walk apply.
+    hourly_injection = _injection_hourly_on_cohort(snap, entry)
     for utc_hour in hours:
         local = dt_util.as_local(utc_hour)
         snap_h = await _snap_for(date(local.year, local.month, 1))
@@ -448,6 +454,8 @@ async def _backfill_price_sensors(
                     year=local.year,
                     month=local.month,
                     cache=month_spp_cache,
+                    hourly=hourly_injection,
+                    hourly_spot=spots.get(utc_hour),
                 )
                 inj_rate = _historical_injection_rate(
                     snap_h.injection, inj_spot, energy=snap_h.energy, when=local
@@ -592,6 +600,8 @@ async def _backfill_cost_sensor(
     running_energy = 0.0
     running_fees = 0.0
     month_mean_cache: dict[tuple[int, int], float | None] = {}
+    # Same per-hour-injection gate as the price-sensor pass above.
+    hourly_injection = _injection_hourly_on_cohort(snap, entry)
     for utc_hour in hours:
         local = dt_util.as_local(utc_hour)
         month_first = date(local.year, local.month, 1)
@@ -625,6 +635,8 @@ async def _backfill_cost_sensor(
                         year=local.year,
                         month=local.month,
                         cache=month_spp_cache,
+                        hourly=hourly_injection,
+                        hourly_spot=spots.get(utc_hour),
                     )
                     inj_rate = _historical_injection_rate(
                         snap_h.injection, inj_spot, energy=snap_h.energy, when=local

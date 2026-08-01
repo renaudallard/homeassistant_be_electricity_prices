@@ -1925,14 +1925,20 @@ async def test_reset_monthly_peak_drops_persisted_value(
     coord.async_request_refresh.assert_awaited_once()
 
 
-async def test_variable_cohort_bakes_injection_at_month_mean(
-    hass: HomeAssistant,
+async def test_variable_cohort_keeps_its_per_hour_injection_index(
+    hass: HomeAssistant, freezer: Any
 ) -> None:
-    """Fix-2 regression: a Cociter Variable contract with a start date
-    re-prices to a SpotMonthlyRates cohort, so its spot-indexed injection must
-    be credited at the delivery-month mean (matching the YTD walk and backfill),
-    not the per-hour spot. Before the fix the bake was gated on
-    self._snapshot.energy (still VariableRates) and so was skipped."""
+    """A Cociter Variable contract with a start date re-prices its ENERGY leg
+    to a SpotMonthlyRates cohort, but its INJECTION keeps its own per-hour
+    index. The card indexes the two legs on different periods and says so:
+    note (7) "le prix ... est indexe mensuellement ... moyenne arithmetique ...
+    (BELIX) durant le mois de fourniture" for consumption, note (9) "le prix de
+    l'injection varie chaque heure" for injection.
+
+    The cohort re-price freezes the commodity coefficients the customer signed,
+    not the feed-in formula, so the bake must not reach the injection. It used
+    to, which priced the credit off a flat month mean; since PV output peaks
+    when the day-ahead price troughs, that systematically over-credited."""
     from unittest.mock import MagicMock
 
     from custom_components.be_electricity_prices.providers.base import (
@@ -1965,11 +1971,12 @@ async def test_variable_cohort_bakes_injection_at_month_mean(
     )
     coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
     coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    freezer.move_to("2026-07-01 10:30:00+00:00")
     coord._fetch_spot_prices = AsyncMock(  # type: ignore[method-assign]
-        return_value={datetime(2026, 7, 1, 10, tzinfo=UTC): 0.30}
+        return_value={datetime(2026, 7, 1, h, tzinfo=UTC): 0.30 for h in range(24)}
     )
     coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
-    # Fix the month mean so the expected injection value is deterministic.
+    # Fix the month mean so a regression back to the bake is unambiguous.
     coord._monthly_spot_mean = MagicMock(return_value=0.10)  # type: ignore[method-assign]
 
     async def _cohort(*_a: object, **_k: object) -> SpotMonthlyRates:
@@ -1988,10 +1995,13 @@ async def test_variable_cohort_bakes_injection_at_month_mean(
     ):
         data = await coord._update_body()
 
-    # Injection baked at the month mean: 0.97 * 0.10 - 0.021 = 0.076, NOT
-    # 0.97 * 0.30 - 0.021 = 0.270 (the per-hour spot).
+    # Priced at the hour's own spot: 0.97 * 0.30 - 0.021 = 0.270, NOT the
+    # month mean 0.97 * 0.10 - 0.021 = 0.076.
     value = data.injection_price_eur_per_kwh
-    assert value is not None and abs(value - 0.076) < 1e-9
+    assert value is not None and abs(value - 0.270) < 1e-9
+    # And the today/tomorrow injection arrays survive: a flat baked rate made
+    # _injection_varies_intraday False and emitted nothing (issue #40 arrays).
+    assert data.injection_hourly
 
 
 async def test_variable_cohort_without_key_still_prices(hass: HomeAssistant) -> None:
