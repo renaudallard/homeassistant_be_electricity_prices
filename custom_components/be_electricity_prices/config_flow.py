@@ -1370,6 +1370,15 @@ class _WizardStepsMixin:
         # Sibelga, Flanders bills via the capacity tariff).
         if self._data[CONF_REGION] == REGION_WALLONIA:
             return await self.async_step_dso_tariff_mode()
+        # Drop a mode carried over from a Walloon edit. Nothing else pops it
+        # and the options flow writes self._data verbatim, so an entry moved
+        # to Flanders or Brussels kept dso_tariff_mode='impact'. The network
+        # side shrugs that off (the overlay has no Impact triplet outside
+        # Wallonia, so network_eur_per_kwh falls through), but _routed_rate
+        # still sends the ENERGY leg through dso_impact_band: 11:00-17:00
+        # then bills off-peak where the region's own schedule says peak, and
+        # 22:00-01:00 bills peak where it says off-peak.
+        self._data.pop(CONF_DSO_TARIFF_MODE, None)
         return await self._after_dso_tariff_mode()
 
     async def async_step_connection_power(

@@ -1833,3 +1833,64 @@ async def test_compare_prosumer_term_matches_the_live_ytd_sensor(
     live = await _ytd_prosumer(hass, MagicMock(), MagicMock(), snapshot, entry, today)
     assert live > 0.0
     assert quoted == pytest.approx(live, rel=1e-9)
+
+
+async def test_editing_out_of_wallonia_drops_the_impact_tariff_mode(
+    hass: HomeAssistant,
+) -> None:
+    """Tarif Impact is Wallonia-only and the step is skipped elsewhere, but
+    nothing popped the key and the options flow writes its data verbatim, so a
+    Walloon entry edited to Flanders kept dso_tariff_mode='impact'. The network
+    side falls through harmlessly (no Impact triplet outside Wallonia), but
+    _routed_rate still routes the ENERGY leg through dso_impact_band, which
+    bills 11:00-17:00 off-peak where Flanders says peak and 22:00-01:00 peak
+    where it says off-peak."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "bi",
+            "dso_tariff_mode": "impact",
+            "solar_kva": 0.0,
+            "solar_regime": "none",
+        },
+        title="was walloon",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "edit"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "flanders"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "power_fix"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "fluvius_antwerpen"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "bi"}
+    )
+    # Flanders skips the dso_tariff_mode step entirely.
+    assert result["step_id"] != "dso_tariff_mode"
+    # Walk whatever remains (Flanders adds a capacity step) to the end.
+    answers = {
+        "capacity": {"capacity_mode": "fixed", "capacity_fixed_kw": 0.0},
+        "solar": {"solar_kva": 0.0, "solar_regime": "none"},
+        "meters": {},
+    }
+    while result["type"] == data_entry_flow.FlowResultType.FORM:
+        step = result["step_id"]
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], answers.get(step, {})
+        )
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+
+    assert entry.data["region"] == "flanders"
+    assert "dso_tariff_mode" not in entry.data
