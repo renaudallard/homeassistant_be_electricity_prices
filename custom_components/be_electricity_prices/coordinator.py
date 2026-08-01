@@ -1172,6 +1172,28 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # mean spot + base. Compute the running mean once (over the persisted
         # year-to-date hours plus today's fetched curve) and reuse it for the
         # live price table and for baking the mean-indexed injection.
+        # Dynamic contracts replay historical hourly spots to bill the
+        # YTD energy term; spot-monthly contracts average them per month;
+        # static-energy contracts with a spot-indexed injection replay them
+        # to credit the YTD injection. Backfill any missing hours in
+        # [Jan 1, today] before anything reads the cache; failures degrade to
+        # "no data" for those hours rather than tearing the tick down.
+        #
+        # This has to run BEFORE the monthly mean below. _monthly_spot_mean
+        # averages self._historical_spots, and this is the only thing that
+        # fills it, so computing the mean first made a tick that started with
+        # an empty cache average today's curve alone and call it the month.
+        # On a cold start that flat rate was ~46% off, and it is what the
+        # whole today+tomorrow table and the baked injection credit use until
+        # the next tick.
+        if isinstance(
+            priced.energy, (DynamicRates, SpotMonthlyRates)
+        ) or _injection_needs_spot(self._snapshot, self.entry):
+            today_local = dt_util.now().date()
+            await self._ensure_historical_spots(
+                date(today_local.year, 1, 1), today_local
+            )
+
         monthly_mean: float | None = None
         if isinstance(priced.energy, SpotMonthlyRates):
             now_local = dt_util.now()
@@ -1241,19 +1263,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         injection_price = _compute_injection_price(
             injection_snapshot, self.entry, spot_prices
         )
-        # Dynamic contracts replay historical hourly spots to bill the
-        # YTD energy term; spot-monthly contracts average them per month;
-        # static-energy contracts with a spot-indexed injection replay them
-        # to credit the YTD injection. Backfill any missing hours in
-        # [Jan 1, today] before calling the engine; failures degrade to "no
-        # data" for those hours rather than tearing the tick down.
-        if isinstance(
-            priced.energy, (DynamicRates, SpotMonthlyRates)
-        ) or _injection_needs_spot(self._snapshot, self.entry):
-            today_local = dt_util.now().date()
-            await self._ensure_historical_spots(
-                date(today_local.year, 1, 1), today_local
-            )
         ytd_breakdown: dict[str, float] = {}
         current_year_cost = await _compute_current_year_cost(
             self.hass,

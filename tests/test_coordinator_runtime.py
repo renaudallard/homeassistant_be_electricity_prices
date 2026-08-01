@@ -2408,3 +2408,82 @@ async def test_impact_mode_without_impact_rates_raises_a_repair_issue(
     )
     coord._sync_impact_gap_issue()
     assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_spot_monthly_mean_waits_for_the_historical_spot_fill(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """_monthly_spot_mean averages self._historical_spots, and
+    _ensure_historical_spots is the only thing that fills it. The mean used to
+    be computed first, so a tick starting with an empty cache averaged today's
+    curve alone and called it the delivery month's mean. That flat rate is what
+    the whole today+tomorrow table and the baked injection credit use until the
+    next tick, so a cold start mis-priced the lot.
+
+    Pins the ordering: by the time the mean is taken, the fill must have run.
+    """
+    from unittest.mock import MagicMock
+
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+
+    freezer.move_to("2026-07-22 10:30:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "custom",
+            "contract": "custom_monthly",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "solar_regime": "none",
+            "api_key": "TESTKEY",
+        },
+        title="spot monthly ordering",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        energy=SpotMonthlyRates(factor=0.96, base=-0.009),
+        injection=InjectionRates(current=None, factor=0.9, base=-0.01),
+    )
+
+    order: list[str] = []
+
+    async def _fill(*_a: object, **_k: object) -> None:
+        order.append("fill")
+        # What the fill would have put in the cache.
+        coord._historical_spots.update(
+            {
+                datetime(2026, 7, d, h, tzinfo=UTC): 0.12
+                for d in range(1, 22)
+                for h in range(24)
+            }
+        )
+
+    def _mean(*a: object, **k: object) -> float:
+        order.append("mean")
+        return 0.10
+
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(  # type: ignore[method-assign]
+        return_value={datetime(2026, 7, 22, h, tzinfo=UTC): 0.05 for h in range(24)}
+    )
+    coord._ensure_historical_spots = _fill  # type: ignore[method-assign]
+    coord._monthly_spot_mean = MagicMock(side_effect=_mean)  # type: ignore[method-assign]
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator._compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        await coord._update_body()
+
+    assert order[: order.index("mean") + 1].count("fill") == 1, (
+        f"the spot cache must be filled before the month mean is taken, got {order}"
+    )
