@@ -1880,7 +1880,7 @@ async def test_editing_out_of_wallonia_drops_the_impact_tariff_mode(
     # Flanders skips the dso_tariff_mode step entirely.
     assert result["step_id"] != "dso_tariff_mode"
     # Walk whatever remains (Flanders adds a capacity step) to the end.
-    answers = {
+    answers: dict[str, dict[str, Any]] = {
         "capacity": {"capacity_mode": "fixed", "capacity_fixed_kw": 0.0},
         "solar": {"solar_kva": 0.0, "solar_regime": "none"},
         "meters": {},
@@ -1894,3 +1894,49 @@ async def test_editing_out_of_wallonia_drops_the_impact_tariff_mode(
 
     assert entry.data["region"] == "flanders"
     assert "dso_tariff_mode" not in entry.data
+
+
+async def test_blanking_a_meter_picker_actually_clears_it(hass: HomeAssistant) -> None:
+    """ha-form omits a blanked selector from user_input entirely, and
+    voluptuous then re-injects a `default`, so a wired kWh or capacity-peak
+    sensor came straight back and could never be unwired. The stored id is a
+    suggestion now, and the step handler pops whatever the user cleared."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "dso_tariff_mode": "simple",
+            "solar_kva": 0.0,
+            "solar_regime": "none",
+            "consumption_kwh": "sensor.old_total",
+            "injection_kwh": "sensor.old_inj",
+        },
+        title="wired meters",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "edit"}
+    )
+    answers: dict[str, dict[str, Any]] = {
+        "edit": {"supplier": "eneco", "region": "wallonia"},
+        "contract": {"contract": "power_fix"},
+        "dso": {"dso": "ores"},
+        "meter": {"meter": "mono"},
+        "dso_tariff_mode": {"dso_tariff_mode": "simple"},
+        "solar": {"solar_kva": 0.0, "solar_regime": "none"},
+        "meters": {},  # every picker blanked
+    }
+    while result["type"] == data_entry_flow.FlowResultType.FORM:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], answers.get(result["step_id"], {})
+        )
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+
+    assert "consumption_kwh" not in entry.data
+    assert "injection_kwh" not in entry.data

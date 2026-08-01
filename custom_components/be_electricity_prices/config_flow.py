@@ -737,9 +737,13 @@ def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
         device_class=["power", "apparent_power"],
     )
     if (sensor := defaults.get(CONF_CAPACITY_PEAK_SENSOR)) is not None:
-        fields[vol.Optional(CONF_CAPACITY_PEAK_SENSOR, default=sensor)] = (
-            EntitySelector(peak_selector)
-        )
+        # Suggestion, not default: see _meters_schema. A `default` re-injects
+        # the old entity id when the user blanks the picker.
+        fields[
+            vol.Optional(
+                CONF_CAPACITY_PEAK_SENSOR, description={"suggested_value": sensor}
+            )
+        ] = EntitySelector(peak_selector)
     else:
         fields[vol.Optional(CONF_CAPACITY_PEAK_SENSOR)] = EntitySelector(peak_selector)
     fields[
@@ -751,6 +755,18 @@ def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
         NumberSelectorConfig(min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX)
     )
     return vol.Schema(fields)
+
+
+# The six kWh entity pickers, in the order the meters step renders them.
+# Shared by the schema and the step handler, which pops any the user blanked.
+_METER_SENSOR_KEYS: tuple[str, ...] = (
+    CONF_DAY_CONSUMPTION_KWH,
+    CONF_NIGHT_CONSUMPTION_KWH,
+    CONF_DAY_INJECTION_KWH,
+    CONF_NIGHT_INJECTION_KWH,
+    CONF_CONSUMPTION_KWH,
+    CONF_INJECTION_KWH,
+)
 
 
 def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
@@ -775,17 +791,17 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
         device_class="energy",
     )
     fields = {}
-    for conf in (
-        CONF_DAY_CONSUMPTION_KWH,
-        CONF_NIGHT_CONSUMPTION_KWH,
-        CONF_DAY_INJECTION_KWH,
-        CONF_NIGHT_INJECTION_KWH,
-        CONF_CONSUMPTION_KWH,
-        CONF_INJECTION_KWH,
-    ):
-        default = defaults.get(conf)
-        if default is not None:
-            fields[vol.Optional(conf, default=default)] = EntitySelector(kwh_selector)
+    for conf in _METER_SENSOR_KEYS:
+        stored = defaults.get(conf)
+        # A stored entity id is a SUGGESTION, not a default. ha-form omits a
+        # blanked selector from user_input entirely, and voluptuous then
+        # re-injects a `default`, so the cleared sensor came straight back and
+        # a wired meter could never be unwired. Same shape the contract-date
+        # and manual-rate fields already use; the step handler pops the key.
+        if stored is not None:
+            fields[vol.Optional(conf, description={"suggested_value": stored})] = (
+                EntitySelector(kwh_selector)
+            )
         else:
             fields[vol.Optional(conf)] = EntitySelector(kwh_selector)
     return vol.Schema(fields)
@@ -1263,6 +1279,10 @@ class _WizardStepsMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
+            # A blanked picker is absent from user_input; pop it so clearing
+            # the sensor really clears it (the schema only suggests it now).
+            if CONF_CAPACITY_PEAK_SENSOR not in user_input:
+                self._data.pop(CONF_CAPACITY_PEAK_SENSOR, None)
             self._data.update(user_input)
             return await self.async_step_solar()
         defaults = dict(self._data)
@@ -1345,6 +1365,11 @@ class _WizardStepsMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
+            # Same as the capacity step: a blanked picker never reaches
+            # user_input, so drop it explicitly to allow unwiring a meter.
+            for key in _METER_SENSOR_KEYS:
+                if key not in user_input:
+                    self._data.pop(key, None)
             self._data.update(user_input)
             return self._finalize()
         defaults = dict(self._data)
