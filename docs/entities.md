@@ -179,7 +179,7 @@ The payload:
 | `tomorrow` | `_split_today_tomorrow(data)[1]` | per-hour breakdown rows for tomorrow |
 
 `today` / `tomorrow` rows are `{start, energy, network, taxes, all_in}` (each
-rounded to 6 decimals, `pricing.py:380`). `cheapest_4h_today` /
+rounded to 6 decimals, `pricing.py:400`). `cheapest_4h_today` /
 `most_expensive_4h_today` rows are `{start, price}` (`sensor.py:276`).
 
 Quarter-hourly vs hourly payloads: the `today`, `tomorrow`, `cheapest_4h_today`

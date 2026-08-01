@@ -165,13 +165,23 @@ def is_offpeak(when: datetime, region: str = REGION_FLANDERS) -> bool:
       Wallonia (from 2026-01-01): one uniform schedule every day including
         weekends and holidays - off-peak 22:00-07:00 and 11:00-17:00.
     """
-    if region == REGION_WALLONIA:
+    if region == REGION_WALLONIA and when.date() >= _WALLONIA_SCHEDULE_FROM:
         return when.hour < 7 or when.hour >= 22 or 11 <= when.hour < 17
     if when.weekday() >= 5:
         return True
     if region == REGION_BRUSSELS and is_belgian_holiday(when.date()):
         return True
     return when.hour < 7 or when.hour >= 22
+
+
+# Wallonia's uniform every-day off-peak schedule (22:00-07:00 plus the
+# 11:00-17:00 midday window) took effect on this date. Before it, Wallonia
+# billed the same classic bi-hourly schedule as Flanders. The date matters
+# because ``backfill_statistics`` accepts a user-supplied start with no lower
+# bound, so a manual backfill reaching into 2025 would otherwise re-band six
+# hours of every day onto a tariff that was not in force yet. Every automatic
+# path anchors at 1 January of the current year and never sees these hours.
+_WALLONIA_SCHEDULE_FROM: Final[date] = date(2026, 1, 1)
 
 
 TouSlot = Literal["peak", "transition", "offpeak"]

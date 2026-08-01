@@ -683,3 +683,20 @@ def test_yearly_fixed_fee_falls_back_when_no_dedicated_exclusive_night() -> None
     energy = FixedRates(single=0.20, yearly_fixed_fee=70.0)
     assert yearly_fixed_fee_for_meter(energy, "exclusive_night") == pytest.approx(70.0)
     assert yearly_fixed_fee_for_meter(energy, "mono") == pytest.approx(70.0)
+
+
+def test_wallonia_midday_offpeak_only_applies_from_2026() -> None:
+    """Wallonia's uniform schedule (which made 11:00-17:00 off-peak every day)
+    started on 2026-01-01; before it the region billed the same classic
+    bi-hourly schedule as Flanders. No automatic path reaches a pre-2026 hour,
+    but backfill_statistics takes a user-supplied start with no lower bound, so
+    a manual backfill into 2025 must not re-band six hours of every day onto a
+    tariff that was not in force yet."""
+    for year, midday_offpeak in ((2024, False), (2025, False), (2026, True)):
+        noon = datetime(year, 6, 18, 12, 0)
+        assert is_offpeak(noon, "wallonia") is midday_offpeak
+    # The night window is unchanged on both sides of the boundary, and the
+    # pre-2026 schedule still follows the weekend rule it shared with Flanders.
+    for year in (2025, 2026):
+        assert is_offpeak(datetime(year, 6, 18, 3, 0), "wallonia")
+        assert is_offpeak(datetime(year, 6, 21, 12, 0), "wallonia")
