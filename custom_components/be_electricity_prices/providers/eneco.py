@@ -502,16 +502,17 @@ def _find_fluvius_row(text: str, label: str) -> DsoOverlay | None:
 
 def _extract_taxes(text: str) -> TaxOverlay:
     tier_match = re.search(
-        rf"Verbruik tussen{_WS}*\n*{_WS}*0{_WS}+en{_WS}+3\.000{_WS}+kWh{_WS}*\n*{_WS}*"
+        rf"(?:Verbruik tussen{_WS}*\n*{_WS}*0{_WS}+en{_WS}+3\.000{_WS}+kWh|Alle verbruik){_WS}*\n*{_WS}*"
         + _NUM
-        + rf"{_WS}+"
-        + _NUM,
+        + rf"(?:{_WS}+"
+        + _NUM
+        + rf")?",
         text,
     )
     if not tier_match:
         raise ExtractorError("could not parse Eneco federal excise block")
     excise = to_float(tier_match.group(1)) / 100.0
-    contribution = to_float(tier_match.group(2)) / 100.0
+    contribution = to_float(tier_match.group(2)) / 100.0 if tier_match.group(2) else 0.0
 
     # Anchor on the "(€cent/kWh)" unit token (like the connection fee
     # below) rather than the first number after the label: the sibling
