@@ -1940,3 +1940,48 @@ async def test_blanking_a_meter_picker_actually_clears_it(hass: HomeAssistant) -
 
     assert "consumption_kwh" not in entry.data
     assert "injection_kwh" not in entry.data
+
+
+async def test_compare_contract_step_fills_its_supplier_placeholder(
+    hass: HomeAssistant,
+) -> None:
+    """The compare_contract description reads 'Pick a contract from {supplier}.'
+    but the step passed no description_placeholders, so HA handed the frontend
+    None and the user saw the literal token."""
+    import json
+    from pathlib import Path
+
+    strings = json.loads(
+        (Path("custom_components/be_electricity_prices/strings.json")).read_text(
+            encoding="utf-8"
+        )
+    )
+    desc = strings["options"]["step"]["compare_contract"]["description"]
+    assert "{supplier}" in desc
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "solar_kva": 0.0,
+            "solar_regime": "none",
+        },
+        title="compare placeholders",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "compare"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "bolt"}
+    )
+    assert result["step_id"] == "compare_contract"
+    placeholders = result.get("description_placeholders") or {}
+    assert placeholders.get("supplier"), "step must fill {supplier}"
+    assert "{" not in placeholders["supplier"]

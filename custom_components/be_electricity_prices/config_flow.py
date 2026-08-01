@@ -45,6 +45,8 @@ the coordinator from each supplier's own publication.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import re
 from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
@@ -1683,6 +1685,9 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             return self.async_abort(reason="compare_no_alternative")
         return self.async_show_form(
             step_id="compare_contract",
+            description_placeholders={
+                "supplier": _label_for_supplier(self._compare[CONF_SUPPLIER])
+            },
             data_schema=_compare_contract_schema(
                 self._compare[CONF_SUPPLIER],
                 current[CONF_REGION],
@@ -1995,10 +2000,34 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             "error": "",
         }
 
+        # Price the user's CURRENT side off the leg the live sensors bill, not
+        # the raw card. A fixed / dynamic contract with a signing start date is
+        # billed at the rate it locked in, which _cohort_energy_leg resolves
+        # and the coordinator splices on every tick. Reading coord._snapshot
+        # here compared the alternative against today's published card instead,
+        # so the quoted delta was wrong for exactly the users the start-date
+        # feature exists for. _cohort_energy_leg returns None for a contract
+        # that is not the entry's own, so it can never touch the other side.
+        current_snapshot = coord._snapshot
+        if current_snapshot is not None:
+            from .coordinator import _cohort_energy_leg
+
+            cohort = await _cohort_energy_leg(
+                self.hass,
+                async_get_clientsession(self.hass),
+                get_extractor(current[CONF_SUPPLIER]),
+                current[CONF_CONTRACT],
+                region,
+                self.config_entry,
+                current_snapshot,
+            )
+            if cohort is not None:
+                current_snapshot = replace(current_snapshot, energy=cohort)
+
         current_per_kwh: float | None = None
-        if coord._snapshot is not None:
+        if current_snapshot is not None:
             current_per_kwh = _tou_weighted_per_kwh(
-                coord._snapshot,
+                current_snapshot,
                 dso,
                 region,
                 dt_util.as_local(now_utc),
@@ -2045,9 +2074,9 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         current_inj_price: float | None = None
         compare_inj_price: float | None = None
         if regime == "injection":
-            if coord._snapshot is not None:
+            if current_snapshot is not None:
                 current_inj_price = _compare_injection_credit(
-                    coord._snapshot, self.config_entry, spot_dict, avg_spot
+                    current_snapshot, self.config_entry, spot_dict, avg_spot
                 )
             if other_snap is not None:
                 compare_inj_price = _compare_injection_credit(
@@ -2057,7 +2086,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         if current_per_kwh is not None:
             placeholders["current_per_kwh"] = f"{current_per_kwh:.4f}"
             placeholders["current_annual"] = (
-                f"{_annual_bill(coord._snapshot, self.config_entry, peak_kw, current_per_kwh, annual_kwh, rolling_inj_kwh, current_inj_price, meter=current_meter):.2f}"
+                f"{_annual_bill(current_snapshot, self.config_entry, peak_kw, current_per_kwh, annual_kwh, rolling_inj_kwh, current_inj_price, meter=current_meter):.2f}"
             )
         if other_per_kwh is not None and other_snap is not None:
             placeholders["compare_per_kwh"] = f"{other_per_kwh:.4f}"
@@ -2068,7 +2097,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             current_per_kwh is not None
             and other_per_kwh is not None
             and other_snap is not None
-            and coord._snapshot is not None
+            and current_snapshot is not None
         ):
             delta = _annual_bill(
                 other_snap,
@@ -2080,7 +2109,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                 compare_inj_price,
                 meter=meter,
             ) - _annual_bill(
-                coord._snapshot,
+                current_snapshot,
                 self.config_entry,
                 peak_kw,
                 current_per_kwh,
@@ -2119,7 +2148,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             and current_kind != "dynamic"
             and other_kind != "dynamic"
         )
-        if archive_capable and other_snap is not None and coord._snapshot is not None:
+        if archive_capable and other_snap is not None and current_snapshot is not None:
             # Replay the coordinator's historical spot cache so a
             # spot-indexed injection (Cociter Variable) gets the same
             # per-hour feed-in credit the live YTD applies; spots are the
@@ -2151,7 +2180,11 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
                     self.hass,
                     session,
                     current_extractor,
-                    coord._snapshot,
+                    # Already cohort-spliced, and _compute_current_year_cost
+                    # re-resolves the cohort itself from the same entry, so
+                    # this is idempotent; the DSO and tax overlays are the
+                    # raw card's either way.
+                    current_snapshot,
                     self.config_entry,
                     historical_spots=hist_spots,
                     billed_peak_kw=peak_kw,
@@ -2190,7 +2223,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             and current_per_kwh is not None
             and other_per_kwh is not None
             and other_snap is not None
-            and coord._snapshot is not None
+            and current_snapshot is not None
         ):
             # The YTD what-if mirrors the live current_year_cost sensor and
             # the archive YTD path, both of which bill the Flanders capacity
@@ -2198,7 +2231,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             # three figures consistent (the full annual estimate above keeps
             # it).
             current_ytd = _annual_bill(
-                coord._snapshot,
+                current_snapshot,
                 self.config_entry,
                 peak_kw,
                 current_per_kwh,
