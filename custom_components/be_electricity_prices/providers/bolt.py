@@ -488,7 +488,17 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
 
 
 def _extract_publication_month(text: str) -> str:
-    match = re.search(r"^([A-ZÉÈÛ][a-zéèû]+\s+\d{4})\s*/", text, re.MULTILINE)
+    """The card's "<Month> <Year>" header, verbatim.
+
+    The accented-letter classes span the whole Latin-1 range rather than
+    the handful of accents French month names actually use. Bolt's August
+    2026 fixed card prints "Aôut 2026" - the circumflex on the wrong vowel
+    - and an exact `[a-zéèû]` class dropped the label to "" on a typo that
+    changes nothing about the card's meaning. This value is a display
+    label (diagnostics, the snapshot_publication attribute) and never
+    feeds pricing, so tolerating a misspelling beats blanking it.
+    """
+    match = re.search(r"^([A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]+\s+\d{4})\s*/", text, re.MULTILINE)
     return match.group(1) if match else ""
 
 

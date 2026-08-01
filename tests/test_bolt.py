@@ -311,3 +311,20 @@ def test_variable_unchanged_by_dynamic_addition() -> None:
     # Variable injection stays the flat monthly indicative (not spot-indexed).
     assert snap.injection is not None
     assert snap.injection.factor is None and snap.injection.base is None
+
+
+def test_publication_month_tolerates_a_misspelled_accent() -> None:
+    """Bolt's August 2026 fixed card prints "Aôut 2026" - the circumflex on
+    the wrong vowel - and an exact accent class blanked the label on that
+    typo. The header is a display label that never feeds pricing, so a
+    misspelling must still produce a label rather than an empty string."""
+    from custom_components.be_electricity_prices.providers.bolt import (
+        _extract_publication_month,
+    )
+
+    assert _extract_publication_month("Aôut 2026 /Résidentiel\n") == "Aôut 2026"
+    # The correctly spelled months keep working.
+    for header in ("Août 2026", "Juin 2026", "Février 2026", "Décembre 2025"):
+        assert _extract_publication_month(f"{header} /Résidentiel\n") == header
+    # A line that is not a month header still yields no label.
+    assert _extract_publication_month("Carte Tarifaire\nBolt Fixe\n") == ""
