@@ -463,6 +463,14 @@ class TaxOverlay:
 
     federal_excise: float
     energy_contribution: float
+    # Degressive excise bands as ((upper_kwh, eur_per_kwh), ...) ascending,
+    # for a card that prints the special excise as a tariff schedule by
+    # annual consumption instead of one rate. Professional cards do; every
+    # residential card prints a single rate and leaves this None. The band
+    # the entry's annual volume falls in is resolved into ``federal_excise``
+    # by :func:`resolve_excise_band`, so the pricing engine keeps reading
+    # one rate and knows nothing about bands.
+    federal_excise_bands: tuple[tuple[float, float], ...] | None = None
     flanders_renewables: float = 0.0
     wallonia_renewables: float = 0.0
     brussels_renewables: float = 0.0
@@ -597,6 +605,37 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
             else snapshot.supplier_prosumer_eur_per_kva_year * factor
         ),
     )
+
+
+def resolve_excise_band(
+    snapshot: SupplierSnapshot, annual_kwh: float
+) -> SupplierSnapshot:
+    """Pick the excise band ``annual_kwh`` falls in, or leave the card alone.
+
+    A card without ``federal_excise_bands`` prints one rate and is returned
+    unchanged (identity), which is every residential card.
+
+    The Belgian special excise is set annually on a schedule that decreases
+    by consumption band, so which rate applies is a fact about the site, not
+    about the card. The entry's estimated annual consumption selects it once
+    here and the pricing engine goes on reading a single ``federal_excise``.
+
+    A volume past the last band clamps to it: the schedule stops at the
+    ceiling the card covers (1.000.000 kWh/year on the current professional
+    cards), and above that the connection is out of what these cards price
+    at all - clamping keeps a plausible rate rather than inventing one.
+    """
+    bands = snapshot.taxes.federal_excise_bands
+    if not bands:
+        return snapshot
+    rate = bands[-1][1]
+    for upper, band_rate in bands:
+        if annual_kwh <= upper:
+            rate = band_rate
+            break
+    if rate == snapshot.taxes.federal_excise:
+        return snapshot
+    return replace(snapshot, taxes=replace(snapshot.taxes, federal_excise=rate))
 
 
 SnapshotFetcher = Callable[

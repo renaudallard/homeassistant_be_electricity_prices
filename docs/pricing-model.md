@@ -143,10 +143,10 @@ pricing engine:
 - **Fixed and annual fees** - the yearly fee, data management, capacity, the DSO
   and supplier prosumer forfaits, the Brussels OSP table, the energy fund -
   never reach that path: the live, YTD, backfill and compare paths each sum them
-  raw. `base.apply_vat` (`providers/base.py:548`) bakes them once instead.
+  raw. `base.apply_vat` (`providers/base.py:556`) bakes them once instead.
 
-`apply_vat` is called per config entry, from `_set_snapshot`
-(`coordinator.py:1682`), never before the shared snapshot cache: that cache is
+`apply_vat` is called per config entry, from `_resolve_snapshot`
+(`coordinator.py:550`), never before the shared snapshot cache: that cache is
 keyed on `(supplier, contract, region)` and shared between entries that may
 answer the VAT question differently. It is identity on a `vat_rate == 0.0`
 snapshot, so it costs nothing for a residential entry. `CONF_INCLUDE_VAT`
@@ -155,6 +155,17 @@ own ex-VAT numbers stand.
 
 Injection is the exception: it is VAT-exempt residentially and never VAT-scaled
 here (see [Injection math](#injection-feed-in-math)).
+
+### Degressive federal excise
+
+The federal special excise is normally one rate, but a card may print it as a
+schedule that decreases by annual consumption band. `TaxOverlay` then carries
+`federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:610`)
+picks the band the entry's `CONF_ANNUAL_CONSUMPTION_KWH` falls in and writes it
+to `federal_excise`. The pricing engine never sees a band - it goes on reading a
+single rate. A volume past the last band clamps to it. Residential cards leave
+`federal_excise_bands` at `None`, where the resolver is identity.
 
 ## Energy rate by contract kind
 

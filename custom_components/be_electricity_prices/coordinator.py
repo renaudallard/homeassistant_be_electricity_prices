@@ -71,6 +71,7 @@ from .api import EntsoeAuthError, EntsoeClient, EntsoeError
 from .const import (
     CAPACITY_MODE_FIXED,
     CAPACITY_MODE_SENSOR,
+    CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_API_KEY,
     CONF_CAPACITY_FIXED_KW,
     CONF_CAPACITY_MODE,
@@ -100,6 +101,7 @@ from .const import (
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
+    DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_CONNECTION_KVA_TIER,
     DEFAULT_INCLUDE_VAT,
     DOMAIN,
@@ -151,6 +153,7 @@ from .providers.base import (
     TimeOfUseRates,
     VariableRates,
     apply_vat,
+    resolve_excise_band,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -450,7 +453,7 @@ async def _snapshot_for_month(
     region: str,
     year_month: date,
     current_snapshot: "SupplierSnapshot",
-    include_vat: bool = DEFAULT_INCLUDE_VAT,
+    entry: ConfigEntry | None = None,
 ) -> "SupplierSnapshot":
     """Resolve the historical snapshot for ``year_month`` or fall back.
 
@@ -461,15 +464,16 @@ async def _snapshot_for_month(
     snapshot, used as a proxy for non-archive suppliers (OCTA+,
     TotalEnergies, Engie, Luminus, DATS 24, Mega, Bolt).
 
-    The cache is shared across entries, so it holds archived cards as
-    parsed and each caller's VAT preference is applied on the way out.
-    ``current_snapshot`` is the caller's own snapshot and already resolved.
+    The cache is shared across entries, so it holds archived cards exactly
+    as parsed and each caller's own VAT / consumption facts are applied on
+    the way out. ``current_snapshot`` is the caller's own and already
+    resolved, so it is passed through untouched.
     """
 
     def resolved(snap: "SupplierSnapshot | None") -> "SupplierSnapshot":
         if snap is None:
             return current_snapshot
-        return apply_vat(snap, include_vat=include_vat)
+        return snap if entry is None else _resolve_snapshot(entry, snap)
 
     cache = _monthly_snapshots(hass)
     failed = _monthly_failed_fetches(hass)
@@ -541,6 +545,22 @@ def _include_vat(entry: ConfigEntry) -> bool:
     only bites on a card published excluding VAT.
     """
     return bool(entry.data.get(CONF_INCLUDE_VAT, DEFAULT_INCLUDE_VAT))
+
+
+def _resolve_snapshot(entry: ConfigEntry, snap: SupplierSnapshot) -> SupplierSnapshot:
+    """Resolve a card against the site facts only this entry knows.
+
+    Both steps are identity on a residential card, so this is free for
+    every existing entry. Order is irrelevant: the excise band is a
+    per-kWh rate and ``apply_vat`` never touches those.
+    """
+    resolved = apply_vat(snap, include_vat=_include_vat(entry))
+    return resolve_excise_band(
+        resolved,
+        float(
+            entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH, DEFAULT_ANNUAL_CONSUMPTION_KWH)
+        ),
+    )
 
 
 def _parse_iso_date(value: Any) -> date | None:
@@ -700,7 +720,7 @@ async def _cohort_energy_leg(
             region,
             start,
             current_snapshot,
-            _include_vat(entry),
+            entry,
         )
         # _snapshot_for_month returns the SAME current_snapshot object when the
         # signing month has no archive; identity means "no archived card".
@@ -759,7 +779,7 @@ async def _effective_snapshot_for_month(
         region,
         year_month,
         current_snapshot,
-        _include_vat(entry),
+        entry,
     )
     cohort = await _cohort_energy_leg(
         hass, session, extractor, contract, region, entry, current_snapshot
@@ -1687,11 +1707,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         what other entries on the same tuple see.
         """
         self._snapshot_raw = snap
-        self._snapshot = (
-            None
-            if snap is None
-            else apply_vat(snap, include_vat=_include_vat(self.entry))
-        )
+        self._snapshot = None if snap is None else _resolve_snapshot(self.entry, snap)
 
     def _adopt_shared(self, shared: _SharedSnapshot) -> None:
         """Take a fresh shared snapshot as our own."""
@@ -4247,8 +4263,10 @@ async def _compute_current_year_cost(
 # signing cohort against the current month's mean. Bump so a cached variable
 # snapshot from before the fields existed is dropped and re-parsed with them.
 # v16: the persisted snapshot now holds the card as parsed rather than as
-# priced, so the entry's VAT preference is re-applied on load. Bump so a cache
-# written under the old meaning is dropped.
+# priced, so the entry's VAT preference is re-applied on load, and TaxOverlay
+# gained federal_excise_bands for cards that print the special excise as a
+# degressive schedule by annual consumption. Bump so a cache written under
+# either of the old meanings is dropped.
 _SNAPSHOT_SCHEMA_VERSION = 16
 
 
@@ -4271,6 +4289,20 @@ def _snapshot_to_dict(
         "injection": snap.injection.__dict__ if snap.injection else None,
         "supplier_prosumer_eur_per_kva_year": snap.supplier_prosumer_eur_per_kva_year,
     }
+
+
+def _taxes_from_dict(data: dict[str, Any]) -> TaxOverlay:
+    """Rebuild a TaxOverlay, restoring the excise bands' tuple shape.
+
+    JSON has no tuples: a banded excise round-trips as a list of lists and
+    has to be put back the way the dataclass declares it.
+    """
+    bands = data.get("federal_excise_bands")
+    if bands is None:
+        return TaxOverlay(**data)
+    return TaxOverlay(
+        **{**data, "federal_excise_bands": tuple((b[0], b[1]) for b in bands)}
+    )
 
 
 def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
@@ -4309,7 +4341,7 @@ def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
         contract=data["contract"],
         energy=energy,
         dsos={k: DsoOverlay(**v) for k, v in data["dsos"].items()},
-        taxes=TaxOverlay(**data["taxes"]),
+        taxes=_taxes_from_dict(data["taxes"]),
         source_url=data["source_url"],
         publication_label=data.get("publication_label", ""),
         valid_until=valid_until,

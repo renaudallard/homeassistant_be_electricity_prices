@@ -298,9 +298,9 @@ A new supplier is a self-contained change; the contract is in
 The extractor maps the card's own DSO labels onto the canonical DSO keys (`const.py:49`), sets a
 per-contract `regions` set for products that are not sold everywhere, and, if the card ships
 ex-VAT numbers, sets `TaxOverlay.vat_rate` explicitly (the default `0.0` means "already
-VAT-inclusive", `providers/base.py:474`). An ex-VAT snapshot is left exactly as the card prints
+VAT-inclusive", `providers/base.py:482`). An ex-VAT snapshot is left exactly as the card prints
 it; `base.apply_vat` resolves it per config entry at the point the coordinator adopts it
-(`coordinator.py:1682`), because the snapshot caches above that point are shared between entries.
+(`coordinator.py:550`), because the snapshot caches above that point are shared between entries.
 
 ## Where to go next
 

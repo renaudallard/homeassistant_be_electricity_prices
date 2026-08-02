@@ -157,6 +157,14 @@ CONF_API_KEY: Final = "api_key"
 CONF_INCLUDE_VAT: Final = "include_vat"
 DEFAULT_INCLUDE_VAT: Final = True
 
+# Estimated yearly consumption in kWh, used to pick the federal excise band
+# on a card that prints the special excise as a degressive schedule instead
+# of one rate (the professional cards). Inert on a residential card. The
+# default is the same 3500 kWh household figure the compare page assumes
+# when no kWh sensor is wired.
+CONF_ANNUAL_CONSUMPTION_KWH: Final = "annual_consumption_kwh"
+DEFAULT_ANNUAL_CONSUMPTION_KWH: Final = 3500.0
+
 METER_MONO: Final = "mono"
 METER_BI: Final = "bi"
 METER_DYNAMIC: Final = "dynamic"

@@ -52,7 +52,9 @@ from custom_components.be_electricity_prices.providers.base import (
     InjectionRates,
     SpotMonthlyRates,
     SupplierExtractor,
+    TaxOverlay,
     apply_vat,
+    resolve_excise_band,
 )
 from custom_components.be_electricity_prices.providers.custom import build_snapshot
 from tests import make_snapshot, make_stub_extractor
@@ -580,3 +582,68 @@ async def test_fetch_spp_weights_still_never_raises_on_a_hostile_payload() -> No
     with patch.object(synergrid, "_download", _fake_download):
         out = await synergrid.fetch_spp_weights(MagicMock(), 2026)
     assert out == {}
+
+
+# ---- degressive federal excise ----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("annual_kwh", "expected"),
+    [
+        (0.0, 0.01421),  # a fresh connection still sits in the first band
+        (3500.0, 0.01421),
+        (20_000.0, 0.01421),  # the boundary belongs to the band it closes
+        (20_000.1, 0.01209),
+        (50_000.0, 0.01209),
+        (750_000.0, 0.01139),
+        (5_000_000.0, 0.01139),  # past the card's ceiling: clamp, don't invent
+    ],
+)
+def test_resolve_excise_band_picks_the_band_for_the_volume(
+    annual_kwh: float, expected: float
+) -> None:
+    # The bands are Engie's August 2026 professional schedule, in EUR/kWh.
+    snap = make_snapshot(
+        taxes=TaxOverlay(
+            federal_excise=0.0,
+            energy_contribution=0.0019261,
+            federal_excise_bands=(
+                (20_000.0, 0.01421),
+                (50_000.0, 0.01209),
+                (1_000_000.0, 0.01139),
+            ),
+        )
+    )
+    assert resolve_excise_band(snap, annual_kwh).taxes.federal_excise == pytest.approx(
+        expected
+    )
+
+
+def test_resolve_excise_band_is_identity_without_bands() -> None:
+    # Every residential card prints one rate; the resolver must not copy.
+    snap = make_snapshot(
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002)
+    )
+    assert resolve_excise_band(snap, 3500.0) is snap
+    assert resolve_excise_band(snap, 900_000.0) is snap
+
+
+def test_resolve_excise_band_leaves_the_rest_of_the_card_alone() -> None:
+    snap = make_snapshot(
+        taxes=TaxOverlay(
+            federal_excise=0.0,
+            energy_contribution=0.0019261,
+            flanders_renewables=0.01466,
+            energy_fund_eur_per_month=10.07,
+            vat_rate=0.21,
+            federal_excise_bands=((20_000.0, 0.01421), (50_000.0, 0.01209)),
+        )
+    )
+    out = resolve_excise_band(snap, 30_000.0)
+    assert out.taxes.federal_excise == pytest.approx(0.01209)
+    assert out.taxes.energy_contribution == pytest.approx(0.0019261)
+    assert out.taxes.flanders_renewables == pytest.approx(0.01466)
+    assert out.taxes.energy_fund_eur_per_month == pytest.approx(10.07)
+    assert out.taxes.vat_rate == pytest.approx(0.21)
+    assert out.energy is snap.energy
+    assert out.dsos is snap.dsos
