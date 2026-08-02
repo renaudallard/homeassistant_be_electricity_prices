@@ -47,6 +47,18 @@
           "meter": "Meter"
         }
       },
+      "professional": {
+        "title": "Professional contract",
+        "description": "Professional tariff cards are published excluding VAT, and the federal excise is degressive by yearly volume. Two answers are needed to price them.",
+        "data": {
+          "include_vat": "Prices include VAT (21%)",
+          "annual_consumption_kwh": "Estimated yearly consumption"
+        },
+        "data_description": {
+          "include_vat": "Turn this off if your business deducts VAT: prices, fees and costs are then reported excluding it. Injection follows the same choice.",
+          "annual_consumption_kwh": "Selects the excise band (bands at 20 000 and 50 000 kWh per year)."
+        }
+      },
       "dso_tariff_mode": {
         "title": "Distribution tariff (Wallonia)",
         "description": "How your DSO bills you for the network. 'Simple' / 'Bi-horaire' match the existing meter convention. 'Tarif Impact' uses the CWaPE 3-band hour-of-day rates (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) and requires a smart meter.",
@@ -271,6 +283,18 @@
         "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts.",
         "data": {
           "meter": "Meter"
+        }
+      },
+      "professional": {
+        "title": "Professional contract",
+        "description": "Professional tariff cards are published excluding VAT, and the federal excise is degressive by yearly volume. Two answers are needed to price them.",
+        "data": {
+          "include_vat": "Prices include VAT (21%)",
+          "annual_consumption_kwh": "Estimated yearly consumption"
+        },
+        "data_description": {
+          "include_vat": "Turn this off if your business deducts VAT: prices, fees and costs are then reported excluding it. Injection follows the same choice.",
+          "annual_consumption_kwh": "Selects the excise band (bands at 20 000 and 50 000 kWh per year)."
         }
       },
       "dso_tariff_mode": {

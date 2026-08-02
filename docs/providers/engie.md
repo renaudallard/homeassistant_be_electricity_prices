@@ -62,11 +62,13 @@ one snapshot (`engie.py:39`, `engie.py:343`).
 
 ## Contracts
 
-Ten products are declared in `_CONTRACTS` (`engie.py:129`). Every `Contract`
-exposed to the registry (`engie.py:877`) sets `regions` from the contract's
-`months_per_region` keys (`engie.py:870`); none set `spot_indexed_injection`
-(dynamic contracts already collect the ENTSO-E key via their energy formula, so
-the flag stays False, matching the framework note at `base.py:77`).
+Eighteen products are declared in `_CONTRACTS` (`engie.py:147`): ten
+residential, and eight professional editions of the same families. Every
+`Contract` exposed to the registry (`engie.py:1050`) sets `regions` from the
+contract's `months_per_region` keys (`engie.py:1046`) and `professional` from
+its `segment`; none set `spot_indexed_injection` (dynamic contracts already
+collect the ENTSO-E key via their energy formula, so the flag stays False,
+matching the framework note at `base.py:83`).
 
 | contract_id | label | kind | regions | Notes |
 | --- | --- | --- | --- | --- |
@@ -80,6 +82,14 @@ the flag stays False, matching the framework note at `base.py:77`).
 | `engie_empower_flextime` | Engie Empower Flextime | tou | V, W, B | GREEN, I. SMR3-only TOU billing of the Empower Variable card (same PDF). |
 | `engie_flow` | Engie Flow | variable | V, W, B | GREEN, I. 24-month (V/W), 48-month (B). |
 | `engie_empty_house` | Engie Empty House | variable | V, W, B | GREY, I. Mono-only card for vacant homes; bills the `sans domicile` energy fund. |
+| `engie_pro_easy_fixed` | Engie Easy Fixed (pro) | fixed | V, W, B | GREEN, F, `segment=P`. 12-month in every region, including Brussels. |
+| `engie_pro_easy_variable` | Engie Easy Variable (pro) | variable | V, W, B | GREEN, I, `segment=P`. |
+| `engie_pro_dynamic` | Engie Dynamic (pro) | dynamic | V, W, B | GREY, I, `segment=P`. Formula not grossed at parse time (the card is ex-VAT throughout). |
+| `engie_pro_empower_fixed` | Engie Empower Fixed (pro) | fixed | V, W, B | GREEN, F, `segment=P`. |
+| `engie_pro_empower_variable` | Engie Empower Variable (pro) | variable | V, W, B | GREEN, I, `segment=P`. |
+| `engie_pro_empower_flextime` | Engie Empower Flextime (pro) | tou | V, W, B | GREEN, I, `segment=P`. Same PDF as the pro Empower Variable. |
+| `engie_pro_flow` | Engie Flow (pro) | variable | V, W, B | GREEN, I, `segment=P`. 24-month in every region, including Brussels. |
+| `engie_pro_empty_house` | Engie Empty House (pro) | variable | V, W, B | GREY, I, `segment=P`. Bills the professional energy-fund row, not `sans domicile`. |
 
 Region availability is expressed only through the presence of a region letter in
 `months_per_region`. Basic Online omits `_B` (`engie.py:164`), so
@@ -91,6 +101,35 @@ not in the catalogue (`engie.py:225`): the social tariff is set quarterly by the
 CREG, auto-assigned to protected customers rather than picked from a list, and
 its PDF carries an all-in regulated price with no DSO breakdown, so it does not
 fit the energy-plus-network-plus-tax model.
+
+### The professional editions
+
+Engie publishes a professional card for every family except Direct Online and
+Basic Online, at the same endpoint with `segment=P` and `_P_` in the document
+slug (`_slug`, `engie.py:338`). `_ContractDef.segment` carries it and
+`_ContractDef.professional` is derived from it (`engie.py:135`).
+
+The layout is the residential one; four things differ, and the parser branches
+on `professional` for each:
+
+| | residential | professional |
+| --- | --- | --- |
+| VAT basis | `Prix, 6% de tva comprise`, values VAT-incl, `vat_rate=0.0` | `Prix tva exclue`, values as printed, `vat_rate=0.21` |
+| Federal excise | one `Toutes consommations` rate since August 2026 | still a degressive schedule: 0-20.000 / 20.000-50.000 / 50.000-1.000.000 kWh, read into `federal_excise_bands` |
+| Energy contribution | folded into the excise, absent from the card | still printed (`0,19261` c€/kWh) |
+| Flemish energy fund | `Résidentiel (avec domicile)` / `(sans domicile)` | one `Professionnel (basse tension)` row, used by every pro product |
+| Injection | `n'est pas soumis à la TVA` | `est soumis à la TVA (21%)`, so `vat_applies=True` |
+
+The dynamic formula is printed *hors TVA* on both. The residential parser
+therefore scales it by the parsed 6% multiplier so it matches the rest of that
+card; the professional parser leaves it as printed and lets `vat_rate` carry
+the 21%, since nothing else on that card is grossed either
+(`_vat_multiplier`, `engie.py:521`). A professional card that stops printing
+`Prix tva exclue` raises rather than silently under-pricing by 21%.
+
+Tier bounds are parsed with `_tier_bound_kwh` rather than `to_float`: the dot in
+`20.000` is a thousands separator, and reading it as a decimal point would band
+every site into the top tranche.
 
 ### Dynamic billing grid
 

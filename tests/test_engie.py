@@ -361,7 +361,9 @@ def test_august_2026_flat_excise_replaces_the_tier_table() -> None:
     )
 
     august = "Accise fédérale(11) (c€/kWh)\nToutes consommations 4,87600\n"
-    assert _extract_federal_excise(august) == pytest.approx(0.048760)
+    rate, bands = _extract_federal_excise(august)
+    assert rate == pytest.approx(0.048760)
+    assert bands is None
     # Row deleted because the levy is abolished, not because of drift.
     assert _extract_energy_contribution(august) == 0.0
 
@@ -369,5 +371,168 @@ def test_august_2026_flat_excise_replaces_the_tier_table() -> None:
     july = (
         "Consommation entre 0 et 3.000 kWh 5,0329\nCotisation sur l'énergie 0,20417\n"
     )
-    assert _extract_federal_excise(july) == pytest.approx(0.050329)
+    rate, bands = _extract_federal_excise(july)
+    assert rate == pytest.approx(0.050329)
+    assert bands is None
     assert _extract_energy_contribution(july) == pytest.approx(0.0020417)
+
+
+# ---- professional cards ------------------------------------------------------
+
+
+def _pro_easy_three_regions() -> dict[str, str]:
+    return {
+        REGION_FLANDERS: fixture_text("engie_pro_easy_indexed_v.pdf"),
+        REGION_WALLONIA: fixture_text("engie_pro_easy_indexed_w.pdf"),
+        REGION_BRUSSELS: fixture_text("engie_pro_easy_indexed_b.pdf"),
+    }
+
+
+def test_pro_contracts_are_registered() -> None:
+    contract_ids = {c.id for c in EXTRACTORS["engie"].contracts}
+    assert "engie_pro_easy_variable" in contract_ids
+    assert "engie_pro_dynamic" in contract_ids
+    assert "engie_pro_empower_flextime" in contract_ids
+    # Direct Online and Basic Online are residential-only.
+    assert "engie_pro_direct_online" not in contract_ids
+    assert "engie_pro_basic_online" not in contract_ids
+
+
+def test_pro_document_url_switches_segment() -> None:
+    from custom_components.be_electricity_prices.providers.engie import (
+        _CONTRACTS_BY_ID,
+        _document_url,
+    )
+
+    res = _document_url(_CONTRACTS_BY_ID["engie_easy_variable"], "V")
+    pro = _document_url(_CONTRACTS_BY_ID["engie_pro_easy_variable"], "V")
+    assert "document=E_EASY_R_GREEN_C_I_12_V_F" in res
+    assert "segment=R" in res
+    assert "document=E_EASY_P_GREEN_C_I_12_V_F" in pro
+    assert "segment=P" in pro
+    # Brussels runs 12 months on the pro card, not the residential 36.
+    assert "E_EASY_P_GREEN_C_I_12_B_F" in _document_url(
+        _CONTRACTS_BY_ID["engie_pro_easy_variable"], "B"
+    )
+
+
+def test_pro_card_is_parsed_ex_vat_with_the_excise_schedule() -> None:
+    snap = parse_snapshot("engie_pro_easy_variable", _pro_easy_three_regions())
+    # The card prints "Prix tva exclue"; the snapshot says so rather than
+    # grossing anything up here.
+    assert snap.taxes.vat_rate == pytest.approx(0.21)
+    # The degressive schedule the residential cards lost in August 2026.
+    assert snap.taxes.federal_excise_bands == (
+        (20_000.0, pytest.approx(0.01421)),
+        (50_000.0, pytest.approx(0.01209)),
+        (1_000_000.0, pytest.approx(0.01139)),
+    )
+    # The energy contribution is professional-only again: residential has
+    # it folded into the excise.
+    assert snap.taxes.energy_contribution == pytest.approx(0.0019261)
+    # "Professionnel (basse tension)", not "Résidentiel (avec domicile)".
+    assert snap.taxes.energy_fund_eur_per_month == pytest.approx(10.07)
+    assert set(snap.dsos) >= {"fluvius_antwerpen", "ores", "sibelga"}
+
+
+def test_pro_regulated_values_are_the_residential_ones_ex_vat() -> None:
+    """The professional and residential cards carry the same regulated
+    tables; the professional one prints them excluding the 6% VAT the
+    residential one includes. Grossing the professional numbers by 1.06
+    must reproduce the residential card exactly."""
+    pro = parse_snapshot("engie_pro_easy_variable", _pro_easy_three_regions())
+    res = parse_snapshot(
+        "engie_easy_variable",
+        {REGION_FLANDERS: fixture_text("engie_easy_indexed_v.pdf")},
+    )
+    pro_fl = pro.dsos["fluvius_antwerpen"]
+    res_fl = res.dsos["fluvius_antwerpen"]
+    assert pro_fl.capacity_eur_per_kw_year is not None
+    assert res_fl.capacity_eur_per_kw_year is not None
+    assert pro_fl.capacity_eur_per_kw_year * 1.06 == pytest.approx(
+        res_fl.capacity_eur_per_kw_year, rel=1e-4
+    )
+    assert pro_fl.distribution_single * 1.06 == pytest.approx(
+        res_fl.distribution_single, rel=1e-4
+    )
+    assert pro_fl.data_management_per_year * 1.06 == pytest.approx(
+        res_fl.data_management_per_year, rel=1e-3
+    )
+
+
+def test_pro_injection_is_taxed() -> None:
+    snap = parse_snapshot(
+        "engie_pro_dynamic", {REGION_FLANDERS: fixture_text("engie_pro_dynamic_v.pdf")}
+    )
+    assert snap.injection is not None
+    assert snap.injection.vat_applies is True
+    # ... and the residential one is not.
+    res = parse_snapshot("engie_dynamic", _dynamic_three_regions())
+    assert res.injection is not None
+    assert res.injection.vat_applies is False
+
+
+def test_pro_dynamic_formula_is_not_grossed_at_parse_time() -> None:
+    """The residential parser bakes the 6% into the dynamic factor because
+    the card is otherwise VAT-inclusive. The professional card is ex-VAT
+    throughout, so the formula stays as printed and vat_rate carries the
+    21% for apply_vat to resolve."""
+    from custom_components.be_electricity_prices.providers.engie import (
+        _FORMULA_RE,
+    )
+
+    text = fixture_text("engie_pro_dynamic_v.pdf")
+    snap = parse_snapshot("engie_pro_dynamic", {REGION_FLANDERS: text})
+    assert isinstance(snap.energy, DynamicRates)
+    printed = _FORMULA_RE.search(text)
+    assert printed is not None
+    factor_printed = float(printed.group(4).replace(",", "."))
+    assert snap.energy.factor == pytest.approx(factor_printed * 10.0)
+
+
+def test_pro_empower_still_yields_the_flextime_triplet() -> None:
+    snap = parse_snapshot(
+        "engie_pro_empower_flextime",
+        {REGION_FLANDERS: fixture_text("engie_pro_empower_variable_v.pdf")},
+    )
+    assert isinstance(snap.energy, TimeOfUseRates)
+    assert snap.energy.peak > snap.energy.transition > snap.energy.offpeak
+
+
+def test_pro_card_without_the_ex_vat_header_is_refused() -> None:
+    """A professional card that started printing VAT-inclusive numbers
+    would silently under-price by 21%. Fail loudly instead."""
+    from custom_components.be_electricity_prices.providers.engie import (
+        _vat_multiplier,
+    )
+
+    with pytest.raises(ExtractorError, match="tva exclue"):
+        _vat_multiplier("Prix, 6% de tva comprise", professional=True)
+    assert _vat_multiplier("Prix tva exclue", professional=True) == 1.0
+
+
+def test_pro_excise_tier_bounds_are_whole_kwh() -> None:
+    """The tier bound's dot is a thousands separator, not a decimal point.
+    Reading 20.000 as twenty would band every site into the top tranche."""
+    from custom_components.be_electricity_prices.providers.engie import (
+        _extract_federal_excise,
+    )
+
+    text = (
+        "Accise fédérale(11) (c€/kWh)\n"
+        "Consommation entre 0 et 20.000 kWh 1,421\n"
+        "Consommation entre 20.000 et 50.000 kWh 1,209\n"
+        "Consommation entre 50.000 et 1.000.000 kWh 1,139\n"
+    )
+    rate, bands = _extract_federal_excise(text, professional=True)
+    assert bands is not None
+    assert [b[0] for b in bands] == [20_000.0, 50_000.0, 1_000_000.0]
+    assert rate == pytest.approx(0.01421)
+
+
+def test_pro_contract_is_flagged_in_the_registry() -> None:
+    """The config flow gates its professional step on this flag, so it has
+    to distinguish the two editions."""
+    contracts = {c.id: c for c in EXTRACTORS["engie"].contracts}
+    assert contracts["engie_pro_easy_variable"].professional is True
+    assert contracts["engie_easy_variable"].professional is False

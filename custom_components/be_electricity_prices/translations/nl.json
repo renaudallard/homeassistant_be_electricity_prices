@@ -47,6 +47,18 @@
           "meter": "Meter"
         }
       },
+      "professional": {
+        "title": "Professioneel contract",
+        "description": "Professionele tariefkaarten worden exclusief btw gepubliceerd, en de federale accijns is degressief volgens het jaarvolume. Twee antwoorden zijn nodig om ze te tariferen.",
+        "data": {
+          "include_vat": "Prijzen inclusief btw (21%)",
+          "annual_consumption_kwh": "Geschat jaarverbruik"
+        },
+        "data_description": {
+          "include_vat": "Zet dit uit als uw onderneming btw kan aftrekken: prijzen, vergoedingen en kosten worden dan exclusief btw gerapporteerd. Injectie volgt dezelfde keuze.",
+          "annual_consumption_kwh": "Bepaalt de accijnsschijf (schijven op 20 000 en 50 000 kWh per jaar)."
+        }
+      },
       "dso_tariff_mode": {
         "title": "Distributietarief (Wallonie)",
         "description": "Hoe je netbeheerder factureert. 'Simple' / 'Bi-horaire' volgen de bestaande conventie. 'Tarif Impact' gebruikt de 3 CWaPE-tijdvakken (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) en vereist een digitale meter.",
@@ -271,6 +283,18 @@
         "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten.",
         "data": {
           "meter": "Meter"
+        }
+      },
+      "professional": {
+        "title": "Professioneel contract",
+        "description": "Professionele tariefkaarten worden exclusief btw gepubliceerd, en de federale accijns is degressief volgens het jaarvolume. Twee antwoorden zijn nodig om ze te tariferen.",
+        "data": {
+          "include_vat": "Prijzen inclusief btw (21%)",
+          "annual_consumption_kwh": "Geschat jaarverbruik"
+        },
+        "data_description": {
+          "include_vat": "Zet dit uit als uw onderneming btw kan aftrekken: prijzen, vergoedingen en kosten worden dan exclusief btw gerapporteerd. Injectie volgt dezelfde keuze.",
+          "annual_consumption_kwh": "Bepaalt de accijnsschijf (schijven op 20 000 en 50 000 kWh per jaar)."
         }
       },
       "dso_tariff_mode": {

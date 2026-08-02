@@ -68,6 +68,12 @@ class Contract:
     # extractors override per-contract for products that 404 outside their
     # home region (e.g. TotalEnergies Impact is Wallonia-only).
     regions: frozenset[str] = field(default_factory=lambda: _ALL_REGIONS)
+    # True when the supplier sells this product to businesses: its card is
+    # published excluding VAT and may band the federal excise by annual
+    # volume, so the config flow asks for the VAT treatment and the yearly
+    # consumption. Nothing else keys off it - a professional contract is
+    # otherwise an ordinary contract.
+    professional: bool = False
     # True when this (non-dynamic) product's injection is a per-hour spot
     # formula with no printed monthly indicative (Cociter Variable).
     # Pricing the injection then needs an ENTSO-E spot even though the

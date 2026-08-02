@@ -82,6 +82,7 @@ from .api import EntsoeAuthError, EntsoeClient, EntsoeError
 from .const import (
     CAPACITY_MODE_FIXED,
     CAPACITY_MODE_SENSOR,
+    CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_API_KEY,
     CONF_CAPACITY_FIXED_KW,
     CONF_CAPACITY_MODE,
@@ -148,6 +149,7 @@ from .const import (
     CUSTOM_CONTRACT_MONTHLY,
     CUSTOM_INJECTION_MODE_CURRENT,
     CUSTOM_INJECTION_MODES,
+    DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_CONNECTION_KVA_TIER,
     DEFAULT_CUSTOM_VAT_RATE,
     DEFAULT_INCLUDE_VAT,
@@ -229,6 +231,47 @@ def _contract_kind(supplier_id: str, contract_id: str) -> str:
         if c.id == contract_id:
             return c.kind
     return ""
+
+
+def _contract_is_professional(supplier_id: str | None, contract_id: str | None) -> bool:
+    """True when the chosen contract is a professional product, whose card
+    is published excluding VAT and may band the federal excise by annual
+    volume. Resolved from the registry's ``Contract.professional`` flag.
+    """
+    if not supplier_id or not contract_id:
+        return False
+    try:
+        contracts = get_extractor(supplier_id).contracts
+    except ExtractorError:
+        return False
+    return any(c.id == contract_id and c.professional for c in contracts)
+
+
+def _professional_schema(defaults: dict[str, Any]) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_INCLUDE_VAT,
+                default=bool(defaults.get(CONF_INCLUDE_VAT, DEFAULT_INCLUDE_VAT)),
+            ): BooleanSelector(),
+            vol.Required(
+                CONF_ANNUAL_CONSUMPTION_KWH,
+                default=float(
+                    defaults.get(
+                        CONF_ANNUAL_CONSUMPTION_KWH, DEFAULT_ANNUAL_CONSUMPTION_KWH
+                    )
+                ),
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=0,
+                    max=1_000_000,
+                    step=100,
+                    mode=NumberSelectorMode.BOX,
+                    unit_of_measurement="kWh",
+                )
+            ),
+        }
+    )
 
 
 def _contract_has_spot_injection(
@@ -1253,12 +1296,36 @@ class _WizardStepsMixin:
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            return await self._after_meter()
+            return await self._ask_professional()
         return self.async_show_form(
             step_id="meter",
             data_schema=_meter_schema(
                 self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT], self._data
             ),
+        )
+
+    async def _ask_professional(self) -> ConfigFlowResult:
+        """Only a professional contract needs the VAT treatment and the
+        annual volume; a residential card answers both by construction."""
+        if not _contract_is_professional(
+            self._data.get(CONF_SUPPLIER), self._data.get(CONF_CONTRACT)
+        ):
+            # Drop settings carried over from a professional edit, so a
+            # switch back to a residential contract can't leave an
+            # ex-VAT preference silently in force.
+            self._data.pop(CONF_INCLUDE_VAT, None)
+            self._data.pop(CONF_ANNUAL_CONSUMPTION_KWH, None)
+            return await self._after_meter()
+        return await self.async_step_professional()
+
+    async def async_step_professional(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self._after_meter()
+        return self.async_show_form(
+            step_id="professional", data_schema=_professional_schema(self._data)
         )
 
     async def async_step_api_key(

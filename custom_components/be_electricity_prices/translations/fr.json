@@ -47,6 +47,18 @@
           "meter": "Compteur"
         }
       },
+      "professional": {
+        "title": "Contrat professionnel",
+        "description": "Les cartes tarifaires professionnelles sont publiées hors TVA, et l'accise fédérale est dégressive selon le volume annuel. Deux réponses sont nécessaires pour les tarifer.",
+        "data": {
+          "include_vat": "Prix TVA comprise (21%)",
+          "annual_consumption_kwh": "Consommation annuelle estimée"
+        },
+        "data_description": {
+          "include_vat": "Désactivez si votre entreprise récupère la TVA : les prix, redevances et coûts sont alors rapportés hors TVA. L'injection suit le même choix.",
+          "annual_consumption_kwh": "Détermine la tranche d'accise (paliers à 20 000 et 50 000 kWh par an)."
+        }
+      },
       "dso_tariff_mode": {
         "title": "Tarif de distribution (Wallonie)",
         "description": "Mode de facturation du reseau par votre GRD. 'Simple' / 'Bi-horaire' suivent la convention historique. 'Tarif Impact' utilise les 3 plages CWaPE par heure (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) et necessite un compteur intelligent.",
@@ -271,6 +283,18 @@
         "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique.",
         "data": {
           "meter": "Compteur"
+        }
+      },
+      "professional": {
+        "title": "Contrat professionnel",
+        "description": "Les cartes tarifaires professionnelles sont publiées hors TVA, et l'accise fédérale est dégressive selon le volume annuel. Deux réponses sont nécessaires pour les tarifer.",
+        "data": {
+          "include_vat": "Prix TVA comprise (21%)",
+          "annual_consumption_kwh": "Consommation annuelle estimée"
+        },
+        "data_description": {
+          "include_vat": "Désactivez si votre entreprise récupère la TVA : les prix, redevances et coûts sont alors rapportés hors TVA. L'injection suit le même choix.",
+          "annual_consumption_kwh": "Détermine la tranche d'accise (paliers à 20 000 et 50 000 kWh par an)."
         }
       },
       "dso_tariff_mode": {

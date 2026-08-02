@@ -47,6 +47,18 @@
           "meter": "Zaehler"
         }
       },
+      "professional": {
+        "title": "Gewerblicher Vertrag",
+        "description": "Gewerbliche Tarifkarten werden ohne MwSt. veröffentlicht, und die Bundesverbrauchsteuer ist nach Jahresmenge degressiv. Zwei Angaben sind zur Preisbildung nötig.",
+        "data": {
+          "include_vat": "Preise inklusive MwSt. (21%)",
+          "annual_consumption_kwh": "Geschätzter Jahresverbrauch"
+        },
+        "data_description": {
+          "include_vat": "Ausschalten, wenn Ihr Unternehmen die MwSt. abziehen kann: Preise, Gebühren und Kosten werden dann ohne MwSt. ausgewiesen. Die Einspeisung folgt derselben Wahl.",
+          "annual_consumption_kwh": "Wählt die Verbrauchsteuerstufe (Stufen bei 20 000 und 50 000 kWh pro Jahr)."
+        }
+      },
       "dso_tariff_mode": {
         "title": "Verteilungstarif (Wallonien)",
         "description": "Wie Ihr Netzbetreiber abrechnet. 'Simple' / 'Bi-horaire' folgen der bisherigen Zaehler-Konvention. 'Tarif Impact' verwendet die 3 CWaPE-Zeitfenster pro Stunde (PIC 17-22, MEDIUM 7-11 + 22-1, ECO 1-7 + 11-17) und erfordert einen intelligenten Zaehler.",
@@ -271,6 +283,18 @@
         "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege.",
         "data": {
           "meter": "Zaehler"
+        }
+      },
+      "professional": {
+        "title": "Gewerblicher Vertrag",
+        "description": "Gewerbliche Tarifkarten werden ohne MwSt. veröffentlicht, und die Bundesverbrauchsteuer ist nach Jahresmenge degressiv. Zwei Angaben sind zur Preisbildung nötig.",
+        "data": {
+          "include_vat": "Preise inklusive MwSt. (21%)",
+          "annual_consumption_kwh": "Geschätzter Jahresverbrauch"
+        },
+        "data_description": {
+          "include_vat": "Ausschalten, wenn Ihr Unternehmen die MwSt. abziehen kann: Preise, Gebühren und Kosten werden dann ohne MwSt. ausgewiesen. Die Einspeisung folgt derselben Wahl.",
+          "annual_consumption_kwh": "Wählt die Verbrauchsteuerstufe (Stufen bei 20 000 und 50 000 kWh pro Jahr)."
         }
       },
       "dso_tariff_mode": {

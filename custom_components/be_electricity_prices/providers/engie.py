@@ -39,8 +39,14 @@ since the energy formula is region-uniform but the DSO overlay is not.
 ``parse_snapshot`` still accepts a multi-region map so tests can exercise
 the merge path.
 
-All values are 6% VAT inclusive. The Dynamic formula is printed pre-VAT,
-so the extractor scales factor and base by the parsed VAT multiplier.
+Residential values are 6% VAT inclusive, and the Dynamic formula is
+printed pre-VAT, so the extractor scales factor and base by the parsed VAT
+multiplier. Engie also publishes a professional edition of most families
+(``segment=P``, ``_P_`` in the slug): the same layout priced excluding
+VAT at 21%, keeping the degressive excise schedule the residential cards
+lost in August 2026 and printing the professional energy-fund row. Those
+snapshots carry ``vat_rate`` and their per-kWh values as printed;
+``base.apply_vat`` resolves them per config entry.
 """
 
 from __future__ import annotations
@@ -99,6 +105,9 @@ _API_URL = (
     "https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF"
 )
 
+# Belgian standard rate, which the professional cards price excluding.
+_PRO_VAT_RATE = 0.21
+
 _V = "V"
 _W = "W"
 _B = "B"
@@ -119,6 +128,15 @@ class _ContractDef:
     color: str  # GREEN or GREY in the slug
     rate: str  # F (fixed) or I (indexed) in the slug
     months_per_region: dict[str, str]
+    # R (residential) or P (professional), in both the slug and the
+    # segment query parameter. The professional edition of a product is a
+    # different card: same layout, but priced excluding VAT, with the
+    # degressive excise schedule and the professional energy-fund row.
+    segment: str = "R"
+
+    @property
+    def professional(self) -> bool:
+        return self.segment == "P"
 
 
 # Catalogue of every electricity contract Engie publishes on the public
@@ -227,6 +245,91 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     # protected customers (they don't pick it from a list). Its PDF carries
     # an all-in regulated price with no DSO breakdown, so it doesn't fit
     # the integration's energy-plus-network-plus-tax model.
+    #
+    # The professional editions. Engie publishes one for every family
+    # except Direct Online and Basic Online, which are residential-only.
+    # Note the Brussels term differs from the residential catalogue: the
+    # pro cards run 12 / 24 months there too, not 36 / 48.
+    _ContractDef(
+        contract_id="engie_pro_easy_fixed",
+        label="Engie Easy Fixed (pro)",
+        kind="fixed",
+        family="EASY",
+        color="GREEN",
+        rate="F",
+        months_per_region={_V: "12", _W: "12", _B: "12"},
+        segment="P",
+    ),
+    _ContractDef(
+        contract_id="engie_pro_easy_variable",
+        label="Engie Easy Variable (pro)",
+        kind="variable",
+        family="EASY",
+        color="GREEN",
+        rate="I",
+        months_per_region={_V: "12", _W: "12", _B: "12"},
+        segment="P",
+    ),
+    _ContractDef(
+        contract_id="engie_pro_dynamic",
+        label="Engie Dynamic (pro)",
+        kind="dynamic",
+        family="DYNAMIC",
+        color="GREY",
+        rate="I",
+        months_per_region={_V: "12", _W: "12", _B: "12"},
+        segment="P",
+    ),
+    _ContractDef(
+        contract_id="engie_pro_empower_fixed",
+        label="Engie Empower Fixed (pro)",
+        kind="fixed",
+        family="EMPOWER",
+        color="GREEN",
+        rate="F",
+        months_per_region={_V: "00", _W: "00", _B: "00"},
+        segment="P",
+    ),
+    _ContractDef(
+        contract_id="engie_pro_empower_variable",
+        label="Engie Empower Variable (pro)",
+        kind="variable",
+        family="EMPOWER",
+        color="GREEN",
+        rate="I",
+        months_per_region={_V: "00", _W: "00", _B: "00"},
+        segment="P",
+    ),
+    _ContractDef(
+        contract_id="engie_pro_empower_flextime",
+        label="Engie Empower Flextime (pro)",
+        kind="tou",
+        family="EMPOWER",
+        color="GREEN",
+        rate="I",
+        months_per_region={_V: "00", _W: "00", _B: "00"},
+        segment="P",
+    ),
+    _ContractDef(
+        contract_id="engie_pro_flow",
+        label="Engie Flow (pro)",
+        kind="variable",
+        family="FLOW",
+        color="GREEN",
+        rate="I",
+        months_per_region={_V: "24", _W: "24", _B: "24"},
+        segment="P",
+    ),
+    _ContractDef(
+        contract_id="engie_pro_empty_house",
+        label="Engie Empty House (pro)",
+        kind="variable",
+        family="EMPTYHOUSE",
+        color="GREY",
+        rate="I",
+        months_per_region={_V: "00", _W: "00", _B: "00"},
+        segment="P",
+    ),
 )
 
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
@@ -234,13 +337,13 @@ _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
 def _slug(c: _ContractDef, region_code: str) -> str:
     months = c.months_per_region[region_code]
-    return f"E_{c.family}_R_{c.color}_C_{c.rate}_{months}_{region_code}_F"
+    return f"E_{c.family}_{c.segment}_{c.color}_C_{c.rate}_{months}_{region_code}_F"
 
 
 def _document_url(c: _ContractDef, region_code: str) -> str:
     return (
         f"{_API_URL}?document={_slug(c, region_code)}"
-        f"&monthOffset=0&segment=R&language=F"
+        f"&monthOffset=0&segment={c.segment}&language=F"
     )
 
 
@@ -350,10 +453,13 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
     # are supplier-set or federal and identical across regions, so we
     # read them from any one PDF.
     any_text = next(iter(region_texts.values()))
-    energy = _extract_energy(any_text, contract.kind)
-    injection = _extract_injection(any_text, contract.kind)
+    professional = contract.professional
+    energy = _extract_energy(any_text, contract.kind, professional=professional)
+    injection = _extract_injection(any_text, contract.kind, professional=professional)
     publication_label = _extract_publication_month(any_text)
-    federal_excise = _extract_federal_excise(any_text)
+    federal_excise, excise_bands = _extract_federal_excise(
+        any_text, professional=professional
+    )
     energy_contribution = _extract_energy_contribution(any_text)
 
     dsos: dict[str, DsoOverlay] = {}
@@ -368,7 +474,9 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
             dsos.update(_extract_flanders_dsos(text))
             flanders_renewables = renewables
             energy_fund = _extract_energy_fund(
-                text, sans_domicile=contract_id == "engie_empty_house"
+                text,
+                sans_domicile=contract_id == "engie_empty_house",
+                professional=professional,
             )
         elif region_key == REGION_WALLONIA:
             dsos.update(_extract_wallonia_dsos(text))
@@ -386,12 +494,15 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
         taxes=TaxOverlay(
             federal_excise=federal_excise,
             energy_contribution=energy_contribution,
+            federal_excise_bands=excise_bands,
             flanders_renewables=flanders_renewables,
             wallonia_renewables=wallonia_renewables,
             brussels_renewables=brussels_renewables,
             region_connection_fee=region_connection_fee,
             energy_fund_eur_per_month=energy_fund,
-            vat_rate=0.0,
+            # The professional card prints everything excluding VAT at
+            # 21%; base.apply_vat resolves it for the entry.
+            vat_rate=_PRO_VAT_RATE if professional else 0.0,
         ),
         source_url=_API_URL,
         publication_label=publication_label,
@@ -404,13 +515,23 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
 
 
 _VAT_RE = re.compile(r"(\d+)\s*%\s*de\s*tva\s*comprise", re.IGNORECASE)
+_VAT_EXCLUDED_RE = re.compile(r"Prix\s+tva\s+exclue", re.IGNORECASE)
 
 
-def _vat_multiplier(text: str) -> float:
+def _vat_multiplier(text: str, *, professional: bool = False) -> float:
     # The Dynamic formula is printed pre-VAT and scaled by this multiplier
     # (the only caller), so the phrase is mandatory: a reworded header
     # would otherwise fall back to vat_multiplier's 6% default silently
     # and mask a VAT-rate or wording change. Fail loud instead.
+    if professional:
+        # The professional card prices everything excluding VAT, so the
+        # formula needs no scaling here; the snapshot carries vat_rate and
+        # base.apply_vat resolves it for the entry. Assert the header all
+        # the same, so a card that starts printing VAT-inclusive numbers
+        # fails loudly instead of silently under-pricing by 21%.
+        if _VAT_EXCLUDED_RE.search(text) is None:
+            raise ExtractorError("Engie: professional card is not marked tva exclue")
+        return 1.0
     if _VAT_RE.search(text) is None:
         raise ExtractorError("could not parse Engie dynamic VAT multiplier")
     return vat_multiplier(text, _VAT_RE)
@@ -428,7 +549,9 @@ _FORMULA_RE = re.compile(
 )
 
 
-def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
+def _extract_energy(
+    text: str, kind: TariffKind, *, professional: bool = False
+) -> EnergyRates:
     # Engie prints the yearly fee in two different layouts:
     #
     # 1. Standard cards (Easy / Dynamic / Empty House): the fee sits on
@@ -458,7 +581,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         # Groups: (base_sign, base_magnitude, factor_sign, factor_magnitude).
         base_pre_vat_cents = parse_sign(match.group(1)) * to_float(match.group(2))
         factor_pdf = parse_sign(match.group(3)) * to_float(match.group(4))
-        vat = _vat_multiplier(text)
+        vat = _vat_multiplier(text, professional=professional)
         # PDF formula yields c€/kWh hors TVA from BELPEX in EUR/MWh; spot
         # is EUR/kWh = EUR/MWh / 1000:
         #   factor_eur_kwh = factor_pdf * vat * 1000 / 100 = factor_pdf * vat * 10
@@ -543,7 +666,9 @@ def _extract_publication_month(text: str) -> str:
     return match.group(1) if match else ""
 
 
-def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
+def _extract_injection(
+    text: str, kind: TariffKind, *, professional: bool = False
+) -> InjectionRates | None:
     # The first "Injection(3)" row is the applicable rate (a second row is
     # the annual estimate). Its columns mirror the consumption row:
     #   normal | bi-pleines | bi-creuses | flextime pleines |
@@ -585,7 +710,9 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         factor_pdf = parse_sign(injection_match.group(3)) * to_float(
             injection_match.group(4)
         )
-        # Residential injection is VAT-exempt.
+        # Both sides are printed on the card's own VAT basis: residential
+        # injection is VAT-exempt, professional injection is grossed later
+        # by apply_vat off vat_applies.
         factor = factor_pdf * 10.0
         base = base_pdf_cents / 100.0
         formula = injection_match.group(0)
@@ -599,6 +726,10 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         peak=peak,
         transition=transition,
         offpeak=offpeak,
+        # "Le prix d'injection est soumis a la TVA (21%)" on the
+        # professional card, against "n'est pas soumis a la TVA" on the
+        # residential one.
+        vat_applies=professional,
     )
 
 
@@ -620,30 +751,67 @@ def _extract_consumption_renewables(text: str) -> float:
     return to_float(nums[-1]) / 100.0
 
 
-def _extract_federal_excise(text: str) -> float:
+_EXCISE_TIER_RE = re.compile(
+    r"Consommation entre\s+([\d.]+)\s+et\s+([\d.]+)\s+kWh\s+([\d,.]+)"
+)
+
+
+def _tier_bound_kwh(text: str) -> float:
+    """Parse a tier bound like ``20.000`` or ``1.000.000`` as whole kWh.
+
+    The dot is a thousands separator here, not a decimal point, so
+    ``to_float`` would read 20.000 kWh as twenty and band every site into
+    the top tranche. The bounds are always whole kWh, so dropping the
+    separators is exact.
+    """
+    return float(re.sub(r"[.\s  ]", "", text.strip()))
+
+
+def _extract_federal_excise(
+    text: str, *, professional: bool = False
+) -> tuple[float, tuple[tuple[float, float], ...] | None]:
     """Federal excise, mandatory across regions.
 
-    Two card shapes. Until July 2026 the excise was degressive and printed
-    as four consumption tiers, of which the residential one is 0-3.000 kWh.
-    From 1 August 2026 the federal scheme folded the separate energy
-    contribution into the excise and flattened it, so the card prints one
-    rate under "Toutes consommations". Try the flat form first: a card that
-    carries both would be the tiered one being phased out, and the flat row
-    is the authoritative single rate when it is present.
+    Returns ``(rate, bands)``. ``bands`` is None whenever the card prices
+    one rate, which is every residential card; the coordinator resolves a
+    banded card against the entry's annual volume.
+
+    Three card shapes. Until July 2026 the residential excise was
+    degressive and printed as four consumption tiers, of which the
+    residential one is 0-3.000 kWh. From 1 August 2026 the federal scheme
+    folded the separate energy contribution into the excise and flattened
+    it, so the residential card prints one rate under "Toutes
+    consommations". Try the flat form first: a card that carries both would
+    be the tiered one being phased out, and the flat row is the
+    authoritative single rate when it is present.
+
+    Professional cards kept the schedule the residential ones lost, in
+    three bands (0-20.000 / 20.000-50.000 / 50.000-1.000.000 kWh), and the
+    card says so: "calcule sur base annuelle, suivant un tarif degressif
+    par tranche de consommation". Read the whole table.
     """
+    if professional:
+        tiers = _EXCISE_TIER_RE.findall(text)
+        if not tiers:
+            raise ExtractorError("Engie: professional federal excise tiers not found")
+        bands = tuple(
+            (_tier_bound_kwh(upper), to_float(rate) / 100.0)
+            for _lower, upper, rate in tiers
+        )
+        return bands[0][1], bands
     flat = re.search(
         r"Accise\s+f[ée]d[ée]rale[^\n]*\n\s*Toutes\s+consommations\s+([\d,.]+)",
         text,
     )
     if flat:
-        return to_float(flat.group(1)) / 100.0
+        return to_float(flat.group(1)) / 100.0, None
     match = re.search(
         r"Consommation entre\s+0\s+et\s+3\.000\s+kWh\s+([\d,.]+)",
         text,
     )
     if not match:
         raise ExtractorError("Engie: federal excise (0-3000 kWh tier) not found")
-    return to_float(match.group(1)) / 100.0
+    return to_float(match.group(1)) / 100.0, None
 
 
 def _extract_energy_contribution(text: str) -> float:
@@ -668,15 +836,23 @@ def _extract_energy_contribution(text: str) -> float:
     return float(f"0.{match.group(1)}") / 100.0
 
 
-def _extract_energy_fund(text: str, *, sans_domicile: bool = False) -> float:
-    """Flemish residential energy fund. Optional outside Flanders, so a
-    miss legitimately means 'no fund on this card' -- keep the silent
-    default.
+def _extract_energy_fund(
+    text: str, *, sans_domicile: bool = False, professional: bool = False
+) -> float:
+    """Flemish energy fund. Optional outside Flanders, so a miss
+    legitimately means 'no fund on this card' -- keep the silent default.
 
-    The card prints two sub-cases: 'avec domicile' (0 for most products)
-    and 'sans domicile' (a positive fee). The Empty House product is created
-    for vacant homes, which by definition have no registered domicile, so it
-    bills the 'sans domicile' rate rather than 0."""
+    The residential card prints two sub-cases: 'avec domicile' (0 for most
+    products) and 'sans domicile' (a positive fee). The Empty House product
+    is created for vacant homes, which by definition have no registered
+    domicile, so it bills the 'sans domicile' rate rather than 0.
+
+    The professional card has neither: it prints one 'Professionnel (basse
+    tension)' row, which applies to every professional product including
+    the Empty House one."""
+    if professional:
+        match = re.search(r"Professionnel\s+\(basse\s+tension\)\s+([\d,.]+)", text)
+        return to_float(match.group(1)) if match else 0.0
     label = "sans" if sans_domicile else "avec"
     match = re.search(
         rf"Résidentiel\s+\({label}\s+domicile\)\s+([\d,.]+)",
@@ -880,6 +1056,7 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             regions=_contract_regions(c),
+            professional=c.professional,
         )
         for c in _CONTRACTS
     ),

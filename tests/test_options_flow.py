@@ -42,8 +42,10 @@ from custom_components.be_electricity_prices.config_flow import (
     _validate_contract_dates,
 )
 from custom_components.be_electricity_prices.const import (
+    CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
+    CONF_INCLUDE_VAT,
     DOMAIN,
 )
 from custom_components.be_electricity_prices.coordinator import _parse_iso_date
@@ -1985,3 +1987,22 @@ async def test_compare_contract_step_fills_its_supplier_placeholder(
     placeholders = result.get("description_placeholders") or {}
     assert placeholders.get("supplier"), "step must fill {supplier}"
     assert "{" not in placeholders["supplier"]
+
+
+async def test_professional_step_only_shows_for_a_pro_contract(
+    hass: HomeAssistant,
+) -> None:
+    """The VAT treatment and the yearly volume are questions only a
+    professional card raises; a residential entry must never be asked."""
+    from custom_components.be_electricity_prices.config_flow import (
+        _contract_is_professional,
+        _professional_schema,
+    )
+
+    assert _contract_is_professional("engie", "engie_pro_easy_variable") is True
+    assert _contract_is_professional("engie", "engie_easy_variable") is False
+    assert _contract_is_professional("engie", "no_such_contract") is False
+    assert _contract_is_professional(None, None) is False
+
+    keys = {str(k.schema) for k in _professional_schema({}).schema}
+    assert keys == {CONF_INCLUDE_VAT, CONF_ANNUAL_CONSUMPTION_KWH}
