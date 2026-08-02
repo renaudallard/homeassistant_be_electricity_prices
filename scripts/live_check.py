@@ -373,6 +373,72 @@ def _expect(label: str, condition: bool, detail: str = "") -> bool:
 _MAX_ENERGY_CONTRIBUTION = 0.01
 
 
+def _expect_professional_basis(prefix: str, contract: object, snap: object) -> None:
+    """Assert what a professional card must carry, and a residential one
+    must not.
+
+    The whole professional lane rests on the card being published
+    excluding VAT: if a supplier quietly switched to VAT-inclusive
+    printing, every price would come out 21% high and nothing else here
+    would notice, because each individual field would still parse. Gate
+    the basis itself, in both directions, so the asymmetry can't hide.
+    """
+    professional = bool(getattr(contract, "professional", False))
+    taxes = snap.taxes  # type: ignore[attr-defined]
+    injection = snap.injection  # type: ignore[attr-defined]
+    if professional:
+        _expect(
+            f"{prefix}: professional card is ex-VAT",
+            taxes.vat_rate == 0.21,
+            detail=f"vat_rate={taxes.vat_rate}",
+        )
+        if injection is not None:
+            _expect(
+                f"{prefix}: professional injection is taxed",
+                injection.vat_applies,
+            )
+    else:
+        _expect(
+            f"{prefix}: residential card is VAT-inclusive",
+            taxes.vat_rate == 0.0,
+            detail=f"vat_rate={taxes.vat_rate}",
+        )
+        if injection is not None:
+            _expect(
+                f"{prefix}: residential injection is exempt",
+                not injection.vat_applies,
+            )
+
+
+def _expect_excise_bands(prefix: str, taxes: object) -> None:
+    """A degressive excise schedule must be ordered and plausible.
+
+    Only asserted where the card prints one (Engie and Mega professional
+    cards); Bolt prints the first tranche alone, so an absent schedule is
+    not a failure.
+    """
+    bands = taxes.federal_excise_bands  # type: ignore[attr-defined]
+    if not bands:
+        return
+    uppers = [b[0] for b in bands]
+    rates = [b[1] for b in bands]
+    _expect(
+        f"{prefix}: excise bands ascend by volume",
+        uppers == sorted(uppers) and len(set(uppers)) == len(uppers),
+        detail=f"uppers={uppers}",
+    )
+    _expect(
+        f"{prefix}: excise bands are degressive",
+        all(a >= b for a, b in zip(rates, rates[1:], strict=False)),
+        detail=f"rates={rates}",
+    )
+    _expect(
+        f"{prefix}: excise band bounds are whole kWh",
+        all(u >= 1000.0 for u in uppers),
+        detail=f"uppers={uppers} (a thousands-separator slip reads 20.000 as 20)",
+    )
+
+
 def _expect_energy_contribution(prefix: str, taxes: object) -> None:
     """Bounds-check the federal energy contribution on a fetched snapshot.
 
@@ -932,6 +998,8 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
             except Exception as err:
                 _record(f"{prefix}: parse", False, f"{type(err).__name__}: {err}")
                 continue
+            _expect_professional_basis(prefix, contract, snap)
+            _expect_excise_bands(prefix, snap.taxes)
             _expect(
                 f"{prefix}: expected DSOs present",
                 expected_dsos[region_key] <= set(snap.dsos),
@@ -1066,6 +1134,8 @@ async def _check_mega_pairs(
             except Exception as err:
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
+            _expect_professional_basis(prefix, contract, snap)
+            _expect_excise_bands(prefix, snap.taxes)
             _expect(
                 f"{prefix}: expected DSOs present",
                 expected_dsos[region_key] <= set(snap.dsos),
@@ -1166,6 +1236,8 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
             except Exception as err:
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
+            _expect_professional_basis(prefix, contract, snap)
+            _expect_excise_bands(prefix, snap.taxes)
             _expect(f"{prefix}: publication label", bool(snap.publication_label))
             _expect(
                 f"{prefix}: expected DSOs present",
@@ -1676,11 +1748,16 @@ BYTES_WARN_THRESHOLD = 5_000_000
 #   * octaplus: ~17.6 MB (8 contracts x 2 regions at ~1 MB each after the
 #     2026 card redesign; fixed_impact is Wallonia-only). Allow 22 MB.
 _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
-    "bolt": 50_000_000,
+    # bolt, engie and mega each gained a professional edition of most of
+    # their catalogue (August 2026), which roughly doubles the number of
+    # cards fetched: bolt 7 -> 14 of its ~5 MB PDFs, engie ~24 -> ~48
+    # region PDFs, mega 33 -> ~57. Budgets doubled to match, still with
+    # the same slack the residential-only figures carried.
+    "bolt": 100_000_000,
     "totalenergies": 15_000_000,
-    "engie": 8_000_000,
+    "engie": 16_000_000,
     "ecofix": 8_000_000,
-    "mega": 7_000_000,
+    "mega": 14_000_000,
     "octaplus": 22_000_000,
 }
 
@@ -1695,11 +1772,15 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
 # so on a slow-CDN day (issue #13) the six 20-30 s fetches sum to ~180 s
 # even though real wallclock stays well under the 240 s hard cap and the
 # snapshot succeeds; budget it accordingly so it doesn't false-fire.
+# The same professional editions double the fetch count for bolt, engie
+# and mega. elapsed_s is the SUM of per-request durations, so it scales
+# with the count even where the fetches overlap; the 240 s hard wallclock
+# cap is unaffected because bolt still gathers concurrently.
 _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
-    "bolt": 200.0,
-    "engie": 130.0,
+    "bolt": 400.0,
+    "engie": 260.0,
     "luminus": 150.0,
-    "mega": 120.0,
+    "mega": 240.0,
     # TotalEnergies and OCTA+ fetch every (contract, region) PDF
     # sequentially (25 and 21 fetches), so their summed elapsed_s blows
     # the 90 s default on a slow day even though each fetch is small and
