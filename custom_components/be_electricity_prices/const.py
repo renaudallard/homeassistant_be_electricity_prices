@@ -149,6 +149,14 @@ CONF_MANUAL_YEARLY_FEE: Final = "manual_yearly_fee"
 CONF_METER: Final = "meter"
 CONF_API_KEY: Final = "api_key"
 
+# Whether prices include VAT. Only meaningful on a contract whose card
+# prints excluding VAT (the professional cards); residential cards print
+# VAT-inclusive and the setting cannot change them. A business that
+# deducts VAT bears the ex-VAT cost and sets this False; one that cannot
+# deduct (or a private customer) leaves it True.
+CONF_INCLUDE_VAT: Final = "include_vat"
+DEFAULT_INCLUDE_VAT: Final = True
+
 METER_MONO: Final = "mono"
 METER_BI: Final = "bi"
 METER_DYNAMIC: Final = "dynamic"

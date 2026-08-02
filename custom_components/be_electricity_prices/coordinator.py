@@ -85,6 +85,7 @@ from .const import (
     CONF_DAY_INJECTION_KWH,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
+    CONF_INCLUDE_VAT,
     CONF_INJECTION_KWH,
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_ENERGY_FACTOR,
@@ -100,6 +101,7 @@ from .const import (
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     DEFAULT_CONNECTION_KVA_TIER,
+    DEFAULT_INCLUDE_VAT,
     DOMAIN,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
@@ -148,6 +150,7 @@ from .providers.base import (
     TaxOverlay,
     TimeOfUseRates,
     VariableRates,
+    apply_vat,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -447,6 +450,7 @@ async def _snapshot_for_month(
     region: str,
     year_month: date,
     current_snapshot: "SupplierSnapshot",
+    include_vat: bool = DEFAULT_INCLUDE_VAT,
 ) -> "SupplierSnapshot":
     """Resolve the historical snapshot for ``year_month`` or fall back.
 
@@ -456,7 +460,17 @@ async def _snapshot_for_month(
     signal we shouldn't keep re-asking. The fallback is the current
     snapshot, used as a proxy for non-archive suppliers (OCTA+,
     TotalEnergies, Engie, Luminus, DATS 24, Mega, Bolt).
+
+    The cache is shared across entries, so it holds archived cards as
+    parsed and each caller's VAT preference is applied on the way out.
+    ``current_snapshot`` is the caller's own snapshot and already resolved.
     """
+
+    def resolved(snap: "SupplierSnapshot | None") -> "SupplierSnapshot":
+        if snap is None:
+            return current_snapshot
+        return apply_vat(snap, include_vat=include_vat)
+
     cache = _monthly_snapshots(hass)
     failed = _monthly_failed_fetches(hass)
     cache_key = (
@@ -466,8 +480,7 @@ async def _snapshot_for_month(
         f"{year_month.year:04d}-{year_month.month:02d}",
     )
     if cache_key in cache:
-        cached = cache[cache_key]
-        return cached if cached is not None else current_snapshot
+        return resolved(cache[cache_key])
     fetch_archived = extractor.fetch_for_month
     if fetch_archived is None:
         cache[cache_key] = None
@@ -486,8 +499,7 @@ async def _snapshot_for_month(
         # Re-check under the lock so the second waiter doesn't repeat
         # what the first just did.
         if cache_key in cache:
-            cached = cache[cache_key]
-            return cached if cached is not None else current_snapshot
+            return resolved(cache[cache_key])
         last_fail = failed.get(cache_key)
         if (
             last_fail is not None
@@ -519,7 +531,16 @@ async def _snapshot_for_month(
         # stale "uncredited" output until the entry reloads.
         if not fetch_failed and _tuple_generation(hass, cache_key) == gen_at_entry:
             cache[cache_key] = snap
-    return snap if snap is not None else current_snapshot
+    return resolved(snap)
+
+
+def _include_vat(entry: ConfigEntry) -> bool:
+    """Whether this entry wants its prices VAT-inclusive.
+
+    Inert on a residential card, which prints VAT-inclusive already; it
+    only bites on a card published excluding VAT.
+    """
+    return bool(entry.data.get(CONF_INCLUDE_VAT, DEFAULT_INCLUDE_VAT))
 
 
 def _parse_iso_date(value: Any) -> date | None:
@@ -672,7 +693,14 @@ async def _cohort_energy_leg(
     # _cohort_energy_from_archived). TOU / Impact are not re-priced yet.
     if extractor.fetch_for_month is not None:
         snap_start = await _snapshot_for_month(
-            hass, session, extractor, contract, region, start, current_snapshot
+            hass,
+            session,
+            extractor,
+            contract,
+            region,
+            start,
+            current_snapshot,
+            _include_vat(entry),
         )
         # _snapshot_for_month returns the SAME current_snapshot object when the
         # signing month has no archive; identity means "no archived card".
@@ -724,7 +752,14 @@ async def _effective_snapshot_for_month(
     plain delivery-month snapshot) when there is no cohort override.
     """
     snap_m = await _snapshot_for_month(
-        hass, session, extractor, contract, region, year_month, current_snapshot
+        hass,
+        session,
+        extractor,
+        contract,
+        region,
+        year_month,
+        current_snapshot,
+        _include_vat(entry),
     )
     cohort = await _cohort_energy_leg(
         hass, session, extractor, contract, region, entry, current_snapshot
@@ -868,7 +903,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._store: Store[dict[str, Any]] = _MigratingStore(
             hass, STORAGE_VERSION, f"{DOMAIN}_cache_{entry.entry_id}"
         )
+        # _snapshot is what this entry prices against: the card resolved
+        # against its VAT preference. _snapshot_raw is the card exactly as
+        # parsed, which is what gets shared with sibling entries and
+        # persisted - they may answer the VAT question differently.
         self._snapshot: SupplierSnapshot | None = None
+        self._snapshot_raw: SupplierSnapshot | None = None
         self._snapshot_fetched_at: datetime | None = None
         self._snapshot_probe_key: str | None = None
         # Set by async_force_refresh; cleared on the next successful
@@ -947,7 +987,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         snap = stored.get("snapshot")
         if isinstance(snap, dict) and not tuple_mismatch:
             try:
-                self._snapshot = _snapshot_from_dict(snap)
+                self._set_snapshot(_snapshot_from_dict(snap))
                 self._snapshot_fetched_at = datetime.fromisoformat(snap["_cached_at"])
                 cached_probe = snap.get("_probe_key")
                 self._snapshot_probe_key = (
@@ -959,7 +999,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     self.entry.entry_id,
                     err,
                 )
-                self._snapshot = None
+                self._set_snapshot(None)
                 self._snapshot_fetched_at = None
                 self._snapshot_probe_key = None
         elif tuple_mismatch:
@@ -1063,10 +1103,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         regulated values, so we assemble the snapshot from the config entry
         every tick. Always fresh (no probe / TTL), so it never goes stale.
         """
-        self._snapshot = build_custom_snapshot(
-            self.entry.data,
-            self.entry.data.get(CONF_REGION, ""),
-            self.entry.data.get(CONF_DSO, ""),
+        self._set_snapshot(
+            build_custom_snapshot(
+                self.entry.data,
+                self.entry.data.get(CONF_REGION, ""),
+                self.entry.data.get(CONF_DSO, ""),
+            )
         )
         self._snapshot_fetched_at = dt_util.utcnow()
         self._last_error = ""
@@ -1636,9 +1678,24 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self.entry.data[CONF_REGION],
         )
 
+    def _set_snapshot(self, snap: SupplierSnapshot | None) -> None:
+        """Keep the card as parsed and resolve this entry's VAT preference.
+
+        Every path that produces a snapshot - a fetch, a sibling's shared
+        copy, the persisted cache, the custom-formula build - lands here,
+        so the VAT choice is applied exactly once and never leaks into
+        what other entries on the same tuple see.
+        """
+        self._snapshot_raw = snap
+        self._snapshot = (
+            None
+            if snap is None
+            else apply_vat(snap, include_vat=_include_vat(self.entry))
+        )
+
     def _adopt_shared(self, shared: _SharedSnapshot) -> None:
         """Take a fresh shared snapshot as our own."""
-        self._snapshot = shared.snapshot
+        self._set_snapshot(shared.snapshot)
         self._snapshot_fetched_at = shared.fetched_at
         self._snapshot_probe_key = shared.probe_key
         self._last_error = ""
@@ -1724,9 +1781,13 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             # Re-use the previous probe_key when the current probe
             # came back empty (probe-less suppliers stay None; a
             # transiently-failing probe keeps the last known key).
-            if cache.get(key) is None and self._snapshot_fetched_at is not None:
+            if (
+                cache.get(key) is None
+                and self._snapshot_raw is not None
+                and self._snapshot_fetched_at is not None
+            ):
                 cache[key] = _SharedSnapshot(
-                    snapshot=self._snapshot,
+                    snapshot=self._snapshot_raw,
                     fetched_at=self._snapshot_fetched_at,
                     probe_key=probe_key
                     if probe_key is not None
@@ -1785,7 +1846,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                         snapshot=snap, fetched_at=fetched_at, probe_key=probe_key
                     )
                     failed.pop(key, None)
-                self._snapshot = snap
+                self._set_snapshot(snap)
                 self._snapshot_fetched_at = fetched_at
                 self._snapshot_probe_key = probe_key
                 self._last_error = ""
@@ -2416,9 +2477,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 "history": dict(self._peak_history),
             },
         }
-        if self._snapshot is not None and self._snapshot_fetched_at is not None:
+        if self._snapshot_raw is not None and self._snapshot_fetched_at is not None:
+            # Persist the card as parsed, not as priced: flipping the VAT
+            # preference must re-resolve the cached card on the next load
+            # rather than serve a snapshot baked for the old answer.
             payload["snapshot"] = _snapshot_to_dict(
-                self._snapshot,
+                self._snapshot_raw,
                 self._snapshot_fetched_at,
                 self._snapshot_probe_key,
             )
@@ -4182,7 +4246,10 @@ async def _compute_current_year_cost(
 # coefficients) so a variable contract with a contract start date re-prices its
 # signing cohort against the current month's mean. Bump so a cached variable
 # snapshot from before the fields existed is dropped and re-parsed with them.
-_SNAPSHOT_SCHEMA_VERSION = 15
+# v16: the persisted snapshot now holds the card as parsed rather than as
+# priced, so the entry's VAT preference is re-applied on load. Bump so a cache
+# written under the old meaning is dropped.
+_SNAPSHOT_SCHEMA_VERSION = 16
 
 
 def _snapshot_to_dict(

@@ -52,6 +52,7 @@ from custom_components.be_electricity_prices.providers.base import (
     InjectionRates,
     SpotMonthlyRates,
     SupplierExtractor,
+    apply_vat,
 )
 from custom_components.be_electricity_prices.providers.custom import build_snapshot
 from tests import make_snapshot, make_stub_extractor
@@ -372,9 +373,9 @@ async def test_spp_weights_survive_persist_round_trip(hass: HomeAssistant) -> No
     [(0.06, 1.06), (0.0, 1.0)],  # custom grosses up; scraped (vat 0) is a no-op
 )
 def test_custom_bakes_fixed_fees_vat_inclusive(vat_rate: float, factor: float) -> None:
-    # Fixed fees are baked VAT-inclusive at build time (so every consumption
-    # path -- live, YTD, backfill, compare -- reads the correct value); per-kWh
-    # values stay excl-VAT and keep vat_rate for compute_breakdown to gross up.
+    # apply_vat bakes the fixed fees (so every consumption path -- live, YTD,
+    # backfill, compare -- reads the correct value); per-kWh values stay
+    # excl-VAT and keep vat_rate for compute_breakdown to gross up.
     data = {
         const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
         const.CONF_CUSTOM_ENERGY_SINGLE: 0.30,
@@ -385,7 +386,10 @@ def test_custom_bakes_fixed_fees_vat_inclusive(vat_rate: float, factor: float) -
         const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.05,
         const.CONF_CUSTOM_VAT_RATE: vat_rate,
     }
-    snap = build_snapshot(data, const.REGION_FLANDERS, const.DSO_FLUVIUS_ANTWERPEN)
+    snap = apply_vat(
+        build_snapshot(data, const.REGION_FLANDERS, const.DSO_FLUVIUS_ANTWERPEN),
+        include_vat=True,
+    )
     ov = snap.dsos[const.DSO_FLUVIUS_ANTWERPEN]
     assert snap.energy.yearly_fixed_fee == pytest.approx(100.0 * factor)
     assert snap.taxes.energy_fund_eur_per_month == pytest.approx(5.0 * factor)
@@ -394,6 +398,50 @@ def test_custom_bakes_fixed_fees_vat_inclusive(vat_rate: float, factor: float) -
     # per-kWh values are untouched; vat_rate is preserved for the gross-up
     assert ov.distribution_single == pytest.approx(0.05)
     assert snap.taxes.vat_rate == pytest.approx(vat_rate)
+
+
+def test_apply_vat_excluded_leaves_the_card_as_printed() -> None:
+    # A business that deducts VAT bears the ex-VAT cost: no fee is baked and
+    # the per-kWh gross-up is switched off with it.
+    data = {
+        const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+        const.CONF_CUSTOM_ENERGY_SINGLE: 0.30,
+        const.CONF_CUSTOM_YEARLY_FIXED_FEE: 100.0,
+        const.CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH: 5.0,
+        const.CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR: 15.0,
+        const.CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR: 40.0,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.05,
+        const.CONF_CUSTOM_VAT_RATE: 0.21,
+    }
+    snap = apply_vat(
+        build_snapshot(data, const.REGION_FLANDERS, const.DSO_FLUVIUS_ANTWERPEN),
+        include_vat=False,
+    )
+    ov = snap.dsos[const.DSO_FLUVIUS_ANTWERPEN]
+    assert snap.energy.yearly_fixed_fee == pytest.approx(100.0)
+    assert snap.taxes.energy_fund_eur_per_month == pytest.approx(5.0)
+    assert ov.data_management_per_year == pytest.approx(15.0)
+    assert ov.capacity_eur_per_kw_year == pytest.approx(40.0)
+    assert ov.distribution_single == pytest.approx(0.05)
+    assert snap.taxes.vat_rate == pytest.approx(0.0)
+
+
+def test_apply_vat_is_identity_on_a_vat_inclusive_card() -> None:
+    # Every residential card prints VAT-incl and carries vat_rate 0; the
+    # preference cannot change it, and the snapshot is not even copied.
+    snap = build_snapshot(
+        {
+            const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+            const.CONF_CUSTOM_ENERGY_SINGLE: 0.30,
+            const.CONF_CUSTOM_YEARLY_FIXED_FEE: 100.0,
+            const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.05,
+            const.CONF_CUSTOM_VAT_RATE: 0.0,
+        },
+        const.REGION_FLANDERS,
+        const.DSO_FLUVIUS_ANTWERPEN,
+    )
+    assert apply_vat(snap, include_vat=True) is snap
+    assert apply_vat(snap, include_vat=False) is snap
 
 
 # ---- config-flow toggle ------------------------------------------------------

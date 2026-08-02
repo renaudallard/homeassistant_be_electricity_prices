@@ -121,20 +121,40 @@ roughly 2.7 c/kWh (`providers/base.py:457-459`, illustrative).
 
 ### VAT handling and the vat_rate == 0.0 convention
 
-Belgian residential electricity is billed at 6% VAT, but every current extractor
-parses numbers that are already VAT-inclusive, so the snapshot convention is
-`vat_rate = 0.0`, and the multiplier `1.0 + vat_rate` is `1.0`
-(`providers/base.py:471-474`, `pricing.py:599-605`). Under that convention the
-reported components match what the PDF prints exactly.
+Belgian residential electricity is billed at 6% VAT, and every scraped
+residential card prints numbers that are already VAT-inclusive, so the snapshot
+convention for them is `vat_rate = 0.0` and the multiplier `1.0 + vat_rate` is
+`1.0` (`providers/base.py:479-482`, `pricing.py:599-605`). Under that convention
+the reported components match what the PDF prints exactly.
 
-The multiplier exists only as forward-compatibility: if a future extractor parses
-ex-VAT numbers it sets `vat_rate = 0.06`, and VAT then applies uniformly across
-energy, network and taxes rather than being smeared into the taxes component
-(`pricing.py:422-425`). Applying VAT per component before summing is what keeps
-`energy + network + taxes == all_in` exact (see the invariant above).
+A non-zero `vat_rate` means the opposite: the snapshot carries the numbers
+**excluding** VAT, at the rate given. The expert custom supplier does this today
+(the user types ex-VAT coefficients, default rate 0.06), and professional cards,
+which print *"Prix tva exclue"* at 21%, do the same.
 
-Injection is the exception: it is VAT-exempt and never VAT-scaled (see
-[Injection math](#injection-feed-in-math)).
+VAT then has to reach two kinds of value, and only one of them goes through the
+pricing engine:
+
+- **Per-kWh rates** are grossed per component in `_finalize_breakdown`
+  (`pricing.py:422-425`), uniformly across energy, network and taxes rather than
+  smeared into the taxes component. Applying it per component before summing is
+  what keeps `energy + network + taxes == all_in` exact (see the invariant
+  above).
+- **Fixed and annual fees** - the yearly fee, data management, capacity, the DSO
+  and supplier prosumer forfaits, the Brussels OSP table, the energy fund -
+  never reach that path: the live, YTD, backfill and compare paths each sum them
+  raw. `base.apply_vat` (`providers/base.py:548`) bakes them once instead.
+
+`apply_vat` is called per config entry, from `_set_snapshot`
+(`coordinator.py:1682`), never before the shared snapshot cache: that cache is
+keyed on `(supplier, contract, region)` and shared between entries that may
+answer the VAT question differently. It is identity on a `vat_rate == 0.0`
+snapshot, so it costs nothing for a residential entry. `CONF_INCLUDE_VAT`
+chooses the factor: a business that deducts VAT sets it False and the card's
+own ex-VAT numbers stand.
+
+Injection is the exception: it is VAT-exempt residentially and never VAT-scaled
+here (see [Injection math](#injection-feed-in-math)).
 
 ## Energy rate by contract kind
 

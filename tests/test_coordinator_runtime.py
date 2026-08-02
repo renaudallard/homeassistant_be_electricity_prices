@@ -852,7 +852,7 @@ async def test_self_fresh_populates_empty_shared_cache(
         {"fetch": staticmethod(AsyncMock()), "probe": staticmethod(_fake_probe)},
     )
 
-    coord._snapshot = _fake_snapshot()
+    coord._set_snapshot(_fake_snapshot())
     coord._snapshot_probe_key = "stable-key"
     coord._snapshot_fetched_at = dt_util.utcnow() - timedelta(hours=12)
     assert _shared_snapshots(hass).get(coord._shared_key()) is None
@@ -865,6 +865,10 @@ async def test_self_fresh_populates_empty_shared_cache(
 
     shared = _shared_snapshots(hass).get(coord._shared_key())
     assert shared is not None
+    # The shared row carries the card as parsed, which siblings resolve
+    # against their own VAT preference; on a VAT-incl card that is the
+    # very object this entry prices against.
+    assert shared.snapshot is coord._snapshot_raw
     assert shared.snapshot is coord._snapshot
     assert shared.probe_key == "stable-key"
 

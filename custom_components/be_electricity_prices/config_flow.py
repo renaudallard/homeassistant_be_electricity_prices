@@ -127,6 +127,7 @@ from .const import (
     CONF_DAY_INJECTION_KWH,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
+    CONF_INCLUDE_VAT,
     CONF_INJECTION_KWH,
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_ENERGY_FACTOR,
@@ -149,6 +150,7 @@ from .const import (
     CUSTOM_INJECTION_MODES,
     DEFAULT_CONNECTION_KVA_TIER,
     DEFAULT_CUSTOM_VAT_RATE,
+    DEFAULT_INCLUDE_VAT,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
     DSO_TARIFF_MODES,
@@ -171,7 +173,7 @@ from .const import (
     REGIONS,
 )
 from .providers import ExtractorError, all_extractors, get as get_extractor
-from .providers.base import Contract
+from .providers.base import Contract, apply_vat
 
 
 # ---- shared schema builders ---------------------------------------------------
@@ -2042,8 +2044,13 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         other_per_kwh: float | None = None
         other_snap = None
         try:
-            other_snap = await other_extractor.fetch(
-                session, self._compare[CONF_CONTRACT], region
+            other_snap = apply_vat(
+                await other_extractor.fetch(
+                    session, self._compare[CONF_CONTRACT], region
+                ),
+                include_vat=bool(
+                    self.config_entry.data.get(CONF_INCLUDE_VAT, DEFAULT_INCLUDE_VAT)
+                ),
             )
         except Exception as err:  # noqa: BLE001
             placeholders["error"] = f"could not fetch quote: {err}"

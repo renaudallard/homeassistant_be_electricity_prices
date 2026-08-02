@@ -170,18 +170,8 @@ def _opt(data: Mapping[str, Any], key: str) -> float | None:
     return float(value) if value is not None else None
 
 
-def _opt_vat(data: Mapping[str, Any], key: str, vat_factor: float) -> float | None:
-    value = _opt(data, key)
-    return value * vat_factor if value is not None else None
-
-
-def _build_energy(
-    data: Mapping[str, Any], contract: str, vat_factor: float
-) -> EnergyRates:
-    # Per-kWh coefficients (factor/base/single/peak/...) stay excl-VAT and are
-    # grossed up by vat_rate in compute_breakdown. The fixed yearly fee is not
-    # in that per-kWh path, so it is baked VAT-inclusive here.
-    fee = _num(data, CONF_CUSTOM_YEARLY_FIXED_FEE) * vat_factor
+def _build_energy(data: Mapping[str, Any], contract: str) -> EnergyRates:
+    fee = _num(data, CONF_CUSTOM_YEARLY_FIXED_FEE)
     if contract == CUSTOM_CONTRACT_DYNAMIC:
         return DynamicRates(
             factor=_num(data, CONF_CUSTOM_ENERGY_FACTOR),
@@ -204,14 +194,11 @@ def _build_energy(
     )
 
 
-def _build_dso(data: Mapping[str, Any], region: str, vat_factor: float) -> DsoOverlay:
-    # distribution/transport/Impact-bands are per-kWh (excl-VAT, grossed in
-    # compute_breakdown); the fixed fees (data-management, capacity, prosumer,
-    # Brussels OSP) are not in that path, so they are baked VAT-inclusive.
+def _build_dso(data: Mapping[str, Any], region: str) -> DsoOverlay:
     osp: dict[str, float] | None = None
     if region == REGION_BRUSSELS:
         tier = data.get(CONF_CONNECTION_KVA_TIER, DEFAULT_CONNECTION_KVA_TIER)
-        osp = {tier: _num(data, CONF_CUSTOM_DSO_BRUSSELS_OSP) * vat_factor}
+        osp = {tier: _num(data, CONF_CUSTOM_DSO_BRUSSELS_OSP)}
     return DsoOverlay(
         distribution_single=_num(data, CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE),
         distribution_peak=_opt(data, CONF_CUSTOM_DSO_DISTRIBUTION_PEAK),
@@ -220,15 +207,9 @@ def _build_dso(data: Mapping[str, Any], region: str, vat_factor: float) -> DsoOv
             data, CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT
         ),
         transport=_num(data, CONF_CUSTOM_DSO_TRANSPORT),
-        data_management_per_year=(
-            _num(data, CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR) * vat_factor
-        ),
-        capacity_eur_per_kw_year=_opt_vat(
-            data, CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR, vat_factor
-        ),
-        prosumer_eur_per_kva_year=_opt_vat(
-            data, CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR, vat_factor
-        ),
+        data_management_per_year=_num(data, CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR),
+        capacity_eur_per_kw_year=_opt(data, CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR),
+        prosumer_eur_per_kva_year=_opt(data, CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR),
         distribution_pic=_opt(data, CONF_CUSTOM_DSO_DISTRIBUTION_PIC),
         distribution_medium=_opt(data, CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM),
         distribution_eco=_opt(data, CONF_CUSTOM_DSO_DISTRIBUTION_ECO),
@@ -236,7 +217,7 @@ def _build_dso(data: Mapping[str, Any], region: str, vat_factor: float) -> DsoOv
     )
 
 
-def _build_taxes(data: Mapping[str, Any], region: str, vat_factor: float) -> TaxOverlay:
+def _build_taxes(data: Mapping[str, Any], region: str) -> TaxOverlay:
     renewables = _num(data, CONF_CUSTOM_TAX_REGIONAL_RENEWABLES)
     return TaxOverlay(
         federal_excise=_num(data, CONF_CUSTOM_TAX_FEDERAL_EXCISE),
@@ -245,11 +226,7 @@ def _build_taxes(data: Mapping[str, Any], region: str, vat_factor: float) -> Tax
         wallonia_renewables=renewables if region == REGION_WALLONIA else 0.0,
         brussels_renewables=renewables if region == REGION_BRUSSELS else 0.0,
         region_connection_fee=_num(data, CONF_CUSTOM_TAX_REGION_CONNECTION_FEE),
-        # energy_fund is a fixed monthly fee (not in taxes_eur_per_kwh), so bake
-        # it VAT-inclusive; vat_rate itself stays raw for the per-kWh gross-up.
-        energy_fund_eur_per_month=(
-            _num(data, CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH) * vat_factor
-        ),
+        energy_fund_eur_per_month=_num(data, CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH),
         vat_rate=_num(data, CONF_CUSTOM_VAT_RATE, DEFAULT_CUSTOM_VAT_RATE),
     )
 
@@ -282,20 +259,19 @@ def build_snapshot(data: Mapping[str, Any], region: str, dso: str) -> SupplierSn
     mode the energy carries only factor/base; the coordinator threads the
     delivery month's mean spot through pricing.
 
-    VAT convention: the user enters everything excluding VAT. Per-kWh values
-    keep ``vat_rate`` and are grossed up per component in ``compute_breakdown``.
-    Fixed/annual fees are NOT in that path (they are summed raw in the live,
-    year-to-date, backfill and compare paths), so they are baked VAT-inclusive
-    here, once, matching how a scraped card carries its fixed fees.
+    VAT convention: the user enters everything excluding VAT, so the snapshot
+    is returned on that basis with the entered rate on ``vat_rate``, exactly
+    like a professional card. ``base.apply_vat`` resolves it for the entry -
+    grossing the per-kWh side through ``compute_breakdown`` and baking the
+    fixed/annual fees, which no pricing path grosses on its own.
     """
     contract = str(data.get(CONF_CONTRACT, CUSTOM_CONTRACT_FIXED))
-    vat_factor = 1.0 + _num(data, CONF_CUSTOM_VAT_RATE, DEFAULT_CUSTOM_VAT_RATE)
     return SupplierSnapshot(
         supplier=SUPPLIER_CUSTOM,
         contract=contract,
-        energy=_build_energy(data, contract, vat_factor),
-        dsos={dso: _build_dso(data, region, vat_factor)},
-        taxes=_build_taxes(data, region, vat_factor),
+        energy=_build_energy(data, contract),
+        dsos={dso: _build_dso(data, region)},
+        taxes=_build_taxes(data, region),
         source_url="custom formula (config entry)",
         publication_label="Custom formula",
         injection=_build_injection(data),

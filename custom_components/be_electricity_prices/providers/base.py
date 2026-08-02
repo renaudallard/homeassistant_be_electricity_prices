@@ -42,7 +42,7 @@ comes from a live fetch.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Literal, Protocol
 
@@ -494,7 +494,9 @@ class SupplierSnapshot:
     # inverter capacity per year, billed ON TOP OF the DSO prosumer tariff
     # (DsoOverlay.prosumer_eur_per_kva_year). Cociter Variable publishes one
     # ("Forfait panneaux photovoltaiques ... en regime de compensation");
-    # most cards don't, so it stays None. Already TVAC - never VAT-scaled.
+    # most cards don't, so it stays None. Carried on the basis its card
+    # prints it: TVAC on a residential card, excl-VAT on a professional one,
+    # where apply_vat bakes it like every other annual fee.
     supplier_prosumer_eur_per_kva_year: float | None = None
     # Last calendar day the published rates apply to (typically the last
     # day of the supplier's pricing month). ``None`` when the extractor
@@ -504,6 +506,97 @@ class SupplierSnapshot:
     # check ``date.today() <= valid_until``; ``None`` means we don't
     # know, so callers should fall back to "treat as available".
     valid_until: date | None = None
+
+
+def _vat_energy(energy: EnergyRates, factor: float) -> EnergyRates:
+    # Only these three carry a separate exclusive-night abonnement; the rest
+    # bill the standard fee on every meter type.
+    if isinstance(energy, (FixedRates, VariableRates, SpotMonthlyRates)):
+        excl_night = energy.yearly_fixed_fee_exclusive_night
+        return replace(
+            energy,
+            yearly_fixed_fee=energy.yearly_fixed_fee * factor,
+            yearly_fixed_fee_exclusive_night=(
+                None if excl_night is None else excl_night * factor
+            ),
+        )
+    return replace(energy, yearly_fixed_fee=energy.yearly_fixed_fee * factor)
+
+
+def _vat_dso(dso: DsoOverlay, factor: float) -> DsoOverlay:
+    return replace(
+        dso,
+        data_management_per_year=dso.data_management_per_year * factor,
+        capacity_eur_per_kw_year=(
+            None
+            if dso.capacity_eur_per_kw_year is None
+            else dso.capacity_eur_per_kw_year * factor
+        ),
+        prosumer_eur_per_kva_year=(
+            None
+            if dso.prosumer_eur_per_kva_year is None
+            else dso.prosumer_eur_per_kva_year * factor
+        ),
+        brussels_osp_by_tier=(
+            None
+            if dso.brussels_osp_by_tier is None
+            else {k: v * factor for k, v in dso.brussels_osp_by_tier.items()}
+        ),
+    )
+
+
+def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnapshot:
+    """Resolve a snapshot against the entry's VAT preference.
+
+    ``TaxOverlay.vat_rate == 0.0`` means the card printed VAT-inclusive
+    numbers - the convention every residential card follows - so the
+    snapshot is returned unchanged (identity, not a copy).
+
+    A non-zero rate means the card printed everything excluding VAT, as
+    professional cards do. Two kinds of value then need different handling
+    and only one of them is covered by the pricing engine:
+
+      - Per-kWh rates are grossed up per component in
+        ``pricing._finalize_breakdown`` from ``vat_rate``, so they stay as
+        printed here and only the rate itself is resolved.
+      - Fixed and annual fees - the yearly fee, data management, capacity,
+        the DSO and supplier prosumer forfaits, the Brussels OSP table and
+        the energy fund - never reach that path: the live, year-to-date,
+        backfill and compare paths each sum them raw. They are baked here
+        so the choice lands exactly once whichever path bills them.
+
+    ``include_vat=False`` serves a business that deducts VAT: the factor
+    is 1.0 and the numbers stay as the card printed them.
+
+    Injection is untouched. Residential injection is VAT-exempt outright;
+    professional injection is taxed but carries its own exemption, so it
+    is resolved on the injection side rather than here.
+
+    Call this per config entry, never before the shared snapshot cache:
+    the cache is keyed on (supplier, contract, region) and shared between
+    entries that may answer this question differently.
+    """
+    rate = snapshot.taxes.vat_rate
+    if rate == 0.0:
+        return snapshot
+    factor = 1.0 + rate if include_vat else 1.0
+    return replace(
+        snapshot,
+        energy=_vat_energy(snapshot.energy, factor),
+        dsos={k: _vat_dso(v, factor) for k, v in snapshot.dsos.items()},
+        taxes=replace(
+            snapshot.taxes,
+            energy_fund_eur_per_month=(
+                snapshot.taxes.energy_fund_eur_per_month * factor
+            ),
+            vat_rate=rate if include_vat else 0.0,
+        ),
+        supplier_prosumer_eur_per_kva_year=(
+            None
+            if snapshot.supplier_prosumer_eur_per_kva_year is None
+            else snapshot.supplier_prosumer_eur_per_kva_year * factor
+        ),
+    )
 
 
 SnapshotFetcher = Callable[
