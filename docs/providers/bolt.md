@@ -49,10 +49,30 @@ all three regions still live inside that one French document. The listing page
 
 ## Contracts
 
-Bolt declares seven residential-electricity contracts (`bolt.py:133`). All are region-unrestricted
-(default `regions` = all three). Six are fixed / variable with a flat monthly-indicative injection;
-the seventh, `bolt_dynamic`, is a `quarter_hourly` dynamic contract that depends on the ENTSO-E spot
-and has a spot-indexed injection (see Contracts / Injection below).
+Bolt declares seven residential-electricity contracts and a professional edition of each, fourteen
+in all (`bolt.py:144`). All are region-unrestricted (default `regions` = all three). Six of the
+seven are fixed / variable with a flat monthly-indicative injection; the seventh, `bolt_dynamic`,
+is a `quarter_hourly` dynamic contract that depends on the ENTSO-E spot and has a spot-indexed
+injection (see Contracts / Injection below).
+
+### The professional editions
+
+Bolt publishes each product twice at the same path, with `_res_` or `_pro_` in the filename, so the
+pro lane is just `_ContractDef.segment` feeding `_document_url`. Three things differ on the card:
+
+- **It prices excluding VAT at 21%**, so the snapshot carries `vat_rate=0.21`. The distribution
+  block is still headed `TTC`, but its numbers match the other suppliers' ex-VAT tables to the
+  cent, so the label is stale rather than the values - do not trust that heading.
+- **Injection is taxed** (`vat_applies=True`), against the residential exemption.
+- **The `N% TVA` phrase is gone.** `_extract_dynamic_energy` reads it to scale the Belpex formula,
+  and `vat_multiplier` falls back to 6% when it is missing, which would have scaled an already
+  ex-VAT formula and then let `vat_rate` scale it again. The professional branch asserts `HTVA`
+  and scales by 1.0 instead.
+
+Bolt prints only the first excise tranche (`1,4210` c€/kWh, the 0-20.000 kWh band) rather than the
+whole schedule Engie and Mega publish, so a professional Bolt snapshot carries no
+`federal_excise_bands` and a site above 20 MWh/year is billed the first band's rate. Nothing can be
+done about that from the card alone, and inventing the other bands would put EUR values in source.
 
 | id | label | kind | folder / slug | spot-indexed injection | Notes |
 | --- | --- | --- | --- | --- | --- |

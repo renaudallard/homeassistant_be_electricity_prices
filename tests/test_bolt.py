@@ -53,7 +53,8 @@ def test_bolt_is_registered() -> None:
     assert "bolt_fix" in contract_ids
     assert "bolt_variable" in contract_ids
     assert "bolt_dynamic" in contract_ids
-    assert len(contract_ids) == 7
+    # Seven residential products, plus the seven professional editions.
+    assert len(contract_ids) == 14
 
 
 def test_fix_yearly_fee_is_monthly_x_12() -> None:
@@ -328,3 +329,90 @@ def test_publication_month_tolerates_a_misspelled_accent() -> None:
         assert _extract_publication_month(f"{header} /Résidentiel\n") == header
     # A line that is not a month header still yields no label.
     assert _extract_publication_month("Carte Tarifaire\nBolt Fixe\n") == ""
+
+
+# ---- professional cards ------------------------------------------------------
+
+
+def test_pro_contracts_are_registered_and_flagged() -> None:
+    contracts = {c.id: c for c in EXTRACTORS["bolt"].contracts}
+    assert contracts["bolt_pro_variable"].professional is True
+    assert contracts["bolt_variable"].professional is False
+    assert "bolt_pro_dynamic" in contracts
+
+
+def test_pro_document_url_swaps_the_segment() -> None:
+    from custom_components.be_electricity_prices.providers.bolt import (
+        _CONTRACTS_BY_ID,
+        _document_url,
+    )
+
+    assert _document_url(_CONTRACTS_BY_ID["bolt_variable"]).endswith(
+        "/var/bolt_res_el_fr_11.pdf"
+    )
+    assert _document_url(_CONTRACTS_BY_ID["bolt_pro_variable"]).endswith(
+        "/var/bolt_pro_el_fr_11.pdf"
+    )
+
+
+def test_pro_card_is_parsed_ex_vat() -> None:
+    snap = parse_snapshot(
+        "bolt_pro_variable",
+        fixture_text("bolt_pro_variable.pdf", layout=True),
+        "flanders",
+    )
+    assert snap.taxes.vat_rate == pytest.approx(0.21)
+    assert snap.injection is not None
+    assert snap.injection.vat_applies is True
+
+
+def test_pro_inline_bihourly_row_is_not_read_as_exclusive_night() -> None:
+    """Some Bolt renders inline all four columns on the Prix mensuel row
+    (mono, Jour, Nuit, Exclusif nuit) instead of two. Reading that with
+    the two-number rule takes Jour for the exclusive-night rate and bills
+    a night circuit at the day price."""
+    snap = parse_snapshot(
+        "bolt_pro_variable",
+        fixture_text("bolt_pro_variable.pdf", layout=True),
+        "flanders",
+    )
+    assert isinstance(snap.energy, VariableRates)
+    # Card row: Prix mensuel 12,62  13,85  11,53  11,53
+    assert snap.energy.current == pytest.approx(0.1262)
+    assert snap.energy.peak == pytest.approx(0.1385)
+    assert snap.energy.offpeak == pytest.approx(0.1153)
+    assert snap.energy.exclusive_night == pytest.approx(0.1153)
+
+
+def test_pro_dynamic_formula_is_not_vat_scaled() -> None:
+    """The professional card drops the "N% TVA" phrase the multiplier
+    reads. Falling back to the residential 6% default would scale the
+    formula on a card that is already ex-VAT, and vat_rate would then
+    scale it again."""
+    snap = parse_snapshot(
+        "bolt_pro_dynamic",
+        fixture_text("bolt_pro_variable.pdf", layout=True),
+        "flanders",
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    # Card formula: 1,1192 x Belpex + 15,10 EUR/MWh HTVA.
+    assert snap.energy.factor == pytest.approx(1.1192)
+    assert snap.energy.base == pytest.approx(0.01510)
+
+
+def test_pro_card_without_htva_is_refused() -> None:
+    from custom_components.be_electricity_prices.providers.bolt import (
+        _extract_dynamic_energy,
+    )
+
+    text = fixture_text("bolt_pro_variable.pdf", layout=True).replace("HTVA", "TTC")
+    with pytest.raises(ExtractorError, match="HTVA"):
+        _extract_dynamic_energy(text.replace(" ", "\n"), 0.0, professional=True)
+
+
+def test_pro_fixed_card_still_parses() -> None:
+    snap = parse_snapshot(
+        "bolt_pro_fix", fixture_text("bolt_pro_fix.pdf", layout=True), "flanders"
+    )
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.taxes.vat_rate == pytest.approx(0.21)

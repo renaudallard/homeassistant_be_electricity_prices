@@ -49,7 +49,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
 import aiohttp
@@ -112,6 +112,9 @@ _LOGGER = logging.getLogger(__name__)
 _RESA_REW_LOGGED = False
 
 _BASE_URL = "https://files.boltenergie.be/pricelists"
+
+# Belgian standard rate, which the professional cards price excluding.
+_PRO_VAT_RATE = 0.21
 _LISTING_URL = "https://www.boltenergie.be/fr/listes-des-prix"
 _VARIABLE_SUFFIX = "11"  # current variable-card version
 
@@ -128,6 +131,14 @@ class _ContractDef:
     kind: TariffKind
     folder: str  # 'fix' or 'var'
     slug: str  # filename prefix
+    # 'res' or 'pro' in the filename. Bolt publishes a professional
+    # edition of every product at the same path with the segment
+    # swapped: same layout, priced excluding VAT.
+    segment: str = "res"
+
+    @property
+    def professional(self) -> bool:
+        return self.segment == "pro"
 
 
 _CONTRACTS: tuple[_ContractDef, ...] = (
@@ -149,6 +160,58 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "var",
         "plenty_online",
     ),
+    # The professional editions: same paths with the segment swapped.
+    _ContractDef(
+        "bolt_pro_fix", "Bolt Fixe (pro, 1 year)", "fixed", "fix", "fix", segment="pro"
+    ),
+    _ContractDef(
+        "bolt_pro_plenty_fix",
+        "Bolt Plenty Fixe (pro, 1 year)",
+        "fixed",
+        "fix",
+        "plenty_fix",
+        segment="pro",
+    ),
+    _ContractDef(
+        "bolt_pro_variable",
+        "Bolt Variable (pro)",
+        "variable",
+        "var",
+        "bolt",
+        segment="pro",
+    ),
+    _ContractDef(
+        "bolt_pro_dynamic",
+        "Bolt Dynamisch (pro)",
+        "dynamic",
+        "var",
+        "bolt",
+        segment="pro",
+    ),
+    _ContractDef(
+        "bolt_pro_plenty",
+        "Bolt Plenty Variable (pro)",
+        "variable",
+        "var",
+        "plenty",
+        segment="pro",
+    ),
+    _ContractDef(
+        "bolt_pro_online",
+        "Bolt Online (pro)",
+        "variable",
+        "var",
+        "online",
+        segment="pro",
+    ),
+    _ContractDef(
+        "bolt_pro_plenty_online",
+        "Bolt Plenty Online (pro)",
+        "variable",
+        "var",
+        "plenty_online",
+        segment="pro",
+    ),
 )
 
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
@@ -163,7 +226,10 @@ def _document_url(contract: _ContractDef, suffix: str | None = None) -> str:
         suffix = suffix or dt_util.now().strftime("%Y%m")
     else:
         suffix = suffix or _VARIABLE_SUFFIX
-    return f"{_BASE_URL}/{contract.folder}/{contract.slug}_res_el_fr_{suffix}.pdf"
+    return (
+        f"{_BASE_URL}/{contract.folder}/"
+        f"{contract.slug}_{contract.segment}_el_fr_{suffix}.pdf"
+    )
 
 
 async def probe(
@@ -318,8 +384,11 @@ def parse_snapshot(
     # regexes covers every block.
     text = text.replace(" ", "\n")
 
-    energy = _extract_energy(text, contract.kind)
+    professional = contract.professional
+    energy = _extract_energy(text, contract.kind, professional=professional)
     injection = _extract_injection(text, contract.kind)
+    if professional and injection is not None:
+        injection = replace(injection, vat_applies=True)
     publication_label = _extract_publication_month(text)
     federal_excise, energy_contribution, region_connection_fee = _extract_taxes(
         text, region
@@ -355,7 +424,11 @@ def parse_snapshot(
             brussels_renewables=brussels_renewables,
             region_connection_fee=region_connection_fee,
             energy_fund_eur_per_month=energy_fund,
-            vat_rate=0.0,
+            # The professional card prices excluding VAT throughout - its
+            # distribution block is still headed TTC, but the numbers match
+            # the other suppliers' ex-VAT tables to the cent, so the label
+            # is stale, not the values. base.apply_vat resolves it.
+            vat_rate=_PRO_VAT_RATE if professional else 0.0,
         ),
         source_url=source_url,
         publication_label=publication_label,
@@ -395,19 +468,34 @@ _BELPEX_FORMULA_RE = re.compile(
 )
 
 
-def _extract_dynamic_energy(text: str, yearly_fee: float) -> DynamicRates:
+def _extract_dynamic_energy(
+    text: str, yearly_fee: float, *, professional: bool = False
+) -> DynamicRates:
     """Bolt Dynamic: factor * quarter-hourly Belpex spot + base.
 
     The card formula is EUR/MWh HTVA; convert to the EUR/kWh basis applied
     against the EUR/kWh spot and bake VAT (snapshot vat_rate is 0): the factor
     is a dimensionless ratio (* VAT), the base goes EUR/MWh -> EUR/kWh (/1000 *
     VAT). Bills per quarter-hour, so keep the native 15-minute grid.
+
+    The professional card prices everything excluding VAT, so there is
+    nothing to bake here and the snapshot's vat_rate carries the 21%
+    instead. It also drops the "N% TVA" phrase the multiplier reads,
+    which would otherwise fall back to the residential 6% default and
+    scale the formula twice over.
     """
     matches = _BELPEX_FORMULA_RE.findall(text)
     if not matches:
         raise ExtractorError("Bolt: could not parse dynamic Belpex formula")
     factor_s, sign, base_s = matches[0]
-    vat = vat_multiplier(text, re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE))
+    if professional:
+        if "HTVA" not in text:
+            raise ExtractorError("Bolt: professional card is not marked HTVA")
+        vat = 1.0
+    else:
+        vat = vat_multiplier(
+            text, re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE)
+        )
     base_eur_mwh = parse_sign(sign) * to_float(base_s)
     return DynamicRates(
         factor=to_float(factor_s) * vat,
@@ -417,20 +505,30 @@ def _extract_dynamic_energy(text: str, yearly_fee: float) -> DynamicRates:
     )
 
 
-def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
+def _extract_energy(
+    text: str, kind: TariffKind, *, professional: bool = False
+) -> EnergyRates:
     yearly_fee = _extract_yearly_fee(text)
     if kind == "dynamic":
-        return _extract_dynamic_energy(text, yearly_fee)
+        return _extract_dynamic_energy(text, yearly_fee, professional=professional)
     # Bolt's 'Prix mensuel' line is the current month's price for all
     # contract kinds. Static cards have only this; variable cards also
-    # show 'Prix annuel estimé' which we ignore. Layout: two adjacent
-    # numbers, mono then Exclusif nuit (group 2 below is the
-    # exclusive-night rate, not a day/peak rate).
-    match = re.search(r"Prix mensuel\s+([\d.,]+)\s+([\d.,]+)\b", text)
-    if not match:
+    # show 'Prix annuel estimé' which we ignore.
+    #
+    # The row renders in one of two shapes, and which one is a property of
+    # the individual card render rather than of the product: either two
+    # numbers (mono then Exclusif nuit, with the bi-horaire pair left to
+    # the "Prix de l'électricité verte" block below), or all four columns
+    # inline (mono, Jour, Nuit, Exclusif nuit). Reading the four-number
+    # shape with the two-number rule would take Jour for the
+    # exclusive-night rate and bill a night circuit at the day price.
+    match = re.search(r"Prix mensuel([^\n]*)", text)
+    numbers = re.findall(r"[\d.,]+", match.group(1)) if match else []
+    inline_bihourly = len(numbers) >= 4
+    if len(numbers) < 2:
         raise ExtractorError(f"could not parse Bolt {kind} consumption block")
-    mono = to_float(match.group(1)) / 100.0
-    excl = to_float(match.group(2)) / 100.0
+    mono = to_float(numbers[0]) / 100.0
+    excl = to_float(numbers[3] if inline_bihourly else numbers[1]) / 100.0
     # The "Prix de l'électricité verte" block prints two "Jour Nuit"
     # subheads -- the first is for consumption (with our bi-horaire
     # row), the second is for injection. The bi-horaire row is always
@@ -453,7 +551,13 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         if span
         else []
     )
-    if pairs:
+    if inline_bihourly:
+        # The row already carried them, and is the more reliable source:
+        # the span anchor below walks into the DSO table on the renders
+        # that inline the pair.
+        peak = to_float(numbers[1]) / 100.0
+        offpeak = to_float(numbers[2]) / 100.0
+    elif pairs:
         peak = to_float(pairs[-1][0]) / 100.0
         offpeak = to_float(pairs[-1][1]) / 100.0
     elif kind == "fixed":
@@ -837,7 +941,13 @@ EXTRACTOR = SupplierExtractor(
     id="bolt",
     label="Bolt",
     contracts=tuple(
-        Contract(id=c.contract_id, label=c.label, kind=c.kind) for c in _CONTRACTS
+        Contract(
+            id=c.contract_id,
+            label=c.label,
+            kind=c.kind,
+            professional=c.professional,
+        )
+        for c in _CONTRACTS
     ),
     fetch=fetch,
     fetch_for_month=fetch_for_month,
