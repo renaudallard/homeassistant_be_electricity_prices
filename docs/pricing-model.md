@@ -153,8 +153,12 @@ snapshot, so it costs nothing for a residential entry. `CONF_INCLUDE_VAT`
 chooses the factor: a business that deducts VAT sets it False and the card's
 own ex-VAT numbers stand.
 
-Injection is the exception: it is VAT-exempt residentially and never VAT-scaled
-here (see [Injection math](#injection-feed-in-math)).
+Injection is conditional: residentially it is VAT-exempt and never VAT-scaled,
+but professional cards tax it at 21% (*"Le prix d'injection est soumis a la TVA"*,
+the reverse of the residential wording). An extractor whose card taxes it sets
+`InjectionRates.vat_applies` and `apply_vat` grosses those rates too - they are
+not in the per-component path either (see
+[Injection math](#injection-feed-in-math)).
 
 ### Degressive federal excise
 

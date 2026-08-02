@@ -4265,8 +4265,9 @@ async def _compute_current_year_cost(
 # v16: the persisted snapshot now holds the card as parsed rather than as
 # priced, so the entry's VAT preference is re-applied on load, and TaxOverlay
 # gained federal_excise_bands for cards that print the special excise as a
-# degressive schedule by annual consumption. Bump so a cache written under
-# either of the old meanings is dropped.
+# degressive schedule by annual consumption, and InjectionRates gained
+# vat_applies for cards that tax injection. Bump so a cache written under any
+# of the old meanings is dropped.
 _SNAPSHOT_SCHEMA_VERSION = 16
 
 

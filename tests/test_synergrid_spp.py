@@ -647,3 +647,43 @@ def test_resolve_excise_band_leaves_the_rest_of_the_card_alone() -> None:
     assert out.taxes.vat_rate == pytest.approx(0.21)
     assert out.energy is snap.energy
     assert out.dsos is snap.dsos
+
+
+# ---- professional injection is taxed --------------------------------------
+
+
+def _pro_snapshot(*, vat_applies: bool) -> Any:
+    return make_snapshot(
+        taxes=TaxOverlay(
+            federal_excise=0.01421, energy_contribution=0.0019261, vat_rate=0.21
+        ),
+        injection=InjectionRates(
+            current=0.05, factor=1.0, base=-0.013, vat_applies=vat_applies
+        ),
+    )
+
+
+def test_apply_vat_grosses_a_taxed_injection() -> None:
+    # Professional cards state injection IS subject to 21% VAT, the reverse
+    # of the residential exemption. None of these rates reaches the pricing
+    # engine's per-component gross-up, so apply_vat has to bake them.
+    inj = apply_vat(_pro_snapshot(vat_applies=True), include_vat=True).injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.05 * 1.21)
+    assert inj.factor == pytest.approx(1.21)
+    assert inj.base == pytest.approx(-0.013 * 1.21)
+
+
+def test_apply_vat_leaves_a_taxed_injection_alone_when_vat_is_deducted() -> None:
+    inj = apply_vat(_pro_snapshot(vat_applies=True), include_vat=False).injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.05)
+    assert inj.base == pytest.approx(-0.013)
+
+
+def test_apply_vat_never_touches_an_exempt_injection() -> None:
+    # An ex-VAT card whose injection is exempt: the consumption side grosses
+    # up, the injection must not.
+    snap = _pro_snapshot(vat_applies=False)
+    out = apply_vat(snap, include_vat=True)
+    assert out.injection is snap.injection

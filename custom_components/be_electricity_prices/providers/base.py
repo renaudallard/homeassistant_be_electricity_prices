@@ -269,8 +269,12 @@ class InjectionRates:
     """Injection (solar feed-in) compensation, in EUR/kWh.
 
     Belgian residential injection is exempt from VAT, so values here are
-    NEVER VAT-incl regardless of the consumption snapshot's vat_rate. At
-    least one of (current, factor+base) must be populated:
+    NEVER VAT-incl on a residential card regardless of the consumption
+    snapshot's vat_rate. Professional injection is not exempt - the cards
+    print *"Le prix d'injection est soumis a la TVA (21%)"* - so a
+    professional extractor sets ``vat_applies`` and ``apply_vat`` grosses
+    these rates with the rest of the card. At least one of (current,
+    factor+base) must be populated:
 
       - ``current`` is the supplier's monthly indicative price (e.g. Eneco's
         "Maandprijs" of 4.76 c/kWh on Power Fix). Used when no live spot is
@@ -304,6 +308,11 @@ class InjectionRates:
     peak: float | None = None
     transition: float | None = None
     offpeak: float | None = None
+    # True when the card taxes injection (professional cards do, at 21%).
+    # None of these rates passes through the pricing engine's per-component
+    # VAT gross-up, so ``apply_vat`` bakes them, like the fixed fees. Left
+    # False by every residential extractor, where injection is exempt.
+    vat_applies: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -553,6 +562,21 @@ def _vat_dso(dso: DsoOverlay, factor: float) -> DsoOverlay:
     )
 
 
+def _vat_injection(injection: InjectionRates, factor: float) -> InjectionRates:
+    def scaled(value: float | None) -> float | None:
+        return None if value is None else value * factor
+
+    return replace(
+        injection,
+        current=scaled(injection.current),
+        factor=scaled(injection.factor),
+        base=scaled(injection.base),
+        peak=scaled(injection.peak),
+        transition=scaled(injection.transition),
+        offpeak=scaled(injection.offpeak),
+    )
+
+
 def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnapshot:
     """Resolve a snapshot against the entry's VAT preference.
 
@@ -576,9 +600,9 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
     ``include_vat=False`` serves a business that deducts VAT: the factor
     is 1.0 and the numbers stay as the card printed them.
 
-    Injection is untouched. Residential injection is VAT-exempt outright;
-    professional injection is taxed but carries its own exemption, so it
-    is resolved on the injection side rather than here.
+    Injection is baked here too, but only when the card taxes it
+    (``InjectionRates.vat_applies``). Residential injection is VAT-exempt
+    outright and stays untouched even on a card that is otherwise ex-VAT.
 
     Call this per config entry, never before the shared snapshot cache:
     the cache is keyed on (supplier, contract, region) and shared between
@@ -588,10 +612,16 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
     if rate == 0.0:
         return snapshot
     factor = 1.0 + rate if include_vat else 1.0
+    injection = snapshot.injection
     return replace(
         snapshot,
         energy=_vat_energy(snapshot.energy, factor),
         dsos={k: _vat_dso(v, factor) for k, v in snapshot.dsos.items()},
+        injection=(
+            _vat_injection(injection, factor)
+            if injection is not None and injection.vat_applies
+            else injection
+        ),
         taxes=replace(
             snapshot.taxes,
             energy_fund_eur_per_month=(
