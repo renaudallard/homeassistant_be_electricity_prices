@@ -53,10 +53,11 @@ when called without one (`mega.py:440`).
 
 ## Contracts
 
-Eleven residential electricity products are registered (`_CONTRACTS`,
-`mega.py:159`; the test pins `len(contract_ids) == 11` at `test_mega.py:63`). The
-count dropped from twelve when the Off-peak Fixed product was retired in July 2026
-(`mega.py:47`).
+Ten residential electricity products are registered, plus eight professional
+editions (`_CONTRACTS`, `mega.py:172`; the test pins
+`len(contract_ids) == 18` at `test_mega.py:66`). The residential count dropped
+from twelve as Off-peak Fixed was retired in July 2026 (`mega.py:47`) and Zen
+Fixed in August.
 
 | id | label | TariffKind | Regions | Notes |
 | --- | --- | --- | --- | --- |
@@ -95,13 +96,58 @@ Notes on the enumeration:
 The catalog also carries `Prepaid Fixed` / `Prepaid Flex`, which are topup-card
 products with a different billing model (no monthly invoice, no recorder-backed
 consumption sensors), out of scope for the Energy-dashboard integration
-(`_KNOWN_UNSUPPORTED_PRODUCTS`, `mega.py:205`).
+(`_KNOWN_UNSUPPORTED_PRODUCTS`, `mega.py:291`).
+
+### The professional editions
+
+Mega publishes a B2B card for eight of its products, to the same CDN, but never
+links them from the public listing: the `data-product-element` anchors carry
+only `Mega-FR-EL-B2C-` hrefs. There is nothing to scrape, so the pro lane builds
+the URL instead (`_pro_pdf_url`, `mega.py:386`):
+
+```
+https://my.mega.be/resources/tarif/Mega-FR-EL-B2B-<REGION>-<MMYYYY>-<Family>01<MM>[-<Variant>].pdf
+```
+
+`01<MM>` is the card's validity start, always the first of its month, so a
+contract only needs its family token (`Smart`, `Cosy`, `Dynamic`, ...) and the
+`-Fixed` variant suffix. A month Mega has not published resolves to the CDN's
+HTML stub, which `fetch_pdf_text` rejects, so a wrong guess fails loud; `fetch`
+then falls back to the previous month, which covers the day or two of lag around
+a month boundary.
+
+Consequences of having no listing:
+
+- **No probe.** The built URL only changes at a month boundary, so returning it
+  as a freshness key would pin the snapshot for a whole month and swallow a
+  mid-month re-publish. `probe` returns `None` for a pro contract and the
+  24-hour TTL takes over.
+- **`discover()` cannot see them**, so a new professional product will not
+  surface in the daily catalog diff. The residential listing remains the only
+  discovery signal.
+
+Online Flex and the whole Off-peak family have no B2B card. Zen Fixed does, even
+though Mega retired the residential one in August 2026.
+
+Card differences, all handled in `parse_snapshot` on the contract's
+`professional` flag:
+
+| | residential | professional |
+| --- | --- | --- |
+| Header | `Client résidentiel - <Region>` | `Client professionnel - <Region>` |
+| VAT basis | TVAC, `vat_rate=0.0` | HTVA, `vat_rate=0.21` |
+| Federal excise | one `Accise spéciale` rate since August 2026 | three tranches (0-20.000 / 20.000-50.000 / 50.000-1.000.000 kWh) into `federal_excise_bands` |
+| Energy contribution | folded into the excise, row gone | still printed, one column per tranche |
+| Injection | not taxed | *"les prix d'injection sont à majorer de la TVA"*, so `vat_applies=True` |
+
+The region header check accepts either wording but still pins the region, since
+a wrong-region card mis-prices silently.
 
 ## Fetch strategy
 
 ### Live fetch
 
-`fetch(session, contract_id, region)` (`mega.py:319`):
+`fetch(session, contract_id, region)` (`mega.py:434`):
 
 1. Validate the contract id and resolve the region to its `VL` / `WL` / `BX` code.
 2. GET the listing HTML (`_fetch_listing_html`, `mega.py:272`).

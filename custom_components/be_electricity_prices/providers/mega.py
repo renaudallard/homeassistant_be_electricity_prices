@@ -62,10 +62,11 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, replace
+from datetime import date, timedelta
 
 import aiohttp
+from homeassistant.util import dt as dt_util
 
 from ..const import (
     DSO_AIEG,
@@ -90,6 +91,7 @@ from ._pdf import (
     parse_brussels_osp,
     parse_sign,
     parse_valid_until,
+    tier_bound_kwh,
     to_float,
     vat_multiplier,
 )
@@ -154,6 +156,17 @@ class _ContractDef:
     # three; Off-peak Impact is Wallonia-only because it requires the
     # CWaPE IMPACT DSO tariff (Wallonia-specific).
     regions: frozenset[str] = _MEGA_ALL_REGIONS
+    # B2C (residential) or B2B (professional), the segment in the card's
+    # filename. The professional cards are absent from the public listing,
+    # so a B2B contract also carries the filename tokens needed to build
+    # its URL directly; see _pro_pdf_url.
+    segment: str = "B2C"
+    file_family: str = ""  # "Smart", "Cosy", "Dynamic", ...
+    file_variant: str = ""  # "-Fixed" or empty
+
+    @property
+    def professional(self) -> bool:
+        return self.segment == "B2B"
 
 
 _CONTRACTS: tuple[_ContractDef, ...] = (
@@ -188,6 +201,79 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     ),
     _ContractDef("mega_dynamic", "Mega Dynamic", "dynamic", "Dynamic"),
     _ContractDef("mega_cap", "Mega Cap", "variable", "Mega Cap"),
+    # The professional editions. Mega publishes these to the same CDN but
+    # never links them from the public listing, so they are addressed by
+    # building the filename. Online Flex and the whole Off-peak family
+    # have no B2B card; Zen Fixed does, even though Mega retired the
+    # residential one in August 2026.
+    _ContractDef(
+        "mega_pro_smart_fixed",
+        "Mega Smart Fixed (pro)",
+        "fixed",
+        "Smart Fixed",
+        segment="B2B",
+        file_family="Smart",
+        file_variant="-Fixed",
+    ),
+    _ContractDef(
+        "mega_pro_smart_flex",
+        "Mega Smart Flex (pro)",
+        "variable",
+        "Smart Flex",
+        segment="B2B",
+        file_family="Smart",
+    ),
+    _ContractDef(
+        "mega_pro_online_fixed",
+        "Mega Online Fixed (pro)",
+        "fixed",
+        "Online Fixed",
+        segment="B2B",
+        file_family="Online",
+        file_variant="-Fixed",
+    ),
+    _ContractDef(
+        "mega_pro_cosy_fixed",
+        "Mega Cosy Fixed (pro)",
+        "fixed",
+        "Cosy Fixed",
+        segment="B2B",
+        file_family="Cosy",
+        file_variant="-Fixed",
+    ),
+    _ContractDef(
+        "mega_pro_cosy_flex",
+        "Mega Cosy Flex (pro)",
+        "variable",
+        "Cosy Flex",
+        segment="B2B",
+        file_family="Cosy",
+    ),
+    _ContractDef(
+        "mega_pro_dynamic",
+        "Mega Dynamic (pro)",
+        "dynamic",
+        "Dynamic",
+        segment="B2B",
+        file_family="Dynamic",
+    ),
+    _ContractDef(
+        "mega_pro_cap",
+        "Mega Cap (pro)",
+        "variable",
+        "Mega Cap",
+        segment="B2B",
+        file_family="Cap",
+    ),
+    _ContractDef(
+        "mega_pro_zen_fixed",
+        "Mega Zen Fixed (pro)",
+        "fixed",
+        "Zen Fixed",
+        segment="B2B",
+        file_family="Zen",
+        file_variant="-Fixed",
+    ),
 )
 
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
@@ -294,6 +380,29 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 # ---- top-level fetch + parser -------------------------------------------------
 
 
+_CDN_BASE = "https://my.mega.be/resources/tarif/"
+
+
+def _pro_pdf_url(c: _ContractDef, region_code: str, year_month: date) -> str:
+    """Build the professional card's URL for a month.
+
+    Mega serves the B2B cards from the same CDN as the residential ones
+    but never links them from the public listing, so there is nothing to
+    scrape: the filename is the residential grammar with the B2B segment,
+
+        Mega-FR-EL-B2B-<REGION>-<MMYYYY>-<Family>01<MM>[-<Variant>].pdf
+
+    where the 01<MM> is the card's validity start, always the first of its
+    month. A month Mega has not published resolves to the CDN's HTML stub,
+    which fetch_pdf_text rejects, so a wrong guess fails loud.
+    """
+    mm = f"{year_month.month:02d}"
+    return (
+        f"{_CDN_BASE}Mega-FR-EL-B2B-{region_code}-{mm}{year_month.year}-"
+        f"{c.file_family}01{mm}{c.file_variant}.pdf"
+    )
+
+
 async def probe(
     session: aiohttp.ClientSession,
     contract_id: str,
@@ -308,6 +417,12 @@ async def probe(
     contract = _CONTRACTS_BY_ID.get(contract_id)
     region_code = _REGION_TO_CODE.get(region)
     if contract is None or region_code is None:
+        return None
+    if contract.professional:
+        # No listing carries the professional cards, and the built URL
+        # only changes at a month boundary - returning it would pin the
+        # snapshot for a whole month and swallow a mid-month re-publish.
+        # Fall back to the time-based TTL instead.
         return None
     try:
         listing = await _fetch_listing_html(session)
@@ -329,14 +444,27 @@ async def fetch(
     if region_code is None:
         raise ExtractorError(f"Mega: unknown region {region!r}")
 
+    if contract.professional:
+        today = dt_util.now().date()
+        pdf_url = _pro_pdf_url(contract, region_code, today)
+        try:
+            text = await fetch_pdf_text(session, pdf_url)
+        except ExtractorError:
+            # Early in a month Mega can lag a day or two before the new
+            # card lands; the one still in force is last month's.
+            previous = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+            pdf_url = _pro_pdf_url(contract, region_code, previous)
+            text = await fetch_pdf_text(session, pdf_url)
+        return parse_snapshot(contract_id, text, region, pdf_url)
+
     listing = await _fetch_listing_html(session)
-    pdf_url = _resolve_pdf_url(listing, contract.product_name, region_code)
-    if pdf_url is None:
+    listed_url = _resolve_pdf_url(listing, contract.product_name, region_code)
+    if listed_url is None:
         raise ExtractorError(
             f"Mega {contract_id}: no listing entry for region {region!r}"
         )
-    text = await fetch_pdf_text(session, pdf_url)
-    return parse_snapshot(contract_id, text, region, pdf_url)
+    text = await fetch_pdf_text(session, listed_url)
+    return parse_snapshot(contract_id, text, region, listed_url)
 
 
 async def fetch_for_month(
@@ -432,7 +560,9 @@ def _assert_card_region(text: str, region: str) -> None:
     """
     label = fold_accents(_REGION_CARD_LABELS[region])
     haystack = fold_accents(re.sub(r"\s+", " ", text))
-    if not re.search(rf"client\s+residentiel\s*[-–]\s*{label}", haystack):
+    if not re.search(
+        rf"client\s+(?:residentiel|professionnel)\s*[-–]\s*{label}", haystack
+    ):
         raise ExtractorError(f"Mega: card is not the {region} edition")
 
 
@@ -446,11 +576,26 @@ def parse_snapshot(
 
     _assert_card_region(text, region)
 
+    professional = contract.professional
     energy = _extract_energy(text, contract.kind)
     injection = _extract_injection(text, contract.kind)
+    if professional and injection is not None:
+        # "les prix d'injection sont a majorer de la TVA, sauf si vous
+        # etes soumis au regime d'exoneration".
+        injection = replace(injection, vat_applies=True)
     publication_label = _extract_publication_month(text)
-    federal_excise = _extract_federal_excise(text)
-    energy_contribution = _extract_energy_contribution(text)
+    excise_bands: tuple[tuple[float, float], ...] | None = None
+    if professional:
+        tiers = _extract_pro_excise_tiers(text)
+        excise_bands = tuple(
+            (tier_bound_kwh(upper), to_float(rate) / 100.0)
+            for _lower, upper, rate, _contrib in tiers
+        )
+        federal_excise = excise_bands[0][1]
+        energy_contribution = to_float(tiers[0][3]) / 100.0
+    else:
+        federal_excise = _extract_federal_excise(text)
+        energy_contribution = _extract_energy_contribution(text)
     region_connection_fee = (
         _extract_connection_fee(text) if region == REGION_WALLONIA else 0.0
     )
@@ -476,12 +621,15 @@ def parse_snapshot(
         taxes=TaxOverlay(
             federal_excise=federal_excise,
             energy_contribution=energy_contribution,
+            federal_excise_bands=excise_bands,
             flanders_renewables=flanders_renewables,
             wallonia_renewables=wallonia_renewables,
             brussels_renewables=brussels_renewables,
             region_connection_fee=region_connection_fee,
             energy_fund_eur_per_month=0.0,
-            vat_rate=0.0,
+            # The professional card prints HTVA throughout; base.apply_vat
+            # resolves it for the entry.
+            vat_rate=_PRO_VAT_RATE if professional else 0.0,
         ),
         source_url=source_url,
         publication_label=publication_label,
@@ -775,6 +923,26 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
 # ---- taxes --------------------------------------------------------------------
 
 
+_PRO_VAT_RATE = 0.21
+
+_PRO_TIER_RE = re.compile(
+    r"Consommation entre\s+([\d.]+)\s+et\s+([\d.]+)\s+kWh\s+([\d.,]+)\s+([\d.,]+)"
+)
+
+
+def _extract_pro_excise_tiers(text: str) -> list[tuple[str, str, str, str]]:
+    """The professional card's degressive excise table.
+
+    Each row carries both levies: the tranche's excise and, beside it, the
+    energy contribution, which professional cards still print where the
+    residential ones folded it into the excise in August 2026.
+    """
+    tiers = _PRO_TIER_RE.findall(text)
+    if not tiers:
+        raise ExtractorError("Mega: professional excise tiers not found")
+    return tiers
+
+
 def _extract_federal_excise(text: str) -> float:
     """Federal excise, uniform across regions.
 
@@ -1054,7 +1222,13 @@ EXTRACTOR = SupplierExtractor(
     id="mega",
     label="Mega",
     contracts=tuple(
-        Contract(id=c.contract_id, label=c.label, kind=c.kind, regions=c.regions)
+        Contract(
+            id=c.contract_id,
+            label=c.label,
+            kind=c.kind,
+            regions=c.regions,
+            professional=c.professional,
+        )
         for c in _CONTRACTS
     ),
     fetch=fetch,

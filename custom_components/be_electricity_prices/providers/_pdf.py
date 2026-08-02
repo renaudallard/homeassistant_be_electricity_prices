@@ -518,6 +518,20 @@ def to_float(text: str) -> float:
     return float(cleaned.replace(",", "."))
 
 
+def tier_bound_kwh(text: str) -> float:
+    """Parse a consumption-tier bound like ``20.000`` or ``1.000.000``.
+
+    Distinct from :func:`to_float`: the dot here is a thousands separator,
+    not a decimal point, so ``to_float`` would read 20.000 kWh as twenty
+    and band every site into the wrong tranche. Tier bounds are always
+    whole kWh, so dropping the separators is exact.
+    """
+    cleaned = text.strip()
+    for sep in _NUMERIC_SEPARATORS:
+        cleaned = cleaned.replace(sep, "")
+    return float(cleaned.replace(".", ""))
+
+
 # Single source of truth for the sign character that appears between
 # BELPEX/Epex factor and base across every supplier formula (both
 # consumption and injection sides). Hyphen-minus, ASCII plus,

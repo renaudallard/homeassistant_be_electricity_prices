@@ -82,6 +82,7 @@ from ._pdf import (
     parse_brussels_osp,
     parse_sign,
     parse_valid_until,
+    tier_bound_kwh,
     to_float,
     vat_multiplier,
 )
@@ -756,17 +757,6 @@ _EXCISE_TIER_RE = re.compile(
 )
 
 
-def _tier_bound_kwh(text: str) -> float:
-    """Parse a tier bound like ``20.000`` or ``1.000.000`` as whole kWh.
-
-    The dot is a thousands separator here, not a decimal point, so
-    ``to_float`` would read 20.000 kWh as twenty and band every site into
-    the top tranche. The bounds are always whole kWh, so dropping the
-    separators is exact.
-    """
-    return float(re.sub(r"[.\s  ]", "", text.strip()))
-
-
 def _extract_federal_excise(
     text: str, *, professional: bool = False
 ) -> tuple[float, tuple[tuple[float, float], ...] | None]:
@@ -795,7 +785,7 @@ def _extract_federal_excise(
         if not tiers:
             raise ExtractorError("Engie: professional federal excise tiers not found")
         bands = tuple(
-            (_tier_bound_kwh(upper), to_float(rate) / 100.0)
+            (tier_bound_kwh(upper), to_float(rate) / 100.0)
             for _lower, upper, rate in tiers
         )
         return bands[0][1], bands

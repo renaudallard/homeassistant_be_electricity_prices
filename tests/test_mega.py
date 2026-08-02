@@ -62,7 +62,8 @@ def test_mega_is_registered() -> None:
     # Zen Fixed was discontinued in August 2026 (listing block dropped in all
     # three regions; Wallonia resolves to the CDN's HTML stub).
     assert "mega_zen_fixed" not in contract_ids
-    assert len(contract_ids) == 10
+    # Ten residential products, plus the eight professional editions.
+    assert len(contract_ids) == 18
 
 
 def test_listing_url_finder_picks_electricity_for_region() -> None:
@@ -534,3 +535,99 @@ def test_august_2026_flat_excise_replaces_the_tier_table() -> None:
     july = "Consommation entre\n0 et 3000 kWh\n5,0329\n0,20417\n"
     assert _extract_federal_excise(july) == pytest.approx(0.050329)
     assert _extract_energy_contribution(july) == pytest.approx(0.0020417)
+
+
+# ---- professional cards ------------------------------------------------------
+
+
+def test_pro_contracts_are_registered_and_flagged() -> None:
+    contracts = {c.id: c for c in EXTRACTORS["mega"].contracts}
+    assert contracts["mega_pro_smart_fixed"].professional is True
+    assert contracts["mega_smart_fixed"].professional is False
+    # Online Flex and the Off-peak family have no B2B card.
+    assert "mega_pro_online_flex" not in contracts
+    assert "mega_pro_offpeak_flex" not in contracts
+    # Zen Fixed is retired residentially but still published for business.
+    assert "mega_pro_zen_fixed" in contracts
+    assert "mega_zen_fixed" not in contracts
+
+
+def test_pro_pdf_url_is_built_not_scraped() -> None:
+    """Mega serves the professional cards from the same CDN but never
+    links them from the public listing, so the filename is constructed."""
+    from custom_components.be_electricity_prices.providers.mega import (
+        _CONTRACTS_BY_ID,
+        _pro_pdf_url,
+    )
+
+    url = _pro_pdf_url(_CONTRACTS_BY_ID["mega_pro_smart_fixed"], "WL", date(2026, 7, 9))
+    assert url == (
+        "https://my.mega.be/resources/tarif/"
+        "Mega-FR-EL-B2B-WL-072026-Smart0107-Fixed.pdf"
+    )
+    # The flex variant drops the -Fixed suffix, the same way the
+    # residential filenames do.
+    assert _pro_pdf_url(
+        _CONTRACTS_BY_ID["mega_pro_smart_flex"], "VL", date(2026, 8, 1)
+    ).endswith("Mega-FR-EL-B2B-VL-082026-Smart0108.pdf")
+
+
+async def test_pro_lane_has_no_probe() -> None:
+    """The built URL only changes at a month boundary, so returning it as
+    a freshness key would pin the snapshot for a whole month. The pro lane
+    falls back to the time-based TTL instead."""
+    assert await mega_mod.probe(AsyncMock(), "mega_pro_smart_fixed", "wallonia") is None
+
+
+def test_pro_card_is_parsed_ex_vat_with_the_excise_schedule() -> None:
+    snap = parse_snapshot(
+        "mega_pro_smart_fixed", fixture_text("mega_pro_smart_fixed_w.pdf"), "wallonia"
+    )
+    assert snap.taxes.vat_rate == pytest.approx(0.21)
+    assert snap.taxes.federal_excise_bands == (
+        (20_000.0, pytest.approx(0.01421)),
+        (50_000.0, pytest.approx(0.01209)),
+        (1_000_000.0, pytest.approx(0.01139)),
+    )
+    # Read off the same tier rows, where the residential card no longer
+    # prints it at all.
+    assert snap.taxes.energy_contribution == pytest.approx(0.0019261)
+    assert {"aieg", "aiesh", "ores", "resa", "rew"} <= set(snap.dsos)
+
+
+def test_pro_injection_is_taxed() -> None:
+    snap = parse_snapshot(
+        "mega_pro_dynamic", fixture_text("mega_pro_dynamic_w.pdf"), "wallonia"
+    )
+    assert snap.injection is not None
+    assert snap.injection.vat_applies is True
+    res = parse_snapshot("mega_dynamic", fixture_text("mega_dynamic_w.pdf"), "wallonia")
+    assert res.injection is not None
+    assert res.injection.vat_applies is False
+
+
+def test_pro_regulated_values_are_the_residential_ones_ex_vat() -> None:
+    """Both editions carry the same regulated tables; the professional one
+    prints them without the 6% VAT the residential one includes."""
+    pro = parse_snapshot(
+        "mega_pro_smart_fixed", fixture_text("mega_pro_smart_fixed_v.pdf"), "flanders"
+    )
+    res = parse_snapshot(
+        "mega_smart_fixed", fixture_text("mega_smart_fixed_v.pdf"), "flanders"
+    )
+    pro_dso = pro.dsos["fluvius_antwerpen"]
+    res_dso = res.dsos["fluvius_antwerpen"]
+    assert pro_dso.distribution_single * 1.06 == pytest.approx(
+        res_dso.distribution_single, rel=1e-3
+    )
+    assert pro_dso.data_management_per_year * 1.06 == pytest.approx(
+        res_dso.data_management_per_year, rel=1e-3
+    )
+
+
+def test_pro_card_region_header_is_still_checked() -> None:
+    """The gate now accepts "client professionnel" as well, but must keep
+    rejecting the wrong region: a wrong-region card mis-prices silently."""
+    text = fixture_text("mega_pro_smart_fixed_w.pdf")
+    with pytest.raises(ExtractorError, match="not the flanders edition"):
+        parse_snapshot("mega_pro_smart_fixed", text, "flanders")

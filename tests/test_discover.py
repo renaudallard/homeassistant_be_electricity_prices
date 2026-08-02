@@ -149,7 +149,10 @@ def _read(name: str) -> str:
 def test_mega_discover_matches_registry() -> None:
     session = _FakeSession(_read("mega.html"))
     discovered = _run(mega_mod.discover(session))
-    expected = {c.product_name for c in mega_mod._CONTRACTS}
+    # discover() scrapes the residential listing, which is the only place
+    # Mega advertises products; the professional editions are unlisted and
+    # addressed by built URL, so they are not part of the baseline.
+    expected = {c.product_name for c in mega_mod._CONTRACTS if not c.professional}
     assert discovered == expected
 
 
