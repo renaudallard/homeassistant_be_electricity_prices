@@ -91,18 +91,36 @@ Adding another supplier is a self-contained PR: drop a new module under
 register it in [`providers/__init__.py`](./custom_components/be_electricity_prices/providers/__init__.py),
 and ship a fixture-based unit test. The Eneco module is the reference.
 
-**Why isn't a business-only supplier like Yuso listed?** The integration models
-Belgian *residential* all-in tariffs only. Business (B2B) suppliers cannot be
-added even when they publish dynamic tariff cards, because those cards price the
-energy commodity alone (platform fee plus green/CHP certificates, ex-VAT) while
-the network tariffs and taxes are billed separately by the grid operator.
-Assembling an all-in price for a professional connection then needs per-site
-facts that no public card lists: the connection tier and contracted or measured
-peak power, the annual consumption band and any sector exemption, the reactive
-power / power factor, and any individually negotiated terms. Those inputs cannot
-be fetched or guessed, so a residential-only integration cannot represent a B2B
-contract. If you nonetheless know your own formula and grid/tax rates, the
-**Expert: custom formula** supplier lets you enter them by hand (see below).
+**Why isn't a business-only supplier like Yuso listed?** Not because it is
+business-only — professional tariffs *are* supported, see below — but because
+Yuso's cards price the energy commodity alone (platform fee plus green/CHP
+certificates) and state that network tariffs and taxes are passed through
+one-for-one, billed separately by the grid operator. There is no all-in price to
+assemble from such a card, for a household or a business alike. The same applies
+to any supplier that publishes commodity-only pricing. If you know your own
+formula and grid/tax rates, the **Expert: custom formula** supplier lets you
+enter them by hand (see below).
+
+**Professional (B2B) tariffs.** Engie, Mega and Bolt publish full professional
+tariff cards carrying the same DSO and tax tables as their residential ones,
+printed **excluding VAT**, and the integration reads them. Pick a *Pro* contract
+in the supplier dropdown and two extra settings appear:
+
+- **Prices include VAT** — professional electricity is taxed at 21%. Leave this
+  on if your business cannot deduct VAT; turn it off if it can, and every price,
+  fee and cost sensor reports the ex-VAT amount you actually bear. Injection
+  follows the same choice (unlike residential injection, which is VAT-exempt
+  outright). Residential contracts print VAT-inclusive already, so the setting is
+  hidden for them.
+- **Estimated yearly consumption** — the federal special excise is degressive on
+  professional cards (bands at 20 000 and 50 000 kWh/year), so the band your
+  site falls in has to be known to price a kWh.
+
+Scope limits, taken from the cards themselves: they price **low-voltage**
+(*basse tension* / *laagspanning*) connections only, with injection up to 10 kVA
+and consumption up to 1 000 000 kWh/year. Medium- and high-voltage connections,
+contracted-power demand charges and reactive-power billing are out of scope —
+they depend on per-site contract terms no public card lists.
 
 **Expert: custom formula (no public card).** Some products can't be scraped
 because the supplier publishes no public, machine-resolvable tariff card — the
