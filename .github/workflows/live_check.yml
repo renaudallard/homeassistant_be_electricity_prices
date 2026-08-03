@@ -126,12 +126,21 @@ jobs:
             echo
             echo "## Last report"
             echo
-            # The full report outgrew GitHub's 65,536-character issue body
-            # limit, so createIssue rejected it and nothing was filed. Drop
-            # the "## All checks" checklist (the bulk, and it only repeats
-            # what the failures table already says); keep the failures
-            # table and the per-supplier metrics block.
-            awk '/^## All checks$/{skip=1; next} /^## /{skip=0} !skip' report.md
+            if [ -s report.md ]; then
+              # The full report outgrew GitHub's 65,536-character issue
+              # body limit, so createIssue rejected it and nothing was
+              # filed. Drop the "## All checks" checklist (the bulk, and
+              # it only repeats what the failures table already says);
+              # keep the failures table and the metrics block.
+              awk '/^## All checks$/{skip=1; next} /^## /{skip=0} !skip' report.md
+            else
+              # No report at all means the harness died before printing
+              # (see the CancelledError note in live_check.py). Filing the
+              # bare heading leaves a triager nothing to go on, so say so
+              # and point at the log, which still holds the traceback.
+              echo "_No report: the harness produced no output on its last attempt,"
+              echo "so it died before printing. The traceback is in the run log_"
+            fi
           } > issue_body.md
 
           # Defensive cap: a mass failure could still blow the limit
