@@ -156,3 +156,16 @@ async def test_external_cancellation_still_propagates(
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+def test_every_latency_budget_stays_under_the_hard_cap() -> None:
+    """A budget at or above the cap can never fire: the supplier is killed
+    before it can report the drift the budget exists to catch."""
+    cap = lc._SUPPLIER_HARD_TIMEOUT_S
+    over = {
+        supplier: budget
+        for supplier, budget in lc._LATENCY_BUDGET_OVERRIDES.items()
+        if budget >= cap
+    }
+    assert not over, f"latency budgets at/above the {cap}s hard cap: {over}"
+    assert lc.LATENCY_WARN_THRESHOLD_S < cap

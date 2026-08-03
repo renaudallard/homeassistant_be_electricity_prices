@@ -309,14 +309,22 @@ def _attributed(supplier: str) -> Iterator[None]:
         _CURRENT_SUPPLIER.reset(token)
 
 
-# Hard cap for a single supplier's whole check, above the largest
-# per-supplier latency drift budget (200 s for bolt, see
-# _LATENCY_BUDGET_OVERRIDES). aiohttp's session-level total=60 s only
-# bounds individual requests, so a check that issues many sequential
-# requests can still drag for minutes if one of them is slow but not
-# stalled. wait_for cuts that off so a single broken supplier can never
-# block the gather() and starve the rest of the run.
-_SUPPLIER_HARD_TIMEOUT_S = 240.0
+# Hard cap for a single supplier's whole check. aiohttp's session-level
+# total=60 s only bounds individual requests, so a check that issues many
+# sequential requests can still drag for minutes if one of them is slow
+# but not stalled. wait_for cuts that off so a single broken supplier can
+# never block the gather() and starve the rest of the run.
+#
+# INVARIANT: this must stay ABOVE every latency budget in
+# _LATENCY_BUDGET_OVERRIDES. Those budgets warn that a supplier has got
+# slow; this cap kills it. A budget at or above the cap can never fire,
+# because the supplier is killed before it can report the drift.
+#
+# Raised from 240 s when the professional editions roughly doubled the
+# sequential fetch counts (engie 29 -> 53, mega 28 -> 52): those two walk
+# their catalogue one card at a time, so their wallclock scales with it
+# and they were landing on the old cap on a slow-CDN day.
+_SUPPLIER_HARD_TIMEOUT_S = 600.0
 
 
 async def _attributed_check(
@@ -1796,8 +1804,9 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
 # snapshot succeeds; budget it accordingly so it doesn't false-fire.
 # The same professional editions double the fetch count for bolt, engie
 # and mega. elapsed_s is the SUM of per-request durations, so it scales
-# with the count even where the fetches overlap; the 240 s hard wallclock
-# cap is unaffected because bolt still gathers concurrently.
+# with the count even where the fetches overlap. Every value here must
+# stay under _SUPPLIER_HARD_TIMEOUT_S, or the supplier is killed before
+# it can ever report the drift these budgets exist to catch.
 _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     "bolt": 400.0,
     "engie": 260.0,
