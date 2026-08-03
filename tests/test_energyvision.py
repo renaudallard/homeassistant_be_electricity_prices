@@ -420,3 +420,49 @@ def test_flanders_parsers_are_not_used_for_the_walloon_card() -> None:
     Dutch path must fail rather than silently produce a partial snapshot."""
     with pytest.raises(ExtractorError):
         parse_snapshot(_FIXED, _wal_text(), "test://ev-wal-jul")
+
+
+def test_august_2026_flat_excise_replaces_the_tier_table() -> None:
+    """On 2026-08-01 the federal scheme folded the separate energy
+    contribution into the special excise and flattened it. EnergyVision
+    made the switch a month after Engie / Mega / Eneco: its August Flemish
+    card dropped both the "Verbruik tussen 0 & 3.000 kWh" tier row and the
+    Energiebijdrage line, which took every Flemish contract offline."""
+    from custom_components.be_electricity_prices.providers.energyvision import (
+        _extract_taxes,
+    )
+
+    august = (
+        "Kosten GSC en WKC geldig voor 1,554 €cent/kWh.\n"
+        "Bijdrage energiefonds / toeslagen en federale accijns\n"
+        "Standaard tarief gedomicilieerd: 0 €/maand\n"
+        "Federale accijns (€cent/kWh)\n"
+        "Bijzondere accijns 4,876 €cent/kWh\n"
+    )
+    taxes = _extract_taxes(august)
+    assert taxes.federal_excise == pytest.approx(0.04876)
+    # Row deleted because the levy is abolished, not because of drift.
+    assert taxes.energy_contribution == 0.0
+    assert taxes.flanders_renewables == pytest.approx(0.01554)
+
+    # The pre-August tiered card keeps working, contribution and all.
+    july = (
+        "Kosten GSC en WKC geldig voor 1,554 €cent/kWh.\n"
+        "Energiebijdrage 0,20417\n"
+        "Verbruik tussen 0 & 3.000 kWh 5,0329\n"
+    )
+    taxes = _extract_taxes(july)
+    assert taxes.federal_excise == pytest.approx(0.050329)
+    assert taxes.energy_contribution == pytest.approx(0.0020417)
+
+
+def test_missing_renewables_row_is_still_fatal() -> None:
+    """Tolerating the abolished contribution must not make the whole tax
+    block optional: the GSC/WKC quota cost is a per-kWh charge, so
+    silently zeroing it under-bills every Flemish user."""
+    from custom_components.be_electricity_prices.providers.energyvision import (
+        _extract_taxes,
+    )
+
+    with pytest.raises(ExtractorError, match="tax block"):
+        _extract_taxes("Bijzondere accijns 4,876 €cent/kWh\n")

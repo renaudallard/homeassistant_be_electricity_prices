@@ -203,6 +203,13 @@ _CONTRIB_RE = re.compile(rf"Energiebijdrage\s+{_NUM}", re.IGNORECASE)
 _EXCISE_RE = re.compile(
     rf"Verbruik\s+tussen\s+0\s*&\s*3\.000\s+kWh\s+{_NUM}", re.IGNORECASE
 )
+# From 1 August 2026 the federal scheme folded the separate energy
+# contribution into the special excise and flattened it, so the tier table
+# and the Energiebijdrage row both left the card and one "Bijzondere
+# accijns" rate took their place. EnergyVision switched on its August
+# Flemish card, a month after Engie / Mega / Eneco. The Walloon card is
+# still on the old shape and keeps its own parser (_extract_taxes_fr).
+_FLAT_EXCISE_RE = re.compile(rf"Bijzondere\s+accijns\s+{_NUM}", re.IGNORECASE)
 _FUND_RE = re.compile(
     rf"Standaard\s+tarief\s+gedomicilieerd\s*:\s*{_NUM}\s*€\s*/\s*maand",
     re.IGNORECASE,
@@ -494,15 +501,22 @@ def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:
 def _extract_taxes(text: str) -> TaxOverlay:
     gsc = _GSC_WKC_RE.search(text)
     contrib = _CONTRIB_RE.search(text)
-    excise = _EXCISE_RE.search(text)
-    if not gsc or not contrib or not excise:
+    # Try the flat August-2026 row first: a card carrying both would be the
+    # tiered one being phased out, and the flat rate is authoritative when
+    # present. Same precedence the other suppliers' parsers use.
+    excise = _FLAT_EXCISE_RE.search(text) or _EXCISE_RE.search(text)
+    if not gsc or not excise:
         raise ExtractorError("EnergyVision: could not parse tax block")
     fund = _FUND_RE.search(text)
     # Every value on the card is VAT-inclusive (the federal excise and energy
     # fund are VAT-exempt), so vat_rate stays 0.0, matching the energy leg.
     return TaxOverlay(
         federal_excise=to_float(excise.group(1)) / 100.0,
-        energy_contribution=to_float(contrib.group(1)) / 100.0,
+        # The contribution was abolished on 2026-08-01, taking its row off
+        # the card with it. An absent row is the abolished levy, not a
+        # layout drift: return 0 rather than failing the fetch and taking
+        # every Flemish EnergyVision contract offline.
+        energy_contribution=(to_float(contrib.group(1)) / 100.0 if contrib else 0.0),
         flanders_renewables=to_float(gsc.group(1)) / 100.0,
         energy_fund_eur_per_month=(to_float(fund.group(1)) if fund else 0.0),
         vat_rate=0.0,
