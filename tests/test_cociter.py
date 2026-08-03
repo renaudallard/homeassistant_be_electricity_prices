@@ -323,3 +323,34 @@ def test_fetch_for_month_unknown_contract_returns_none() -> None:
         )
     )
     assert snap is None
+
+
+def test_injection_formula_survives_a_meter_label_rewording() -> None:
+    """Cociter rewords the meter-type label in front of the injection
+    formula: "Tout compteur", "Compteur SMR3", and from the August 2026
+    card "Compteur pouvant effectuer des mesures par quart d'heure". The
+    label is prose, so match any of them rather than enumerating - the
+    August rewording took the whole contract offline."""
+    from custom_components.be_electricity_prices.providers.cociter import (
+        _extract_injection,
+    )
+
+    august = (
+        "Injection (10)\n"
+        "Le prix de l'injection varie chaque quart d'heure. Il est calculé en "
+        "fonction de l'indice QUARTER HOURL Y BELPEX *** avec la formule "
+        "suivante :\n"
+        "Type de compteur FORMULE DE PRIX\n"
+        "Compteur pouvant effectuer des mesures par quart d'heure "
+        "(0,097 x QUARTER HOURL Y BELPEX – 2,1)\n"
+    )
+    inj = _extract_injection(august)
+    assert inj is not None
+    assert inj.factor == pytest.approx(0.97)
+    assert inj.base == pytest.approx(-0.021)
+
+    # The older wordings must keep working.
+    older = august.replace(
+        "Compteur pouvant effectuer des mesures par quart d'heure", "Compteur SMR3"
+    )
+    assert _extract_injection(older).factor == pytest.approx(0.97)

@@ -286,7 +286,13 @@ def _extract_injection(text: str) -> InjectionRates:
     """
     formula = re.search(
         rf"Le\s+prix\s+de\s+l['‘’ʼ]\s*injection.*?"
-        rf"(?:Tout compteur[^\n]*|Compteur SMR3)\s*"
+        # The meter-type label in front of the formula is prose Cociter
+        # rewords: "Tout compteur", "Compteur SMR3", and from the August
+        # 2026 card "Compteur pouvant effectuer des mesures par quart
+        # d'heure". Match any Compteur label up to the formula's opening
+        # bracket rather than enumerating them, so the next rewording
+        # doesn't take the injection block offline again.
+        rf"(?:Tout\s+)?[Cc]ompteur[^\n(]*"
         rf"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
         rf"([{SIGN_CHARS}])\s*([\d,]+)\)",
         text,
@@ -294,9 +300,9 @@ def _extract_injection(text: str) -> InjectionRates:
     )
     if formula is None:
         # Variable PDF has no anchor prose around the injection block;
-        # fall back to the first formula on a Tout compteur line.
+        # fall back to the first formula on any Compteur line.
         formula = re.search(
-            rf"Tout compteur[^\n]*\s*"
+            rf"(?:Tout\s+)?[Cc]ompteur[^\n(]*"
             rf"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
             rf"([{SIGN_CHARS}])\s*([\d,]+)\)",
             text,
