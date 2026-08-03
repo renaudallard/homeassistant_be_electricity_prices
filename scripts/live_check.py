@@ -345,12 +345,34 @@ async def _attributed_check(
                 False,
                 f"exceeded {_SUPPLIER_HARD_TIMEOUT_S:.0f}s wallclock",
             )
+        except asyncio.CancelledError:
+            # wait_for cancels the inner coroutine when the cap expires and
+            # normally re-raises that as TimeoutError. It cannot when the
+            # coroutine is parked on something uncancellable: the PDF parse
+            # runs under asyncio.to_thread, and a thread cannot be
+            # interrupted, so the CancelledError surfaces here instead. It
+            # is a BaseException, so the clause below never saw it, and one
+            # slow supplier took the whole run down with it -- no report
+            # printed at all, and the workflow filed an issue with an empty
+            # body (2026-08-03, totalenergies at the 240 s cap).
+            #
+            # Only swallow the cancellation we caused ourselves. A pending
+            # cancel request on this task means the run is being torn down
+            # from outside, which must keep propagating.
+            current = asyncio.current_task()
+            if current is not None and current.cancelling():
+                raise
+            _record(
+                f"{supplier}: hard timeout",
+                False,
+                f"exceeded {_SUPPLIER_HARD_TIMEOUT_S:.0f}s wallclock "
+                "(cancelled inside an uncancellable parse)",
+            )
         except Exception as err:  # noqa: BLE001
             # Record any other failure as this supplier's row instead of
             # letting it propagate out of the top-level gather, which would
             # abort every other supplier's check and mis-report a real data
-            # regression as a harness crash (rc=8). CancelledError is a
-            # BaseException and is deliberately not caught here.
+            # regression as a harness crash (rc=8).
             _record(
                 f"{supplier}: unexpected error",
                 False,
