@@ -1809,6 +1809,14 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
 # it can ever report the drift these budgets exist to catch.
 _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     "bolt": 400.0,
+    # eneco.be answers slowly from GitHub runners and fast from anywhere
+    # else: the listing page it times out on in CI serves in ~1.3 s and
+    # ~180 KB from a residential line. Its six small fetches summed to
+    # 35-96 s across the six attempts of one run, with a TimeoutError on
+    # every attempt, so the 90 s default fires on host latency rather
+    # than on any change to the cards. Same shape as the bolt CDN and
+    # the mega runner-IP block.
+    "eneco": 150.0,
     "engie": 260.0,
     "luminus": 150.0,
     "mega": 240.0,

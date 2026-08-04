@@ -249,18 +249,19 @@ Two safety caps bound runtime. Each supplier check runs under
 supplier cannot starve the `gather()`. The session-level `aiohttp.ClientTimeout(total=60)`
 (`scripts/live_check.py:1577`) bounds individual requests.
 
-`_drift_warnings` (`scripts/live_check.py:1721`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:1841`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
-`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1660`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1678`) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py:1698`) for the known-large catalogues (Bolt, TotalEnergies, Engie, Ecofix,
-Mega, OCTA+). Note that `elapsed_s` is the sum of per-request durations, not true wallclock, so a
-supplier that fetches concurrently (Bolt fetches its six PDFs with `asyncio.gather`,
-`scripts/live_check.py:910`) records the sum of its parallel fetches; the budgets are sized around
-that. The synthetic `_catalog` bucket is skipped in drift analysis because it aggregates every
-supplier's discovery fetch under one name (`scripts/live_check.py:1725`). When a budget is blown,
-`live_check.yml` opens or updates a dedicated drift issue (see below). Tuning a false-firing drift
-alert means adjusting the override, not the code.
+`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1762`), with per-supplier overrides in
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1780`) for the known-large catalogues (Bolt,
+TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
+(`scripts/live_check.py:1810`) for those same multi-fetch suppliers plus Luminus and Eneco, which
+are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request durations,
+not true wallclock, so a supplier that fetches concurrently (Bolt fetches its six PDFs with
+`asyncio.gather`, `scripts/live_check.py:910`) records the sum of its parallel fetches; the budgets
+are sized around that. The synthetic `_catalog` bucket is skipped in drift analysis because it
+aggregates every supplier's discovery fetch under one name (`scripts/live_check.py:1845`). When a
+budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see below). Tuning a
+false-firing drift alert means adjusting the override, not the code.
 
 ### Exit codes and the two report side-channels
 
