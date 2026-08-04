@@ -185,7 +185,7 @@ when the listing fetch fails.
 
 ### Historical fetch (archive)
 
-`fetch_for_month(session, contract_id, region, year_month)` (`mega.py:342`) uses
+`fetch_for_month(session, contract_id, region, year_month)` (`mega.py:470`) uses
 the fact that Mega's CDN keeps every monthly issue under a stable URL. The month
 appears twice in the filename: the `<MMYYYY>` segment and the `<MM>` half of the
 product's effective-date `<DD><MM>` suffix. Both must rotate to the requested month
@@ -217,6 +217,18 @@ The test `test_fetch_for_month_rewrites_effective_date_month_preserving_day`
 the suffix mid-token (`Smart2204-Fixed`), exactly the case the old `01<MM>.pdf$`
 rewrite missed. Requesting March 2026 must yield a URL ending
 `-032026-Smart2203-Fixed.pdf` (both months rotate, day 22 stays, year untouched).
+
+A **professional** contract skips all of that: the B2B cards are absent from the
+listing, so `fetch_for_month` builds the filename with `_pro_pdf_url` for the
+requested month exactly as `fetch` does (`mega.py:499`). Routing them through the
+listing matched the residential card of the same `product_name` (`Smart Fixed` is
+shared by `mega_smart_fixed` and `mega_pro_smart_fixed`) and billed a B2B contract
+at residential rates on every archived month. Unlike `fetch`, the archive branch has
+**no previous-month retry**: a month Mega never published must return `None` so the
+caller falls back to the current-card proxy rather than billing the neighbouring
+month's card. `test_fetch_for_month_builds_the_b2b_url_for_a_professional_contract`
+(`test_mega.py:154`) pins the `-B2B-` segment, the variant suffix and the single
+fetch attempt.
 
 ### Catalog discovery
 
@@ -473,7 +485,11 @@ The land mines a future maintainer must know, drawn from the module comments:
   abolished, so an absent row is a real zero rather than drift.
 - **`fetch_for_month` must rotate two month placeholders and preserve the effective
   day**, and reject the CDN HTML stub via the PDF magic-byte check plus
-  `archive_validity_check` (`mega.py:350`).
+  `archive_validity_check` (`mega.py:470`).
+- **Every segment-aware path needs the `contract.professional` branch.** `fetch`,
+  `probe` and `fetch_for_month` all have to know that the B2B cards live off the
+  listing; `fetch_for_month` lacked it and served the residential card, because the
+  B2C and B2B definitions of a product share `product_name`.
 
 ## Test fixtures
 

@@ -486,6 +486,12 @@ async def fetch_for_month(
     the current URL via the listing first, then swap both month
     placeholders.
 
+    The professional cards never appear in that listing, so there is no
+    URL to rewrite: they take the same built filename ``fetch`` uses,
+    with the requested month. Resolving them through the listing matched
+    the residential card of the same product name and billed a B2B
+    contract at residential rates.
+
     Returns ``None`` when the URL 404s (or returns the CDN's HTML stub
     for a non-archived effective day, which ``_is_pdf_payload`` rejects),
     the parse fails, or the requested month falls outside the archive.
@@ -496,6 +502,20 @@ async def fetch_for_month(
     region_code = _REGION_TO_CODE.get(region)
     if region_code is None:
         return None
+    if contract.professional:
+        pro_url = _pro_pdf_url(contract, region_code, year_month)
+        try:
+            text = await fetch_pdf_text(session, pro_url)
+            pro_snap = parse_snapshot(contract_id, text, region, pro_url)
+        except ExtractorError:
+            # Deliberately no previous-month retry, unlike fetch(): a month
+            # Mega never published must resolve to None so the caller falls
+            # back to the current-card proxy, not to a neighbouring month's
+            # card silently billed as this one's.
+            return None
+        return archive_validity_check(
+            pro_snap, text, year_month, month_names=_FR_MONTH_NAMES
+        )
     try:
         listing = await _fetch_listing_html(session)
     except ExtractorError:

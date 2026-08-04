@@ -151,6 +151,46 @@ def test_fetch_for_month_rewrites_effective_date_month_preserving_day() -> None:
     asyncio.run(_run())
 
 
+def test_fetch_for_month_builds_the_b2b_url_for_a_professional_contract() -> None:
+    # The professional cards are absent from the public listing, and the
+    # B2C entry they used to match carries the same product name ("Smart
+    # Fixed"), so resolving them through the listing billed a B2B contract
+    # at residential rates. The archive must build the B2B filename the
+    # same way fetch() does, without touching the listing at all.
+    captured: list[str] = []
+
+    async def _capture(_session: object, url: str, **_kw: object) -> str:
+        captured.append(url)
+        raise ExtractorError("short-circuit before parse")
+
+    listing_calls = AsyncMock(side_effect=AssertionError("listing must not be used"))
+
+    async def _run() -> None:
+        with (
+            patch.object(mega_mod, "_fetch_listing_html", new=listing_calls),
+            patch.object(mega_mod, "fetch_pdf_text", new=_capture),
+        ):
+            for contract_id, expected in (
+                ("mega_pro_smart_fixed", "-072026-Smart0107-Fixed.pdf"),
+                ("mega_pro_smart_flex", "-072026-Smart0107.pdf"),
+            ):
+                captured.clear()
+                out = await mega_mod.fetch_for_month(
+                    None,  # type: ignore[arg-type]
+                    contract_id,
+                    "wallonia",
+                    date(2026, 7, 1),
+                )
+                assert out is None  # the patched fetch raised
+                # One attempt only: no previous-month retry, or an
+                # unpublished month would bill the neighbour's card.
+                assert len(captured) == 1
+                assert "-B2B-WL-" in captured[0]
+                assert captured[0].endswith(expected)
+
+    asyncio.run(_run())
+
+
 def test_dynamic_extracts_consumption_formula_tvac() -> None:
     snap = parse_snapshot(
         "mega_dynamic", fixture_text("mega_dynamic_w.pdf"), "wallonia"
