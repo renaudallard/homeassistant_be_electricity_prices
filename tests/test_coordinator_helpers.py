@@ -70,6 +70,7 @@ from custom_components.be_electricity_prices.coordinator import (
     _live_today_kwh,
     _recorder_daily_kwh,
     _snapshot_for_month,
+    _SNAPSHOT_SCHEMA_VERSION,
     _snapshot_from_dict,
     _snapshot_to_dict,
     _ytd_spot_injection_credit,
@@ -1987,6 +1988,32 @@ def test_snapshot_round_trip_for_tou_contract() -> None:
     assert restored.energy.peak == pytest.approx(0.30)
     assert restored.energy.transition == pytest.approx(0.20)
     assert restored.energy.offpeak == pytest.approx(0.10)
+
+
+def test_a_cache_from_an_older_schema_is_discarded() -> None:
+    """The persisted snapshot holds the card AS PARSED, and the probe path has
+    no TTL, so an extractor fix reaches an existing entry only when its
+    supplier republishes -- up to a month later -- unless the schema version
+    moves with it.
+
+    This is the trap 0.11.37 fell into: three extractor value fixes shipped
+    against an unchanged version 17, so Ecopower / Mega / Bolt entries kept
+    serving the pre-fix figures after upgrading. Any change to what an
+    extractor produces must bump the constant; a change to how a stored card
+    is priced (apply_vat, resolve_excise_band) need not, since those run on
+    load."""
+    snap = make_snapshot(supplier="ecopower", contract="ecopower_burgerstroom")
+    payload = _snapshot_to_dict(
+        snap, datetime(2026, 8, 1, tzinfo=UTC), probe_key="unchanged"
+    )
+    assert payload["_schema_version"] == _SNAPSHOT_SCHEMA_VERSION
+
+    stale = {**payload, "_schema_version": _SNAPSHOT_SCHEMA_VERSION - 1}
+    with pytest.raises(ValueError, match="older than the running integration"):
+        _snapshot_from_dict(stale)
+
+    # The current version must of course still round-trip.
+    assert _snapshot_from_dict(payload).supplier == "ecopower"
 
 
 async def test_ytd_static_fees_honours_meter_override(hass: HomeAssistant) -> None:

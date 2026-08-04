@@ -4369,7 +4369,17 @@ async def _compute_current_year_cost(
 # entry stranded on its July snapshot by the August tax-block change drops that
 # cache and re-parses the current card instead of waiting for the probe key to
 # move.
-_SNAPSHOT_SCHEMA_VERSION = 17
+# v18: three extractor fixes changed what is parsed into the snapshot, and all
+# three suppliers are probe-based, so without this bump an existing entry keeps
+# serving the wrong figures until its supplier republishes a card, up to a month
+# later. Ecopower stopped baking 6% VAT into databeheer / capacity / the
+# subscription, Mega now parses the Flemish energy fund instead of hardcoding
+# 0.0, and Bolt reads the non-residential fund row on professional contracts.
+# The rule this keeps tripping over: the persisted snapshot holds the card AS
+# PARSED, so any change to what an extractor produces needs this version moved
+# with it. A change that only affects how a stored card is priced (apply_vat,
+# resolve_excise_band) does not, since those run on load.
+_SNAPSHOT_SCHEMA_VERSION = 18
 
 
 def _snapshot_to_dict(
