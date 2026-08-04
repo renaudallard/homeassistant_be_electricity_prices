@@ -294,12 +294,20 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
 async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> None:
     """Drop per-entry state when the user removes the entry.
 
-    The 'snapshot stale' issue id embeds the entry id; once the entry
-    is gone the coordinator can't auto-resolve it, so it would linger
-    in the Repairs panel forever. HA calls this hook after
-    ``async_unload_entry`` for a removal (not for a reload). The
-    persistent snapshot Store is also deleted so the JSON blob the
-    coordinator writes under ``.storage/`` doesn't outlive the entry.
+    Every Repairs issue id embeds the entry id, and the coordinator only
+    resolves them while it is still ticking; once the entry is gone none
+    of them can clear themselves, so each kind has to be deleted here or
+    it lingers in the Repairs panel forever. The list must name every
+    issue this integration raises: ``test_repair_issue_kinds_match_the_
+    declared_strings`` pins it against ``strings.json`` so a new issue
+    cannot be added without landing here too.
+    ``supplier_deprecated_no_successor`` is absent on purpose, sharing
+    the ``supplier_deprecated`` id.
+
+    HA calls this hook after ``async_unload_entry`` for a removal (not
+    for a reload). The persistent snapshot Store is also deleted so the
+    JSON blob the coordinator writes under ``.storage/`` doesn't outlive
+    the entry.
     """
     for issue_kind in (
         "snapshot_stale",
@@ -307,6 +315,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         "extractor_unreachable",
         "entsoe_auth_failed",
         "supplier_deprecated",
+        "exclusive_night_rate_missing",
+        "impact_rates_missing",
         "connection_fee_missing",
     ):
         issue_registry.async_delete_issue(

@@ -1337,45 +1337,73 @@ async def test_actionable_failure_raises_extractor_failed_immediately(
     assert registry.async_get_issue(DOMAIN, unreachable_id) is None
 
 
+# Every distinct Repairs issue id this integration raises, by prefix.
+# supplier_deprecated_no_successor is deliberately absent: it shares the
+# supplier_deprecated id, since an entry only ever carries one of the two.
+_REPAIR_ISSUE_KINDS = (
+    "snapshot_stale",
+    "extractor_failed",
+    "extractor_unreachable",
+    "entsoe_auth_failed",
+    "supplier_deprecated",
+    "exclusive_night_rate_missing",
+    "impact_rates_missing",
+    "connection_fee_missing",
+)
+
+
+def test_repair_issue_kinds_match_the_declared_strings() -> None:
+    """strings.json is the source of truth for what can be raised. Adding an
+    issue there without adding it here (and to async_remove_entry) leaves it
+    lingering in the Repairs panel after the entry is gone, which is how
+    exclusive_night_rate_missing and impact_rates_missing were missed."""
+    import json
+    from pathlib import Path
+
+    strings = json.loads(
+        (
+            Path(__file__).resolve().parent.parent
+            / "custom_components"
+            / "be_electricity_prices"
+            / "strings.json"
+        ).read_text(encoding="utf-8")
+    )
+    declared = set(strings["issues"]) - {"supplier_deprecated_no_successor"}
+    assert declared == set(_REPAIR_ISSUE_KINDS)
+
+
 async def test_async_remove_entry_clears_all_repair_issues(
     hass: HomeAssistant,
 ) -> None:
-    """All four issue kinds (snapshot_stale, extractor_failed,
-    extractor_unreachable, entsoe_auth_failed) embed the entry id, so
-    async_remove_entry must clear each of them or they'd linger forever."""
+    """Every issue id embeds the entry id, so once the entry is gone the
+    coordinator can no longer auto-resolve any of them: async_remove_entry
+    has to clear each one or it lingers in the Repairs panel forever.
+
+    Raised straight through the registry rather than via the coordinator:
+    several are mutually exclusive by construction (extractor_failed vs
+    extractor_unreachable), and what is under test is the removal list, not
+    how each issue comes to be raised."""
     from custom_components.be_electricity_prices import async_remove_entry
 
     entry = _entry()
     entry.add_to_hass(hass)
-    coord = BePricesCoordinator(hass, entry)
-    coord._sync_stale_issue(True)
-    coord._sync_extractor_issue("boom")
-    coord._sync_entsoe_auth_issue(True, "401")
-    # extractor_unreachable is mutually exclusive with extractor_failed via
-    # _sync_extractor_issue, so raise it straight through the registry to
-    # assert async_remove_entry clears that id too.
-    ir.async_create_issue(
-        hass,
-        DOMAIN,
-        f"extractor_unreachable_{entry.entry_id}",
-        is_fixable=False,
-        severity=ir.IssueSeverity.WARNING,
-        translation_key="extractor_unreachable",
-    )
+    for kind in _REPAIR_ISSUE_KINDS:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            f"{kind}_{entry.entry_id}",
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=kind,
+        )
 
-    kinds = (
-        "snapshot_stale",
-        "extractor_failed",
-        "extractor_unreachable",
-        "entsoe_auth_failed",
-    )
     registry = ir.async_get(hass)
-    for kind in kinds:
+    for kind in _REPAIR_ISSUE_KINDS:
         assert registry.async_get_issue(DOMAIN, f"{kind}_{entry.entry_id}") is not None
 
     await async_remove_entry(hass, entry)
 
-    for kind in kinds:
+    for kind in _REPAIR_ISSUE_KINDS:
         assert registry.async_get_issue(DOMAIN, f"{kind}_{entry.entry_id}") is None
 
 
