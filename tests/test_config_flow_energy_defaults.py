@@ -215,6 +215,32 @@ async def test_utility_meter_helper_fills_day_night_registers(
     assert defaults["night_injection_kwh"] == "sensor.injection_nuit"
 
 
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_underscored_off_peak_tariff_does_not_capture_the_day_register(
+    hass: HomeAssistant,
+) -> None:
+    """``off_peak`` and ``peak`` are both valid utility_meter tariff names,
+    and HA builds children as ``{entry_id}_{tariff}``, so ``<entry>_off_peak``
+    also ends with ``_peak``. A suffix match therefore bound the day slot to
+    the off-peak register, and the user's night kWh got billed at the day
+    rate while day kWh vanished."""
+    _add_utility_meter_entry(
+        hass,
+        source="sensor.grid_total",
+        tariffs=["off_peak", "peak"],
+        entry_id="um_underscored",
+        child_entity_ids={
+            "off_peak": "sensor.grid_off_peak",
+            "peak": "sensor.grid_peak",
+        },
+    )
+    defaults: dict[str, Any] = {}
+    with _patch_manager(_grid_prefs(consumption="sensor.grid_total")):
+        await _apply_energy_manager_defaults(hass, defaults)
+    assert defaults["day_consumption_kwh"] == "sensor.grid_peak"
+    assert defaults["night_consumption_kwh"] == "sensor.grid_off_peak"
+
+
 def _add_yaml_utility_meter(
     hass: HomeAssistant,
     *,

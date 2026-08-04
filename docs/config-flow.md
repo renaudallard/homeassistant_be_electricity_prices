@@ -362,7 +362,7 @@ dashboard's grid source `flow_from[0].stat_energy_from` (consumption) and
 `flow_to[0].stat_energy_to` (injection), accepting them only when the statistic id
 starts with `sensor.` (a recorder-only statistic id would render as a broken
 `EntitySelector` default; `config_flow.py:971`). For each side it then tries
-`_utility_meter_day_night_children` (`config_flow.py:842`) to also pre-fill the
+`_utility_meter_day_night_children` (`config_flow.py:893`) to also pre-fill the
 day/night registers from a `utility_meter` helper rooted at the same source. That
 helper:
 
@@ -374,7 +374,14 @@ helper:
   special-case),
 - bails to `{}` on any ambiguity (a name carrying both a day and a night token, or
   two children mapping to the same slot), because a wrong day/night pick mis-bills
-  the year cost (`config_flow.py:860` comment).
+  the year cost (`config_flow.py:911` comment),
+- resolves each classified tariff to its child by matching the registry unique id
+  **exactly** against `f"{entry_id}_{tariff}"`, the shape HA's `utility_meter`
+  builds. It used to test `endswith(f"_{tariff}")`, which binds the wrong child
+  whenever one tariff name ends with another across an underscore: with the common
+  `["off_peak", "peak"]` pair, `<entry>_off_peak` also ends with `_peak`, so the day
+  slot took the off-peak register and night kWh got billed at the day rate. As a
+  backstop it also refuses a result where both slots resolved to the same entity.
 
 Anything pre-filled stays editable (`strings.json:199`).
 

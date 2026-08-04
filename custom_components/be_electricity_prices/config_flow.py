@@ -934,11 +934,22 @@ def _utility_meter_day_night_children(
         registry_entries = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
         out: dict[str, str] = {}
         for slot, tariff in slot_tariffs.items():
+            # Match the child id exactly. utility_meter builds them as
+            # f"{entry_id}_{tariff}", so a suffix test binds the wrong child
+            # whenever one tariff name ends with another across an
+            # underscore: with the common ["off_peak", "peak"] pair,
+            # "<entry>_off_peak" also ends with "_peak", and the day slot
+            # would take the off-peak register, billing night kWh at the
+            # day rate.
+            expected = f"{entry.entry_id}_{tariff}"
             for re_entry in registry_entries:
-                if re_entry.unique_id.endswith(f"_{tariff}"):
+                if re_entry.unique_id == expected:
                     out[slot] = re_entry.entity_id
                     break
-        if "day" in out and "night" in out:
+        # Two slots resolving to one entity means the match was wrong, not
+        # that the helper has one register; pre-filling both with it would
+        # bill the same kWh twice at two different rates.
+        if "day" in out and "night" in out and out["day"] != out["night"]:
             return out
 
     # YAML-rooted helpers: walk the entity registry for utility_meter
