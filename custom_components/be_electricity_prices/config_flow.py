@@ -651,7 +651,14 @@ def _custom_dso_schema(defaults: dict[str, Any]) -> vol.Schema:
     dso_mode = defaults.get(CONF_DSO_TARIFF_MODE)
     fields: dict[Any, Any] = {}
     _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE)
-    if meter == METER_BI:
+    # METER_DYNAMIC belongs here as much as METER_BI: an SMR3 meter registers
+    # the bi-horaire split the same way, and pricing.network_eur_per_kwh routes
+    # both through distribution_peak / distribution_offpeak whenever the DSO
+    # mode is not "simple". A dynamic / TOU contract also FORCES this meter
+    # (_meter_schema), so without these boxes a custom entry could never
+    # supply the two rates its own network leg is billed on, and every hour
+    # silently fell back to distribution_single.
+    if meter in (METER_BI, METER_DYNAMIC):
         _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_PEAK)
         _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK)
     if meter == METER_EXCLUSIVE_NIGHT:

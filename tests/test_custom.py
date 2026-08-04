@@ -39,6 +39,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.be_electricity_prices import const
 from custom_components.be_electricity_prices.config_flow import (
     _compare_supplier_options,
+    _custom_dso_schema,
 )
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
@@ -474,3 +475,32 @@ async def test_flow_custom_fixed_wallonia_no_api_key(
     result = await cfg(flow, {})
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][const.CONF_CUSTOM_ENERGY_SINGLE] == 0.30
+
+
+def test_custom_dso_schema_offers_the_bihourly_split_to_a_dynamic_meter() -> None:
+    """A dynamic / TOU contract FORCES METER_DYNAMIC (`_meter_schema`), and
+    `pricing.network_eur_per_kwh` routes both `bi` and `dynamic` through
+    `distribution_peak` / `distribution_offpeak` whenever the DSO mode is not
+    "simple". Gating the two boxes on METER_BI alone meant a custom dynamic
+    entry could never supply the rates its own network leg is billed on, so
+    every hour silently fell back to `distribution_single`."""
+    base = {
+        const.CONF_REGION: const.REGION_WALLONIA,
+        const.CONF_DSO_TARIFF_MODE: "bi_horaire",
+    }
+
+    def keys(meter: str) -> set[str]:
+        return {
+            str(k) for k in _custom_dso_schema({**base, const.CONF_METER: meter}).schema
+        }
+
+    for meter in (const.METER_BI, const.METER_DYNAMIC):
+        got = keys(meter)
+        assert const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK in got, meter
+        assert const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK in got, meter
+
+    # Meters that are never routed through the split must not be asked for it.
+    for meter in (const.METER_MONO, const.METER_EXCLUSIVE_NIGHT):
+        got = keys(meter)
+        assert const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK not in got, meter
+        assert const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK not in got, meter
