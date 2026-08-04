@@ -47,6 +47,7 @@ from statistics import fmean
 from typing import Any
 
 import aiohttp
+from homeassistant.components.sensor import ATTR_STATE_CLASS, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
@@ -3162,6 +3163,13 @@ async def _live_today_kwh(
     is unavailable / non-numeric, has no reading at midnight yet, or carries a
     unit that can't be converted to kWh; the caller then keeps the daily
     statistic as a fallback rather than risk a wrong figure.
+
+    A reading below the midnight one means different things per state class,
+    so the class decides how it is read: only ``total_increasing`` can be
+    read as a counter reset, matching how the recorder's own statistics
+    engine treats that class. A ``total`` meter is allowed to fall, and the
+    signed delta is exactly what the recorder reports as that day's
+    ``change``, so it is returned as-is.
     """
     state = hass.states.get(entity_id)
     if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
@@ -3171,6 +3179,7 @@ async def _live_today_kwh(
     except (TypeError, ValueError):
         return None
     unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
+    state_class = state.attributes.get(ATTR_STATE_CLASS)
 
     midnight = dt_util.start_of_local_day(today).astimezone(UTC)
     try:
@@ -3205,9 +3214,16 @@ async def _live_today_kwh(
     except (TypeError, ValueError):
         return None
     delta = current - opening
-    if delta < 0.0:
+    if delta < 0.0 and state_class == SensorStateClass.TOTAL_INCREASING:
         # A ``total_increasing`` meter that reset since midnight: everything
         # it has counted since the reset is today's consumption.
+        #
+        # Gated on the state class on purpose. The picker accepts any
+        # device_class=energy sensor, so a ``total`` register that nets
+        # injection against consumption (a utility_meter with
+        # net_consumption, a bidirectional meter) is a legitimate choice,
+        # and it falls whenever the site exports more than it draws. Reading
+        # that as a reset would bill its whole lifetime total as one day.
         delta = current
     if unit == UnitOfEnergy.KILO_WATT_HOUR:
         return delta
