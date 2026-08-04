@@ -51,10 +51,18 @@ from __future__ import annotations
 import calendar
 import logging
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+
+if TYPE_CHECKING:
+    # Only for annotations: the recorder models are imported inside the
+    # functions that use them, so the module still loads without a recorder.
+    from homeassistant.components.recorder.models import (
+        StatisticData,
+        StatisticMetaData,
+    )
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
@@ -744,7 +752,59 @@ async def _backfill_cost_sensor(
         unit_of_measurement="EUR",
     )
     async_import_statistics(hass, metadata, rows)
+    _seed_short_term_sum(hass, metadata, rows[-1])
     return {sid: len(rows)}
+
+
+def _seed_short_term_sum(
+    hass: HomeAssistant, metadata: StatisticMetaData, last: StatisticData
+) -> None:
+    """Continue the imported ``sum`` chain into the live one.
+
+    The cost sensor is ``state_class: TOTAL``, so the recorder's own sensor
+    platform compiles statistics for the same id we import into, and it seeds
+    its running sum from ``statistics_short_term`` alone
+    (``sensor/recorder.py``: ``_sum = last_stat.get("sum") or 0.0``).
+    ``async_import_statistics`` writes only the long-term table, so without
+    this the live chain restarts at zero directly after a backfilled row
+    carrying the whole year: the first compiled hour then reports
+    ``change = 0 - <year to date>``, and the Energy dashboard's Cost card
+    shows roughly minus one annual bill for that day.
+
+    Writing one short-term row at the last backfilled instant hands the
+    platform the running total to resume from. It has to carry ``last_reset``
+    as well as ``state`` and ``sum``: the compiler reads all three off that
+    row, and a row without one looks like a fresh cycle against the sensor's
+    own Jan-1 ``last_reset``, which takes the meter-reset branch and adds the
+    whole live reading on top of the resumed sum instead of the delta. Match
+    the sensor's ``last_reset_fn`` exactly (local Jan 1 of the current year).
+
+    Best effort: a recorder that refuses the write leaves the seam, which is
+    no worse than not trying, so it must never take the backfill down with it.
+    """
+    try:
+        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+            get_instance,
+        )
+        from homeassistant.components.recorder.db_schema import StatisticsShortTerm
+    except ImportError:  # pragma: no cover - recorder always ships with HA
+        return
+    seed: StatisticData = {
+        **last,
+        "last_reset": dt_util.now().replace(
+            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        ),
+    }
+    try:
+        get_instance(hass).async_import_statistics(
+            metadata, [seed], StatisticsShortTerm
+        )
+    except Exception:  # noqa: BLE001 - recorder may surface anything
+        _LOGGER.debug(
+            "could not seed the short-term sum for %s; the first compiled "
+            "hour will show a one-off negative change",
+            metadata["statistic_id"],
+        )
 
 
 async def backfill_range(

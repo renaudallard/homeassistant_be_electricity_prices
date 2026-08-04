@@ -129,6 +129,23 @@ The comment at `tests/conftest.py:58` documents this constraint. When you write 
 tests (offpeak windows, YTD backfill boundaries, monthly archive keys), assume Brussels local
 time and do not reintroduce a US default.
 
+### `tests/recorder/`: tests that need a real recorder database
+
+Both autouse fixtures above resolve `hass`, and `recorder_mock` cannot run under them: its
+`recorder_db_url` dependency asserts `hass_fixture_setup` is still empty, i.e. the database must
+be built *before* `hass` exists. `tests/recorder/conftest.py` therefore overrides both by name,
+as no-ops, for that directory only.
+
+Do **not** instead make the parent fixtures resolve lazily via `getfixturevalue`. That was tried:
+it changes fixture setup order so `hass` is no longer in `request.fixturenames` when the timezone
+pin runs, which silently unpinned Brussels and broke six slot/DST tests. Keeping the override
+local leaves the rest of the suite byte-identical.
+
+Almost every backfill test mocks the recorder (`tests/test_backfill.py` patches
+`recorder.get_instance`), which is right when the assertion is about *what we write*. Use
+`tests/recorder/` only when the assertion is about *how HA compiles what we wrote* — currently
+just the backfill→live `sum` seam, which is invisible to a mock.
+
 ### mypy test-stub convention
 
 Production code is type-checked with `mypy --strict`, but tests and helper scripts are checked

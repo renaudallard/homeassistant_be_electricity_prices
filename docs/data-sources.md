@@ -412,7 +412,25 @@ cost. Two rules enforce this:
   year-to-date sum instead of restarting from zero and clashing with the existing
   head of the series.
 
-`_backfill_cost_sensor` runs one running total per hour (`backfill.py:726`)
+**The `sum` chain has to be handed over to the live compile.** `current_year_cost`
+is `state_class: TOTAL`, so HA's own sensor platform compiles statistics under the
+same statistic id the backfill imports into — and it seeds its running sum from
+`statistics_short_term` alone (`sensor/recorder.py`: `_sum = last_stat.get("sum")
+or 0.0`), a table `async_import_statistics` never writes. Left alone, the live
+chain restarts at zero directly after a backfilled row carrying the whole year, so
+the first compiled hour reports `change = 0 - <year to date>` and the Energy
+dashboard's Cost card shows roughly **minus one annual bill** for that day.
+`_seed_short_term_sum` (`backfill.py:759`) writes one short-term row at the last
+backfilled instant to hand the platform its resume point. That row must carry
+`last_reset` as well as `state` and `sum`: the compiler reads all three, and a row
+missing `last_reset` looks like a fresh cycle against the sensor's Jan-1
+`last_reset`, taking the meter-reset branch and adding the whole live reading on
+top of the resumed sum (observed: `sum` 1000.4 instead of 500.3). The seed is best
+effort and swallows recorder errors, since failing to seed is no worse than not
+trying. `tests/recorder/test_backfill_seam.py` pins all three states against a
+real recorder.
+
+`_backfill_cost_sensor` runs one running total per hour (`backfill.py:740`)
 rather than one end-of-day number, so the recorder draws a smoothly growing YTD
 line. Fixed fees (the supplier's yearly fixed fee, the energy-fund monthly charge
 times 12, the DSO data-management annual charge, and the Brussels Brugel OSP fee)
