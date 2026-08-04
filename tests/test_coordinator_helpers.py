@@ -2267,6 +2267,44 @@ def test_manual_energy_leg_dynamic_keeps_quarter_hourly() -> None:
     )
 
 
+def test_manual_energy_leg_day_night_without_a_mono_rate() -> None:
+    """Issue #54: no box on the step is a master switch.
+
+    A bi-hourly customer signs a day rate and a night rate; there is no mono
+    rate on their contract to type. Requiring the single box threw away the
+    day / night rates AND the fee they did type.
+    """
+    current = make_snapshot(
+        energy=FixedRates(single=0.30, peak=0.33, offpeak=0.27, yearly_fixed_fee=99.0)
+    )
+    entry = _entry(
+        contract="test",
+        **{
+            CONF_MANUAL_ENERGY_PEAK: 0.25,
+            CONF_MANUAL_ENERGY_OFFPEAK: 0.18,
+        },
+    )
+    assert _manual_energy_leg(entry, current.energy) == FixedRates(
+        single=0.30, peak=0.25, offpeak=0.18, yearly_fixed_fee=99.0
+    )
+
+
+def test_manual_energy_leg_fee_only() -> None:
+    """A signed standing charge with an unchanged energy rate is a real case
+    (the card rate plus a negotiated fee), and used to be dropped whole."""
+    current = make_snapshot(energy=FixedRates(single=0.30, yearly_fixed_fee=99.0))
+    entry = _entry(contract="test", **{CONF_MANUAL_YEARLY_FEE: 60.0})
+    assert _manual_energy_leg(entry, current.energy) == FixedRates(
+        single=0.30, yearly_fixed_fee=60.0
+    )
+
+    dyn = make_snapshot(energy=DynamicRates(factor=1.05, base=0.017))
+    entry = _entry(contract="test", **{CONF_MANUAL_YEARLY_FEE: 48.0})
+    assert _manual_energy_leg(entry, dyn.energy) == DynamicRates(
+        factor=1.05, base=0.017, yearly_fixed_fee=48.0
+    )
+
+
 def test_manual_energy_leg_blank_returns_none() -> None:
     current = make_snapshot(energy=FixedRates(single=0.30))
     assert _manual_energy_leg(_entry(contract="test"), current.energy) is None

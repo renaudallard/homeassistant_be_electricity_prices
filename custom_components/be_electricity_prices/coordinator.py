@@ -606,17 +606,19 @@ def _manual_energy_leg(entry: ConfigEntry, card: EnergyRates) -> EnergyRates | N
     energy = card
     # Every box on the signed_rate step is optional and the step tells the
     # user "leave blank to keep the retrieved card's value". Honour that PER
-    # FIELD: a blank box falls back to that card's value, not to zero. Only
-    # the headline field (single / factor) means "no override at all" and
-    # returns None. Substituting 0.0 made a user who typed just their locked
-    # energy rate lose the standing charge entirely, and on a dynamic
-    # contract silently zeroed the formula's base.
+    # FIELD: a blank box falls back to that card's value, not to zero.
+    # Substituting 0.0 made a user who typed just their locked energy rate
+    # lose the standing charge entirely, and on a dynamic contract silently
+    # zeroed the formula's base. Only an entirely blank step means "no
+    # override at all": no single box is a master switch, so a bi-hourly
+    # customer who has no mono rate to type keeps their day / night rates,
+    # and a fee-only override applies on its own.
     fee_raw = entry.data.get(CONF_MANUAL_YEARLY_FEE)
     fee = float(fee_raw) if fee_raw is not None else energy.yearly_fixed_fee
     if isinstance(energy, DynamicRates):
         factor = entry.data.get(CONF_MANUAL_ENERGY_FACTOR)
         base = entry.data.get(CONF_MANUAL_ENERGY_BASE)
-        if factor is None and base is None:
+        if factor is None and base is None and fee_raw is None:
             return None
         return DynamicRates(
             factor=float(factor) if factor is not None else energy.factor,
@@ -626,12 +628,12 @@ def _manual_energy_leg(entry: ConfigEntry, card: EnergyRates) -> EnergyRates | N
         )
     if isinstance(energy, FixedRates):
         single = entry.data.get(CONF_MANUAL_ENERGY_SINGLE)
-        if single is None:
-            return None
         peak = entry.data.get(CONF_MANUAL_ENERGY_PEAK)
         offpeak = entry.data.get(CONF_MANUAL_ENERGY_OFFPEAK)
+        if single is None and peak is None and offpeak is None and fee_raw is None:
+            return None
         return FixedRates(
-            single=float(single),
+            single=float(single) if single is not None else energy.single,
             peak=float(peak) if peak is not None else energy.peak,
             offpeak=float(offpeak) if offpeak is not None else energy.offpeak,
             exclusive_night=energy.exclusive_night,
