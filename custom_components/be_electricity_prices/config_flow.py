@@ -176,7 +176,7 @@ from .const import (
     REGIONS,
 )
 from .providers import ExtractorError, all_extractors, get as get_extractor
-from .providers.base import Contract, apply_vat
+from .providers.base import Contract
 
 
 # ---- shared schema builders ---------------------------------------------------
@@ -2165,13 +2165,20 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         other_extractor = get_extractor(self._compare[CONF_SUPPLIER])
         other_per_kwh: float | None = None
         other_snap = None
+        # Resolve the quote against this entry's site facts through the same
+        # helper the coordinator uses, not apply_vat alone. Both transforms are
+        # per-entry, and skipping the excise band priced a professional quote
+        # at the card's first tier however much the household actually uses:
+        # 1,421 c€/kWh instead of 1,139 at 60 000 kWh/yr, overstating the
+        # alternative by about 169 EUR/yr. The user's own side comes off the
+        # coordinator and IS resolved, so the comparison was biased.
+        from .coordinator import _resolve_snapshot
+
         try:
-            other_snap = apply_vat(
+            other_snap = _resolve_snapshot(
+                self.config_entry,
                 await other_extractor.fetch(
                     session, self._compare[CONF_CONTRACT], region
-                ),
-                include_vat=bool(
-                    self.config_entry.data.get(CONF_INCLUDE_VAT, DEFAULT_INCLUDE_VAT)
                 ),
             )
         except Exception as err:  # noqa: BLE001

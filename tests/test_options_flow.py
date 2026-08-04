@@ -2006,3 +2006,63 @@ async def test_professional_step_only_shows_for_a_pro_contract(
 
     keys = {str(k.schema) for k in _professional_schema({}).schema}
     assert keys == {CONF_INCLUDE_VAT, CONF_ANNUAL_CONSUMPTION_KWH}
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_resolves_the_quote_through_the_shared_resolver(
+    hass: HomeAssistant,
+) -> None:
+    """The quoted card must be resolved against this entry's own site facts,
+    not just its VAT preference.
+
+    The compare flow called `apply_vat` alone, so a banded professional card
+    was priced at its FIRST excise tier however much the household actually
+    uses: 1,421 c€/kWh instead of 1,139 at 60 000 kWh/yr, about 169 EUR/yr
+    against the alternative. The user's own side comes off the coordinator and
+    IS fully resolved, so the comparison was biased. Both transforms live in
+    `coordinator._resolve_snapshot`; compare must go through it.
+    """
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices import coordinator as coord_mod
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    other_snap = _stub_snapshot("cociter", "cociter_variable", 0.16)
+    fake = replace(EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap))
+
+    seen: list[Any] = []
+    real = coord_mod._resolve_snapshot
+
+    def _spy(cfg_entry: Any, snap: Any) -> Any:
+        seen.append((cfg_entry, snap))
+        return real(cfg_entry, snap)
+
+    with (
+        patch.dict(EXTRACTORS, {"cociter": fake}),
+        patch.object(coord_mod, "_resolve_snapshot", _spy),
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_variable"}
+        )
+        assert result["step_id"] == "compare_meter"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        assert result["step_id"] == "compare_result"
+
+    assert seen, "compare did not resolve the quote through _resolve_snapshot"
+    used_entry, used_snap = seen[-1]
+    assert used_entry is entry
+    assert used_snap is other_snap

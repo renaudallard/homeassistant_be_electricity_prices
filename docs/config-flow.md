@@ -519,6 +519,16 @@ apples-to-apples; only supplier, contract, and (for static targets) meter vary.
 | `compare_api_key` | `config_flow.py:1769` | Shown when `_after_compare_meter` (`config_flow.py:1741`) finds the quote needs spot data the entry lacks: a dynamic target, or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved (`strings.json:227`) |
 | `compare_result` | `config_flow.py:1797` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`config_flow.py:1810`); submit aborts `compare_done` |
 
+The quoted supplier's freshly fetched card is resolved through
+`coordinator._resolve_snapshot`, the same helper the live path uses, so it gets
+**both** per-entry transforms: `apply_vat` and `resolve_excise_band`. It previously
+called `apply_vat` alone, which priced a banded professional card at its first
+excise tier however much the household uses (1,421 c€/kWh instead of 1,139 at
+60 000 kWh/yr, about 169 EUR/yr) while the user's own side, coming off the
+coordinator, was fully resolved — a comparison biased against the alternative.
+Anything that turns a parsed card into a priced one belongs in that helper, not
+inlined at a call site.
+
 The compare-meter narrowing mirrors the install `_meter_schema` exactly (dynamic/
 tou/tou_impact all require a smart meter; `config_flow.py:1717` comment). The
 compare result never mutates coordinator state: when it must borrow the historical
