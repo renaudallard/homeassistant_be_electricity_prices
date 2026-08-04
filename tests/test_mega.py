@@ -665,6 +665,35 @@ def test_pro_regulated_values_are_the_residential_ones_ex_vat() -> None:
     )
 
 
+def test_pro_flanders_bills_the_base_energy_fund() -> None:
+    """A business connection pays "Montant de base"; the professional card
+    simply omits the reduced row a domiciled household would pay. The value
+    used to be hardcoded 0.0, dropping 120,84 EUR/yr."""
+    snap = parse_snapshot(
+        "mega_pro_smart_fixed", fixture_text("mega_pro_smart_fixed_v.pdf"), "flanders"
+    )
+    assert snap.taxes.energy_fund_eur_per_month == pytest.approx(10.07)
+
+
+def test_residential_flanders_bills_the_reduced_energy_fund() -> None:
+    """A domiciled household pays "Montant réduit", 0.00 on this card, and
+    must never fall through to the 10,07 base amount printed above it."""
+    snap = parse_snapshot(
+        "mega_smart_fixed", fixture_text("mega_smart_fixed_v.pdf"), "flanders"
+    )
+    assert snap.taxes.energy_fund_eur_per_month == 0.0
+
+
+def test_energy_fund_is_flanders_only() -> None:
+    """Wallonia and Brussels cards carry no Fonds Energie block at all."""
+    for cid, fx, region in (
+        ("mega_pro_smart_fixed", "mega_pro_smart_fixed_w.pdf", "wallonia"),
+        ("mega_smart_fixed", "mega_smart_fixed_b.pdf", "brussels"),
+    ):
+        snap = parse_snapshot(cid, fixture_text(fx), region)
+        assert snap.taxes.energy_fund_eur_per_month == 0.0
+
+
 def test_pro_card_region_header_is_still_checked() -> None:
     """The gate now accepts "client professionnel" as well, but must keep
     rejecting the wrong region: a wrong-region card mis-prices silently."""

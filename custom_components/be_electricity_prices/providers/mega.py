@@ -646,7 +646,9 @@ def parse_snapshot(
             wallonia_renewables=wallonia_renewables,
             brussels_renewables=brussels_renewables,
             region_connection_fee=region_connection_fee,
-            energy_fund_eur_per_month=0.0,
+            energy_fund_eur_per_month=_extract_energy_fund(
+                text, region, professional=professional
+            ),
             # The professional card prints HTVA throughout; base.apply_vat
             # resolves it for the entry.
             vat_rate=_PRO_VAT_RATE if professional else 0.0,
@@ -659,6 +661,36 @@ def parse_snapshot(
             text, region, contract.kind
         ),
     )
+
+
+def _extract_energy_fund(text: str, region: str, *, professional: bool) -> float:
+    """Flemish energy fund in EUR/month, from the row this contract bills.
+
+    Only the Flemish cards carry the block, so Wallonia and Brussels read 0
+    without looking. Inside it the card prints a "Montant de base" that a
+    business connection pays, and, on residential cards only, a "Montant
+    réduit (résidentiel avec domicile)" that a domiciled household pays
+    instead. A professional card simply omits the reduced row.
+
+    A residential contract never falls back to the base amount: if the
+    reduced row is missing the levy reads 0, which is what it was before
+    this was parsed at all, rather than billing a household the business
+    rate. Scoped to a window after the label so "Montant de base" cannot
+    match an unrelated table.
+    """
+    if region != REGION_FLANDERS:
+        return 0.0
+    block = re.search(r"Fonds Energie.{0,160}", text, re.S)
+    if block is None:
+        return 0.0
+    window = block.group(0)
+    if not professional:
+        reduced = re.search(
+            r"Montant réduit \(résidentiel avec domicile\)\s*\n\s*([\d.,]+)", window
+        )
+        return to_float(reduced.group(1)) if reduced else 0.0
+    base = re.search(r"Montant de base\s*\n\s*([\d.,]+)", window)
+    return to_float(base.group(1)) if base else 0.0
 
 
 def _extract_supplier_prosumer(text: str, region: str, kind: str) -> float | None:

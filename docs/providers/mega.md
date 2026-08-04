@@ -396,7 +396,15 @@ month (Mega cards are valid for the printed month).
 - `region_connection_fee`: the Wallonia raccordement
   (`Redevance de raccordement`, `mega.py:827`), 0.0 outside Wallonia. Mandatory in
   Wallonia, raises on a miss.
-- `energy_fund_eur_per_month`: 0.0.
+- `energy_fund_eur_per_month`: the Flemish `Fonds Energie` block
+  (`_extract_energy_fund`, `mega.py:666`), 0.0 outside Flanders, where the cards
+  carry no such row. Inside it a **professional** contract bills `Montant de base`
+  (10.07 EUR/month on the August 2026 card) and a residential one bills `Montant
+  réduit (résidentiel avec domicile)` (0.00); the professional card omits the
+  reduced row entirely. A residential contract never falls back to the base
+  amount on a missing reduced row, so a household is never billed the business
+  rate. This was hardcoded 0.0 until it was found to drop 120,84 EUR/yr on every
+  professional Flanders contract.
 - `vat_rate`: **0.0**, meaning the snapshot's prices are already VAT-incl (`mega.py:484`).
   This is the same convention as Eneco and Cociter; do not add a VAT multiplier when
   parsing.
