@@ -1591,6 +1591,39 @@ class _WizardStepsMixin:
         raise NotImplementedError
 
 
+def _unique_id_for(data: dict[str, Any]) -> str:
+    """The uniqueness key an entry claims.
+
+    ``supplier:contract:region:dso``, plus the meter for an exclusive-night
+    circuit. That circuit is a whole-entry meter type (both the energy and
+    the network side route the entire entry through the exclusive-night
+    rate), so it has to be its own entry, which is what ``const.py`` and the
+    docs tell the user to create. A household has one contract on one DSO,
+    so that second entry carried the same tuple as the first and always
+    aborted ``already_configured``: the documented setup could not be
+    performed at all.
+
+    Only that meter extends the key. The standard meters keep claiming the
+    exact string entries were created with, so an existing entry still
+    matches and a real duplicate is still caught, and two night circuits on
+    one tuple still collide with each other. It does not reintroduce the
+    double poll the check exists to prevent either: the snapshot, archive
+    and spot caches are shared per (supplier, contract, region) across
+    entries.
+
+    Install and edit must build the key the same way, or editing a
+    night-circuit entry computes the plain tuple, finds the household's main
+    entry holding exactly that, and aborts.
+    """
+    unique = (
+        f"{data[CONF_SUPPLIER]}:{data[CONF_CONTRACT]}"
+        f":{data[CONF_REGION]}:{data[CONF_DSO]}"
+    )
+    if data.get(CONF_METER) == METER_EXCLUSIVE_NIGHT:
+        return f"{unique}:{METER_EXCLUSIVE_NIGHT}"
+    return unique
+
+
 # ---- ConfigFlow ---------------------------------------------------------------
 
 
@@ -1615,11 +1648,7 @@ class BePricesConfigFlow(_WizardStepsMixin, ConfigFlow, domain=DOMAIN):
         # Reject duplicate entries: the same (supplier, contract,
         # region, dso) tuple already running its own coordinator would
         # double-poll the supplier.
-        unique = (
-            f"{self._data[CONF_SUPPLIER]}:{self._data[CONF_CONTRACT]}"
-            f":{self._data[CONF_REGION]}:{self._data[CONF_DSO]}"
-        )
-        await self.async_set_unique_id(unique)
+        await self.async_set_unique_id(_unique_id_for(self._data))
         self._abort_if_unique_id_configured()
         return await super()._after_meter()
 
@@ -1669,10 +1698,10 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         # Reject edits that collide with another existing entry. Two
         # coordinators on the same (supplier, contract, region, dso) tuple
         # would double-poll the supplier and break shared-snapshot dedup.
-        new_unique = (
-            f"{self._data[CONF_SUPPLIER]}:{self._data[CONF_CONTRACT]}"
-            f":{self._data[CONF_REGION]}:{self._data[CONF_DSO]}"
-        )
+        # Built the same way as on install, or editing a night-circuit
+        # entry would compute the plain tuple, find the household's main
+        # entry holding exactly that, and abort.
+        new_unique = _unique_id_for(self._data)
         if new_unique != self.config_entry.unique_id:
             for other in self.hass.config_entries.async_entries(DOMAIN):
                 if (

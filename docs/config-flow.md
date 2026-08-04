@@ -191,12 +191,10 @@ rather than raising.
 The `exclusive_night` meter is not a first-class branch of the wizard: per
 `const.py:155`, a dedicated night circuit (electric water heater, night-storage
 heater) is configured as a *second* config entry pointing at the exclusive-night
-kWh sensor; the primary (day) meter stays mono/bi/dynamic. The two entries get
-distinct unique ids because the meter is part of neither, see the unique-id note
-below (the tuple is supplier:contract:region:dso, so two entries with different
-meters but the same tuple would still collide, which is why the pattern is one
-day-meter entry plus one night-circuit entry on a *different* contract or the same
-tuple is not created twice).
+kWh sensor; the primary (day) meter stays mono/bi/dynamic. The night-circuit entry
+gets its own unique id because that one meter type is appended to the key, so it no
+longer collides with the household's main entry on the same
+supplier:contract:region:dso tuple; see the unique-id note below.
 
 ### `dso_tariff_mode`: Wallonia-only DSO billing mode
 
@@ -417,14 +415,28 @@ consumption and drove the YTD negative instead of resting on the fees-only floor
 
 ### Unique id and duplicate rejection
 
-The unique id is the string `supplier:contract:region:dso`. On install,
-`BePricesConfigFlow._after_meter` (`config_flow.py:1526`) sets it after the meter
-step and calls `_abort_if_unique_id_configured`; the same tuple already running its
-own coordinator would double-poll the supplier and break shared-snapshot dedup. The
-OptionsFlow enforces the same at finalize (`config_flow.py:1538`): if the edited
-tuple differs from the entry's current unique id, it scans other `DOMAIN` entries and
-aborts `already_configured` on a collision. The abort strings are
-`config.abort.supplier_region_unavailable` / `already_configured` (`strings.json:164`).
+The unique id is built by `_unique_id_for` (`config_flow.py:1594`): the string
+`supplier:contract:region:dso`, **plus the meter for an exclusive-night circuit**.
+On install, `BePricesConfigFlow._after_meter` (`config_flow.py:1647`) sets it after
+the meter step and calls `_abort_if_unique_id_configured`; the same tuple already
+running its own coordinator would double-poll the supplier and break shared-snapshot
+dedup. The OptionsFlow enforces the same at finalize (`config_flow.py:1704`): if the
+edited key differs from the entry's current unique id, it scans other `DOMAIN`
+entries and aborts `already_configured` on a collision. The abort strings are
+`config.abort.supplier_region_unavailable` / `already_configured`.
+
+Only the exclusive-night meter extends the key, for a reason worth keeping straight.
+That circuit is a whole-entry meter type, so the docs tell the user to add it as a
+second entry — but a household has one contract on one DSO, so that second entry
+carried the identical tuple and **always** aborted: the documented setup could not be
+performed at all. Appending just that one meter unblocks it while the standard meters
+keep claiming the exact string existing entries were created with, so an existing
+entry still matches and a real duplicate is still caught, and two night circuits on
+one tuple still collide with each other. It does not reintroduce the double poll
+either: the snapshot, archive and spot caches are shared per
+(supplier, contract, region) across entries. Install and edit **must** build the key
+through the same helper, or editing a night-circuit entry computes the plain tuple,
+finds the main entry holding exactly that, and aborts.
 
 ### Defaults selection pattern
 

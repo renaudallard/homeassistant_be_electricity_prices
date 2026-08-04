@@ -176,7 +176,7 @@
     },
     "abort": {
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Please go back and pick a different combination.",
-      "already_configured": "Another entry already polls the same (supplier, contract, region, DSO) tuple. Edit that entry instead, or pick a different combination.",
+      "already_configured": "Another entry already polls the same (supplier, contract, region, DSO) combination. Edit that entry instead, or pick a different combination. An exclusive-night circuit is the exception: it is set up as its own additional entry, so it does not clash with your main one.",
       "compare_no_alternative": "No other supplier or contract is available in your region to compare against.",
       "compare_done": "Comparison complete - no changes saved."
     },
@@ -190,7 +190,7 @@
   "options": {
     "abort": {
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Please go back and pick a different combination.",
-      "already_configured": "Another entry already polls the same (supplier, contract, region, DSO) tuple. Edit that entry instead, or pick a different combination.",
+      "already_configured": "Another entry already polls the same (supplier, contract, region, DSO) combination. Edit that entry instead, or pick a different combination. An exclusive-night circuit is the exception: it is set up as its own additional entry, so it does not clash with your main one.",
       "compare_no_alternative": "No other supplier or contract is available in your region to compare against.",
       "compare_done": "Comparison complete - no changes saved."
     },

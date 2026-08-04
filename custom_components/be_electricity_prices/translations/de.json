@@ -176,7 +176,7 @@
     },
     "abort": {
       "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewaehlten Region keinen Privathaushaltsstrom. Bitte zurueck und eine andere Kombination waehlen.",
-      "already_configured": "Ein anderer Eintrag ruft bereits dasselbe Tupel (Anbieter, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder waehlen Sie eine andere Kombination.",
+      "already_configured": "Ein anderer Eintrag fragt bereits dieselbe Kombination (Lieferant, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder wählen Sie eine andere Kombination. Der reine Nachtstromkreis ist die Ausnahme: Er wird als eigener zusätzlicher Eintrag angelegt und kollidiert daher nicht mit Ihrem Haupteintrag.",
       "compare_no_alternative": "Kein anderer Anbieter oder Vertrag in Ihrer Region zum Vergleich verfuegbar.",
       "compare_done": "Vergleich abgeschlossen - keine Aenderungen gespeichert."
     },
@@ -190,7 +190,7 @@
   "options": {
     "abort": {
       "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewaehlten Region keinen Privathaushaltsstrom. Bitte zurueck und eine andere Kombination waehlen.",
-      "already_configured": "Ein anderer Eintrag ruft bereits dasselbe Tupel (Anbieter, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder waehlen Sie eine andere Kombination.",
+      "already_configured": "Ein anderer Eintrag fragt bereits dieselbe Kombination (Lieferant, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder wählen Sie eine andere Kombination. Der reine Nachtstromkreis ist die Ausnahme: Er wird als eigener zusätzlicher Eintrag angelegt und kollidiert daher nicht mit Ihrem Haupteintrag.",
       "compare_no_alternative": "Kein anderer Anbieter oder Vertrag in Ihrer Region zum Vergleich verfuegbar.",
       "compare_done": "Vergleich abgeschlossen - keine Aenderungen gespeichert."
     },

@@ -176,7 +176,7 @@
     },
     "abort": {
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Ga terug en kies een andere combinatie.",
-      "already_configured": "Een andere ingang bevraagt al dezelfde combinatie (leverancier, contract, regio, DNB). Bewerk die ingang of kies een andere combinatie.",
+      "already_configured": "Een andere invoer bevraagt al dezelfde combinatie (leverancier, contract, regio, DNB). Pas die invoer aan, of kies een andere combinatie. Een uitsluitend-nachtcircuit is de uitzondering: dat maakt u aan als een eigen extra invoer, dus het botst niet met uw hoofdinvoer.",
       "compare_no_alternative": "Geen andere leverancier of contract beschikbaar in jouw regio om mee te vergelijken.",
       "compare_done": "Vergelijking voltooid - geen wijzigingen opgeslagen."
     },
@@ -190,7 +190,7 @@
   "options": {
     "abort": {
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Ga terug en kies een andere combinatie.",
-      "already_configured": "Een andere ingang bevraagt al dezelfde combinatie (leverancier, contract, regio, DNB). Bewerk die ingang of kies een andere combinatie.",
+      "already_configured": "Een andere invoer bevraagt al dezelfde combinatie (leverancier, contract, regio, DNB). Pas die invoer aan, of kies een andere combinatie. Een uitsluitend-nachtcircuit is de uitzondering: dat maakt u aan als een eigen extra invoer, dus het botst niet met uw hoofdinvoer.",
       "compare_no_alternative": "Geen andere leverancier of contract beschikbaar in jouw regio om mee te vergelijken.",
       "compare_done": "Vergelijking voltooid - geen wijzigingen opgeslagen."
     },
