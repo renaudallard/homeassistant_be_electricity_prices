@@ -1738,7 +1738,7 @@ async def _run() -> int:
     # gets the file alongside the existing logs (CI happens to invoke
     # from repo root, so behaviour there is unchanged).
     (ROOT / "catalog_report.md").write_text(_render_report(catalog_checks))
-    drift_warnings = _drift_warnings(METRICS)
+    drift_warnings = _drift_warnings(METRICS, _failed_suppliers(extractor_checks))
     (ROOT / "drift_report.md").write_text(_render_drift(drift_warnings))
     extractor_failed = any(not c.ok for c in extractor_checks)
     catalog_failed = any(not c.ok for c in catalog_checks)
@@ -1838,7 +1838,23 @@ def _latency_budget(supplier: str) -> float:
     return _LATENCY_BUDGET_OVERRIDES.get(supplier, LATENCY_WARN_THRESHOLD_S)
 
 
-def _drift_warnings(metrics: dict[str, dict[str, float]]) -> list[str]:
+def _failed_suppliers(checks: Iterable[Check]) -> frozenset[str]:
+    """Suppliers carrying at least one failed check.
+
+    Labels are `<supplier>: <what>` or `<supplier>/<contract>[/<region>]:
+    <what>`, so the supplier is whatever precedes the first separator.
+    """
+    return frozenset(
+        check.label.split(":", 1)[0].split("/", 1)[0].strip()
+        for check in checks
+        if not check.ok
+    )
+
+
+def _drift_warnings(
+    metrics: dict[str, dict[str, float]],
+    failed: frozenset[str] = frozenset(),
+) -> list[str]:
     """Static-threshold drift signals: latency or byte budgets blown."""
     warnings: list[str] = []
     for supplier, m in sorted(metrics.items()):
@@ -1848,6 +1864,23 @@ def _drift_warnings(metrics: dict[str, dict[str, float]]) -> list[str]:
             # wallclock blow any single-supplier budget by design. It is
             # not a per-supplier regression signal; skip it rather than
             # auto-open a spurious drift issue.
+            continue
+        if supplier in failed:
+            # This supplier's extractor already failed, which is both the
+            # louder signal and the likely cause of the numbers: a
+            # supplier that reworks its cards changes their size, and the
+            # workflow then retries the whole run for an hour, so every
+            # other supplier gets several more rolls against its budget
+            # and drift is judged on whichever attempt happened to be
+            # last. Reporting drift as well splits one supplier-side
+            # event across two issues and refiles it daily for as long as
+            # the extractor stays broken. Keep the measurement in the log
+            # so tuning a budget later does not need a rerun.
+            print(
+                f"drift: {supplier} skipped, extractor failed "
+                f"(elapsed {m['elapsed_s']:.1f}s, {int(m['bytes']):,} bytes)",
+                file=sys.stderr,
+            )
             continue
         latency_budget = _latency_budget(supplier)
         if m["elapsed_s"] > latency_budget:

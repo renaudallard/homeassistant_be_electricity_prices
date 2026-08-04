@@ -249,7 +249,7 @@ Two safety caps bound runtime. Each supplier check runs under
 supplier cannot starve the `gather()`. The session-level `aiohttp.ClientTimeout(total=60)`
 (`scripts/live_check.py:1577`) bounds individual requests.
 
-`_drift_warnings` (`scripts/live_check.py:1841`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:1854`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1762`), with per-supplier overrides in
 `_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1780`) for the known-large catalogues (Bolt,
@@ -259,9 +259,21 @@ are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-re
 not true wallclock, so a supplier that fetches concurrently (Bolt fetches its six PDFs with
 `asyncio.gather`, `scripts/live_check.py:910`) records the sum of its parallel fetches; the budgets
 are sized around that. The synthetic `_catalog` bucket is skipped in drift analysis because it
-aggregates every supplier's discovery fetch under one name (`scripts/live_check.py:1845`). When a
+aggregates every supplier's discovery fetch under one name (`scripts/live_check.py:1861`). When a
 budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see below). Tuning a
 false-firing drift alert means adjusting the override, not the code.
+
+A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:1868`,
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:1841`). The
+failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
+cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
+every other supplier gets several more rolls against its budget with drift judged on whichever
+attempt landed last. Issue #55 is the worked example: Ecofix rasterised its August 2026 cards, which
+pushed each PDF from ~1.1 MB to ~1.76 MB and blew the byte budget, while six retried attempts gave
+Eneco enough rolls to land one 96.4s outlier against the then-90s default. One supplier-side event,
+two suppliers named, and it would have refiled every day for as long as Ecofix stayed broken. The
+skipped measurement is printed to stderr so a budget can still be tuned from the run log without a
+rerun.
 
 ### Exit codes and the two report side-channels
 

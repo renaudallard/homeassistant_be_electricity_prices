@@ -169,3 +169,44 @@ def test_every_latency_budget_stays_under_the_hard_cap() -> None:
     }
     assert not over, f"latency budgets at/above the {cap}s hard cap: {over}"
     assert lc.LATENCY_WARN_THRESHOLD_S < cap
+
+
+def _blown(supplier: str) -> dict[str, dict[str, float]]:
+    """Metrics that blow both budgets for one supplier."""
+    return {
+        supplier: {
+            "fetches": 6.0,
+            "elapsed_s": lc._latency_budget(supplier) + 10.0,
+            "bytes": float(lc._bytes_budget(supplier) + 1_000_000),
+            "failed": 0.0,
+            "failed_s": 0.0,
+        }
+    }
+
+
+def test_drift_reports_a_blown_budget_when_the_extractor_passed() -> None:
+    warnings = lc._drift_warnings(_blown("ecofix"), frozenset())
+    assert len(warnings) == 2
+    assert any("fetch time" in w for w in warnings)
+    assert any("bytes" in w for w in warnings)
+
+
+def test_drift_is_skipped_for_a_supplier_whose_extractor_failed() -> None:
+    """The extractor failure is the louder signal and the likely cause of
+    the numbers, so drift must not split it into a second issue."""
+    assert lc._drift_warnings(_blown("ecofix"), frozenset({"ecofix"})) == []
+
+
+def test_drift_still_fires_for_a_supplier_that_passed() -> None:
+    """A failure at one supplier must not silence drift at another."""
+    warnings = lc._drift_warnings(_blown("eneco"), frozenset({"ecofix"}))
+    assert len(warnings) == 2
+
+
+def test_failed_suppliers_reads_the_supplier_off_the_label() -> None:
+    checks = [
+        lc.Check("ecofix/ecofix_motion/flanders: fetch", False, "boom"),
+        lc.Check("eneco/power_fix: publication label", True),
+        lc.Check("totalenergies: hard timeout", False, "exceeded 600s"),
+    ]
+    assert lc._failed_suppliers(checks) == frozenset({"ecofix", "totalenergies"})
