@@ -141,9 +141,9 @@ pricing engine:
   what keeps `energy + network + taxes == all_in` exact (see the invariant
   above).
 - **Fixed and annual fees** - the yearly fee, data management, capacity, the DSO
-  and supplier prosumer forfaits, the Brussels OSP table, the energy fund -
-  never reach that path: the live, YTD, backfill and compare paths each sum them
-  raw. `base.apply_vat` (`providers/base.py:556`) bakes them once instead.
+  and supplier prosumer forfaits, the Brussels OSP table - never reach that path:
+  the live, YTD, backfill and compare paths each sum them raw.
+  `base.apply_vat` (`providers/base.py:594`) bakes them once instead.
 
 `apply_vat` is called per config entry, from `_resolve_snapshot`
 (`coordinator.py:550`), never before the shared snapshot cache: that cache is
@@ -153,7 +153,16 @@ snapshot, so it costs nothing for a residential entry. `CONF_INCLUDE_VAT`
 chooses the factor: a business that deducts VAT sets it False and the card's
 own ex-VAT numbers stand.
 
-Injection is conditional: residentially it is VAT-exempt and never VAT-scaled,
+Two values are exempt outright and are never baked, whatever the card's basis.
+The **Flemish energy fund** is levied VAT-free and the cards say so on the fund
+row itself: Engie footnotes `Cotisation Fonds Energie Region Flamande(8)` with
+*"(8) Vous ne payez pas de TVA sur ces couts"*, and DATS 24 marks `Bijdrage
+Energiefonds Vlaams Gewest8` with *"8Niet aan btw onderworpen"*. It used to be
+baked with the other annual fees, which charged a professional Flanders entry
+12,18 EUR/month against an invoiced 10,07, about 25 EUR/yr on `current_year_cost`,
+the compare quote and the config-flow estimate alike.
+
+Injection is the other, and is conditional: residentially it is VAT-exempt and never VAT-scaled,
 but professional cards tax it at 21% (*"Le prix d'injection est soumis a la TVA"*,
 the reverse of the residential wording). An extractor whose card taxes it sets
 `InjectionRates.vat_applies` and `apply_vat` grosses those rates too - they are

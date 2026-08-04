@@ -606,17 +606,23 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
         ``pricing._finalize_breakdown`` from ``vat_rate``, so they stay as
         printed here and only the rate itself is resolved.
       - Fixed and annual fees - the yearly fee, data management, capacity,
-        the DSO and supplier prosumer forfaits, the Brussels OSP table and
-        the energy fund - never reach that path: the live, year-to-date,
-        backfill and compare paths each sum them raw. They are baked here
-        so the choice lands exactly once whichever path bills them.
+        the DSO and supplier prosumer forfaits and the Brussels OSP table -
+        never reach that path: the live, year-to-date, backfill and compare
+        paths each sum them raw. They are baked here so the choice lands
+        exactly once whichever path bills them.
 
     ``include_vat=False`` serves a business that deducts VAT: the factor
     is 1.0 and the numbers stay as the card printed them.
 
-    Injection is baked here too, but only when the card taxes it
-    (``InjectionRates.vat_applies``). Residential injection is VAT-exempt
-    outright and stays untouched even on a card that is otherwise ex-VAT.
+    Two values are exempt outright and stay as parsed whatever the card's
+    basis. Injection is baked only when the card taxes it
+    (``InjectionRates.vat_applies``); residential injection is VAT-exempt.
+    The Flemish energy fund is never baked at all: the cards say so in as
+    many words, Engie footnoting its ``Cotisation Fonds Energie Region
+    Flamande`` with "Vous ne payez pas de TVA sur ces couts" and DATS 24 its
+    ``Bijdrage Energiefonds Vlaams Gewest`` with "Niet aan btw onderworpen".
+    Grossing it charged a professional Flanders entry 12,18 EUR/month
+    against an invoiced 10,07, about 25 EUR/yr.
 
     Call this per config entry, never before the shared snapshot cache:
     the cache is keyed on (supplier, contract, region) and shared between
@@ -636,13 +642,9 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
             if injection is not None and injection.vat_applies
             else injection
         ),
-        taxes=replace(
-            snapshot.taxes,
-            energy_fund_eur_per_month=(
-                snapshot.taxes.energy_fund_eur_per_month * factor
-            ),
-            vat_rate=rate if include_vat else 0.0,
-        ),
+        # energy_fund_eur_per_month is deliberately absent: the levy is
+        # VAT-free, so it is billed exactly as the card prints it.
+        taxes=replace(snapshot.taxes, vat_rate=rate if include_vat else 0.0),
         supplier_prosumer_eur_per_kva_year=(
             None
             if snapshot.supplier_prosumer_eur_per_kva_year is None

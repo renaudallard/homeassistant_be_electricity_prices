@@ -57,7 +57,7 @@ from custom_components.be_electricity_prices.providers.base import (
     resolve_excise_band,
 )
 from custom_components.be_electricity_prices.providers.custom import build_snapshot
-from tests import make_snapshot, make_stub_extractor
+from tests import fixture_text, make_snapshot, make_stub_extractor
 
 # ---- minimal xlsx fixture (built with the stdlib, no openpyxl) ---------------
 
@@ -394,12 +394,52 @@ def test_custom_bakes_fixed_fees_vat_inclusive(vat_rate: float, factor: float) -
     )
     ov = snap.dsos[const.DSO_FLUVIUS_ANTWERPEN]
     assert snap.energy.yearly_fixed_fee == pytest.approx(100.0 * factor)
-    assert snap.taxes.energy_fund_eur_per_month == pytest.approx(5.0 * factor)
+    # The Flemish energy fund is levied VAT-free, so it is never baked: the
+    # cards say so outright (Engie "Vous ne payez pas de TVA sur ces couts",
+    # DATS 24 "Niet aan btw onderworpen").
+    assert snap.taxes.energy_fund_eur_per_month == pytest.approx(5.0)
     assert ov.data_management_per_year == pytest.approx(15.0 * factor)
     assert ov.capacity_eur_per_kw_year == pytest.approx(40.0 * factor)
     # per-kWh values are untouched; vat_rate is preserved for the gross-up
     assert ov.distribution_single == pytest.approx(0.05)
     assert snap.taxes.vat_rate == pytest.approx(vat_rate)
+
+
+def test_energy_fund_is_never_grossed_on_a_scraped_professional_card() -> None:
+    """The Flemish energy fund is levied VAT-free and must be billed exactly
+    as the card prints it.
+
+    The suppliers say so on the cards themselves, with the footnote marker on
+    the fund row: Engie prints ``Cotisation Fonds Energie Region Flamande(8)``
+    with ``(8) Vous ne payez pas de TVA sur ces couts``, and DATS 24 prints
+    ``Bijdrage Energiefonds Vlaams Gewest8`` with ``8Niet aan btw
+    onderworpen``. Grossing it charged a professional Flanders entry 12,18
+    EUR/month against an invoiced 10,07, about 25 EUR/yr on current_year_cost,
+    the compare quote and the config-flow estimate alike.
+
+    Checked on a real card rather than a synthetic overlay, because the whole
+    professional lane only bites on a scraped ex-VAT snapshot.
+    """
+    from custom_components.be_electricity_prices.providers import engie
+
+    snap = engie.parse_snapshot(
+        "engie_pro_easy_variable",
+        {const.REGION_FLANDERS: fixture_text("engie_pro_easy_indexed_v.pdf")},
+    )
+    assert snap.taxes.vat_rate == pytest.approx(0.21)
+    printed = snap.taxes.energy_fund_eur_per_month
+    assert printed == pytest.approx(10.07)
+
+    for include in (True, False):
+        out = apply_vat(snap, include_vat=include)
+        assert out.taxes.energy_fund_eur_per_month == pytest.approx(printed)
+
+    # The VAT-able neighbours on the same card must still be grossed, or this
+    # would have swapped one mis-price for another.
+    dso_key = next(iter(snap.dsos))
+    before = snap.dsos[dso_key].data_management_per_year
+    after = apply_vat(snap, include_vat=True).dsos[dso_key].data_management_per_year
+    assert after == pytest.approx(before * 1.21)
 
 
 def test_apply_vat_excluded_leaves_the_card_as_printed() -> None:
