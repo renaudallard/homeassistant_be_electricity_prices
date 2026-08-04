@@ -24,7 +24,7 @@
       },
       "signed_rate": {
         "title": "Tarief bij ondertekening (optioneel)",
-        "description": "Uw leverancier houdt geen online archief van oude tariefkaarten bij, dus het tarief dat u bij ondertekening hebt vastgelegd kan niet automatisch worden opgehaald. Voer het hier in om uw contract correct te berekenen; laat leeg om de huidige kaart te blijven gebruiken. Waarden per kWh in dezelfde btw-basis als op de kaart van uw leverancier; het jaarlijkse vaste bedrag inclusief btw.",
+        "description": "Voer het tarief in dat u werkelijk hebt ondertekend. Een promotioneel, onderhandeld of via een makelaar verkregen tarief staat op geen enkele gepubliceerde tariefkaart, dus alleen u kunt het opgeven. Wat u invult vervangt de kaart veld voor veld; laat een veld leeg om daarvoor de waarde van de kaart te behouden, of laat de hele stap leeg om alleen op basis van de kaart te rekenen. Houdt uw leverancier een archief van oude tariefkaarten bij, dan vult de kaart van uw ondertekeningsmaand de lege velden aan; anders doet de huidige kaart dat. Waarden per kWh in dezelfde btw-basis als op de kaart van uw leverancier; het jaarlijkse vaste bedrag inclusief btw.",
         "data": {
           "manual_energy_single": "Vastgelegd energietarief (EUR/kWh)",
           "manual_energy_peak": "Vastgelegd piektarief (EUR/kWh)",
@@ -263,7 +263,7 @@
       },
       "signed_rate": {
         "title": "Tarief bij ondertekening (optioneel)",
-        "description": "Uw leverancier houdt geen online archief van oude tariefkaarten bij, dus het tarief dat u bij ondertekening hebt vastgelegd kan niet automatisch worden opgehaald. Voer het hier in om uw contract correct te berekenen; laat leeg om de huidige kaart te blijven gebruiken. Waarden per kWh in dezelfde btw-basis als op de kaart van uw leverancier; het jaarlijkse vaste bedrag inclusief btw.",
+        "description": "Voer het tarief in dat u werkelijk hebt ondertekend. Een promotioneel, onderhandeld of via een makelaar verkregen tarief staat op geen enkele gepubliceerde tariefkaart, dus alleen u kunt het opgeven. Wat u invult vervangt de kaart veld voor veld; laat een veld leeg om daarvoor de waarde van de kaart te behouden, of laat de hele stap leeg om alleen op basis van de kaart te rekenen. Houdt uw leverancier een archief van oude tariefkaarten bij, dan vult de kaart van uw ondertekeningsmaand de lege velden aan; anders doet de huidige kaart dat. Waarden per kWh in dezelfde btw-basis als op de kaart van uw leverancier; het jaarlijkse vaste bedrag inclusief btw.",
         "data": {
           "manual_energy_single": "Vastgelegd energietarief (EUR/kWh)",
           "manual_energy_peak": "Vastgelegd piektarief (EUR/kWh)",

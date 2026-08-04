@@ -777,8 +777,21 @@ async def _cohort_energy_leg(
         entry, current_snapshot.energy if archived is None else archived
     )
     if manual is not None:
-        return manual
-    return archived
+        source = "hand-entered signing rate"
+    elif archived is not None:
+        source = "archived signing-month card"
+    else:
+        source = "current card (no cohort rate available)"
+    # Which of the three resolutions won is otherwise invisible: the sensors
+    # publish a price, not its provenance, so "my signing rate does nothing"
+    # was unanswerable without reading the source.
+    _LOGGER.debug(
+        "%s: contract started %s, energy priced from the %s",
+        contract,
+        start,
+        source,
+    )
+    return manual if manual is not None else archived
 
 
 async def _effective_snapshot_for_month(

@@ -24,7 +24,7 @@
       },
       "signed_rate": {
         "title": "Tarif de signature (facultatif)",
-        "description": "Votre fournisseur ne conserve pas d'archive en ligne des anciennes cartes tarifaires, le tarif bloqué à la signature ne peut donc pas être récupéré automatiquement. Saisissez-le ici pour calculer correctement votre contrat ; laissez vide pour continuer à utiliser la carte actuelle. Valeurs au kWh dans la même base TVA que celle imprimée sur la carte de votre fournisseur ; forfait annuel TVA comprise.",
+        "description": "Saisissez le tarif que vous avez réellement signé. Un tarif promotionnel, négocié ou obtenu via un courtier ne figure sur aucune carte tarifaire publiée : vous seul pouvez le fournir. Ce que vous saisissez remplace la carte champ par champ ; laissez un champ vide pour en conserver la valeur de la carte, ou laissez toute l'étape vide pour calculer uniquement d'après la carte. Si votre fournisseur archive ses anciennes cartes tarifaires, celle de votre mois de signature complète les champs vides ; sinon c'est la carte actuelle. Valeurs au kWh dans la même base TVA que celle imprimée sur la carte de votre fournisseur ; forfait annuel TVA comprise.",
         "data": {
           "manual_energy_single": "Tarif énergie signé (EUR/kWh)",
           "manual_energy_peak": "Tarif heures pleines signé (EUR/kWh)",
@@ -263,7 +263,7 @@
       },
       "signed_rate": {
         "title": "Tarif de signature (facultatif)",
-        "description": "Votre fournisseur ne conserve pas d'archive en ligne des anciennes cartes tarifaires, le tarif bloqué à la signature ne peut donc pas être récupéré automatiquement. Saisissez-le ici pour calculer correctement votre contrat ; laissez vide pour continuer à utiliser la carte actuelle. Valeurs au kWh dans la même base TVA que celle imprimée sur la carte de votre fournisseur ; forfait annuel TVA comprise.",
+        "description": "Saisissez le tarif que vous avez réellement signé. Un tarif promotionnel, négocié ou obtenu via un courtier ne figure sur aucune carte tarifaire publiée : vous seul pouvez le fournir. Ce que vous saisissez remplace la carte champ par champ ; laissez un champ vide pour en conserver la valeur de la carte, ou laissez toute l'étape vide pour calculer uniquement d'après la carte. Si votre fournisseur archive ses anciennes cartes tarifaires, celle de votre mois de signature complète les champs vides ; sinon c'est la carte actuelle. Valeurs au kWh dans la même base TVA que celle imprimée sur la carte de votre fournisseur ; forfait annuel TVA comprise.",
         "data": {
           "manual_energy_single": "Tarif énergie signé (EUR/kWh)",
           "manual_energy_peak": "Tarif heures pleines signé (EUR/kWh)",

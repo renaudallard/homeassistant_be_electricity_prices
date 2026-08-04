@@ -24,7 +24,7 @@
       },
       "signed_rate": {
         "title": "Vertragstarif bei Abschluss (optional)",
-        "description": "Ihr Anbieter führt kein Online-Archiv alter Tarifblätter, daher kann der bei Vertragsabschluss festgelegte Tarif nicht automatisch abgerufen werden. Geben Sie ihn hier ein, um Ihren Vertrag korrekt zu berechnen; leer lassen, um weiterhin das aktuelle Tarifblatt zu verwenden. Werte pro kWh in derselben MwSt-Basis wie auf dem Tarifblatt Ihres Anbieters; die Jahresgebühr inklusive MwSt.",
+        "description": "Geben Sie den Tarif ein, den Sie tatsächlich abgeschlossen haben. Ein Aktions-, Makler- oder ausgehandelter Tarif steht auf keinem veröffentlichten Tarifblatt, nur Sie können ihn angeben. Ihre Eingaben ersetzen das Tarifblatt Feld für Feld; lassen Sie ein Feld leer, um dafür den Wert des Tarifblatts zu behalten, oder den ganzen Schritt leer, um allein nach Tarifblatt zu rechnen. Führt Ihr Anbieter ein Archiv alter Tarifblätter, füllt das Blatt Ihres Abschlussmonats die leeren Felder; sonst das aktuelle. Werte pro kWh in derselben MwSt-Basis wie auf dem Tarifblatt Ihres Anbieters; die Jahresgebühr inklusive MwSt.",
         "data": {
           "manual_energy_single": "Festgelegter Energietarif (EUR/kWh)",
           "manual_energy_peak": "Festgelegter Hochtarif (EUR/kWh)",
@@ -263,7 +263,7 @@
       },
       "signed_rate": {
         "title": "Vertragstarif bei Abschluss (optional)",
-        "description": "Ihr Anbieter führt kein Online-Archiv alter Tarifblätter, daher kann der bei Vertragsabschluss festgelegte Tarif nicht automatisch abgerufen werden. Geben Sie ihn hier ein, um Ihren Vertrag korrekt zu berechnen; leer lassen, um weiterhin das aktuelle Tarifblatt zu verwenden. Werte pro kWh in derselben MwSt-Basis wie auf dem Tarifblatt Ihres Anbieters; die Jahresgebühr inklusive MwSt.",
+        "description": "Geben Sie den Tarif ein, den Sie tatsächlich abgeschlossen haben. Ein Aktions-, Makler- oder ausgehandelter Tarif steht auf keinem veröffentlichten Tarifblatt, nur Sie können ihn angeben. Ihre Eingaben ersetzen das Tarifblatt Feld für Feld; lassen Sie ein Feld leer, um dafür den Wert des Tarifblatts zu behalten, oder den ganzen Schritt leer, um allein nach Tarifblatt zu rechnen. Führt Ihr Anbieter ein Archiv alter Tarifblätter, füllt das Blatt Ihres Abschlussmonats die leeren Felder; sonst das aktuelle. Werte pro kWh in derselben MwSt-Basis wie auf dem Tarifblatt Ihres Anbieters; die Jahresgebühr inklusive MwSt.",
         "data": {
           "manual_energy_single": "Festgelegter Energietarif (EUR/kWh)",
           "manual_energy_peak": "Festgelegter Hochtarif (EUR/kWh)",

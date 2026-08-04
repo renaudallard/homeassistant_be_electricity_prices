@@ -24,7 +24,7 @@
       },
       "signed_rate": {
         "title": "Signing rate (optional)",
-        "description": "Your supplier keeps no online archive of past tariff cards, so the rate you locked in at signing cannot be retrieved automatically. Enter it here to price your contract correctly; leave blank to keep using the current published card. Per-kWh values go in the same VAT basis your supplier prints on its card; the yearly fee goes in VAT-inclusive.",
+        "description": "Enter the rate you actually signed at. A promotional, brokered or negotiated rate appears on no published tariff card, so only you can supply it. What you type overrides the card box by box; leave a box blank to keep the card's value for it, or leave the whole step blank to price off the card alone. When your supplier archives past tariff cards, the card for your signing month fills the blanks; otherwise the current card does. Per-kWh values go in the same VAT basis your supplier prints on its card; the yearly fee goes in VAT-inclusive.",
         "data": {
           "manual_energy_single": "Signed energy rate (EUR/kWh)",
           "manual_energy_peak": "Signed peak rate (EUR/kWh)",
@@ -263,7 +263,7 @@
       },
       "signed_rate": {
         "title": "Signing rate (optional)",
-        "description": "Your supplier keeps no online archive of past tariff cards, so the rate you locked in at signing cannot be retrieved automatically. Enter it here to price your contract correctly; leave blank to keep using the current published card. Per-kWh values go in the same VAT basis your supplier prints on its card; the yearly fee goes in VAT-inclusive.",
+        "description": "Enter the rate you actually signed at. A promotional, brokered or negotiated rate appears on no published tariff card, so only you can supply it. What you type overrides the card box by box; leave a box blank to keep the card's value for it, or leave the whole step blank to price off the card alone. When your supplier archives past tariff cards, the card for your signing month fills the blanks; otherwise the current card does. Per-kWh values go in the same VAT basis your supplier prints on its card; the yearly fee goes in VAT-inclusive.",
         "data": {
           "manual_energy_single": "Signed energy rate (EUR/kWh)",
           "manual_energy_peak": "Signed peak rate (EUR/kWh)",

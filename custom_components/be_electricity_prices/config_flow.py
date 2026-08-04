@@ -1251,9 +1251,11 @@ class _WizardStepsMixin:
         """Offer the signing-rate override for a start date on a fixed /
         dynamic contract of a real (non-custom) supplier.
 
-        It becomes the cohort energy leg whenever the archive cannot recover
-        the signing month (a non-archive supplier, or a start date older than
-        the archive reaches); the archived card wins when it is available.
+        Offered whether or not the supplier keeps an archive: the archive only
+        ever knew the published card, so a promotional, brokered or negotiated
+        rate has to be typed. What the user types wins over the archived card
+        (``_manual_energy_leg``), which is the only reason it is worth asking
+        an archive supplier's customer at all.
         """
         if self._data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
             return False
