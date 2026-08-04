@@ -19,6 +19,49 @@ Related reading:
 
 ## Overview
 
+> [!WARNING]
+> **Broken since the August 2026 card: the PDFs are page images.** Every page of
+> every product is now a single full-page image covering 99.9% of the sheet, in
+> both the NL and FR editions. Measured on the August cards:
+>
+> | card | page 1 | pages 2-5 |
+> | --- | --- | --- |
+> | `EL_Ecofix_Motion_NL` | 116 chars, 1 image @ 99.9% | 13 chars each (the month) |
+> | `EL_Ecofix_Motion_FR` | 108 chars, 1 image @ 99.9% | 9 chars each |
+> | `EL_Ecofix_Flexy_NL` | 121 chars, 1 image @ 99.9% | 13 chars (178 on p4) |
+>
+> What survives as live text is the supplier's own side: the formulas, and a
+> handful of unlabelled fee numbers. Motion keeps them on page 1, Flexy on
+> page 4:
+>
+> ```
+> Motion   (0,1000 x Belpex 15M) + 1,1020    inj (0,0884 x Belpex 15M) - 0,5000
+> Flexy    (BELPEX-RLP-M * 0,1020) + 1,2000  inj (BELPEX-SPP-M * 0,0884) - 0,5000
+> ```
+>
+> What is gone is the whole regulated side — the DSO network tables and the tax
+> block — which is most of a Belgian all-in price, so `parse_snapshot` fails
+> loud rather than assembling a partial card. There is no fallback: `current/`
+> is overwrite-in-place and Ecofix publishes no dated archive (every archive URL
+> pattern probed returns 404).
+>
+> **Do not add OCR.** Dense numeric tables printed with Belgian comma decimals
+> are OCR's weakest case, and a misread digit mis-prices silently, which is the
+> failure mode every extractor here is built to avoid; it would also mean an OCR
+> engine as a runtime dependency for one supplier. **Do not cross-fill from a
+> sibling card either**: DSO distribution and transport tariffs genuinely are
+> regulated and identical per DSO, but the green-certificate quota cost is
+> supplier-specific (EnergyVision prints 3,00 c€/kWh where DATS 24 prints 2,860
+> for the same month), so the tax block still cannot be reconstructed — and it
+> would break the invariant stated at the top of `providers/base.py`, that no
+> EUR values live in Python source.
+>
+> Affected users are pointed at the **Expert: custom formula** supplier
+> (`providers/custom.py`), which collects exactly the missing DSO and tax blocks
+> and supports `quarter_hourly`, so Motion is reproduced faithfully. July's card
+> parsed normally, so this is a regression in Ecofix's document generator and
+> the real fix is upstream.
+
 Ecofix is a Belgian residential supplier selling in **Flanders and Wallonia**
 only. There are no Brussels rows on any current card, and the registry advertises
 Flanders + Wallonia so config-flow never offers Ecofix to a Brussels household

@@ -87,20 +87,47 @@ publication and how to parse it.
 | **Expert: custom formula** *(no public card)* | Dynamic (`factor × spot + base`) · Monthly average (`factor × monthly-mean spot + base`) · Fixed / manual rate | [`providers/custom.py`](./custom_components/be_electricity_prices/providers/custom.py) — an escape hatch for suppliers with **no public, machine-resolvable tariff card** (see below). Not scraped: you type the commodity formula and all regulated DSO + tax values, and the coordinator builds the snapshot from your config entry. |
 
 > [!WARNING]
-> **Ecofix: the August 2026 card cannot be read.** Ecofix regenerated its tariff
-> PDFs as page images. The supplier's own figures (yearly fee, rates, the
-> `BELPEX-RLP-M` / `BELPEX-SPP-M` formulas) are still live text, but the pages
-> carrying the **DSO network tables and the tax block are pixels** — 54 words of
-> text across the whole 5-page document. Those are most of a Belgian all-in
-> price, so no snapshot can be assembled and the extractor fails loud rather
-> than billing an incomplete figure.
+> **Ecofix: the August 2026 card cannot be read automatically — but you can
+> still price the contract, see the workaround below.** Ecofix regenerated its
+> tariff PDFs as page images: every page of every product is now one full-page
+> image covering 99.9% of the sheet, in both the NL and FR editions. The pages
+> carrying the **DSO network tables and the tax block hold no text at all** —
+> only the month name. Those are most of a Belgian all-in price, so no snapshot
+> can be assembled and the extractor fails loud rather than billing an
+> incomplete figure. `current/` is overwrite-in-place and Ecofix publishes no
+> dated archive, so there is no text-era card to fall back to.
 >
-> Both the NL and FR editions are affected, and Ecofix publishes the data
-> nowhere else. Existing Ecofix entries keep serving their last good snapshot
-> and raise a Repairs card; they simply cannot pick up new months. July's card
-> parsed normally, so this looks like an unintended regression in Ecofix's
-> document generator rather than a deliberate format change. Nothing can be
-> fixed on this side until they publish a text PDF again.
+> The extractor will not OCR them. Reading dense numeric tables printed with
+> Belgian comma decimals is where OCR is least reliable, and a single misread
+> digit would mis-price a bill *silently* — the opposite of how every other
+> extractor here behaves. It would also mean shipping an OCR engine as a
+> runtime dependency for one supplier.
+>
+> **Workaround: use the Expert: custom formula supplier**
+> ([`providers/custom.py`](./custom_components/be_electricity_prices/providers/custom.py),
+> listed in the table above and offered in the supplier picker). It
+> collects exactly what went missing — the whole DSO block and the whole tax
+> block — and it supports quarter-hourly billing, so Motion is reproduced
+> faithfully rather than approximated. The part that is easy to get wrong is
+> still machine-readable: page 1 (page 4 for Flexy) keeps the formulas as live
+> text, so you can copy them straight out of the PDF. The August 2026 cards
+> printed:
+>
+> | product | energy | injection |
+> | --- | --- | --- |
+> | Motion / Motion Online | `(0,1000 x Belpex 15M) + 1,1020` | `(0,0884 x Belpex 15M) - 0,5000` |
+> | Flexy | `(BELPEX-RLP-M * 0,1020) + 1,2000` | `(BELPEX-SPP-M * 0,0884) - 0,5000` |
+>
+> Read the DSO and tax numbers off the card with your eyes — the image renders
+> fine for a human — and enter them once. Check the formulas against your own
+> current card rather than trusting the table above, which is a snapshot of one
+> month.
+>
+> Existing Ecofix entries keep serving their last good snapshot and raise a
+> Repairs card; they simply cannot pick up new months. July's card parsed
+> normally, so this is an unintended regression in Ecofix's document generator
+> rather than a deliberate format change, and the real fix is upstream: nothing
+> restores the automatic path until they publish a text PDF again.
 
 Adding another supplier is a self-contained PR: drop a new module under
 [`custom_components/be_electricity_prices/providers/`](./custom_components/be_electricity_prices/providers/),
