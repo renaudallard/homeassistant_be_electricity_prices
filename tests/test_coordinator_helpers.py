@@ -2245,7 +2245,7 @@ def test_manual_energy_leg_fixed() -> None:
             CONF_MANUAL_YEARLY_FEE: 60.0,
         },
     )
-    assert _manual_energy_leg(entry, current) == FixedRates(
+    assert _manual_energy_leg(entry, current.energy) == FixedRates(
         single=0.22, peak=0.25, offpeak=0.18, yearly_fixed_fee=60.0
     )
 
@@ -2262,14 +2262,14 @@ def test_manual_energy_leg_dynamic_keeps_quarter_hourly() -> None:
             CONF_MANUAL_YEARLY_FEE: 48.0,
         },
     )
-    assert _manual_energy_leg(entry, current) == DynamicRates(
+    assert _manual_energy_leg(entry, current.energy) == DynamicRates(
         factor=1.02, base=0.01, yearly_fixed_fee=48.0, quarter_hourly=True
     )
 
 
 def test_manual_energy_leg_blank_returns_none() -> None:
     current = make_snapshot(energy=FixedRates(single=0.30))
-    assert _manual_energy_leg(_entry(contract="test"), current) is None
+    assert _manual_energy_leg(_entry(contract="test"), current.energy) is None
 
 
 def test_manual_energy_leg_none_for_variable() -> None:
@@ -2277,7 +2277,7 @@ def test_manual_energy_leg_none_for_variable() -> None:
     # override is not offered for variable and must not be applied.
     current = make_snapshot(energy=VariableRates(current=0.22))
     entry = _entry(contract="test", **{CONF_MANUAL_ENERGY_SINGLE: 0.20})
-    assert _manual_energy_leg(entry, current) is None
+    assert _manual_energy_leg(entry, current.energy) is None
 
 
 async def test_cohort_energy_leg_manual_when_no_archive(
@@ -2297,12 +2297,20 @@ async def test_cohort_energy_leg_manual_when_no_archive(
     assert leg == FixedRates(single=0.20)
 
 
-async def test_cohort_energy_leg_archive_wins_over_manual(
+async def test_cohort_energy_leg_manual_wins_over_archive(
     hass: HomeAssistant, freezer: Any
 ) -> None:
+    """Issue #54: a signing rate typed by the user must beat the archived card.
+
+    The archive only knows the published card; a promotional, brokered or
+    negotiated rate exists nowhere online, and the step that collected it
+    promises to price the contract with it. Suppliers that keep an archive
+    (Mega, Bolt, Eneco, ...) used to discard it silently, so the same form
+    worked on Engie and did nothing on Mega.
+    """
     freezer.move_to("2026-07-15 12:00:00+02:00")
-    current = make_snapshot(energy=FixedRates(single=0.30))
-    archived = make_snapshot(energy=FixedRates(single=0.18))
+    current = make_snapshot(energy=FixedRates(single=0.30, peak=0.33, offpeak=0.27))
+    archived = make_snapshot(energy=FixedRates(single=0.18, peak=0.20, offpeak=0.16))
 
     async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
         return archived
@@ -2316,7 +2324,26 @@ async def test_cohort_energy_leg_archive_wins_over_manual(
     leg = await _cohort_energy_leg(
         hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
     )
-    # The actual archived card is authoritative over the typed rate.
+    # The typed rate replaces the archived single; the boxes left blank keep
+    # the ARCHIVED signing-month values, not today's card.
+    assert leg == FixedRates(single=0.25, peak=0.20, offpeak=0.16)
+
+
+async def test_cohort_energy_leg_archive_still_wins_when_nothing_typed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(energy=FixedRates(single=0.30))
+    archived = make_snapshot(energy=FixedRates(single=0.18))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return archived
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2025-11-10")
+    leg = await _cohort_energy_leg(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+    )
     assert leg == FixedRates(single=0.18)
 
 
@@ -2596,7 +2623,7 @@ def test_manual_signing_rate_blank_fields_keep_the_current_card() -> None:
         energy=FixedRates(single=0.20, peak=0.22, offpeak=0.18, yearly_fixed_fee=95.0)
     )
     entry = SimpleNamespace(data={"manual_energy_single": 0.17})
-    leg = _manual_energy_leg(entry, card)  # type: ignore[arg-type]
+    leg = _manual_energy_leg(entry, card.energy)  # type: ignore[arg-type]
     assert isinstance(leg, FixedRates)
     assert leg.single == pytest.approx(0.17)  # the override
     assert leg.yearly_fixed_fee == pytest.approx(95.0)  # kept, not zeroed
@@ -2607,7 +2634,7 @@ def test_manual_signing_rate_blank_fields_keep_the_current_card() -> None:
         energy=DynamicRates(factor=1.05, base=0.017, yearly_fixed_fee=60.0)
     )
     entry = SimpleNamespace(data={"manual_energy_factor": 1.12})
-    leg = _manual_energy_leg(entry, dyn)  # type: ignore[arg-type]
+    leg = _manual_energy_leg(entry, dyn.energy)  # type: ignore[arg-type]
     assert isinstance(leg, DynamicRates)
     assert leg.factor == pytest.approx(1.12)
     assert leg.base == pytest.approx(0.017)  # kept, not zeroed
@@ -2617,7 +2644,7 @@ def test_manual_signing_rate_blank_fields_keep_the_current_card() -> None:
     entry = SimpleNamespace(
         data={"manual_energy_single": 0.17, "manual_yearly_fee": 0.0}
     )
-    leg = _manual_energy_leg(entry, card)  # type: ignore[arg-type]
+    leg = _manual_energy_leg(entry, card.energy)  # type: ignore[arg-type]
     assert isinstance(leg, FixedRates)
     assert leg.yearly_fixed_fee == 0.0
 

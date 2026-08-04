@@ -590,27 +590,27 @@ def _contract_start_month(entry: ConfigEntry) -> date | None:
     return date(d.year, d.month, 1)
 
 
-def _manual_energy_leg(
-    entry: ConfigEntry, current_snapshot: "SupplierSnapshot"
-) -> EnergyRates | None:
-    """Build the energy leg from a hand-entered signing rate, or ``None``.
+def _manual_energy_leg(entry: ConfigEntry, card: EnergyRates) -> EnergyRates | None:
+    """Overlay a hand-entered signing rate onto ``card``, or ``None``.
 
-    The fallback for a start date the archive cannot cover: the user typed the
-    rate they signed at. Shaped to match the contract's current kind (dynamic
-    -> factor / base, fixed -> single / peak / offpeak). Per-kWh values are
-    stored as entered (grossed by compute_breakdown at the current card's VAT
-    rate); the yearly fee is stored VAT-inclusive, matching how cards store it.
-    ``None`` when the override was left blank, or the contract is neither fixed
-    nor dynamic.
+    The user typed the rate they signed at, so it wins over anything the
+    integration can retrieve: ``card`` is the leg that would otherwise bill
+    (the archived signing-month card when the supplier keeps one, else the
+    current card) and every box the user filled replaces its field. Shaped to
+    match the contract's kind (dynamic -> factor / base, fixed -> single /
+    peak / offpeak). Per-kWh values are stored as entered (grossed by
+    compute_breakdown at the current card's VAT rate); the yearly fee is
+    stored VAT-inclusive, matching how cards store it. ``None`` when every box
+    was left blank, or the contract is neither fixed nor dynamic.
     """
-    energy = current_snapshot.energy
+    energy = card
     # Every box on the signed_rate step is optional and the step tells the
-    # user "leave blank to keep using the current published card". Honour
-    # that PER FIELD: a blank box falls back to the current card's value,
-    # not to zero. Only the headline field (single / factor) means "no
-    # override at all" and returns None. Substituting 0.0 made a user who
-    # typed just their locked energy rate lose the standing charge entirely,
-    # and on a dynamic contract silently zeroed the formula's base.
+    # user "leave blank to keep the retrieved card's value". Honour that PER
+    # FIELD: a blank box falls back to that card's value, not to zero. Only
+    # the headline field (single / factor) means "no override at all" and
+    # returns None. Substituting 0.0 made a user who typed just their locked
+    # energy rate lose the standing charge entirely, and on a dynamic
+    # contract silently zeroed the formula's base.
     fee_raw = entry.data.get(CONF_MANUAL_YEARLY_FEE)
     fee = float(fee_raw) if fee_raw is not None else energy.yearly_fixed_fee
     if isinstance(energy, DynamicRates):
@@ -688,10 +688,13 @@ async def _cohort_energy_leg(
     start, no archived card or manual rate to re-price with, or a variable
     cohort with no ENTSO-E key to resolve its monthly mean).
 
-    Resolution order is archive, then a hand-entered manual rate, then the
-    current card: the actual archived signing-month card is authoritative when
-    the supplier keeps one; a manually entered rate covers non-archive
-    suppliers and start dates older than the archive reaches.
+    Resolution order is a hand-entered signing rate, then the archive, then
+    the current card. What the user typed wins per field: only they know
+    whether they signed at the card rate or at a promotional, brokered or
+    negotiated one, and the form that collected the value promises to price
+    the contract with it. The archived signing-month card fills in every field
+    left blank when the supplier keeps an archive; the current card does
+    otherwise.
 
     ``None`` is also returned for a ``contract`` that isn't the entry's own
     (the OptionsFlow compare path walks an alternative contract with no
@@ -707,10 +710,12 @@ async def _cohort_energy_leg(
         # Signed this month or dated in the future: the current card already
         # is the signing-month card, so there is nothing to splice.
         return None
-    # Prefer the actual archived signing-month card. Fixed / dynamic re-price
-    # from its leg directly (the locked value); variable re-prices from the
-    # cohort's parsed coefficients against the current month's mean (see
-    # _cohort_energy_from_archived). TOU / Impact are not re-priced yet.
+    # Resolve the archived signing-month card first, as the base the typed
+    # rate overlays onto. Fixed / dynamic re-price from its leg directly (the
+    # locked value); variable re-prices from the cohort's parsed coefficients
+    # against the current month's mean (see _cohort_energy_from_archived).
+    # TOU / Impact are not re-priced yet.
+    archived: EnergyRates | None = None
     if extractor.fetch_for_month is not None:
         snap_start = await _snapshot_for_month(
             hass,
@@ -744,12 +749,18 @@ async def _cohort_energy_leg(
                 CONF_API_KEY
             ):
                 cohort = None
-            if cohort is not None:
-                return cohort
-    # No retrievable archived card: use a hand-entered signing rate if present,
-    # else keep the current card (``_manual_energy_leg`` returns None when the
-    # override was left blank).
-    return _manual_energy_leg(entry, current_snapshot)
+            archived = cohort
+    # The typed rate overlays whichever card was retrieved, so a user who
+    # filled in only some boxes keeps the archived signing-month values for
+    # the rest rather than today's. ``_manual_energy_leg`` returns None when
+    # every box was left blank, which leaves the archive (or the current card)
+    # billing as before.
+    manual = _manual_energy_leg(
+        entry, current_snapshot.energy if archived is None else archived
+    )
+    if manual is not None:
+        return manual
+    return archived
 
 
 async def _effective_snapshot_for_month(

@@ -153,7 +153,17 @@ falls through to branch 2's soft path. Because only the dynamic and spot-monthly
 *contract kinds* are asked for an API key, a variable cohort that re-prices to
 `SpotMonthlyRates` would otherwise hard-fail an entry over a key the user was
 never prompted for; `_cohort_energy_leg` therefore drops the cohort leg when no
-key is configured (`coordinator.py:695`), keeping the current card instead.
+key is configured (`coordinator.py:748`), keeping the current card instead.
+
+**Cohort resolution order** (`_cohort_energy_leg`, `coordinator.py:672`): the
+hand-entered signing rate first, then the archived signing-month card, then the
+current card. `_manual_energy_leg` (`coordinator.py:593`) overlays what the user
+typed onto whichever card was retrieved, **per field**, so a half-filled form
+keeps the archived signing-month values for the boxes left blank rather than
+today's. The archive is authoritative only about the *published* card; a
+promotional, brokered or negotiated rate exists nowhere online, so the typed
+value has to win. It used to lose, which made the signing-rate step a no-op on
+exactly the seven suppliers that keep an archive (issue #54).
 
 ### 3.1 Resolution selection (hourly vs quarter-hourly)
 
