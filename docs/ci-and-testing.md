@@ -244,10 +244,13 @@ Reading a row correctly needs three facts about which hook feeds which column:
   that first url whichever hop died.
 
 Two safety caps bound runtime. Each supplier check runs under
-`asyncio.wait_for(..., timeout=_SUPPLIER_HARD_TIMEOUT_S)` with a 240s hard cap
-(`scripts/live_check.py:341`), recorded as an extractor failure rather than propagating so one hung
-supplier cannot starve the `gather()`. The session-level `aiohttp.ClientTimeout(total=60)`
-(`scripts/live_check.py:1577`) bounds individual requests.
+`asyncio.wait_for(..., timeout=_SUPPLIER_HARD_TIMEOUT_S)` (`scripts/live_check.py:349`) with a 600s
+hard cap (`scripts/live_check.py:327`, raised from 240s when the professional editions roughly
+doubled Engie's and Mega's sequential fetch counts), recorded as an extractor failure rather than
+propagating so one hung supplier cannot starve the `gather()`. Every latency budget below must stay
+under that cap, or the supplier is killed before it can report the drift the budget exists to catch.
+The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:1679`) bounds individual
+requests.
 
 `_drift_warnings` (`scripts/live_check.py:1854`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
