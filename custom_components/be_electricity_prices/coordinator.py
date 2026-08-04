@@ -686,9 +686,9 @@ async def _cohort_energy_leg(
     locked in at signing, not today's card. This returns the signing-month
     card's energy leg so the caller can splice it onto the current
     delivery-month DSO / tax overlays; ``None`` means "no cohort override,
-    keep the current energy" (no start date set, this month / a future
-    start, no archived card or manual rate to re-price with, or a variable
-    cohort with no ENTSO-E key to resolve its monthly mean).
+    keep the current energy" (no start date set, or nothing to re-price with:
+    no signing rate typed and no archived card, or a variable cohort with no
+    ENTSO-E key to resolve its monthly mean).
 
     Resolution order is a hand-entered signing rate, then the archive, then
     the current card. What the user typed wins per field: only they know
@@ -708,17 +708,17 @@ async def _cohort_energy_leg(
     if start is None:
         return None
     now = dt_util.now()
-    if start >= date(now.year, now.month, 1):
-        # Signed this month or dated in the future: the current card already
-        # is the signing-month card, so there is nothing to splice.
-        return None
     # Resolve the archived signing-month card first, as the base the typed
     # rate overlays onto. Fixed / dynamic re-price from its leg directly (the
     # locked value); variable re-prices from the cohort's parsed coefficients
     # against the current month's mean (see _cohort_energy_from_archived).
-    # TOU / Impact are not re-priced yet.
+    # TOU / Impact are not re-priced yet. Signed this month (the step accepts
+    # any date up to today) or dated in the future: the current card already
+    # is the signing-month card, so there is nothing to retrieve. A typed
+    # signing rate still applies, and used to sit unread until the month
+    # rolled over and the price jumped under the user.
     archived: EnergyRates | None = None
-    if extractor.fetch_for_month is not None:
+    if start < date(now.year, now.month, 1) and extractor.fetch_for_month is not None:
         snap_start = await _snapshot_for_month(
             hass,
             session,

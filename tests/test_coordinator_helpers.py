@@ -2108,6 +2108,30 @@ async def test_cohort_energy_leg_none_for_this_month_or_future(
         assert leg is None, start
 
 
+async def test_cohort_energy_leg_manual_applies_from_a_start_date_this_month(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Issue #54: the step accepts any start date up to today, so a contract
+    signed earlier this month collected a signing rate that was then ignored
+    until the month rolled over -- at which point the price jumped."""
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    current = make_snapshot(energy=FixedRates(single=0.30))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        raise AssertionError("this month's card is the current one, do not fetch")
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(
+        contract="test",
+        contract_start_date="2026-07-01",
+        **{CONF_MANUAL_ENERGY_SINGLE: 0.21},
+    )
+    leg = await _cohort_energy_leg(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+    )
+    assert leg == FixedRates(single=0.21)
+
+
 async def test_cohort_energy_leg_none_when_no_archive(
     hass: HomeAssistant, freezer: Any
 ) -> None:
