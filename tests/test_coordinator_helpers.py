@@ -41,6 +41,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.be_electricity_prices.const import (
     CONF_API_KEY,
     CONF_MANUAL_ENERGY_BASE,
+    CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT,
     CONF_MANUAL_ENERGY_FACTOR,
     CONF_MANUAL_ENERGY_OFFPEAK,
     CONF_MANUAL_ENERGY_PEAK,
@@ -86,6 +87,10 @@ from custom_components.be_electricity_prices.providers.base import (
     TaxOverlay,
     TimeOfUseRates,
     VariableRates,
+)
+from custom_components.be_electricity_prices.pricing import (
+    energy_eur_per_kwh,
+    yearly_fixed_fee_for_meter,
 )
 from tests import make_snapshot, make_stub_extractor
 
@@ -2311,6 +2316,37 @@ def test_manual_energy_leg_day_night_without_a_mono_rate() -> None:
     assert _manual_energy_leg(entry, current.energy) == FixedRates(
         single=0.30, peak=0.25, offpeak=0.18, yearly_fixed_fee=99.0
     )
+
+
+def test_manual_energy_leg_exclusive_night() -> None:
+    """Issue #54: a dedicated night circuit bills its own rate and, on cards
+    that print one, its own standing charge. Both used to be copied from the
+    card whatever the user typed, so an exclusive-night entry was the one
+    meter shape the signing rate could not reach."""
+    current = make_snapshot(
+        energy=FixedRates(
+            single=0.30,
+            exclusive_night=0.24,
+            yearly_fixed_fee=99.0,
+            yearly_fixed_fee_exclusive_night=45.0,
+        )
+    )
+    entry = _entry(
+        contract="test",
+        **{
+            CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT: 0.19,
+            CONF_MANUAL_YEARLY_FEE: 60.0,
+        },
+    )
+    leg = _manual_energy_leg(entry, current.energy)
+    assert isinstance(leg, FixedRates)
+    assert leg.exclusive_night == pytest.approx(0.19)
+    assert energy_eur_per_kwh(
+        leg, dt_util.now(), None, "exclusive_night"
+    ) == pytest.approx(0.19)
+    # The card's separate night standing charge would otherwise be billed
+    # instead of the one the user signed for.
+    assert yearly_fixed_fee_for_meter(leg, "exclusive_night") == pytest.approx(60.0)
 
 
 def test_manual_energy_leg_fee_only() -> None:

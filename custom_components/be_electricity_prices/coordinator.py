@@ -89,6 +89,7 @@ from .const import (
     CONF_INCLUDE_VAT,
     CONF_INJECTION_KWH,
     CONF_MANUAL_ENERGY_BASE,
+    CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT,
     CONF_MANUAL_ENERGY_FACTOR,
     CONF_MANUAL_ENERGY_OFFPEAK,
     CONF_MANUAL_ENERGY_PEAK,
@@ -598,10 +599,10 @@ def _manual_energy_leg(entry: ConfigEntry, card: EnergyRates) -> EnergyRates | N
     (the archived signing-month card when the supplier keeps one, else the
     current card) and every box the user filled replaces its field. Shaped to
     match the contract's kind (dynamic -> factor / base, fixed -> single /
-    peak / offpeak). Per-kWh values are stored as entered (grossed by
-    compute_breakdown at the current card's VAT rate); the yearly fee is
-    stored VAT-inclusive, matching how cards store it. ``None`` when every box
-    was left blank, or the contract is neither fixed nor dynamic.
+    peak / offpeak / exclusive night). Per-kWh values are stored as entered
+    (grossed by compute_breakdown at the current card's VAT rate); the yearly
+    fee is stored VAT-inclusive, matching how cards store it. ``None`` when
+    every box was left blank, or the contract is neither fixed nor dynamic.
     """
     energy = card
     # Every box on the signed_rate step is optional and the step tells the
@@ -630,15 +631,30 @@ def _manual_energy_leg(entry: ConfigEntry, card: EnergyRates) -> EnergyRates | N
         single = entry.data.get(CONF_MANUAL_ENERGY_SINGLE)
         peak = entry.data.get(CONF_MANUAL_ENERGY_PEAK)
         offpeak = entry.data.get(CONF_MANUAL_ENERGY_OFFPEAK)
-        if single is None and peak is None and offpeak is None and fee_raw is None:
+        night = entry.data.get(CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT)
+        if (
+            single is None
+            and peak is None
+            and offpeak is None
+            and night is None
+            and fee_raw is None
+        ):
             return None
         return FixedRates(
             single=float(single) if single is not None else energy.single,
             peak=float(peak) if peak is not None else energy.peak,
             offpeak=float(offpeak) if offpeak is not None else energy.offpeak,
-            exclusive_night=energy.exclusive_night,
+            exclusive_night=(
+                float(night) if night is not None else energy.exclusive_night
+            ),
             yearly_fixed_fee=fee,
-            yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
+            # A card that prints a separate night-circuit standing charge
+            # bills it instead of the standard one (yearly_fixed_fee_for_meter),
+            # which would swallow a typed fee on an exclusive-night entry. A
+            # signed fee is the whole standing charge, whatever the circuit.
+            yearly_fixed_fee_exclusive_night=(
+                None if fee_raw is not None else energy.yearly_fixed_fee_exclusive_night
+            ),
         )
     return None
 

@@ -131,6 +131,7 @@ from .const import (
     CONF_INCLUDE_VAT,
     CONF_INJECTION_KWH,
     CONF_MANUAL_ENERGY_BASE,
+    CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT,
     CONF_MANUAL_ENERGY_FACTOR,
     CONF_MANUAL_ENERGY_OFFPEAK,
     CONF_MANUAL_ENERGY_PEAK,
@@ -423,6 +424,7 @@ _MANUAL_RATE_KEYS: tuple[str, ...] = (
     CONF_MANUAL_ENERGY_SINGLE,
     CONF_MANUAL_ENERGY_PEAK,
     CONF_MANUAL_ENERGY_OFFPEAK,
+    CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT,
     CONF_MANUAL_ENERGY_FACTOR,
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_YEARLY_FEE,
@@ -456,9 +458,12 @@ def _signed_rate_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Optional signing-rate override fields, shaped by the contract kind.
 
     Dynamic contracts collect factor / base (which a Belgian formula can drive
-    negative); fixed contracts collect single (+ optional peak / offpeak). All
-    fields are optional: leave them blank to let the archive price the contract,
-    or to keep the current card when the supplier keeps no archive.
+    negative); fixed contracts collect single, peak, off-peak and the
+    exclusive-night circuit's own rate. Every field is optional and overrides
+    only itself: leave one blank to keep the retrieved card's value for it, or
+    the whole step blank to price entirely off the card. The meter step comes
+    later in the wizard, so the rate boxes for every meter shape are offered
+    here regardless of which one the user will pick.
     """
     kind = _contract_kind(
         defaults.get(CONF_SUPPLIER, ""), defaults.get(CONF_CONTRACT, "")
@@ -471,6 +476,7 @@ def _signed_rate_schema(defaults: dict[str, Any]) -> vol.Schema:
         _add_manual_num(fields, defaults, CONF_MANUAL_ENERGY_SINGLE)
         _add_manual_num(fields, defaults, CONF_MANUAL_ENERGY_PEAK)
         _add_manual_num(fields, defaults, CONF_MANUAL_ENERGY_OFFPEAK)
+        _add_manual_num(fields, defaults, CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT)
     _add_manual_num(fields, defaults, CONF_MANUAL_YEARLY_FEE)
     return vol.Schema(fields)
 

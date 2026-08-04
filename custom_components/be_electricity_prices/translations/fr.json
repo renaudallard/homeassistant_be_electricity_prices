@@ -29,6 +29,7 @@
           "manual_energy_single": "Tarif énergie signé (EUR/kWh)",
           "manual_energy_peak": "Tarif heures pleines signé (EUR/kWh)",
           "manual_energy_offpeak": "Tarif heures creuses signé (EUR/kWh)",
+          "manual_energy_exclusive_night": "Tarif circuit exclusif nuit signe (EUR/kWh)",
           "manual_energy_factor": "Facteur spot signé",
           "manual_energy_base": "Base spot signée (EUR/kWh)",
           "manual_yearly_fee": "Forfait annuel signé (EUR, TVA comprise)"
@@ -267,6 +268,7 @@
           "manual_energy_single": "Tarif énergie signé (EUR/kWh)",
           "manual_energy_peak": "Tarif heures pleines signé (EUR/kWh)",
           "manual_energy_offpeak": "Tarif heures creuses signé (EUR/kWh)",
+          "manual_energy_exclusive_night": "Tarif circuit exclusif nuit signe (EUR/kWh)",
           "manual_energy_factor": "Facteur spot signé",
           "manual_energy_base": "Base spot signée (EUR/kWh)",
           "manual_yearly_fee": "Forfait annuel signé (EUR, TVA comprise)"

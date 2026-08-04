@@ -29,6 +29,7 @@
           "manual_energy_single": "Festgelegter Energietarif (EUR/kWh)",
           "manual_energy_peak": "Festgelegter Hochtarif (EUR/kWh)",
           "manual_energy_offpeak": "Festgelegter Niedertarif (EUR/kWh)",
+          "manual_energy_exclusive_night": "Festgelegter Exklusiv-Nachttarif (EUR/kWh)",
           "manual_energy_factor": "Festgelegter Spot-Faktor",
           "manual_energy_base": "Festgelegte Spot-Basis (EUR/kWh)",
           "manual_yearly_fee": "Festgelegte Jahresgebühr (EUR, inkl. MwSt.)"
@@ -267,6 +268,7 @@
           "manual_energy_single": "Festgelegter Energietarif (EUR/kWh)",
           "manual_energy_peak": "Festgelegter Hochtarif (EUR/kWh)",
           "manual_energy_offpeak": "Festgelegter Niedertarif (EUR/kWh)",
+          "manual_energy_exclusive_night": "Festgelegter Exklusiv-Nachttarif (EUR/kWh)",
           "manual_energy_factor": "Festgelegter Spot-Faktor",
           "manual_energy_base": "Festgelegte Spot-Basis (EUR/kWh)",
           "manual_yearly_fee": "Festgelegte Jahresgebühr (EUR, inkl. MwSt.)"

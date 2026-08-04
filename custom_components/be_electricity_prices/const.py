@@ -136,12 +136,15 @@ CONF_CONTRACT_END_DATE: Final = "contract_end_date"
 # leg when the supplier keeps no archive of the signing month (or the archive
 # does not reach that far back), where the rate cannot be retrieved and only
 # the user knows what they locked in. Fixed contracts fill single (+ optional
-# peak / offpeak); dynamic contracts fill factor / base. Per-kWh values are
+# peak / offpeak / exclusive night); dynamic contracts fill factor / base. A
+# dedicated night circuit bills its own rate, so it needs its own box or the
+# card's night rate keeps billing whatever else was typed. Per-kWh values are
 # entered in the supplier card's VAT basis (grossed at compute time); the
 # yearly fee is entered VAT-inclusive, matching how cards store it.
 CONF_MANUAL_ENERGY_SINGLE: Final = "manual_energy_single"
 CONF_MANUAL_ENERGY_PEAK: Final = "manual_energy_peak"
 CONF_MANUAL_ENERGY_OFFPEAK: Final = "manual_energy_offpeak"
+CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT: Final = "manual_energy_exclusive_night"
 CONF_MANUAL_ENERGY_FACTOR: Final = "manual_energy_factor"
 CONF_MANUAL_ENERGY_BASE: Final = "manual_energy_base"
 CONF_MANUAL_YEARLY_FEE: Final = "manual_yearly_fee"

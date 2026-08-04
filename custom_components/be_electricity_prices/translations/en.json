@@ -29,6 +29,7 @@
           "manual_energy_single": "Signed energy rate (EUR/kWh)",
           "manual_energy_peak": "Signed peak rate (EUR/kWh)",
           "manual_energy_offpeak": "Signed off-peak rate (EUR/kWh)",
+          "manual_energy_exclusive_night": "Signed exclusive-night rate (EUR/kWh)",
           "manual_energy_factor": "Signed spot factor",
           "manual_energy_base": "Signed spot base (EUR/kWh)",
           "manual_yearly_fee": "Signed yearly fee (EUR, incl. VAT)"
@@ -267,6 +268,7 @@
           "manual_energy_single": "Signed energy rate (EUR/kWh)",
           "manual_energy_peak": "Signed peak rate (EUR/kWh)",
           "manual_energy_offpeak": "Signed off-peak rate (EUR/kWh)",
+          "manual_energy_exclusive_night": "Signed exclusive-night rate (EUR/kWh)",
           "manual_energy_factor": "Signed spot factor",
           "manual_energy_base": "Signed spot base (EUR/kWh)",
           "manual_yearly_fee": "Signed yearly fee (EUR, incl. VAT)"

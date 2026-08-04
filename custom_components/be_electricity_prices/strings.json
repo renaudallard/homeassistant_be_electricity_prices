@@ -29,6 +29,7 @@
           "manual_energy_single": "Signed energy rate (EUR/kWh)",
           "manual_energy_peak": "Signed peak rate (EUR/kWh)",
           "manual_energy_offpeak": "Signed off-peak rate (EUR/kWh)",
+          "manual_energy_exclusive_night": "Signed exclusive-night rate (EUR/kWh)",
           "manual_energy_factor": "Signed spot factor",
           "manual_energy_base": "Signed spot base (EUR/kWh)",
           "manual_yearly_fee": "Signed yearly fee (EUR, incl. VAT)"
@@ -267,6 +268,7 @@
           "manual_energy_single": "[%key:component::be_electricity_prices::config::step::signed_rate::data::manual_energy_single%]",
           "manual_energy_peak": "[%key:component::be_electricity_prices::config::step::signed_rate::data::manual_energy_peak%]",
           "manual_energy_offpeak": "[%key:component::be_electricity_prices::config::step::signed_rate::data::manual_energy_offpeak%]",
+          "manual_energy_exclusive_night": "[%key:component::be_electricity_prices::config::step::signed_rate::data::manual_energy_exclusive_night%]",
           "manual_energy_factor": "[%key:component::be_electricity_prices::config::step::signed_rate::data::manual_energy_factor%]",
           "manual_energy_base": "[%key:component::be_electricity_prices::config::step::signed_rate::data::manual_energy_base%]",
           "manual_yearly_fee": "[%key:component::be_electricity_prices::config::step::signed_rate::data::manual_yearly_fee%]"

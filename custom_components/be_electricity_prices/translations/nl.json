@@ -29,6 +29,7 @@
           "manual_energy_single": "Vastgelegd energietarief (EUR/kWh)",
           "manual_energy_peak": "Vastgelegd piektarief (EUR/kWh)",
           "manual_energy_offpeak": "Vastgelegd daltarief (EUR/kWh)",
+          "manual_energy_exclusive_night": "Vastgelegd exclusief-nachttarief (EUR/kWh)",
           "manual_energy_factor": "Vastgelegde spotfactor",
           "manual_energy_base": "Vastgelegde spotbasis (EUR/kWh)",
           "manual_yearly_fee": "Vastgelegd jaarlijks vast bedrag (EUR, incl. btw)"
@@ -267,6 +268,7 @@
           "manual_energy_single": "Vastgelegd energietarief (EUR/kWh)",
           "manual_energy_peak": "Vastgelegd piektarief (EUR/kWh)",
           "manual_energy_offpeak": "Vastgelegd daltarief (EUR/kWh)",
+          "manual_energy_exclusive_night": "Vastgelegd exclusief-nachttarief (EUR/kWh)",
           "manual_energy_factor": "Vastgelegde spotfactor",
           "manual_energy_base": "Vastgelegde spotbasis (EUR/kWh)",
           "manual_yearly_fee": "Vastgelegd jaarlijks vast bedrag (EUR, incl. btw)"
