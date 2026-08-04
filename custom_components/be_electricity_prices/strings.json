@@ -592,6 +592,10 @@
     "impact_rates_missing": {
       "title": "{supplier} ({contract}) does not publish Tarif Impact rates for {dso}",
       "description": "This entry is set to the Wallonia Tarif Impact billing mode, but the tariff card {supplier} publishes for {contract} carries no PIC / MEDIUM / ECO distribution rates. The network part of the price falls back to the bi-hourly schedule while the energy part still follows the Impact bands, so the two disagree between 22:00 and 01:00, where Impact bills MEDIUM.\n\nThe bill stays close, but you are not being billed on the tariff you opted into. Switch this entry's DSO billing mode to bi-hourly, or pick a contract whose card publishes the Impact block."
+    },
+    "connection_fee_missing": {
+      "title": "{supplier} ({contract}) no longer publishes the Walloon connection fee",
+      "description": "Since the August 2026 card, {supplier} has stopped printing the \"Redevance de raccordement\" row on its Walloon tariff cards. Wallonia still levies this charge and the card's own terms keep taxes and network fees fully passed through, but the rate is published nowhere this integration can read.\n\nPrices for this entry therefore exclude it, which under-bills by roughly 0,075 c€/kWh (about €2.60 per year at 3500 kWh). Everything else on the card, including the new flat federal excise, is priced normally. This notice clears automatically once {supplier} prints the row again."
     }
   },
   "entity": {

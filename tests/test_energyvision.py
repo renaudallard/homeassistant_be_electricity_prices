@@ -74,6 +74,17 @@ def _wal() -> SupplierSnapshot:
     return parse_snapshot(_FIXED_WAL, _wal_text(), "test://ev-wal-jul")
 
 
+def _wal_aug_text() -> str:
+    """The August 2026 card: EnergyVision deleted the whole supplements
+    sub-block (energy contribution + connection fee) and replaced the
+    four-tier excise table with one flat "Accise speciale" row."""
+    return fixture_text("energyvision_fixed_1y_wal_aug.pdf", layout=True)
+
+
+def _wal_aug() -> SupplierSnapshot:
+    return parse_snapshot(_FIXED_WAL, _wal_aug_text(), "test://ev-wal-aug")
+
+
 # ---- dynamic card (GSDYN) ---------------------------------------------------
 
 
@@ -402,17 +413,54 @@ def test_wallonia_dsos_are_not_all_the_same_row() -> None:
 
 
 def test_wallonia_mandatory_rows_fail_loud() -> None:
+    """Rows no Walloon card omits. A miss is layout drift, so raise rather
+    than price a partial card. The energy contribution and the connection fee
+    are deliberately absent from this list: see the two tests below."""
     for needle, match in (
         ("Électricité verte - tarif fixe", "energy price"),
         ("Injection – variable", "injection price"),
         ("Frais fixes", "frais fixes"),
-        ("Contribution énergétique", "tax block"),
-        ("Redevance de raccordement", "tax block"),
         ("certificats de cogénération", "tax block"),
     ):
         text = _wal_text().replace(needle, "XXX")
         with pytest.raises(ExtractorError, match=match):
             parse_snapshot(_FIXED_WAL, text, "test://ev-wal-jul")
+
+
+def test_august_card_parses_the_flat_excise() -> None:
+    """The four-tier table is gone; the flat "Accise speciale" row is the
+    authoritative single rate."""
+    assert _wal_aug().taxes.federal_excise == pytest.approx(0.04876)
+
+
+def test_august_card_reads_the_absent_contribution_as_abolished() -> None:
+    """The levy went to zero on 2026-08-01 and the card drops the row, so an
+    absent row is the abolished levy rather than layout drift."""
+    assert _wal_aug().taxes.energy_contribution == 0.0
+
+
+def test_august_card_bills_the_absent_connection_fee_as_zero_and_flags_it() -> None:
+    """Wallonia still levies the fee, but EnergyVision publishes it nowhere.
+    Bill 0 rather than take the contract offline, and flag it so the
+    coordinator can disclose what the cost excludes."""
+    taxes = _wal_aug().taxes
+    assert taxes.region_connection_fee == 0.0
+    assert taxes.region_connection_fee_unavailable is True
+
+
+def test_august_card_still_reads_the_green_certificate_cost() -> None:
+    """The one tax row that survived the rewrite."""
+    assert _wal_aug().taxes.wallonia_renewables == pytest.approx(0.03)
+
+
+def test_july_card_keeps_the_tiered_excise_and_the_connection_fee() -> None:
+    """An older card must keep pricing off the 0-3.000 kWh tier and must not
+    be flagged as missing a fee it actually prints."""
+    taxes = _wal().taxes
+    assert taxes.federal_excise == pytest.approx(0.0503288)
+    assert taxes.energy_contribution == pytest.approx(0.0020417)
+    assert taxes.region_connection_fee == pytest.approx(0.00075)
+    assert taxes.region_connection_fee_unavailable is False
 
 
 def test_flanders_parsers_are_not_used_for_the_walloon_card() -> None:

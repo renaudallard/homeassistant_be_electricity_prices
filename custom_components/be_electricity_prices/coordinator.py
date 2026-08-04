@@ -1387,6 +1387,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._sync_stale_issue(stale)
         self._sync_exclusive_night_gap_issue()
         self._sync_impact_gap_issue()
+        self._sync_connection_fee_issue()
         return CoordinatorData(
             hourly=hourly,
             resolution=(
@@ -1532,6 +1533,43 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                     "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
                     "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
                     "dso": str(self.entry.data.get(CONF_DSO, "")),
+                },
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+    def _sync_connection_fee_issue(self) -> None:
+        """Flag a Walloon card that stopped printing the connection fee.
+
+        EnergyVision deleted the row from every one of its Walloon cards on
+        1 August 2026, together with the energy contribution that really was
+        abolished that day. The connection fee was not: Wallonia still levies
+        it and the card's own terms keep taxes and redevances fully passed
+        through to the customer.
+
+        The extractor bills 0 for it rather than failing the fetch, which
+        would leave the entry frozen on a July snapshot still carrying the
+        abolished contribution and the superseded excise, and be the larger
+        error of the two. Say what the cost excludes so the gap is disclosed
+        rather than silent, and clear it the moment the row comes back.
+        """
+        if self._unloaded:
+            return
+        issue_id = f"connection_fee_missing_{self.entry.entry_id}"
+        if (
+            self._snapshot is not None
+            and self._snapshot.taxes.region_connection_fee_unavailable
+        ):
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="connection_fee_missing",
+                translation_placeholders={
+                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
+                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
                 },
             )
         else:
@@ -4310,7 +4348,12 @@ async def _compute_current_year_cost(
 # degressive schedule by annual consumption, and InjectionRates gained
 # vat_applies for cards that tax injection. Bump so a cache written under any
 # of the old meanings is dropped.
-_SNAPSHOT_SCHEMA_VERSION = 16
+# v17: TaxOverlay gained region_connection_fee_unavailable, for a Walloon card
+# that stopped printing the connection-fee row. Bump so an EnergyVision Wallonia
+# entry stranded on its July snapshot by the August tax-block change drops that
+# cache and re-parses the current card instead of waiting for the probe key to
+# move.
+_SNAPSHOT_SCHEMA_VERSION = 17
 
 
 def _snapshot_to_dict(

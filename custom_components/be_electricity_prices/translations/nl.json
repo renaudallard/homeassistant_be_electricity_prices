@@ -592,6 +592,10 @@
     "impact_rates_missing": {
       "title": "{supplier} ({contract}) publiceert geen Tarif Impact-tarieven voor {dso}",
       "description": "Deze invoer staat op de Waalse Tarif Impact-facturatiemodus, maar de tariefkaart die {supplier} voor {contract} publiceert bevat geen PIC / MEDIUM / ECO distributietarieven. Het netgedeelte valt terug op het tweevoudige schema terwijl het energiegedeelte de Impact-blokken blijft volgen; die twee lopen uiteen tussen 22.00 en 01.00 uur, waar Impact MEDIUM aanrekent.\n\nDe factuur blijft dichtbij, maar u wordt niet gefactureerd op het tarief dat u koos. Zet de distributiemodus van deze invoer op tweevoudig, of kies een contract waarvan de kaart het Impact-blok publiceert."
+    },
+    "connection_fee_missing": {
+      "title": "{supplier} ({contract}) publiceert de Waalse aansluitingsvergoeding niet meer",
+      "description": "Sinds de tariefkaart van augustus 2026 drukt {supplier} de rij \"Redevance de raccordement\" niet meer af op zijn Waalse tariefkaarten. Wallonië heft deze bijdrage nog steeds en de kaart bepaalt zelf dat taksen en netkosten volledig worden doorgerekend, maar het tarief staat nergens waar deze integratie het kan lezen.\n\nDe prijzen voor deze ingave sluiten ze daarom uit, wat ongeveer 0,075 c€/kWh te weinig aanrekent (ongeveer €2,60 per jaar bij 3500 kWh). Al de rest op de kaart, ook de nieuwe vlakke federale accijns, wordt normaal berekend. Deze melding verdwijnt automatisch zodra {supplier} de rij opnieuw afdrukt."
     }
   },
   "entity": {

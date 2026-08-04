@@ -2414,6 +2414,58 @@ async def test_impact_mode_without_impact_rates_raises_a_repair_issue(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_missing_walloon_connection_fee_raises_and_clears_a_repair(
+    hass: HomeAssistant,
+) -> None:
+    """EnergyVision stopped printing the connection fee on its Walloon cards
+    in August 2026. The extractor bills 0 rather than taking the contract
+    offline, so the gap has to be disclosed instead of silently under-billing,
+    and it must clear the moment the row comes back."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "energyvision",
+            "contract": "energyvision_fixed_1y",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+        },
+        title="EnergyVision Wallonia",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"connection_fee_missing_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    coord._snapshot = make_snapshot(
+        taxes=TaxOverlay(
+            federal_excise=0.04876,
+            energy_contribution=0.0,
+            wallonia_renewables=0.03,
+            region_connection_fee=0.0,
+            region_connection_fee_unavailable=True,
+        )
+    )
+    coord._sync_connection_fee_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    # The row comes back: the fee is read again and the notice clears.
+    coord._snapshot = make_snapshot(
+        taxes=TaxOverlay(
+            federal_excise=0.04876,
+            energy_contribution=0.0,
+            wallonia_renewables=0.03,
+            region_connection_fee=0.00075,
+        )
+    )
+    coord._sync_connection_fee_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
 async def test_spot_monthly_mean_waits_for_the_historical_spot_fill(
     hass: HomeAssistant, freezer: Any
 ) -> None:

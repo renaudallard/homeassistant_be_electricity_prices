@@ -490,6 +490,14 @@ class TaxOverlay:
     wallonia_renewables: float = 0.0
     brussels_renewables: float = 0.0
     region_connection_fee: float = 0.0
+    # True when the card is Walloon but prints no connection-fee row, so the
+    # fee above is a stand-in rather than a reading. Wallonia still levies it
+    # and the supplier still passes it through, so a snapshot carrying this
+    # under-bills by the regulated rate; the coordinator raises a repair issue
+    # telling the user what their cost excludes. Every card that prints the
+    # row leaves this False, as does any non-Walloon card, where 0.0 is the
+    # honest value rather than a gap.
+    region_connection_fee_unavailable: bool = False
     energy_fund_eur_per_month: float = 0.0
     # 0.0 means the snapshot's prices are already VAT-incl (the convention
     # for both Eneco and Cociter today). An extractor that starts shipping

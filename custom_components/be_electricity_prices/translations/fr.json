@@ -592,6 +592,10 @@
     "impact_rates_missing": {
       "title": "{supplier} ({contract}) ne publie pas les tarifs Tarif Impact pour {dso}",
       "description": "Cette entree utilise le mode de facturation Tarif Impact (Wallonie), mais la carte tarifaire que {supplier} publie pour {contract} ne comporte pas de tarifs de distribution PIC / MEDIUM / ECO. La part reseau du prix revient a la grille bi-horaire tandis que la part energie suit toujours les plages Impact ; les deux divergent donc entre 22h00 et 01h00, ou Impact facture MEDIUM.\n\nLa facture reste proche, mais vous n'etes pas facture sur le tarif choisi. Passez le mode de facturation de cette entree en bi-horaire, ou choisissez un contrat dont la carte publie le bloc Impact."
+    },
+    "connection_fee_missing": {
+      "title": "{supplier} ({contract}) ne publie plus la redevance de raccordement wallonne",
+      "description": "Depuis la carte tarifaire d'août 2026, {supplier} n'imprime plus la ligne « Redevance de raccordement » sur ses cartes wallonnes. La Wallonie prélève toujours cette redevance et les conditions de la carte prévoient que les taxes et les tarifs de réseau restent entièrement répercutés, mais le taux n'est publié nulle part où cette intégration puisse le lire.\n\nLes prix de cette entrée l'excluent donc, ce qui sous-facture d'environ 0,075 c€/kWh (environ 2,60 € par an pour 3500 kWh). Tout le reste de la carte, y compris la nouvelle accise fédérale forfaitaire, est facturé normalement. Cet avis disparaît automatiquement dès que {supplier} réimprime la ligne."
     }
   },
   "entity": {

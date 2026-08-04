@@ -270,12 +270,13 @@ map already carries the French months.
 | Energy | `Électricité verte - tarif fixe 13,57 €cent/kWh` | `FixedRates(single=0.1357)` |
 | Standing charge | `Frais fixes 75 €/an` | `yearly_fixed_fee=75.0` |
 | Injection | `Injection – variable 2,07 €cent/kWh` | `InjectionRates(current=0.0207)` |
-| Federal excise | `Consommation entre 0 & 3.000 kWh 5,03288` | `federal_excise=0.0503288` |
-| Energy contribution | `Contribution énergétique 0,20417` | `energy_contribution=0.0020417` |
+| Federal excise *(to July 2026)* | `Consommation entre 0 & 3.000 kWh 5,03288` | `federal_excise=0.0503288` |
+| Federal excise *(from August 2026)* | `Accise spéciale 4,876 €cent/kWh` | `federal_excise=0.04876` |
+| Energy contribution *(to July 2026)* | `Contribution énergétique 0,20417` | `energy_contribution=0.0020417` |
 | Green certificates | `certificats verts et ... cogénération ... 3,00 €cent/kWh` | `wallonia_renewables=0.03` |
-| Connection fee | `Redevance de raccordement 0,07500` | `region_connection_fee=0.00075` |
+| Connection fee *(to July 2026)* | `Redevance de raccordement 0,07500` | `region_connection_fee=0.00075` |
 
-Four things a maintainer needs to know about this card:
+Five things a maintainer needs to know about this card:
 
 - **One flat energy rate.** The card prints no bi-horaire or exclusive-night energy price;
   `Compteur mono-horaire`, `Heures pleines/creuses` and `Exclusif nuit` appear only as DSO
@@ -292,10 +293,29 @@ Four things a maintainer needs to know about this card:
   applied to the printed value, so `floor_at_zero` stays `False` (it is a 1 c€ floor, not a
   zero floor).
 - **The tax block has no GSC/WKC and no energiefonds**, but adds the CV quota cost and the
-  connection fee. All four Walloon tax rows are mandatory: the CV cost and the connection
-  fee are per-kWh charges, so zeroing either under-bills the whole contract. The CV cost is
-  supplier-specific (EnergyVision prints 3,00 c€/kWh where DATS 24 prints 2,860 for the same
-  month), so it is never cross-filled from a sibling card.
+  connection fee. The CV cost is supplier-specific (EnergyVision prints 3,00 c€/kWh where
+  DATS 24 prints 2,860 for the same month), so it is never cross-filled from a sibling card.
+- **The August 2026 card rewrote the tax block** (issue #53). EnergyVision deleted the whole
+  `Suppléments` sub-block and flattened the excise, on every one of its Walloon cards at
+  once, so three of the four rows the parser required vanished:
+
+  | Row | July | August | Handling |
+  | --- | --- | --- | --- |
+  | Excise | four tiers | one `Accise spéciale` row | flat first, tiered fallback |
+  | Energy contribution | `0,20417` | absent | absent means the levy abolished on 2026-08-01, read as 0 |
+  | Connection fee | `0,07500` | absent | billed as 0 **and flagged** |
+  | Green certificates | `3,00` | `3,00` | still mandatory, raise on a miss |
+
+  The connection fee is the awkward one: Wallonia still levies it and this card's own terms
+  keep taxes and redevances "entièrement répercutables sur le client", so 0 is a stand-in and
+  not a reading. Failing the fetch instead would strand the entry on its July snapshot, which
+  still carries the abolished contribution and the superseded excise — about €12.60/yr of
+  over-billing at 3500 kWh against roughly €2.60/yr under-billed by the missing fee. So the
+  extractor bills 0, sets `TaxOverlay.region_connection_fee_unavailable`, and the coordinator
+  raises the `connection_fee_missing` Repairs card so the gap is disclosed rather than silent.
+  It clears itself when EnergyVision prints the row again. Peers that still print it (Engie,
+  Mega, Bolt, OCTA+, DATS 24) keep reading it off their own cards, and **the rate is never
+  hardcoded** — no regulated billing value is hardcoded anywhere in this integration.
 
 ## Quirks and historical bugs (land mines)
 
@@ -331,9 +351,13 @@ The fixtures live under `tests/fixtures/`:
 | `energyvision_dynamic_jul.pdf` | the GSDYN "Goedkope Stroom Dynamisch" card, July 2026 |
 | `energyvision_fixed_3y_jul.pdf` | the GS3JV "Goedkope stroom 3 jaar vast" card, July 2026 |
 | `energyvision_fixed_1y_wal_jul.pdf` | the GS1JV "Électricité bon marché 1 an fixe" Walloon card, July 2026 |
+| `energyvision_fixed_1y_wal_aug.pdf` | the same card for August 2026, carrying the rewritten tax block |
 
-Tests load them through `fixture_text("energyvision_<...>_jul.pdf", layout=True)`, matching
-the layout-preserving extraction used in production.
+Tests load them through `fixture_text("energyvision_<...>.pdf", layout=True)`, matching
+the layout-preserving extraction used in production. Both Walloon fixtures are kept on
+purpose: the July one pins the tiered excise and the printed connection fee, the August one
+pins the flat excise and the two absent rows, so a future parser change cannot silently
+regress either card generation.
 
 ## When the card changes, look here
 

@@ -254,6 +254,12 @@ _FEE_FR_RE = re.compile(rf"Frais\s+fixes\s+{_NUM}\s*€\s*/\s*an", re.IGNORECASE
 _EXCISE_FR_RE = re.compile(
     rf"Consommation\s+entre\s+0\s*&\s*3\.000\s+kWh\s+{_NUM}", re.IGNORECASE
 )
+# From 1 August 2026 the federal scheme folded the energy contribution into
+# the special excise and flattened it, so the card prints one rate under
+# "Accise speciale" instead of the four-tier consumption table.
+_EXCISE_FLAT_FR_RE = re.compile(
+    rf"Accise\s+sp[ée]ciale\s+{_NUM}\s*€?\s*cent\s*/\s*kWh", re.IGNORECASE
+)
 _CONTRIB_FR_RE = re.compile(rf"Contribution\s+énergétique\s+{_NUM}", re.IGNORECASE)
 _CONNECTION_FR_RE = re.compile(
     rf"Redevance\s+de\s+raccordement\s+{_NUM}", re.IGNORECASE
@@ -580,22 +586,47 @@ def _extract_fixed_fr(text: str) -> tuple[FixedRates, InjectionRates]:
 
 
 def _extract_taxes_fr(text: str) -> TaxOverlay:
-    excise = _EXCISE_FR_RE.search(text)
-    contrib = _CONTRIB_FR_RE.search(text)
+    """Parse the Walloon tax block across both card generations.
+
+    Until July 2026 the card carried a "Supplements et accise federale"
+    section holding the energy contribution, the connection fee and a
+    four-tier excise table. On 1 August 2026 EnergyVision deleted the whole
+    supplements sub-block and replaced the tiers with one flat "Accise
+    speciale" row, on every one of its Walloon cards at once.
+
+    Only the green-certificate quota cost survives on both, so it stays
+    mandatory. The excise takes the flat row when present and falls back to
+    the 0-3.000 kWh tier for an older card.
+    """
+    excise = _EXCISE_FLAT_FR_RE.search(text) or _EXCISE_FR_RE.search(text)
     cv = _CV_FR_RE.search(text)
-    connection = _CONNECTION_FR_RE.search(text)
-    if not excise or not contrib or not cv or not connection:
-        # All four are mandatory on a Walloon card. The CV quota cost and the
-        # connection fee in particular are per-kWh charges, so silently
-        # zeroing either under-bills every user of this contract.
+    if not excise or not cv:
+        # The excise and the CV quota cost are both per-kWh charges that no
+        # Walloon card omits, so a miss here is layout drift rather than a
+        # component that stopped existing.
         raise ExtractorError("EnergyVision: could not parse Wallonia tax block")
+    # The energy contribution was abolished on 2026-08-01 and folded into the
+    # excise above, so an absent row is the levy being gone, not drift.
+    contrib = _CONTRIB_FR_RE.search(text)
+    # The connection fee is a different case: Wallonia still levies it, and
+    # this card's own terms say taxes and redevances stay "entierement
+    # repercutables sur le client". EnergyVision dropped the row along with
+    # the abolished contribution, and publishes the rate nowhere else, so
+    # there is nothing to read. Bill 0 rather than take the contract offline
+    # over a charge worth ~0,075 c€/kWh, and flag it so the coordinator can
+    # tell the user what their cost excludes. Peers that still print the row
+    # (Engie, Mega, Bolt, OCTA+, DATS 24) keep reading it off their cards.
+    connection = _CONNECTION_FR_RE.search(text)
     # There is no Flemish energiefonds and no GSC/WKC row on this card; the
     # header states every price includes 6% VAT, so vat_rate stays 0.0.
     return TaxOverlay(
         federal_excise=to_float(excise.group(1)) / 100.0,
-        energy_contribution=to_float(contrib.group(1)) / 100.0,
+        energy_contribution=to_float(contrib.group(1)) / 100.0 if contrib else 0.0,
         wallonia_renewables=to_float(cv.group(1)) / 100.0,
-        region_connection_fee=to_float(connection.group(1)) / 100.0,
+        region_connection_fee=(
+            to_float(connection.group(1)) / 100.0 if connection else 0.0
+        ),
+        region_connection_fee_unavailable=connection is None,
         vat_rate=0.0,
     )
 

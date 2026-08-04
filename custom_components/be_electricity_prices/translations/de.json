@@ -592,6 +592,10 @@
     "impact_rates_missing": {
       "title": "{supplier} ({contract}) veroeffentlicht keine Tarif-Impact-Saetze fuer {dso}",
       "description": "Dieser Eintrag nutzt den wallonischen Abrechnungsmodus Tarif Impact, aber die Tarifkarte, die {supplier} fuer {contract} veroeffentlicht, enthaelt keine PIC / MEDIUM / ECO Verteilungstarife. Der Netzanteil faellt auf den Zweitarif-Zeitplan zurueck, waehrend der Energieanteil weiter den Impact-Baendern folgt; beide weichen zwischen 22:00 und 01:00 Uhr voneinander ab, wo Impact MEDIUM abrechnet.\n\nDie Rechnung bleibt nahe dran, aber Sie werden nicht nach dem gewaehlten Tarif abgerechnet. Stellen Sie den Verteilungsmodus dieses Eintrags auf Zweitarif um, oder waehlen Sie einen Vertrag, dessen Karte den Impact-Block veroeffentlicht."
+    },
+    "connection_fee_missing": {
+      "title": "{supplier} ({contract}) veröffentlicht die wallonische Anschlussgebühr nicht mehr",
+      "description": "Seit der Tarifkarte vom August 2026 druckt {supplier} die Zeile „Redevance de raccordement“ nicht mehr auf seinen wallonischen Tarifkarten. Die Wallonie erhebt diese Gebühr weiterhin, und die Bedingungen der Karte sehen vor, dass Steuern und Netzentgelte vollständig weitergegeben werden, doch der Satz wird nirgends veröffentlicht, wo diese Integration ihn lesen könnte.\n\nDie Preise dieses Eintrags schließen ihn daher aus, was rund 0,075 c€/kWh zu wenig berechnet (etwa 2,60 € pro Jahr bei 3500 kWh). Alles übrige auf der Karte, auch die neue pauschale föderale Akzise, wird normal berechnet. Dieser Hinweis verschwindet automatisch, sobald {supplier} die Zeile wieder druckt."
     }
   },
   "entity": {

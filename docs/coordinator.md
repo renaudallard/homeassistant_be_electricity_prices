@@ -325,8 +325,10 @@ Repairs issues, all keyed by `entry_id`:
 | `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 1354 |
 | `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) AND the successor has a contract in the entry's region | 1383 |
 | `supplier_deprecated_no_successor` | `_sync_deprecated_supplier_issue` | same, but the successor is unset, unknown to this build, or has no contract in the entry's region | 1383 |
+| `connection_fee_missing` | `_sync_connection_fee_issue` | the snapshot carries `TaxOverlay.region_connection_fee_unavailable`, i.e. a Walloon card that stopped printing the connection-fee row | 1541 |
 
-The first four are failure states and clear on a successful refresh.
+The first four are failure states and clear on a successful refresh, as does
+`connection_fee_missing` once the supplier prints the row again.
 `supplier_deprecated` is not: it is a lifecycle notice, evaluated first on every
 tick (`coordinator.py:1075`) straight off the registry flag and never against the
 clock, and it clears only when the entry is re-pointed at a supplier that has not
@@ -351,4 +353,4 @@ Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`coordinator.py:242`, d
 - **Identity guard** (`coordinator.py:2373`): skip when `runtime_data` is a *different* coordinator (must not skip during first refresh, when it is `UNDEFINED`).
 - **Tuple guard** (`coordinator.py:2392`): skip when live `entry.data` has drifted from `_supplier_tuple` (the OptionsFlow window where `entry.data` changed but `runtime_data` is still swapping).
 
-Serialization is `_snapshot_to_dict` / `_snapshot_from_dict` (`coordinator.py:4273`, `4308`), which stamp and check `_SNAPSHOT_SCHEMA_VERSION` as described in section 2.3. What is persisted is the card **as parsed**, not as priced: `_set_snapshot` keeps both, and the per-entry VAT and excise-band resolution is re-applied on load. Historical spots are pruned with a local-midnight Jan 1 anchor (`coordinator.py:2337`) so a Brussels restart in early January doesn't drop the first hour or two of YTD. On entry removal, `async_remove_entry` (`__init__.py:294`) deletes the five Repairs issues and removes the Store file so nothing outlives the entry.
+Serialization is `_snapshot_to_dict` / `_snapshot_from_dict` (`coordinator.py:4273`, `4308`), which stamp and check `_SNAPSHOT_SCHEMA_VERSION` as described in section 2.3. What is persisted is the card **as parsed**, not as priced: `_set_snapshot` keeps both, and the per-entry VAT and excise-band resolution is re-applied on load. Historical spots are pruned with a local-midnight Jan 1 anchor (`coordinator.py:2337`) so a Brussels restart in early January doesn't drop the first hour or two of YTD. On entry removal, `async_remove_entry` (`__init__.py:294`) deletes the six Repairs issues it lists and removes the Store file so nothing outlives the entry.
