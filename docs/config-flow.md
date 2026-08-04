@@ -28,7 +28,8 @@ Related docs:
 | `BePricesConfigFlow` | `_WizardStepsMixin, ConfigFlow` | Install-time flow; entry step `async_step_user`, finalizes with `async_create_entry` (`config_flow.py:1502`) |
 | `BePricesOptionsFlow` | `_WizardStepsMixin, OptionsFlow` | Post-install; menu -> `edit` (re-runs the chain pre-filled) or `compare` (throwaway quote) (`config_flow.py:1550`) |
 
-Both flows walk the *same* chain: `supplier/region -> contract -> dso -> meter ->
+Both flows walk the *same* chain: `supplier/region -> contract -> (signed_rate) ->
+dso -> meter ->
 (dso_tariff_mode) -> (api_key) -> (custom_energy) -> (capacity) ->
 (connection_power) -> solar -> (injection_api_key) -> (custom_injection) ->
 (custom_dso) -> (custom_tax) -> meters`. The four `custom_*` steps run only for
@@ -51,8 +52,9 @@ the "Shown when" column gives the gate.
 | Step id | Method | Asks | Writes | Shown when / branch |
 | --- | --- | --- | --- | --- |
 | `user` | `async_step_user` (`config_flow.py:1514`) | Supplier, region | `CONF_SUPPLIER`, `CONF_REGION` | Always (install entry step) |
-| `contract` | `async_step_contract` (`config_flow.py:1174`) | Contract (region-filtered) | `CONF_CONTRACT` | Always; aborts `supplier_region_unavailable` if none |
-| `dso` | `async_step_dso` (`config_flow.py:1238`) | Distribution operator | `CONF_DSO` | Always |
+| `contract` | `async_step_contract` (`config_flow.py:1225`) | Contract (region-filtered), optional start / end date | `CONF_CONTRACT`, `CONF_CONTRACT_START_DATE`, `CONF_CONTRACT_END_DATE` | Always; aborts `supplier_region_unavailable` if none; rejects a future start or an end not after the start |
+| `signed_rate` | `async_step_signed_rate` (`config_flow.py:1274`) | The rate actually signed at: single / peak / offpeak / exclusive night, or spot factor / base, plus the yearly fee | The 6 `CONF_MANUAL_*` keys (`_MANUAL_RATE_KEYS`) | `_needs_manual_rate` true (`config_flow.py:1250`): a start date is set on a fixed / dynamic contract of a non-custom supplier. Offered whether or not the supplier archives past cards, because what is typed wins over the archived card |
+| `dso` | `async_step_dso` (`config_flow.py:1291`) | Distribution operator | `CONF_DSO` | Always |
 | `meter` | `async_step_meter` (`config_flow.py:1249`) | Meter type | `CONF_METER` | Always; option list narrows by contract kind |
 | `dso_tariff_mode` | `async_step_dso_tariff_mode` (`config_flow.py:1383`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia (`config_flow.py:1398`) |
 | `api_key` | `async_step_api_key` (`config_flow.py:1262`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
@@ -76,7 +78,9 @@ the "Shown when" column gives the gate.
                                           │
                           async_step_contract  (region-filtered)
                                           │  abort if no contract in region
-                          async_step_dso
+      _after_contract → _needs_manual_rate? ┼── yes → async_step_signed_rate
+                                          │              │ (all fields optional)
+                          async_step_dso  ◄─────────────┘
                                           │
                           async_step_meter  (kind-narrowed list)
                                           │
