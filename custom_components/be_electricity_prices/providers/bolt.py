@@ -393,7 +393,11 @@ def parse_snapshot(
     federal_excise, energy_contribution, region_connection_fee = _extract_taxes(
         text, region
     )
-    energy_fund = _extract_energy_fund(text) if region == REGION_FLANDERS else 0.0
+    energy_fund = (
+        _extract_energy_fund(text, professional=professional)
+        if region == REGION_FLANDERS
+        else 0.0
+    )
     flanders_renewables, wallonia_renewables, brussels_renewables = _extract_renewables(
         text
     )
@@ -703,12 +707,31 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
     return excise, contribution, connection
 
 
-def _extract_energy_fund(text: str) -> float:
-    """Flanders 'Cotisation Fond énergie, résidentiel' is typically '-' (0)."""
-    match = re.search(
-        r"Cotisation Fond énergie, résidentiel[^\n]*\n\s*([\d.,-]+)",
-        text,
-    )
+def _extract_energy_fund(text: str, *, professional: bool = False) -> float:
+    """Flemish energy fund in EUR/month, from the row this contract bills.
+
+    Every card prints both categories. A domiciled residential connection
+    pays the 'résidentiel' row, which is '-' (0); a business connection pays
+    the 'non-résidentiel' one, which the same card fills in (10,07 on the
+    August 2026 card). Reading the residential row for a professional
+    contract dropped the levy entirely.
+
+    The two rows are laid out differently and need their own patterns: the
+    residential value sits after a U+2028 that the text layer normalises to
+    a newline, while the non-residential values are inline on the label
+    line after an optional footnote marker.
+    """
+    if professional:
+        match = re.search(
+            r"Cotisation Fond énergie, non-résidentiel\s*\(€/mois\)\s*"
+            r"(?:\d+\s+)?([\d.,-]+)",
+            text,
+        )
+    else:
+        match = re.search(
+            r"Cotisation Fond énergie, résidentiel[^\n]*\n\s*([\d.,-]+)",
+            text,
+        )
     if match is None or match.group(1).strip() == "-":
         return 0.0
     return to_float(match.group(1))

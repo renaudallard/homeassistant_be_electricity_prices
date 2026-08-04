@@ -416,3 +416,30 @@ def test_pro_fixed_card_still_parses() -> None:
     )
     assert isinstance(snap.energy, FixedRates)
     assert snap.taxes.vat_rate == pytest.approx(0.21)
+
+
+def test_pro_flanders_bills_the_non_residential_energy_fund() -> None:
+    """A business connection pays the 'non-résidentiel' row (10,07 EUR/month
+    on this card), not the 'résidentiel' one that is '-' for a domiciled
+    household. Reading the residential row dropped 120,84 EUR/yr."""
+    snap = parse_snapshot(
+        "bolt_pro_fix", fixture_text("bolt_pro_fix.pdf", layout=True), "flanders"
+    )
+    assert snap.taxes.energy_fund_eur_per_month == pytest.approx(10.07)
+
+
+def test_residential_flanders_energy_fund_stays_zero() -> None:
+    """The residential row is '-' for a domiciled household, and the card's
+    non-residential row must not leak into a residential contract."""
+    snap = parse_snapshot(
+        "bolt_fix", fixture_text("bolt_fix.pdf", layout=True), "flanders"
+    )
+    assert snap.taxes.energy_fund_eur_per_month == 0.0
+
+
+def test_pro_energy_fund_is_flanders_only() -> None:
+    """The Flemish fund is not levied in Wallonia or Brussels."""
+    text = fixture_text("bolt_pro_fix.pdf", layout=True)
+    for region in ("wallonia", "brussels"):
+        snap = parse_snapshot("bolt_pro_fix", text, region)
+        assert snap.taxes.energy_fund_eur_per_month == 0.0
