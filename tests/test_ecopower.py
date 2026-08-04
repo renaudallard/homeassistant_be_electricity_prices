@@ -41,6 +41,7 @@ from custom_components.be_electricity_prices.providers.base import (
     InjectionRates,
     SupplierSnapshot,
     VariableRates,
+    apply_vat,
 )
 from custom_components.be_electricity_prices.providers.ecopower import (
     _extract_energy,
@@ -105,16 +106,16 @@ def test_april_card_dsos_cover_all_eight_fluvius_subareas() -> None:
 
 def test_april_card_extracts_distribution_and_capacity_for_antwerpen() -> None:
     """Spot-check Fluvius Antwerpen against the printed values:
-    databeheer 17.85, capacity 49.40 EUR/kW/yr HTVA, distribution
-    0.0505027. Both the capacity and databeheer tariffs are flat euro
-    fees that bypass the pricing VAT factor, so they carry the 6%
-    residential VAT baked in (49.40 * 1.06; 17.85 * 1.06 = 18.92, the
-    same Fluvius fee the other suppliers print TVAC)."""
+    databeheer 17.85, capacity 49.40 EUR/kW/yr, distribution 0.0505027.
+    The card is HTVA and declares vat_rate=0.06, so the snapshot stores
+    the flat fees exactly as printed and base.apply_vat grosses them
+    once per entry (17.85 -> 18.92, the same Fluvius fee the other
+    suppliers print TVAC)."""
     snap = _april_snap()
     a = snap.dsos["fluvius_antwerpen"]
     assert a.distribution_single == pytest.approx(0.0505027)
-    assert a.capacity_eur_per_kw_year == pytest.approx(49.40 * 1.06)
-    assert a.data_management_per_year == pytest.approx(17.85 * 1.06)
+    assert a.capacity_eur_per_kw_year == pytest.approx(49.40)
+    assert a.data_management_per_year == pytest.approx(17.85)
     # Ecopower rolls Elia transport into the network distribution; the
     # card has no separate transport line, so ``transport`` stays 0
     # rather than being silently double-counted via a guess.
@@ -128,10 +129,38 @@ def test_april_card_extracts_imewo_with_optional_max_column() -> None:
     the distribution rate."""
     snap = _april_snap()
     assert snap.dsos["fluvius_imewo"].distribution_single == pytest.approx(0.0522864)
-    # 54.20 EUR/kW/yr HTVA + 6% residential VAT baked in.
-    assert snap.dsos["fluvius_imewo"].capacity_eur_per_kw_year == pytest.approx(
-        54.20 * 1.06
-    )
+    # 54.20 EUR/kW/yr as printed; apply_vat grosses it per entry.
+    assert snap.dsos["fluvius_imewo"].capacity_eur_per_kw_year == pytest.approx(54.20)
+
+
+def test_flat_fees_are_grossed_exactly_once_end_to_end() -> None:
+    """The card is the only residential one that declares vat_rate=0.06, so
+    it is the only one where apply_vat is not a no-op. The extractor used to
+    bake the 6% as well, billing it twice: Fluvius Antwerpen's databeheer was
+    served at 17,85 x 1,06^2 = 20,06 instead of 18,92, and capacity at 55,51
+    instead of 52,36, overstating a 4 kW entry by about 13,70 EUR/yr."""
+    snap = _april_snap()
+    a = snap.dsos["fluvius_antwerpen"]
+    assert a.data_management_per_year == pytest.approx(17.85)
+    assert a.capacity_eur_per_kw_year == pytest.approx(49.40)
+
+    served = apply_vat(snap, include_vat=True).dsos["fluvius_antwerpen"]
+    assert served.data_management_per_year == pytest.approx(17.85 * 1.06)
+    assert served.capacity_eur_per_kw_year == pytest.approx(49.40 * 1.06)
+
+    # A business that deducts VAT keeps the card's printed figures.
+    net = apply_vat(snap, include_vat=False).dsos["fluvius_antwerpen"]
+    assert net.data_management_per_year == pytest.approx(17.85)
+    assert net.capacity_eur_per_kw_year == pytest.approx(49.40)
+
+
+def test_dbs_subscription_is_grossed_exactly_once_end_to_end() -> None:
+    """Same for the dynamic card's Abonnementskost: 5,00/month HTVA is
+    stored as 60,00 and served as 63,60, not 67,42."""
+    snap = _dbs_snap()
+    assert snap.energy.yearly_fixed_fee == pytest.approx(60.0)
+    served = apply_vat(snap, include_vat=True)
+    assert served.energy.yearly_fixed_fee == pytest.approx(63.6)
 
 
 def test_april_card_taxes_are_htva_with_vat_06() -> None:
@@ -333,12 +362,11 @@ def test_dbs_card_energy_is_dynamic_formula_htva() -> None:
 
 
 def test_dbs_card_subscription_fee_is_vat_inclusive_annual() -> None:
-    """Abonnementskost 5,00 euro/maand HTVA. yearly_fixed_fee holds the
-    actual annual euros (summed without rescaling), so it is the
-    VAT-inclusive 12-month total: 5 × 12 × 1.06 = 63.60."""
+    """Abonnementskost 5,00 euro/maand HTVA -> the 12-month total, still
+    HTVA: base.apply_vat grosses every flat annual fee once per entry."""
     snap = _dbs_snap()
     assert isinstance(snap.energy, DynamicRates)
-    assert snap.energy.yearly_fixed_fee == pytest.approx(63.6)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(60.0)
 
 
 def test_dbs_card_injection_is_dynamic_formula() -> None:
@@ -366,10 +394,9 @@ def test_dbs_card_dso_row_columns_for_antwerpen() -> None:
     gbs parser keeps; the trailing injection network tariff is ignored."""
     snap = _dbs_snap()
     a = snap.dsos["fluvius_antwerpen"]
-    # 17.85 HTVA + 6% residential VAT baked in (= 18.92 TVAC).
-    assert a.data_management_per_year == pytest.approx(17.85 * 1.06)
-    # 49.40 EUR/kW/yr HTVA + 6% residential VAT baked in.
-    assert a.capacity_eur_per_kw_year == pytest.approx(49.40 * 1.06)
+    # Stored as printed; apply_vat grosses both once per entry.
+    assert a.data_management_per_year == pytest.approx(17.85)
+    assert a.capacity_eur_per_kw_year == pytest.approx(49.40)
     assert a.distribution_single == pytest.approx(0.0505027)
     assert a.distribution_exclusive_night == pytest.approx(0.0454058)
     assert a.transport == 0.0
@@ -381,8 +408,8 @@ def test_dbs_card_wrapped_midden_vlaanderen_row_parses() -> None:
     snap = _dbs_snap()
     mv = snap.dsos["fluvius_intergem"]
     assert mv.distribution_single == pytest.approx(0.0498061)
-    # 50.12 EUR/kW/yr HTVA + 6% residential VAT baked in.
-    assert mv.capacity_eur_per_kw_year == pytest.approx(50.12 * 1.06)
+    # 50.12 EUR/kW/yr as printed; apply_vat grosses it per entry.
+    assert mv.capacity_eur_per_kw_year == pytest.approx(50.12)
 
 
 def test_dbs_card_taxes_are_htva_with_vat_06() -> None:

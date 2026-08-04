@@ -421,15 +421,15 @@ def _extract_dbs_energy(text: str) -> DynamicRates:
 def _extract_dbs_abonnement(text: str) -> float:
     """Yearly subscription fee in EUR, VAT-inclusive.
 
-    Printed HTVA as ``Abonnementskost 5,00 euro/maand``. yearly_fixed_fee
-    holds the actual euros the customer pays (it is summed without
-    rescaling in the YTD path), so multiply out the 12 months and the 6%
-    residential VAT here.
+    Printed HTVA as ``Abonnementskost 5,00 euro/maand``, so multiply out the
+    12 months and leave it HTVA: this card declares ``vat_rate=0.06`` and
+    ``base.apply_vat`` grosses every flat annual fee once, per entry. Baking
+    the 6% here as well billed it twice.
     """
     match = _ABONNEMENT_RE.search(text)
     if not match:
         raise ExtractorError("could not parse Ecopower Abonnementskost")
-    return to_float(match.group(1)) * 12.0 * 1.06
+    return to_float(match.group(1)) * 12.0
 
 
 # ---- DSOs --------------------------------------------------------------------
@@ -467,15 +467,13 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         )
         if not row:
             continue
-        # Ecopower's card is HTVA. Per-kWh distribution flows through the
-        # pricing engine's VAT factor, but the capacity and data-management
-        # tariffs are billed as fixed euro amounts that bypass it (the YTD
-        # and backfill paths sum them as flat annual fees), so bake the 6%
-        # residential VAT into both here, mirroring _extract_dbs_abonnement.
-        # The same Fluvius databeheer fee prints 17,85 HTVA here vs 18,92
-        # TVAC on the other suppliers' cards (17,85 x 1,06 = 18,92).
-        databeheer = to_float(row.group(1)) * 1.06
-        capacity = to_float(row.group(2)) * 1.06
+        # Ecopower's card is HTVA and declares vat_rate=0.06, so store both
+        # flat fees exactly as printed: base.apply_vat grosses them once per
+        # entry, alongside every other flat annual fee. The same Fluvius
+        # databeheer prints 17,85 HTVA here vs 18,92 TVAC on the other
+        # suppliers' cards, and apply_vat is what turns one into the other.
+        databeheer = to_float(row.group(1))
+        capacity = to_float(row.group(2))
         single = to_float(row.group(3))
         # Group 4 is the exclusive-night meter rate (separate circuit
         # for an electric water heater / night-storage heater). It
@@ -546,11 +544,10 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=to_float(row.group(3)),
             distribution_exclusive_night=to_float(row.group(4)),
             transport=0.0,  # rolled into distribution on Ecopower's card
-            # HTVA card; capacity and databeheer are flat euro fees that
-            # bypass pricing's VAT factor, so bake the 6% residential VAT
-            # into both here (same as the gbs parser).
-            capacity_eur_per_kw_year=to_float(row.group(2)) * 1.06,
-            data_management_per_year=to_float(row.group(1)) * 1.06,
+            # HTVA card, stored as printed: base.apply_vat grosses both flat
+            # fees once per entry (same as the gbs parser).
+            capacity_eur_per_kw_year=to_float(row.group(2)),
+            data_management_per_year=to_float(row.group(1)),
         )
     if not out:
         # Section header matched but no DSO row did - fail loud rather than

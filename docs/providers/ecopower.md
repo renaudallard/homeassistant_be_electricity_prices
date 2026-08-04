@@ -37,6 +37,14 @@ overlay so `compute_breakdown` scales the per-kWh energy and levies up to TVAC (
 `ecopower.py:56-60`; `_extract_taxes` `ecopower.py:574-612`). Residential injection is VAT-exempt,
 so injection formulas are stored unscaled.
 
+That `vat_rate=0.06` also makes Ecopower the one residential card where `base.apply_vat` is **not**
+a no-op: it grosses every flat annual fee (the yearly fee, data management, capacity, the prosumer
+forfaits) once per entry, because those never reach `compute_breakdown`'s per-kWh factor. So the
+extractor must store flat fees exactly as the card prints them. It used to bake the 6% itself as
+well, which billed it twice once the B2B work routed every snapshot through `apply_vat`: Fluvius
+Antwerpen databeheer was served at `17,85 × 1,06² = 20,06` instead of `18,92`, overstating a 4 kW
+entry by about 13,70 EUR/yr.
+
 ### Publication URLs
 
 | Product | Price page (scraped) | Card filename pattern |
@@ -202,9 +210,8 @@ parse time, and carrying a variable cost without a live spot is what `VariableRa
 
 The monthly subscription `Abonnementskost <n> euro/maand` (`_ABONNEMENT_RE`, `ecopower.py:389`)
 maps to `yearly_fixed_fee` via `_extract_dbs_abonnement` (`ecopower.py:421-432`). Because
-`yearly_fixed_fee` is summed as actual euros without further rescaling, the parser multiplies the
-monthly HTVA figure by 12 and by 1.06 here (illustrative `5 × 12 × 1.06 = 63.60`,
-`test_ecopower.py:293-299`).
+`yearly_fixed_fee` is summed as actual euros, the parser multiplies the monthly figure by 12 and
+leaves it HTVA (`5 × 12 = 60,00`); `apply_vat` turns that into the `63,60` an entry is billed.
 
 ### DSO parsing
 
@@ -238,8 +245,8 @@ mis-aligning the distribution rate.
 
 Captured columns map to `DsoOverlay` (`ecopower.py:486-492`):
 
-- `data_management_per_year` = databeheer `× 1.06`
-- `capacity_eur_per_kw_year` = capacity `× 1.06`
+- `data_management_per_year` = databeheer (as printed, HTVA; `apply_vat` grosses it)
+- `capacity_eur_per_kw_year` = capacity (as printed, HTVA; `apply_vat` grosses it)
 - `distribution_single` = enkelvoudig (unscaled)
 - `distribution_exclusive_night` = uitsluitend-nacht (unscaled)
 - `transport = 0.0` (Elia transport is rolled into distribution on Ecopower's card; there is no
@@ -257,8 +264,8 @@ databeheer | capacity | afname enkelvoudig | afname uitsluitend-nacht | [maximum
 Row regex reads the first four numeric columns (`ecopower.py:538-542`) and ignores the optional
 maximumtarief and the trailing injection network tariff (`DsoOverlay` does not model them). Column
 mapping (`ecopower.py:545-554`): `distribution_single` = group 3, `distribution_exclusive_night` =
-group 4, `capacity_eur_per_kw_year` = group 2 `× 1.06`, `data_management_per_year` = group 1
-`× 1.06`, `transport = 0.0`.
+group 4, `capacity_eur_per_kw_year` = group 2, `data_management_per_year` = group 1 (both as
+printed, HTVA; `apply_vat` grosses them), `transport = 0.0`.
 
 The dbs DSO block has a wrapped-label hurdle: on the narrower dynamic card pdfplumber wraps the
 longest label `Fluvius Midden-Vlaanderen` across three lines (`Fluvius Midden-` /
@@ -352,15 +359,25 @@ it. No Wallonia Tarif Impact or Brussels OSP applies (Flanders-only).
 
 ### VAT scaling: the recurring Ecopower gotcha
 
-Because Ecopower publishes HTVA, the extractor bakes the 6% residential VAT into every value that
-**bypasses** the pricing engine's VAT factor (the flat annual euro fees: capacity,
-data-management, the dbs subscription), while leaving per-kWh values HTVA for `compute_breakdown`
-to scale. The recurring worked example in the comments: the same Fluvius databeheer fee prints
-`17,85` HTVA on Ecopower's card versus `18,92` TVAC on other suppliers' cards
-(`17,85 × 1,06 = 18,92`, `ecopower.py:475-477`; `test_ecopower.py:106-121`). If you touch any of
-the `* 1.06` multipliers, keep this split straight: **per-kWh energy and levies stay HTVA**
-(scaled once by `vat_rate=0.06` in pricing); **flat euro fees get `× 1.06` here** (they never see
-the pricing VAT factor).
+Because Ecopower publishes HTVA, **every** value is stored exactly as the card prints it and the
+6% is applied once, downstream, by whichever layer bills that value:
+
+| value | grossed by | where |
+| --- | --- | --- |
+| per-kWh energy, distribution, levies | `compute_breakdown` via `vat_rate=0.06` | `pricing._finalize_breakdown` |
+| flat annual euro fees (yearly fee, data management, capacity, prosumer forfaits) | `base.apply_vat`, once per entry | `base.py:594` |
+
+The worked example: the same Fluvius databeheer prints `17,85` HTVA on Ecopower's card versus
+`18,92` TVAC on other suppliers' cards, and `apply_vat` is what turns one into the other
+(`ecopower.py:475`; `test_ecopower.py`, `test_flat_fees_are_grossed_exactly_once_end_to_end`).
+
+The extractor used to bake the 6% into the flat fees itself, on the reasoning that they bypass the
+pricing engine's VAT factor. That was correct until the B2B work routed every snapshot through
+`apply_vat`, which grosses exactly those fees — after which they were billed twice: databeheer
+served at `17,85 × 1,06² = 20,06` instead of `18,92`, capacity at `55,51` instead of `52,36`,
+overstating a 4 kW entry by about 13,70 EUR/yr (8,99 at the 2,5 kW Flemish floor, 19,99 at 6 kW).
+**Do not reintroduce a `* 1.06` anywhere in this module.** If a flat fee looks 6% light, the bug is
+that `apply_vat` is not reaching it, not that the extractor should pre-scale it.
 
 ## Quirks and historical bugs
 
@@ -413,9 +430,9 @@ Every non-obvious hazard the source comments flag:
 - **MWh vs kWh factor scaling.** Both dbs formulas print the factor against EPEX DA in EUR/MWh, so
   factor is `× 1000` (`ecopower.py:411`, `712`). Forgetting this understates the spot component
   by 1000x.
-- **dbs `yearly_fixed_fee` is VAT-inclusive absolute euros.** It is summed without rescaling, so
-  the parser multiplies out 12 months and 1.06 (`ecopower.py:421-432`). This mirrors the memory
-  note that a `yearly_fixed_fee` holds TVAC absolute euros.
+- **dbs `yearly_fixed_fee` is absolute euros, stored HTVA.** It is summed without rescaling in the
+  YTD path, so the parser multiplies out the 12 months (`ecopower.py:421`) and stops there:
+  `apply_vat` adds the 6% once per entry. Multiplying it here as well billed it twice.
 - **Fail-loud on empty DSO / missing GSC/WKK.** Both are deliberate guards against a silent
   backfill skip / silently-dropped mandatory charge (`ecopower.py:493-497`, `579-580`).
 - **`discover` logs unreachable pages.** A partial page failure is logged, not swallowed, so a
@@ -458,10 +475,10 @@ Ranked by likelihood of breaking when Ecopower re-renders a card:
    (`ecopower.py:113-136`), `_resolve_latest_pdf` / `_resolve_latest_dbs_pdf`
    (`ecopower.py:758-802`), and `discover` (`ecopower.py:231-267`). Symptom: `no Ecopower
    tariefkaart link found`.
-6. **VAT rate change (no longer 6%)** -> the `0.06` in `_extract_taxes` (`ecopower.py:611`) and
-   every `* 1.06` on flat fees (`ecopower.py:432`, `456-457`, `531-532`). These must move
-   together.
+6. **VAT rate change (no longer 6%)** -> the single `0.06` in `_extract_taxes`
+   (`ecopower.py:611`). Nothing else: it is the only place the rate is written, and both
+   `compute_breakdown` and `apply_vat` read it from there.
 
 All EUR figures above (0,1274 energy, 0,1378 split energy, 0,02 / 0,0329 injection, 17,85 / 18,92
-databeheer, 49,40 / 54,20 / 50,12 capacity, 63,60 subscription) come from source comments or test
-assertions and are **illustrative** only; no price lives in the extractor source.
+databeheer, 49,40 / 54,20 / 50,12 capacity, 60,00 HTVA / 63,60 TVAC subscription) come from source
+comments or test assertions and are **illustrative** only; no price lives in the extractor source.
