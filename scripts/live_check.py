@@ -565,16 +565,7 @@ async def _check_eneco(session: aiohttp.ClientSession, eneco: types.ModuleType) 
             snap.taxes.wallonia_renewables > 0,
             detail=str(snap.taxes),
         )
-        _validate_snapshot(prefix, cid, snap)
-        # Pick one Fluvius row to bounds-check the digital meter parser.
-        if "fluvius_antwerpen" in snap.dsos:
-            antwerpen = snap.dsos["fluvius_antwerpen"]
-            _expect(
-                f"{prefix}: fluvius capacity tariff in [20, 200] EUR/kW/yr",
-                antwerpen.capacity_eur_per_kw_year is not None
-                and 20.0 <= antwerpen.capacity_eur_per_kw_year <= 200.0,
-                detail=str(antwerpen),
-            )
+        _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
 
 
 async def _check_cociter(
@@ -774,15 +765,7 @@ async def _check_ecopower(
             snap.taxes.vat_rate == 0.06,
             detail=str(snap.taxes),
         )
-        _validate_snapshot(prefix, cid, snap)
-        if "fluvius_antwerpen" in snap.dsos:
-            a = snap.dsos["fluvius_antwerpen"]
-            _expect(
-                f"{prefix}: fluvius capacity tariff in [20, 200] EUR/kW/yr",
-                a.capacity_eur_per_kw_year is not None
-                and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
-                detail=str(a),
-            )
+        _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
 
 
 async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) -> None:
@@ -815,15 +798,7 @@ async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) 
         snap.taxes.vat_rate == 0.0,
         detail=str(snap.taxes),
     )
-    _validate_snapshot(prefix, cid, snap)
-    if "fluvius_antwerpen" in snap.dsos:
-        a = snap.dsos["fluvius_antwerpen"]
-        _expect(
-            f"{prefix}: fluvius capacity tariff in [20, 200] EUR/kW/yr",
-            a.capacity_eur_per_kw_year is not None
-            and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
-            detail=str(a),
-        )
+    _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
 
 
 async def _check_energiebe(
@@ -860,15 +835,7 @@ async def _check_energiebe(
         snap.taxes.vat_rate == 0.0,
         detail=str(snap.taxes),
     )
-    _validate_snapshot(prefix, cid, snap)
-    if "fluvius_antwerpen" in snap.dsos:
-        a = snap.dsos["fluvius_antwerpen"]
-        _expect(
-            f"{prefix}: fluvius capacity tariff in [20, 200] EUR/kW/yr",
-            a.capacity_eur_per_kw_year is not None
-            and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
-            detail=str(a),
-        )
+    _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
 
 
 async def _check_energyvision(
@@ -917,15 +884,7 @@ async def _check_energyvision(
                 snap.taxes.vat_rate == 0.0,
                 detail=str(snap.taxes),
             )
-            _validate_snapshot(prefix, cid, snap)
-            if "fluvius_antwerpen" in snap.dsos:
-                a = snap.dsos["fluvius_antwerpen"]
-                _expect(
-                    f"{prefix}: fluvius capacity tariff in [20, 200] EUR/kW/yr",
-                    a.capacity_eur_per_kw_year is not None
-                    and 20.0 <= a.capacity_eur_per_kw_year <= 200.0,
-                    detail=str(a),
-                )
+            _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
             if "ores" in snap.dsos:
                 # The Walloon card prints the CWaPE Impact bands cheapest
                 # first, the reverse of the DATS 24 layout: a positional
@@ -1465,7 +1424,12 @@ def _expected_injection_shape(contract_id: str) -> str:
 
 
 def _validate_snapshot(
-    prefix: str, contract_id: str, snap: object, *, injection_shape: str | None = None
+    prefix: str,
+    contract_id: str,
+    snap: object,
+    *,
+    injection_shape: str | None = None,
+    require_capacity: frozenset[str] = frozenset(),
 ) -> None:
     """Validate the energy rates and the injection coverage/shape of one
     fetched snapshot. Called by every ``_check_*`` after its
@@ -1475,19 +1439,42 @@ def _validate_snapshot(
     _validate_energy(prefix, contract_id, getattr(snap, "energy", None))
     shape = injection_shape or _expected_injection_shape(contract_id)
     _validate_injection(prefix, snap, shape)
-    _validate_dsos(prefix, snap)
+    _validate_dsos(prefix, snap, require_capacity=require_capacity)
 
 
-def _validate_dsos(prefix: str, snap: object) -> None:
+# The Fluvius row five Flanders checks spot-checked by hand for a PRESENT
+# capacity tariff. Kept as exactly the one key they used: widening it to all
+# eight areas is a real coverage increase, not a refactor, and would want a
+# look at a live report first.
+_CAPACITY_REQUIRED = frozenset({"fluvius_antwerpen"})
+
+
+def _validate_dsos(
+    prefix: str, snap: object, *, require_capacity: frozenset[str] = frozenset()
+) -> None:
     """Bounds-check the capacity tariff on every DSO overlay a supplier
     populates, so a column-index misread fails CI instead of shipping
     silently (the capaciteitstarief is the dominant cost for a Flemish
     digital-meter user). It's a regulated, supplier-independent rate; the
-    field is None on non-Flemish overlays, which are skipped. Only the sole
-    prior spot-check (one Fluvius row on three suppliers) covered it."""
+    field is None on non-Flemish overlays, which are skipped.
+
+    ``require_capacity`` names DSO keys whose capacity must additionally be
+    PRESENT, not merely in range. The loop below cannot catch a None: it has
+    nothing to bounds-check. Five suppliers spot-checked exactly that on
+    fluvius_antwerpen with their own pasted block, each one sitting directly
+    after the _validate_snapshot call that already runs this function, so the
+    same bound was recorded twice per run. Those blocks are the leftovers this
+    parameter replaces: a key absent from the snapshot is still not asserted,
+    which is what they did."""
     dsos = getattr(snap, "dsos", None) or {}
     for key, overlay in dsos.items():
         capacity = getattr(overlay, "capacity_eur_per_kw_year", None)
+        if key in require_capacity:
+            _expect(
+                f"{prefix}: {key} publishes a capacity tariff",
+                capacity is not None,
+                detail=str(overlay),
+            )
         if capacity is not None:
             _expect(
                 f"{prefix}: {key} capacity tariff in [20, 200] EUR/kW/yr",
