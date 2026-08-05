@@ -390,7 +390,7 @@ Anything pre-filled stays editable (`strings.json:199`).
 | Supplier has no contract in region -> abort `supplier_region_unavailable` | `config_flow.py:1180` | Region filtering deferred from the supplier step to here |
 | Dynamic/TOU/Impact contract forces `METER_DYNAMIC` | `config_flow.py:656` | Smart meter required; mixing bi-horaire network with TOU energy mis-bills |
 | `dso_tariff_mode` (incl. Impact) only in Wallonia | `config_flow.py:1398` | Impact is CWaPE-only; other regions bill differently |
-| `capacity` step only in Flanders | `config_flow.py:3011`, `:1418` | Only Flanders has the capaciteitstarief |
+| `capacity` step only in Flanders | `config_flow.py:3026`, `:1418` | Only Flanders has the capaciteitstarief |
 | `connection_power` step only in Brussels | `config_flow.py:1426` | Only Brussels charges the Brugel OSP fee |
 | Compensation regime only in Wallonia | `config_flow.py:1114` | Avoids double-counting the Flemish capacity tariff |
 | Peak sensor restricted to power/apparent_power | `config_flow.py:739` | Issue #19: a kWh sensor would inflate the capacity bill |

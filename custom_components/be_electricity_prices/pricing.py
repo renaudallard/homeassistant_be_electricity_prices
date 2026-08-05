@@ -511,6 +511,27 @@ def dso_impact_band(when: datetime) -> ImpactBand:
     return "eco"  # 01-07 + 11-17
 
 
+def impact_band_hours() -> dict[ImpactBand, tuple[int, ...]]:
+    """Which local hours fall in each Impact band, derived from the schedule
+    above rather than restated.
+
+    The annual-estimate path needs one representative hour per band and the
+    band's share of the week. It had both written out as literals -- hours 19 /
+    9 / 3 and weights 35 / 49 / 84 -- next to a comment repeating the schedule.
+    That is the regulated CWaPE table living in a second place: move a band
+    boundary in ``dso_impact_band`` and the estimate keeps the old weighting
+    with nothing to catch it. Counting the hours here keeps them in step by
+    construction, and the per-day counts weight identically to the per-week
+    ones (both scale by seven).
+    """
+    out: dict[ImpactBand, list[int]] = {}
+    for hour in range(24):
+        # Any date and any tz: dso_impact_band reads only .hour, and the bands
+        # are the same every day of the week.
+        out.setdefault(dso_impact_band(datetime(2026, 1, 1, hour)), []).append(hour)
+    return {band: tuple(hours) for band, hours in out.items()}
+
+
 def network_eur_per_kwh(
     dso: DsoOverlay,
     when: datetime,

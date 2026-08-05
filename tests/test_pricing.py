@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from datetime import date, datetime
 
 import pytest
@@ -272,6 +273,56 @@ def test_tou_slot_smartflex_seasonal_season_boundaries() -> None:
     assert tou_slot(datetime(2026, 3, 20, 13, 0), rule) == "transition"
     assert tou_slot(datetime(2026, 9, 20, 13, 0), rule) == "offpeak"
     assert tou_slot(datetime(2026, 9, 21, 13, 0), rule) == "transition"
+
+
+def test_impact_band_hours_is_derived_from_the_band_schedule() -> None:
+    """The annual estimate weights each Impact band by its share of the day.
+
+    It used to carry the representative hours (19 / 9 / 3) and the weights
+    (35 / 49 / 84) as literals beside a comment repeating the CWaPE schedule --
+    the regulated table in a second place. Counting them off dso_impact_band
+    keeps them in step: move a boundary and the weighting follows.
+    """
+    from custom_components.be_electricity_prices.pricing import impact_band_hours
+
+    bands = impact_band_hours()
+    assert bands["pic"] == (17, 18, 19, 20, 21)
+    assert bands["medium"] == (0, 7, 8, 9, 10, 22, 23)
+    assert bands["eco"] == (1, 2, 3, 4, 5, 6, 11, 12, 13, 14, 15, 16)
+    # The published per-week weights, which are just these x7.
+    assert [len(bands["pic"]) * 7, len(bands["medium"]) * 7, len(bands["eco"]) * 7] == [
+        35,
+        49,
+        84,
+    ]
+    # Every hour of the day is claimed exactly once.
+    assert sum(len(v) for v in bands.values()) == 24
+    assert len({h for v in bands.values() for h in v}) == 24
+
+    # Each representative hour really is in the band it stands for.
+    for band, hours in bands.items():
+        for hour in hours:
+            assert dso_impact_band(datetime(2026, 1, 15, hour)) == band
+
+
+def test_impact_band_weights_follow_a_moved_boundary(monkeypatch: Any) -> None:
+    """The whole point of deriving them: a schedule change cannot be missed."""
+    from custom_components.be_electricity_prices import pricing
+
+    def shifted(when: datetime) -> str:
+        # Widen pic by one hour at each end, taking from medium and eco.
+        h = when.hour
+        if 16 <= h < 23:
+            return "pic"
+        if 7 <= h < 11 or h < 1:
+            return "medium"
+        return "eco"
+
+    monkeypatch.setattr(pricing, "dso_impact_band", shifted)
+    bands = pricing.impact_band_hours()
+    assert bands["pic"] == (16, 17, 18, 19, 20, 21, 22)
+    assert len(bands["pic"]) * 7 == 49  # was 35; the literal would have stayed
+    assert sum(len(v) for v in bands.values()) == 24
 
 
 def test_dso_impact_band_does_not_observe_holidays() -> None:

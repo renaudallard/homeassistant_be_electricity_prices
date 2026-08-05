@@ -101,7 +101,7 @@ Note what is deliberately absent from the per-kWh formula:
   levies (`pricing.py:576-585`); `energy_fund_eur_per_month` is defined on the
   `TaxOverlay` (`providers/base.py:469`) but is not touched here.
 - The Wallonia `region_connection_fee` is a per-kWh term and IS billed, but
-  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:611`), not
+  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:632`), not
   `taxes_eur_per_kwh`. Engie's Walloon card prints `Redevance raccordement(8)`
   and footnote (8) reads *"Vous ne payez pas de TVA sur ces couts"* — the same
   footnote that exempts the Flemish energy fund on its Flanders edition.
@@ -315,6 +315,14 @@ Source cited in the docstring: TotalEnergies Impact card footnote 7 / ORES
 "Comprendre ma facture / Impact" (`pricing.py:486-488`). Requires an SMR3
 quarter-hourly meter and an opt-in to the DSO Impact tariff
 (`providers/base.py:244-245`).
+
+`impact_band_hours()` counts the table above off `dso_impact_band` rather than
+restating it, returning the hours in each band (5 / 7 / 12 per day, the 35 / 49
+/ 84 per week the cards quote). The OptionsFlow annual estimate takes both its
+representative hour and its weight from it. Those were literals beside a
+comment repeating the schedule, which put the regulated CWaPE table in a second
+place: move a boundary in `dso_impact_band` and the estimate kept the old
+weighting silently. The weighted mean is exactly the mean over all 24 hours.
 
 ## Meter routing
 

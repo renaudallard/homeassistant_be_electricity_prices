@@ -2698,7 +2698,12 @@ def _tou_weighted_per_kwh(
     Returns ``None`` on compute failure so the caller can render '-'
     on the result page rather than tear the flow down.
     """
-    from .pricing import compute_breakdown, is_belgian_holiday, is_offpeak
+    from .pricing import (
+        compute_breakdown,
+        impact_band_hours,
+        is_belgian_holiday,
+        is_offpeak,
+    )
     from .providers.base import ImpactRates, TimeOfUseRates
 
     try:
@@ -2739,25 +2744,35 @@ def _tou_weighted_per_kwh(
         weekday -= timedelta(days=1)
     base = datetime.combine(weekday, time(), tzinfo=when_now.tzinfo)
     if isinstance(snapshot.energy, ImpactRates) or impact_network:
-        # CWaPE Impact bands (every day, no weekend exception):
-        #   pic    17-22                (35h/week)
-        #   medium 07-11 + 22-01        (49h/week)
-        #   eco    01-07 + 11-17        (84h/week)
+        # Weight each CWaPE Impact band by its share of the day. Both the
+        # representative hour and the weight come from `impact_band_hours`,
+        # which counts them off `dso_impact_band`: the schedule is regulated
+        # and belongs in one place, and writing the hours (19 / 9 / 3) and the
+        # weights (35 / 49 / 84) out here meant a band boundary could move in
+        # pricing.py while this estimate kept the old weighting silently.
+        bands = impact_band_hours()
         try:
-            bd_pic = compute_breakdown(
-                snapshot, dso, region, base.replace(hour=19), spot, meter, dso_mode
-            )
-            bd_med = compute_breakdown(
-                snapshot, dso, region, base.replace(hour=9), spot, meter, dso_mode
-            )
-            bd_eco = compute_breakdown(
-                snapshot, dso, region, base.replace(hour=3), spot, meter, dso_mode
-            )
+            weighted = 0.0
+            hours = 0
+            for band_hours in bands.values():
+                if not band_hours:
+                    continue
+                band_bd = compute_breakdown(
+                    snapshot,
+                    dso,
+                    region,
+                    base.replace(hour=band_hours[0]),
+                    spot,
+                    meter,
+                    dso_mode,
+                )
+                weighted += band_bd.all_in * len(band_hours)
+                hours += len(band_hours)
         except Exception:  # noqa: BLE001
             return bd.all_in
-        wp, wm, we = 35.0, 49.0, 84.0
-        total = wp + wm + we
-        return (bd_pic.all_in * wp + bd_med.all_in * wm + bd_eco.all_in * we) / total
+        if not hours:
+            return bd.all_in
+        return weighted / hours
     if not isinstance(snapshot.energy, TimeOfUseRates):
         # Fixed/Variable on a bi-hourly/dynamic meter: weight the peak and
         # off-peak all-in by the region's bi-horaire hour split (uniform
