@@ -3889,14 +3889,7 @@ def _hourly_consumption_sensors(entry: ConfigEntry) -> list[str]:
     covers it, so a partial wiring can't silently undercount the missing
     band (caller surfaces the fees-only floor).
     """
-    day = entry.data.get(CONF_DAY_CONSUMPTION_KWH)
-    night = entry.data.get(CONF_NIGHT_CONSUMPTION_KWH)
-    if day and night:
-        return [day, night]
-    total = entry.data.get(CONF_CONSUMPTION_KWH)
-    if total:
-        return [total]
-    return []
+    return _hourly_kwh_sensors(entry, "consumption")
 
 
 def _hourly_injection_sensors(entry: ConfigEntry) -> list[str]:
@@ -3905,13 +3898,24 @@ def _hourly_injection_sensors(entry: ConfigEntry) -> list[str]:
     Registers first when both halves are wired, then the totals sensor.
     Returns an empty list when neither is available, so a partial register
     wiring doesn't get counted as injection coverage."""
-    day = entry.data.get(CONF_DAY_INJECTION_KWH)
-    night = entry.data.get(CONF_NIGHT_INJECTION_KWH)
-    if day and night:
-        return [day, night]
-    total = entry.data.get(CONF_INJECTION_KWH)
-    if total:
-        return [total]
+    return _hourly_kwh_sensors(entry, "injection")
+
+
+def _hourly_kwh_sensors(entry: ConfigEntry, side: str) -> list[str]:
+    """The registers-then-total preference, once, for either side.
+
+    Both sides spelled this out separately while reading the same three keys
+    ``_kwh_sensor_ids`` already returns, so the preference order existed in
+    three places: here twice and in ``_side_is_half_wired``. The order is the
+    load-bearing part -- checking the total first bills the hourly path off a
+    different meter than the static per-day path for a user who wired both,
+    and the two figures then drift against each other.
+    """
+    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
+    if day_id and night_id:
+        return [day_id, night_id]
+    if total_id:
+        return [total_id]
     return []
 
 
