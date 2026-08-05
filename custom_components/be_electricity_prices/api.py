@@ -274,6 +274,13 @@ def parse_day_ahead_xml(
                 total = max(inferred, max(explicit))
             else:
                 total = max(explicit)
+            # The cap above bounds what the document's own timeInterval can
+            # ask for, but a single Point carrying an out-of-range position
+            # walked straight past it: one bogus <position>3000000</position>
+            # on an ordinary day-ahead document produced 3 000 000 slots,
+            # 870 MB of peak memory and 163 s of CPU, which is the same OOM
+            # the interval cap exists to prevent. Bound the loop itself.
+            total = min(total, _MAX_PERIOD_SLOTS(step))
             # Carry-forward only: ENTSO-E documents fill *forward* from the
             # previous explicit point, never backward. If position 1 itself
             # is missing, every position before the first explicit one

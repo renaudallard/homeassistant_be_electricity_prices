@@ -213,6 +213,15 @@ point count and the prices come from the document itself:
   an out-of-range end allocated without limit: a 100-year PT15M interval
   produced 3.5 million slots and about a gigabyte of RSS, an OOM on typical
   hardware. A day-ahead publication covers a day or two.
+
+  The cap has to bound the **loop**, not just the interval. It first applied
+  only to the count inferred from `timeInterval`, while the loop ran to
+  `max(inferred, max(explicit))` — so a single `<Point>` with an out-of-range
+  `<position>` walked straight past it. Measured on an otherwise ordinary
+  document carrying one `<position>3000000</position>`: 3 000 000 slots,
+  870 MB of peak memory and 163 s of CPU, versus 744 slots, 0,21 MB and 0,04 s
+  once the total itself is clamped. Whatever the document claims, one parse
+  must cost a bounded amount of work.
 - **Non-finite prices are rejected.** `float()` accepts `NaN`, `Infinity` and
   `-Infinity`, and overflows a long literal such as `1e400` to `inf`, so a
   malformed price entered the spot cache looking real. It then spreads:

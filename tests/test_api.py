@@ -38,6 +38,7 @@ from custom_components.be_electricity_prices.api import (
     EntsoeClient,
     EntsoeError,
     _parse_iso_utc,
+    _MAX_PERIOD_SLOTS,
     parse_day_ahead_xml,
 )
 
@@ -341,3 +342,23 @@ def test_every_period_in_a_timeseries_is_read() -> None:
     out = parse_day_ahead_xml(doc)
     assert len(out) == 4
     assert out[datetime(2026, 8, 2, 0, tzinfo=UTC)] == pytest.approx(0.03)
+
+
+def test_out_of_range_point_position_cannot_blow_the_slot_cap() -> None:
+    """The interval cap bounds what a document's own timeInterval can ask
+    for, but the loop ran to `max(inferred, max(explicit))`, so one Point
+    carrying a bogus position walked straight past it.
+
+    Measured before the bound: 3 000 000 slots, 870 MB of peak memory and
+    163 s of CPU from a single ordinary-looking day-ahead document, which is
+    the same OOM the interval cap was added to prevent. A malformed upstream
+    document must cost a bounded amount of work.
+    """
+    points = (
+        "<Point><position>1</position><price.amount>10</price.amount></Point>"
+        "<Point><position>3000000</position><price.amount>20</price.amount></Point>"
+    )
+    parsed = parse_day_ahead_xml(_doc(points))
+    assert len(parsed) <= _MAX_PERIOD_SLOTS(timedelta(minutes=60))
+    # The legitimate leading point still parses.
+    assert parsed[datetime(2026, 4, 29, 22, 0, tzinfo=UTC)] == pytest.approx(0.010)
