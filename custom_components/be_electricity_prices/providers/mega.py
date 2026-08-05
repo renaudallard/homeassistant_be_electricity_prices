@@ -802,10 +802,17 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             yearly_fixed_fee=yearly_fee,
         )
 
+    # A variable / Impact card's headline table is a 12-month forward
+    # simulation; the rates it actually bills are printed below it as "les
+    # derniers prix constates et utilises pour le calcul de votre facture de
+    # regularisation". Prefer those, and fall back to the table on a card
+    # that carries no such sentence.
+    realized = _realized_rates(text) if kind in ("variable", "tou_impact") else {}
+
     if kind == "tou_impact":
-        pic = _extract_impact_tier(text, "PIC")
-        medium = _extract_impact_tier(text, "MEDIUM")
-        eco = _extract_impact_tier(text, "ECO")
+        pic = realized.get("pic") or _extract_impact_tier(text, "PIC")
+        medium = realized.get("medium") or _extract_impact_tier(text, "MEDIUM")
+        eco = realized.get("eco") or _extract_impact_tier(text, "ECO")
         if pic is None or medium is None or eco is None:
             raise ExtractorError("could not parse Mega Off-peak Impact energy block")
         formula_match = re.search(
@@ -842,14 +849,68 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         )
     f_factor, f_base = _variable_cohort_coefficients(text)
     return VariableRates(
-        current=mono,
-        peak=peak,
-        offpeak=offpeak,
-        exclusive_night=excl_night,
+        current=realized.get("mono", mono),
+        peak=realized.get("peak", peak),
+        offpeak=realized.get("offpeak", offpeak),
+        exclusive_night=realized.get("exclusive_night", excl_night),
         yearly_fixed_fee=yearly_fee,
         formula_factor=f_factor,
         formula_base=f_base,
     )
+
+
+def _realized_rates(text: str) -> dict[str, float]:
+    """The rates Mega says it actually bills, in EUR/kWh.
+
+    On a variable or Off-peak Impact card the headline table is a forward
+    simulation, and the card says so: "Les prix affiches dans le tableau
+    ci-dessus et utilises pour realiser une simulation tarifaire sont calcules
+    sur base d'une prevision des prix de l'energie pour une livraison les 12
+    prochains mois." The billed figures are in the sentence after it, "Les
+    derniers prix constates et utilises pour le calcul de votre facture de
+    regularisation pour le mois de <month>", printed in c€/kWh.
+
+    Two label sets, one per product family:
+      variable      Compteur mono-horaire / Jour / Nuit / Exclusif nuit
+      Off-peak Imp. tarif ECO / tarif MEDIUM / tarif PIC
+    both followed by Injection. Returns whatever it finds keyed by
+    mono / peak / offpeak / exclusive_night / eco / medium / pic / injection;
+    an empty mapping means the sentence is absent (a fixed card, or a layout
+    change) and the caller keeps the table.
+
+    The text layer wraps mid-word, so every label tolerates internal
+    whitespace and soft hyphens.
+    """
+    block = re.search(
+        r"derniers prix constat[^:]*sont les suivants \(c€/kWh\)\s*:(.{0,400})",
+        text,
+        re.S | re.I,
+    )
+    if block is None:
+        return {}
+    body = re.sub(r"-\s*\n\s*", "", block.group(1))
+    body = re.sub(r"\s+", " ", body)
+    labels = (
+        ("mono", r"Compteur mono-?horaire"),
+        ("peak", r"Jour"),
+        ("offpeak", r"Nuit"),
+        ("exclusive_night", r"Exclusif nuit"),
+        ("eco", r"tarif ECO"),
+        ("medium", r"tarif MEDIUM"),
+        ("pic", r"tarif PIC"),
+        ("injection", r"Injection"),
+    )
+    out: dict[str, float] = {}
+    for key, label in labels:
+        # "Nuit" also matches inside "Exclusif nuit", so require the label to
+        # start the item: after the colon-separated list separator or the
+        # start of the block.
+        # Match the digits exactly, never a trailing sentence period: the
+        # list ends "Injection : 2.32." and a greedy [\d.,]+ ate the stop.
+        m = re.search(rf"(?:^|[;:,])\s*{label}\s*:\s*(\d+(?:[.,]\d+)?)", body, re.I)
+        if m is not None:
+            out[key] = to_float(m.group(1)) / 100.0
+    return out
 
 
 def _extract_impact_tier(text: str, tier: str) -> float | None:
@@ -937,7 +998,17 @@ def _extract_valid_until(text: str) -> date | None:
 
 
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
-    """Mega prints injection rates in the same energy block, second column."""
+    """Mega prints injection rates in the same energy block, second column.
+
+    On a variable / Impact card that block is the 12-month simulation, so the
+    realized "derniers prix constates" sentence wins here as well: reading the
+    table credited 3,84 c€/kWh where the card bills 2,32.
+    """
+    realized_injection = (
+        _realized_rates(text).get("injection")
+        if kind in ("variable", "tou_impact")
+        else None
+    )
     if kind == "tou_impact":
         # Off-peak Impact cards lack the ``Compteur mono-horaire`` anchor;
         # injection sits as the second number under any of the three tier
@@ -953,6 +1024,9 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         )
         match = pattern.search(text)
         current = to_float(match.group(1)) / 100.0 if match else None
+
+    if realized_injection is not None:
+        current = realized_injection
 
     factor: float | None = None
     base: float | None = None

@@ -453,9 +453,13 @@ def test_offpeak_impact_parses_three_tier_rates() -> None:
     # PIC is the most expensive band, ECO the cheapest -- enforced by
     # live_check too.
     assert snap.energy.pic > snap.energy.medium > snap.energy.eco
-    assert snap.energy.pic == pytest.approx(0.182)
-    assert snap.energy.medium == pytest.approx(0.1496)
-    assert snap.energy.eco == pytest.approx(0.1011)
+    # The three-tier table on this card is a 12-month forward simulation
+    # (0.1011 / 0.1496 / 0.182). The card states the rates it actually bills
+    # below it, as "les derniers prix constates ... pour le calcul de votre
+    # facture de regularisation", and those are what an entry is charged.
+    assert snap.energy.pic == pytest.approx(0.1578)
+    assert snap.energy.medium == pytest.approx(0.1295)
+    assert snap.energy.eco == pytest.approx(0.0866)
     assert snap.energy.yearly_fixed_fee == pytest.approx(74.2)
     # Formula text captures all three tiers from the footnote.
     assert snap.energy.formula is not None
@@ -470,11 +474,13 @@ def test_offpeak_impact_injection_uses_per_tier_column() -> None:
         fixture_text("mega_offpeak_impact_w.pdf"),
         "wallonia",
     )
-    # The Impact card has no ``Compteur mono-horaire`` anchor; injection
-    # lives as the second number under each Tarif row. All three rows
-    # carry the same rate, so the parser pulls the first occurrence.
+    # The Impact card has no ``Compteur mono-horaire`` anchor, so the table
+    # path reads injection as the second number under each Tarif row (0.0292,
+    # all three rows equal). That table is the forward simulation though, so
+    # the realized sentence wins and the credit is the 0.18 c€/kWh the card
+    # says it settles.
     assert snap.injection is not None
-    assert snap.injection.current == pytest.approx(0.0292)
+    assert snap.injection.current == pytest.approx(0.0018)
 
 
 def test_offpeak_impact_wallonia_dsos_carry_impact_triplet() -> None:
@@ -700,3 +706,38 @@ def test_pro_card_region_header_is_still_checked() -> None:
     text = fixture_text("mega_pro_smart_fixed_w.pdf")
     with pytest.raises(ExtractorError, match="not the flanders edition"):
         parse_snapshot("mega_pro_smart_fixed", text, "flanders")
+
+
+def test_variable_prefers_the_realized_rates_over_the_simulation_table() -> None:
+    """A variable card's headline table is a 12-month forward simulation and
+    the card says so; the rates it actually bills are printed underneath as
+    "les derniers prix constates et utilises pour le calcul de votre facture
+    de regularisation".
+
+    Reading the table billed 17,42 c€/kWh where Mega settles 15,30, about
+    74 EUR/yr at 3500 kWh, and credited injection at 3,84 where it pays 2,32.
+    """
+    snap = parse_snapshot(
+        "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"
+    )
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current == pytest.approx(0.153)
+    assert snap.energy.peak == pytest.approx(0.1756)
+    assert snap.energy.offpeak == pytest.approx(0.1355)
+    assert snap.energy.exclusive_night == pytest.approx(0.1355)
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(0.0232)
+
+
+def test_fixed_and_dynamic_cards_keep_reading_their_own_tables() -> None:
+    """Only variable and Impact cards carry the simulation disclaimer. A
+    fixed card's table IS the billed rate, so it must be untouched."""
+    from custom_components.be_electricity_prices.providers.mega import _realized_rates
+
+    assert _realized_rates(fixture_text("mega_smart_fixed_v.pdf")) == {}
+    assert _realized_rates(fixture_text("mega_dynamic_w.pdf")) == {}
+    snap = parse_snapshot(
+        "mega_smart_fixed", fixture_text("mega_smart_fixed_v.pdf"), "flanders"
+    )
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(0.1718)

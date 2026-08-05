@@ -284,11 +284,34 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:355`) enforces it.
   bare `PIC` on the last row and lowercase `tarif` in the footnote.
 - `fixed` / `variable`: read `Compteur mono-horaire` (mono), plus `Tarif jour`
   (peak), `Tarif nuit` (offpeak) and `Exclusif nuit` (exclusive night) via
-  `_extract_meter_value` (`mega.py:668`). The bi-hourly labels are only read inside
+  `_extract_meter_value` (`mega.py:929`). The bi-hourly labels are only read inside
   the `Compteur bi-horaire` scope so a later mention in a dynamic-formula footnote
   cannot shadow the energy-block value; the anchor regex tolerates the newline pypdf
   inserts inside `Compteur bi-horaire`. A missing mono rate raises. `fixed` builds
   `FixedRates`, everything else builds `VariableRates`.
+
+> [!IMPORTANT]
+> **On a `variable` or `tou_impact` card, that table is not the billed rate.** The
+> card states it outright: *"Les prix affiches dans le tableau ci-dessus et utilises
+> pour realiser une simulation tarifaire sont calcules sur base d'une prevision des
+> prix de l'energie pour une livraison les 12 prochains mois."* The rates Mega
+> settles on are in the sentence below it, *"Les derniers prix constates et utilises
+> pour le calcul de votre facture de regularisation pour le mois de &lt;month&gt;"*,
+> in c€/kWh. `_realized_rates` (`mega.py:862`) parses that sentence and both
+> `_extract_energy` and `_extract_injection` prefer it, falling back to the table
+> when it is absent.
+>
+> Two label sets share one parser: `Compteur mono-horaire / Jour / Nuit / Exclusif
+> nuit` on a variable card, `tarif ECO / MEDIUM / PIC` on an Impact one, each
+> followed by `Injection`. The text layer wraps mid-word (`Compteur mono-\nhoraire`)
+> so the soft hyphen is stripped first, `Nuit` must not match inside `Exclusif
+> nuit`, and the number pattern must not swallow the sentence's closing period
+> (`Injection : 2.32.`).
+>
+> Reading the table billed the April 2026 Walloon Smart Flex card at 17,42 c€/kWh
+> where Mega settles 15,30 — about **74 EUR/yr** at 3500 kWh — and credited
+> injection at 3,84 where it pays 2,32. `fixed` and `dynamic` cards carry no such
+> disclaimer and are left alone.
 
 The Wallonia Smart Fixed fixture pins mono / peak / offpeak / exclusive-night to
 0.1712 / 0.1938 / 0.1549 / 0.1549 EUR/kWh with a 111.3 EUR/yr fee (illustrative,
