@@ -565,7 +565,17 @@ _FEDERAL_EXCISE_RE = re.compile(
 _ENERGY_CONTRIB_RE = re.compile(r"Bijdrage op de energie\s+([\d,]+)\s*euro/kWh")
 _GSC_RE = re.compile(r"Kost GSC\s+([\d,]+)\s*euro/kWh")
 _WKK_RE = re.compile(r"Kost WKK\s+([\d,]+)\s*euro/kWh")
-_FUND_RE = re.compile(r"Bijdrage Energiefonds\s+([\d,]+)\s*euro/maand", re.IGNORECASE)
+# The card prints the domiciled amount with two decimals and a superscript
+# footnote marker immediately after it, which the text layer flattens onto the
+# number: "Bijdrage Energiefonds 0,006 euro/maand 10,07 euro/maand" is 0,00
+# plus footnote 6, not 0,006. The marker is just the footnote's number, so it
+# moves between cards (0,004 / 0,005 / 0,006 across the fixtures) and read as a
+# value it made the levy drift card to card. Anchor on the two decimals the
+# card actually prints and let the marker fall outside the group. The second
+# column is the non-residential amount, which a residential entry never pays.
+_FUND_RE = re.compile(
+    r"Bijdrage Energiefonds\s+([\d.]+,\d{2})\d?\s*euro/maand", re.IGNORECASE
+)
 
 
 def _extract_taxes(text: str) -> TaxOverlay:

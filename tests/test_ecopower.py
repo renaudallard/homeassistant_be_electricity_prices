@@ -173,7 +173,12 @@ def test_april_card_taxes_are_htva_with_vat_06() -> None:
     assert t.energy_contribution == pytest.approx(0.0019261)
     # GSC + WKK = 0.0110 + 0.00392 = 0.01492.
     assert t.flanders_renewables == pytest.approx(0.01492)
-    assert t.energy_fund_eur_per_month == pytest.approx(0.006)
+    # The card prints "Bijdrage Energiefonds 0,006 euro/maand 10,07 euro/maand":
+    # 0,00 for a domiciled residential customer, then a SUPERSCRIPT footnote
+    # marker, then the non-residential column. The marker is the footnote's
+    # number, so reading it as a decimal made the levy drift card to card
+    # (0,004 / 0,005 / 0,006 across the fixtures) instead of staying 0.
+    assert t.energy_fund_eur_per_month == pytest.approx(0.0)
     # Wallonia / Brussels surcharges stay 0 -- Ecopower is Flanders-only.
     assert t.wallonia_renewables == 0.0
     assert t.brussels_renewables == 0.0
@@ -570,3 +575,15 @@ def test_dbs_fetch_for_month_returns_none_before_first_card() -> None:
         )
     )
     assert snap is None
+
+
+def test_energy_fund_marker_is_not_read_as_a_third_decimal() -> None:
+    """The footnote number after the value changes between cards, so reading
+    it made a fixed levy look like it moved every month."""
+    for fixture in (
+        "ecopower_burgerstroom_feb.pdf",
+        "ecopower_burgerstroom_apr.pdf",
+        "ecopower_burgerstroom_jul.pdf",
+    ):
+        snap = parse_snapshot(fixture_text(fixture, layout=True), "t://", "x")
+        assert snap.taxes.energy_fund_eur_per_month == pytest.approx(0.0), fixture
