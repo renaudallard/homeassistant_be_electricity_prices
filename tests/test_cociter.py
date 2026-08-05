@@ -354,3 +354,54 @@ def test_injection_formula_survives_a_meter_label_rewording() -> None:
         "Compteur pouvant effectuer des mesures par quart d'heure", "Compteur SMR3"
     )
     assert _extract_injection(older).factor == pytest.approx(0.97)
+
+
+def test_wordpress_dedup_suffix_does_not_hide_a_month() -> None:
+    """Cociter's site is WordPress, which appends "-1", "-2", ... when a file
+    is re-uploaded under an existing name. July 2026's dynamic card is
+    published as ``RCDyn_SM3_Coop-2607-fr-1.pdf``; requiring ``-fr.pdf`` to
+    follow the month immediately dropped that month from the archive, and the
+    year-to-date walk billed July at the current card instead."""
+    from custom_components.be_electricity_prices.providers.cociter import (
+        _DYN_RE,
+        _VAR_RE,
+    )
+
+    html = (
+        '<a href="https://x/RCDyn_SM3_Coop-2606-fr.pdf">jun</a>'
+        '<a href="https://x/RCDyn_SM3_Coop-2607-fr-1.pdf">jul</a>'
+        '<a href="https://x/RCVar_YMR_Coop-2607-fr-2.pdf">jul var</a>'
+    )
+    assert sorted(m[1] for m in _DYN_RE.findall(html)) == ["2606", "2607"]
+    assert sorted(m[1] for m in _VAR_RE.findall(html)) == ["2607"]
+
+
+async def test_reupload_wins_over_the_superseded_card() -> None:
+    """When both the original and a re-upload are listed, the suffixed URL is
+    the newer file and must be the one fetched."""
+    from datetime import date
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.be_electricity_prices.providers import cociter as cociter_mod
+
+    html = (
+        '<a href="https://x/RCDyn_SM3_Coop-2607-fr.pdf">old</a>'
+        '<a href="https://x/RCDyn_SM3_Coop-2607-fr-1.pdf">new</a>'
+    )
+    seen: list[str] = []
+
+    async def _capture(_session: object, url: str, **_kw: object) -> str:
+        seen.append(url)
+        raise ExtractorError("short-circuit before parse")
+
+    with (
+        patch.object(cociter_mod, "fetch_text", new=AsyncMock(return_value=html)),
+        patch.object(cociter_mod, "fetch_pdf_text", new=_capture),
+    ):
+        await cociter_mod.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "cociter_dynamic",
+            "wallonia",
+            date(2026, 7, 1),
+        )
+    assert seen and seen[-1].endswith("-fr-1.pdf")

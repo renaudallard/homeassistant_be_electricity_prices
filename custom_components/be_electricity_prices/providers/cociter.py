@@ -86,11 +86,18 @@ _FR_MONTHS = FR_MONTHS
 
 
 # Cociter's current monthly publication patterns. The 4-digit group is YYMM.
+#
+# The optional ``-<n>`` before ``.pdf`` is WordPress's dedup suffix: it appends
+# ``-1``, ``-2``, ... when a file is re-uploaded under a name that already
+# exists, and Cociter's site does exactly that (July 2026's dynamic card is
+# published as ``RCDyn_SM3_Coop-2607-fr-1.pdf``). Requiring ``-fr.pdf`` to
+# follow the month immediately dropped that month from the archive silently:
+# the year-to-date walk fell back to the current card for July instead.
 _VAR_RE = re.compile(
-    r'href="(https?://[^"]*RCVar_YMR_Coop-(\d{4})-fr\.pdf)"', re.IGNORECASE
+    r'href="(https?://[^"]*RCVar_YMR_Coop-(\d{4})-fr(?:-\d+)?\.pdf)"', re.IGNORECASE
 )
 _DYN_RE = re.compile(
-    r'href="(https?://[^"]*RCDyn_SM3_Coop-(\d{4})-fr\.pdf)"', re.IGNORECASE
+    r'href="(https?://[^"]*RCDyn_SM3_Coop-(\d{4})-fr(?:-\d+)?\.pdf)"', re.IGNORECASE
 )
 
 # Cociter prints one row per Wallonian DSO it serves; the labels are the
@@ -154,13 +161,19 @@ async def fetch_for_month(
         html = await fetch_text(session, _INDEX_URL)
     except ExtractorError:
         return None
-    pdf_url: str | None = None
-    for url, yymm in pattern.findall(html):
-        if yymm == target_yymm:
-            pdf_url = url
-            break
-    if pdf_url is None:
+    # A month can appear twice when Cociter re-uploads its card: WordPress
+    # keeps the original and adds "-1" to the newcomer, so the suffixed URL is
+    # the NEWER file. Take the highest suffix rather than the first match, or
+    # a re-upload correcting the original would be ignored.
+    candidates = [url for url, yymm in pattern.findall(html) if yymm == target_yymm]
+    if not candidates:
         return None
+
+    def _dedup_rank(url: str) -> int:
+        m = re.search(r"-(\d+)\.pdf$", url)
+        return int(m.group(1)) if m else 0
+
+    pdf_url = max(candidates, key=_dedup_rank)
     try:
         text = await fetch_pdf_text(session, pdf_url)
         snap = parse_snapshot(text, contract_id, pdf_url, _yymm_to_label(target_yymm))
@@ -210,7 +223,7 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
         return set()
     out: set[str] = set()
     for family in re.findall(
-        r"(RC[A-Za-z]+_[A-Za-z0-9]+)_Coop-\d+-(?:fr|nl)\.pdf", html
+        r"(RC[A-Za-z]+_[A-Za-z0-9]+)_Coop-\d+-(?:fr|nl)(?:-\d+)?\.pdf", html
     ):
         out.add(_DISCOVER_FAMILIES.get(family, family))
     return out

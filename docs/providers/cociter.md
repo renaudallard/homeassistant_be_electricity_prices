@@ -34,6 +34,8 @@ filenames on a single listing page (`cociter.py:28-38`, `cociter.py:80`):
 https://www.cociter.be/electricite/cartes-tarifaires/
     RCVar_YMR_Coop-YYMM-fr.pdf   variable contract (BELIX-indexed)
     RCDyn_SM3_Coop-YYMM-fr.pdf   dynamic contract (quarter-hourly BELPEX)
+
+The filename patterns accept an optional `-<n>` before `.pdf`: Cociter's site is WordPress, which appends `-1`, `-2`, ... when a file is re-uploaded under an existing name, and July 2026's dynamic card is published as `RCDyn_SM3_Coop-2607-fr-1.pdf`. Requiring `-fr.pdf` to follow the month immediately dropped that month from the archive silently, so the year-to-date walk billed July at the current card. When both the original and a re-upload are listed the **suffixed** URL is the newer file, so `fetch_for_month` takes the highest suffix rather than the first match.
 ```
 
 `YYMM` is a 2-digit year followed by a 2-digit month, e.g. `2604` for April
