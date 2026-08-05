@@ -90,6 +90,7 @@ from .coordinator import (
     _cohort_energy_leg,
     _contract_start_month,
     _historical_injection_rate,
+    _capacity_monthly_eur,
     _hourly_consumption_sensors,
     _hourly_injection_sensors,
     _injection_hourly_on_cohort,
@@ -686,18 +687,13 @@ async def _backfill_cost_sensor(
         # meets the live _ytd_capacity proration (days_in_ytd /
         # days_in_full_month) at the seam rather than trailing it.
         if billed_peak_kw:
-            overlay = snap_h.dsos.get(dso)
-            rate = overlay.capacity_eur_per_kw_year if overlay is not None else None
-            if rate is not None:
+            monthly = _capacity_monthly_eur(snap_h.dsos.get(dso), billed_peak_kw)
+            if monthly:
                 days_in_full_month = calendar.monthrange(
                     month_first.year, month_first.month
                 )[1]
                 running_fees += (
-                    billed_peak_kw
-                    * rate
-                    / 12.0
-                    / days_in_full_month
-                    / hours_per_local_date[local.date()]
+                    monthly / days_in_full_month / hours_per_local_date[local.date()]
                 )
 
         # Compensation is Walloon-only (see coordinator._compute_prosumer):

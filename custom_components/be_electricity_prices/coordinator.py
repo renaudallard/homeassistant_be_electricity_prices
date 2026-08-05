@@ -2718,6 +2718,23 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         await self._store.async_save(payload)
 
 
+def _capacity_monthly_eur(overlay: DsoOverlay | None, peak_kw: float) -> float:
+    """One month of the Flemish capacity charge, or 0.0 when it isn't billed.
+
+    The annual EUR/kW rate over twelve, with the two "nothing to bill" cases
+    folded in: no overlay for this DSO, or a card that prints no capacity row.
+
+    Shared because three paths bill this and must agree -- the live tick, the
+    year-to-date walk and the backfill's per-hour accrual. ``_annual_static_fees``
+    is shared across the same three for the same reason; capacity is the fee
+    that was left out of it, so it drifted here instead. Deliberately region
+    -agnostic: each caller keeps its own Flanders gate.
+    """
+    if overlay is None or overlay.capacity_eur_per_kw_year is None:
+        return 0.0
+    return peak_kw * overlay.capacity_eur_per_kw_year / 12.0
+
+
 def _compute_capacity(
     snapshot: SupplierSnapshot, entry: ConfigEntry, peak_kw: float
 ) -> float:
@@ -2727,10 +2744,7 @@ def _compute_capacity(
     dso = entry.data.get(CONF_DSO)
     if dso is None:
         return 0.0
-    overlay = snapshot.dsos.get(dso)
-    if overlay is None or overlay.capacity_eur_per_kw_year is None:
-        return 0.0
-    return peak_kw * overlay.capacity_eur_per_kw_year / 12.0
+    return _capacity_monthly_eur(snapshot.dsos.get(dso), peak_kw)
 
 
 def _brussels_osp_fee(overlay: DsoOverlay | None, entry: ConfigEntry) -> float:
@@ -3824,10 +3838,7 @@ async def _ytd_capacity(
     async for snap_m, _, days_in_full_month, days_in_ytd in _walk_ytd_months(
         hass, session, extractor, snapshot, entry, today, contract=contract
     ):
-        overlay = snap_m.dsos.get(dso)
-        if overlay is None or overlay.capacity_eur_per_kw_year is None:
-            continue
-        monthly = billed_peak_kw * overlay.capacity_eur_per_kw_year / 12.0
+        monthly = _capacity_monthly_eur(snap_m.dsos.get(dso), billed_peak_kw)
         total += monthly * (days_in_ytd / days_in_full_month)
     return total
 

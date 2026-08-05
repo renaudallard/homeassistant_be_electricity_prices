@@ -232,6 +232,39 @@ def test_prosumer_no_regime_set_returns_zero() -> None:
     assert cost == 0.0
 
 
+def test_the_three_capacity_paths_share_one_formula() -> None:
+    """peak x rate / 12 was written out in the live tick, the year-to-date walk
+    and the backfill's per-hour accrual, each with its own spelling of the two
+    "nothing to bill" guards.
+
+    _annual_static_fees is shared across those same three paths precisely so a
+    fee component cannot drift between them; capacity was the one left out.
+    Pin that the shared helper answers identically for every shape, including
+    a card with no capacity row and a DSO missing from the snapshot.
+    """
+    from custom_components.be_electricity_prices.coordinator import (
+        _capacity_monthly_eur,
+    )
+
+    def overlay(rate: float | None) -> DsoOverlay:
+        return DsoOverlay(
+            distribution_single=0.1, transport=0.01, capacity_eur_per_kw_year=rate
+        )
+
+    assert _capacity_monthly_eur(overlay(43.5), 6.4) == pytest.approx(23.2)
+    assert _capacity_monthly_eur(overlay(43.5), 2.5) == pytest.approx(9.0625)
+    # Nothing to bill: no card row, a zero rate, no overlay at all, no peak.
+    assert _capacity_monthly_eur(overlay(None), 6.4) == 0.0
+    assert _capacity_monthly_eur(overlay(0.0), 6.4) == 0.0
+    assert _capacity_monthly_eur(None, 6.4) == 0.0
+    assert _capacity_monthly_eur(overlay(43.5), 0.0) == 0.0
+
+    # The live wrapper keeps its own defensive read of a corrupt entry that
+    # lost CONF_DSO -- that guard is the wrapper's, not the helper's.
+    snap = make_snapshot(dsos={"ores": overlay(43.5)})
+    assert _compute_capacity(snap, SimpleNamespace(data={}), 6.4) == 0.0  # type: ignore[arg-type]
+
+
 def test_capacity_returns_zero_when_no_capacity_rate() -> None:
     # Wallonia DSOs have no capacity tariff.
     cost = _compute_capacity(_snapshot(prosumer=85.0, capacity=None), _entry(), 5.0)
