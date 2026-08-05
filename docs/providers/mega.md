@@ -53,11 +53,13 @@ when called without one (`mega.py:440`).
 
 ## Contracts
 
-Ten residential electricity products are registered, plus eight professional
+Eleven residential electricity products are registered, plus nine professional
 editions (`_CONTRACTS`, `mega.py:172`; the test pins
-`len(contract_ids) == 18` at `test_mega.py:66`). The residential count dropped
-from twelve as Off-peak Fixed was retired in July 2026 (`mega.py:47`) and Zen
-Fixed in August.
+`len(contract_ids) == 20` at `test_mega.py:70`). Zen Fixed's residential edition
+was retired in August 2026 (its professional one survives). Off-peak Fixed was
+retired in July 2026 and **came back for the August 2026 card**, in all three
+regions and with a B2B edition it had not had before -- the catalog check
+flagged it the day it reappeared (issue #57).
 
 | id | label | TariffKind | Regions | Notes |
 | --- | --- | --- | --- | --- |
@@ -79,9 +81,12 @@ Notes on the enumeration:
   meter, both Wallonia-specific. The test `test_offpeak_impact_contract_is_wallonia_only`
   (`test_mega.py:455`) enforces this. Every other product declares the default
   `_MEGA_ALL_REGIONS` (`mega.py:142`).
-- Off-peak Fixed was discontinued (July 2026): the listing no longer advertises it
-  and its CDN PDFs are gone. `discover()` re-surfaces it if Mega revives it
-  (`mega.py:176`).
+- Off-peak Fixed was discontinued in July 2026 and revived for the August 2026
+  card. This is exactly what `discover()` exists for: the daily catalog diff
+  flagged the returned `data-product-element` and the product went back into the
+  registry. It parses on the existing fixed path with no parser change -- it is
+  an ordinary bi-hourly fixed card (Wallonia August 2026: single 0,1932, peak
+  0,2350, off-peak 0,1610, fee 74,20 EUR/yr).
 - The Tarif Social variant is deliberately omitted, same reasoning as Engie and
   Luminus: it is a regulated CREG tariff, auto-assigned, with no DSO breakdown
   (`mega.py:52`).
@@ -126,8 +131,9 @@ Consequences of having no listing:
   surface in the daily catalog diff. The residential listing remains the only
   discovery signal.
 
-Online Flex and the whole Off-peak family have no B2B card. Zen Fixed does, even
-though Mega retired the residential one in August 2026.
+Online Flex, Off-peak Flex and Off-peak Impact have no B2B card. Off-peak Fixed
+gained one when it returned in August 2026 (`Offpeak-Bi01<MM>-Fix`), and Zen
+Fixed has one even though Mega retired the residential edition that month.
 
 Card differences, all handled in `parse_snapshot` on the contract's
 `professional` flag:
@@ -506,8 +512,10 @@ The land mines a future maintainer must know, drawn from the module comments:
 - **Brussels folds two flat annual euros** (metering fee + Sibelga <=13kVA term) into
   `data_management_per_year`; the >13kVA term is intentionally dropped
   (`mega.py:1033`).
-- **Off-peak Fixed retired (July 2026);** `discover()` re-surfaces it if revived
-  (`mega.py:176`).
+- **Off-peak Fixed retired (July 2026), revived (August 2026)** with a B2B
+  edition it previously lacked. `discover()` surfaced the return the same day;
+  a product Mega pulls is dropped from the registry rather than left to 404, and
+  re-added when the catalog check says it is back.
 - **Mandatory-line policy:** the yearly fee, federal excise, Wallonia raccordement,
   regional renewables, and the (non-Brussels, non-dynamic) PV forfait all raise on a
   miss rather than silently defaulting to 0, so a layout drift fails loudly instead

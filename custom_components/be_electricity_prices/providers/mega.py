@@ -186,9 +186,13 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef("mega_online_flex", "Mega Online Flex", "variable", "Online Flex"),
     _ContractDef("mega_cosy_fixed", "Mega Cosy Fixed", "fixed", "Cosy Fixed"),
     _ContractDef("mega_cosy_flex", "Mega Cosy Flex", "variable", "Cosy Flex"),
-    # Mega discontinued "Off-peak Fixed" (July 2026): the listing no longer
-    # advertises it and its CDN PDFs are gone. Only "Off-peak Flex" and
-    # "Off-peak Impact" remain. discover() re-surfaces it if Mega revives it.
+    # Mega pulled "Off-peak Fixed" in July 2026 and brought it back for the
+    # August 2026 card, in all three regions and with a B2B edition, which is
+    # the catalog check doing exactly what it exists for. The card parses on
+    # the existing fixed path with no parser change.
+    _ContractDef(
+        "mega_offpeak_fixed", "Mega Off-peak Fixed", "fixed", "Off-peak Fixed"
+    ),
     _ContractDef(
         "mega_offpeak_flex", "Mega Off-peak Flex", "variable", "Off-peak Flex"
     ),
@@ -203,9 +207,19 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef("mega_cap", "Mega Cap", "variable", "Mega Cap"),
     # The professional editions. Mega publishes these to the same CDN but
     # never links them from the public listing, so they are addressed by
-    # building the filename. Online Flex and the whole Off-peak family
-    # have no B2B card; Zen Fixed does, even though Mega retired the
-    # residential one in August 2026.
+    # building the filename. Online Flex, Off-peak Flex and Off-peak Impact
+    # have no B2B card; Off-peak Fixed gained one when it returned in August
+    # 2026, and Zen Fixed has one even though Mega retired the residential
+    # edition that month.
+    _ContractDef(
+        "mega_pro_offpeak_fixed",
+        "Mega Off-peak Fixed (pro)",
+        "fixed",
+        "Off-peak Fixed",
+        segment="B2B",
+        file_family="Offpeak-Bi",
+        file_variant="-Fix",
+    ),
     _ContractDef(
         "mega_pro_smart_fixed",
         "Mega Smart Fixed (pro)",

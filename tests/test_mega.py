@@ -62,8 +62,12 @@ def test_mega_is_registered() -> None:
     # Zen Fixed was discontinued in August 2026 (listing block dropped in all
     # three regions; Wallonia resolves to the CDN's HTML stub).
     assert "mega_zen_fixed" not in contract_ids
-    # Ten residential products, plus the eight professional editions.
-    assert len(contract_ids) == 18
+    # Off-peak Fixed was pulled in July 2026 and came back for the August card,
+    # with a B2B edition it did not have before.
+    assert "mega_offpeak_fixed" in contract_ids
+    assert "mega_pro_offpeak_fixed" in contract_ids
+    # Eleven residential products, plus the nine professional editions.
+    assert len(contract_ids) == 20
 
 
 def test_listing_url_finder_picks_electricity_for_region() -> None:
@@ -764,3 +768,52 @@ def test_pro_variable_cohort_coefficients_are_not_vat_baked() -> None:
     # professional read does not.
     assert res_factor == pytest.approx(pro_factor * 1.06)
     assert res_base == pytest.approx(pro_base * 1.06)
+
+
+def test_returned_offpeak_fixed_parses_in_every_region() -> None:
+    """Mega pulled Off-peak Fixed in July 2026 and republished it for August,
+    in all three regions. It parses on the existing fixed path: the card is an
+    ordinary bi-hourly fixed card, so re-adding it needed no parser change."""
+    snap = parse_snapshot(
+        "mega_offpeak_fixed", fixture_text("mega_offpeak_fixed_w.pdf"), "wallonia"
+    )
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(0.1932)
+    assert snap.energy.peak == pytest.approx(0.2350)
+    assert snap.energy.offpeak == pytest.approx(0.1610)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(74.2)
+    # The August flat excise, not the retired tier table.
+    assert snap.taxes.federal_excise == pytest.approx(0.04876)
+    assert len(snap.dsos) == 5
+
+
+def test_returned_offpeak_fixed_has_a_professional_edition() -> None:
+    """The residential product came back WITH a B2B card, which it did not
+    have before July. It prices ex-VAT with the degressive excise schedule and
+    carries the Flemish energy fund a business connection pays."""
+    snap = parse_snapshot(
+        "mega_pro_offpeak_fixed",
+        fixture_text("mega_pro_offpeak_fixed_v.pdf"),
+        "flanders",
+    )
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.taxes.vat_rate == pytest.approx(0.21)
+    assert snap.taxes.federal_excise_bands is not None
+    assert snap.energy.yearly_fixed_fee == pytest.approx(70.0)
+    assert snap.taxes.energy_fund_eur_per_month == pytest.approx(10.07)
+
+
+def test_returned_offpeak_fixed_builds_its_b2b_url() -> None:
+    """The B2B filename grammar for the returned product:
+    Offpeak-Bi + 01 + MM + -Fix."""
+    from datetime import date
+
+    from custom_components.be_electricity_prices.providers.mega import (
+        _CONTRACTS_BY_ID,
+        _pro_pdf_url,
+    )
+
+    url = _pro_pdf_url(
+        _CONTRACTS_BY_ID["mega_pro_offpeak_fixed"], "VL", date(2026, 8, 1)
+    )
+    assert url.endswith("Mega-FR-EL-B2B-VL-082026-Offpeak-Bi0108-Fix.pdf")
