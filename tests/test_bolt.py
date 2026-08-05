@@ -28,13 +28,14 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
+from custom_components.be_electricity_prices.pricing import compute_breakdown
 from tests import fixture_text
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
@@ -102,7 +103,7 @@ def test_injection_accepts_negative_second_column() -> None:
     # is billed, but the second is a required anchor token, so the parser
     # must tolerate its minus sign instead of returning None.
     text = "Injection\nPrix mensuel 3,40 -0,43 Compteur\n"
-    inj = bolt_mod._extract_injection(text, "fixed")
+    inj = bolt_mod._extract_injection(text, "fixed", "wallonia")
     assert inj is not None
     assert inj.current == pytest.approx(0.034)
     assert inj.factor is None
@@ -294,7 +295,7 @@ def test_dynamic_injection_selected_by_factor_not_position() -> None:
         "Injection\n"
         "Injection nuit Belpex * 0,94 - 11,33\n"
     )
-    inj = bolt_mod._extract_injection(text, "dynamic")
+    inj = bolt_mod._extract_injection(text, "dynamic", "wallonia")
     assert inj is not None
     assert inj.current is None
     assert inj.factor == pytest.approx(0.94)
@@ -468,6 +469,53 @@ def test_pre_redesign_archive_card_still_parses() -> None:
     # The federal levies of that month, read off the inline three-column row.
     assert snap.taxes.federal_excise == pytest.approx(0.050329)
     assert snap.taxes.energy_contribution == pytest.approx(0.0020417)
+
+
+def test_pre_redesign_archive_card_carries_its_overlays_too() -> None:
+    """Making the old layout's ENERGY block parse left its overlays behind.
+
+    The card prints all three, just differently, and each miss was silent:
+    ``SIBELGA`` in caps (the DSO regex only matched ``Sibelga``, so the dso
+    map came back EMPTY and a Brussels year-to-date skipped every archived
+    month outright -- static_breakdown raises KeyError on a missing DSO and
+    the walk reads that as "no rate to apply", billing Q1 at zero); the
+    connection fee behind parenthesised footnote markers ``(*)(***)`` rather
+    than bare digits, so Wallonia billed it at zero; and the feed-in
+    indicative as a three-column FL/WAL/BX row instead of ``Prix mensuel``,
+    so the credit vanished for those months.
+    """
+    text = fixture_text("bolt_fix_jan_legacy.pdf", layout=True)
+
+    # "Injection (c€/kWh) 5,87 6,69 3,78", per region.
+    for region, injection in (
+        ("flanders", 0.0587),
+        ("wallonia", 0.0669),
+        ("brussels", 0.0378),
+    ):
+        snap = parse_snapshot("bolt_fix", text, region, "test://bolt-202601")
+        assert snap.injection is not None, region
+        assert snap.injection.current == pytest.approx(injection), region
+
+    # "Redevance de raccordement (c€/kWh) (*)(***) - 0,075 -": Wallonia only.
+    assert parse_snapshot(
+        "bolt_fix", text, "wallonia", "test://"
+    ).taxes.region_connection_fee == pytest.approx(0.00075)
+    assert parse_snapshot(
+        "bolt_fix", text, "flanders", "test://"
+    ).taxes.region_connection_fee == pytest.approx(0.0)
+
+    # "SIBELGA 9,96 9,96 7,53 7,53 2,27 14,73 -": the month must be priceable.
+    brussels = parse_snapshot("bolt_fix", text, "brussels", "test://")
+    assert "sibelga" in brussels.dsos
+    assert (
+        compute_breakdown(
+            brussels,
+            "sibelga",
+            "brussels",
+            datetime(2026, 1, 15, 12, 0, tzinfo=UTC),
+        )
+        is not None
+    )
 
 
 def test_footnote_marker_is_not_read_as_the_flanders_tax_value() -> None:

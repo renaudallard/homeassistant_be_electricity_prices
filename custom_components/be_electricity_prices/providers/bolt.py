@@ -386,7 +386,7 @@ def parse_snapshot(
 
     professional = contract.professional
     energy = _extract_energy(text, contract.kind, professional=professional)
-    injection = _extract_injection(text, contract.kind)
+    injection = _extract_injection(text, contract.kind, region)
     if professional and injection is not None:
         injection = replace(injection, vat_applies=True)
     publication_label = _extract_publication_month(text)
@@ -680,7 +680,9 @@ def _extract_publication_month(text: str) -> str:
     return match.group(1) if match else ""
 
 
-def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
+def _extract_injection(
+    text: str, kind: TariffKind, region: str
+) -> InjectionRates | None:
     if kind == "dynamic":
         # Dynamic injection is spot-indexed: the same Belpex formula table
         # prints an injection row whose factor is < 1 (Bolt redistributes a
@@ -713,10 +715,26 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     # minus too, so a month that ever prints a negative feed-in indicative
     # is captured instead of failing the match and dropping the credit.
     m = re.search(r"Injection\b.*?Prix mensuel\s+(-?[\d.,]+)\s+-?[\d.,]+", text, re.S)
-    if not m:
+    if m:
+        current = to_float(m.group(1)) / 100.0
+        return InjectionRates(current=current, factor=None, base=None, formula=None)
+    # A pre-April-2026 archive card has no "Prix mensuel" row. It prints the
+    # indicative as a three-column FL/WAL/BX row like the tax block instead:
+    # "Injection (c€/kWh) 5,87 6,69 3,78". Missing it dropped the feed-in
+    # credit entirely for every archived month a year-to-date walk crosses.
+    legacy = re.search(
+        r"Injection\s*\(c€/kWh\)\s*(-?[\d.,]+)\s+(-?[\d.,]+)\s+(-?[\d.,]+)",
+        text,
+    )
+    if not legacy:
         return None
-    current = to_float(m.group(1)) / 100.0
-    return InjectionRates(current=current, factor=None, base=None, formula=None)
+    index = {REGION_FLANDERS: 1, REGION_WALLONIA: 2, REGION_BRUSSELS: 3}[region]
+    token = legacy.group(index).strip()
+    if token == "-" or not token:
+        return None
+    return InjectionRates(
+        current=to_float(token) / 100.0, factor=None, base=None, formula=None
+    )
 
 
 # ---- taxes --------------------------------------------------------------------
@@ -759,16 +777,19 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
         raise ExtractorError("Bolt: 'Droit d'accise spécial' row not found")
     if contribution_match is None:
         raise ExtractorError("Bolt: 'Contribution sur l'énergie' row not found")
-    # Connection fee row prints footnote refs ahead of the values:
-    # "Redevance de raccordement (c€/kWh) 6 7 - 0,075 -". Allow up to
-    # three integer footnote markers ahead of the values; the three
-    # trailing tokens are FL/WAL/BX (some are "-" when not
-    # applicable). Capping the eater at {0,3} stops a future card with
-    # an integer-only Flanders value from being mistaken for a
-    # footnote and silently shifting the columns. The whole row is
-    # Wallonia-only on real Bolt cards, so a regex miss is permitted.
+    # Connection fee row prints footnote refs ahead of the values, as bare
+    # integers on a current card and as parenthesised stars on an archived
+    # pre-redesign one:
+    #   now: "Redevance de raccordement (c€/kWh) 6 7 - 0,075 -"
+    #   old: "Redevance de raccordement (c€/kWh) (*)(***) - 0,075 -"
+    # Allow either form ahead of the values; the three trailing tokens are
+    # FL/WAL/BX (some are "-" when not applicable). Capping the eater stops a
+    # future card with an integer-only Flanders value from being mistaken for
+    # a footnote and silently shifting the columns. Matching bare integers
+    # only made every archived month bill Wallonia's connection fee at zero.
     connection_match = re.search(
-        r"Redevance de raccordement[^\n]*?\(c€/kWh\)\s*(?:\d+\s+){0,3}"
+        r"Redevance de raccordement[^\n]*?\(c€/kWh\)\s*"
+        r"(?:(?:\(\*+\)|\d+)\s*){0,4}"
         r"(-|[\d.,]+)\s+(-|[\d.,]+)\s+(-|[\d.,]+)",
         text,
     )
@@ -1014,11 +1035,18 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     """Sibelga row: ``Sibelga 9,96 9,96 7,53 7,53 2,27 14,73 -``.
 
     Layout: mono | jour | nuit | excl_nuit | transport | terme_fixe | prosumer (-)
+
+    Case-insensitive: the pre-April-2026 archive cards print ``SIBELGA``.
+    Matching only the current spelling returned an EMPTY dso map for those
+    months, and a Brussels entry's year-to-date then skipped every archived
+    month outright (``static_breakdown`` raises ``KeyError`` on a missing DSO
+    and the walk treats that as "no rate to apply"), billing Q1 at zero.
     """
     match = re.search(
         r"Sibelga\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
         r"([\d.,]+)\s+([\d.,]+)",
         text,
+        re.IGNORECASE,
     )
     if not match:
         return {}
