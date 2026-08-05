@@ -493,8 +493,13 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
             r"Redevance\s+raccordement\s+Wallonie[^0-9]*([\d.,]+)",
             text,
         )
-        if fee:
-            region_connection_fee = to_float(fee.group(1)) / 100.0
+        if fee is None:
+            # Mandatory Walloon levy: every sibling extractor raises here
+            # rather than return 0, because a per-kWh charge zeroed on a
+            # label drift under-bills every Walloon entry silently and the
+            # coordinator would rather keep the last good snapshot.
+            raise ExtractorError("OCTA+: Wallonia connection fee row not found")
+        region_connection_fee = to_float(fee.group(1)) / 100.0
     return federal_excise, energy_contribution, region_connection_fee
 
 

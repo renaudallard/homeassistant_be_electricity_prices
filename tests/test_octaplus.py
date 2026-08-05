@@ -350,3 +350,14 @@ def test_brussels_region_rejected() -> None:
             await EXTRACTORS["octaplus"].fetch(None, "octaplus_fixed", "brussels")  # type: ignore[arg-type]
 
     asyncio.run(_run())
+
+
+def test_missing_wallonia_connection_fee_fails_loud() -> None:
+    """A mandatory per-kWh Walloon levy zeroed on a label drift under-bills
+    every Walloon entry silently. Every sibling extractor raises here; OCTA+
+    returned 0 and said nothing."""
+    text = _text("octaplus_fixed_w.pdf").replace(
+        "Redevance raccordement Wallonie", "XXX"
+    )
+    with pytest.raises(ExtractorError, match="connection fee"):
+        parse_snapshot("octaplus_fixed", text, "wallonia")
