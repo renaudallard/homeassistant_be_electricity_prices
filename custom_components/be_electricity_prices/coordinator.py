@@ -365,23 +365,37 @@ def evict_shared_caches(
     held = locks.get(key)
     if held is not None and not held.locked():
         locks.pop(key, None)
-    monthly = _monthly_snapshots(hass)
     monthly_locks: dict[tuple[str, str, str, str], asyncio.Lock] = bucket.setdefault(
         _MONTHLY_LOCKS_KEY, {}
     )
+    for k in _drop_monthly_rows(hass, key, extractor_id):
+        held_m = monthly_locks.get(k)
+        if held_m is not None and not held_m.locked():
+            monthly_locks.pop(k, None)
+
+
+def _drop_monthly_rows(
+    hass: HomeAssistant, key: tuple[str, str, str], extractor_id: str
+) -> list[tuple[str, str, str, str]]:
+    """Drop every per-month archive row pinned to one supplier tuple.
+
+    Returns the keys removed so a caller can clean up alongside them. The
+    rows have no TTL, so whoever wants a re-fetch has to say so: on unload
+    that is eviction, on the refresh service it is the user asking for the
+    current card again.
+    """
+    monthly = _monthly_snapshots(hass)
+    monthly_failed = _monthly_failed_fetches(hass)
     _, contract, region = key
     stale = [
         k
         for k in monthly
         if k[0] == extractor_id and k[1] == contract and k[2] == region
     ]
-    monthly_failed = _monthly_failed_fetches(hass)
     for k in stale:
         monthly.pop(k, None)
         monthly_failed.pop(k, None)
-        held_m = monthly_locks.get(k)
-        if held_m is not None and not held_m.locked():
-            monthly_locks.pop(k, None)
+    return stale
 
 
 def _shared_lock(hass: HomeAssistant, key: tuple[str, str, str]) -> asyncio.Lock:
@@ -1739,6 +1753,15 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # coordinator tick short-circuits inside _SHARED_FAILURE_TTL
         # and the service appears to do nothing.
         _shared_failed_fetches(self.hass).pop(key, None)
+        # And the per-month archive rows. The year-to-date walk runs Jan 1
+        # through today INCLUSIVE, so the CURRENT delivery month is cached
+        # there too, with no TTL: a supplier that re-issues this month's card
+        # (Eneco reissues a corrected volume under the same month) would go on
+        # being billed from the first card fetched for the life of the HA
+        # process, and this service, which exists precisely to pick up a
+        # corrected card, could not clear it.
+        for month_key in _drop_monthly_rows(self.hass, key, key[0]):
+            _bump_tuple_generation(self.hass, month_key)
         await self.async_request_refresh()
 
     async def reset_monthly_peak(self) -> None:

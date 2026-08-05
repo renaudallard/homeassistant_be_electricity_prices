@@ -548,6 +548,43 @@ async def test_force_refresh_evicts_shared_cache_for_other_coordinator(
         assert fetch_calls == 2
 
 
+async def test_force_refresh_drops_the_per_month_archive_rows(
+    hass: HomeAssistant,
+) -> None:
+    """The refresh service must clear the per-month archive cache too.
+
+    The year-to-date walk runs Jan 1 through today INCLUSIVE, so the CURRENT
+    delivery month is cached there with no TTL. A supplier that re-issues
+    this month's card under the same month (Eneco publishes corrected
+    volumes) would otherwise keep being billed from the first card fetched
+    for the life of the HA process, and this service, whose whole purpose is
+    to pick up a corrected card, could not clear it.
+    """
+    from custom_components.be_electricity_prices.coordinator import (
+        _monthly_failed_fetches,
+        _monthly_snapshots,
+    )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+
+    key = coord._shared_key()
+    mine = (key[0], key[1], key[2], "2026-08")
+    other = ("someone_else", key[1], key[2], "2026-08")
+    _monthly_snapshots(hass)[mine] = _fake_snapshot()
+    _monthly_snapshots(hass)[other] = _fake_snapshot()
+    _monthly_failed_fetches(hass)[mine] = 1.0
+
+    await coord.async_force_refresh()
+
+    assert mine not in _monthly_snapshots(hass)
+    assert mine not in _monthly_failed_fetches(hass)
+    # Another supplier's rows are none of this entry's business.
+    assert other in _monthly_snapshots(hass)
+
+
 async def test_force_refresh_not_defeated_by_sibling_cache(
     hass: HomeAssistant,
 ) -> None:
