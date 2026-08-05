@@ -315,7 +315,7 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
 | `backfill_range` (`backfill.py:810`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py:929`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
+| `backfill_if_missing` (`backfill.py:965`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py:41`). Backfill is reached either automatically
@@ -420,6 +420,16 @@ cost. Two rules enforce this:
   `emit_from` (`backfill.py:731`), so a mid-year `start` still carries the correct
   year-to-date sum instead of restarting from zero and clashing with the existing
   head of the series.
+- A window ending on or before Jan 1 of the *current* year rebuilds the price
+  sensors only. The two rules above keep one request inside one year, but a
+  finished past year's series would then sit immediately before the current
+  year's in the same statistic id, and the join is exactly the drop the
+  invariant forbids. Setting `last_reset` on the imported boundary row does not
+  help: it was measured, and a row carrying the new year's `last_reset` still
+  reported `change = -1197`. So the cost leg is skipped and the service response
+  carries a `skipped` note saying why (`backfill.py:874`). Representing a past
+  year would mean abandoning the per-year restart and importing a
+  lifetime-cumulative sum instead, which is a different design.
 
 **The `sum` chain has to be handed over to the live compile.** `current_year_cost`
 is `state_class: TOTAL`, so HA's own sensor platform compiles statistics under the

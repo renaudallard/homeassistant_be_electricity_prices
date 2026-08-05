@@ -549,7 +549,7 @@ or to redo a narrower window:
 | --- | --- | --- |
 | `entry_id` | first loaded | Optional config entry to target. |
 | `start` | Jan 1 00:00 local | First hour to backfill. The price sensors are written from this hour. `current_year_cost` resets each Jan 1, so it is backfilled only for the **end year**, accumulated from that Jan 1 — a mid-year `start` still carries the correct year-to-date total, and a multi-year range backfills only the current year's running cost (avoiding a spurious negative jump at the year boundary). |
-| `end` | current hour | First hour NOT to backfill (exclusive); the in-progress hour is left to the live coordinator. |
+| `end` | current hour | First hour NOT to backfill (exclusive); the in-progress hour is left to the live coordinator. Set it on or before 1 January of the current year and only the price sensors are rebuilt: a past year's cost series would sit immediately before the current year's, and the recorder ignores `last_reset` on imported statistics, so the join would show roughly minus one annual bill on the Energy dashboard. The response then carries a `skipped` note saying so. |
 | `clear` | `false` | Delete the target series first. Use after a tariff change so old rows don't mislead. |
 
 Re-runs without `clear` are idempotent (rows are upserted by

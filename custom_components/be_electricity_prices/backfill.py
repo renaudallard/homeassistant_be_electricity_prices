@@ -871,6 +871,34 @@ async def backfill_range(
             "window starting on or before 1 January, or leave clear off (a "
             "re-import already overwrites the requested hours)."
         )
+    # A window that ends on or before 1 January of the CURRENT year rebuilds a
+    # past year's cost, and that year's series would sit immediately before the
+    # current year's in the same statistic id. The recorder renders change as
+    # (sum - prev_sum) and ignores last_reset on imported rows even when it is
+    # set (measured: a boundary row carrying the new year's last_reset still
+    # reported change = -1197), so the join would paint roughly minus one
+    # annual bill onto the Energy dashboard's Cost card at 1 January.
+    #
+    # There is no representation that avoids it while the cost sum restarts at
+    # each 1 January, so skip the cost leg rather than corrupt the card. The
+    # price series carry no sum, cross no boundary, and are still rebuilt over
+    # the whole requested window, which is most of what a past-year request is
+    # for. Report the skip: silently writing zero cost rows here is the bug
+    # this window used to have.
+    this_year_anchor_utc = _floor_to_hour_utc(
+        dt_util.now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    )
+    skip_cost = end_utc <= this_year_anchor_utc
+    if skip_cost:
+        _LOGGER.warning(
+            "backfill for %s covers %s..%s, which ends on or before 1 January of "
+            "the current year: rebuilding the cost sensor there would paint a "
+            "large negative cost onto the Energy dashboard at the year boundary, "
+            "so only the price sensors were rebuilt",
+            entry.entry_id,
+            start_utc.isoformat(),
+            end_utc.isoformat(),
+        )
     # Fetch spots over the union of the price window and the cost window
     # so the dynamic price rows AND the cost sensor's pre-start
     # accumulation both have spots (a no-op for non-dynamic suppliers).
@@ -894,7 +922,7 @@ async def backfill_range(
         # (given the guard above rejects a later start) means start == anchor.
         # Skipping the wipe is safe: async_import_statistics upserts on
         # (statistic_id, start), so the re-imported year still lands.
-        if start_utc == cost_anchor_utc:
+        if start_utc == cost_anchor_utc and not skip_cost:
             keys.append(_COST_SENSOR_KEY)
         if entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION:
             keys.append(_INJECTION_PRICE_SENSOR_KEY)
@@ -906,11 +934,12 @@ async def backfill_range(
             await _clear_all(hass, ids)
 
     counts = await _backfill_price_sensors(hass, entry, coordinator, hours, spots)
-    counts.update(
-        await _backfill_cost_sensor(
-            hass, entry, coordinator, cost_hours, spots, emit_from=cost_emit_from
+    if not skip_cost:
+        counts.update(
+            await _backfill_cost_sensor(
+                hass, entry, coordinator, cost_hours, spots, emit_from=cost_emit_from
+            )
         )
-    )
     total = sum(counts.values())
     _LOGGER.info(
         "backfill wrote %d statistic rows for %s over %s..%s",
@@ -919,11 +948,18 @@ async def backfill_range(
         start_utc.isoformat(),
         end_utc.isoformat(),
     )
-    return {
+    result: dict[str, Any] = {
         "rows_written": total,
         "sensors": counts,
         "range": [start_utc.isoformat(), end_utc.isoformat()],
     }
+    if skip_cost:
+        result["skipped"] = (
+            "cost: a window ending on or before 1 January of the current year "
+            "would paint a large negative cost at the year boundary, because "
+            "the recorder ignores last_reset on imported statistics"
+        )
+    return result
 
 
 async def backfill_if_missing(

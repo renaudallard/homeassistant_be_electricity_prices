@@ -61,7 +61,11 @@ backfill_statistics:
     further back than the automatic Jan 1 anchor. Re-runs are safe:
     rows are upserted by (statistic_id, hour). Pass clear=true to
     delete the target series first when the underlying tariff
-    changed.
+    changed. A window ending on or before 1 January of the current
+    year rebuilds the price sensors only: a past year's cost series
+    would sit immediately before the current year's and paint a large
+    negative cost onto the Energy dashboard at the boundary, because
+    the recorder ignores last_reset on imported statistics.
   fields:
     entry_id:
       name: Entry ID
@@ -86,7 +90,9 @@ backfill_statistics:
       description: >-
         First hour NOT to backfill (exclusive). Default = current
         hour, so the in-progress hour the live coordinator is about
-        to write itself stays untouched.
+        to write itself stays untouched. Set this on or before 1
+        January of the current year and only the price sensors are
+        rebuilt (see the description above).
       example: "2026-05-01T00:00:00+02:00"
       selector:
         datetime:

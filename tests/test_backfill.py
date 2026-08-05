@@ -402,20 +402,29 @@ async def test_cost_backfill_midyear_start_anchors_sum_at_jan1(
     assert all(states[i] < states[i + 1] for i in range(len(states) - 1))
 
 
-async def test_cost_backfill_covers_a_whole_year_requested_exclusively(
-    hass: HomeAssistant,
+async def test_a_year_crossing_window_says_it_skipped_the_cost_sensor(
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """services.yaml documents `end` as the first hour NOT to backfill, so a
-    whole year is start = 1 Jan YYYY, end = 1 Jan YYYY+1.
+    whole year is start = 1 Jan YYYY, end = 1 Jan YYYY+1. `end` is clamped to
+    now, so such a window is always a PAST year.
 
-    Anchoring the cost window on that exclusive end took the year off the
-    NEXT year, landing on end_utc itself: the cost window came out empty and
-    the service reported success having written a full year of price rows and
-    zero cost rows.
+    Two bugs met here. Anchoring the cost window on the exclusive end took the
+    year off the NEXT year and landed on end_utc itself, so the cost window
+    came out empty and the service reported success having written a full year
+    of price rows and zero cost rows. Anchoring on the last hour actually
+    backfilled names the right year -- but that year's cost series would then
+    sit immediately before the current year's under one statistic id, and the
+    recorder ignores last_reset on imported rows, so the join paints roughly
+    minus one annual bill onto the Energy dashboard.
+
+    So the cost leg is skipped for these windows. What the original bug was
+    really about survives as the requirement: the skip must not be silent.
     """
+    freezer.move_to("2026-08-05 12:00:00+02:00")
     entry = _entry()
     entry.add_to_hass(hass)
-    ids = _register_sensors(hass, entry, ["current_year_cost"])
+    ids = _register_sensors(hass, entry, ["current_price", "current_year_cost"])
     entry.runtime_data = await _make_coordinator(entry)
 
     captured: list[tuple[str, list[Any]]] = []
@@ -440,12 +449,45 @@ async def test_cost_backfill_covers_a_whole_year_requested_exclusively(
             return_value=instance,
         ),
     ):
-        await bf.backfill_range(hass, entry, start, end)
+        result = await bf.backfill_range(hass, entry, start, end)
 
     cost_rows = next(
         (rows for sid, rows in captured if sid == ids["current_year_cost"]), []
     )
-    assert cost_rows, "the cost sensor got no rows for a year-crossing window"
+    assert not cost_rows, "a past year's cost series must not be imported"
+    assert any(sid == ids["current_price"] for sid, _ in captured), (
+        "the price sensors are unaffected by the year boundary and must still "
+        "be rebuilt"
+    )
+    assert "skipped" in result and "cost" in result["skipped"], (
+        "zero cost rows without a word is exactly the original bug"
+    )
+
+    # The guard is for finished years only. A current-year window still
+    # rebuilds the cost sensor, including one that reaches back into last
+    # year: its cost leg is anchored on this year's 1 January and crosses
+    # nothing.
+    for begin in (
+        datetime(2026, 1, 1, tzinfo=BRUSSELS),
+        datetime(2025, 12, 31, tzinfo=BRUSSELS),
+    ):
+        captured.clear()
+        with (
+            patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+            patch(
+                "homeassistant.components.recorder.statistics.async_import_statistics",
+                new=_fake_import,
+            ),
+            patch(
+                "homeassistant.components.recorder.get_instance",
+                return_value=instance,
+            ),
+        ):
+            result = await bf.backfill_range(
+                hass, entry, begin, datetime(2026, 3, 1, tzinfo=BRUSSELS)
+            )
+        assert any(sid == ids["current_year_cost"] for sid, _ in captured), begin
+        assert "skipped" not in result, begin
 
 
 async def test_backfill_range_rejects_clear_with_midyear_window(
