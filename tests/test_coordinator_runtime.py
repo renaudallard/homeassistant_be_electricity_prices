@@ -575,7 +575,7 @@ async def test_force_refresh_drops_the_per_month_archive_rows(
     other = ("someone_else", key[1], key[2], "2026-08")
     _monthly_snapshots(hass)[mine] = _fake_snapshot()
     _monthly_snapshots(hass)[other] = _fake_snapshot()
-    _monthly_failed_fetches(hass)[mine] = 1.0
+    _monthly_failed_fetches(hass)[mine] = datetime(2026, 8, 1, tzinfo=UTC)
 
     await coord.async_force_refresh()
 
