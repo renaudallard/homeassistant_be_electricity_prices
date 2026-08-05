@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -404,7 +405,77 @@ async def test_reupload_wins_over_the_superseded_card() -> None:
             "wallonia",
             date(2026, 7, 1),
         )
-    assert seen and seen[-1].endswith("-fr-1.pdf")
+    # The re-upload is tried FIRST. It is not necessarily the one used: the
+    # stub raises, and an edition that does not parse now falls through to the
+    # one it displaced (see the test below), so assert the order, not the last.
+    assert seen and seen[0].endswith("-fr-1.pdf")
+
+
+async def test_an_unparseable_re_upload_falls_back_to_the_edition_it_displaced() -> (
+    None
+):
+    """A re-upload is not always an improvement.
+
+    July 2026's dynamic card was republished with the index renamed from
+    "QUARTER HOURLY BELPEX" to "15 MIN BELPEX", the meter labels dropped and
+    the injection prose moved below its own formula. Taking only the newest
+    edition lost that month from the archive walk, and the walk billed July at
+    the CURRENT card's overlays. The original still parses and is still served
+    -- Cociter just stopped linking it -- so it is derived from the same "-N"
+    convention and tried once every LISTED edition has failed.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.be_electricity_prices.providers import cociter as cociter_mod
+
+    html = '<a href="https://x/RCDyn_SM3_Coop-2607-fr-1.pdf">jul</a>'
+    fetched: list[str] = []
+
+    async def _fetch(_session: object, url: str, **_kw: object) -> str:
+        fetched.append(url)
+        return "text-of-" + url.rsplit("/", 1)[1]
+
+    def _parse(text: str, *_a: object, **_kw: object) -> Any:
+        # Only the displaced original parses.
+        if text.endswith("-fr-1.pdf"):
+            raise ExtractorError("could not parse Cociter dynamic formula")
+        return SimpleNamespace(supplier="cociter", contract="cociter_dynamic")
+
+    with (
+        patch.object(cociter_mod, "fetch_text", new=AsyncMock(return_value=html)),
+        patch.object(cociter_mod, "fetch_pdf_text", new=_fetch),
+        patch.object(cociter_mod, "parse_snapshot", new=_parse),
+        patch.object(cociter_mod, "archive_validity_check", new=lambda s, *a, **k: s),
+    ):
+        snap = await cociter_mod.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "cociter_dynamic",
+            "wallonia",
+            date(2026, 7, 1),
+        )
+    assert snap is not None, "the month must not be lost"
+    assert [u.rsplit("/", 1)[1] for u in fetched] == [
+        "RCDyn_SM3_Coop-2607-fr-1.pdf",
+        "RCDyn_SM3_Coop-2607-fr.pdf",
+    ]
+
+    # A healthy month costs exactly one fetch: there is no suffix to strip, so
+    # nothing extra is derived.
+    fetched.clear()
+    html = '<a href="https://x/RCDyn_SM3_Coop-2606-fr.pdf">jun</a>'
+    with (
+        patch.object(cociter_mod, "fetch_text", new=AsyncMock(return_value=html)),
+        patch.object(cociter_mod, "fetch_pdf_text", new=_fetch),
+        patch.object(cociter_mod, "parse_snapshot", new=_parse),
+        patch.object(cociter_mod, "archive_validity_check", new=lambda s, *a, **k: s),
+    ):
+        await cociter_mod.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "cociter_dynamic",
+            "wallonia",
+            date(2026, 6, 1),
+        )
+    assert len(fetched) == 1
 
 
 async def test_the_live_card_and_the_archived_one_resolve_the_same_file() -> None:

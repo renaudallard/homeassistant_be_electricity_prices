@@ -168,13 +168,36 @@ async def fetch_for_month(
     candidates = [url for url, yymm in pattern.findall(html) if yymm == target_yymm]
     if not candidates:
         return None
-    pdf_url = max(candidates, key=_dedup_rank)
-    try:
-        text = await fetch_pdf_text(session, pdf_url)
-        snap = parse_snapshot(text, contract_id, pdf_url, _yymm_to_label(target_yymm))
-    except ExtractorError:
-        return None
-    return archive_validity_check(snap, text, year_month, month_names=_FR_MONTHS)
+    # Newest first, but fall through to an older edition when it does not
+    # parse. A re-upload is not always an improvement: July 2026's dynamic
+    # card was republished with the index renamed from "QUARTER HOURLY BELPEX"
+    # to "15 MIN BELPEX", the meter labels dropped and the injection prose
+    # moved BELOW its own formula. Taking only the newest lost that month from
+    # the archive walk outright, and the walk then billed July at the current
+    # card's overlays -- while the original, which parses and agrees with the
+    # August card, was still served at its unsuffixed URL.
+    # Last resort, after every LISTED edition has failed to parse: the
+    # original the re-upload displaced. WordPress keeps it at the unsuffixed
+    # URL and Cociter keeps serving it, but drops the link, so no ordering
+    # over the listing can reach it. Derived from the same "-N" convention
+    # _dedup_rank reads, and only ever fetched once the listed ones are out.
+    ordered = sorted(candidates, key=_dedup_rank, reverse=True)
+    ordered += [
+        stripped
+        for url in ordered
+        if (stripped := re.sub(r"-\d+(\.pdf)$", r"\1", url)) != url
+        and stripped not in candidates
+    ]
+    for pdf_url in ordered:
+        try:
+            text = await fetch_pdf_text(session, pdf_url)
+            snap = parse_snapshot(
+                text, contract_id, pdf_url, _yymm_to_label(target_yymm)
+            )
+        except ExtractorError:
+            continue
+        return archive_validity_check(snap, text, year_month, month_names=_FR_MONTHS)
+    return None
 
 
 async def probe(
@@ -299,9 +322,12 @@ def _extract_injection(text: str) -> InjectionRates:
         # 2026 card "Compteur pouvant effectuer des mesures par quart
         # d'heure". Match any Compteur label up to the formula's opening
         # bracket rather than enumerating them, so the next rewording
-        # doesn't take the injection block offline again.
+        # doesn't take the injection block offline again. The label stays
+        # REQUIRED though: made optional, this pattern matches the
+        # CONSUMPTION formula on a card that prints its injection prose after
+        # its injection formula, and billed a 1,03 x +3 feed-in.
         rf"(?:Tout\s+)?[Cc]ompteur[^\n(]*"
-        rf"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
+        rf"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*|15\s*MIN\s*)?BELPEX\s*"
         rf"([{SIGN_CHARS}])\s*([\d,]+)\)",
         text,
         re.S,
@@ -311,7 +337,7 @@ def _extract_injection(text: str) -> InjectionRates:
         # fall back to the first formula on any Compteur line.
         formula = re.search(
             rf"(?:Tout\s+)?[Cc]ompteur[^\n(]*"
-            rf"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*)?BELPEX\s*"
+            rf"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*|15\s*MIN\s*)?BELPEX\s*"
             rf"([{SIGN_CHARS}])\s*([\d,]+)\)",
             text,
         )
@@ -392,8 +418,15 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
     # capture N so the conversion follows whatever VAT the PDF actually applies.
     # Accept the full SIGN_CHARS set between factor and base so a future card
     # with a Unicode minus or a negative base doesn't dead-end the parser.
+    # The index name and the "Compteur SMR3" prefix are both variable. The
+    # July 2026 re-upload prints "(0,103 x 15 MIN BELPEX + 3) + 6% TVA" with
+    # no prefix, where every other card says "Compteur SMR3 (0,103 x QUARTER
+    # HOURL Y BELPEX + 3)". Same index, same coefficients, renamed: pinning
+    # the old spelling lost that month from the archive walk entirely, and the
+    # walk then billed July at the CURRENT card's overlays.
     formula = re.search(
-        rf"Compteur SMR3\s*\(([\d,]+)\s*x\s*QUARTER\s*HOURL\s*Y\s*BELPEX\s*"
+        rf"(?:Compteur SMR3\s*)?\(([\d,]+)\s*x\s*"
+        rf"(?:QUARTER\s*HOURL\s*Y|15\s*MIN)\s*BELPEX\s*"
         rf"([{SIGN_CHARS}])\s*([\d,]+)\)\s*\+\s*(\d+)\s*%\s*TVA",
         text,
     )
