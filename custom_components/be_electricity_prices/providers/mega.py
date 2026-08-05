@@ -945,7 +945,21 @@ def _realized_rates(text: str) -> dict[str, float]:
         # simulation table, crediting +2,42 c€/kWh against a billed -0,32 --
         # the wrong sign, 82 EUR out over 3000 kWh injected. The soft-hyphen
         # join above has already run, so a minus left here is a real one.
-        m = re.search(rf"(?:^|[;:,])\s*{label}\s*:\s*(-?\d+(?:[.,]\d+)?)", body, re.I)
+        # The value needs a right-hand boundary as well. Without one the
+        # pattern takes the first well-formed PREFIX of a malformed token, and
+        # the June 2026 Flanders cards collide two runs in the text layer:
+        # "Compteur mono- horaire : 16.76.38". That yielded mono = 16,76 --
+        # which is the Jour value, so mono == peak while offpeak was 14,20, a
+        # combination the card cannot print. Refusing the token drops the key
+        # and the caller falls back to the headline table, which is honest;
+        # taking a prefix that belongs to another row is not. A trailing
+        # sentence period still has to pass ("Injection : 2.32."), so the
+        # boundary rejects only a further DIGIT or a decimal group.
+        m = re.search(
+            rf"(?:^|[;:,])\s*{label}\s*:\s*(-?\d+(?:[.,]\d+)?)(?!\d|[.,]\d)",
+            body,
+            re.I,
+        )
         if m is not None:
             out[key] = to_float(m.group(1)) / 100.0
     return out

@@ -759,6 +759,34 @@ def test_a_negative_realized_injection_keeps_its_sign() -> None:
     assert rates["exclusive_night"] == pytest.approx(0.1186)
 
 
+def test_a_collided_value_token_is_refused_not_truncated() -> None:
+    """The June 2026 Flanders cards collide two runs in the text layer.
+
+    "Compteur mono- horaire : 16.76.38" is not a number. With no right-hand
+    boundary the pattern took the well-formed prefix 16.76 -- which is the
+    Jour value on that same card -- and billed it as mono, giving
+    mono == peak while offpeak was 14,20, a combination the card cannot
+    print. Refusing the token drops the key and the caller falls back to the
+    headline table for that field.
+    """
+    from custom_components.be_electricity_prices.providers.mega import _realized_rates
+
+    body = (
+        "Les derniers prix constates et utilises pour le calcul de votre "
+        "facture de regularisation pour le mois de mai sont les suivants "
+        "(c€/kWh) : Compteur mono- horaire : 16.76.38; Jour : 16.76; "
+        "Nuit : 14.2; Exclusif nuit : 14.2 ; Injection : 1.4. Pour plus"
+    )
+    rates = _realized_rates(body)
+    assert "mono" not in rates
+    # Every well-formed value on the same line still parses, including the
+    # one closing the sentence with a period.
+    assert rates["peak"] == pytest.approx(0.1676)
+    assert rates["offpeak"] == pytest.approx(0.142)
+    assert rates["exclusive_night"] == pytest.approx(0.142)
+    assert rates["injection"] == pytest.approx(0.014)
+
+
 def test_fixed_and_dynamic_cards_keep_reading_their_own_tables() -> None:
     """Only variable and Impact cards carry the simulation disclaimer. A
     fixed card's table IS the billed rate, so it must be untouched."""
