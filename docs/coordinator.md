@@ -92,6 +92,19 @@ _update_body (coordinator.py:1074)
 
 ### 2.1 Snapshot freshness: probe vs stored key vs TTL
 
+**A probe match restamps the age clock on every path.** `_maybe_refresh_snapshot`
+tries the shared-cache shortcut before the self-fresh branch, and in steady state
+the shared row is this coordinator's OWN row (its cold fetch wrote it), so the
+shortcut is what actually runs each tick. Both paths now pass the probe key into
+the adopt/restamp step: when freshness was decided by a PROBE rather than the TTL,
+`fetched_at` moves to now on both the entry and the shared row. Only the self-fresh
+branch used to do this, so an adopted snapshot kept the cold-fetch stamp for as long
+as the supplier published the same card — monthly, in practice — and after seven days
+every probe-based supplier raised a false `snapshot_stale` Repairs card with
+`snapshot_age_hours` reading days while the card had been verified minutes earlier.
+A TTL-based match must NOT restamp, or the TTL clock resets every tick and a
+probe-less supplier is never re-fetched.
+
 `_maybe_refresh_snapshot` (`coordinator.py:1647`) decides whether to re-fetch the full tariff card. It never fetches unconditionally; a full PDF/HTML fetch happens only when a cheap check says the published card changed.
 
 The cheap check is the extractor **probe** (`SnapshotProbe`, `providers/base.py:517`): a `HEAD` or small listing `GET` that returns a freshness key. Same key across calls means the snapshot is still valid; a changed key means re-fetch. The probe is optional; `None` means the supplier has no reliable probe path (Engie/Luminus API endpoints, DATS 24 single PDF) and the time-based TTL takes over.

@@ -548,6 +548,56 @@ async def test_force_refresh_evicts_shared_cache_for_other_coordinator(
         assert fetch_calls == 2
 
 
+async def test_probe_match_through_the_shared_cache_refreshes_fetched_at(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A probe match must restamp the age clock even when the snapshot came
+    back through the shared-cache shortcut.
+
+    That shortcut is tried BEFORE the self-fresh branch, and in steady state
+    the shared row is this coordinator's own row, so it is the path that
+    actually runs every tick. Leaving the stamp alone pinned it at the
+    cold-fetch instant for as long as the supplier published the same card:
+    cards are monthly, so after seven days every probe-based supplier raised a
+    false "snapshot stale" repair while the card had been verified minutes
+    earlier.
+    """
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _probe(*_a: object, **_k: object) -> str:
+        return "same-card"
+
+    from dataclasses import replace as _replace
+
+    extractor = _replace(
+        make_stub_extractor(fetch=AsyncMock(return_value=_fake_snapshot())),
+        probe=_probe,
+    )
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        freezer.move_to("2026-08-01 09:00:00+00:00")
+        await coord._maybe_refresh_snapshot()  # cold fetch, seeds the shared row
+        first = coord._snapshot_fetched_at
+
+        freezer.move_to("2026-08-10 09:00:00+00:00")
+        await coord._maybe_refresh_snapshot()  # probe matches, adopts shared
+
+    assert coord._snapshot_fetched_at is not None
+    assert first is not None
+    assert coord._snapshot_fetched_at > first, "age clock never moved"
+    assert coord._snapshot_age_hours() < 1.0
+    # The shared row is restamped too, so a sibling sees the same age.
+    from custom_components.be_electricity_prices.coordinator import _shared_snapshots
+
+    assert _shared_snapshots(hass)[coord._shared_key()].fetched_at == (
+        coord._snapshot_fetched_at
+    )
+
+
 async def test_force_refresh_drops_the_per_month_archive_rows(
     hass: HomeAssistant,
 ) -> None:

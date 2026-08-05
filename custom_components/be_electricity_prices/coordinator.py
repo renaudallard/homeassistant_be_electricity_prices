@@ -1817,10 +1817,39 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self._snapshot_raw = snap
         self._snapshot = None if snap is None else _resolve_snapshot(self.entry, snap)
 
-    def _adopt_shared(self, shared: _SharedSnapshot) -> None:
-        """Take a fresh shared snapshot as our own."""
+    def _adopt_shared(
+        self,
+        shared: _SharedSnapshot,
+        probe_key: str | None = None,
+        now: datetime | None = None,
+    ) -> None:
+        """Take a fresh shared snapshot as our own.
+
+        When the freshness decision came from a PROBE key rather than the
+        TTL, restamp ``fetched_at`` to now, exactly as the self-fresh branch
+        below does and for the same reason: the probe just verified the
+        supplier has not published a new card, so the snapshot is "checked
+        just now", not "fetched whenever the cold fetch happened".
+
+        This path is the one that runs in steady state. The shared row is
+        normally this coordinator's OWN row, written by its cold fetch, and
+        the shortcut is tried before the self-fresh branch, so leaving the
+        stamp alone pinned it at the cold-fetch instant for as long as the
+        supplier kept publishing the same card. Cards are monthly, so after
+        seven days every probe-based supplier raised a false "snapshot
+        stale" Repairs card, with `snapshot_age_hours` reading days while the
+        card had been verified minutes earlier. Restamp the shared row too so
+        siblings agree.
+
+        A TTL-based match must NOT restamp: that would reset the TTL clock on
+        every tick and a probe-less supplier would never be re-fetched.
+        """
         self._set_snapshot(shared.snapshot)
-        self._snapshot_fetched_at = shared.fetched_at
+        if probe_key is not None and now is not None:
+            shared.fetched_at = now
+            self._snapshot_fetched_at = now
+        else:
+            self._snapshot_fetched_at = shared.fetched_at
         self._snapshot_probe_key = shared.probe_key
         self._last_error = ""
         self._force_refresh = False
@@ -1872,7 +1901,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # fresh snapshot we can adopt directly.
         shared = cache.get(key)
         if shared is not None and self._shared_is_fresh(shared, probe_key, now, ttl):
-            self._adopt_shared(shared)
+            self._adopt_shared(shared, probe_key, now)
             return
 
         # Our own snapshot may already be valid against this probe.
@@ -1941,10 +1970,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         gen_at_entry = _tuple_generation(self.hass, key)
         async with _shared_lock(self.hass, key):
             shared = cache.get(key)
+            locked_now = dt_util.utcnow()
             if shared is not None and self._shared_is_fresh(
-                shared, probe_key, dt_util.utcnow(), ttl
+                shared, probe_key, locked_now, ttl
             ):
-                self._adopt_shared(shared)
+                self._adopt_shared(shared, probe_key, locked_now)
                 return
             # Re-check the negative cache under the lock so the second
             # waiter doesn't repeat what the first just failed; same
