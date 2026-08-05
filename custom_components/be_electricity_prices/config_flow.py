@@ -896,20 +896,29 @@ _METER_SENSOR_KEYS: tuple[str, ...] = (
 def _incomplete_register_pairs(data: dict[str, Any]) -> dict[str, str]:
     """Report a day/night register pair that has only one half filled.
 
-    The coordinator needs both halves or neither: ``_resolve_daily_kwh`` and
-    ``_hourly_consumption_sensors`` both give up on a half-wired pair, and
-    ``current_year_cost`` then collapses to the fees-only floor without an
-    error, a repair or any log line the user would look at. The form is the
+    A half-wired pair with nothing else covering that side is fatal:
+    ``_resolve_daily_kwh`` and ``_hourly_consumption_sensors`` both give up on
+    it, and ``current_year_cost`` then collapses to the fees-only floor without
+    an error, a repair or any log line the user would look at. The form is the
     one place the mistake is visible, so refuse it there.
+
+    A totals sensor rescues it, though, and the coordinator says so
+    (``coordinator.py:3570``): the odd register half is ignored and the side
+    bills off the total. Refusing that combination too would lock an entry
+    that has always billed correctly out of its own options flow over a field
+    that never affected its bill, so this mirrors the coordinator's rule
+    exactly rather than tightening it.
 
     Keyed on the NIGHT field of each side, which is where the message renders.
     """
     errors: dict[str, str] = {}
-    for day_key, night_key in (
-        (CONF_DAY_CONSUMPTION_KWH, CONF_NIGHT_CONSUMPTION_KWH),
-        (CONF_DAY_INJECTION_KWH, CONF_NIGHT_INJECTION_KWH),
+    for day_key, night_key, total_key in (
+        (CONF_DAY_CONSUMPTION_KWH, CONF_NIGHT_CONSUMPTION_KWH, CONF_CONSUMPTION_KWH),
+        (CONF_DAY_INJECTION_KWH, CONF_NIGHT_INJECTION_KWH, CONF_INJECTION_KWH),
     ):
-        if bool(data.get(day_key)) != bool(data.get(night_key)):
+        if bool(data.get(day_key)) != bool(data.get(night_key)) and not data.get(
+            total_key
+        ):
             errors[night_key] = "register_pair_incomplete"
     return errors
 

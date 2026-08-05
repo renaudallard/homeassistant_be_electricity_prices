@@ -185,7 +185,7 @@
       "cannot_connect": "Could not reach ENTSO-E to verify the token. Check your network and try again.",
       "start_date_in_future": "The contract start date cannot be in the future.",
       "end_before_start": "The contract end date must be after the start date.",
-      "register_pair_incomplete": "Fill in both the day and the night register, or neither. With only one of the pair the year-to-date cost cannot split your consumption and falls back to fees only.",
+      "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Pick a different supplier or region."
     }
   },
@@ -201,7 +201,7 @@
       "cannot_connect": "[%key:component::be_electricity_prices::config::error::cannot_connect%]",
       "start_date_in_future": "[%key:component::be_electricity_prices::config::error::start_date_in_future%]",
       "end_before_start": "[%key:component::be_electricity_prices::config::error::end_before_start%]",
-      "register_pair_incomplete": "Fill in both the day and the night register, or neither. With only one of the pair the year-to-date cost cannot split your consumption and falls back to fees only.",
+      "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Pick a different supplier or region."
     },
     "step": {

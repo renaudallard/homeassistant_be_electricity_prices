@@ -549,3 +549,52 @@ def test_half_wired_register_pair_is_rejected() -> None:
         )
         == 2
     )
+
+
+def test_the_meters_form_and_the_coordinator_share_one_wiring_rule() -> None:
+    """The form must refuse exactly what the coordinator cannot bill.
+
+    A totals sensor rescues a half-wired register pair: the odd half is
+    ignored and the side bills off the total. The form used to refuse that
+    anyway, which locked an entry that had always billed correctly out of its
+    own options flow over a field that never affected its bill.
+    """
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.config_flow import (
+        _incomplete_register_pairs,
+    )
+    from custom_components.be_electricity_prices.coordinator import (
+        _hourly_consumption_sensors,
+        _hourly_injection_sensors,
+    )
+
+    cases = [
+        {const.CONF_CONSUMPTION_KWH: "sensor.total"},
+        {
+            const.CONF_DAY_CONSUMPTION_KWH: "sensor.d",
+            const.CONF_NIGHT_CONSUMPTION_KWH: "sensor.n",
+        },
+        {
+            const.CONF_CONSUMPTION_KWH: "sensor.total",
+            const.CONF_DAY_CONSUMPTION_KWH: "sensor.d",
+        },
+        {
+            const.CONF_CONSUMPTION_KWH: "sensor.total",
+            const.CONF_NIGHT_CONSUMPTION_KWH: "sensor.n",
+        },
+        {
+            const.CONF_INJECTION_KWH: "sensor.it",
+            const.CONF_DAY_INJECTION_KWH: "sensor.di",
+        },
+        {const.CONF_DAY_CONSUMPTION_KWH: "sensor.d"},
+        {const.CONF_NIGHT_INJECTION_KWH: "sensor.ni"},
+    ]
+    for data in cases:
+        entry = SimpleNamespace(data=data)
+        billable = bool(
+            _hourly_consumption_sensors(entry)  # type: ignore[arg-type]
+            or _hourly_injection_sensors(entry)  # type: ignore[arg-type]
+        )
+        refused = bool(_incomplete_register_pairs(data))
+        assert refused is not billable, data

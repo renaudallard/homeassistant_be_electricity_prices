@@ -3542,12 +3542,14 @@ async def _resolve_daily_kwh(
 
     A side that has only one half of its register pair (e.g.
     ``CONF_DAY_CONSUMPTION_KWH`` set, ``CONF_NIGHT_CONSUMPTION_KWH``
-    missing) returns ``None`` so the caller falls back to the
-    fees-only floor instead of silently undercounting the missing
-    band.
+    missing) *and no totals sensor* returns ``None`` so the caller falls
+    back to the fees-only floor instead of silently undercounting the
+    missing band. With a totals sensor the odd half is simply ignored and
+    the side bills off the total, which is the rule the meters form
+    enforces too (``config_flow.py:896``).
 
     Returns ``None`` when neither side has any meter inputs at all
-    or when either side has a partial register wiring.
+    or when either side has an uncovered partial register wiring.
     """
     meter = entry.data.get(CONF_METER, METER_MONO)
     region = entry.data.get(CONF_REGION, "")
