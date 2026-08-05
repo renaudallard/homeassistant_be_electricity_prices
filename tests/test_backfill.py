@@ -490,6 +490,66 @@ async def test_a_year_crossing_window_says_it_skipped_the_cost_sensor(
         assert "skipped" not in result, begin
 
 
+async def test_clear_is_only_guarded_when_the_cost_leg_is_in_play(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The clear guard protects the cost series; without one there is nothing
+    to protect.
+
+    A window ending in a finished year leaves the cost series out of both the
+    wipe and the re-import, so refusing it denied the price rebuild the user
+    asked for -- and the message was false for exactly that window: a start in
+    the year BEFORE the one typed as `end` is not "after 1 January of the end
+    year", and the remedy it suggests is already satisfied.
+    """
+    freezer.move_to("2026-08-05 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    _register_sensors(hass, entry, ["current_price", "current_year_cost"])
+    entry.runtime_data = await _make_coordinator(entry)
+
+    cleared: list[list[str]] = []
+
+    async def _spy(_hass: object, sids: list[str]) -> None:
+        cleared.append(list(sids))
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+
+    def _noop_import(_hass: HomeAssistant, _meta: Any, _stats: Any) -> None:
+        return None
+
+    async def _run(start: datetime, end: datetime) -> dict[str, Any]:
+        with (
+            patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+            patch.object(bf, "_clear_all", _spy),
+            patch(
+                "homeassistant.components.recorder.statistics.async_import_statistics",
+                new=_noop_import,
+            ),
+            patch(
+                "homeassistant.components.recorder.get_instance", return_value=instance
+            ),
+        ):
+            return await bf.backfill_range(hass, entry, start, end, clear=True)
+
+    # Second half of a finished year: allowed, prices wiped and re-imported,
+    # the cost series left alone.
+    result = await _run(
+        datetime(2025, 7, 1, tzinfo=BRUSSELS), datetime(2026, 1, 1, tzinfo=BRUSSELS)
+    )
+    assert cleared, "the price series should still be wiped"
+    assert not any("current_year_cost" in sid for sid in cleared[0])
+    assert "skipped" in result
+
+    # A narrow CURRENT-year window still refuses: there the wipe really would
+    # delete cost rows the re-import does not put back.
+    with pytest.raises(ServiceValidationError, match="clear=True"):
+        await _run(
+            datetime(2026, 6, 1, tzinfo=BRUSSELS), datetime(2026, 8, 1, tzinfo=BRUSSELS)
+        )
+
+
 async def test_backfill_range_rejects_clear_with_midyear_window(
     hass: HomeAssistant,
 ) -> None:

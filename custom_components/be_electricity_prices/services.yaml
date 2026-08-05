@@ -104,7 +104,9 @@ backfill_statistics:
         re-import only repopulates the requested range. Use ONLY when
         re-running a full year (default range = Jan 1 to now); a window
         that starts after Jan 1 of the end year is rejected with clear
-        on. For a narrower window, leave this off: the import upserts on
+        on, unless the window ends in a finished year -- the cost series
+        is left out of both the wipe and the re-import there, so there is
+        nothing to protect. For a narrower window, leave this off: the import upserts on
         (statistic_id, hour) so a re-run already overwrites the
         requested hours without touching anything outside the range.
       default: false

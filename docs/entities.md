@@ -409,6 +409,8 @@ is about to write itself stays untouched. Re-runs are safe: rows are upserted on
 `(statistic_id, hour)`. `clear=true` is destructive: it deletes the ENTIRE
 target series (not just the requested range) and then repopulates only the
 requested range, so a window starting after Jan 1 of the end year is rejected
+(unless it ends in a finished year, where the cost series is left out of both the
+wipe and the re-import and there is nothing to protect)
 when `clear` is on. Use it only for a full-year re-run after a tariff card
 changed; for a narrower window leave `clear` off and rely on the upsert.
 

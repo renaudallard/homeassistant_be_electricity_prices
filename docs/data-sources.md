@@ -315,7 +315,7 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
 | `backfill_range` (`backfill.py:810`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py:965`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
+| `backfill_if_missing` (`backfill.py:973`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py:41`). Backfill is reached either automatically

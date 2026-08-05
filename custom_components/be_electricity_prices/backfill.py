@@ -856,21 +856,6 @@ async def backfill_range(
             month=1, day=1, hour=0, minute=0, second=0, microsecond=0
         )
     )
-    if clear and start_utc > cost_anchor_utc:
-        # clear=True wipes the WHOLE series (clear_statistics is
-        # series-scoped), but a sub-year window only repopulates
-        # [start, end]; everything outside it -- including the
-        # Jan 1..start head of the current year -- would be gone for
-        # good. Refuse the narrow-window + clear combination so the
-        # destructive wipe can only run when the re-import covers the
-        # cleared rows (start on or before the year anchor).
-        raise ServiceValidationError(
-            "clear=True deletes the entire statistics series, but this "
-            "window starts after 1 January of the end year, so the cleared "
-            "rows before the start would not be re-imported. Re-run with a "
-            "window starting on or before 1 January, or leave clear off (a "
-            "re-import already overwrites the requested hours)."
-        )
     # A window that ends on or before 1 January of the CURRENT year rebuilds a
     # past year's cost, and that year's series would sit immediately before the
     # current year's in the same statistic id. The recorder renders change as
@@ -898,6 +883,29 @@ async def backfill_range(
             entry.entry_id,
             start_utc.isoformat(),
             end_utc.isoformat(),
+        )
+    if clear and not skip_cost and start_utc > cost_anchor_utc:
+        # clear=True wipes the WHOLE series (clear_statistics is
+        # series-scoped), but a sub-year window only repopulates
+        # [start, end]; everything outside it -- including the
+        # Jan 1..start head of the current year -- would be gone for
+        # good. Refuse the narrow-window + clear combination so the
+        # destructive wipe can only run when the re-import covers the
+        # cleared rows (start on or before the year anchor).
+        #
+        # Only when the cost leg is in play. A window ending in a finished
+        # year leaves the cost series out of both the wipe and the re-import,
+        # so nothing destructive is left to guard: refusing there denied the
+        # price rebuild the user asked for, with a message that was false for
+        # exactly that window (a start in the year BEFORE the one they typed
+        # as `end` is not "after 1 January of the end year", and the remedy it
+        # suggests is already satisfied).
+        raise ServiceValidationError(
+            "clear=True deletes the entire statistics series, but this "
+            "window starts after 1 January of the end year, so the cleared "
+            "rows before the start would not be re-imported. Re-run with a "
+            "window starting on or before 1 January, or leave clear off (a "
+            "re-import already overwrites the requested hours)."
         )
     # Fetch spots over the union of the price window and the cost window
     # so the dynamic price rows AND the cost sensor's pre-start
