@@ -59,7 +59,8 @@ class PriceBreakdown:      # pricing.py:74-81
 | `compute_breakdown(snapshot, dso_key, region, when, spot_eur_per_kwh=None, meter="mono", dso_tariff_mode="bi_horaire")` | `pricing.py:588` | `PriceBreakdown` | Top-level all-in EUR/kWh for one hour. |
 | `energy_eur_per_kwh(energy, when, spot_eur_per_kwh, meter, region, dso_tariff_mode)` | `pricing.py:273` | `float` | Energy component; dispatches on the `EnergyRates` subtype. |
 | `network_eur_per_kwh(dso, when, meter, dso_tariff_mode, region)` | `pricing.py:497` | `float` | Distribution + transport for the hour. |
-| `taxes_eur_per_kwh(taxes, region)` | `pricing.py:576` | `float` | Per-kWh federal + regional levies. |
+| `taxes_eur_per_kwh(taxes, region)` | `pricing.py:593` | `float` | Per-kWh federal + regional levies that VAT applies to. |
+| `taxes_vat_exempt_eur_per_kwh(taxes, region)` | `pricing.py:611` | `float` | Per-kWh levies billed at face value whatever the card's VAT basis (the Walloon connection fee). |
 | `_routed_rate(base, energy, when, meter, region, *, bi_capable, dso_tariff_mode)` | `pricing.py:242` | `float` | Shared Fixed/Variable meter routing. |
 | `tou_slot(when, weekend_rule="weekend_offpeak")` | `pricing.py:195` | `"peak"|"transition"|"offpeak"` | TOU band for a datetime. |
 | `dso_impact_band(when)` | `pricing.py:478` | `"pic"|"medium"|"eco"` | Wallonia Tarif Impact band for a datetime. |
@@ -99,19 +100,26 @@ Note what is deliberately absent from the per-kWh formula:
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:576-585`); `energy_fund_eur_per_month` is defined on the
   `TaxOverlay` (`providers/base.py:470`) but is not touched here.
-- The Wallonia `region_connection_fee` is a per-kWh term and IS included in
-  `taxes_eur_per_kwh` for Wallonia (`pricing.py:579-580`).
+- The Wallonia `region_connection_fee` is a per-kWh term and IS billed, but
+  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:611`), not
+  `taxes_eur_per_kwh`. Engie's Walloon card prints `Redevance raccordement(8)`
+  and footnote (8) reads *"Vous ne payez pas de TVA sur ces couts"* — the same
+  footnote that exempts the Flemish energy fund on its Flanders edition.
+  `_finalize_breakdown` adds it to the taxes component **after** the VAT factor,
+  so it lands at face value. On a VAT-inclusive card (`vat_rate == 0`) the total
+  is identical either way; on a professional Walloon card it was billed at
+  0,0009075 EUR/kWh against the 0,00075 printed, about 9,45 EUR/yr at 60 000 kWh.
 
 ### Regional renewables selection
 
 `taxes_eur_per_kwh` starts from the two always-present federal levies and adds
 exactly one region's renewables surcharge (`pricing.py:576-585`):
 
-| Region | Terms added |
-| --- | --- |
-| Flanders | `flanders_renewables` |
-| Wallonia | `region_connection_fee + wallonia_renewables` |
-| Brussels | `brussels_renewables` |
+| Region | Terms added (VAT-able) | Added VAT-exempt |
+| --- | --- | --- |
+| Flanders | `flanders_renewables` | — |
+| Wallonia | `wallonia_renewables` | `region_connection_fee` |
+| Brussels | `brussels_renewables` | — |
 
 The `TaxOverlay` carries all three renewables columns; an extractor that operates
 in only one or two regions leaves the others at `0.0`

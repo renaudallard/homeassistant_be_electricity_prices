@@ -39,6 +39,7 @@ from custom_components.be_electricity_prices.pricing import (
     is_offpeak,
     network_eur_per_kwh,
     taxes_eur_per_kwh,
+    taxes_vat_exempt_eur_per_kwh,
     tou_slot,
     yearly_fixed_fee_for_meter,
 )
@@ -574,6 +575,15 @@ def test_taxes_brussels_uses_brussels_renewables_only() -> None:
 
 
 def test_taxes_wallonia_includes_connection_and_wallonia_renewables() -> None:
+    """The connection fee is billed, but through the VAT-exempt channel.
+
+    Engie's Walloon card prints ``Redevance raccordement(8)`` and footnote (8)
+    reads "Vous ne payez pas de TVA sur ces couts" -- the same footnote that
+    exempts the Flemish energy fund on its Flanders edition. So it is summed
+    into the taxes component at face value rather than through the VAT
+    factor, which on a professional card charged 0,0009075 EUR/kWh against
+    the 0,00075 printed, about 9,45 EUR/yr at 60 000 kWh.
+    """
     t = TaxOverlay(
         federal_excise=0.05,
         energy_contribution=0.002,
@@ -581,9 +591,34 @@ def test_taxes_wallonia_includes_connection_and_wallonia_renewables() -> None:
         wallonia_renewables=0.0313,
         region_connection_fee=0.00075,
     )
-    assert taxes_eur_per_kwh(t, "wallonia") == pytest.approx(
-        0.05 + 0.002 + 0.0313 + 0.00075
+    assert taxes_eur_per_kwh(t, "wallonia") == pytest.approx(0.05 + 0.002 + 0.0313)
+    assert taxes_vat_exempt_eur_per_kwh(t, "wallonia") == pytest.approx(0.00075)
+    # Together they are the whole Walloon per-kWh levy stack, so a
+    # VAT-inclusive card (vat_rate == 0) prices exactly as before.
+    assert taxes_eur_per_kwh(t, "wallonia") + taxes_vat_exempt_eur_per_kwh(
+        t, "wallonia"
+    ) == pytest.approx(0.05 + 0.002 + 0.0313 + 0.00075)
+
+
+def test_connection_fee_is_not_grossed_on_an_ex_vat_card() -> None:
+    """End to end: the exempt levy lands at face value while the rest of the
+    taxes component is grossed."""
+    from custom_components.be_electricity_prices.pricing import _finalize_breakdown
+
+    bd = _finalize_breakdown(0.10, 0.05, 0.04, 0.21, 0.00075)
+    assert bd.taxes == pytest.approx(0.04 * 1.21 + 0.00075)
+    # The component invariant must survive the extra term.
+    assert bd.energy + bd.network + bd.taxes == pytest.approx(bd.all_in)
+
+
+def test_connection_fee_is_flanders_and_brussels_free() -> None:
+    t = TaxOverlay(
+        federal_excise=0.05,
+        energy_contribution=0.002,
+        region_connection_fee=0.00075,
     )
+    assert taxes_vat_exempt_eur_per_kwh(t, "flanders") == 0.0
+    assert taxes_vat_exempt_eur_per_kwh(t, "brussels") == 0.0
 
 
 def test_taxes_flanders_uses_flanders_renewables_only() -> None:

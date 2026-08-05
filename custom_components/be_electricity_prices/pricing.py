@@ -409,7 +409,11 @@ def _require_overlay(snapshot: SupplierSnapshot, dso_key: str) -> DsoOverlay:
 
 
 def _finalize_breakdown(
-    energy: float, network: float, taxes: float, vat_rate: float
+    energy: float,
+    network: float,
+    taxes: float,
+    vat_rate: float,
+    taxes_exempt: float = 0.0,
 ) -> PriceBreakdown:
     """Gross each component up by VAT, then assemble the breakdown.
 
@@ -418,11 +422,18 @@ def _finalize_breakdown(
     ``vat_rate`` becomes non-zero for a future extractor that parses
     ex-VAT prices; computing ``all_in`` as ``(e + n + t) * vat`` would
     diverge by sub-femto-euro rounding.
+
+    ``taxes_exempt`` carries the per-kWh levies Belgian law does not tax,
+    added to the taxes component AFTER the factor so they land in the price
+    at face value. Today that is the Walloon connection fee: Engie's Walloon
+    card prints ``Redevance raccordement(8)`` and footnote (8) reads "Vous ne
+    payez pas de TVA sur ces couts", the same footnote that exempts the
+    Flemish energy fund on its Flanders edition.
     """
     vat_factor = 1.0 + vat_rate
     energy_v = energy * vat_factor
     network_v = network * vat_factor
-    taxes_v = taxes * vat_factor
+    taxes_v = taxes * vat_factor + taxes_exempt
     return PriceBreakdown(
         energy=energy_v,
         network=network_v,
@@ -468,7 +479,13 @@ def static_breakdown(
         dist = overlay.distribution_single
     network = dist + overlay.transport
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
-    return _finalize_breakdown(energy, network, taxes, snapshot.taxes.vat_rate)
+    return _finalize_breakdown(
+        energy,
+        network,
+        taxes,
+        snapshot.taxes.vat_rate,
+        taxes_vat_exempt_eur_per_kwh(snapshot.taxes, region),
+    )
 
 
 DsoTariffMode = Literal["simple", "bi_horaire", "impact"]
@@ -574,15 +591,33 @@ def network_eur_per_kwh(
 
 
 def taxes_eur_per_kwh(taxes: TaxOverlay, region: str) -> float:
-    """Per-kWh levies for the configured region."""
+    """Per-kWh levies for the configured region that VAT applies to.
+
+    The Walloon connection fee is deliberately absent: it is VAT-exempt and
+    comes back through :func:`taxes_vat_exempt_eur_per_kwh`. Both are summed
+    into the taxes component, so the total is unchanged on a VAT-inclusive
+    card (``vat_rate == 0``) and only differs on an ex-VAT professional one.
+    """
     out = taxes.federal_excise + taxes.energy_contribution
     if region == REGION_WALLONIA:
-        out += taxes.region_connection_fee + taxes.wallonia_renewables
+        out += taxes.wallonia_renewables
     elif region == REGION_FLANDERS:
         out += taxes.flanders_renewables
     elif region == REGION_BRUSSELS:
         out += taxes.brussels_renewables
     return out
+
+
+def taxes_vat_exempt_eur_per_kwh(taxes: TaxOverlay, region: str) -> float:
+    """Per-kWh levies billed at face value, whatever the card's VAT basis.
+
+    Only the Walloon connection fee today. Grossing it charged a professional
+    Walloon site 0,0009075 EUR/kWh against the 0,00075 the card prints, about
+    9,45 EUR/yr at 60 000 kWh.
+    """
+    if region == REGION_WALLONIA:
+        return taxes.region_connection_fee
+    return 0.0
 
 
 def compute_breakdown(
@@ -610,4 +645,10 @@ def compute_breakdown(
     )
     network = network_eur_per_kwh(overlay, when, meter, dso_tariff_mode, region)
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
-    return _finalize_breakdown(energy, network, taxes, snapshot.taxes.vat_rate)
+    return _finalize_breakdown(
+        energy,
+        network,
+        taxes,
+        snapshot.taxes.vat_rate,
+        taxes_vat_exempt_eur_per_kwh(snapshot.taxes, region),
+    )
