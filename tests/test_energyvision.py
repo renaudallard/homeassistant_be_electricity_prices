@@ -260,7 +260,9 @@ def test_missing_fee_is_fatal() -> None:
 
 def test_missing_gsc_wkc_is_fatal() -> None:
     text = _dyn_text().replace("GSC en WKC", "XXX")
-    with pytest.raises(ExtractorError, match="tax block"):
+    # The shared Flemish helper names the row it lost, where this extractor
+    # used to report "tax block" for a missing excise and a missing GSC alike.
+    with pytest.raises(ExtractorError, match="GSC/WKK"):
         parse_snapshot(_DYNAMIC, text, "test://ev")
 
 
@@ -512,5 +514,5 @@ def test_missing_renewables_row_is_still_fatal() -> None:
         _extract_taxes,
     )
 
-    with pytest.raises(ExtractorError, match="tax block"):
+    with pytest.raises(ExtractorError, match="GSC/WKK"):
         _extract_taxes("Bijzondere accijns 4,876 €cent/kWh\n")

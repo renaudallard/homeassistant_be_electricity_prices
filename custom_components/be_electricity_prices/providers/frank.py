@@ -60,6 +60,7 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    flanders_tax_overlay,
     NL_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
@@ -417,34 +418,14 @@ _FUND_RE = re.compile(
 
 
 def _extract_taxes(text: str) -> TaxOverlay:
-    excise = _EXCISE_RE.search(text)
-    if not excise:
-        raise ExtractorError("could not parse Frank Energie tax block")
-    # The federal "bijdrage op de energie" dropped to zero on 2026-08-01.
-    # Frank answered by deleting the row from the card rather than printing
-    # a zero (the August 2026 card has no "Bijdrage op Energie" line at
-    # all), so an absent row now means the levy is abolished, not that the
-    # layout drifted. Default it to zero instead of failing the whole fetch
-    # and taking every Frank contract offline. The excise, GSC and WKK rows
-    # stay mandatory: those are still billed, so a miss there is real drift.
-    contrib = _ENERGY_CONTRIB_RE.search(text)
-    gsc = _GSC_RE.search(text)
-    wkk = _WKK_RE.search(text)
-    if not gsc or not wkk:
-        # Frank is Flanders-only, so GSC + WKK are mandatory renewables
-        # levies on every card; a miss is a layout drift that would
-        # silently under-bill. Fail loud, matching the federal block above.
-        raise ExtractorError("could not parse Frank Energie GSC/WKK levies")
-    fund = _FUND_RE.search(text)
-    # All values on the card are VAT-inclusive (6% BTW).
-    return TaxOverlay(
-        federal_excise=to_float(excise.group(1)) / 100.0,
-        energy_contribution=(to_float(contrib.group(1)) / 100.0 if contrib else 0.0),
-        flanders_renewables=(
-            to_float(gsc.group(1)) / 100.0 + to_float(wkk.group(1)) / 100.0
-        ),
-        energy_fund_eur_per_month=(to_float(fund.group(1)) if fund else 0.0),
-        vat_rate=0.0,
+    """All values on the card are VAT-inclusive (6% BTW)."""
+    return flanders_tax_overlay(
+        text,
+        supplier="Frank Energie",
+        excise=(_EXCISE_RE,),
+        renewables=(_GSC_RE, _WKK_RE),
+        contribution=_ENERGY_CONTRIB_RE,
+        fund=_FUND_RE,
     )
 
 

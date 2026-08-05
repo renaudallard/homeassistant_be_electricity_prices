@@ -33,7 +33,7 @@ import json
 import logging
 import re
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date
 from io import BytesIO
 from pathlib import Path
@@ -43,7 +43,7 @@ import aiohttp
 import pypdf
 from homeassistant.util import dt as dt_util
 
-from .base import ExtractorError, SupplierSnapshot
+from .base import ExtractorError, SupplierSnapshot, TaxOverlay
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -907,3 +907,62 @@ def parse_valid_until(text: str) -> date | None:
             if _accept(cand):
                 candidates.append(cand)
     return max(candidates) if candidates else None
+
+
+def flanders_tax_overlay(
+    text: str,
+    *,
+    supplier: str,
+    excise: Sequence[re.Pattern[str]],
+    renewables: Sequence[re.Pattern[str]],
+    contribution: re.Pattern[str] | None = None,
+    fund: re.Pattern[str] | None = None,
+) -> TaxOverlay:
+    """The tax block of a Flanders-only, VAT-inclusive card.
+
+    Every Flemish card carries the same four rows and the same policy about
+    which of them may be missing. Only the anchors differ, so the callers pass
+    compiled patterns and this holds the policy:
+
+    * ``excise`` -- MANDATORY. Patterns are tried in order and the first match
+      wins, so a card printing both the flat August-2026 row and the tiered
+      one being phased out resolves to the flat rate.
+    * ``renewables`` -- MANDATORY, and ALL of them must match. Summed. Some
+      cards print GSC and WKK separately, others one pre-summed row.
+    * ``contribution`` -- OPTIONAL, absent means 0.0. The federal levy dropped
+      to zero on 2026-08-01 and suppliers answered by deleting the row, so an
+      absent row is the abolished levy, not a layout drift.
+    * ``fund`` -- OPTIONAL, absent means 0.0, and it is EUR/month so it is NOT
+      scaled by 100 like the c€/kWh rows.
+
+    Sharing the policy is the point. It was written out three times and had
+    already drifted: two suppliers defaulted an absent contribution row to
+    zero while the third still raised on it, so that one would have gone
+    offline the moment its card dropped the row like the others' did.
+    """
+    excise_match = next((m for p in excise if (m := p.search(text))), None)
+    if excise_match is None:
+        raise ExtractorError(f"{supplier}: could not parse the tax block")
+    renewables_matches = [p.search(text) for p in renewables]
+    if not renewables or any(m is None for m in renewables_matches):
+        # Flanders-only cards always bill the green-certificate levies; a miss
+        # is a layout drift that would silently under-bill, so fail loud and
+        # let the coordinator keep serving its cached snapshot.
+        raise ExtractorError(f"{supplier}: could not parse the GSC/WKK levies")
+    contribution_match = contribution.search(text) if contribution else None
+    fund_match = fund.search(text) if fund else None
+    return TaxOverlay(
+        federal_excise=to_float(excise_match.group(1)) / 100.0,
+        energy_contribution=(
+            to_float(contribution_match.group(1)) / 100.0 if contribution_match else 0.0
+        ),
+        flanders_renewables=sum(
+            to_float(m.group(1)) / 100.0 for m in renewables_matches if m is not None
+        ),
+        energy_fund_eur_per_month=(
+            to_float(fund_match.group(1)) if fund_match else 0.0
+        ),
+        # These cards print every value VAT-inclusive (the federal excise and
+        # the energy fund are VAT-exempt), so the snapshot needs no gross-up.
+        vat_rate=0.0,
+    )

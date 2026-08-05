@@ -58,6 +58,7 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    flanders_tax_overlay,
     SIGN_CHARS,
     fetch_pdf_text_layout,
     parse_sign,
@@ -247,27 +248,20 @@ def _extract_injection(text: str) -> InjectionRates:
 
 
 def _extract_taxes(text: str) -> TaxOverlay:
-    excise = _EXCISE_RE.search(text)
-    contrib = _CONTRIB_RE.search(text)
-    if not excise or not contrib:
-        raise ExtractorError("could not parse energie.be tax block")
-    gsc = _GSC_RE.search(text)
-    wkk = _WKK_RE.search(text)
-    if not gsc or not wkk:
-        # energie.be dynamic is Flanders-only, so GSC + WKK are mandatory
-        # renewables levies; a miss would silently under-bill.
-        raise ExtractorError("could not parse energie.be GSC/WKK levies")
-    fund = _FUND_RE.search(text)
-    # Every value on the card is VAT-inclusive (the federal excise and the
-    # energy fund are VAT-exempt), so vat_rate stays 0.0, matching Frank.
-    return TaxOverlay(
-        federal_excise=to_float(excise.group(1)) / 100.0,
-        energy_contribution=to_float(contrib.group(1)) / 100.0,
-        flanders_renewables=(
-            to_float(gsc.group(1)) / 100.0 + to_float(wkk.group(1)) / 100.0
-        ),
-        energy_fund_eur_per_month=(to_float(fund.group(1)) if fund else 0.0),
-        vat_rate=0.0,
+    """Every value on the card is VAT-inclusive.
+
+    The contribution row was mandatory here while Frank and EnergyVision had
+    already made it optional for the 2026-08-01 abolition, so energie.be would
+    have gone offline the moment its card dropped the row the way theirs did.
+    The shared helper holds that policy now.
+    """
+    return flanders_tax_overlay(
+        text,
+        supplier="energie.be",
+        excise=(_EXCISE_RE,),
+        renewables=(_GSC_RE, _WKK_RE),
+        contribution=_CONTRIB_RE,
+        fund=_FUND_RE,
     )
 
 

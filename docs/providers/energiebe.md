@@ -29,7 +29,7 @@ All eight Fluvius sub-areas are covered (see the DSO section). The card also car
 professional block; only the residential rows are parsed (see [Residential scoping]).
 
 energie.be publishes its cards as PDFs behind a small JSON document API. The dynamic card
-lives at one stable URL, `_CARD_URL` (`providers/energiebe.py:82`):
+lives at one stable URL, `_CARD_URL` (`providers/energiebe.py:83`):
 
 ```
 https://energie-production-api.azurewebsites.net/api/v1/data/document?key=DynamicTariffs
@@ -55,11 +55,11 @@ config (contract_id) -> fetch(): GET _CARD_URL (302 -> Azure blob, aiohttp follo
 ```
 
 The `publication_label` is a lowercased "month year" string ("juli 2026") reconstructed
-from the residential card header by `_publication_label` (`providers/energiebe.py:199`).
+from the residential card header by `_publication_label` (`providers/energiebe.py:200`).
 
 ## Contracts
 
-One contract is declared in the `EXTRACTOR` (`providers/energiebe.py:306`):
+One contract is declared in the `EXTRACTOR` (`providers/energiebe.py:300`):
 
 | contract id | label | TariffKind | regions | quarter_hourly |
 | --- | --- | --- | --- | --- |
@@ -76,7 +76,7 @@ need to gate it (`base.py:71`).
 
 ### Download (`fetch`)
 
-`fetch` (`providers/energiebe.py:157`) validates the contract id and region, calls
+`fetch` (`providers/energiebe.py:158`) validates the contract id and region, calls
 `fetch_pdf_text_layout(session, _CARD_URL)` to download and layout-extract the PDF (the
 layout extractor keeps column alignment, important for the DSO table), then
 `parse_snapshot`. Validation is by `%PDF` magic bytes in the shared helper
@@ -99,7 +99,7 @@ There is neither a probe nor an archive:
 The `?key=DynamicTariffs` PDF bundles a residential block (pages 1-2) and a professional
 block (pages 3-4). The two blocks share the same energy and injection formula but differ on
 GSC/WKK, the tax rows and the DSO net-tariff table (e.g. residential databeheer 18,92
-EUR/yr vs professional 17,85). `_residential` (`providers/energiebe.py:193`) slices the
+EUR/yr vs professional 17,85). `_residential` (`providers/energiebe.py:194`) slices the
 text at the professional section header `_PROF_MARKER = "dynamisch tarief professioneel"`
 (`providers/energiebe.py:103`) so no professional row can leak into a residential snapshot.
 `test_only_residential_block_is_parsed` (`tests/test_energiebe.py`) pins that the parsed
@@ -111,15 +111,15 @@ professioneel" without "tarief", so it does not trip the slice.
 
 ## Parsing
 
-`parse_snapshot` (`providers/energiebe.py:173`) runs `_residential` first, then assembles
+`parse_snapshot` (`providers/energiebe.py:174`) runs `_residential` first, then assembles
 the `SupplierSnapshot` from four sub-parsers plus the shared `parse_valid_until`.
 
 | field | parser | source |
 | --- | --- | --- |
-| `energy` (`DynamicRates`) | `_extract_energy` | `providers/energiebe.py:204` |
-| `injection` (`InjectionRates`) | `_extract_injection` | `providers/energiebe.py:231` |
-| `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/energiebe.py:249` |
-| `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/energiebe.py:274` |
+| `energy` (`DynamicRates`) | `_extract_energy` | `providers/energiebe.py:205` |
+| `injection` (`InjectionRates`) | `_extract_injection` | `providers/energiebe.py:232` |
+| `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/energiebe.py:250` |
+| `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/energiebe.py:268` |
 | `valid_until` | `parse_valid_until` (shared) | `_pdf.py:794` |
 
 `_NUM = r"([\d]+(?:[.,][\d]+)?)"` accepts both decimal separators; a dot-decimal re-render
@@ -139,7 +139,7 @@ wrong would 10x the energy leg. See the conversion in `_extract_energy`
 
 ## Energy formula
 
-`_extract_energy` (`providers/energiebe.py:204`) parses the formula row with `_ENERGY_RE`
+`_extract_energy` (`providers/energiebe.py:205`) parses the formula row with `_ENERGY_RE`
 (`providers/energiebe.py:124`), anchored on "formule (excl. BTW):" so it binds the energy
 formula and not the injection one that shares the `(factor x Belpex +/- base)` shape:
 
@@ -176,7 +176,7 @@ Injection is the hourly `factor*spot+base` shape (shape (b) in the taxonomy in
 [../pricing-model.md](../pricing-model.md)); on a dynamic card it prices off the live spot
 the energy path already fetches, so `current` stays `None`. `_extract_injection`
 (`providers/energiebe.py:231`) parses the `terugleveringsvergoeding` row with
-`_INJECTION_RE` (`providers/energiebe.py:132`):
+`_INJECTION_RE` (`providers/energiebe.py:133`):
 
 ```
 injectievergoeding ... (<factor_pdf> x Belpex <sign> <base_cents>)
@@ -202,7 +202,7 @@ energie.be publishes no supplier-side prosumer / PV forfait, so
 
 ## Taxes
 
-`_extract_taxes` (`providers/energiebe.py:249`) parses four levy rows and builds a
+`_extract_taxes` (`providers/energiebe.py:250`) parses four levy rows and builds a
 `TaxOverlay`. All card values are VAT-inclusive (the federal excise and the energy fund are
 VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`).
 
@@ -227,8 +227,8 @@ pins GSC 1,17 + WKK 0,39 = 1,56 c€/kWh. All c€/kWh values are divided by 100
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/energiebe.py:274`) covers all eight Fluvius sub-areas via
-`_DSO_ROWS` (`providers/energiebe.py:109`), which maps each card label prefix to the
+`_extract_dsos` (`providers/energiebe.py:268`) covers all eight Fluvius sub-areas via
+`_DSO_ROWS` (`providers/energiebe.py:110`), which maps each card label prefix to the
 canonical DSO key:
 
 | card label | canonical key |

@@ -233,3 +233,46 @@ def test_contract_is_dynamic_and_flanders_only() -> None:
     for c in EXTRACTORS["energiebe"].contracts:
         assert c.kind == "dynamic"
         assert c.regions == frozenset({"flanders"})
+
+
+def test_an_abolished_contribution_row_no_longer_takes_the_supplier_offline() -> None:
+    """The three Flemish tax extractors had drifted on one policy.
+
+    The federal contribution dropped to zero on 2026-08-01 and suppliers
+    answered by deleting the row. Frank and EnergyVision were taught to read an
+    absent row as the abolished levy; energie.be still required it, so it would
+    have raised on every fetch the moment its card followed suit -- taking the
+    entry offline over a levy that is no longer billed. The shared helper holds
+    that policy for all three now.
+
+    The rows that ARE still billed stay mandatory: a miss there is a real
+    layout drift that would silently under-bill.
+    """
+    import re
+
+    from custom_components.be_electricity_prices.providers.base import ExtractorError
+    from custom_components.be_electricity_prices.providers.energiebe import (
+        _extract_taxes,
+    )
+
+    text = _text()
+    # Today's card still prints the row, zeroed by the supplier.
+    assert _extract_taxes(text).energy_contribution == pytest.approx(0.0020420)
+
+    without = re.sub(r"[^\n]*Bijdrage\s+op\s+de\s+Energie[^\n]*\n", "", text)
+    assert without != text
+    taxes = _extract_taxes(without)
+    assert taxes.energy_contribution == 0.0
+    # Everything else on the card is untouched by the missing row.
+    assert taxes.federal_excise == pytest.approx(0.050329)
+    assert taxes.flanders_renewables == pytest.approx(0.0156)
+
+    for pattern in (
+        r"[^\n]*Bijzondere\s+accijns[^\n]*\n",
+        r"[^\n]*\bGSC\b[^\n]*\n",
+        r"[^\n]*\bWKK\b[^\n]*\n",
+    ):
+        broken = re.sub(pattern, "", text)
+        assert broken != text, pattern
+        with pytest.raises(ExtractorError):
+            _extract_taxes(broken)

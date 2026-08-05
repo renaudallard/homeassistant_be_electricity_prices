@@ -81,6 +81,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    flanders_tax_overlay,
     SIGN_CHARS,
     fetch_pdf_text_layout,
     fetch_text,
@@ -505,27 +506,19 @@ def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:
 
 
 def _extract_taxes(text: str) -> TaxOverlay:
-    gsc = _GSC_WKC_RE.search(text)
-    contrib = _CONTRIB_RE.search(text)
-    # Try the flat August-2026 row first: a card carrying both would be the
-    # tiered one being phased out, and the flat rate is authoritative when
-    # present. Same precedence the other suppliers' parsers use.
-    excise = _FLAT_EXCISE_RE.search(text) or _EXCISE_RE.search(text)
-    if not gsc or not excise:
-        raise ExtractorError("EnergyVision: could not parse tax block")
-    fund = _FUND_RE.search(text)
-    # Every value on the card is VAT-inclusive (the federal excise and energy
-    # fund are VAT-exempt), so vat_rate stays 0.0, matching the energy leg.
-    return TaxOverlay(
-        federal_excise=to_float(excise.group(1)) / 100.0,
-        # The contribution was abolished on 2026-08-01, taking its row off
-        # the card with it. An absent row is the abolished levy, not a
-        # layout drift: return 0 rather than failing the fetch and taking
-        # every Flemish EnergyVision contract offline.
-        energy_contribution=(to_float(contrib.group(1)) / 100.0 if contrib else 0.0),
-        flanders_renewables=to_float(gsc.group(1)) / 100.0,
-        energy_fund_eur_per_month=(to_float(fund.group(1)) if fund else 0.0),
-        vat_rate=0.0,
+    """Every value on the card is VAT-inclusive.
+
+    The flat August-2026 excise row is tried before the tiered one being
+    phased out: a card carrying both is mid-transition and the flat rate is
+    authoritative. GSC and WKK arrive pre-summed in one row here.
+    """
+    return flanders_tax_overlay(
+        text,
+        supplier="EnergyVision",
+        excise=(_FLAT_EXCISE_RE, _EXCISE_RE),
+        renewables=(_GSC_WKC_RE,),
+        contribution=_CONTRIB_RE,
+        fund=_FUND_RE,
     )
 
 
