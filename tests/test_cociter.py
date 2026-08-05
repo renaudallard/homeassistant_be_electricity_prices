@@ -405,3 +405,45 @@ async def test_reupload_wins_over_the_superseded_card() -> None:
             date(2026, 7, 1),
         )
     assert seen and seen[-1].endswith("-fr-1.pdf")
+
+
+async def test_the_live_card_and_the_archived_one_resolve_the_same_file() -> None:
+    """`_find_latest` (the live fetch and the probe) must rank re-uploads too.
+
+    It sorted on the month alone, so a month carrying both the original and a
+    correction fell back to listing order, while `fetch_for_month` ranked on
+    the re-upload counter. The two disagreed whenever the index listed the
+    newest first -- the live price came off the superseded card, and the probe
+    pinned the cache to it.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.be_electricity_prices.providers import cociter as cociter_mod
+
+    for html in (
+        '<a href="https://x/RCDyn_SM3_Coop-2607-fr.pdf">old</a>'
+        '<a href="https://x/RCDyn_SM3_Coop-2607-fr-1.pdf">new</a>',
+        # Newest first, the ordering that used to pick the superseded file.
+        '<a href="https://x/RCDyn_SM3_Coop-2607-fr-1.pdf">new</a>'
+        '<a href="https://x/RCDyn_SM3_Coop-2607-fr.pdf">old</a>',
+    ):
+        with patch.object(cociter_mod, "fetch_text", new=AsyncMock(return_value=html)):
+            url, label = await cociter_mod._find_latest(
+                None,  # type: ignore[arg-type]
+                cociter_mod._DYN_RE,
+            )
+        assert url.endswith("-fr-1.pdf"), html
+        assert label == "2026-07"
+
+    # A newer month still wins over a heavily re-uploaded older one.
+    html = (
+        '<a href="https://x/RCDyn_SM3_Coop-2607-fr-9.pdf">jul</a>'
+        '<a href="https://x/RCDyn_SM3_Coop-2608-fr.pdf">aug</a>'
+    )
+    with patch.object(cociter_mod, "fetch_text", new=AsyncMock(return_value=html)):
+        url, label = await cociter_mod._find_latest(
+            None,  # type: ignore[arg-type]
+            cociter_mod._DYN_RE,
+        )
+    assert url.endswith("2608-fr.pdf")
+    assert label == "2026-08"

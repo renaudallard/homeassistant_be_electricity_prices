@@ -168,11 +168,6 @@ async def fetch_for_month(
     candidates = [url for url, yymm in pattern.findall(html) if yymm == target_yymm]
     if not candidates:
         return None
-
-    def _dedup_rank(url: str) -> int:
-        m = re.search(r"-(\d+)\.pdf$", url)
-        return int(m.group(1)) if m else 0
-
     pdf_url = max(candidates, key=_dedup_rank)
     try:
         text = await fetch_pdf_text(session, pdf_url)
@@ -531,6 +526,18 @@ def _extract_taxes(text: str) -> TaxOverlay:
     )
 
 
+def _dedup_rank(url: str) -> int:
+    """WordPress's re-upload counter, or 0 for the original.
+
+    Cociter's site keeps the original when a card is re-uploaded and adds
+    "-1", "-2", ... to the newcomer, so the highest suffix is the current
+    file. Every path that resolves a card has to rank on this, not on
+    listing order: the index is not ordered by it.
+    """
+    m = re.search(r"-(\d+)\.pdf$", url)
+    return int(m.group(1)) if m else 0
+
+
 async def _find_latest(
     session: aiohttp.ClientSession, pattern: re.Pattern[str]
 ) -> tuple[str, str]:
@@ -538,7 +545,13 @@ async def _find_latest(
     matches = pattern.findall(html)
     if not matches:
         raise ExtractorError(f"no matching tariff card linked at {_INDEX_URL}")
-    matches.sort(key=lambda m: m[1])
+    # Rank on (month, re-upload counter). Sorting on the month alone left
+    # ties in listing order, so a month carrying both the original and a
+    # correction resolved to whichever came last in the HTML. fetch_for_month
+    # already ranked on the counter, so the live card and the archived one
+    # for the SAME month could be different files -- and when the index lists
+    # the newest first, the live path served the superseded one.
+    matches.sort(key=lambda m: (m[1], _dedup_rank(m[0])))
     url, yymm = matches[-1]
     label = _yymm_to_label(yymm)
     return url, label
