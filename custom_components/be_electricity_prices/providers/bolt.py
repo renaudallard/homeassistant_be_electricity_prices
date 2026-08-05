@@ -509,6 +509,72 @@ def _extract_dynamic_energy(
     )
 
 
+def _extract_legacy_energy(
+    text: str, kind: TariffKind, yearly_fee: float
+) -> EnergyRates | None:
+    """Read a pre-April-2026 Bolt card, or ``None`` if this is not one.
+
+    Bolt redesigned its cards between March and April 2026. The archive PDFs
+    for the earlier months are still served, and ``fetch_for_month`` reaches
+    for them whenever a year-to-date walk crosses Q1 or a contract was signed
+    then, but they carry no ``Prix mensuel`` row: the rates sit under
+    ``Coût de l'énergie`` with one labelled line per meter type,
+
+        Coût de l'énergie Simple
+         c€13,27/kWh
+                       Jour
+         c€13,27/kWh
+                       Nuit
+         c€13,27/kWh
+                       Excl. nuit c€13,27/kWh
+
+    so ``parse_snapshot`` raised, ``fetch_for_month`` swallowed it, and every
+    Q1 month silently billed at the CURRENT card's rate instead.
+
+    Keyed on which anchor the card actually carries rather than on a date, so
+    it neither guesses at a boundary nor needs touching when Bolt redesigns
+    again. Returns ``None`` when the old anchor is absent too, leaving the
+    caller to raise its own error.
+    """
+    if not re.search(r"Co[ûu]t de l['’]énergie", text):
+        return None
+
+    def _rate(label: str) -> float | None:
+        # Values render as "c€13,27/kWh", the label sometimes on the line
+        # above and sometimes inline, so allow a bounded gap but never cross
+        # into another label's value.
+        m = re.search(
+            rf"{label}[^\n]*\n?[^c\n]*c€\s*([\d.,]+)\s*/\s*kWh", text, re.IGNORECASE
+        )
+        return to_float(m.group(1)) / 100.0 if m else None
+
+    mono = _rate(r"Co[ûu]t de l['’]énergie\s+Simple")
+    if mono is None:
+        return None
+    peak = _rate(r"\bJour\b") or mono
+    offpeak = _rate(r"\bNuit\b") or mono
+    excl = _rate(r"Excl\.?\s*nuit") or mono
+    if kind == "fixed":
+        return FixedRates(
+            single=mono,
+            peak=peak,
+            offpeak=offpeak,
+            exclusive_night=excl,
+            yearly_fixed_fee=yearly_fee,
+        )
+    if kind == "variable":
+        return VariableRates(
+            current=mono,
+            peak=peak,
+            offpeak=offpeak,
+            exclusive_night=excl,
+            yearly_fixed_fee=yearly_fee,
+        )
+    # Only the archived fix / variable families use this layout; a dynamic
+    # card is handled by its own formula branch before we get here.
+    return None
+
+
 def _extract_energy(
     text: str, kind: TariffKind, *, professional: bool = False
 ) -> EnergyRates:
@@ -527,6 +593,10 @@ def _extract_energy(
     # shape with the two-number rule would take Jour for the
     # exclusive-night rate and bill a night circuit at the day price.
     match = re.search(r"Prix mensuel([^\n]*)", text)
+    if match is None:
+        legacy = _extract_legacy_energy(text, kind, yearly_fee)
+        if legacy is not None:
+            return legacy
     numbers = re.findall(r"[\d.,]+", match.group(1)) if match else []
     inline_bihourly = len(numbers) >= 4
     if len(numbers) < 2:
@@ -660,12 +730,23 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
     separators (U+2028) to regular newlines, so the regexes below
     see a uniform layout.
     """
+    # The three regional values sit on the lines below the label on a
+    # post-April-2026 card and INLINE on the label line on the archived
+    # pre-redesign ones:
+    #   now: "Droit d'accise spécial (c€/kwh) (c€/kWh) 5\n 5,0329\n 5,0329\n 5,0329"
+    #   old: "Droit d'accise spécial (c€/kwh) (**) 5,0329 5,0329 5,0329"
+    # Skip everything up to the first DECIMAL number, then take three. The
+    # decimal separator is what distinguishes a value from the bare footnote
+    # marker ("5" above), which a plain [\d.,]+ captured as the Flanders
+    # value and billed the excise at 5 c€/kWh instead of 5,0329.
+    _THREE_COLS = r"(?:(?!\d+[.,]\d).)*?(\d+[.,]\d+)\s+(\d+[.,]\d+)\s+(\d+[.,]\d+)"
     excise_match = re.search(
-        r"Droit d['’]accise spécial[^\n]*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)",
+        rf"Droit d['’]accise spécial{_THREE_COLS}",
         text,
+        re.S,
     )
     contribution_match = re.search(
-        r"Contribution sur l['’]énergie[^\n]*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)",
+        rf"Contribution sur l['’]énergie{_THREE_COLS}",
         text,
         re.S,
     )

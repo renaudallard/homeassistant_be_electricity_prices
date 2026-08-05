@@ -443,3 +443,39 @@ def test_pro_energy_fund_is_flanders_only() -> None:
     for region in ("wallonia", "brussels"):
         snap = parse_snapshot("bolt_pro_fix", text, region)
         assert snap.taxes.energy_fund_eur_per_month == 0.0
+
+
+def test_pre_redesign_archive_card_still_parses() -> None:
+    """Bolt redesigned its cards between March and April 2026, and the earlier
+    archive PDFs are still served.
+
+    They carry no `Prix mensuel` row: the rates sit under `Coût de l'énergie`
+    with one labelled line per meter type, and the three regional tax columns
+    are inline on the label line rather than below it. parse_snapshot raised,
+    fetch_for_month swallowed it, and every Q1 month of a year-to-date walk
+    silently billed at the CURRENT card's rate instead -- 16,71 c€/kWh where
+    January was 13,27.
+    """
+    snap = parse_snapshot(
+        "bolt_fix",
+        fixture_text("bolt_fix_jan_legacy.pdf", layout=True),
+        "flanders",
+        "test://bolt-202601",
+    )
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(0.1327)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(131.88)
+    # The federal levies of that month, read off the inline three-column row.
+    assert snap.taxes.federal_excise == pytest.approx(0.050329)
+    assert snap.taxes.energy_contribution == pytest.approx(0.0020417)
+
+
+def test_footnote_marker_is_not_read_as_the_flanders_tax_value() -> None:
+    """The current layout prints a bare footnote digit between the label and
+    the values (`... (c€/kWh) 5` then 5,0329 on the next lines). Matching the
+    first number after the label captured that 5 and billed the excise at
+    5 c€/kWh; only a decimal separator distinguishes a value from a marker."""
+    snap = parse_snapshot(
+        "bolt_fix", fixture_text("bolt_fix.pdf", layout=True), "flanders", "test://"
+    )
+    assert snap.taxes.federal_excise == pytest.approx(0.050329)

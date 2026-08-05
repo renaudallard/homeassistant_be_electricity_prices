@@ -162,6 +162,31 @@ returns `None` and the caller uses the proxy. `test_fetch_for_month_rejects_mism
 (`tests/test_bolt.py:225`) pins this: the April fixture is accepted for April 2026 and rejected for
 January 2026.
 
+> [!IMPORTANT]
+> **The archive spans two card layouts.** Bolt redesigned its cards between March
+> and April 2026, and the pre-redesign PDFs are still served, so any year-to-date
+> walk crossing Q1 (and every Q1 signing cohort) reaches for them. They differ in
+> two places:
+>
+> | | pre-April 2026 | April 2026 onward |
+> | --- | --- | --- |
+> | energy rates | `Coût de l'énergie Simple` + one labelled line per meter type | `Prix mensuel` row |
+> | tax columns | three values **inline** on the label line | on the lines below it |
+>
+> `_extract_legacy_energy` (`bolt.py:512`) reads the older shape, keyed on which
+> anchor the card actually carries rather than on a date, so it neither guesses at
+> the boundary nor needs revisiting the next time Bolt redesigns. The tax reader
+> takes either column shape. Before this, `parse_snapshot` raised on those months,
+> `fetch_for_month` swallowed the error, and January through March silently billed
+> at the CURRENT card's rate: 16,71 c€/kWh against January's actual 13,27.
+>
+> One trap in the tax row: the current layout prints a bare footnote digit between
+> the label and the values (`... (c€/kWh) 5` then `5,0329`). Matching the first
+> number after the label captures that `5` and bills the excise at 5 c€/kWh, so the
+> pattern requires a decimal separator — that is what distinguishes a value from a
+> marker. `tests/fixtures/bolt_fix_jan_legacy.pdf` is the real January 2026 card
+> and pins the old shape.
+
 ## Parsing
 
 `parse_snapshot(contract_id, text, region, source_url)` (`bolt.py:309`) is the pure parser exposed
