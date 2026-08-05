@@ -610,7 +610,9 @@ def _contract_start_month(entry: ConfigEntry) -> date | None:
     return date(d.year, d.month, 1)
 
 
-def _manual_energy_leg(entry: ConfigEntry, card: EnergyRates) -> EnergyRates | None:
+def _manual_energy_leg(
+    entry: ConfigEntry, card: EnergyRates, card_vat_rate: float = 0.0
+) -> EnergyRates | None:
     """Overlay a hand-entered signing rate onto ``card``, or ``None``.
 
     The user typed the rate they signed at, so it wins over anything the
@@ -619,9 +621,20 @@ def _manual_energy_leg(entry: ConfigEntry, card: EnergyRates) -> EnergyRates | N
     current card) and every box the user filled replaces its field. Shaped to
     match the contract's kind (dynamic -> factor / base, fixed -> single /
     peak / offpeak / exclusive night). Per-kWh values are stored as entered
-    (grossed by compute_breakdown at the current card's VAT rate); the yearly
-    fee is stored VAT-inclusive, matching how cards store it. ``None`` when
-    every box was left blank, or the contract is neither fixed nor dynamic.
+    (grossed by compute_breakdown at the current card's VAT rate). ``None``
+    when every box was left blank, or the contract is neither fixed nor
+    dynamic.
+
+    The fee box is labelled "incl. VAT" and the typed figure is taken at that
+    word, so it has to be put onto whatever basis this entry bills on. That is
+    VAT-inclusive for every residential entry and for a business that does not
+    deduct, and it is EX-VAT for one that does: ``apply_vat`` leaves such an
+    entry's card fees as the professional card printed them. Without the
+    conversion the typed fee stayed gross while every other fee on the same
+    entry was net, so a 121,00 EUR signed fee sat next to a 100,00 EUR card
+    fee. ``card_vat_rate`` is the rate the card was published at, read before
+    ``apply_vat`` resolves it away; 0.0 (the default) means a VAT-inclusive
+    card, where the two bases coincide and nothing changes.
     """
     energy = card
     # Every box on the signed_rate step is optional and the step tells the
@@ -635,6 +648,9 @@ def _manual_energy_leg(entry: ConfigEntry, card: EnergyRates) -> EnergyRates | N
     # and a fee-only override applies on its own.
     fee_raw = entry.data.get(CONF_MANUAL_YEARLY_FEE)
     fee = float(fee_raw) if fee_raw is not None else energy.yearly_fixed_fee
+    if fee_raw is not None and card_vat_rate and not _include_vat(entry):
+        # This entry bills ex-VAT; the box asked for a gross figure.
+        fee /= 1.0 + card_vat_rate
     if isinstance(energy, DynamicRates):
         factor = entry.data.get(CONF_MANUAL_ENERGY_FACTOR)
         base = entry.data.get(CONF_MANUAL_ENERGY_BASE)
@@ -714,6 +730,7 @@ async def _cohort_energy_leg(
     region: str,
     entry: ConfigEntry,
     current_snapshot: "SupplierSnapshot",
+    card_vat_rate: float = 0.0,
 ) -> EnergyRates | None:
     """Resolve the energy leg a contract actually bills at, or ``None``.
 
@@ -793,7 +810,9 @@ async def _cohort_energy_leg(
     # every box was left blank, which leaves the archive (or the current card)
     # billing as before.
     manual = _manual_energy_leg(
-        entry, current_snapshot.energy if archived is None else archived
+        entry,
+        current_snapshot.energy if archived is None else archived,
+        card_vat_rate,
     )
     if manual is not None:
         source = "hand-entered signing rate"
@@ -1225,6 +1244,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self.entry.data.get(CONF_REGION, ""),
             self.entry,
             self._snapshot,
+            # The rate the card was PUBLISHED at, before apply_vat resolved it
+            # away, so a typed gross fee can be put on this entry's basis.
+            self._snapshot_raw.taxes.vat_rate if self._snapshot_raw else 0.0,
         )
         priced = (
             self._snapshot

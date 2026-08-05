@@ -3081,3 +3081,42 @@ def test_all_kwh_resolvers_agree_that_registers_win() -> None:
     empty = SimpleNamespace(data={})
     assert co._hourly_consumption_sensors(empty) == []  # type: ignore[arg-type]
     assert co._hourly_injection_sensors(empty) == []  # type: ignore[arg-type]
+
+
+def test_typed_signing_fee_lands_on_the_entry_basis() -> None:
+    """The fee box is labelled "incl. VAT" and the typed figure is taken at
+    that word, so it must be put onto whatever basis the entry bills on.
+
+    A business that deducts VAT bills ex-VAT: apply_vat leaves its card fees
+    as the professional card printed them, so a typed 121,00 sat next to a
+    100,00 card fee on the same entry.
+    """
+    from custom_components.be_electricity_prices import coordinator as co
+    from custom_components.be_electricity_prices.providers.base import FixedRates
+
+    card = FixedRates(single=0.20, yearly_fixed_fee=100.0)
+
+    def _entry_with(include_vat: bool) -> Any:
+        return SimpleNamespace(
+            data={
+                "supplier": "engie",
+                "contract": "engie_pro_easy_fixed",
+                "manual_yearly_fee": 121.0,
+                "include_vat": include_vat,
+            }
+        )
+
+    # Deducting business: the gross figure is converted to the card's basis.
+    net = co._manual_energy_leg(_entry_with(False), card, 0.21)  # type: ignore[arg-type]
+    assert net is not None
+    assert net.yearly_fixed_fee == pytest.approx(100.0)
+
+    # Not deducting: the entry bills gross, so the typed figure stands.
+    gross = co._manual_energy_leg(_entry_with(True), card, 0.21)  # type: ignore[arg-type]
+    assert gross is not None
+    assert gross.yearly_fixed_fee == pytest.approx(121.0)
+
+    # A residential (VAT-inclusive) card has no conversion to make either way.
+    res = co._manual_energy_leg(_entry_with(False), card, 0.0)  # type: ignore[arg-type]
+    assert res is not None
+    assert res.yearly_fixed_fee == pytest.approx(121.0)
