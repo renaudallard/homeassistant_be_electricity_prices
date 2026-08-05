@@ -58,7 +58,7 @@ the "Shown when" column gives the gate.
 | `meter` | `async_step_meter` (`config_flow.py:1249`) | Meter type | `CONF_METER` | Always; option list narrows by contract kind |
 | `dso_tariff_mode` | `async_step_dso_tariff_mode` (`config_flow.py:1383`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia (`config_flow.py:1398`) |
 | `api_key` | `async_step_api_key` (`config_flow.py:1262`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
-| `custom_energy` | `async_step_custom_energy` | Commodity formula (mode-dependent fields) | `CONF_CUSTOM_ENERGY_*`, `CONF_CUSTOM_YEARLY_FIXED_FEE` | Custom supplier only, after the energy/api-key step |
+| `custom_energy` | `async_step_custom_energy` | Commodity formula (mode-dependent fields) | `CONF_CUSTOM_ENERGY_*`, `CONF_CUSTOM_YEARLY_FIXED_FEE` | Custom supplier only, after the energy/api-key step. The peak / off-peak energy boxes are shown for **both** `bi` and `dynamic` meters, matching `bi_capable` in `pricing.py:291`; gating on `bi` alone billed a fixed contract on a smart meter at the single rate for all 24 hours |
 | `capacity` | `async_step_capacity` (`config_flow.py:1280`) | Peak source (sensor/fixed) + value | `CONF_CAPACITY_MODE`, `CONF_CAPACITY_PEAK_SENSOR`, `CONF_CAPACITY_FIXED_KW` | Region == Flanders (`config_flow.py:1453`, `:1418`) |
 | `connection_power` | `async_step_connection_power` (`config_flow.py:1411`) | Brussels connection-power tier | `CONF_CONNECTION_KVA_TIER` | Region == Brussels (`config_flow.py:1426`) |
 | `solar` | `async_step_solar` (`config_flow.py:1296`) | Inverter kVA + regime | `CONF_SOLAR_KVA`, `CONF_SOLAR_REGIME` | Always |

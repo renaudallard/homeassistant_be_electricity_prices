@@ -40,6 +40,7 @@ from custom_components.be_electricity_prices import const
 from custom_components.be_electricity_prices.config_flow import (
     _compare_supplier_options,
     _custom_dso_schema,
+    _custom_energy_schema,
 )
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
@@ -504,3 +505,27 @@ def test_custom_dso_schema_offers_the_bihourly_split_to_a_dynamic_meter() -> Non
         got = keys(meter)
         assert const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK not in got, meter
         assert const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK not in got, meter
+
+
+def test_custom_energy_schema_offers_the_day_night_split_to_a_dynamic_meter() -> None:
+    """`pricing.energy_eur_per_kwh` sets `bi_capable = meter in ("bi",
+    "dynamic")` and routes both through `peak` / `offpeak`, so a custom fixed
+    contract on a smart meter must be able to enter them. Gating on METER_BI
+    alone left both None and billed all 24 hours at the single rate -- the
+    same root cause as the DSO step, and together they cost such an entry both
+    the supplier and the network day/night split."""
+    base = {const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED}
+
+    def keys(meter: str) -> set[str]:
+        return {
+            str(k)
+            for k in _custom_energy_schema({**base, const.CONF_METER: meter}).schema
+        }
+
+    for meter in (const.METER_BI, const.METER_DYNAMIC):
+        got = keys(meter)
+        assert const.CONF_CUSTOM_ENERGY_PEAK in got, meter
+        assert const.CONF_CUSTOM_ENERGY_OFFPEAK in got, meter
+    mono = keys(const.METER_MONO)
+    assert const.CONF_CUSTOM_ENERGY_PEAK not in mono
+    assert const.CONF_CUSTOM_ENERGY_OFFPEAK not in mono
