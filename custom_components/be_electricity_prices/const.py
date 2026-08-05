@@ -78,6 +78,11 @@ FLUVIUS_KEYS: Final[frozenset[str]] = frozenset(
 WALLONIA_DSO_KEYS: Final[frozenset[str]] = frozenset(
     {DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW}
 )
+# Brussels has a single DSO. Named alongside its two siblings so callers that
+# take a region's expected DSO set can say so uniformly; the live check
+# spelled it as a bare frozenset({"sibelga"}) literal in four places because
+# there was nothing here to import.
+BRUSSELS_DSO_KEYS: Final[frozenset[str]] = frozenset({DSO_SIBELGA})
 
 # Fluvius sub-area names as most suppliers print them in their Flanders
 # DSO table (Title case, hyphenated), mapped to the DSO key. Shared by the

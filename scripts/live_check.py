@@ -77,9 +77,17 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
         return mod
 
     const = _load("be_pkg.const", PKG / "const.py")
-    global _FLUVIUS_KEYS, _WALLONIA_DSO_KEYS
+    global _FLUVIUS_KEYS, _WALLONIA_DSO_KEYS, _BRUSSELS_DSO_KEYS
     _FLUVIUS_KEYS = const.FLUVIUS_KEYS
     _WALLONIA_DSO_KEYS = const.WALLONIA_DSO_KEYS
+    _BRUSSELS_DSO_KEYS = const.BRUSSELS_DSO_KEYS
+    _EXPECTED_DSOS.update(
+        {
+            "flanders": const.FLUVIUS_KEYS,
+            "wallonia": const.WALLONIA_DSO_KEYS,
+            "brussels": const.BRUSSELS_DSO_KEYS,
+        }
+    )
 
     base = _load("be_pkg.providers.base", PKG / "providers" / "base.py")
     # Bind the rate classes for isinstance-based validation in
@@ -150,6 +158,19 @@ CHECKS: list[Check] = []
 # Declared here so module-load doesn't fail before _load_providers() runs.
 _FLUVIUS_KEYS: frozenset[str] = frozenset()
 _WALLONIA_DSO_KEYS: frozenset[str] = frozenset()
+_BRUSSELS_DSO_KEYS: frozenset[str] = frozenset()
+
+# The DSO set and the renewables field a region's card must carry. Seven
+# checks each restated these as local literals, in two arity groups, and the
+# only thing separating a two-region supplier's map from a three-region one
+# was whether the Brussels row was present -- so a supplier that gained
+# Brussels had to have its map remembered as well as its region tuple.
+_EXPECTED_DSOS: dict[str, frozenset[str]] = {}
+_RENEWABLES_FIELD: dict[str, str] = {
+    "flanders": "flanders_renewables",
+    "wallonia": "wallonia_renewables",
+    "brussels": "brussels_renewables",
+}
 
 # Rate-class references bound by _load_providers; ``object`` placeholder
 # until startup so isinstance() in _validate_energy still type-checks
@@ -689,11 +710,6 @@ async def _check_ecofix(
     # (no Brussels offering). The same PDF carries both regions; the
     # parser narrows the snapshot down to the requested region. Walk
     # every (contract, region) pair to verify both code paths.
-    expected_dsos = {"flanders": _FLUVIUS_KEYS, "wallonia": _WALLONIA_DSO_KEYS}
-    renewables_field = {
-        "flanders": "flanders_renewables",
-        "wallonia": "wallonia_renewables",
-    }
     for contract in ecofix._CONTRACTS:
         cid = contract.contract_id
         for region_key in ("flanders", "wallonia"):
@@ -706,21 +722,7 @@ async def _check_ecofix(
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
             _expect(f"{prefix}: publication label", bool(snap.publication_label))
-            _expect(
-                f"{prefix}: expected DSOs present",
-                expected_dsos[region_key] <= set(snap.dsos),
-                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
-            )
-            _expect(
-                f"{prefix}: regional renewables > 0",
-                getattr(snap.taxes, renewables_field[region_key]) > 0,
-                detail=str(snap.taxes),
-            )
-            _expect(
-                f"{prefix}: federal excise > 0",
-                snap.taxes.federal_excise > 0,
-                detail=str(snap.taxes),
-            )
+            _expect_region_basics(prefix, region_key, snap)
             _expect_energy_contribution(prefix, snap.taxes)
             _validate_snapshot(prefix, cid, snap)
 
@@ -893,11 +895,6 @@ async def _check_luminus(
     # Luminus serves Flanders and Wallonia for every market product
     # (Brussels carries only the regulated Social tariff, which is
     # excluded from the registry). Walk every (contract, region) pair.
-    expected_dsos = {"flanders": _FLUVIUS_KEYS, "wallonia": _WALLONIA_DSO_KEYS}
-    renewables_field = {
-        "flanders": "flanders_renewables",
-        "wallonia": "wallonia_renewables",
-    }
     for contract in luminus._CONTRACTS:
         cid = contract.contract_id
         for region_key in ("flanders", "wallonia"):
@@ -910,21 +907,7 @@ async def _check_luminus(
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
             _expect(f"{prefix}: publication label", bool(snap.publication_label))
-            _expect(
-                f"{prefix}: expected DSOs present",
-                expected_dsos[region_key] <= set(snap.dsos),
-                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
-            )
-            _expect(
-                f"{prefix}: regional renewables > 0",
-                getattr(snap.taxes, renewables_field[region_key]) > 0,
-                detail=str(snap.taxes),
-            )
-            _expect(
-                f"{prefix}: federal excise > 0",
-                snap.taxes.federal_excise > 0,
-                detail=str(snap.taxes),
-            )
+            _expect_region_basics(prefix, region_key, snap)
             _expect_energy_contribution(prefix, snap.taxes)
             _validate_snapshot(prefix, cid, snap)
 
@@ -933,16 +916,6 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
     # Bolt's PDFs are nationwide (one file per contract, all 3 regions
     # in one document), so we walk every (contract, region) pair just to
     # verify the parsing path for each region works.
-    expected_dsos = {
-        "flanders": _FLUVIUS_KEYS,
-        "wallonia": _WALLONIA_DSO_KEYS,
-        "brussels": frozenset({"sibelga"}),
-    }
-    renewables_field = {
-        "flanders": "flanders_renewables",
-        "wallonia": "wallonia_renewables",
-        "brussels": "brussels_renewables",
-    }
     # Fetch all six contract PDFs concurrently. Sequential fetches
     # turned the 240 s per-supplier wallclock cap into the binding
     # constraint on slow-CDN days (issue #13: 5 contracts each at
@@ -976,21 +949,7 @@ async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) ->
                 continue
             _expect_professional_basis(prefix, contract, snap)
             _expect_excise_bands(prefix, snap.taxes)
-            _expect(
-                f"{prefix}: expected DSOs present",
-                expected_dsos[region_key] <= set(snap.dsos),
-                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
-            )
-            _expect(
-                f"{prefix}: regional renewables > 0",
-                getattr(snap.taxes, renewables_field[region_key]) > 0,
-                detail=str(snap.taxes),
-            )
-            _expect(
-                f"{prefix}: federal excise > 0",
-                snap.taxes.federal_excise > 0,
-                detail=str(snap.taxes),
-            )
+            _expect_region_basics(prefix, region_key, snap)
             _expect(
                 f"{prefix}: publication label",
                 bool(snap.publication_label),
@@ -1004,16 +963,6 @@ async def _check_totalenergies(
 ) -> None:
     # TotalEnergies serves all 3 regions for every product. Walk every
     # (contract, region) pair against the real /latest/ PDFs.
-    expected_dsos = {
-        "flanders": _FLUVIUS_KEYS,
-        "wallonia": _WALLONIA_DSO_KEYS,
-        "brussels": frozenset({"sibelga"}),
-    }
-    renewables_field = {
-        "flanders": "flanders_renewables",
-        "wallonia": "wallonia_renewables",
-        "brussels": "brussels_renewables",
-    }
     for contract in totalenergies._CONTRACTS:
         cid = contract.contract_id
         for region_key in ("flanders", "wallonia", "brussels"):
@@ -1027,21 +976,7 @@ async def _check_totalenergies(
             except Exception as err:
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
-            _expect(
-                f"{prefix}: expected DSOs present",
-                expected_dsos[region_key] <= set(snap.dsos),
-                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
-            )
-            _expect(
-                f"{prefix}: regional renewables > 0",
-                getattr(snap.taxes, renewables_field[region_key]) > 0,
-                detail=str(snap.taxes),
-            )
-            _expect(
-                f"{prefix}: federal excise > 0",
-                snap.taxes.federal_excise > 0,
-                detail=str(snap.taxes),
-            )
+            _expect_region_basics(prefix, region_key, snap)
             _expect(
                 f"{prefix}: publication label",
                 bool(snap.publication_label),
@@ -1060,16 +995,6 @@ async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) ->
     # listing once and override _fetch_listing_html for the duration of
     # this check so the fetch path is still exercised end-to-end while
     # the harness stops paying for the same HTML 33 times.
-    expected_dsos = {
-        "flanders": _FLUVIUS_KEYS,
-        "wallonia": _WALLONIA_DSO_KEYS,
-        "brussels": frozenset({"sibelga"}),
-    }
-    renewables_field = {
-        "flanders": "flanders_renewables",
-        "wallonia": "wallonia_renewables",
-        "brussels": "brussels_renewables",
-    }
     try:
         listing_html = await _fetch_with_retry(
             partial(mega._fetch_listing_html, session)
@@ -1086,16 +1011,13 @@ async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) ->
     original_fetch_listing = mega._fetch_listing_html
     setattr(mega, "_fetch_listing_html", _cached_listing)  # noqa: B010
     try:
-        await _check_mega_pairs(session, mega, expected_dsos, renewables_field)
+        await _check_mega_pairs(session, mega)
     finally:
         setattr(mega, "_fetch_listing_html", original_fetch_listing)  # noqa: B010
 
 
 async def _check_mega_pairs(
-    session: aiohttp.ClientSession,
-    mega: types.ModuleType,
-    expected_dsos: dict[str, frozenset[str]],
-    renewables_field: dict[str, str],
+    session: aiohttp.ClientSession, mega: types.ModuleType
 ) -> None:
     for contract in mega._CONTRACTS:
         cid = contract.contract_id
@@ -1112,21 +1034,7 @@ async def _check_mega_pairs(
                 continue
             _expect_professional_basis(prefix, contract, snap)
             _expect_excise_bands(prefix, snap.taxes)
-            _expect(
-                f"{prefix}: expected DSOs present",
-                expected_dsos[region_key] <= set(snap.dsos),
-                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
-            )
-            _expect(
-                f"{prefix}: regional renewables > 0",
-                getattr(snap.taxes, renewables_field[region_key]) > 0,
-                detail=str(snap.taxes),
-            )
-            _expect(
-                f"{prefix}: federal excise > 0",
-                snap.taxes.federal_excise > 0,
-                detail=str(snap.taxes),
-            )
+            _expect_region_basics(prefix, region_key, snap)
             _expect(
                 f"{prefix}: publication label",
                 bool(snap.publication_label),
@@ -1141,11 +1049,6 @@ async def _check_octaplus(
     # OCTA+ only sells residential electricity in Flanders and Wallonia
     # (Brussels offerings are professional-only). One PDF per (contract,
     # region) at https://files.octaplus.be/tariffs/E_OCTA_<SLUG>_RE_<VL|WL>_FR.pdf
-    expected_dsos = {"flanders": _FLUVIUS_KEYS, "wallonia": _WALLONIA_DSO_KEYS}
-    renewables_field = {
-        "flanders": "flanders_renewables",
-        "wallonia": "wallonia_renewables",
-    }
     for contract in octaplus._CONTRACTS:
         cid = contract.contract_id
         for region_key in ("flanders", "wallonia"):
@@ -1164,21 +1067,7 @@ async def _check_octaplus(
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
                 continue
             _expect(f"{prefix}: publication label", bool(snap.publication_label))
-            _expect(
-                f"{prefix}: expected DSOs present",
-                expected_dsos[region_key] <= set(snap.dsos),
-                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
-            )
-            _expect(
-                f"{prefix}: regional renewables > 0",
-                getattr(snap.taxes, renewables_field[region_key]) > 0,
-                detail=str(snap.taxes),
-            )
-            _expect(
-                f"{prefix}: federal excise > 0",
-                snap.taxes.federal_excise > 0,
-                detail=str(snap.taxes),
-            )
+            _expect_region_basics(prefix, region_key, snap)
             _expect_energy_contribution(prefix, snap.taxes)
             _validate_snapshot(prefix, cid, snap)
 
@@ -1188,17 +1077,7 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
     # check walks every supported region per contract instead of asking
     # for a single merged snapshot. If a region fetch ever stops working
     # the report flags the specific (contract, region) pair.
-    expected_dsos = {
-        "flanders": _FLUVIUS_KEYS,
-        "wallonia": _WALLONIA_DSO_KEYS,
-        "brussels": frozenset({"sibelga"}),
-    }
     region_letter = {"flanders": "V", "wallonia": "W", "brussels": "B"}
-    renewables_field = {
-        "flanders": "flanders_renewables",
-        "wallonia": "wallonia_renewables",
-        "brussels": "brussels_renewables",
-    }
     for contract in engie._CONTRACTS:
         cid = contract.contract_id
         for region_key, letter in region_letter.items():
@@ -1215,21 +1094,7 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
             _expect_professional_basis(prefix, contract, snap)
             _expect_excise_bands(prefix, snap.taxes)
             _expect(f"{prefix}: publication label", bool(snap.publication_label))
-            _expect(
-                f"{prefix}: expected DSOs present",
-                expected_dsos[region_key] <= set(snap.dsos),
-                detail=f"missing: {sorted(expected_dsos[region_key] - set(snap.dsos))}",
-            )
-            _expect(
-                f"{prefix}: regional renewables > 0",
-                getattr(snap.taxes, renewables_field[region_key]) > 0,
-                detail=str(snap.taxes),
-            )
-            _expect(
-                f"{prefix}: federal excise > 0",
-                snap.taxes.federal_excise > 0,
-                detail=str(snap.taxes),
-            )
+            _expect_region_basics(prefix, region_key, snap)
             _validate_snapshot(prefix, cid, snap)
 
 
@@ -1408,6 +1273,40 @@ def _expected_injection_shape(contract_id: str) -> str:
     if getattr(contract, "kind", "") in ("fixed", "variable"):
         return "monthly"
     return "present"
+
+
+def _expect_region_basics(prefix: str, region_key: str, snap: object) -> None:
+    """The three assertions every per-(contract, region) check makes.
+
+    Expected DSOs present, that region's renewables levy above zero, and the
+    federal excise above zero. Seven checks carried these three byte-identical
+    _expect calls plus their own copy of the region maps, so a new
+    region-level invariant had to be added seven times and the copies had
+    already fallen into two arity groups.
+
+    Deliberately only these three. The publication-label assertion differs
+    between checks (some pass a detail=), and the per-supplier extras --
+    professional VAT basis, excise bands, energy contribution, the ORES band
+    ordering -- stay at their call sites where their reasons live.
+    """
+    taxes = getattr(snap, "taxes", None)
+    dsos = getattr(snap, "dsos", None) or {}
+    expected = _EXPECTED_DSOS[region_key]
+    _expect(
+        f"{prefix}: expected DSOs present",
+        expected <= set(dsos),
+        detail=f"missing: {sorted(expected - set(dsos))}",
+    )
+    _expect(
+        f"{prefix}: regional renewables > 0",
+        getattr(taxes, _RENEWABLES_FIELD[region_key]) > 0,
+        detail=str(taxes),
+    )
+    _expect(
+        f"{prefix}: federal excise > 0",
+        getattr(taxes, "federal_excise", 0) > 0,
+        detail=str(taxes),
+    )
 
 
 def _validate_snapshot(
