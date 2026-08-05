@@ -768,20 +768,32 @@ async def _check_ecopower(
         _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
 
 
-async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) -> None:
-    expected_dso_keys = _FLUVIUS_KEYS
-    cid = "frank_dynamic"
-    prefix = f"frank/{cid}"
+async def _check_flanders_dynamic(
+    session: aiohttp.ClientSession,
+    mod: types.ModuleType,
+    supplier: str,
+    cid: str,
+) -> None:
+    """One Flanders-only dynamic card: all eight Fluvius rows, the federal and
+    regional levies, and a VAT-inclusive card.
+
+    Frank and energie.be checked exactly this, in two functions that differed
+    only in the supplier token. ``cid`` stays a parameter rather than looping
+    ``mod.EXTRACTOR.contracts``: Frank sells five tiers off one card and this
+    deliberately checks the default one, so iterating them would multiply
+    Frank's wallclock and byte draw by five and trip the drift budgets.
+    """
+    prefix = f"{supplier}/{cid}"
     try:
-        snap = await _fetch_with_retry(partial(frank.fetch, session, cid, "flanders"))
+        snap = await _fetch_with_retry(partial(mod.fetch, session, cid, "flanders"))
     except Exception as err:
         _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
         return
     _expect(f"{prefix}: publication label", bool(snap.publication_label))
     _expect(
         f"{prefix}: all eight Fluvius DSOs present",
-        expected_dso_keys <= set(snap.dsos),
-        detail=f"missing: {sorted(expected_dso_keys - set(snap.dsos))}",
+        _FLUVIUS_KEYS <= set(snap.dsos),
+        detail=f"missing: {sorted(_FLUVIUS_KEYS - set(snap.dsos))}",
     )
     _expect(
         f"{prefix}: federal excise > 0",
@@ -799,43 +811,18 @@ async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) 
         detail=str(snap.taxes),
     )
     _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
+
+
+async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) -> None:
+    # Own coroutine so the per-supplier byte / latency attribution keeps its
+    # own bucket; same for energie.be below.
+    await _check_flanders_dynamic(session, frank, "frank", "frank_dynamic")
 
 
 async def _check_energiebe(
     session: aiohttp.ClientSession, energiebe: types.ModuleType
 ) -> None:
-    expected_dso_keys = _FLUVIUS_KEYS
-    cid = "energiebe_dynamic"
-    prefix = f"energiebe/{cid}"
-    try:
-        snap = await _fetch_with_retry(
-            partial(energiebe.fetch, session, cid, "flanders")
-        )
-    except Exception as err:
-        _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
-        return
-    _expect(f"{prefix}: publication label", bool(snap.publication_label))
-    _expect(
-        f"{prefix}: all eight Fluvius DSOs present",
-        expected_dso_keys <= set(snap.dsos),
-        detail=f"missing: {sorted(expected_dso_keys - set(snap.dsos))}",
-    )
-    _expect(
-        f"{prefix}: federal excise > 0",
-        snap.taxes.federal_excise > 0,
-        detail=str(snap.taxes),
-    )
-    _expect(
-        f"{prefix}: flanders renewables > 0",
-        snap.taxes.flanders_renewables > 0,
-        detail=str(snap.taxes),
-    )
-    _expect(
-        f"{prefix}: vat_rate is 0.0 (VAT-inclusive card)",
-        snap.taxes.vat_rate == 0.0,
-        detail=str(snap.taxes),
-    )
-    _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
+    await _check_flanders_dynamic(session, energiebe, "energiebe", "energiebe_dynamic")
 
 
 async def _check_energyvision(
