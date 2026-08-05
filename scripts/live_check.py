@@ -59,8 +59,39 @@ ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "custom_components" / "be_electricity_prices"
 
 
-def _load_providers() -> tuple[types.ModuleType, ...]:
-    """Load the providers package without dragging Home Assistant into scope."""
+# Every supplier the live check covers, in report order. The single list the
+# loader, the module map and the gather are all driven from: these used to be
+# five parallel enumerations, and _load_providers returned a bare 15-tuple that
+# _run destructured BY POSITION. Inserting a supplier into one list and not the
+# other silently rebound every module after the insertion point, so the check
+# would fetch one supplier's card and assert it under another's name while
+# reporting green.
+_SUPPLIERS: tuple[str, ...] = (
+    "eneco",
+    "cociter",
+    "dats24",
+    "ebem",
+    "ecofix",
+    "ecopower",
+    "engie",
+    "luminus",
+    "mega",
+    "totalenergies",
+    "bolt",
+    "octaplus",
+    "frank",
+    "energiebe",
+    "energyvision",
+)
+
+
+def _load_providers() -> dict[str, types.ModuleType]:
+    """Load the providers package without dragging Home Assistant into scope.
+
+    Keyed by supplier id: ``_check_catalogs`` indexes it by name, and a dict
+    cannot be destructured into the wrong variables the way the old positional
+    tuple could.
+    """
     parent = types.ModuleType("be_pkg")
     parent.__path__ = [str(PKG)]
     sys.modules["be_pkg"] = parent
@@ -102,42 +133,24 @@ def _load_providers() -> tuple[types.ModuleType, ...]:
     pdf = _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
     global _is_transient_fetch_error
     _is_transient_fetch_error = pdf.is_transient_fetch_error
-    eneco = _load("be_pkg.providers.eneco", PKG / "providers" / "eneco.py")
-    cociter = _load("be_pkg.providers.cociter", PKG / "providers" / "cociter.py")
-    dats24 = _load("be_pkg.providers.dats24", PKG / "providers" / "dats24.py")
-    ebem = _load("be_pkg.providers.ebem", PKG / "providers" / "ebem.py")
-    ecofix = _load("be_pkg.providers.ecofix", PKG / "providers" / "ecofix.py")
-    ecopower = _load("be_pkg.providers.ecopower", PKG / "providers" / "ecopower.py")
-    engie = _load("be_pkg.providers.engie", PKG / "providers" / "engie.py")
-    luminus = _load("be_pkg.providers.luminus", PKG / "providers" / "luminus.py")
-    mega = _load("be_pkg.providers.mega", PKG / "providers" / "mega.py")
-    totalenergies = _load(
-        "be_pkg.providers.totalenergies", PKG / "providers" / "totalenergies.py"
-    )
-    bolt = _load("be_pkg.providers.bolt", PKG / "providers" / "bolt.py")
-    octaplus = _load("be_pkg.providers.octaplus", PKG / "providers" / "octaplus.py")
-    frank = _load("be_pkg.providers.frank", PKG / "providers" / "frank.py")
-    energiebe = _load("be_pkg.providers.energiebe", PKG / "providers" / "energiebe.py")
-    energyvision = _load(
-        "be_pkg.providers.energyvision", PKG / "providers" / "energyvision.py"
-    )
-    return (
-        eneco,
-        cociter,
-        dats24,
-        ebem,
-        ecofix,
-        ecopower,
-        engie,
-        luminus,
-        mega,
-        totalenergies,
-        bolt,
-        octaplus,
-        frank,
-        energiebe,
-        energyvision,
-    )
+    loaded = {
+        supplier: _load(
+            f"be_pkg.providers.{supplier}", PKG / "providers" / f"{supplier}.py"
+        )
+        for supplier in _SUPPLIERS
+    }
+    # Every module must be the supplier it is filed under. The old positional
+    # unpack could bind a module to the wrong name and still report green, so
+    # make that impossible rather than merely unlikely: the extractor knows its
+    # own id, and a mismatch means the list and the filenames have diverged.
+    mismatched = {
+        supplier: mod.EXTRACTOR.id
+        for supplier, mod in loaded.items()
+        if mod.EXTRACTOR.id != supplier
+    }
+    if mismatched:
+        raise RuntimeError(f"provider module / supplier id mismatch: {mismatched}")
+    return loaded
 
 
 @dataclass
@@ -1499,41 +1512,37 @@ def _render_report(
     return out
 
 
+# supplier id -> its check coroutine. Defined here because every _check_* has
+# to exist first. The keys must equal _SUPPLIERS exactly, which the assert
+# below pins: a supplier added to one and not the other is the failure this
+# whole arrangement exists to make impossible.
+_CHECKS_BY_SUPPLIER: dict[
+    str, Callable[[aiohttp.ClientSession, types.ModuleType], Awaitable[None]]
+] = {
+    "eneco": _check_eneco,
+    "cociter": _check_cociter,
+    "dats24": _check_dats24,
+    "ebem": _check_ebem,
+    "ecofix": _check_ecofix,
+    "ecopower": _check_ecopower,
+    "engie": _check_engie,
+    "luminus": _check_luminus,
+    "mega": _check_mega,
+    "totalenergies": _check_totalenergies,
+    "bolt": _check_bolt,
+    "octaplus": _check_octaplus,
+    "frank": _check_frank,
+    "energiebe": _check_energiebe,
+    "energyvision": _check_energyvision,
+}
+assert set(_CHECKS_BY_SUPPLIER) == set(_SUPPLIERS), (
+    "live check supplier list and check registry disagree: "
+    f"{set(_SUPPLIERS) ^ set(_CHECKS_BY_SUPPLIER)}"
+)
+
+
 async def _run() -> int:
-    (
-        eneco,
-        cociter,
-        dats24,
-        ebem,
-        ecofix,
-        ecopower,
-        engie,
-        luminus,
-        mega,
-        totalenergies,
-        bolt,
-        octaplus,
-        frank,
-        energiebe,
-        energyvision,
-    ) = _load_providers()
-    modules = {
-        "eneco": eneco,
-        "cociter": cociter,
-        "dats24": dats24,
-        "ebem": ebem,
-        "ecofix": ecofix,
-        "ecopower": ecopower,
-        "engie": engie,
-        "luminus": luminus,
-        "mega": mega,
-        "totalenergies": totalenergies,
-        "bolt": bolt,
-        "octaplus": octaplus,
-        "frank": frank,
-        "energiebe": energiebe,
-        "energyvision": energyvision,
-    }
+    modules = _load_providers()
     # Index every contract so _expected_injection_shape can derive a shape
     # for cards not explicitly listed in _INJECTION_SHAPE.
     for _mod in modules.values():
@@ -1549,25 +1558,12 @@ async def _run() -> int:
         # TraceConfig hooks run in the same task that issued the request,
         # so per-supplier byte / latency attribution stays correct.
         await asyncio.gather(
-            _attributed_check("eneco", _check_eneco, session, eneco),
-            _attributed_check("cociter", _check_cociter, session, cociter),
-            _attributed_check("dats24", _check_dats24, session, dats24),
-            _attributed_check("ebem", _check_ebem, session, ebem),
-            _attributed_check("ecofix", _check_ecofix, session, ecofix),
-            _attributed_check("ecopower", _check_ecopower, session, ecopower),
-            _attributed_check("engie", _check_engie, session, engie),
-            _attributed_check("luminus", _check_luminus, session, luminus),
-            _attributed_check("mega", _check_mega, session, mega),
-            _attributed_check(
-                "totalenergies", _check_totalenergies, session, totalenergies
-            ),
-            _attributed_check("bolt", _check_bolt, session, bolt),
-            _attributed_check("octaplus", _check_octaplus, session, octaplus),
-            _attributed_check("frank", _check_frank, session, frank),
-            _attributed_check("energiebe", _check_energiebe, session, energiebe),
-            _attributed_check(
-                "energyvision", _check_energyvision, session, energyvision
-            ),
+            *(
+                _attributed_check(
+                    supplier, _CHECKS_BY_SUPPLIER[supplier], session, modules[supplier]
+                )
+                for supplier in _SUPPLIERS
+            )
         )
         # Catalog probes fan out across suppliers; attribute them
         # to a synthetic bucket so they don't double-count against
