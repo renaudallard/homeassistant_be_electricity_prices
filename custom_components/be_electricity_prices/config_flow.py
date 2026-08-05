@@ -835,6 +835,27 @@ _METER_SENSOR_KEYS: tuple[str, ...] = (
 )
 
 
+def _incomplete_register_pairs(data: dict[str, Any]) -> dict[str, str]:
+    """Report a day/night register pair that has only one half filled.
+
+    The coordinator needs both halves or neither: ``_resolve_daily_kwh`` and
+    ``_hourly_consumption_sensors`` both give up on a half-wired pair, and
+    ``current_year_cost`` then collapses to the fees-only floor without an
+    error, a repair or any log line the user would look at. The form is the
+    one place the mistake is visible, so refuse it there.
+
+    Keyed on the NIGHT field of each side, which is where the message renders.
+    """
+    errors: dict[str, str] = {}
+    for day_key, night_key in (
+        (CONF_DAY_CONSUMPTION_KWH, CONF_NIGHT_CONSUMPTION_KWH),
+        (CONF_DAY_INJECTION_KWH, CONF_NIGHT_INJECTION_KWH),
+    ):
+        if bool(data.get(day_key)) != bool(data.get(night_key)):
+            errors[night_key] = "register_pair_incomplete"
+    return errors
+
+
 def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Cumulative-kWh sensors for the current_year_cost computation.
 
@@ -1474,6 +1495,19 @@ class _WizardStepsMixin:
                 if key not in user_input:
                     self._data.pop(key, None)
             self._data.update(user_input)
+            # A day/night pair only works as a pair. _resolve_daily_kwh and
+            # _hourly_consumption_sensors both give up when one half is
+            # missing, and the year cost then silently collapses to the
+            # fees-only floor with no error, no repair and nothing in the log
+            # a user would see. Catch it at the point the mistake is made.
+            errors = _incomplete_register_pairs(self._data)
+            if errors:
+                defaults = dict(self._data)
+                return self.async_show_form(
+                    step_id="meters",
+                    data_schema=_meters_schema(defaults),
+                    errors=errors,
+                )
             return self._finalize()
         defaults = dict(self._data)
         await _apply_energy_manager_defaults(self.hass, defaults)

@@ -35,6 +35,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.be_electricity_prices import const
 from custom_components.be_electricity_prices.config_flow import (
     _apply_energy_manager_capacity_default,
     _apply_energy_manager_defaults,
@@ -514,3 +515,37 @@ async def test_capacity_pre_fill_ignores_a_disabled_meter_peak(
     with _patch_manager(_grid_prefs(consumption="sensor.electricity_meter_total")):
         await _apply_energy_manager_capacity_default(hass, defaults)
     assert defaults["capacity_peak_sensor"] == "sensor.electricity_meter_power"
+
+
+def test_half_wired_register_pair_is_rejected() -> None:
+    """A day/night pair only works as a pair: the coordinator gives up on a
+    half-wired one and current_year_cost collapses to the fees-only floor
+    with no error, no repair and nothing in the log a user would see."""
+    from custom_components.be_electricity_prices.config_flow import (
+        _incomplete_register_pairs,
+    )
+
+    assert _incomplete_register_pairs({}) == {}
+    both = {
+        const.CONF_DAY_CONSUMPTION_KWH: "sensor.d",
+        const.CONF_NIGHT_CONSUMPTION_KWH: "sensor.n",
+    }
+    assert _incomplete_register_pairs(both) == {}
+    assert _incomplete_register_pairs({const.CONF_DAY_CONSUMPTION_KWH: "sensor.d"}) == {
+        const.CONF_NIGHT_CONSUMPTION_KWH: "register_pair_incomplete"
+    }
+    assert _incomplete_register_pairs({const.CONF_NIGHT_INJECTION_KWH: "sensor.n"}) == {
+        const.CONF_NIGHT_INJECTION_KWH: "register_pair_incomplete"
+    }
+    # Both sides half-wired reports both.
+    assert (
+        len(
+            _incomplete_register_pairs(
+                {
+                    const.CONF_DAY_CONSUMPTION_KWH: "sensor.d",
+                    const.CONF_DAY_INJECTION_KWH: "sensor.di",
+                }
+            )
+        )
+        == 2
+    )

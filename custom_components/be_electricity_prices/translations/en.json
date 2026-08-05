@@ -184,7 +184,8 @@
       "invalid_api_key": "ENTSO-E rejected this token. Double-check the value at transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "Could not reach ENTSO-E to verify the token. Check your network and try again.",
       "start_date_in_future": "The contract start date cannot be in the future.",
-      "end_before_start": "The contract end date must be after the start date."
+      "end_before_start": "The contract end date must be after the start date.",
+      "register_pair_incomplete": "Fill in both the day and the night register, or neither. With only one of the pair the year-to-date cost cannot split your consumption and falls back to fees only."
     }
   },
   "options": {
@@ -198,7 +199,8 @@
       "invalid_api_key": "ENTSO-E rejected this token. Double-check the value at transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "Could not reach ENTSO-E to verify the token. Check your network and try again.",
       "start_date_in_future": "The contract start date cannot be in the future.",
-      "end_before_start": "The contract end date must be after the start date."
+      "end_before_start": "The contract end date must be after the start date.",
+      "register_pair_incomplete": "Fill in both the day and the night register, or neither. With only one of the pair the year-to-date cost cannot split your consumption and falls back to fees only."
     },
     "step": {
       "init": {

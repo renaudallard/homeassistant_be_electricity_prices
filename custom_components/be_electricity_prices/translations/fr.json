@@ -184,7 +184,8 @@
       "invalid_api_key": "ENTSO-E a rejete ce jeton. Verifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "Impossible de joindre ENTSO-E pour verifier le jeton. Verifiez votre reseau et reessayez.",
       "start_date_in_future": "La date de début du contrat ne peut pas être dans le futur.",
-      "end_before_start": "La date de fin du contrat doit être postérieure à la date de début."
+      "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
+      "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou aucun des deux. Avec un seul des deux, le coût annuel ne peut pas répartir votre consommation et se limite aux frais fixes."
     }
   },
   "options": {
@@ -198,7 +199,8 @@
       "invalid_api_key": "ENTSO-E a rejete ce jeton. Verifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "Impossible de joindre ENTSO-E pour verifier le jeton. Verifiez votre reseau et reessayez.",
       "start_date_in_future": "La date de début du contrat ne peut pas être dans le futur.",
-      "end_before_start": "La date de fin du contrat doit être postérieure à la date de début."
+      "end_before_start": "La date de fin du contrat doit être postérieure à la date de début.",
+      "register_pair_incomplete": "Renseignez le registre jour ET le registre nuit, ou aucun des deux. Avec un seul des deux, le coût annuel ne peut pas répartir votre consommation et se limite aux frais fixes."
     },
     "step": {
       "init": {
