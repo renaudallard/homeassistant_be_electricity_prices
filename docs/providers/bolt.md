@@ -74,6 +74,20 @@ whole schedule Engie and Mega publish, so a professional Bolt snapshot carries n
 `federal_excise_bands` and a site above 20 MWh/year is billed the first band's rate. Nothing can be
 done about that from the card alone, and inventing the other bands would put EUR values in source.
 
+The same limitation applies to **Brussels**, and it is worth stating so nobody "fixes" it by
+hardcoding. Sibelga bills two separate regulated annual terms for a residential connection:
+*Activités de mesure et de comptage* and *Puissance mise à disposition ≤13 kVA*. Engie sums both
+(`engie.py:1027`) and so does Mega (`mega.py:1359`, `mesure + fixed_term_le13`), which is why their
+Brussels `data_management_per_year` is around 64,80 EUR/yr. **Bolt's card prints only six numbers
+for the Sibelga row**, ending at the metering term, with no ≤13 kVA column anywhere in the
+document, so its Brussels `data_management_per_year` is that term alone and a Bolt Brussels entry
+under-states the annual network fee against an Engie or Mega quote for the same connection.
+
+There is nothing to read, and `providers/base.py` is explicit that no EUR value lives in Python
+source — every number in a `SupplierSnapshot` comes from a live fetch. Sourcing the term from the
+Brugel/Sibelga publication the way the Brussels OSP table is handled would be a real fix; putting
+the figure in the extractor would not. Left as a known gap.
+
 | id | label | kind | folder / slug | spot-indexed injection | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `bolt_fix` | Bolt Fixe (1 year) | fixed | `fix` / `fix` | no | The only card with a real monthly archive |
