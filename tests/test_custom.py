@@ -580,6 +580,52 @@ def test_fallback_rate_boxes_never_carry_a_default() -> None:
     )
     assert not has_default(night, const.CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT)
 
+    # The ENERGY twin of that last box was the one left behind, and it is the
+    # worst of the six: an exclusive-night meter routes the whole entry through
+    # this single rate, so the energy leg went to zero for every hour.
+    night_energy = _custom_energy_schema(
+        {
+            const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+            const.CONF_METER: const.METER_EXCLUSIVE_NIGHT,
+        }
+    )
+    assert not has_default(night_energy, const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT)
+
+
+def test_a_blanked_fallback_box_is_removed_from_the_entry() -> None:
+    """Dropping the default is only half of it: the step has to pop the key.
+
+    ha-form omits a blanked selector from user_input entirely, so a bare
+    data.update(user_input) leaves the stored number in place and the re-shown
+    form pre-fills it again as a suggestion. That matters because 0.11.40 and
+    0.11.41 briefly shipped these boxes with a 0.0 default, so an entry edited
+    in that window holds a billed zero -- and without the pop there is no way
+    to clear it.
+    """
+    from custom_components.be_electricity_prices.config_flow import _drop_blanked
+
+    data = {
+        const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+        const.CONF_METER: const.METER_EXCLUSIVE_NIGHT,
+        const.CONF_CUSTOM_ENERGY_SINGLE: 0.30,
+        const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT: 0.0,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK: 0.0,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK: 0.0,
+    }
+    # The user clears every fallback box and submits just the single rate.
+    _drop_blanked(data, {const.CONF_CUSTOM_ENERGY_SINGLE: 0.30})
+    for key in (
+        const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK,
+    ):
+        assert key not in data, key
+    # A box the user DID fill is kept, and the non-fallback rates are untouched.
+    _drop_blanked(data, {const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT: 0.12})
+    data.update({const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT: 0.12})
+    assert data[const.CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT] == pytest.approx(0.12)
+    assert data[const.CONF_CUSTOM_ENERGY_SINGLE] == pytest.approx(0.30)
+
 
 def test_absent_fallback_rates_price_off_the_single_rate() -> None:
     """The behaviour the missing defaults protect: with peak / offpeak absent

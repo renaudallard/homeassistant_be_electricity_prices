@@ -458,6 +458,34 @@ _MANUAL_RATE_KEYS: tuple[str, ...] = (
     CONF_MANUAL_YEARLY_FEE,
 )
 
+# The custom-supplier rate boxes whose ABSENCE is meaningful: ``_routed_rate``
+# and ``_network_rate`` fall back to the single rate when these are None, so a
+# stored 0.0 is a different answer, not an empty box. Their steps have to pop a
+# blanked one exactly like the signing-rate step does, or the value can be set
+# but never cleared -- and 0.11.40/0.11.41 briefly shipped these boxes with a
+# 0.0 default, so entries edited in that window hold a billed zero with no
+# route out of it.
+_CUSTOM_FALLBACK_KEYS: tuple[str, ...] = (
+    CONF_CUSTOM_ENERGY_PEAK,
+    CONF_CUSTOM_ENERGY_OFFPEAK,
+    CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
+    CONF_CUSTOM_DSO_DISTRIBUTION_PEAK,
+    CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK,
+    CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT,
+)
+
+
+def _drop_blanked(data: dict[str, Any], user_input: dict[str, Any]) -> None:
+    """Remove any fallback key the user cleared from the form.
+
+    ha-form omits a blanked selector from ``user_input`` entirely, so a bare
+    ``data.update(user_input)`` leaves the stored number in place and the
+    re-shown form pre-fills it again as a suggestion.
+    """
+    for key in _CUSTOM_FALLBACK_KEYS:
+        if key not in user_input:
+            data.pop(key, None)
+
 
 def _add_manual_num(
     fields: dict[Any, Any],
@@ -624,7 +652,17 @@ def _custom_energy_schema(defaults: dict[str, Any]) -> vol.Schema:
             _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_PEAK, fallback=True)
             _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_OFFPEAK, fallback=True)
         if meter == METER_EXCLUSIVE_NIGHT:
-            _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT)
+            # Same fallback class as the peak / off-peak pair above and as its
+            # own DSO counterpart: ``_routed_rate`` bills the single rate when
+            # ``exclusive_night`` is None, so a 0.0 injected into an untouched
+            # box is a DIFFERENT answer, not an absent one. This box was the
+            # one left behind when the other five were fixed, and it is the
+            # worst of them: an exclusive-night meter routes the whole entry
+            # through this single rate, so the energy leg went to zero for
+            # every hour, not just some.
+            _add_custom_num(
+                fields, defaults, CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT, fallback=True
+            )
     else:
         _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_FACTOR, 1.0, negative=True)
         _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_BASE, negative=True)
@@ -1661,6 +1699,7 @@ class _WizardStepsMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
+            _drop_blanked(self._data, user_input)
             self._data.update(user_input)
             return await self._after_energy_collected()
         return self.async_show_form(
@@ -1683,6 +1722,7 @@ class _WizardStepsMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
+            _drop_blanked(self._data, user_input)
             self._data.update(user_input)
             return await self.async_step_custom_tax()
         return self.async_show_form(
