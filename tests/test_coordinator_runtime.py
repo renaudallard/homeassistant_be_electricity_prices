@@ -548,6 +548,32 @@ async def test_force_refresh_evicts_shared_cache_for_other_coordinator(
         assert fetch_calls == 2
 
 
+async def test_pruning_spots_keeps_the_same_dict_object(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """_ensure_historical_spots merges each fetched chunk into
+    self._historical_spots and re-resolves the attribute after every await.
+
+    A prune landing between two chunks (the tick calls it from
+    _save_persistent while a backfill is mid-fetch) used to REBIND the
+    attribute, so everything the earlier chunks had merged into the old dict
+    was silently discarded. Pruning in place keeps every holder on one dict.
+    """
+    freezer.move_to("2026-01-02 12:00:00+01:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    before = coord._historical_spots
+    before[datetime(2025, 6, 1, 10, tzinfo=UTC)] = 0.05  # prior year, prunable
+    before[datetime(2026, 1, 1, 10, tzinfo=UTC)] = 0.06  # current year, kept
+
+    coord._prune_historical_spots()
+
+    assert coord._historical_spots is before, "prune rebound the dict"
+    assert datetime(2025, 6, 1, 10, tzinfo=UTC) not in before
+    assert before[datetime(2026, 1, 1, 10, tzinfo=UTC)] == 0.06
+
+
 async def test_probe_match_through_the_shared_cache_refreshes_fetched_at(
     hass: HomeAssistant, freezer: Any
 ) -> None:

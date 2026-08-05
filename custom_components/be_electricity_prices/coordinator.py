@@ -2573,9 +2573,14 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         # reallocation on each of the other 364 days.
         if min(self._historical_spots) >= keep_after:
             return
-        self._historical_spots = {
-            h: v for h, v in self._historical_spots.items() if h >= keep_after
-        }
+        # Mutate in place rather than rebinding. _ensure_historical_spots
+        # merges each fetched chunk into this attribute and re-resolves it
+        # after every await, so a prune landing between two chunks (the tick
+        # calls it from _save_persistent while a backfill is mid-fetch) would
+        # rebind the attribute and silently discard everything the earlier
+        # chunks had already merged into the old dict.
+        for stale_hour in [h for h in self._historical_spots if h < keep_after]:
+            del self._historical_spots[stale_hour]
         # Drop prior year days from the completeness set alongside their spots
         # so it doesn't grow without bound across years.
         self._complete_spot_days = {
