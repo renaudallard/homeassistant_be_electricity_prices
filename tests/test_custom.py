@@ -529,3 +529,82 @@ def test_custom_energy_schema_offers_the_day_night_split_to_a_dynamic_meter() ->
     mono = keys(const.METER_MONO)
     assert const.CONF_CUSTOM_ENERGY_PEAK not in mono
     assert const.CONF_CUSTOM_ENERGY_OFFPEAK not in mono
+
+
+def test_fallback_rate_boxes_never_carry_a_default() -> None:
+    """A rate the pricing engine falls back for must not be submitted as 0,00.
+
+    `vol.Optional(key, default=0.0)` sends the default verbatim when the user
+    leaves the box alone, so simply clicking through the wizard wrote peak =
+    offpeak = 0,00 into the entry and `_routed_rate` billed ZERO instead of
+    falling back to the single rate: an existing custom entry re-opened and
+    clicked through priced at 0,00000 EUR/kWh, energy and network both nil.
+
+    The base rates keep their defaults; only the ones with a fallback lose them.
+    """
+    import voluptuous as vol
+
+    def has_default(schema: Any, key: str) -> bool:
+        for k in schema.schema:
+            if str(k) == key:
+                return getattr(k, "default", vol.UNDEFINED) is not vol.UNDEFINED
+        raise AssertionError(f"{key} not in schema")
+
+    energy = _custom_energy_schema(
+        {
+            const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+            const.CONF_METER: const.METER_DYNAMIC,
+        }
+    )
+    assert has_default(energy, const.CONF_CUSTOM_ENERGY_SINGLE)
+    assert not has_default(energy, const.CONF_CUSTOM_ENERGY_PEAK)
+    assert not has_default(energy, const.CONF_CUSTOM_ENERGY_OFFPEAK)
+
+    dso = _custom_dso_schema(
+        {
+            const.CONF_REGION: const.REGION_WALLONIA,
+            const.CONF_METER: const.METER_DYNAMIC,
+            const.CONF_DSO_TARIFF_MODE: "bi_horaire",
+        }
+    )
+    assert has_default(dso, const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE)
+    assert not has_default(dso, const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK)
+    assert not has_default(dso, const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK)
+
+    night = _custom_dso_schema(
+        {
+            const.CONF_REGION: const.REGION_WALLONIA,
+            const.CONF_METER: const.METER_EXCLUSIVE_NIGHT,
+            const.CONF_DSO_TARIFF_MODE: "bi_horaire",
+        }
+    )
+    assert not has_default(night, const.CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT)
+
+
+def test_absent_fallback_rates_price_off_the_single_rate() -> None:
+    """The behaviour the missing defaults protect: with peak / offpeak absent
+    a bi-hourly hour still bills the single rate, not zero."""
+    from datetime import UTC, datetime
+
+    from custom_components.be_electricity_prices import pricing
+    from custom_components.be_electricity_prices.providers.custom import build_snapshot
+
+    entry = {
+        const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+        const.CONF_CUSTOM_ENERGY_SINGLE: 0.20,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.05,
+        const.CONF_CUSTOM_VAT_RATE: 0.0,
+    }
+    snap = build_snapshot(entry, const.REGION_WALLONIA, const.DSO_ORES)
+    bd = pricing.compute_breakdown(
+        snap,
+        const.DSO_ORES,
+        const.REGION_WALLONIA,
+        datetime(2026, 8, 5, 12, tzinfo=UTC),
+        None,
+        const.METER_DYNAMIC,
+        dso_tariff_mode="bi_horaire",
+    )
+    assert bd.energy == pytest.approx(0.20)
+    assert bd.network == pytest.approx(0.05)
+    assert bd.all_in == pytest.approx(0.25)

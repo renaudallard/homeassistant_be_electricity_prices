@@ -576,7 +576,28 @@ def _add_custom_num(
     default: float = 0.0,
     *,
     negative: bool = False,
+    fallback: bool = False,
 ) -> None:
+    """Append a hand-entered custom-supplier number.
+
+    ``fallback=True`` marks a rate the pricing engine FALLS BACK for when it is
+    absent (the bi-hourly peak / off-peak split and the exclusive-night
+    distribution rate all fall back to the single rate). Those must never carry
+    a ``default``: a default is submitted verbatim when the user leaves the box
+    alone, so 0,00 lands in the entry and the engine bills zero instead of
+    falling back. Use the stored value as a *suggestion* instead, exactly as
+    ``_add_manual_num`` does, so a blank box omits the key.
+    """
+    if fallback:
+        stored = defaults.get(key)
+        selector = _custom_num(negative=negative)
+        if stored is not None:
+            fields[
+                vol.Optional(key, description={"suggested_value": float(stored)})
+            ] = selector
+        else:
+            fields[vol.Optional(key)] = selector
+        return
     fields[vol.Optional(key, default=float(defaults.get(key, default)))] = _custom_num(
         negative=negative
     )
@@ -600,8 +621,8 @@ def _custom_energy_schema(defaults: dict[str, Any]) -> vol.Schema:
         # custom fixed contract on a smart meter unable to enter its own two
         # rates, so all 24 hours fell back to the single rate.
         if meter in (METER_BI, METER_DYNAMIC):
-            _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_PEAK)
-            _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_OFFPEAK)
+            _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_PEAK, fallback=True)
+            _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_OFFPEAK, fallback=True)
         if meter == METER_EXCLUSIVE_NIGHT:
             _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT)
     else:
@@ -693,10 +714,19 @@ def _custom_dso_schema(defaults: dict[str, Any]) -> vol.Schema:
     # supply the two rates its own network leg is billed on, and every hour
     # silently fell back to distribution_single.
     if meter in (METER_BI, METER_DYNAMIC):
-        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_PEAK)
-        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK)
+        _add_custom_num(
+            fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_PEAK, fallback=True
+        )
+        _add_custom_num(
+            fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK, fallback=True
+        )
     if meter == METER_EXCLUSIVE_NIGHT:
-        _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT)
+        _add_custom_num(
+            fields,
+            defaults,
+            CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT,
+            fallback=True,
+        )
     _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_TRANSPORT)
     _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR)
     if region == REGION_FLANDERS:
