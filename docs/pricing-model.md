@@ -526,7 +526,7 @@ EnergyVision 3 jaar vast / 1 an fixe) must
 emit only the realized monthly `current`, never an hourly `factor*spot+base`,
 because the indicative is the actual credit. The guard that keeps shape (b)/(c)
 from swallowing these cards is the `inj.current is None` clause in both
-`_injection_needs_spot` (`coordinator.py:2916`) and `_compute_injection_price`
+`_injection_needs_spot` (`coordinator.py:2928`) and `_compute_injection_price`
 (`coordinator.py:2761`): when a card prints a monthly `current`, the spot branch
 is skipped and the realized rate is used, keeping the live sensor consistent with
 the YTD credit for the same hour (`coordinator.py:2745-2753`). A latent mis-price

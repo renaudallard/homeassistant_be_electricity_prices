@@ -2295,6 +2295,39 @@ async def test_billed_peak_ignores_the_unmeasured_running_month(
     assert coord._billed_peak_kw() == pytest.approx((6 * 6.0 + 2.5) / 7)
 
 
+async def test_months_counted_matches_the_months_actually_averaged(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """capacity_peak_months must report the mean's real term count.
+
+    It was computed at the call site as len(self._peak_history) + 1, which
+    claims the in-progress month unconditionally -- but the mean leaves that
+    month out until it has a reading, so the attribute over-reported for the
+    whole window the skip exists for. Both now read the same list.
+    """
+    freezer.move_to("2026-05-01 00:30:00+02:00")
+    entry = _flanders_sensor_entry("sensor.house_power")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_history = {f"2025-{m:02d}-01": 6.0 for m in range(6, 12)}
+
+    # Just rolled over, nothing measured: six banked months, six averaged.
+    coord._peak_kw = 0.0
+    assert len(coord._peak_terms()) == 6
+    assert coord._billed_peak_kw() == pytest.approx(6.0)
+
+    # A reading arrives: the seventh term joins both the mean and the count.
+    coord._peak_kw = 1.0
+    assert len(coord._peak_terms()) == 7
+    assert coord._billed_peak_kw() == pytest.approx((6 * 6.0 + 2.5) / 7)
+
+    # Nothing anywhere: the floor is returned without averaging anything.
+    coord._peak_history = {}
+    coord._peak_kw = 0.0
+    assert coord._peak_terms() == []
+    assert coord._billed_peak_kw() == pytest.approx(2.5)
+
+
 async def test_billed_peak_of_a_brand_new_entry_is_the_floor(
     hass: HomeAssistant, freezer: Any
 ) -> None:
