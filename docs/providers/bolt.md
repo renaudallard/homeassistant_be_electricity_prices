@@ -188,7 +188,7 @@ January 2026.
 > | tax columns | three values **inline** on the label line | on the lines below it |
 > | connection fee | markers as `(*)(***)` | bare digits (`6 7`) |
 > | Brussels DSO | `SIBELGA` | `Sibelga` |
-> | feed-in | three-column FL/WAL/BX `Injection (c€/kWh)` row | `Prix mensuel` under the `Injection` header |
+> | feed-in | `Injection (c€/kWh)` row under `Tarif d'injection (HTVA)` | `Prix mensuel` under the `Injection` header |
 >
 > `_extract_legacy_energy` (`bolt.py:512`) reads the older shape, keyed on which
 > anchor the card actually carries rather than on a date, so it neither guesses at
@@ -212,6 +212,15 @@ January 2026.
 > which is worse than the pre-fix behaviour of falling back to the current card.
 > Wallonia's connection fee sat behind parenthesised footnote markers and came out
 > at zero, and the feed-in indicative vanished entirely.
+>
+> The feed-in row carries its own trap. `Injection (c€/kWh) 5,87 6,69 3,78` sits on
+> a page whose tax rows are headed `VL WAL BRU`, so it reads as a regional split --
+> but its header is `(*) TVA non applicable. Simple Jour Nuit` a few lines up, and
+> the `Belpex Q4 2025` row above it uses the same three columns. They are METER
+> REGISTERS. Billing them as regions credited Wallonia the Jour rate and Brussels
+> the Nuit one. Every region bills the **Simple** column, which is what the current
+> card's `Prix mensuel` branch already does with its own `Compteur simple` /
+> `Exclusif nuit` pair.
 
 ## Parsing
 

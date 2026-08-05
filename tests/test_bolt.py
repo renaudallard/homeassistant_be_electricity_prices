@@ -103,7 +103,7 @@ def test_injection_accepts_negative_second_column() -> None:
     # is billed, but the second is a required anchor token, so the parser
     # must tolerate its minus sign instead of returning None.
     text = "Injection\nPrix mensuel 3,40 -0,43 Compteur\n"
-    inj = bolt_mod._extract_injection(text, "fixed", "wallonia")
+    inj = bolt_mod._extract_injection(text, "fixed")
     assert inj is not None
     assert inj.current == pytest.approx(0.034)
     assert inj.factor is None
@@ -295,7 +295,7 @@ def test_dynamic_injection_selected_by_factor_not_position() -> None:
         "Injection\n"
         "Injection nuit Belpex * 0,94 - 11,33\n"
     )
-    inj = bolt_mod._extract_injection(text, "dynamic", "wallonia")
+    inj = bolt_mod._extract_injection(text, "dynamic")
     assert inj is not None
     assert inj.current is None
     assert inj.factor == pytest.approx(0.94)
@@ -486,15 +486,19 @@ def test_pre_redesign_archive_card_carries_its_overlays_too() -> None:
     """
     text = fixture_text("bolt_fix_jan_legacy.pdf", layout=True)
 
-    # "Injection (c€/kWh) 5,87 6,69 3,78", per region.
-    for region, injection in (
-        ("flanders", 0.0587),
-        ("wallonia", 0.0669),
-        ("brussels", 0.0378),
-    ):
+    # "Injection (c€/kWh) 5,87 6,69 3,78" under "Tarif d'injection (HTVA)".
+    # Those columns are METER REGISTERS -- their header is "(*) TVA non
+    # applicable. Simple Jour Nuit" and the Belpex row above shares them --
+    # not regions. The VL/WAL/BX headers on that page govern the tax rows.
+    # Reading them as regions credited Wallonia the Jour rate (6,69) and
+    # Brussels the Nuit one (3,78); every region bills the Simple column,
+    # the same way the current card's "Prix mensuel" branch does.
+    for region in ("flanders", "wallonia", "brussels"):
         snap = parse_snapshot("bolt_fix", text, region, "test://bolt-202601")
         assert snap.injection is not None, region
-        assert snap.injection.current == pytest.approx(injection), region
+        assert snap.injection.current == pytest.approx(0.0587), region
+        assert snap.injection.peak is None, region
+        assert snap.injection.offpeak is None, region
 
     # "Redevance de raccordement (c€/kWh) (*)(***) - 0,075 -": Wallonia only.
     assert parse_snapshot(

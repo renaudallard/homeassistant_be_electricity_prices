@@ -386,7 +386,7 @@ def parse_snapshot(
 
     professional = contract.professional
     energy = _extract_energy(text, contract.kind, professional=professional)
-    injection = _extract_injection(text, contract.kind, region)
+    injection = _extract_injection(text, contract.kind)
     if professional and injection is not None:
         injection = replace(injection, vat_applies=True)
     publication_label = _extract_publication_month(text)
@@ -680,9 +680,7 @@ def _extract_publication_month(text: str) -> str:
     return match.group(1) if match else ""
 
 
-def _extract_injection(
-    text: str, kind: TariffKind, region: str
-) -> InjectionRates | None:
+def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     if kind == "dynamic":
         # Dynamic injection is spot-indexed: the same Belpex formula table
         # prints an injection row whose factor is < 1 (Bolt redistributes a
@@ -719,21 +717,30 @@ def _extract_injection(
         current = to_float(m.group(1)) / 100.0
         return InjectionRates(current=current, factor=None, base=None, formula=None)
     # A pre-April-2026 archive card has no "Prix mensuel" row. It prints the
-    # indicative as a three-column FL/WAL/BX row like the tax block instead:
+    # indicative under the "Tarif d'injection (HTVA)" heading as
     # "Injection (c€/kWh) 5,87 6,69 3,78". Missing it dropped the feed-in
     # credit entirely for every archived month a year-to-date walk crosses.
+    #
+    # Those three columns are METER REGISTERS, not regions. Their header is
+    # "(*) TVA non applicable. Simple Jour Nuit", a few lines up, and the
+    # Belpex row above them uses the same three. The VL/WAL/BX headers on that
+    # page govern the TAX rows only. Reading them as regions credited Wallonia
+    # the Jour rate and Brussels the Nuit one, which is why the first column
+    # is taken here regardless of region -- exactly what the current card's
+    # "Prix mensuel" branch above does with its own Simple / Exclusif-nuit
+    # pair. peak / offpeak stay None: they are consulted only for a
+    # TimeOfUseRates energy leg, and these are fixed and variable cards.
     legacy = re.search(
-        r"Injection\s*\(c€/kWh\)\s*(-?[\d.,]+)\s+(-?[\d.,]+)\s+(-?[\d.,]+)",
+        r"Injection\s*\(c€/kWh\)\s*(-?[\d.,]+)",
         text,
     )
     if not legacy:
         return None
-    index = {REGION_FLANDERS: 1, REGION_WALLONIA: 2, REGION_BRUSSELS: 3}[region]
-    token = legacy.group(index).strip()
-    if token == "-" or not token:
-        return None
     return InjectionRates(
-        current=to_float(token) / 100.0, factor=None, base=None, formula=None
+        current=to_float(legacy.group(1)) / 100.0,
+        factor=None,
+        base=None,
+        formula=None,
     )
 
 
