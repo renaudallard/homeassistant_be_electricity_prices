@@ -2066,3 +2066,35 @@ async def test_compare_resolves_the_quote_through_the_shared_resolver(
     used_entry, used_snap = seen[-1]
     assert used_entry is entry
     assert used_snap is other_snap
+
+
+def test_region_mismatch_is_a_form_error_not_an_abort() -> None:
+    """Supplier and region are picked on the same step, so the mismatch can
+    only be judged once both are in.
+
+    Detecting it a step later and aborting ended the flow, and in the options
+    flow that discarded every other change made in the same run. The abort
+    text even said "go back and pick a different combination", which HA gives
+    no way to do from an abort.
+    """
+    from custom_components.be_electricity_prices.config_flow import (
+        _region_mismatch_error,
+    )
+    from custom_components.be_electricity_prices.const import CONF_REGION, CONF_SUPPLIER
+
+    # Eneco publishes no Brussels contract.
+    assert _region_mismatch_error(
+        {CONF_SUPPLIER: "eneco", CONF_REGION: "brussels"}
+    ) == {CONF_SUPPLIER: "supplier_region_unavailable"}
+    # A combination that exists is fine.
+    assert (
+        _region_mismatch_error({CONF_SUPPLIER: "eneco", CONF_REGION: "wallonia"})
+        is None
+    )
+    # Half-filled data cannot be judged yet.
+    assert _region_mismatch_error({CONF_SUPPLIER: "eneco"}) is None
+    assert _region_mismatch_error({}) is None
+    # An unknown supplier is not this check's business.
+    assert (
+        _region_mismatch_error({CONF_SUPPLIER: "nope", CONF_REGION: "wallonia"}) is None
+    )

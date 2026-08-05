@@ -202,6 +202,34 @@ def _supplier_options(
     ]
 
 
+def _region_mismatch_error(data: dict[str, Any]) -> dict[str, str] | None:
+    """Report a supplier that sells nothing in the chosen region.
+
+    Supplier and region are picked on the SAME step, so the mismatch can only
+    be judged once both are in. Detecting it a step later and aborting ends
+    the flow, and in the options flow that discards every other change made in
+    the same run -- the user re-opens the dialog to find their edits gone. The
+    abort text even says "go back and pick a different combination", which HA
+    gives no way to do from an abort.
+
+    Returning it as a form error re-shows the step with everything still
+    filled in, which is what the text has always described.
+    """
+    supplier = data.get(CONF_SUPPLIER)
+    region = data.get(CONF_REGION)
+    if not supplier or not region:
+        return None
+    try:
+        available = _contracts_for(str(supplier), str(region))
+    except ExtractorError:
+        # Not this check's business: an unknown supplier id is rejected by the
+        # selector itself.
+        return None
+    if available:
+        return None
+    return {CONF_SUPPLIER: "supplier_region_unavailable"}
+
+
 def _contracts_for(supplier_id: str, region: str | None = None) -> tuple[Contract, ...]:
     contracts = get_extractor(supplier_id).contracts
     if region is None:
@@ -1686,6 +1714,13 @@ class BePricesConfigFlow(_WizardStepsMixin, ConfigFlow, domain=DOMAIN):
             self._data = {}
         if user_input is not None:
             self._data.update(user_input)
+            errors = _region_mismatch_error(self._data)
+            if errors:
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=_user_schema(self._data),
+                    errors=errors,
+                )
             return await self.async_step_contract()
         return self.async_show_form(
             step_id="user", data_schema=_user_schema(self._data)
@@ -1736,6 +1771,13 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             self._data = {**self.config_entry.data, **self.config_entry.options}
         if user_input is not None:
             self._data.update(user_input)
+            errors = _region_mismatch_error(self._data)
+            if errors:
+                return self.async_show_form(
+                    step_id="edit",
+                    data_schema=_user_schema(self._data),
+                    errors=errors,
+                )
             return await self.async_step_contract()
         return self.async_show_form(
             step_id="edit", data_schema=_user_schema(self._data)

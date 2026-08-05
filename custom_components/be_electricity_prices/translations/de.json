@@ -185,7 +185,8 @@
       "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprueft werden. Pruefen Sie Ihr Netzwerk und versuchen Sie es erneut.",
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
-      "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder keines von beiden. Mit nur einem der beiden kann die Jahreskosten Ihren Verbrauch nicht aufteilen und fällt auf die reinen Gebühren zurück."
+      "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder keines von beiden. Mit nur einem der beiden kann die Jahreskosten Ihren Verbrauch nicht aufteilen und fällt auf die reinen Gebühren zurück.",
+      "supplier_region_unavailable": "Dieser Lieferant verkauft in der gewählten Region keinen Haushaltsstrom. Wählen Sie einen anderen Lieferanten oder eine andere Region."
     }
   },
   "options": {
@@ -200,7 +201,8 @@
       "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprueft werden. Pruefen Sie Ihr Netzwerk und versuchen Sie es erneut.",
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
-      "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder keines von beiden. Mit nur einem der beiden kann die Jahreskosten Ihren Verbrauch nicht aufteilen und fällt auf die reinen Gebühren zurück."
+      "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder keines von beiden. Mit nur einem der beiden kann die Jahreskosten Ihren Verbrauch nicht aufteilen und fällt auf die reinen Gebühren zurück.",
+      "supplier_region_unavailable": "Dieser Lieferant verkauft in der gewählten Region keinen Haushaltsstrom. Wählen Sie einen anderen Lieferanten oder eine andere Region."
     },
     "step": {
       "init": {

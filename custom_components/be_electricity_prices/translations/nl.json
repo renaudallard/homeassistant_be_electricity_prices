@@ -185,7 +185,8 @@
       "cannot_connect": "Kon ENTSO-E niet bereiken om de token te verifieren. Controleer uw netwerk en probeer opnieuw.",
       "start_date_in_future": "De startdatum van het contract kan niet in de toekomst liggen.",
       "end_before_start": "De einddatum van het contract moet na de startdatum liggen.",
-      "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of geen van beide. Met slechts een van de twee kan de jaarkost uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten."
+      "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of geen van beide. Met slechts een van de twee kan de jaarkost uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
+      "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio."
     }
   },
   "options": {
@@ -200,7 +201,8 @@
       "cannot_connect": "Kon ENTSO-E niet bereiken om de token te verifieren. Controleer uw netwerk en probeer opnieuw.",
       "start_date_in_future": "De startdatum van het contract kan niet in de toekomst liggen.",
       "end_before_start": "De einddatum van het contract moet na de startdatum liggen.",
-      "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of geen van beide. Met slechts een van de twee kan de jaarkost uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten."
+      "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of geen van beide. Met slechts een van de twee kan de jaarkost uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
+      "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio."
     },
     "step": {
       "init": {
