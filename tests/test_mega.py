@@ -733,6 +733,32 @@ def test_variable_prefers_the_realized_rates_over_the_simulation_table() -> None
     assert snap.injection.current == pytest.approx(0.0232)
 
 
+def test_a_negative_realized_injection_keeps_its_sign() -> None:
+    """Some months Mega settles injection BELOW zero: every May 2026 card
+    prints "Injection : -0.32", a month the customer pays to inject.
+
+    The value regex accepted digits only, so the key went missing and
+    _extract_injection fell back to the 12-month simulation table, crediting
+    +2,42 c€/kWh against a billed -0,32. Wrong sign, 82 EUR out over 3000 kWh
+    injected, and nothing in the parse looked wrong.
+    """
+    from custom_components.be_electricity_prices.providers.mega import _realized_rates
+
+    body = (
+        "Les derniers prix constates et utilises pour le calcul de votre "
+        "facture de regularisation pour le mois de mai sont les suivants "
+        "(c€/kWh) : Compteur monohoraire : 12.67; Jour : 13.86; Nuit : 11.86; "
+        "Exclusif nuit : 11.86; Injection : -0.32. Pour plus de renseignements"
+    )
+    rates = _realized_rates(body)
+    assert rates["injection"] == pytest.approx(-0.0032)
+    # The consumption legs are unaffected by the change.
+    assert rates["mono"] == pytest.approx(0.1267)
+    assert rates["peak"] == pytest.approx(0.1386)
+    assert rates["offpeak"] == pytest.approx(0.1186)
+    assert rates["exclusive_night"] == pytest.approx(0.1186)
+
+
 def test_fixed_and_dynamic_cards_keep_reading_their_own_tables() -> None:
     """Only variable and Impact cards carry the simulation disclaimer. A
     fixed card's table IS the billed rate, so it must be untouched."""

@@ -4572,7 +4572,12 @@ async def _compute_current_year_cost(
 # PARSED, so any change to what an extractor produces needs this version moved
 # with it. A change that only affects how a stored card is priced (apply_vat,
 # resolve_excise_band) does not, since those run on load.
-_SNAPSHOT_SCHEMA_VERSION = 18
+# v19: Mega's realized-rate parser dropped a negative injection rate, so a
+# variable or Impact entry fell back to the 12-month simulation table and
+# credited a rate the card charges. Mega is probe-based and the May cards are
+# already published, so their probe key will not move again; without this bump
+# an affected entry keeps the wrong sign indefinitely.
+_SNAPSHOT_SCHEMA_VERSION = 19
 
 
 def _snapshot_to_dict(

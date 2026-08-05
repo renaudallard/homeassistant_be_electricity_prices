@@ -312,7 +312,11 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:402`) enforces it.
 > followed by `Injection`. The text layer wraps mid-word (`Compteur mono-\nhoraire`)
 > so the soft hyphen is stripped first, `Nuit` must not match inside `Exclusif
 > nuit`, and the number pattern must not swallow the sentence's closing period
-> (`Injection : 2.32.`).
+> (`Injection : 2.32.`). It must also accept a leading minus: every May 2026 card
+> prints `Injection : -0.32`, a month the customer pays to inject. Matching digits
+> only dropped the key, so `_extract_injection` fell back to the simulation table
+> and credited +2,42 c€/kWh against a billed -0,32 — the wrong sign, about
+> **82 EUR** over 3000 kWh injected.
 >
 > Reading the table billed the April 2026 Walloon Smart Flex card at 17,42 c€/kWh
 > where Mega settles 15,30 — about **74 EUR/yr** at 3500 kWh — and credited

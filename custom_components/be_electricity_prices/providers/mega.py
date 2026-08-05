@@ -939,7 +939,13 @@ def _realized_rates(text: str) -> dict[str, float]:
         # start of the block.
         # Match the digits exactly, never a trailing sentence period: the
         # list ends "Injection : 2.32." and a greedy [\d.,]+ ate the stop.
-        m = re.search(rf"(?:^|[;:,])\s*{label}\s*:\s*(\d+(?:[.,]\d+)?)", body, re.I)
+        # A leading minus is part of the value: the May 2026 cards print
+        # "Injection : -0.32", a month the customer PAYS to inject. Without
+        # it the key went missing and the caller fell back to the 12-month
+        # simulation table, crediting +2,42 c€/kWh against a billed -0,32 --
+        # the wrong sign, 82 EUR out over 3000 kWh injected. The soft-hyphen
+        # join above has already run, so a minus left here is a real one.
+        m = re.search(rf"(?:^|[;:,])\s*{label}\s*:\s*(-?\d+(?:[.,]\d+)?)", body, re.I)
         if m is not None:
             out[key] = to_float(m.group(1)) / 100.0
     return out
