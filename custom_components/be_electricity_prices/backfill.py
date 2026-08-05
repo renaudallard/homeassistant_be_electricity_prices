@@ -844,8 +844,15 @@ async def backfill_range(
     # crossing a boundary that would drop the sum to ~0 and paint a
     # spurious negative cost. The price (mean) sensors are unaffected by
     # this and keep the full requested window.
+    # Anchor on the LAST hour actually backfilled, not on ``end_utc``, which
+    # is exclusive. services.yaml documents ``end`` as "first hour NOT to
+    # backfill", so the canonical way to rebuild a whole year is
+    # start = 1 Jan YYYY, end = 1 Jan YYYY+1 -- and taking the year off that
+    # end lands on the NEXT year's anchor, which equals end_utc itself. The
+    # cost window was then empty and the service reported success having
+    # written 8760 price rows and zero cost rows.
     cost_anchor_utc = _floor_to_hour_utc(
-        dt_util.as_local(end_utc).replace(
+        dt_util.as_local(end_utc - timedelta(hours=1)).replace(
             month=1, day=1, hour=0, minute=0, second=0, microsecond=0
         )
     )

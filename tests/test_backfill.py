@@ -402,6 +402,52 @@ async def test_cost_backfill_midyear_start_anchors_sum_at_jan1(
     assert all(states[i] < states[i + 1] for i in range(len(states) - 1))
 
 
+async def test_cost_backfill_covers_a_whole_year_requested_exclusively(
+    hass: HomeAssistant,
+) -> None:
+    """services.yaml documents `end` as the first hour NOT to backfill, so a
+    whole year is start = 1 Jan YYYY, end = 1 Jan YYYY+1.
+
+    Anchoring the cost window on that exclusive end took the year off the
+    NEXT year, landing on end_utc itself: the cost window came out empty and
+    the service reported success having written a full year of price rows and
+    zero cost rows.
+    """
+    entry = _entry()
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_year_cost"])
+    entry.runtime_data = await _make_coordinator(entry)
+
+    captured: list[tuple[str, list[Any]]] = []
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        captured.append((metadata["statistic_id"], list(statistics)))
+
+    # A short year-crossing window keeps the test quick while still exercising
+    # the anchor: end lands exactly on 1 January.
+    start = datetime(2025, 12, 31, 21, 0, tzinfo=BRUSSELS)
+    end = datetime(2026, 1, 1, 0, 0, tzinfo=BRUSSELS)
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_fake_import,
+        ),
+        patch(
+            "homeassistant.components.recorder.get_instance",
+            return_value=instance,
+        ),
+    ):
+        await bf.backfill_range(hass, entry, start, end)
+
+    cost_rows = next(
+        (rows for sid, rows in captured if sid == ids["current_year_cost"]), []
+    )
+    assert cost_rows, "the cost sensor got no rows for a year-crossing window"
+
+
 async def test_backfill_range_rejects_clear_with_midyear_window(
     hass: HomeAssistant,
 ) -> None:
