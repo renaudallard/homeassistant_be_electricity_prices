@@ -703,20 +703,33 @@ async def _check_ebem(session: aiohttp.ClientSession, ebem: types.ModuleType) ->
         _validate_snapshot(prefix, cid, snap)
 
 
-async def _check_ecofix(
-    session: aiohttp.ClientSession, ecofix: types.ModuleType
+async def _check_two_region_supplier(
+    session: aiohttp.ClientSession, mod: types.ModuleType, supplier: str
 ) -> None:
-    # Ecofix sells residential electricity in Flanders and Wallonia
-    # (no Brussels offering). The same PDF carries both regions; the
-    # parser narrows the snapshot down to the requested region. Walk
-    # every (contract, region) pair to verify both code paths.
-    for contract in ecofix._CONTRACTS:
+    """Walk every (contract, region) pair of a Flanders + Wallonia supplier.
+
+    Ecofix, Luminus and OCTA+ each sell into those two regions only, and
+    checked them with the same loop and the same assertions in the same order.
+    Only OCTA+ carried the per-contract region guard, which all three want: a
+    contract restricted to one region must not have the other region's card
+    parsed against it.
+
+    That guard reads ``regions`` defensively because only OCTA+'s private
+    ``_ContractDef`` declares the field -- Ecofix's and Luminus's do not, so a
+    plain attribute access raises AttributeError. Their public registry
+    ``Contract`` does have it, but that is a different object from the
+    ``_CONTRACTS`` entries walked here.
+    """
+    for contract in mod._CONTRACTS:
         cid = contract.contract_id
         for region_key in ("flanders", "wallonia"):
-            prefix = f"ecofix/{cid}/{region_key}"
+            regions = getattr(contract, "regions", None)
+            if regions and region_key not in regions:
+                continue
+            prefix = f"{supplier}/{cid}/{region_key}"
             try:
                 snap = await _fetch_with_retry(
-                    partial(ecofix.fetch, session, cid, region_key)
+                    partial(mod.fetch, session, cid, region_key)
                 )
             except Exception as err:
                 _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
@@ -725,6 +738,15 @@ async def _check_ecofix(
             _expect_region_basics(prefix, region_key, snap)
             _expect_energy_contribution(prefix, snap.taxes)
             _validate_snapshot(prefix, cid, snap)
+
+
+async def _check_ecofix(
+    session: aiohttp.ClientSession, ecofix: types.ModuleType
+) -> None:
+    # Ecofix sells residential electricity in Flanders and Wallonia
+    # (no Brussels offering). The same PDF carries both regions; the
+    # parser narrows the snapshot down to the requested region.
+    await _check_two_region_supplier(session, ecofix, "ecofix")
 
 
 async def _check_ecopower(
@@ -894,22 +916,8 @@ async def _check_luminus(
 ) -> None:
     # Luminus serves Flanders and Wallonia for every market product
     # (Brussels carries only the regulated Social tariff, which is
-    # excluded from the registry). Walk every (contract, region) pair.
-    for contract in luminus._CONTRACTS:
-        cid = contract.contract_id
-        for region_key in ("flanders", "wallonia"):
-            prefix = f"luminus/{cid}/{region_key}"
-            try:
-                snap = await _fetch_with_retry(
-                    partial(luminus.fetch, session, cid, region_key)
-                )
-            except Exception as err:
-                _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
-                continue
-            _expect(f"{prefix}: publication label", bool(snap.publication_label))
-            _expect_region_basics(prefix, region_key, snap)
-            _expect_energy_contribution(prefix, snap.taxes)
-            _validate_snapshot(prefix, cid, snap)
+    # excluded from the registry).
+    await _check_two_region_supplier(session, luminus, "luminus")
 
 
 async def _check_bolt(session: aiohttp.ClientSession, bolt: types.ModuleType) -> None:
@@ -1049,27 +1057,9 @@ async def _check_octaplus(
     # OCTA+ only sells residential electricity in Flanders and Wallonia
     # (Brussels offerings are professional-only). One PDF per (contract,
     # region) at https://files.octaplus.be/tariffs/E_OCTA_<SLUG>_RE_<VL|WL>_FR.pdf
-    for contract in octaplus._CONTRACTS:
-        cid = contract.contract_id
-        for region_key in ("flanders", "wallonia"):
-            # octaplus_fixed_impact is Wallonia-only (CWaPE bands); other
-            # contracts leave regions None (both). Skip the regions a
-            # contract does not serve, like the mega/totalenergies loops,
-            # so the Flanders Fixed card is not parsed as an Impact card.
-            if contract.regions and region_key not in contract.regions:
-                continue
-            prefix = f"octaplus/{cid}/{region_key}"
-            try:
-                snap = await _fetch_with_retry(
-                    partial(octaplus.fetch, session, cid, region_key)
-                )
-            except Exception as err:
-                _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
-                continue
-            _expect(f"{prefix}: publication label", bool(snap.publication_label))
-            _expect_region_basics(prefix, region_key, snap)
-            _expect_energy_contribution(prefix, snap.taxes)
-            _validate_snapshot(prefix, cid, snap)
+    # octaplus_fixed_impact is Wallonia-only (CWaPE bands); the shared
+    # loop's region guard keeps the Flanders Fixed card out of it.
+    await _check_two_region_supplier(session, octaplus, "octaplus")
 
 
 async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) -> None:
