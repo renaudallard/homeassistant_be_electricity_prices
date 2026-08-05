@@ -503,6 +503,17 @@ class TaxOverlay:
     # for both Eneco and Cociter today). An extractor that starts shipping
     # ex-VAT numbers must set this to the parsed rate explicitly.
     vat_rate: float = 0.0
+    # The rate the CARD was published at, preserved across ``apply_vat``.
+    # ``vat_rate`` above is the rate the pricing engine should still apply, so
+    # it is zeroed for an entry that deducts VAT -- which loses the only
+    # record of what basis the card used. Anything that has to put a
+    # hand-entered figure onto the entry's basis needs that, and it must
+    # travel WITH the snapshot: threading it through the eight functions that
+    # reach the cohort path is how it came to be applied on the live tick
+    # only. Extractors leave it 0.0; read it as
+    # ``published_vat_rate or vat_rate`` so a raw (unresolved) card, and a
+    # cache written before this field existed, both answer correctly.
+    published_vat_rate: float = 0.0
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -644,7 +655,11 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
         ),
         # energy_fund_eur_per_month is deliberately absent: the levy is
         # VAT-free, so it is billed exactly as the card prints it.
-        taxes=replace(snapshot.taxes, vat_rate=rate if include_vat else 0.0),
+        taxes=replace(
+            snapshot.taxes,
+            vat_rate=rate if include_vat else 0.0,
+            published_vat_rate=rate,
+        ),
         supplier_prosumer_eur_per_kva_year=(
             None
             if snapshot.supplier_prosumer_eur_per_kva_year is None

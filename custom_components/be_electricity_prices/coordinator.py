@@ -730,7 +730,6 @@ async def _cohort_energy_leg(
     region: str,
     entry: ConfigEntry,
     current_snapshot: "SupplierSnapshot",
-    card_vat_rate: float = 0.0,
 ) -> EnergyRates | None:
     """Resolve the energy leg a contract actually bills at, or ``None``.
 
@@ -809,10 +808,16 @@ async def _cohort_energy_leg(
     # the rest rather than today's. ``_manual_energy_leg`` returns None when
     # every box was left blank, which leaves the archive (or the current card)
     # billing as before.
+    # The card's published rate travels ON the snapshot, so every caller of
+    # this function gets it without threading a parameter through eight
+    # signatures -- which is how the conversion previously reached the live
+    # tick only, leaving the year-to-date and monthly paths 21 EUR/yr adrift
+    # on the same entry. Fall back to vat_rate for a raw (unresolved) card.
+    taxes = current_snapshot.taxes
     manual = _manual_energy_leg(
         entry,
         current_snapshot.energy if archived is None else archived,
-        card_vat_rate,
+        taxes.published_vat_rate or taxes.vat_rate,
     )
     if manual is not None:
         source = "hand-entered signing rate"
@@ -1244,9 +1249,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             self.entry.data.get(CONF_REGION, ""),
             self.entry,
             self._snapshot,
-            # The rate the card was PUBLISHED at, before apply_vat resolved it
-            # away, so a typed gross fee can be put on this entry's basis.
-            self._snapshot_raw.taxes.vat_rate if self._snapshot_raw else 0.0,
         )
         priced = (
             self._snapshot

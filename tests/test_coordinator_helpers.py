@@ -40,6 +40,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.const import (
     CONF_API_KEY,
+    CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
+    CONF_INCLUDE_VAT,
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT,
     CONF_MANUAL_ENERGY_FACTOR,
@@ -47,6 +50,8 @@ from custom_components.be_electricity_prices.const import (
     CONF_MANUAL_ENERGY_PEAK,
     CONF_MANUAL_ENERGY_SINGLE,
     CONF_MANUAL_YEARLY_FEE,
+    CONF_REGION,
+    CONF_SUPPLIER,
     DOMAIN,
 )
 from custom_components.be_electricity_prices.coordinator import (
@@ -3081,6 +3086,84 @@ def test_all_kwh_resolvers_agree_that_registers_win() -> None:
     empty = SimpleNamespace(data={})
     assert co._hourly_consumption_sensors(empty) == []  # type: ignore[arg-type]
     assert co._hourly_injection_sensors(empty) == []  # type: ignore[arg-type]
+
+
+async def test_cohort_leg_bills_the_same_fee_on_every_call_path() -> None:
+    """All three `_cohort_energy_leg` call sites must resolve one fee.
+
+    `apply_vat` zeroes `vat_rate` for an entry that deducts VAT, and that was
+    the only record of the basis the card was published at. The live tick
+    passes the raw card, the year-to-date and monthly paths pass the resolved
+    one, so threading the rate as a parameter reached the live tick alone and
+    left the other two 21 EUR/yr adrift on the same entry. The rate now rides
+    on the snapshot every caller already hands in.
+    """
+    from custom_components.be_electricity_prices import providers
+    from custom_components.be_electricity_prices.coordinator import (
+        _cohort_energy_leg,
+    )
+    from custom_components.be_electricity_prices.providers.base import apply_vat
+
+    extractor = providers.get("engie")
+    contract = next(c.id for c in extractor.contracts if "fix" in c.id)
+    entry = SimpleNamespace(
+        data={
+            CONF_SUPPLIER: "engie",
+            CONF_CONTRACT: contract,
+            CONF_REGION: "fluvius_imewo",
+            CONF_CONTRACT_START_DATE: "2026-01-15",
+            CONF_MANUAL_YEARLY_FEE: 121.0,
+            CONF_INCLUDE_VAT: False,
+        },
+        options={},
+        entry_id="e1",
+    )
+    raw = make_snapshot(
+        energy=FixedRates(single=0.20, yearly_fixed_fee=100.0),
+        taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0, vat_rate=0.21),
+    )
+
+    async def fee(snapshot: Any) -> float:
+        leg = await _cohort_energy_leg(
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            extractor,
+            contract,
+            "fluvius_imewo",
+            entry,  # type: ignore[arg-type]
+            snapshot,
+        )
+        assert leg is not None
+        return float(leg.yearly_fixed_fee)
+
+    # The typed 121,00 is gross; an entry that deducts VAT bills 100,00. The
+    # raw card (live tick) and the resolved card (YTD / monthly) must agree.
+    assert await fee(raw) == pytest.approx(100.0)
+    assert await fee(apply_vat(raw, include_vat=False)) == pytest.approx(100.0)
+
+
+def test_published_vat_rate_round_trips_and_tolerates_an_old_cache() -> None:
+    """Adding the field needs no schema bump: a cache written before it
+    existed loads and falls back to the raw card's own vat_rate."""
+    from custom_components.be_electricity_prices import coordinator as co
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+
+    raw = make_snapshot(
+        taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0, vat_rate=0.21)
+    )
+    payload = co._snapshot_to_dict(raw, datetime(2026, 8, 5, tzinfo=UTC), probe_key="k")
+    assert "published_vat_rate" in payload["taxes"]
+    assert co._snapshot_from_dict(payload).taxes.vat_rate == pytest.approx(0.21)
+
+    old = {
+        **payload,
+        "taxes": {
+            k: v for k, v in payload["taxes"].items() if k != "published_vat_rate"
+        },
+    }
+    restored = co._snapshot_from_dict(old).taxes
+    assert restored.published_vat_rate == 0.0
+    assert (restored.published_vat_rate or restored.vat_rate) == pytest.approx(0.21)
 
 
 def test_typed_signing_fee_lands_on_the_entry_basis() -> None:

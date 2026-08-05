@@ -178,6 +178,19 @@ promotional, brokered or negotiated rate exists nowhere online, so the typed
 value has to win. It used to lose, which made the signing-rate step a no-op on
 exactly the seven suppliers that keep an archive (issue #54).
 
+A typed yearly fee is entered as the card prints it, so on a card published
+ex-VAT it has to be un-grossed for an entry that deducts VAT. The rate to
+un-gross by is `TaxOverlay.published_vat_rate` (`providers/base.py:505`), read
+as `published_vat_rate or vat_rate`. It has to ride on the snapshot rather than
+be passed in, because `apply_vat` zeroes `vat_rate` and there are three
+`_cohort_energy_leg` call sites: the live tick (`coordinator.py:869`) hands in
+the raw card, while the monthly (`coordinator.py:1244`) and year-to-date
+(`coordinator.py:4293`) paths hand in the resolved one. Threading it as a
+parameter reached the live tick alone and left the other two 21 EUR/yr adrift
+on the same entry. The `or` fallback also means a probe cache written before
+the field existed still answers correctly, so no schema bump was needed.
+`test_cohort_leg_bills_the_same_fee_on_every_call_path` pins the agreement.
+
 ### 3.1 Resolution selection (hourly vs quarter-hourly)
 
 `_energy_is_quarter_hourly` (`coordinator.py:221`) returns True only for `DynamicRates` with `quarter_hourly=True`. Those extractors (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom, Bolt Dynamisch, energie.be, EnergyVision) bill on the native 15-minute Belpex/eSpot_15/Epex/EPEX DA grid; every other contract stays hourly. `_fetch_spot_prices` passes this as `quarter_hourly=` to `client.fetch_day_ahead` (`coordinator.py:2220`). The constants are `RESOLUTION_HOURLY = "PT60M"` and `RESOLUTION_QUARTER = "PT15M"` (`const.py:253`), matching ENTSO-E's resolution tokens. YTD billing stays hourly regardless (section 7).
