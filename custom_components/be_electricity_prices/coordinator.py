@@ -2337,7 +2337,23 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """
         if self.entry.data.get(CONF_CAPACITY_MODE) == CAPACITY_MODE_FIXED:
             return max(self._peak_kw, VREG_CAPACITY_FLOOR_KW)
-        peaks = [*self._peak_history.values(), self._peak_kw]
+        peaks = list(self._peak_history.values())
+        # Only count the in-progress month once it HAS a measurement. It is
+        # reset to 0 on the local 1st, and a zero floored to 2.5 is not a
+        # measured peak: including it dropped the twelve-term mean at every
+        # rollover, stepping capacity_cost and current_year_cost down for the
+        # first hours of every month and back up as the month accrued. This is
+        # the same rule the paragraph above already applies to a month that
+        # was never measured, and for the same reason: Fluvius estimates a
+        # missing month as the mean of the validated ones, and inserting a
+        # set's own mean leaves the mean unchanged, so leaving the gap out
+        # lands on the same number.
+        if self._peak_kw > 0.0:
+            peaks.append(self._peak_kw)
+        if not peaks:
+            # A brand-new entry in the first hours of its first month has
+            # nothing measured anywhere; the regulated minimum is the answer.
+            return VREG_CAPACITY_FLOOR_KW
         return sum(max(kw, VREG_CAPACITY_FLOOR_KW) for kw in peaks) / len(peaks)
 
     def _build_hourly(

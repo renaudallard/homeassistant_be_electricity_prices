@@ -2242,6 +2242,46 @@ async def test_billed_peak_floors_each_month_before_averaging(
     assert coord._billed_peak_kw() > 2.6  # flooring the mean would give 2.58
 
 
+async def test_billed_peak_ignores_the_unmeasured_running_month(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The running month is reset to 0 on the local 1st, and a zero floored to
+    2,5 is not a measured peak.
+
+    Counting it dragged the twelve-term mean down at every rollover: eleven
+    banked months at 6,0 kW billed (11 x 6,0 + 2,5) / 12 = 5,71 kW for the
+    first hours of the month, stepping capacity_cost and current_year_cost
+    down and back up as the month accrued. The function already leaves out a
+    month it never measured, on Fluvius's own estimate-the-gap rule; an
+    in-progress month with no reading yet is exactly that.
+    """
+    freezer.move_to("2026-05-01 00:30:00+02:00")
+    entry = _flanders_sensor_entry("sensor.house_power")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_history = {f"2025-{m:02d}-01": 6.0 for m in range(6, 12)}
+    coord._peak_kw = 0.0  # just rolled over, nothing measured yet
+
+    assert coord._billed_peak_kw() == pytest.approx(6.0)
+
+    # Once the month HAS a reading it counts, even a low one.
+    coord._peak_kw = 1.0
+    assert coord._billed_peak_kw() == pytest.approx((6 * 6.0 + 2.5) / 7)
+
+
+async def test_billed_peak_of_a_brand_new_entry_is_the_floor(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """No history and no reading yet: the regulated minimum, not a crash."""
+    freezer.move_to("2026-05-01 00:10:00+02:00")
+    entry = _flanders_sensor_entry("sensor.house_power")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_history = {}
+    coord._peak_kw = 0.0
+    assert coord._billed_peak_kw() == pytest.approx(2.5)
+
+
 async def test_billed_peak_falls_back_to_the_floor_when_low(
     hass: HomeAssistant, freezer: Any
 ) -> None:
