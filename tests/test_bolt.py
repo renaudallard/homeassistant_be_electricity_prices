@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, patch
 
@@ -508,6 +509,21 @@ def test_pre_redesign_archive_card_carries_its_overlays_too() -> None:
         "bolt_fix", text, "flanders", "test://"
     ).taxes.region_connection_fee == pytest.approx(0.0)
 
+    # "Cogénération (c€/kWh)* 0,39 -" is the archive card's name for the row
+    # the current one labels "WKK": French throughout, and Flanders-only. The
+    # certificats row still parsed, so missing it just dropped 0,39 c€/kWh.
+    flanders = parse_snapshot("bolt_fix", text, "flanders", "test://")
+    assert flanders.taxes.flanders_renewables == pytest.approx(0.0156)
+
+    # "Cotisation Fond énergie (€/mois) (*)" then a separate
+    # "Non-résidentiel 10,07 - -" row, where the current card puts both on one
+    # labelled line. The professional editions walk this archive too.
+    assert bolt_mod._extract_energy_fund(text, professional=True) == pytest.approx(
+        10.07
+    )
+    # The residential row on the same card is "-", so residential stays 0.
+    assert bolt_mod._extract_energy_fund(text) == pytest.approx(0.0)
+
     # "SIBELGA 9,96 9,96 7,53 7,53 2,27 14,73 -": the month must be priceable.
     brussels = parse_snapshot("bolt_fix", text, "brussels", "test://")
     assert "sibelga" in brussels.dsos
@@ -520,6 +536,40 @@ def test_pre_redesign_archive_card_carries_its_overlays_too() -> None:
         )
         is not None
     )
+
+
+def test_a_tax_row_is_bounded_and_may_hold_whole_numbers() -> None:
+    """Telling a value from a footnote marker by requiring a decimal was the
+    wrong discriminator twice over.
+
+    A levy printed as a whole number was rejected outright, and _extract_taxes
+    raises on a miss, so EVERY Bolt contract in all three regions would stop
+    refreshing -- Belgium zeroed the federal levy in August 2026, so that is
+    not hypothetical. And the skip was unbounded, so a row whose own values
+    were missing from the render captured the NEXT row's silently: the excise
+    came out as the energy contribution, 0,2042 instead of 5,0329 c€/kWh.
+    """
+    text = fixture_text("bolt_fix.pdf", layout=True)
+
+    # A whole-number levy parses instead of taking the snapshot down.
+    i = text.find("Contribution sur l'énergie")
+    assert i > 0
+    zeroed = text[:i] + text[i : i + 90].replace("0,20417", "0") + text[i + 90 :]
+    assert bolt_mod.parse_snapshot(
+        "bolt_fix", zeroed, "wallonia"
+    ).taxes.energy_contribution == pytest.approx(0.0)
+
+    # A row that really is missing its values raises rather than borrowing the
+    # next row's, so the coordinator falls back to its cached snapshot.
+    dropped = re.sub(
+        r"(Droit d’accise spécial[^\n]*)\n\s*5,0329\n\s*5,0329\n\s*5,0329",
+        r"\1",
+        text,
+        count=1,
+    )
+    assert dropped != text
+    with pytest.raises(ExtractorError, match="accise"):
+        bolt_mod.parse_snapshot("bolt_fix", dropped, "flanders")
 
 
 def test_footnote_marker_is_not_read_as_the_flanders_tax_value() -> None:

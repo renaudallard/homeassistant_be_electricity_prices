@@ -747,6 +747,48 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
 # ---- taxes --------------------------------------------------------------------
 
 
+def _three_col_row(text: str, label: str) -> tuple[str, str, str] | None:
+    """The three FL / WAL / BX values of one tax row, or ``None``.
+
+    Bolt prints the values inline on the label line on an archived
+    pre-redesign card and on the lines below it on a current one:
+
+        old: "Droit d'accise spécial (c€/kwh) (**) 5,0329 5,0329 5,0329"
+        now: "Droit d'accise spécial (c€/kwh) (c€/kWh) 5\\n 5,0329\\n 5,0329\\n 5,0329"
+
+    and prefixes them with a bare footnote marker ("5" above) often enough
+    that taking the first three numbers reads the marker as the Flanders
+    value, billing the excise at 5 c€/kWh. Requiring a decimal separator told
+    a value from a marker, but that is the wrong discriminator twice over: a
+    levy printed as a whole number is then rejected outright, raising and
+    stalling EVERY Bolt contract (Belgium zeroed the federal levy in August
+    2026, so this is not hypothetical), and the unbounded skip could run past
+    a row whose own values were missing and capture the NEXT row's silently.
+
+    So bound the row instead: read forward from the label until a line opens
+    a new one, and take the LAST three numbers found. A leading marker falls
+    off the front, whole numbers are fine, and a row that really is missing
+    its values yields fewer than three and returns ``None`` for the caller to
+    raise on.
+    """
+    m = re.search(label, text)
+    if m is None:
+        return None
+    # U+2028 survives in some renders; treat it as the line break it is.
+    rest = text[m.end() :].replace(" ", "\n")
+    row: list[str] = []
+    for n, line in enumerate(rest.split("\n")):
+        # The first line is the remainder of the label's own line, so a word
+        # on it (the unit, "(c€/kWh)") does not open a new row.
+        if n and re.match(r"\s*[^\W\d_]", line):
+            break
+        row.append(line)
+    nums = re.findall(r"-?\d+(?:[.,]\d+)?", " ".join(row))
+    if len(nums) < 3:
+        return None
+    return nums[-3], nums[-2], nums[-1]
+
+
 def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
     """Return (federal_excise, energy_contribution, region_connection_fee).
 
@@ -755,34 +797,19 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
     separators (U+2028) to regular newlines, so the regexes below
     see a uniform layout.
     """
-    # The three regional values sit on the lines below the label on a
-    # post-April-2026 card and INLINE on the label line on the archived
-    # pre-redesign ones:
-    #   now: "Droit d'accise spécial (c€/kwh) (c€/kWh) 5\n 5,0329\n 5,0329\n 5,0329"
-    #   old: "Droit d'accise spécial (c€/kwh) (**) 5,0329 5,0329 5,0329"
-    # Skip everything up to the first DECIMAL number, then take three. The
-    # decimal separator is what distinguishes a value from the bare footnote
-    # marker ("5" above), which a plain [\d.,]+ captured as the Flanders
-    # value and billed the excise at 5 c€/kWh instead of 5,0329.
-    _THREE_COLS = r"(?:(?!\d+[.,]\d).)*?(\d+[.,]\d+)\s+(\d+[.,]\d+)\s+(\d+[.,]\d+)"
-    excise_match = re.search(
-        rf"Droit d['’]accise spécial{_THREE_COLS}",
-        text,
-        re.S,
-    )
-    contribution_match = re.search(
-        rf"Contribution sur l['’]énergie{_THREE_COLS}",
-        text,
-        re.S,
-    )
+    # Both rows are read by _three_col_row, which bounds the row and takes the
+    # last three numbers in it: see there for why a leading footnote marker,
+    # a whole-number levy and a row missing its values all have to work.
+    excise_row = _three_col_row(text, r"Droit d['’]accise spécial")
+    contribution_row = _three_col_row(text, r"Contribution sur l['’]énergie")
     # Federal excise and energy contribution are mandatory federal levies
     # printed on every Belgian supplier card; a regex miss means the
     # layout drifted and the snapshot would silently under-bill by
     # several c€/kWh. Raise so the coordinator falls back to the cached
     # snapshot instead.
-    if excise_match is None:
+    if excise_row is None:
         raise ExtractorError("Bolt: 'Droit d'accise spécial' row not found")
-    if contribution_match is None:
+    if contribution_row is None:
         raise ExtractorError("Bolt: 'Contribution sur l'énergie' row not found")
     # Connection fee row prints footnote refs ahead of the values, as bare
     # integers on a current card and as parenthesised stars on an archived
@@ -801,18 +828,27 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
         text,
     )
 
-    def _per_region(match: re.Match[str] | None, region: str) -> float:
-        if match is None:
+    def _pick(row: tuple[str, str, str] | None, region: str) -> float:
+        if row is None:
             return 0.0
-        index = {REGION_FLANDERS: 1, REGION_WALLONIA: 2, REGION_BRUSSELS: 3}[region]
-        token = match.group(index).strip()
+        index = {REGION_FLANDERS: 0, REGION_WALLONIA: 1, REGION_BRUSSELS: 2}[region]
+        token = row[index].strip()
         if token == "-" or not token:
             return 0.0
         return to_float(token) / 100.0
 
-    excise = _per_region(excise_match, region)
-    contribution = _per_region(contribution_match, region)
-    connection = _per_region(connection_match, region)
+    excise = _pick(excise_row, region)
+    contribution = _pick(contribution_row, region)
+    connection = _pick(
+        None
+        if connection_match is None
+        else (
+            connection_match.group(1),
+            connection_match.group(2),
+            connection_match.group(3),
+        ),
+        region,
+    )
     return excise, contribution, connection
 
 
@@ -829,12 +865,23 @@ def _extract_energy_fund(text: str, *, professional: bool = False) -> float:
     residential value sits after a U+2028 that the text layer normalises to
     a newline, while the non-residential values are inline on the label
     line after an optional footnote marker.
+
+    The pre-redesign archive card splits the same information differently
+    again: a bare ``Cotisation Fond énergie (€/mois) (*)`` heading, then
+    ``Résidentiel`` and ``Non-résidentiel 10,07 - -`` as their own rows. The
+    professional editions walk that archive too, so matching only the current
+    single-line label billed 0,00 where the card says 10,07 -- re-opening,
+    for those months, the bug the non-residential row was added to fix.
     """
     if professional:
         match = re.search(
             r"Cotisation Fond énergie, non-résidentiel\s*\(€/mois\)\s*"
             r"(?:\d+\s+)?([\d.,-]+)",
             text,
+        ) or re.search(
+            r"^\s*Non-r[ée]sidentiel\s+([\d.,-]+)",
+            text,
+            re.MULTILINE,
         )
     else:
         match = re.search(
@@ -858,7 +905,14 @@ def _extract_renewables(text: str) -> tuple[float, float, float]:
     # whitespace separator so the greedy ``\d*`` can't swallow the
     # leading digits of a multi-digit value when the footnote is absent.
     # The trailing ' -' tokens are placeholders for Wallonia / Brussels.
-    wkk = re.search(r"WKK\s*\(c€/kWh\)\s+(?:\d+\s+)?([\d.,]+)", text)
+    #
+    # The pre-redesign archive card is French throughout and labels the same
+    # row 'Cogénération (c€/kWh)* 0,39 -'. Matching only the Dutch label left
+    # the add-on off those months while the certificats row still parsed, so
+    # Flanders billed 1,17 instead of 1,56 c€/kWh with nothing raised.
+    wkk = re.search(
+        r"(?:WKK|Cog[ée]n[ée]ration)\s*\(c€/kWh\)\*?\s+(?:\d+\s+)?([\d.,]+)", text
+    )
     if cert is None:
         # Renewables (certificats verts) are charged in every region; a
         # regex miss is a layout drift that would silently zero ~3 c€/kWh.
