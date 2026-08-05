@@ -3002,6 +3002,42 @@ async def test_half_wired_registers_bill_nothing_on_every_ytd_path() -> None:
     assert co._partial_register_pair(entry, "consumption") is False  # type: ignore[arg-type]
 
 
+async def test_a_totals_sensor_rescues_a_half_wired_pair() -> None:
+    """A half-wired pair cannot be billed FROM THE REGISTERS, but a totals
+    sensor on the same side covers both bands completely and the split is
+    recovered from hourly statistics.
+
+    Refusing regardless threw away a fully wired totals sensor and floored
+    current_year_cost at fees only, which reads to the user as the
+    integration not working at all.
+    """
+    from custom_components.be_electricity_prices import coordinator as co
+
+    entry = SimpleNamespace(
+        data={
+            "supplier": "test",
+            "contract": "test",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "none",
+            "day_consumption_kwh": "sensor.day_cons",
+            # night register absent, but a complete totals sensor IS wired
+            "consumption_kwh": "sensor.grid_import_total",
+        }
+    )
+    assert co._partial_register_pair(entry, "consumption") is False  # type: ignore[arg-type]
+
+    today = date(2026, 8, 1)
+    with patch.object(co, "_recorder_daily_kwh", AsyncMock(return_value={today: 10.0})):
+        daily = await co._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
+    assert daily is not None, "the totals sensor must still be used"
+
+    # With no totals sensor it is still refused.
+    del entry.data["consumption_kwh"]
+    assert co._partial_register_pair(entry, "consumption") is True  # type: ignore[arg-type]
+
+
 def test_all_kwh_resolvers_agree_that_registers_win() -> None:
     """Three helpers answer "which entity holds this side's kWh", and they
     disagreed when BOTH wirings were configured: the static per-day path and

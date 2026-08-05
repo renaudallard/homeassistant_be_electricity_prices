@@ -3539,10 +3539,11 @@ async def _resolve_daily_kwh(
     ) -> bool:
         """Resolve one side (consumption or injection) into ``out``.
 
-        Returns False when this side has a partial register wiring
-        (caller surfaces the fees-only floor); True otherwise.
+        Returns False when this side has a partial register wiring and no
+        totals sensor to fall back on (caller surfaces the fees-only floor);
+        True otherwise.
         """
-        if bool(day_id) ^ bool(night_id):
+        if bool(day_id) ^ bool(night_id) and not total_id:
             return False
         if day_id and night_id:
             for day, kwh in (
@@ -3796,9 +3797,13 @@ async def _ytd_capacity(
 def _partial_register_pair(entry: ConfigEntry, side: str) -> bool:
     """True when exactly one half of ``side``'s day/night register pair is wired.
 
-    A half-wired pair cannot be billed: the missing band's kWh are simply
-    absent, so every path must refuse the whole computation and fall back to
-    the fees-only floor rather than quietly bill the wired half. The static
+    A half-wired pair cannot be billed FROM THE REGISTERS: the missing band's
+    kWh are simply absent, so every path must refuse rather than quietly bill
+    the wired half. A totals sensor on the same side changes that: it covers
+    both bands completely, and the band split is recovered from hourly
+    statistics, so the half-wired pair is merely redundant and the computation
+    should proceed. Refusing regardless threw away a fully wired totals sensor
+    and floored the year cost at fees only. The static
     per-day path has always enforced this; the hourly path (TOU / Impact /
     dynamic / exclusive-night) resolved each side independently and only
     bailed when BOTH were empty, so a half-wired consumption pair collapsed to
@@ -3806,8 +3811,8 @@ def _partial_register_pair(entry: ConfigEntry, side: str) -> bool:
     That billed the feed-in credit against zero consumption and drove the YTD
     negative. Shared here so the two paths cannot drift apart again.
     """
-    day_id, night_id, _total = _kwh_sensor_ids(entry, side)
-    return bool(day_id) ^ bool(night_id)
+    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
+    return bool(day_id) ^ bool(night_id) and not total_id
 
 
 def _kwh_sensor_ids(
