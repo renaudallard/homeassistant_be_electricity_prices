@@ -47,7 +47,11 @@ from statistics import fmean
 from typing import Any
 
 import aiohttp
-from homeassistant.components.sensor import ATTR_STATE_CLASS, SensorStateClass
+from homeassistant.components.sensor import (
+    ATTR_LAST_RESET,
+    ATTR_STATE_CLASS,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
@@ -3172,6 +3176,27 @@ async def _recorder_rows(
     return rows
 
 
+def _reset_since(state: State, midnight: datetime) -> bool:
+    """Did this meter start a new cycle after ``midnight``?
+
+    ``last_reset`` is what a cycling meter publishes to say "my total went
+    back to zero at this instant", and it is the only signal that survives
+    both state classes: HA's ``utility_meter`` reports ``TOTAL`` when
+    ``net_consumption`` is set and ``TOTAL_INCREASING`` otherwise, and cycles
+    either way. Anything unparseable reads as "no reset", which keeps the
+    caller on the plain delta.
+    """
+    raw = state.attributes.get(ATTR_LAST_RESET)
+    if raw is None:
+        return False
+    parsed = raw if isinstance(raw, datetime) else dt_util.parse_datetime(str(raw))
+    if parsed is None:
+        return False
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed >= midnight
+
+
 async def _live_today_kwh(
     hass: HomeAssistant, entity_id: str, today: date
 ) -> float | None:
@@ -3237,9 +3262,20 @@ async def _live_today_kwh(
     except (TypeError, ValueError):
         return None
     delta = current - opening
-    if delta < 0.0 and state_class == SensorStateClass.TOTAL_INCREASING:
-        # A ``total_increasing`` meter that reset since midnight: everything
-        # it has counted since the reset is today's consumption.
+    if delta < 0.0 and _reset_since(state, midnight):
+        # The meter published a ``last_reset`` later than local midnight, so
+        # it started a new cycle today and everything it has counted since is
+        # today's consumption. This is the signal that actually generalises:
+        # a utility_meter with net_consumption reports state_class TOTAL, not
+        # TOTAL_INCREASING (HA returns one or the other on exactly that
+        # option), and it still cycles. Gating on the class alone read its
+        # monthly rollover as a genuine fall and returned minus the whole
+        # previous cycle as today's kWh.
+        delta = current
+    elif delta < 0.0 and state_class == SensorStateClass.TOTAL_INCREASING:
+        # A ``total_increasing`` meter that reset since midnight without
+        # publishing ``last_reset``: the class alone promises it cannot fall,
+        # so a fall is a reset.
         #
         # Gated on the state class on purpose. The picker accepts any
         # device_class=energy sensor, so a ``total`` register that nets

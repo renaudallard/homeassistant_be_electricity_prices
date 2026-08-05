@@ -1007,6 +1007,55 @@ async def test_live_today_kwh_reset_substitution_needs_total_increasing(
     assert kwh == pytest.approx(-95.0)
 
 
+async def test_live_today_kwh_honours_a_cycle_reset_on_a_total_meter(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A utility_meter with net_consumption reports state_class TOTAL (HA
+    returns one class or the other on exactly that option) and still cycles.
+
+    On the rollover day its state at midnight is the whole previous cycle, so
+    a plain delta returns minus that cycle as today's kWh. The published
+    last_reset is what says a new cycle started, and it is the signal that
+    survives both classes."""
+    freezer.move_to("2026-08-01 10:00:00+02:00")
+    hass.states.async_set(
+        "sensor.meter",
+        "4.2",
+        {
+            "unit_of_measurement": "kWh",
+            "device_class": "energy",
+            "state_class": "total",
+            "last_reset": "2026-08-01T00:00:00+02:00",
+        },
+    )
+    inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "312.4")]})
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 8, 1))
+    assert kwh == pytest.approx(4.2)
+
+
+async def test_live_today_kwh_ignores_a_stale_last_reset(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A last_reset from a previous cycle must not turn an ordinary net
+    export into the whole meter reading."""
+    freezer.move_to("2026-08-16 14:00:00+02:00")
+    hass.states.async_set(
+        "sensor.meter",
+        "12345.6",
+        {
+            "unit_of_measurement": "kWh",
+            "device_class": "energy",
+            "state_class": "total",
+            "last_reset": "2026-08-01T00:00:00+02:00",
+        },
+    )
+    inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "12350.1")]})
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        kwh = await _live_today_kwh(hass, "sensor.meter", date(2026, 8, 16))
+    assert kwh == pytest.approx(-4.5)
+
+
 async def test_live_today_kwh_none_when_unavailable(
     hass: HomeAssistant, freezer: Any
 ) -> None:
