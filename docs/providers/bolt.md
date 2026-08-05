@@ -234,7 +234,7 @@ Bolt's price model has two convention quirks the parser normalizes:
    platform fee is the entire Bolt monetisation, so a missing match raises rather than returning 0
    (a silent miss would undercount the bill by roughly 130 EUR/year, illustrative from the
    docstring). The decimal portion is optional so a future round fee like `€ 11 / mois` still
-   parses. `test_fix_yearly_fee_is_monthly_x_12` (`tests/test_bolt.py:59`) asserts `10.99 * 12`
+   parses. `test_fix_yearly_fee_is_monthly_x_12` (`tests/test_bolt.py:60`) asserts `10.99 * 12`
    (illustrative).
 
 2. **`Prix mensuel` is the current month's price for every kind.** The line prints two adjacent
@@ -247,7 +247,7 @@ two `Jour Nuit` subheads: the first pair is for consumption, the second is for i
 the two subheads, so the parser scopes a `re.S` span between them and takes `pairs[-1]`. This is the
 stable invariant because `pdfplumber` sometimes renders the annual-estimate column vertically above
 the row (variable cards) and sometimes drops it entirely (fixed cards), so a fixed positional offset
-would break. `test_variable_uses_current_monthly_not_annual_estimate` (`tests/test_bolt.py:119`)
+would break. `test_variable_uses_current_monthly_not_annual_estimate` (`tests/test_bolt.py:120`)
 verifies the parser skips the annual estimate (15,20 / 15,20 illustrative) and picks the current
 monthly (14,56 / 12,09 illustrative).
 
@@ -259,7 +259,7 @@ The fallback logic when no bi-horaire pair is found is kind-dependent (`bolt.py:
   illustrative).
 - `variable`: a miss is a layout drift, not a mono contract; variable cards always publish distinct
   Jour / Nuit rates, so the parser raises rather than silently billing a bi-hourly user at the mono
-  rate. `test_variable_missing_bihourly_rates_fails_loud` (`tests/test_bolt.py:111`) enforces this.
+  rate. `test_variable_missing_bihourly_rates_fails_loud` (`tests/test_bolt.py:112`) enforces this.
 
 `exclusive_night` is populated for every card from `Prix mensuel` group 2; the pricing engine routes
 an exclusive-night meter through it.
@@ -281,9 +281,9 @@ Two land mines are baked into the anchor (`bolt.py:537`):
 - The July 2026 fix cards print a NEGATIVE second column (`Prix mensuel 3,40 -0,43`, the "Exclusif
   nuit" injection column). Only the first column is billed, but the second is a required anchor
   token, so the regex allows an optional minus on it (`-?[\d.,]+`).
-  `test_injection_accepts_negative_second_column` (`tests/test_bolt.py:98`) locks this in.
+  `test_injection_accepts_negative_second_column` (`tests/test_bolt.py:99`) locks this in.
 
-`test_injection_is_flat_monthly_indicative` (`tests/test_bolt.py:82`) checks both fix and variable
+`test_injection_is_flat_monthly_indicative` (`tests/test_bolt.py:83`) checks both fix and variable
 cards yield `current` = 5,31 c/kWh (illustrative) with `factor`/`base` `None`.
 
 ### Tax block (`_extract_taxes`)
@@ -299,7 +299,7 @@ permitted (returns 0). Its regex eats up to three integer footnote markers ahead
 values (`bolt.py:582`); the `{0,3}` cap deliberately stops a future integer-only Flanders value from
 being mistaken for a footnote and silently shifting the columns.
 
-`test_taxes_split_correctly_per_region` (`tests/test_bolt.py:133`) checks nationwide excise
+`test_taxes_split_correctly_per_region` (`tests/test_bolt.py:134`) checks nationwide excise
 (0.050329) and contribution (0.002042), Wallonia connection fee (0.00075), and per-region renewables
 (all illustrative).
 
@@ -318,7 +318,7 @@ renewables = `(1.17 + 0.39)/100` (cert + WKK, illustrative), proving the footnot
 Bolt maps every DSO sub-area the integration knows, region by region. A structural quirk that spans
 all three parsers: `pdfplumber` sometimes renders a row vertically (one number per line), so the
 regexes use `\s+` (which matches newlines) between values to handle both layouts.
-`test_wallonia_dso_handles_vertical_layout` (`tests/test_bolt.py:159`) exercises this.
+`test_wallonia_dso_handles_vertical_layout` (`tests/test_bolt.py:160`) exercises this.
 
 **Flanders (`_extract_flanders_dsos`, `bolt.py:653`).** Eight Fluvius sub-areas via `_FLANDERS_LABELS`
 (`bolt.py:641`). Note the label-to-key mapping is not one-to-one by name: `Fluvius Kempen` maps to
@@ -353,7 +353,7 @@ rings HA's notification bell at most once per boot. Three outcomes (`bolt.py:768
   layout and the compensating swap now inverts correct values, so it should be removed.
 
 The swap needs manual re-validation at least every 6 months (last done 2026-05, next due 2026-11,
-`bolt.py:706`). `test_resa_is_cheaper_than_rew_after_label_swap` (`tests/test_bolt.py:175`) guards
+`bolt.py:706`). `test_resa_is_cheaper_than_rew_after_label_swap` (`tests/test_bolt.py:176`) guards
 the invariant in CI.
 
 **Brussels (`_extract_brussels_dsos`, `bolt.py:805`).** One row, `Sibelga`, with six captured
@@ -365,7 +365,7 @@ Sibelga overlay also carries the Brussels Brugel OSP annual-fee table via `parse
 (`bolt.py:831`,
 `_pdf.py:553`); Bolt prints `Obligations de service publique` with a lowercase `s`, which the
 case-insensitive helper handles. A missing Sibelga row returns an empty dict (permitted).
-`test_brussels_extracts_sibelga` (`tests/test_bolt.py:204`) checks distribution 0.0996, off-peak
+`test_brussels_extracts_sibelga` (`tests/test_bolt.py:205`) checks distribution 0.0996, off-peak
 0.0753, exclusive-night 0.0753, transport 0.0227 (all illustrative).
 
 ## Quirks and historical bugs (the land mines)

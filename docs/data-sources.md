@@ -42,8 +42,8 @@ knowledge of contracts: the coordinator owns all of that and calls this client.
 
 | Constant | Value | Source |
 | --- | --- | --- |
-| `ENTSOE_BASE_URL` | `https://web-api.tp.entsoe.eu/api` | `const.py:244` |
-| `ENTSOE_BE_DOMAIN` | `10YBE----------2` (BE bidding zone EIC) | `const.py:245` |
+| `ENTSOE_BASE_URL` | `https://web-api.tp.entsoe.eu/api` | `const.py:263` |
+| `ENTSOE_BE_DOMAIN` | `10YBE----------2` (BE bidding zone EIC) | `const.py:264` |
 
 The client is constructed with the user's ENTSO-E API key and Home Assistant's
 shared `aiohttp` session (`api.py:69`). The key is passed on every request as
@@ -64,7 +64,7 @@ periodEnd    = YYYYMMDDhhmm  (UTC)
 securityToken = <api key>
 ```
 
-`_fmt` (`api.py:335`) converts the caller's datetimes to UTC and formats them as
+`_fmt` (`api.py:342`) converts the caller's datetimes to UTC and formats them as
 `%Y%m%d%H%M`, the compact stamp ENTSO-E expects. The request carries a 30-second
 total timeout (`api.py:111`).
 
@@ -115,7 +115,7 @@ stdlib parser the payload expands and parsing continues, so a test written
 against an external entity would have passed either way and proved nothing.
 `defusedxml` rejects hostile constructs with `DefusedXmlException`, which is not
 a `ParseError` subclass, so `parse_day_ahead_xml` catches it separately and wraps
-it as `EntsoeError` (`api.py:165`) so a hostile payload surfaces as a categorised
+it as `EntsoeError` (`api.py:62`) so a hostile payload surfaces as a categorised
 error instead of an unhandled exception out of the coordinator tick.
 
 ### The SPP download never touches the loop
@@ -147,13 +147,13 @@ runtime always requests a window that includes today, and the BE zone always
 publishes today's curve, so a document carrying zero matching data really means
 the request was refused. `parse_day_ahead_xml` detects the acknowledgement root
 (`api.py:180`) and raises `EntsoeAuthError` with a best-effort reason extracted
-from the document's `Reason` block by `_ack_reason` (`api.py:318`).
+from the document's `Reason` block by `_ack_reason` (`api.py:325`).
 
 ### Resolution handling: PT60M vs PT15M and aggregation
 
 ENTSO-E publishes the Belgian curve at 15-minute granularity since the SDAC
 15-minute MTU go-live (2025-10-01; see the note at `const.py:247`). The parser
-handles three resolutions via `_resolution_to_timedelta` (`api.py:357`):
+handles three resolutions via `_resolution_to_timedelta` (`api.py:364`):
 
 | Token | Step |
 | --- | --- |
@@ -236,13 +236,13 @@ sub-hour slot, with the explicit positions used as a floor (`api.py:231`).
 
 ### Timezone handling
 
-`_parse_iso_utc` (`api.py:339`) parses each `timeInterval` boundary with
+`_parse_iso_utc` (`api.py:346`) parses each `timeInterval` boundary with
 `datetime.fromisoformat` (after normalising a trailing `Z`). A44 timestamps are
 UTC by spec, but if a document ever omits the zone, a naive value is treated as
 UTC rather than the HA host's local time (`api.py:352`). Everything in this
 module works in UTC; conversion to Europe/Brussels local time (and the DST-aware
 day boundaries) happens in the coordinator and backfill, never here. A malformed
-timestamp is wrapped as `EntsoeError` (`api.py:346`) so the coordinator keeps
+timestamp is wrapped as `EntsoeError` (`api.py:62`) so the coordinator keeps
 serving cached spots instead of the `ValueError` escaping uncategorised.
 
 ### Unit conversion and return shape
@@ -267,7 +267,7 @@ A malformed `price.amount` or `position` raises `EntsoeError`
 constructs a fresh `EntsoeClient` per call (`coordinator.py:1941`,
 `coordinator.py:1941`). Two paths use it:
 
-- Live curve, `_fetch_spot_prices` (`coordinator.py:1983`). Windows the request
+- Live curve, `_fetch_spot_prices` (`coordinator.py:2220`). Windows the request
   on the local (Europe/Brussels) day so a 00:00 to 02:00 local query does not
   drop yesterday's UTC tail; anchors both endpoints on local midnight converted
   to UTC so the fetched window matches the actual local-day hour count, which
@@ -279,7 +279,7 @@ constructs a fresh `EntsoeClient` per call (`coordinator.py:1941`,
   back with today only will retry tomorrow on the next hourly tick
   (`coordinator.py:2019`, `coordinator.py:2029`). `quarter_hourly` is derived from
   the loaded snapshot's energy kind (`coordinator.py:2017`).
-- Historical backfill, `_ensure_historical_spots` (`coordinator.py:1866`).
+- Historical backfill, `_ensure_historical_spots` (`coordinator.py:2103`).
   Ensures `self._historical_spots` covers every hour of the local days in a range,
   fetching only the missing spans. It considers a day "present" when at least 20
   of its 24 hours are cached (`coordinator.py:1930`), tolerating both the
@@ -314,13 +314,13 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
-| `backfill_range` (`backfill.py:750`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py:862`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
+| `backfill_range` (`backfill.py:810`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
+| `backfill_if_missing` (`backfill.py:929`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py:41`). Backfill is reached either automatically
 at setup or through the `backfill_statistics` service, wired in `__init__.py`
-(service handler `_async_backfill_service` at `__init__.py:580`, one-shot
+(service handler `_async_backfill_service` at `__init__.py:591`, one-shot
 scheduling at `__init__.py:233`). The service handler validates that a snapshot
 is loaded and raises a localized `ServiceValidationError` otherwise, matching the
 window services (`__init__.py:525`).
@@ -333,7 +333,7 @@ a coordinator (`backfill.py:879`).
 ### Statistic ids and the two statistic shapes
 
 The statistic id is the sensor's entity id, resolved from the entity registry by
-unique id `f"{entry_id}_{key}"` via `_stat_id` (`backfill.py:127`). When the
+unique id `f"{entry_id}_{key}"` via `_stat_id` (`backfill.py:135`). When the
 entity is not registered yet (the auto path can fire before platform setup
 completes), the sensor is skipped silently and reported with a 0 count rather
 than fabricating a slug that would diverge from a user-renamed entity.
@@ -347,7 +347,7 @@ Two families of statistics are written:
 
 These are `async_import_statistics` external statistics (`source="recorder"`),
 not internal long-term statistics derived from a live sensor state. The key list
-(`_PRICE_SENSOR_KEYS`, `backfill.py:109`) is maintained by hand in lockstep with
+(`_PRICE_SENSOR_KEYS`, `backfill.py:117`) is maintained by hand in lockstep with
 `sensor.py`, deliberately, because the backfilled values come straight out of
 `compute_breakdown`, not from the live entities, so coupling this module to the
 entity-construction tuples would buy nothing.
@@ -360,14 +360,14 @@ intra-hour spread to record.
 
 Only the price (`mean`) sensors are pure functions of the tariff and spot. The
 `current_year_cost` sensor also needs how many kWh the household consumed and
-injected each past hour. `_backfill_cost_sensor` (`backfill.py:499`) recovers
+injected each past hour. `_backfill_cost_sensor` (`backfill.py:507`) recovers
 that from the recorder: it reads hourly kWh for every configured consumption
 sensor (`_hourly_consumption_sensors`) and injection sensor
 (`_hourly_injection_sensors`) through `_recorder_hourly_kwh`, binned into
 UTC-hour totals (`backfill.py:586`). The recorder helpers treat their date
 arguments as local-day boundaries, so the code passes the local dates of the
 first and last UTC hour, keeping the query window aligned with the backfill's
-`_hour_iter` grid (`backfill.py:584`).
+`_hour_iter` grid (`backfill.py:148`).
 
 ### Billing each past hour at its historical rate
 
@@ -392,7 +392,7 @@ both places.
 
 ### Spot provisioning for backfill
 
-`_ensure_dynamic_spots` (`backfill.py:269`) reuses the coordinator's
+`_ensure_dynamic_spots` (`backfill.py:277`) reuses the coordinator's
 `_ensure_historical_spots` so the bulk-fetch logic (week-sized chunks, present
 threshold, negative cache) stays in one place. It returns an empty dict when no
 spot is needed (static energy with a monthly or no injection). The gate is
@@ -439,7 +439,7 @@ effort and swallows recorder errors, since failing to seed is no worse than not
 trying. `tests/recorder/test_backfill_seam.py` pins all three states against a
 real recorder.
 
-`_backfill_cost_sensor` runs one running total per hour (`backfill.py:740`)
+`_backfill_cost_sensor` runs one running total per hour (`backfill.py:507`)
 rather than one end-of-day number, so the recorder draws a smoothly growing YTD
 line. Fixed fees (the supplier's yearly fixed fee, the energy-fund monthly charge
 times 12, the DSO data-management annual charge, and the Brussels Brugel OSP fee)
@@ -480,7 +480,7 @@ hour.
 ### `clear=True` is series-scoped and guarded
 
 The recorder's only public deletion primitive here is `clear_statistics`, which
-is series-scoped, not range-scoped: `_clear_all` (`backfill.py:247`) deletes the
+is series-scoped, not range-scoped: `_clear_all` (`backfill.py:255`) deletes the
 entire series for the given statistic ids. `backfill_range` therefore refuses the
 narrow-window-plus-clear combination: if `clear=True` and the window starts after
 Jan 1 of the end year, it raises `ServiceValidationError` (`backfill.py:800`),

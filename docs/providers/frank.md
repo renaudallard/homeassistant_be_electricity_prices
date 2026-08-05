@@ -52,12 +52,12 @@ config (contract_id) ->  probe(): GROQ newest _createdAt  -> freshness key
 The `source_url` stored in the snapshot is the resolved Sanity asset URL (whatever
 `_resolve_pdf_url` returned), not a stable human-facing page. The `publication_label` is
 a lowercased "month year" string ("april 2026") reconstructed from the filename by
-`_resolve_pdf_url` (`providers/frank.py:199`).
+`_resolve_pdf_url` (`providers/frank.py:156`).
 
 ## Contracts
 
 Five tiers are declared in `_TIERS` (`providers/frank.py:94`) and turned into `Contract`
-objects by the `EXTRACTOR` comprehension (`providers/frank.py:492`). Every one is
+objects by the `EXTRACTOR` comprehension (`providers/frank.py:489`). Every one is
 `kind="dynamic"`, `regions=_FRANK_REGIONS` (Flanders only), and leaves
 `spot_indexed_injection` at its default `False` (a dynamic contract already collects the
 ENTSO-E key via its energy formula, so the injection regime does not need to gate it; see
@@ -219,7 +219,7 @@ terugleveringsvergoeding: (<factor_pdf> x BELPEX per uur* <sign> <base_cents>)
 ```
 
 Injection is VAT-exempt (Belgian residential feed-in is never VAT-incl,
-`base.py:271`), so no `vat_mult` is applied (`providers/frank.py:396`):
+`base.py:271`), so no `vat_mult` is applied (`providers/frank.py:348`):
 
 ```
 factor = factor_pdf * 10.0
@@ -381,7 +381,7 @@ Fixtures live under `tests/fixtures/`. Each is a real Frank PDF for one tier and
 | `frank_dynamic_aug.pdf` | `frank_dynamic` | standard tier, August 2026; the first card with the energy-contribution row deleted |
 
 The five tiers share one PDF layout, but only the default tier had a fixture originally;
-`test_non_default_tiers_extract_energy_and_injection` (`tests/test_frank.py:231`) was added
+`test_non_default_tiers_extract_energy_and_injection` (`tests/test_frank.py:261`) was added
 with the other four fixtures to catch a tier-specific card regression. Tests load fixtures
 through `fixture_text(name, layout=True)` (`tests/test_frank.py:47`), matching the
 layout-preserving extraction used in production.
@@ -390,7 +390,7 @@ layout-preserving extraction used in production.
 
 | symptom | likely culprit | why |
 | --- | --- | --- |
-| A tier stops fetching, or a new sixth tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py:94`-139) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
+| A tier stops fetching, or a new sixth tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py:131`-139) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
 | "could not parse Frank Energie energy formula" | `_FORMULA_RE` (`:330`) | BELPEX wording, sign chars, or the `x 1,06` multiplier changed on the card |
 | Wrong per-kWh price after a card update | the EURct->EUR conversion in `_extract_dynamic` (`:354`) | Frank switched units or dropped the VAT multiplier |
 | "monthly fixed fee row not found" | `_MONTHLY_FEE_RE` (`:336`) | "Abonnementskost (EUR/maand)" label reworded |

@@ -421,7 +421,7 @@ feed-in credit (`ebem.py:529`, `ebem.py:562`, `tests/test_ebem.py:194`).
 | `tests/fixtures/ebem_dynamic_2026-05.pdf` | `dynamic` card (Groen Dyn@mic), May 2026 | dynamic energy / injection / no-prosumer tests |
 | `tests/fixtures/discover/ebem.html` | listing page snapshot | `fetch_for_month` + `discover` tests |
 
-Test constants `_VARIABLE` / `_DYNAMIC` (`tests/test_ebem.py:52`); the listing
+Test constants `_VARIABLE` / `_DYNAMIC` (`tests/test_ebem.py:53`); the listing
 HTML is read at `tests/test_ebem.py:306`. Fixture text is loaded with
 `layout=True` (`tests/test_ebem.py:56`) so it matches the production
 `fetch_pdf_text_layout` extraction.

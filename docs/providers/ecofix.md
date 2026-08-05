@@ -149,7 +149,7 @@ constructs `SupplierExtractor` with only `fetch` and `probe`). Filenames are
 overwrite-in-place and Ecofix publishes no public archive of past months
 (`ecofix.py:45`), so the coordinator's proxy-forward fallback bills past
 consumption windows at the current snapshot's rates. If Ecofix ever exposes a
-dated archive, add an `ArchivedSnapshotFetcher` (see `providers/base.py:525`).
+dated archive, add an `ArchivedSnapshotFetcher` (see `providers/base.py:703`).
 
 ### discover()
 
@@ -159,7 +159,7 @@ endpoint, this is how the live-check script detects a retired product (its URL
 starts 404ing) versus the registry's declared ids. A brand-new product is invisible
 to `discover()` until its filename is added to `_CONTRACTS`. Behaviour is pinned by
 `test_discover_returns_all_three_contracts_when_each_url_200s` and
-`test_discover_drops_retired_product_when_url_404s` (`tests/test_ecofix.py:364`).
+`test_discover_drops_retired_product_when_url_404s` (`tests/test_ecofix.py:377`).
 
 ## Parsing
 

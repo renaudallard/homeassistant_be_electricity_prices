@@ -207,27 +207,27 @@ asserts the publication label is non-empty, the expected DSO keys for the region
 positive, and then calls `_validate_snapshot`.
 
 The federal energy contribution is the exception to "taxes are positive". It is bounds-checked by
-`_expect_energy_contribution` (`scripts/live_check.py:376`) instead, which accepts
+`_expect_energy_contribution` (`scripts/live_check.py:472`) instead, which accepts
 `[0, 0.01]` EUR/kWh. A `> 0` gate on four suppliers used to enforce it, but the levy was abolished
 on 2026-08-01: EBEM's August card failed CI three times over for reporting the zero it actually
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py:1365`) runs two gates:
+`_validate_snapshot` (`scripts/live_check.py:1467`) runs two gates:
 
-- `_validate_energy` (`scripts/live_check.py:1397`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:1499`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
   additionally assert band ordering (peak >= transition >= offpeak; pic >= medium >= eco). An
   unrecognised energy class is a failure.
-- `_validate_injection` (`scripts/live_check.py:1257`) gates that the feed-in credit parsed and
+- `_validate_injection` (`scripts/live_check.py:1359`) gates that the feed-in credit parsed and
   kept the right shape. This exists because the coordinator drops the credit entirely when
   `injection` is None, so a relabelled injection row silently zeroes a solar user's credit and
   used to pass CI green (issues #31, F53). The `shape` argument pins expectations: `"none"`
   (region pays no feed-in, injection must be absent), `"monthly"` (`current` set, `factor`/`base`
   None), `"spot"` (`factor`/`base` set), or `"present"` (present, shape unconstrained). Per-contract
-  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1325`); the DATS 24 check passes
+  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1427`); the DATS 24 check passes
   `injection_shape` explicitly because its Wallonia card pays no feed-in while its Flanders card is
   monthly-indexed.
 
