@@ -133,7 +133,7 @@ onto these canonical keys.
 
 ### Supplier and contract
 
-A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:709`). It declares
+A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:724`). It declares
 the `Contract`s it sells (`providers/base.py:61`), each carrying a `TariffKind`
 (`providers/base.py:53`):
 
@@ -221,14 +221,14 @@ Numbered walkthrough:
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
    tuple (`coordinator.py:845`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
-3. `async_load_persistent` (`coordinator.py:1061`) loads the last snapshot from `.storage` so an
+3. `async_load_persistent` (`coordinator.py:1066`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
-4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:1162`). It runs
+4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:1167`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:172`),
    so the coordinator must not read `runtime_data` during first refresh.
-5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:509`):
+5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:520`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
    `InjectionRates`.
 6. For a dynamic contract (or a spot-indexed-injection one) the coordinator fetches the ENTSO-E
@@ -236,7 +236,7 @@ Numbered walkthrough:
 7. For each slot the coordinator calls `compute_breakdown` (`pricing.py`), which fuses the chosen
    DSO overlay, the taxes, the meter type, the DSO tariff mode, and (for dynamic) the slot spot
    into a `PriceBreakdown`. See [pricing-model.md](pricing-model.md).
-8. The result is packed into `CoordinatorData` (`coordinator.py:873`): the `hourly` table keyed by
+8. The result is packed into `CoordinatorData` (`coordinator.py:878`): the `hourly` table keyed by
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
    suppliers, `coordinator.py:1289`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
@@ -284,7 +284,7 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:746`). It declares the
+   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:761`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.
