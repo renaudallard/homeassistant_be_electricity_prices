@@ -1056,6 +1056,87 @@ async def test_live_today_kwh_ignores_a_stale_last_reset(
     assert kwh == pytest.approx(-4.5)
 
 
+async def test_top_up_today_hourly_adds_the_uncompiled_remainder(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The hourly branch reads compiled statistics only, so every
+    hourly-billed contract stepped once an hour at best and froze when
+    compilation stalled. Top today up from the live meter, attributing the
+    shortfall to the current hour, where the missing energy actually was."""
+    from custom_components.be_electricity_prices.coordinator import (
+        _top_up_today_hourly,
+    )
+
+    freezer.move_to("2026-07-16 14:30:00+02:00")
+    hass.states.async_set(
+        "sensor.meter",
+        "160.0",
+        {
+            "unit_of_measurement": "kWh",
+            "device_class": "energy",
+            "state_class": "total_increasing",
+        },
+    )
+    inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "100.0")]})
+    midnight = datetime(2026, 7, 15, 22, 0, tzinfo=UTC)  # 2026-07-16 local
+    per_hour = {
+        datetime(2026, 7, 14, 10, tzinfo=UTC): 5.0,  # yesterday, untouched
+        midnight: 40.0,  # today, already compiled
+    }
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        await _top_up_today_hourly(hass, ["sensor.meter"], per_hour, date(2026, 7, 16))
+    # live today = 160 - 100 = 60; statistics carry 40; the missing 20 lands
+    # on the current hour.
+    current = datetime(2026, 7, 16, 12, tzinfo=UTC)
+    assert per_hour[current] == pytest.approx(20.0)
+    assert per_hour[midnight] == pytest.approx(40.0)
+    assert per_hour[datetime(2026, 7, 14, 10, tzinfo=UTC)] == pytest.approx(5.0)
+
+
+async def test_top_up_today_hourly_leaves_caught_up_statistics_alone(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """When statistics already carry today's whole total there is nothing to
+    add, and a meter that ran backwards must not invent a negative hour."""
+    from custom_components.be_electricity_prices.coordinator import (
+        _top_up_today_hourly,
+    )
+
+    freezer.move_to("2026-07-16 14:30:00+02:00")
+    hass.states.async_set(
+        "sensor.meter",
+        "150.0",
+        {
+            "unit_of_measurement": "kWh",
+            "device_class": "energy",
+            "state_class": "total_increasing",
+        },
+    )
+    inst = _midnight_instance({"sensor.meter": [State("sensor.meter", "100.0")]})
+    midnight = datetime(2026, 7, 15, 22, 0, tzinfo=UTC)
+    per_hour = {midnight: 50.0}
+    with patch("homeassistant.components.recorder.get_instance", return_value=inst):
+        await _top_up_today_hourly(hass, ["sensor.meter"], per_hour, date(2026, 7, 16))
+    assert per_hour == {midnight: pytest.approx(50.0)}
+
+
+async def test_top_up_today_hourly_without_a_live_reading_is_a_no_op(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An unavailable meter leaves the statistics figure standing, exactly as
+    the per-day path degrades."""
+    from custom_components.be_electricity_prices.coordinator import (
+        _top_up_today_hourly,
+    )
+
+    freezer.move_to("2026-07-16 14:30:00+02:00")
+    hass.states.async_set("sensor.meter", "unavailable", _meter_attrs("kWh"))
+    midnight = datetime(2026, 7, 15, 22, 0, tzinfo=UTC)
+    per_hour = {midnight: 12.0}
+    await _top_up_today_hourly(hass, ["sensor.meter"], per_hour, date(2026, 7, 16))
+    assert per_hour == {midnight: pytest.approx(12.0)}
+
+
 async def test_live_today_kwh_none_when_unavailable(
     hass: HomeAssistant, freezer: Any
 ) -> None:

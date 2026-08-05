@@ -3413,6 +3413,52 @@ async def _sum_hourly_kwh(
     return out
 
 
+async def _top_up_today_hourly(
+    hass: HomeAssistant,
+    entity_ids: Iterable[str],
+    per_hour: dict[datetime, float],
+    today: date,
+) -> None:
+    """Add today's not-yet-compiled kWh to the hourly map, in place.
+
+    The hourly branch reads long-term hourly statistics only, which reflect
+    the last COMPILED hour. Every hourly-billed contract (dynamic,
+    spot-monthly, TOU, Impact, exclusive-night) therefore stepped
+    ``current_year_cost`` once an hour at best and froze outright when
+    statistics compilation lagged or stalled, while the meter kept updating.
+    The per-day branch has read today off the live meter since 0.11.9; this
+    gives the hourly branch the same guarantee.
+
+    The shortfall (live total for today minus what statistics already carry
+    for today) is attributed to the CURRENT hour. That is where the missing
+    energy actually was: statistics trail real time, so what they have not
+    booked yet is the most recent consumption. It also prices the top-up at
+    the hour the user is living through, which is the point of a live read on
+    a dynamic contract.
+
+    A meter with no reliable live reading contributes nothing and leaves the
+    statistics figure standing, exactly as the per-day path degrades.
+    """
+    live_total = 0.0
+    have_live = False
+    for entity_id in entity_ids:
+        live = await _live_today_kwh(hass, entity_id, today)
+        if live is not None:
+            live_total += live
+            have_live = True
+    if not have_live:
+        return
+    midnight = dt_util.start_of_local_day(today).astimezone(UTC)
+    compiled_today = sum(kwh for hour, kwh in per_hour.items() if hour >= midnight)
+    missing = live_total - compiled_today
+    if missing <= 0.0:
+        # Statistics have caught up (or overshot on a meter that ran
+        # backwards); leave them alone rather than inventing a negative hour.
+        return
+    current_hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    per_hour[current_hour] = per_hour.get(current_hour, 0.0) + missing
+
+
 async def _recorder_daily_band_ratio(
     hass: HomeAssistant, entity_id: str, start: date, end: date, region: str
 ) -> dict[date, tuple[float, float]]:
@@ -3954,6 +4000,12 @@ async def _ytd_hourly_energy(
     jan1 = date(today.year, 1, 1)
     cons_per_hour = await _sum_hourly_kwh(hass, cons_ids, jan1, today)
     inj_per_hour = await _sum_hourly_kwh(hass, inj_ids, jan1, today)
+    # Statistics only carry the last COMPILED hour, so top today up from the
+    # live meters the way the per-day branch has since 0.11.9. Without this
+    # every hourly-billed contract stepped once an hour at best and froze
+    # outright whenever compilation lagged or stalled.
+    await _top_up_today_hourly(hass, cons_ids, cons_per_hour, today)
+    await _top_up_today_hourly(hass, inj_ids, inj_per_hour, today)
 
     _snap_for = _month_snapshot_cache(
         hass, session, extractor, contract, region, snapshot, entry
