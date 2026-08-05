@@ -759,6 +759,35 @@ def test_a_negative_realized_injection_keeps_its_sign() -> None:
     assert rates["exclusive_night"] == pytest.approx(0.1186)
 
 
+def test_a_page_break_in_the_realized_sentence_does_not_kill_the_block() -> None:
+    """The two block anchors must tolerate a colon between them.
+
+    Where the sentence straddles a page break the extractor splices the page
+    footer into it, and that footer is full of colons ("Sources d'energie
+    pour :", "votre produit :"). A colon-free gap then failed to match and the
+    whole override quietly no-opped for that month, leaving one month of a
+    year-to-date walk on the simulation table while its neighbours used the
+    realized rates.
+    """
+    from custom_components.be_electricity_prices.providers.mega import _realized_rates
+
+    spliced = (
+        "Les derniers prix constates et utilises pour le calcul de votre "
+        "facture de regularisation pour le mois de juin\n"
+        "Sources d'energie pour :\nvotre produit : \n 100% verte\n"
+        "la region wallonne (telles qu'approuvees par la CWaPE) : 89,5% verte\n"
+        "et 10,5% grise\nPrix du \nmois 07/2026\n - \n"
+        "TVA 6% incluse - Publie le 30-06-2026\n 1 / 3\nPower Online SA "
+        "sont les suivants (c€/kWh) : Compteur mono-horaire : 17.99; "
+        "Jour : 19.8; Nuit : 16.7; Exclusif nuit : 16.7 ; Injection : 3.63."
+    )
+    rates = _realized_rates(spliced)
+    assert rates["mono"] == pytest.approx(0.1799)
+    assert rates["peak"] == pytest.approx(0.198)
+    assert rates["offpeak"] == pytest.approx(0.167)
+    assert rates["injection"] == pytest.approx(0.0363)
+
+
 def test_a_collided_value_token_is_refused_not_truncated() -> None:
     """The June 2026 Flanders cards collide two runs in the text layer.
 

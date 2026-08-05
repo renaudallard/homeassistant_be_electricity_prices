@@ -913,8 +913,16 @@ def _realized_rates(text: str) -> dict[str, float]:
     The text layer wraps mid-word, so every label tolerates internal
     whitespace and soft hyphens.
     """
+    # The gap between the two anchors must tolerate a colon. On a card where
+    # the sentence straddles a page break the extractor splices the page
+    # footer into it, and that footer is full of colons ("Sources d'energie
+    # pour :", "votre produit :", "(telles qu'approuvees par la CWaPE) :").
+    # A [^:]* gap then fails to match and the whole override quietly no-ops
+    # for that month, so one month of a year-to-date walk sits on the
+    # simulation table while its neighbours use the realized rates. Both
+    # anchors are specific enough that a non-greedy bounded gap is safe.
     block = re.search(
-        r"derniers prix constat[^:]*sont les suivants \(c€/kWh\)\s*:(.{0,400})",
+        r"derniers prix constat.{0,400}?sont les suivants \(c€/kWh\)\s*:(.{0,400})",
         text,
         re.S | re.I,
     )
