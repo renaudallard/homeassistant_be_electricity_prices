@@ -59,17 +59,10 @@ import aiohttp
 from ..const import (
     DSO_AIEG,
     DSO_AIESH,
-    DSO_FLUVIUS_ANTWERPEN,
-    DSO_FLUVIUS_HALLE_VILVOORDE,
-    DSO_FLUVIUS_IMEWO,
-    DSO_FLUVIUS_INTERGEM,
-    DSO_FLUVIUS_IVEKA,
-    DSO_FLUVIUS_LIMBURG,
-    DSO_FLUVIUS_WEST,
-    DSO_FLUVIUS_ZENNE_DIJLE,
     DSO_ORES,
     DSO_RESA,
     DSO_REW,
+    FLUVIUS_CARD_LABELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
@@ -574,16 +567,11 @@ def _extract_wallonia_renewables(text: str) -> float:
 # ---- DSO row parsers --------------------------------------------------------
 
 
-_FLANDERS_LABELS: dict[str, str] = {
-    "Fluvius Antwerpen": DSO_FLUVIUS_ANTWERPEN,
-    "Fluvius Halle-Vilvoorde": DSO_FLUVIUS_HALLE_VILVOORDE,
-    "Fluvius Imewo": DSO_FLUVIUS_IMEWO,
-    "Fluvius Kempen": DSO_FLUVIUS_IVEKA,
-    "Fluvius Limburg": DSO_FLUVIUS_LIMBURG,
-    "Fluvius Midden-Vlaanderen": DSO_FLUVIUS_INTERGEM,
-    "Fluvius West": DSO_FLUVIUS_WEST,
-    "Fluvius Zenne-Dijle": DSO_FLUVIUS_ZENNE_DIJLE,
-}
+# Ecofix prints the eight Fluvius areas exactly as the shared map spells them,
+# so alias it rather than restating it -- the spelling belongs to the card, and
+# a supplier that abbreviates ("Fluvius Midden-Vl") keeps its own map instead.
+# Same form luminus, mega, octaplus and ecopower already use.
+_FLANDERS_LABELS = FLUVIUS_CARD_LABELS
 
 
 def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]:
