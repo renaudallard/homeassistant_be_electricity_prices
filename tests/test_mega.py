@@ -741,3 +741,26 @@ def test_fixed_and_dynamic_cards_keep_reading_their_own_tables() -> None:
     )
     assert isinstance(snap.energy, FixedRates)
     assert snap.energy.single == pytest.approx(0.1718)
+
+
+def test_pro_variable_cohort_coefficients_are_not_vat_baked() -> None:
+    """A professional card is published Hors TVA and its snapshot carries
+    vat_rate 0,21, so the cohort coefficients must stay ex-VAT.
+
+    vat_multiplier falls back to the residential 1,06 when its pattern misses,
+    and a pro card never prints "TVA N% incluse", so the shared call baked 6%
+    into an ex-VAT formula and inflated a pro entry's whole energy leg.
+    """
+    from custom_components.be_electricity_prices.providers.mega import (
+        _variable_cohort_coefficients,
+    )
+
+    text = fixture_text("mega_smart_flex_w.pdf")
+    res_factor, res_base = _variable_cohort_coefficients(text, professional=False)
+    pro_factor, pro_base = _variable_cohort_coefficients(text, professional=True)
+    assert res_factor is not None and pro_factor is not None
+    assert res_base is not None and pro_base is not None
+    # Same card, same printed formula: the residential read bakes 6%, the
+    # professional read does not.
+    assert res_factor == pytest.approx(pro_factor * 1.06)
+    assert res_base == pytest.approx(pro_base * 1.06)

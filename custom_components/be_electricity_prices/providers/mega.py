@@ -597,7 +597,7 @@ def parse_snapshot(
     _assert_card_region(text, region)
 
     professional = contract.professional
-    energy = _extract_energy(text, contract.kind)
+    energy = _extract_energy(text, contract.kind, professional=professional)
     injection = _extract_injection(text, contract.kind)
     if professional and injection is not None:
         # "les prix d'injection sont a majorer de la TVA, sauf si vous
@@ -769,9 +769,21 @@ _VARIABLE_MONO_FORMULA_RE = re.compile(
 )
 
 
-def _variable_cohort_coefficients(text: str) -> tuple[float | None, float | None]:
-    """Numeric coefficients of the variable indexation formula, VAT-baked to
-    the TVAC EUR/kWh basis (snapshot vat_rate is 0), or ``(None, None)``.
+def _variable_cohort_coefficients(
+    text: str, *, professional: bool = False
+) -> tuple[float | None, float | None]:
+    """Numeric coefficients of the variable indexation formula, or
+    ``(None, None)``.
+
+    On a residential card the numbers are baked to the TVAC EUR/kWh basis the
+    snapshot carries (``vat_rate`` 0). A professional card is published Hors
+    TVA and its snapshot carries ``vat_rate`` 0,21, so its coefficients stay
+    ex-VAT and the entry's own VAT preference resolves them later.
+
+    That distinction has to be explicit. ``vat_multiplier`` falls back to the
+    residential 1,06 when its pattern misses, and a professional card never
+    prints "TVA N% incluse" (it prints "Hors TVA"), so the shared call baked
+    6% into an ex-VAT formula and inflated a pro entry's whole energy leg.
 
     The Epex index is the monthly RLP-weighted spot; the coordinator applies
     these against the plain arithmetic monthly mean (a close, few-percent
@@ -780,13 +792,19 @@ def _variable_cohort_coefficients(text: str) -> tuple[float | None, float | None
     match = _VARIABLE_MONO_FORMULA_RE.search(re.sub(r"\s+", " ", text))
     if match is None:
         return None, None
-    vat_mult = vat_multiplier(text, re.compile(r"TVA\s*(\d+)\s*%\s*incluse", re.I))
+    vat_mult = (
+        1.0
+        if professional
+        else vat_multiplier(text, re.compile(r"TVA\s*(\d+)\s*%\s*incluse", re.I))
+    )
     factor = to_float(match.group(1)) * vat_mult
     base = parse_sign(match.group(2)) * to_float(match.group(3)) * vat_mult / 100.0
     return factor, base
 
 
-def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
+def _extract_energy(
+    text: str, kind: TariffKind, *, professional: bool = False
+) -> EnergyRates:
     yearly_fee = _extract_yearly_fee(text)
     if kind == "dynamic":
         consumption = _parse_formula(_CONSUMPTION_FORMULA_RE.search(text))
@@ -847,7 +865,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             exclusive_night=excl_night,
             yearly_fixed_fee=yearly_fee,
         )
-    f_factor, f_base = _variable_cohort_coefficients(text)
+    f_factor, f_base = _variable_cohort_coefficients(text, professional=professional)
     return VariableRates(
         current=realized.get("mono", mono),
         peak=realized.get("peak", peak),
