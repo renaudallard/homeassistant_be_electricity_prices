@@ -170,6 +170,7 @@ from .const import (
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     METER_TYPES,
+    SMART_METER_CONTRACT_KINDS,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
@@ -617,14 +618,11 @@ def _add_custom_num(
     ``_add_manual_num`` does, so a blank box omits the key.
     """
     if fallback:
-        stored = defaults.get(key)
-        selector = _custom_num(negative=negative)
-        if stored is not None:
-            fields[
-                vol.Optional(key, description={"suggested_value": float(stored)})
-            ] = selector
-        else:
-            fields[vol.Optional(key)] = selector
+        # Literally what _add_manual_num does, and for the same reason, so
+        # call it rather than keep a second copy of the suggestion-not-default
+        # idiom: violating that idiom is what shipped a billed 0,00 in
+        # 0.11.40/0.11.41.
+        _add_manual_num(fields, defaults, key, negative=negative)
         return
     fields[vol.Optional(key, default=float(defaults.get(key, default)))] = _custom_num(
         negative=negative
@@ -813,7 +811,7 @@ def _meter_schema(
     # mix. Off-peak Impact additionally requires the user to have the
     # CWaPE Tarif réseau IMPACT subscription on the DSO side.
     kind = _contract_kind(supplier_id, contract_id)
-    if kind in ("dynamic", "tou", "tou_impact"):
+    if kind in SMART_METER_CONTRACT_KINDS:
         options = [METER_DYNAMIC]
         fallback = METER_DYNAMIC
     else:
@@ -2004,7 +2002,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
         # flow's _meter_schema, which gates the same three kinds. (Mega
         # Off-peak Impact is "tou_impact"; omitting it here let the
         # compare flow show an impossible mono/bi meter for it.)
-        if other_kind in ("dynamic", "tou", "tou_impact"):
+        if other_kind in SMART_METER_CONTRACT_KINDS:
             self._compare[CONF_METER] = METER_DYNAMIC
             return await self._after_compare_meter()
         current_meter = self.config_entry.data.get(CONF_METER, METER_MONO)
