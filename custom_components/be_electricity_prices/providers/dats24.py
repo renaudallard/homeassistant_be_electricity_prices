@@ -93,6 +93,7 @@ from ._pdf import (
     to_float,
 )
 from .base import (
+    walloon_dso_overlay,
     Contract,
     DsoOverlay,
     EnergyRates,
@@ -365,17 +366,17 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         )
         if not row:
             continue
-        out[key] = DsoOverlay(
-            distribution_single=to_float(row.group(1)) / 100.0,
-            distribution_peak=to_float(row.group(2)) / 100.0,
-            distribution_offpeak=to_float(row.group(3)) / 100.0,
-            distribution_exclusive_night=to_float(row.group(7)) / 100.0,
-            distribution_pic=to_float(row.group(4)) / 100.0,
-            distribution_medium=to_float(row.group(5)) / 100.0,
-            distribution_eco=to_float(row.group(6)) / 100.0,
-            transport=to_float(row.group(8)) / 100.0,
-            data_management_per_year=to_float(row.group(9)),
-            prosumer_eur_per_kva_year=to_float(row.group(10)),
+        out[key] = walloon_dso_overlay(
+            mono=to_float(row.group(1)),
+            peak=to_float(row.group(2)),
+            offpeak=to_float(row.group(3)),
+            pic=to_float(row.group(4)),
+            medium=to_float(row.group(5)),
+            eco=to_float(row.group(6)),
+            excl_night=to_float(row.group(7)),
+            transport=to_float(row.group(8)),
+            terme_fixe=to_float(row.group(9)),
+            prosumer=to_float(row.group(10)),
         )
     return out
 

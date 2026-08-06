@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:576-585`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:469`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:478`) but is not touched here.
 - The Wallonia `region_connection_fee` is a per-kWh term and IS billed, but
   through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:632`), not
   `taxes_eur_per_kwh`. Engie's Walloon card prints `Redevance raccordement(8)`
@@ -182,7 +182,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:671`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:680`)
 picks the band the entry's `CONF_ANNUAL_CONSUMPTION_KWH` falls in and writes it
 to `federal_excise`. The pricing engine never sees a band - it goes on reading a
 single rate. A volume past the last band clamps to it. Residential cards leave
@@ -534,7 +534,7 @@ EnergyVision 3 jaar vast / 1 an fixe) must
 emit only the realized monthly `current`, never an hourly `factor*spot+base`,
 because the indicative is the actual credit. The guard that keeps shape (b)/(c)
 from swallowing these cards is the `inj.current is None` clause in both
-`_injection_needs_spot` (`coordinator.py:2942`) and `_compute_injection_price`
+`_injection_needs_spot` (`coordinator.py:2913`) and `_compute_injection_price`
 (`coordinator.py:2761`): when a card prints a monthly `current`, the spot branch
 is skipped and the realized rate is used, keeping the live sensor consistent with
 the YTD credit for the same hour (`coordinator.py:2745-2753`). A latent mis-price

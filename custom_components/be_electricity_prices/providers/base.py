@@ -417,9 +417,18 @@ def walloon_dso_overlay(
     ``terme_fixe`` (databeheer, EUR/year) and ``prosumer`` (EUR/kVA/year)
     are annual amounts passed through unscaled.
 
-    Providers whose cards print values already in EUR/kWh (Eneco) or with
-    nullable Impact bands (Luminus), or that index the row positionally
-    (Engie, DATS24), build :class:`DsoOverlay` directly.
+    Every keyword is named rather than positional precisely so a card's own
+    column order does not matter: DATS 24 prints the Impact bands
+    PIC | MEDIUM | ECO and EnergyVision prints them ECO | MEDIUM | PIC, and
+    both map onto the same call.
+
+    Luminus and Eneco build :class:`DsoOverlay` directly, and only for one
+    reason: their cards leave the Impact ``pic`` / ``medium`` / ``eco``
+    triplet nullable, which these parameters are not. (An earlier version of
+    this note also exempted providers that "index the row positionally
+    (Engie, DATS24)" and ones whose cards "print values already in EUR/kWh
+    (Eneco)". Neither held: all three of those call this helper now, and
+    Eneco divides by 100 like everyone else.)
     """
     return DsoOverlay(
         distribution_single=mono / 100.0,

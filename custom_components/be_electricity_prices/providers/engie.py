@@ -87,6 +87,7 @@ from ._pdf import (
     vat_multiplier,
 )
 from .base import (
+    walloon_dso_overlay,
     Contract,
     DsoOverlay,
     DynamicRates,
@@ -963,17 +964,17 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         else:
             data_mgmt = nums[7]
             transport = nums[8]
-        out[key] = DsoOverlay(
-            distribution_single=nums[0] / 100.0,
-            distribution_peak=nums[1] / 100.0,
-            distribution_offpeak=nums[2] / 100.0,
-            distribution_pic=nums[3] / 100.0,
-            distribution_medium=nums[4] / 100.0,
-            distribution_eco=nums[5] / 100.0,
-            distribution_exclusive_night=nums[6] / 100.0,
-            transport=transport / 100.0,
-            data_management_per_year=data_mgmt,
-            prosumer_eur_per_kva_year=prosumer,
+        out[key] = walloon_dso_overlay(
+            mono=nums[0],
+            peak=nums[1],
+            offpeak=nums[2],
+            pic=nums[3],
+            medium=nums[4],
+            eco=nums[5],
+            excl_night=nums[6],
+            transport=transport,
+            terme_fixe=data_mgmt,
+            prosumer=prosumer,
         )
 
     # The card lists ~7 ORES sub-areas (Brab. Wal., Est, Hainaut, ...),

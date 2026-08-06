@@ -123,7 +123,7 @@ orthogonal axes (independent of the above):
 ### Region and DSO sub-area
 
 The three Belgian regions (`REGION_FLANDERS`, `REGION_WALLONIA`, `REGION_BRUSSELS`, `const.py:41`)
-each have different regional levies and a different set of DSOs. `DSO_CHOICES` (`const.py:101`)
+each have different regional levies and a different set of DSOs. `DSO_CHOICES` (`const.py:106`)
 maps each region to its selectable sub-areas. Flanders is split into eight Fluvius sub-areas
 because their distribution rates differ materially; Wallonia has five operators; Brussels has
 only Sibelga. The canonical DSO keys (`const.py:49`) are stored verbatim in each user's
@@ -133,7 +133,7 @@ onto these canonical keys.
 
 ### Supplier and contract
 
-A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:724`). It declares
+A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:733`). It declares
 the `Contract`s it sells (`providers/base.py:61`), each carrying a `TariffKind`
 (`providers/base.py:53`):
 
@@ -166,13 +166,13 @@ each falling back when the card does not publish a separate value.
 
 ### The two orthogonal axes
 
-The DSO tariff mode (`CONF_DSO_TARIFF_MODE`, `const.py:189`) is a grid-side billing choice
+The DSO tariff mode (`CONF_DSO_TARIFF_MODE`, `const.py:203`) is a grid-side billing choice
 independent of the supplier meter: `simple`, `bi_horaire`, or (Wallonia SMR3 opt-in) `impact`
 (Tarif Impact, three distribution rates by CWaPE hour-of-day band). Outside Wallonia only
 `simple` and `bi_horaire` are meaningful, and the coordinator falls back automatically when the
 DSO does not publish Impact rates.
 
-The solar regime (`CONF_SOLAR_REGIME`, `const.py:239`) is independent again: `none` (no panels),
+The solar regime (`CONF_SOLAR_REGIME`, `const.py:253`) is independent again: `none` (no panels),
 `compensation` (the Walloon "meter runs backwards" regime, valid for pre-2024 installs until
 2030-12-31), or `injection` (feed-in credited at the injection tariff). Belgian residential
 injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
@@ -228,7 +228,7 @@ Numbered walkthrough:
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:172`),
    so the coordinator must not read `runtime_data` during first refresh.
-5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:520`):
+5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:529`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
    `InjectionRates`.
 6. For a dynamic contract (or a spot-indexed-injection one) the coordinator fetches the ENTSO-E
@@ -250,7 +250,7 @@ Numbered walkthrough:
 
 ## Freshness and caching, at a glance
 
-The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:277`). Freshness has
+The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:291`). Freshness has
 three layers; the deep detail is in [coordinator.md](coordinator.md).
 
 - Probe: each tick runs the supplier's cheap `probe()` (a HEAD or listing GET returning a
@@ -260,7 +260,7 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
 - TTL fallback: suppliers with no usable probe (Engie, Luminus, DATS 24, where the only cheap
   response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
   `coordinator.py:224`).
-- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:279`)
+- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:293`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
   `coordinator.py:814`).
@@ -284,7 +284,7 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:761`). It declares the
+   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:770`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.
