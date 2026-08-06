@@ -416,10 +416,14 @@ ending green (`.github/workflows/live_check.yml:281`).
 
 Runs only on push to `main` that changes
 `custom_components/be_electricity_prices/manifest.json` (`.github/workflows/autorelease.yml:3`),
-with `contents: write`. It inlines the Tests + Validate gate so a manifest bump on a red branch can
-never publish: a `verify` job mirrors `test.yml` (ruff check, ruff format, `mypy --strict` on
-production, `pytest tests/ -q`) and separate `hacs`/`hassfest` jobs mirror `validate.yml`
-(`.github/workflows/autorelease.yml:25`). The `release` job needs all three
+with `contents: write`. It gates on the Tests + Validate checks so a manifest bump on a red branch
+can never publish: the `verify` job **calls** `test.yml` via `workflow_call`
+(`.github/workflows/autorelease.yml:25`), and separate `hacs`/`hassfest` jobs mirror `validate.yml`.
+`verify` used to be a hand-copy of `test.yml` carrying a note that the two must be kept in sync;
+calling it removes the chance to forget. `test.yml`'s concurrency group includes `github.workflow`
+(the **caller's** name) for that reason — without it the standalone Tests run and the one
+autorelease calls would share a group on a push to `main` and `cancel-in-progress` would kill the
+release's own gate. The `release` job needs all three
 (`.github/workflows/autorelease.yml:72`), then:
 
 1. Extracts the version from `manifest.json` via `jq` and derives `tag=v<version>`
