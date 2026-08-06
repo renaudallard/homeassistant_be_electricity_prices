@@ -1462,28 +1462,56 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             ytd_diagnostics=ytd_breakdown or None,
         )
 
-    def _sync_stale_issue(self, stale: bool) -> None:
-        """Raise or clear the 'snapshot stale' repair issue for this entry."""
+    def _sync_issue(
+        self,
+        key: str,
+        active: bool,
+        *,
+        extra: dict[str, str] | None = None,
+        severity: ir.IssueSeverity = ir.IssueSeverity.WARNING,
+    ) -> None:
+        """Raise or clear one Repairs issue for this entry.
+
+        Five syncers spelled this out: the unloaded guard, the
+        ``f"{translation_key}_{entry_id}"`` id, the create call with its
+        supplier / contract placeholders, and the delete in the else. Only the
+        key, the predicate and a couple of extra placeholders differ.
+
+        The id shape is load-bearing and must stay byte-identical: Repairs
+        persists it, so a changed id leaves an already-raised issue orphaned
+        with no way for the user to clear it.
+        """
         if self._unloaded:
             return
-        issue_id = f"snapshot_stale_{self.entry.entry_id}"
-        if stale:
-            ir.async_create_issue(
-                self.hass,
-                DOMAIN,
-                issue_id,
-                is_fixable=False,
-                severity=ir.IssueSeverity.WARNING,
-                translation_key="snapshot_stale",
-                translation_placeholders={
-                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
-                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
-                    "days": str(SNAPSHOT_STALE_DAYS),
-                    "last_error": self._last_error or "unknown",
-                },
-            )
-        else:
+        issue_id = f"{key}_{self.entry.entry_id}"
+        if not active:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            return
+        placeholders = {
+            "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
+            "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
+        }
+        placeholders.update(extra or {})
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=severity,
+            translation_key=key,
+            translation_placeholders=placeholders,
+        )
+
+    def _sync_stale_issue(self, stale: bool) -> None:
+        """Raise or clear the 'snapshot stale' repair issue for this entry."""
+        self._sync_issue(
+            "snapshot_stale",
+            stale,
+            extra={
+                "days": str(SNAPSHOT_STALE_DAYS),
+                "last_error": self._last_error or "unknown",
+            },
+        )
 
     def _sync_exclusive_night_gap_issue(self) -> None:
         """Flag an exclusive-night meter whose DSO overlay cannot price it.
@@ -1503,9 +1531,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         would be a guess. So price it as the engine already does and tell the
         user, rather than hiding the meter type or silently over-billing.
         """
-        if self._unloaded:
-            return
-        issue_id = f"exclusive_night_rate_missing_{self.entry.entry_id}"
         overlay = (
             self._snapshot.dsos.get(self.entry.data.get(CONF_DSO, ""))
             if self._snapshot is not None
@@ -1517,22 +1542,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             and overlay.distribution_exclusive_night is None
             and overlay.distribution_offpeak is None
         )
-        if gap:
-            ir.async_create_issue(
-                self.hass,
-                DOMAIN,
-                issue_id,
-                is_fixable=False,
-                severity=ir.IssueSeverity.WARNING,
-                translation_key="exclusive_night_rate_missing",
-                translation_placeholders={
-                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
-                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
-                    "dso": str(self.entry.data.get(CONF_DSO, "")),
-                },
-            )
-        else:
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        self._sync_issue(
+            "exclusive_night_rate_missing",
+            gap,
+            extra={"dso": str(self.entry.data.get(CONF_DSO, ""))},
+        )
 
     def _sync_impact_gap_issue(self) -> None:
         """Flag an Impact DSO mode the supplier's card cannot price.
@@ -1551,9 +1565,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         publish peak / offpeak). Still worth telling the user, since they
         explicitly opted into Impact and are not being billed on it.
         """
-        if self._unloaded:
-            return
-        issue_id = f"impact_rates_missing_{self.entry.entry_id}"
         overlay = (
             self._snapshot.dsos.get(self.entry.data.get(CONF_DSO, ""))
             if self._snapshot is not None
@@ -1564,22 +1575,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             and overlay is not None
             and overlay.distribution_pic is None
         )
-        if gap:
-            ir.async_create_issue(
-                self.hass,
-                DOMAIN,
-                issue_id,
-                is_fixable=False,
-                severity=ir.IssueSeverity.WARNING,
-                translation_key="impact_rates_missing",
-                translation_placeholders={
-                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
-                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
-                    "dso": str(self.entry.data.get(CONF_DSO, "")),
-                },
-            )
-        else:
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        self._sync_issue(
+            "impact_rates_missing",
+            gap,
+            extra={"dso": str(self.entry.data.get(CONF_DSO, ""))},
+        )
 
     def _sync_connection_fee_issue(self) -> None:
         """Flag a Walloon card that stopped printing the connection fee.
@@ -1596,27 +1596,11 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         error of the two. Say what the cost excludes so the gap is disclosed
         rather than silent, and clear it the moment the row comes back.
         """
-        if self._unloaded:
-            return
-        issue_id = f"connection_fee_missing_{self.entry.entry_id}"
-        if (
+        self._sync_issue(
+            "connection_fee_missing",
             self._snapshot is not None
-            and self._snapshot.taxes.region_connection_fee_unavailable
-        ):
-            ir.async_create_issue(
-                self.hass,
-                DOMAIN,
-                issue_id,
-                is_fixable=False,
-                severity=ir.IssueSeverity.WARNING,
-                translation_key="connection_fee_missing",
-                translation_placeholders={
-                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
-                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
-                },
-            )
-        else:
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            and self._snapshot.taxes.region_connection_fee_unavailable,
+        )
 
     def _sync_extractor_issue(
         self, message: str | None, *, transient: bool = False
@@ -1674,25 +1658,12 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         outage. Cleared as soon as a refresh succeeds with a key the
         endpoint accepts.
         """
-        if self._unloaded:
-            return
-        issue_id = f"entsoe_auth_failed_{self.entry.entry_id}"
-        if active:
-            ir.async_create_issue(
-                self.hass,
-                DOMAIN,
-                issue_id,
-                is_fixable=False,
-                severity=ir.IssueSeverity.ERROR,
-                translation_key="entsoe_auth_failed",
-                translation_placeholders={
-                    "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
-                    "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
-                    "error": message or "401 Unauthorized",
-                },
-            )
-        else:
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        self._sync_issue(
+            "entsoe_auth_failed",
+            active,
+            extra={"error": message or "401 Unauthorized"},
+            severity=ir.IssueSeverity.ERROR,
+        )
 
     def _sync_deprecated_supplier_issue(self) -> None:
         """Raise or clear the 'this supplier is leaving the market' issue.
