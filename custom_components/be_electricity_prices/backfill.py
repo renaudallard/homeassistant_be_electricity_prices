@@ -50,6 +50,8 @@ from __future__ import annotations
 
 import calendar
 import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -104,7 +106,7 @@ from .coordinator import (
     _spp_weighting_enabled,
     _sum_hourly_kwh,
 )
-from .pricing import compute_breakdown
+from .pricing import DsoTariffMode, MeterType, compute_breakdown
 from .providers import DynamicRates, SpotMonthlyRates, get as get_extractor
 
 _LOGGER = logging.getLogger(__name__)
@@ -349,6 +351,90 @@ def _hour_spot(
     return spots.get(utc_hour) if spots else None
 
 
+@dataclass(frozen=True)
+class _BackfillContext:
+    """Everything both backfill passes resolve before their hour loop.
+
+    The two passes opened with ~33 verbatim identical lines: the lazy recorder
+    imports, the entry unpack, the per-month snapshot cache, the SPP weights
+    and the three per-run caches. A new per-run input had to be added twice.
+    """
+
+    region: str
+    dso: str
+    meter: MeterType
+    dso_mode: DsoTariffMode
+    regime: str
+    snap_for: Callable[[date], Awaitable[Any]]
+    spp_weights: SppWeights | None
+    month_spp_cache: dict[tuple[int, int], float | None]
+    month_mean_cache: dict[tuple[int, int], float | None]
+    hourly_injection: bool
+
+
+def _recorder_models() -> tuple[Any, Any, Any, Any]:
+    """The recorder symbols both passes import, imported lazily.
+
+    Kept inside a function, never at module scope: backfill.py must import
+    cleanly on an installation with no recorder (the annotations live under
+    TYPE_CHECKING for the same reason). mypy --strict needs the ignore because
+    the recorder does not re-export StatisticMeanType via __all__.
+    """
+    from homeassistant.components.recorder.models import (
+        StatisticData,
+        StatisticMetaData,
+    )
+    from homeassistant.components.recorder.statistics import (  # type: ignore[attr-defined]
+        StatisticMeanType,
+        async_import_statistics,
+    )
+
+    return StatisticData, StatisticMetaData, StatisticMeanType, async_import_statistics
+
+
+async def _build_context(
+    hass: HomeAssistant, entry: ConfigEntry, coordinator: BePricesCoordinator
+) -> _BackfillContext:
+    """Resolve the per-run inputs shared by both passes.
+
+    ``_ensure_spp_weights`` must be awaited before ``_spp_weights`` is read;
+    doing it here is what keeps that ordering from having to be remembered at
+    two call sites.
+    """
+    snap = coordinator._snapshot
+    assert snap is not None
+    extractor = get_extractor(entry.data[CONF_SUPPLIER])
+    contract = entry.data[CONF_CONTRACT]
+    region = entry.data.get(CONF_REGION, "")
+    spp_weights = None
+    if _spp_weighting_enabled(entry):
+        await coordinator._ensure_spp_weights()
+        spp_weights = coordinator._spp_weights
+    return _BackfillContext(
+        region=region,
+        dso=entry.data[CONF_DSO],
+        meter=entry.data.get(CONF_METER, METER_MONO),
+        dso_mode=entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE),
+        regime=entry.data.get(CONF_SOLAR_REGIME, "none"),
+        # Cache per-month snapshot lookups so a 365-day window touches at
+        # most 12 archive fetches.
+        snap_for=_month_snapshot_cache(
+            hass, coordinator._session, extractor, contract, region, snap, entry
+        ),
+        # Custom monthly entries that opted into SPP-weighted injection price
+        # the mean-indexed credit off the Synergrid solar profile; mirror the
+        # live YTD credit so the backfill meets it at the seam.
+        spp_weights=spp_weights,
+        month_spp_cache={},
+        month_mean_cache={},
+        # A card whose injection is a per-hour spot formula with no printed
+        # indicative (Cociter Tarif Variable) keeps that hourly index even when
+        # a signing cohort re-prices its ENERGY leg to a monthly mean. Same
+        # gate the live tick and the YTD walk apply.
+        hourly_injection=_injection_hourly_on_cohort(snap, entry),
+    )
+
+
 def _injection_rate_for_hour(
     snap_h: Any,
     *,
@@ -400,28 +486,18 @@ async def _backfill_price_sensors(
     before platform setup completes) are skipped silently and reported
     with a 0 count.
     """
-    from homeassistant.components.recorder.models import (
+    (
         StatisticData,
         StatisticMetaData,
-    )
-
-    # mypy --strict flags StatisticMeanType because the recorder module
-    # doesn't re-export it via __all__; same shape coordinator.py uses
-    # for statistics_during_period and get_instance.
-    from homeassistant.components.recorder.statistics import (  # type: ignore[attr-defined]
         StatisticMeanType,
         async_import_statistics,
-    )
-
-    snap = coordinator._snapshot
-    assert snap is not None
-    extractor = get_extractor(entry.data[CONF_SUPPLIER])
-    contract = entry.data[CONF_CONTRACT]
-    region = entry.data.get(CONF_REGION, "")
-    dso = entry.data[CONF_DSO]
-    meter = entry.data.get(CONF_METER, METER_MONO)
-    dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
-    regime = entry.data.get(CONF_SOLAR_REGIME, "none")
+    ) = _recorder_models()
+    ctx = await _build_context(hass, entry, coordinator)
+    region = ctx.region
+    dso = ctx.dso
+    meter = ctx.meter
+    dso_mode = ctx.dso_mode
+    regime = ctx.regime
 
     keys = list(_PRICE_SENSOR_KEYS)
     if regime == SOLAR_REGIME_INJECTION:
@@ -441,28 +517,12 @@ async def _backfill_price_sensors(
         )
         return {}
 
-    # Cache per-month snapshot lookups so a 365-day window touches at
-    # most 12 archive fetches.
-    _snap_for = _month_snapshot_cache(
-        hass, coordinator._session, extractor, contract, region, snap, entry
-    )
-
-    # Custom monthly entries that opted into SPP-weighted injection price
-    # the mean-indexed credit off the Synergrid solar profile; mirror the
-    # live YTD credit so the backfilled injection_price meets it at the seam.
-    spp_weights = None
-    if _spp_weighting_enabled(entry):
-        await coordinator._ensure_spp_weights()
-        spp_weights = coordinator._spp_weights
-    month_spp_cache: dict[tuple[int, int], float | None] = {}
-
+    _snap_for = ctx.snap_for
+    spp_weights = ctx.spp_weights
+    month_spp_cache = ctx.month_spp_cache
+    month_mean_cache = ctx.month_mean_cache
+    hourly_injection = ctx.hourly_injection
     rows_per_key: dict[str, list[Any]] = {key: [] for key in stat_ids}
-    month_mean_cache: dict[tuple[int, int], float | None] = {}
-    # A card whose injection is a per-hour spot formula with no printed
-    # indicative (Cociter Tarif Variable) keeps that hourly index even when a
-    # signing cohort re-prices its ENERGY leg to a monthly mean. Same gate the
-    # live tick and the YTD walk apply.
-    hourly_injection = _injection_hourly_on_cohort(snap, entry)
     for utc_hour in hours:
         local = dt_util.as_local(utc_hour)
         snap_h = await _snap_for(date(local.year, local.month, 1))
@@ -564,32 +624,22 @@ async def _backfill_cost_sensor(
     silently when the sensor isn't registered (auto path firing
     before platform setup completes).
     """
-    from homeassistant.components.recorder.models import (
-        StatisticData,
-        StatisticMetaData,
-    )
-
-    # mypy --strict flags StatisticMeanType because the recorder module
-    # doesn't re-export it via __all__; same shape coordinator.py uses
-    # for statistics_during_period and get_instance.
-    from homeassistant.components.recorder.statistics import (  # type: ignore[attr-defined]
-        StatisticMeanType,
-        async_import_statistics,
-    )
-
     sid = _stat_id(hass, entry, _COST_SENSOR_KEY)
     if sid is None:
         return {}
 
-    snap = coordinator._snapshot
-    assert snap is not None
-    extractor = get_extractor(entry.data[CONF_SUPPLIER])
-    contract = entry.data[CONF_CONTRACT]
-    region = entry.data.get(CONF_REGION, "")
-    dso = entry.data[CONF_DSO]
-    meter = entry.data.get(CONF_METER, METER_MONO)
-    dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
-    regime = entry.data.get(CONF_SOLAR_REGIME, "none")
+    (
+        StatisticData,
+        StatisticMetaData,
+        StatisticMeanType,
+        async_import_statistics,
+    ) = _recorder_models()
+    ctx = await _build_context(hass, entry, coordinator)
+    region = ctx.region
+    dso = ctx.dso
+    meter = ctx.meter
+    dso_mode = ctx.dso_mode
+    regime = ctx.regime
     is_compensation = regime == SOLAR_REGIME_COMPENSATION
     # Already includes the regime and Wallonia halves of the gate.
     kva = _compensation_kva(entry)
@@ -623,9 +673,11 @@ async def _backfill_cost_sensor(
             hass, _hourly_injection_sensors(entry), start_d, end_d
         )
 
-    _snap_for = _month_snapshot_cache(
-        hass, coordinator._session, extractor, contract, region, snap, entry
-    )
+    _snap_for = ctx.snap_for
+    spp_weights = ctx.spp_weights
+    month_spp_cache = ctx.month_spp_cache
+    month_mean_cache = ctx.month_mean_cache
+    hourly_injection = ctx.hourly_injection
 
     # UTC-hour count per local day so the static fee accrues smoothly per
     # hour yet each local day sums to exactly annual/days_in_year, even on
@@ -635,20 +687,9 @@ async def _backfill_cost_sensor(
         d = dt_util.as_local(h).date()
         hours_per_local_date[d] = hours_per_local_date.get(d, 0) + 1
 
-    # SPP-weighted injection for a custom monthly entry that opted in;
-    # mirrors the live YTD credit so the backfilled cost meets it at the seam.
-    spp_weights = None
-    if _spp_weighting_enabled(entry):
-        await coordinator._ensure_spp_weights()
-        spp_weights = coordinator._spp_weights
-    month_spp_cache: dict[tuple[int, int], float | None] = {}
-
     rows: list[Any] = []
     running_energy = 0.0
     running_fees = 0.0
-    month_mean_cache: dict[tuple[int, int], float | None] = {}
-    # Same per-hour-injection gate as the price-sensor pass above.
-    hourly_injection = _injection_hourly_on_cohort(snap, entry)
     for utc_hour in hours:
         local = dt_util.as_local(utc_hour)
         month_first = date(local.year, local.month, 1)
