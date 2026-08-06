@@ -1117,6 +1117,32 @@ def _utility_meter_day_night_children(
     return {}
 
 
+async def _energy_grid_source(hass: HomeAssistant) -> dict[str, Any] | None:
+    """The Energy dashboard's FIRST grid source, or None.
+
+    Both pre-fill helpers open-coded this: the guarded import, the manager
+    load, the empty-prefs check and the walk to the first ``type == "grid"``
+    entry. The import has to stay inside the function (the tests patch the
+    absolute path, and ``energy`` may not be installed), and every failure mode
+    collapses to None because a pre-fill must never break the wizard.
+    """
+    try:
+        from homeassistant.components.energy.data import async_get_manager
+    except ImportError:
+        return None
+    try:
+        manager = await async_get_manager(hass)
+    except Exception:  # noqa: BLE001 - energy may not be ready
+        return None
+    prefs: dict[str, Any] | None = manager.data  # type: ignore[assignment]
+    if not prefs:
+        return None
+    for source in prefs.get("energy_sources") or []:
+        if source.get("type") == "grid":
+            return source  # type: ignore[no-any-return]
+    return None
+
+
 async def _apply_energy_manager_defaults(
     hass: HomeAssistant, defaults: dict[str, Any]
 ) -> None:
@@ -1143,21 +1169,8 @@ async def _apply_energy_manager_defaults(
         )
     ):
         return
-    try:
-        from homeassistant.components.energy.data import async_get_manager
-    except ImportError:
-        return
-    try:
-        manager = await async_get_manager(hass)
-    except Exception:  # noqa: BLE001 - energy may not be ready
-        return
-    prefs: dict[str, Any] | None = manager.data  # type: ignore[assignment]
-    if not prefs:
-        return
-    sources: list[dict[str, Any]] = prefs.get("energy_sources") or []
-    for source in sources:
-        if source.get("type") != "grid":
-            continue
+    source = await _energy_grid_source(hass)
+    if source is not None:
         flow_from: list[dict[str, Any]] = source.get("flow_from") or []
         flow_to: list[dict[str, Any]] = source.get("flow_to") or []
         consumption_stat: str | None = None
@@ -1245,28 +1258,14 @@ async def _apply_energy_manager_capacity_default(
     if (meter_peak := _dsmr_monthly_peak_sensor(hass)) is not None:
         defaults[CONF_CAPACITY_PEAK_SENSOR] = meter_peak
         return
-    try:
-        from homeassistant.components.energy.data import async_get_manager
-    except ImportError:
-        return
-    try:
-        manager = await async_get_manager(hass)
-    except Exception:  # noqa: BLE001 - energy may not be ready
-        return
-    prefs: dict[str, Any] | None = manager.data  # type: ignore[assignment]
-    if not prefs:
-        return
-    sources: list[dict[str, Any]] = prefs.get("energy_sources") or []
     consumption_stat: str | None = None
-    for source in sources:
-        if source.get("type") != "grid":
-            continue
+    source = await _energy_grid_source(hass)
+    if source is not None:
         flow_from: list[dict[str, Any]] = source.get("flow_from") or []
         if flow_from:
             stat = flow_from[0].get("stat_energy_from")
             if isinstance(stat, str) and stat.startswith("sensor."):
                 consumption_stat = stat
-        break
     if consumption_stat is None:
         return
     from homeassistant.helpers import entity_registry as er
@@ -1363,9 +1362,45 @@ class _WizardStepsMixin:
     """
 
     _data: dict[str, Any]
+    # The translation key of this flow's entry step. It stays per-flow because
+    # the two are separate strings: config.step.user and options.step.edit.
+    _entry_step_id = "user"
 
     if TYPE_CHECKING:
         hass: HomeAssistant
+
+        def async_show_form(self, **kwargs: Any) -> ConfigFlowResult: ...
+        def async_abort(self, **kwargs: Any) -> ConfigFlowResult: ...
+
+    def _seed_data(self) -> dict[str, Any]:
+        """What ``_data`` starts as. Install starts empty; the OptionsFlow
+        starts from the stored entry."""
+        return {}
+
+    async def _async_entry_step(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """The supplier / region entry step, shared by both flows.
+
+        The two spelled out the same handler, differing only in the seed and
+        the step id -- which is exactly what the mixin's own docstring says
+        distinguishes them.
+        """
+        if not hasattr(self, "_data"):
+            self._data = self._seed_data()
+        if user_input is not None:
+            self._data.update(user_input)
+            errors = _region_mismatch_error(self._data)
+            if errors:
+                return self.async_show_form(
+                    step_id=self._entry_step_id,
+                    data_schema=_user_schema(self._data),
+                    errors=errors,
+                )
+            return await self.async_step_contract()
+        return self.async_show_form(
+            step_id=self._entry_step_id, data_schema=_user_schema(self._data)
+        )
 
         def async_show_form(self, **kwargs: Any) -> ConfigFlowResult: ...
         def async_abort(self, **kwargs: Any) -> ConfigFlowResult: ...
@@ -1787,21 +1822,7 @@ class BePricesConfigFlow(_WizardStepsMixin, ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        if not hasattr(self, "_data"):
-            self._data = {}
-        if user_input is not None:
-            self._data.update(user_input)
-            errors = _region_mismatch_error(self._data)
-            if errors:
-                return self.async_show_form(
-                    step_id="user",
-                    data_schema=_user_schema(self._data),
-                    errors=errors,
-                )
-            return await self.async_step_contract()
-        return self.async_show_form(
-            step_id="user", data_schema=_user_schema(self._data)
-        )
+        return await self._async_entry_step(user_input)
 
     async def _after_meter(self) -> ConfigFlowResult:
         # Reject duplicate entries: the same (supplier, contract,
@@ -1841,24 +1862,15 @@ class BePricesOptionsFlow(_WizardStepsMixin, OptionsFlow):
             menu_options=["edit", "compare"],
         )
 
+    _entry_step_id = "edit"
+
+    def _seed_data(self) -> dict[str, Any]:
+        return {**self.config_entry.data, **self.config_entry.options}
+
     async def async_step_edit(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        if not hasattr(self, "_data"):
-            self._data = {**self.config_entry.data, **self.config_entry.options}
-        if user_input is not None:
-            self._data.update(user_input)
-            errors = _region_mismatch_error(self._data)
-            if errors:
-                return self.async_show_form(
-                    step_id="edit",
-                    data_schema=_user_schema(self._data),
-                    errors=errors,
-                )
-            return await self.async_step_contract()
-        return self.async_show_form(
-            step_id="edit", data_schema=_user_schema(self._data)
-        )
+        return await self._async_entry_step(user_input)
 
     def _finalize(self) -> ConfigFlowResult:
         # Reject edits that collide with another existing entry. Two
