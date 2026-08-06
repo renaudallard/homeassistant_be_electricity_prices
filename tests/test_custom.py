@@ -37,7 +37,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import const
-from custom_components.be_electricity_prices.config_flow import (
+from custom_components.be_electricity_prices.compare_flow import (
     _compare_supplier_options,
 )
 from custom_components.be_electricity_prices.flow_schemas import (

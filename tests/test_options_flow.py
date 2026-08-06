@@ -66,10 +66,20 @@ def _bypass_entsoe_validation() -> Iterator[MagicMock]:
     """Default to a passing ENTSO-E key check so the dynamic flow doesn't
     actually hit transparency.entsoe.eu in tests. Individual tests can
     re-patch this to assert the error paths."""
-    with patch(
-        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
-        return_value=None,
-    ) as mock:
+    # Patch BOTH bindings. flow_schemas defines the validator, but config_flow
+    # and compare_flow each imported it BY VALUE, so patching the definition
+    # site reaches neither: the install step would go unpatched and the compare
+    # API-key step would make a live request to transparency.entsoe.eu.
+    with (
+        patch(
+            "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+            return_value=None,
+        ) as mock,
+        patch(
+            "custom_components.be_electricity_prices.compare_flow._validate_entsoe_key",
+            return_value=None,
+        ),
+    ):
         yield mock
 
 
@@ -557,7 +567,7 @@ async def test_compare_branch_supplier_picker_lists_all_in_region(
     the contract picker (via _compare_contract_schema) and the
     api_key step kicks in when the user crosses into dynamic
     territory without a saved key."""
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.compare_flow import (
         _compare_supplier_options,
     )
 
@@ -1190,7 +1200,7 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     open the dialog. The helper computes breakdowns at three
     representative weekday hours and weights by the standard CWaPE
     slot durations."""
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.compare_quote import (
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers.base import TimeOfUseRates
@@ -1238,7 +1248,7 @@ def test_compare_tou_weights_bihoraire_network_over_full_week() -> None:
     # bands across the week (the energy TOU slots and the bi-horaire network
     # bands don't align, so a single sample per energy slot mis-prices the
     # network).
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.compare_quote import (
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers.base import (
@@ -1284,7 +1294,7 @@ def test_compare_smartflex_seasonal_is_dialog_time_invariant() -> None:
     # SmartFlex's seasonal per-kWh estimate must not depend on the hour the
     # user opened the dialog, and must sit between the pure-offpeak and
     # pure-peak all-in (a season/hour-blended average).
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.compare_quote import (
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers.base import TimeOfUseRates
@@ -1324,7 +1334,7 @@ def test_compare_bihourly_meter_weights_peak_offpeak() -> None:
     # A Fixed/Variable contract compared on a bi-hourly meter must time-
     # weight peak vs off-peak, not return whichever slot the dialog opened
     # in, so the per-kWh is independent of when_now.
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.compare_quote import (
         _tou_weighted_per_kwh,
     )
     from custom_components.be_electricity_prices.providers.base import FixedRates
@@ -1383,7 +1393,7 @@ def test_compare_spot_indexed_injection_uses_mean_spot() -> None:
     # (consistent with the energy term), not the live current slot.
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers.base import (
@@ -1410,7 +1420,7 @@ def test_compare_tou_injection_uses_weighted_average_across_slots() -> None:
     # live current-slot rate the way the live helper would.
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.config_flow import (
+    from custom_components.be_electricity_prices.compare_quote import (
         _compare_injection_credit,
     )
     from custom_components.be_electricity_prices.providers.base import (
@@ -1448,7 +1458,7 @@ async def test_compare_branch_aborts_when_no_alternative(
     )
 
     with patch(
-        "custom_components.be_electricity_prices.config_flow._compare_supplier_options",
+        "custom_components.be_electricity_prices.compare_flow._compare_supplier_options",
         return_value=[],
     ):
         result = await hass.config_entries.options.async_init(entry.entry_id)
