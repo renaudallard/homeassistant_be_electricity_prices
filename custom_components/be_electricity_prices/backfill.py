@@ -85,6 +85,7 @@ from .const import (
     SOLAR_REGIME_INJECTION,
 )
 from .coordinator import (
+    local_year_start,
     BePricesCoordinator,
     _annual_static_fees,
     _cohort_energy_leg,
@@ -173,9 +174,7 @@ def _normalize_window(
     """
     now_local = dt_util.now()
     if start is None:
-        start_local = now_local.replace(
-            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-        )
+        start_local = local_year_start(now_local)
     elif isinstance(start, datetime):
         start_local = (
             start
@@ -787,9 +786,9 @@ def _seed_short_term_sum(
         return
     seed: StatisticData = {
         **last,
-        "last_reset": dt_util.now().replace(
-            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-        ),
+        # Must be the SAME instant the current_year_cost sensor reports as its
+        # last_reset, or the compiler takes the meter-reset branch.
+        "last_reset": local_year_start(),
     }
     try:
         get_instance(hass).async_import_statistics(
@@ -848,9 +847,7 @@ async def backfill_range(
     # cost window was then empty and the service reported success having
     # written 8760 price rows and zero cost rows.
     cost_anchor_utc = _floor_to_hour_utc(
-        dt_util.as_local(end_utc - timedelta(hours=1)).replace(
-            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-        )
+        local_year_start(dt_util.as_local(end_utc - timedelta(hours=1)))
     )
     # A window that ends on or before 1 January of the CURRENT year rebuilds a
     # past year's cost, and that year's series would sit immediately before the
@@ -866,9 +863,7 @@ async def backfill_range(
     # the whole requested window, which is most of what a past-year request is
     # for. Report the skip: silently writing zero cost rows here is the bug
     # this window used to have.
-    this_year_anchor_utc = _floor_to_hour_utc(
-        dt_util.now().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-    )
+    this_year_anchor_utc = _floor_to_hour_utc(local_year_start())
     skip_cost = end_utc <= this_year_anchor_utc
     if skip_cost:
         _LOGGER.warning(
@@ -1004,9 +999,7 @@ async def backfill_if_missing(
         )
         return None
     now_local = dt_util.now()
-    jan1_local = now_local.replace(
-        month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-    )
+    jan1_local = local_year_start(now_local)
     jan1_utc = jan1_local.astimezone(UTC)
     if await _existing_stat_window(hass, sid, jan1_utc):
         _LOGGER.debug(

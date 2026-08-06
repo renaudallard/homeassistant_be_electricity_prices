@@ -56,6 +56,7 @@ from .const import (
     SOLAR_REGIME_INJECTION,
 )
 from .coordinator import (
+    local_year_start,
     BePricesCoordinator,
     CoordinatorData,
     _parse_iso_date,
@@ -447,9 +448,7 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         native_unit_of_measurement="EUR",
         suggested_display_precision=2,
         value_fn=lambda d: d.current_year_cost_eur,
-        last_reset_fn=lambda: dt_util.now().replace(
-            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-        ),
+        last_reset_fn=local_year_start,
     ),
 )
 

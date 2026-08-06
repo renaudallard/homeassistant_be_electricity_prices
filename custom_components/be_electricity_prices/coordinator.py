@@ -973,6 +973,27 @@ class _MigratingStore(Store[dict[str, Any]]):
         return old_data
 
 
+def local_year_start(when: datetime | None = None) -> datetime:
+    """Local 1 January 00:00 of ``when``'s year, or of the current year.
+
+    The billing year's anchor. It was spelled out six times as the same
+    ``.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)``,
+    and one of those pairs is a cross-file invariant rather than a
+    convenience: ``_seed_short_term_sum`` has to hand the recorder the SAME
+    instant the ``current_year_cost`` sensor reports as its ``last_reset``,
+    and its docstring said so with nothing enforcing it. A divergence puts the
+    cost compiler on the meter-reset branch and adds a whole year's reading on
+    top of the resumed sum.
+
+    Deliberately a function, never a module-level constant: a Home Assistant
+    process that stays up across midnight on 31 December would otherwise keep
+    reporting last year's anchor.
+    """
+    return (when or dt_util.now()).replace(
+        month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+
+
 class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
     """Pull supplier snapshot + ENTSO-E spot, build the hourly price table."""
 
