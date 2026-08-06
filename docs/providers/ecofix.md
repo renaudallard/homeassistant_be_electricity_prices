@@ -65,7 +65,7 @@ Related reading:
 Ecofix is a Belgian residential supplier selling in **Flanders and Wallonia**
 only. There are no Brussels rows on any current card, and the registry advertises
 Flanders + Wallonia so config-flow never offers Ecofix to a Brussels household
-where every fetch would fail (`ecofix.py:764`, asserted by
+where every fetch would fail (`ecofix.py:747`, asserted by
 `test_ecofix_is_registered` at `tests/test_ecofix.py:65`). `EXTRACTOR.regions()`
 therefore returns `{flanders, wallonia}`.
 
@@ -75,7 +75,7 @@ Prices are published as **stable-URL PDF cards, one PDF per product**, at:
 https://portal.ecofixgp.be/docs/prices/current/EL_Ecofix_<SLUG>_NL.pdf
 ```
 
-built by `_document_url` from `_BASE_URL` (`ecofix.py:104`, `ecofix.py:126`). A
+built by `_document_url` from `_BASE_URL` (`ecofix.py:99`, `ecofix.py:99`). A
 single PDF carries both the Flanders and the Wallonia overlays; `fetch()` narrows
 the parsed snapshot to the requested `region` (`ecofix.py:136`). The three
 products share the same monthly DSO and tax overlay; only the energy formula and
@@ -89,8 +89,8 @@ filenames and HEAD-probes them in `discover()` (`ecofix.py:171`).
 
 ## Contracts
 
-Declared in `_CONTRACTS` (`ecofix.py:115`) and mapped into `Contract` objects in
-the registry (`ecofix.py:766`). All three carry `regions = {flanders, wallonia}`
+Declared in `_CONTRACTS` (`ecofix.py:110`) and mapped into `Contract` objects in
+the registry (`ecofix.py:755`). All three carry `regions = {flanders, wallonia}`
 and leave `spot_indexed_injection` at its default `False` (dynamic contracts
 collect the ENTSO-E key via their energy formula; Flexy's injection is
 monthly-indicative, so it needs no spot).
@@ -124,7 +124,7 @@ Notes:
 1. Validates `contract_id` against `_CONTRACTS_BY_ID`, raising `ExtractorError` on
    an unknown id.
 2. Builds the URL with `_document_url` and downloads the PDF as
-   **layout-preserving text** via `fetch_pdf_text_layout` (`_pdf.py:334`). Layout
+   **layout-preserving text** via `fetch_pdf_text_layout` (`_pdf.py:337`). Layout
    mode is mandatory here: pdfplumber's row reconstruction keeps each DSO row on
    one line, whereas pypdf returns the Wallonia DSO block in column-major order
    that the row-anchored regexes cannot match (`ecofix.py:42`). `fetch_pdf_text_layout`
@@ -144,7 +144,7 @@ region-agnostic).
 
 ### fetch_for_month() / archive
 
-There is **no** `fetch_for_month`: the registry leaves it unset (`ecofix.py:766`
+There is **no** `fetch_for_month`: the registry leaves it unset (`ecofix.py:747`
 constructs `SupplierExtractor` with only `fetch` and `probe`). Filenames are
 overwrite-in-place and Ecofix publishes no public archive of past months
 (`ecofix.py:45`), so the coordinator's proxy-forward fallback bills past
@@ -163,20 +163,20 @@ to `discover()` until its filename is added to `_CONTRACTS`. Behaviour is pinned
 
 ## Parsing
 
-`parse_snapshot` (`ecofix.py:190`) is the pure entry point; it fans out to a set
+`parse_snapshot` (`ecofix.py:183`) is the pure entry point; it fans out to a set
 of narrowly-anchored helpers. The fields it pulls out:
 
 | Field | Helper | Source |
 | --- | --- | --- |
-| Yearly fixed fee + Flanders renewables | `_extract_fee_and_flanders_renewables` | `ecofix.py:263` |
-| Energy formula / rates | `_extract_energy` | `ecofix.py:345` |
-| Injection | `_extract_injection` | `ecofix.py:418` |
-| Publication label + `valid_until` | `_extract_publication` | `ecofix.py:485` |
-| Federal excise + energy contribution | `_extract_federal_taxes` | `ecofix.py:506` |
-| Wallonia connection fee | `_extract_wallonia_connection_fee` | `ecofix.py:522` |
-| Wallonia renewables | `_extract_wallonia_renewables` | `ecofix.py:531` |
-| Flanders DSO overlays | `_extract_flanders_dsos` | `ecofix.py:589` |
-| Wallonia DSO overlays | `_extract_wallonia_dsos` | `ecofix.py:689` |
+| Yearly fixed fee + Flanders renewables | `_extract_fee_and_flanders_renewables` | `ecofix.py:254` |
+| Energy formula / rates | `_extract_energy` | `ecofix.py:336` |
+| Injection | `_extract_injection` | `ecofix.py:409` |
+| Publication label + `valid_until` | `_extract_publication` | `ecofix.py:476` |
+| Federal excise + energy contribution | `_extract_federal_taxes` | `ecofix.py:497` |
+| Wallonia connection fee | `_extract_wallonia_connection_fee` | `ecofix.py:513` |
+| Wallonia renewables | `_extract_wallonia_renewables` | `ecofix.py:522` |
+| Flanders DSO overlays | `_extract_flanders_dsos` | `ecofix.py:575` |
+| Wallonia DSO overlays | `_extract_wallonia_dsos` | `ecofix.py:670` |
 
 The overlay is region-selected: `parse_snapshot` computes the Wallonia connection
 fee and Wallonia renewables only for `wallonia`, the Flanders renewables only for
@@ -194,11 +194,11 @@ Notable parsing hurdles:
   cards are `< 5` c/kWh and yearly fees are `>= 10` EUR/jaar, so the smaller of the
   two tokens is always the renewable and the larger is the fee (`ecofix.py:263`,
   `ecofix.py:322`).
-- **Vlaanderen block slice.** `_flanders_energy_block` (`ecofix.py:249`) carves the
+- **Vlaanderen block slice.** `_flanders_energy_block` (`ecofix.py:240`) carves the
   text from the `Vlaanderen` heading to `Wallonië`; both the fee and the FL
   renewable live in that slice. Scoping the renewable regex to this block stops the
   later federal "Verbruik tussen 0 & 3.000 kWh" row from shadowing it.
-- **Belpex 15M formula anchoring.** `_dynamic_formula_match` (`ecofix.py:327`)
+- **Belpex 15M formula anchoring.** `_dynamic_formula_match` (`ecofix.py:318`)
   anchors each formula on its own label (`Afname` for consumption, `Injectie` for
   injection) instead of indexing into a document-order `findall`. The fill between
   the label and its `(factor x Belpex 15M) <sign> base` formula is tempered with a
@@ -217,7 +217,7 @@ Notable parsing hurdles:
   variant as negative (`_pdf.py:528`). Supplier PDFs flip between these silently on
   re-renders.
 - **DSO-name to canonical-key mapping.** Flanders labels map through
-  `_FLANDERS_LABELS` (`ecofix.py:577`); note "Fluvius Kempen" maps to the
+  `_FLANDERS_LABELS` (`ecofix.py:572`); note "Fluvius Kempen" maps to the
   integration's `fluvius_iveka` key and "Fluvius Midden-Vlaanderen" to
   `fluvius_intergem`. Wallonia labels map through `_WALLONIA_LABELS`
   (`ecofix.py:660`), where `WAVRE` maps to `rew` and the regex `TECTEO\s*-\s*RESA`
@@ -227,7 +227,7 @@ Notable parsing hurdles:
 
 ### Dynamic (Motion, Motion Online)
 
-`_extract_energy` with `kind == "dynamic"` (`ecofix.py:345`) reads the `Afname`
+`_extract_energy` with `kind == "dynamic"` (`ecofix.py:336`) reads the `Afname`
 Belpex 15M formula and returns a `DynamicRates`:
 
 ```
@@ -244,7 +244,7 @@ A missing `Afname` formula is fatal (`ExtractorError`).
 
 ### Variable (Flexy)
 
-`_extract_energy` with `kind == "variable"` (`ecofix.py:377`) reads the indicative
+`_extract_energy` with `kind == "variable"` (`ecofix.py:336`) reads the indicative
 `Maandprijs:` row, which carries four columns `(mono, peak, off-peak,
 exclusive_night)` that hold the same rate for every meter type today; all four are
 surfaced into a `VariableRates`. The `BELPEX-RLP-M` indexation expression is
@@ -258,7 +258,7 @@ A missing `Maandprijs` row is fatal.
 
 ### Flanders
 
-`_extract_flanders_dsos` (`ecofix.py:589`) parses the eight Fluvius sub-areas from
+`_extract_flanders_dsos` (`ecofix.py:575`) parses the eight Fluvius sub-areas from
 the `Vlaams gewest Digitale meter` table. Each digital-meter row holds five numbers:
 capacity (EUR/kW/jaar), kWh-tarief total (c/kWh), kWh-tarief excl. nacht (c/kWh),
 data-management per-kwartier (EUR/jaar), data-management monthly/yearly (EUR/jaar).
@@ -282,10 +282,10 @@ Sub-areas mapped: `fluvius_antwerpen`, `fluvius_halle_vilvoorde`, `fluvius_imewo
 
 ### Wallonia
 
-`_extract_wallonia_dsos` (`ecofix.py:689`) parses each Walloon DSO row, which carries
+`_extract_wallonia_dsos` (`ecofix.py:670`) parses each Walloon DSO row, which carries
 10 numbers in order: Enkelvoudig, Piek, Dal, PIC, MEDIUM, ECO, Excl. nacht,
 Jaarlijkse meteropname (EUR/jaar), Prosumenten tarief (EUR/kWe/jaar), Transport
-(c/kWh). `_build_wallonia_overlay` (`ecofix.py:734`) unpacks these into a
+(c/kWh). `_build_wallonia_overlay` (`ecofix.py:715`) unpacks these into a
 `DsoOverlay`, including the three CWaPE Tarif Impact bands (`distribution_pic`,
 `distribution_medium`, `distribution_eco`) that Wallonia cards publish on every row.
 
@@ -299,7 +299,7 @@ silently billing at the first sub-area's rate
 
 ## Tax overlay
 
-`_extract_federal_taxes` (`ecofix.py:506`) reads the residential federal excise
+`_extract_federal_taxes` (`ecofix.py:497`) reads the residential federal excise
 from the 0-3.000 kWh band (`Verbruik tussen 0 & 3.000 kWh`) and the single-rate
 `Energiebijdrage`; both missing rows are fatal. Regional levies are region-gated in
 `parse_snapshot`:
@@ -321,7 +321,7 @@ re-scale. Illustrative Flanders values (`test_motion_online_taxes_flanders`,
 `tests/test_ecofix.py:135`): federal_excise 0.0503288, energy_contribution
 0.0020417, flanders_renewables 0.016.
 
-`_extract_wallonia_connection_fee` (`ecofix.py:522`) and `_extract_wallonia_renewables`
+`_extract_wallonia_connection_fee` (`ecofix.py:513`) and `_extract_wallonia_renewables`
 (`ecofix.py:531`) are fatal on a miss because both are mandatory in Wallonia. The
 renewables parser is defensive: pdfplumber can co-locate the bare
 `Bijdrage groene energie` value with an unrelated left-column label, so it iterates
@@ -334,7 +334,7 @@ Ecofix spans two of the three injection taxonomy shapes depending on TariffKind
 (see [../pricing-model.md](../pricing-model.md) for the taxonomy):
 
 - **Dynamic (Motion, Motion Online): hourly `factor*spot+base` (spot-indexed).**
-  `_extract_injection` with `kind == "dynamic"` (`ecofix.py:425`) anchors on the
+  `_extract_injection` with `kind == "dynamic"` (`ecofix.py:409`) anchors on the
   `Injectie` label to read the injection Belpex 15M formula, emits `factor =
   factor_pdf * 10` and `base = base_pdf_cents / 100` (no VAT, since Belgian
   residential injection is VAT-exempt, `ecofix.py:418`), and surfaces the printed
@@ -347,7 +347,7 @@ Ecofix spans two of the three injection taxonomy shapes depending on TariffKind
   `(0.0884 x Belpex 15M) - 0.5000` c/kWh gives `factor = 0.884`, `base = -0.005`,
   `current = 0.0483`.
 - **Variable (Flexy): monthly-indicative-only.** Flexy injection settles on
-  `BELPEX-SPP-M`, a monthly index, so `_extract_injection` (`ecofix.py:457`)
+  `BELPEX-SPP-M`, a monthly index, so `_extract_injection` (`ecofix.py:409`)
   surfaces **only** the realized monthly indicative (`Maandprijs`) as `current` and
   keeps `factor`/`base` at None. Emitting a factor/base would make the pricing
   engine apply a monthly coefficient to the hourly spot, mis-pricing the credit
@@ -435,20 +435,20 @@ so those layouts are exercised without needing a separate fixture file.
 
 Ranked by how likely a card re-render is to break them:
 
-1. `_extract_fee_and_flanders_renewables` (`ecofix.py:263`) and `_flanders_energy_block`
+1. `_extract_fee_and_flanders_renewables` (`ecofix.py:254`) and `_flanders_energy_block`
    (`ecofix.py:249`): the Vlaanderen block is the most re-flowed part of the card
    (the July 2026 regression lived here). Watch the fee/renewable order and the
    `Verbruik` / `meter Piekuren` anchors.
-2. `_dynamic_formula_match` (`ecofix.py:327`) and the `_extract_energy` /
+2. `_dynamic_formula_match` (`ecofix.py:318`) and the `_extract_energy` /
    `_extract_injection` dynamic branches: any change to the `Afname` / `Injectie`
    labels, the `Belpex 15M` wording, or the sign glyph.
-3. `_extract_flanders_dsos` (`ecofix.py:589`) and `_FLANDERS_LABELS` (`ecofix.py:577`):
+3. `_extract_flanders_dsos` (`ecofix.py:575`) and `_FLANDERS_LABELS` (`ecofix.py:572`):
    a Fluvius rename (labels are matched literally) or a change in the number of
    columns per row, especially if Fluvius diverges the two data-management regimes.
-4. `_extract_wallonia_dsos` / `_extract_ores` / `_ORES_PATTERN` (`ecofix.py:666`):
+4. `_extract_wallonia_dsos` / `_extract_ores` / `_ORES_PATTERN` (`ecofix.py:647`):
    a Walloon column reorder or an ORES sub-area split (the latter raises by design).
-5. `_extract_publication` (`ecofix.py:485`): a new header token near the month, or a
-   language switch away from Dutch month names in `_DUTCH_MONTHS` (`ecofix.py:130`).
-6. `discover()` / `_document_url` (`ecofix.py:126`, `ecofix.py:171`): a change to the
+5. `_extract_publication` (`ecofix.py:476`): a new header token near the month, or a
+   language switch away from Dutch month names in `_DUTCH_MONTHS` (`ecofix.py:125`).
+6. `discover()` / `_document_url` (`ecofix.py:121`, `ecofix.py:121`): a change to the
    `_BASE_URL` path, the `EL_Ecofix_<slug>_NL.pdf` filename scheme, or the product
    lineup.

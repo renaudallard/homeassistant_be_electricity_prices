@@ -19,12 +19,12 @@ distinct PDF cards. Read this alongside the framework and pricing references:
 | --- | --- | --- |
 | Extractor id | `ebem` | `ebem.py:710` |
 | Label | `EBEM` | `ebem.py:711` |
-| Region(s) served | Flanders only | `_EBEM_REGIONS`, `ebem.py:707` |
+| Region(s) served | Flanders only | `_EBEM_REGIONS`, `ebem.py:703` |
 | Publication form | Monthly PDF cards linked from one HTML listing page | `ebem.py:36` |
-| Listing URL | `https://www.ebem.be/tarieven/` | `_LISTING_URL`, `ebem.py:91` |
-| PDF base | `https://www.ebem.be` | `_PDF_BASE`, `ebem.py:92` |
+| Listing URL | `https://www.ebem.be/tarieven/` | `_LISTING_URL`, `ebem.py:92` |
+| PDF base | `https://www.ebem.be` | `_PDF_BASE`, `ebem.py:93` |
 | Archive | Yes, on the listing page (>= 6 months at last check) | `ebem.py:40` |
-| Probe | HEAD the listing page (`Last-Modified` / `ETag`) | `probe`, `ebem.py:195` |
+| Probe | HEAD the listing page (`Last-Modified` / `ETag`) | `probe`, `ebem.py:196` |
 
 Every contract's `regions` is `frozenset({REGION_FLANDERS})`, so
 `EXTRACTOR.regions()` is `{"flanders"}`. The `region` argument to `fetch`,
@@ -42,7 +42,7 @@ fetch scrapes the listing page and resolves the hash from the `<a href>`
 /media/<hash>/ebem_tariefkaart-<kind>-MM-YYYY.pdf
 ```
 
-captured by `_PDF_RE` (`ebem.py:101`):
+captured by `_PDF_RE` (`ebem.py:102`):
 
 ```python
 r'href="(/media/[^"]+/ebem_tariefkaart-([a-z]+)[-_](\d{2})-(\d{4})\.pdf)"'
@@ -64,7 +64,7 @@ map to contract ids.
 | `ebem_basic_plus` | EBEM Groen B@sic+ | `variable` | `elek` | monthly indicative only | n/a |
 | `ebem_dynamic` | EBEM Groen Dyn@mic | `dynamic` | `dynamic` | hourly factor*spot+base | True (15-min) |
 
-Declared in `_CONTRACTS` (`ebem.py:120`) and turned into `Contract` objects in
+Declared in `_CONTRACTS` (`ebem.py:121`) and turned into `Contract` objects in
 the registry (`ebem.py:712`). None of the three sets `spot_indexed_injection`,
 so all default to `False`.
 
@@ -88,32 +88,32 @@ If EBEM revives one, its PDF kind (e.g. `fix`) surfaces verbatim from
 
 ## Fetch strategy
 
-### `fetch` (`ebem.py:132`)
+### `fetch` (`ebem.py:133`)
 
 1. Look up the `_ContractDef` by id, raising `ExtractorError` on an unknown id.
 2. `_find_latest(session, contract.pdf_kind)` (`ebem.py:242`) GETs the listing,
    filters `_PDF_RE` matches to the requested `pdf_kind`, sorts ascending by
    `(YYYY, MM)`, and returns the newest `(url, "YYYY-MM")`. It raises
    `ExtractorError` when no card of that kind is linked.
-3. `fetch_pdf_text_layout` (`_pdf.py:334`) downloads the PDF and extracts
+3. `fetch_pdf_text_layout` (`_pdf.py:337`) downloads the PDF and extracts
    layout-preserving text. This variant rejects CDNs that return HTTP 200 with
    `text/html` for a missing PDF (`_pdf.py:337`).
-4. `parse_snapshot` (`ebem.py:259`) does the parsing.
+4. `parse_snapshot` (`ebem.py:260`) does the parsing.
 
 Two of the three contracts (`ebem_variable`, `ebem_basic_plus`) share the same
 `elek` PDF; the parser branches on `contract_id` when extracting the energy
 block (`ebem.py:336`).
 
-### `probe` (`ebem.py:195`)
+### `probe` (`ebem.py:196`)
 
-HEADs the listing page via `head_freshness_key` (`_pdf.py:347`) and returns its
+HEADs the listing page via `head_freshness_key` (`_pdf.py:350`) and returns its
 `Last-Modified` (preferred) or `ETag`. EBEM publishes a new monthly card by
 editing the listing page (the opaque media-hash URL changes for every month),
 so the listing's freshness header is the right key for *every* contract at once;
 `probe` ignores `contract_id`. It returns `None` on any 4xx/5xx, network error,
 or missing header, in which case the coordinator's time-based TTL takes over.
 
-### `fetch_for_month` (`ebem.py:152`)
+### `fetch_for_month` (`ebem.py:153`)
 
 EBEM keeps an accessible public archive on the listing page, so past months can
 be billed at their own rates instead of the current-snapshot proxy.
@@ -125,7 +125,7 @@ be billed at their own rates instead of the current-snapshot proxy.
    not published.
 4. Resolve the URL, set `label = "YYYY-MM"`, download + parse; return `None` on
    `ExtractorError`.
-5. Pass the result through `archive_validity_check` (`_pdf.py:755`).
+5. Pass the result through `archive_validity_check` (`_pdf.py:819`).
 
 `archive_validity_check` is called with `month_names=None`. When
 `snap.valid_until` parsed, it rejects the snapshot if that date does not fall in
@@ -140,40 +140,40 @@ documents the interaction: the 2026-01 dynamic URL resolves via the underscore
 branch, but the mocked PDF text says `mei 2026`, so the cross-check returns
 `None`. That is correct safety behaviour, not a bug.
 
-### `discover` (`ebem.py:209`)
+### `discover` (`ebem.py:210`)
 
 Returns the contract ids visible on the listing:
 
 - any `elek` PDF surfaces both `ebem_variable` and `ebem_basic_plus` (same
   card),
 - any `dynamic` PDF surfaces `ebem_dynamic`,
-- `gas` / `aardgas` kinds (`_NON_ELEC_KINDS`, `ebem.py:109`) are dropped
+- `gas` / `aardgas` kinds (`_NON_ELEC_KINDS`, `ebem.py:110`) are dropped
   silently (electricity-only integration),
 - any other kind is returned verbatim so live_check's catalog-drift alert
   files a tracking issue.
 
 ## Parsing
 
-`parse_snapshot` (`ebem.py:259`) assembles a `SupplierSnapshot` from six
+`parse_snapshot` (`ebem.py:260`) assembles a `SupplierSnapshot` from six
 sub-parsers over the layout text. All rates are read from the card, never
 hardcoded; the VAT multiplier is read from the card header too so a
 regulator-driven rate change propagates without a code change (`ebem.py:322`).
 
 | Field | Parser | Notes |
 | --- | --- | --- |
-| `energy` | `_extract_energy` (`ebem.py:336`) | branches on `contract_id` |
-| `injection` | `_extract_injection` (`ebem.py:518`) | branches dynamic vs variable |
-| `dsos` | `_extract_dsos` (`ebem.py:648`) | digital-meter table, optional analog prosumer |
-| `taxes.federal_excise` + `energy_contribution` | `_extract_federal_taxes` (`ebem.py:587`) | |
-| `taxes.flanders_renewables` | `_extract_flanders_renewables` (`ebem.py:608`) | |
-| `valid_until` | `_extract_validity` (`ebem.py:298`) | printed Dutch month + year |
+| `energy` | `_extract_energy` (`ebem.py:337`) | branches on `contract_id` |
+| `injection` | `_extract_injection` (`ebem.py:519`) | branches dynamic vs variable |
+| `dsos` | `_extract_dsos` (`ebem.py:649`) | digital-meter table, optional analog prosumer |
+| `taxes.federal_excise` + `energy_contribution` | `_extract_federal_taxes` (`ebem.py:588`) | |
+| `taxes.flanders_renewables` | `_extract_flanders_renewables` (`ebem.py:609`) | |
+| `valid_until` | `_extract_validity` (`ebem.py:299`) | printed Dutch month + year |
 
-### Validity: `_extract_validity` (`ebem.py:298`)
+### Validity: `_extract_validity` (`ebem.py:299`)
 
 EBEM cards have no `geldig` / `valable` validity keyword that the shared
 `_pdf.parse_valid_until` would anchor on, so that helper returns `None`. The
 card title ends with `<maand> <jaar>` (Dutch month name plus year), parsed
-directly via `_DUTCH_MONTHS` (`ebem.py:295`) and returned as the last day of
+directly via `_DUTCH_MONTHS` (`ebem.py:296`) and returned as the last day of
 that month (`calendar.monthrange`). Two hurdles:
 
 - It matches case-insensitively (`mei 2026` and `Mei 2026`), because a future
@@ -190,11 +190,11 @@ The registry convention is that stored snapshot values are VAT-inclusive
 (`TaxOverlay.vat_rate=0.0` means "already VAT-incl"; `providers/base.py:474`).
 EBEM cards print both ex-VAT and incl-VAT columns:
 
-- `_vat_multiplier` (`ebem.py:322`) reads the percentage from the card header
+- `_vat_multiplier` (`ebem.py:323`) reads the percentage from the card header
   (`INCL. BTW N%` or `BTW N%`) via the shared `vat_multiplier` helper
   (`_pdf.py:411`), defaulting to 1.06.
 - Dynamic energy factor / base are converted from the ex-VAT formula:
-  `_formula_to_dynamic` (`ebem.py:330`) does `factor * vat * 10` and
+  `_formula_to_dynamic` (`ebem.py:331`) does `factor * vat * 10` and
   `base_cents * vat / 100`, identical to `cociter.py`'s dynamic conversion.
 - Variable indicative rates, yearly fees, and the Flanders renewables total are
   read from the *incl-VAT* column directly so VAT is not double-applied.
@@ -220,7 +220,7 @@ parser. Factor / base go through `_formula_to_dynamic` with the card VAT.
 `quarter_hourly=True`. Illustrative from the test: `0.108 * 1.06 * 10 = 1.1448`
 and `1.625 * 1.06 / 100 = 0.017225` (`tests/test_ebem.py:256`).
 
-Yearly fee: `_extract_yearly_fee_abonnement` (`ebem.py:507`), the
+Yearly fee: `_extract_yearly_fee_abonnement` (`ebem.py:508`), the
 `Abonnement ... €/jaar ... €/jaar` row (incl-VAT second column). Illustrative
 `70` (`tests/test_ebem.py:260`).
 
@@ -254,7 +254,7 @@ Each row is `<label> <factor> Belpex <sign> <base>`. A missing row raises
 `Vaste vergoeding (jaarlijkse ...)` row; `yearly_fixed_fee_exclusive_night` is
 the `Vaste vergoeding exclusief nacht` row.
 
-### `_indicative_from_row` (`ebem.py:447`)
+### `_indicative_from_row` (`ebem.py:448`)
 
 EBEM variable cards print four numeric columns per row after the formula:
 `EXCL.BTW`, `INCL.BTW 6%`, `GESCHATTE JAARPRIJS EXCL.BTW`, and
@@ -271,9 +271,9 @@ Illustrative indicatives from the test (`tests/test_ebem.py:93`): mono
 `0.123363`, peak `0.132458`, off-peak / excl-night `0.113359` EUR/kWh; B@sic+
 `0.121243`.
 
-## DSO overlay: `_extract_dsos` (`ebem.py:648`)
+## DSO overlay: `_extract_dsos` (`ebem.py:649`)
 
-Maps the eight Fluvius sub-areas via `_FLANDERS_LABELS` (`ebem.py:636`). Note
+Maps the eight Fluvius sub-areas via `_FLANDERS_LABELS` (`ebem.py:637`). Note
 the card label to canonical DSO key mapping is not one-to-one on names:
 
 | Card label | Canonical key |
@@ -314,7 +314,7 @@ fatal (`ebem.py:687`). Illustrative for `fluvius_iveka`: capacity `59.58`,
 
 ## Tax overlay
 
-`_extract_federal_taxes` (`ebem.py:587`) returns
+`_extract_federal_taxes` (`ebem.py:588`) returns
 `(federal_excise, energy_contribution)` in EUR/kWh:
 
 - Federal excise: the residential `0-3 MWH` band (note the capital `MWH` on this
@@ -324,7 +324,7 @@ fatal (`ebem.py:687`). Illustrative for `fluvius_iveka`: capacity `59.58`,
 
 Both raise `ExtractorError` when the anchor row is missing.
 
-`_extract_flanders_renewables` (`ebem.py:608`) combines
+`_extract_flanders_renewables` (`ebem.py:609`) combines
 `Bijdrage groene stroom` + `Bijdrage WKK` into `flanders_renewables`. The card
 prints both an ex-VAT total and an incl-VAT total; the parser anchors on
 `Totale bijdrage` and reads the `<value> c€/kWh incl. BTW N%` figure (any 1-2
@@ -341,7 +341,7 @@ The remaining `TaxOverlay` fields are zeroed because EBEM is Flanders-only:
 `tests/test_ebem.py:136`). The residential energy-fund tariff is EUR 0; the
 non-residential EUR 10.07/month tier is not modelled (`tests/test_ebem.py:140`).
 
-## Injection: `_extract_injection` (`ebem.py:518`)
+## Injection: `_extract_injection` (`ebem.py:519`)
 
 EBEM spans two of the three injection shapes in the taxonomy (see
 [../pricing-model.md](../pricing-model.md)):
@@ -386,7 +386,7 @@ feed-in credit (`ebem.py:529`, `ebem.py:562`, `tests/test_ebem.py:194`).
   rate and yearly fee, but their DSO and tax overlays are byte-identical
   (`tests/test_ebem.py:228`).
 - **Underscore separator**: the 2026-01 dynamic file uses `dynamic_01-2026`
-  (underscore), so `_PDF_RE` accepts `[-_]` between kind and MM (`ebem.py:96`).
+  (underscore), so `_PDF_RE` accepts `[-_]` between kind and MM (`ebem.py:102`).
 - **Colliding `VERSIE 2026` token**: `_extract_validity` scans for the first
   real Dutch month rather than aborting on the first `word + year`
   (`ebem.py:298`).
@@ -430,15 +430,15 @@ HTML is read at `tests/test_ebem.py:306`. Fixture text is loaded with
 
 | Symptom | Function | Why it breaks |
 | --- | --- | --- |
-| Wrong / missing month, or archive proxy silently used | `_extract_validity` (`ebem.py:298`) | title format or a new colliding `word + year` token |
-| Every fetch 404s or picks wrong month | `_PDF_RE` (`ebem.py:101`) / `_find_latest` (`ebem.py:242`) | filename pattern, separator, or kind token changed |
-| Dynamic energy / injection missing | `_extract_energy` dynamic branch (`ebem.py:337`) / `_extract_injection` dynamic (`ebem.py:520`) | `alle uren` / `Belpex15'` label or spacing drift |
-| Variable rate / indicative wrong | `_indicative_from_row` (`ebem.py:447`) | column order / count or sign changed |
+| Wrong / missing month, or archive proxy silently used | `_extract_validity` (`ebem.py:299`) | title format or a new colliding `word + year` token |
+| Every fetch 404s or picks wrong month | `_PDF_RE` (`ebem.py:102`) / `_find_latest` (`ebem.py:243`) | filename pattern, separator, or kind token changed |
+| Dynamic energy / injection missing | `_extract_energy` dynamic branch (`ebem.py:337`) / `_extract_injection` dynamic (`ebem.py:519`) | `alle uren` / `Belpex15'` label or spacing drift |
+| Variable rate / indicative wrong | `_indicative_from_row` (`ebem.py:448`) | column order / count or sign changed |
 | Variable formula row not found | row regexes (`ebem.py:403`) | meter-type label wording changed |
-| Yearly fees wrong | `_extract_yearly_fee_variable` / `_excl_night` / `_abonnement` (`ebem.py:476`) | `Vaste vergoeding` / `Abonnement` label changed |
-| A DSO drops out or a rate shifts | `_extract_dsos` (`ebem.py:648`) / `_FLANDERS_LABELS` (`ebem.py:636`) | Fluvius label rename, table heading, or column order |
-| Taxes zeroed or wrong | `_extract_federal_taxes` (`ebem.py:587`) / `_extract_flanders_renewables` (`ebem.py:608`) | `0-3 MWH` casing, `Beschermende klanten`, or `Totale bijdrage` row drift |
-| Monthly injection indicative missing (fatal) | `_extract_injection` variable branch (`ebem.py:556`) | card stopped printing the realized indicative column |
+| Yearly fees wrong | `_extract_yearly_fee_variable` / `_excl_night` / `_abonnement` (`ebem.py:477`) | `Vaste vergoeding` / `Abonnement` label changed |
+| A DSO drops out or a rate shifts | `_extract_dsos` (`ebem.py:649`) / `_FLANDERS_LABELS` (`ebem.py:637`) | Fluvius label rename, table heading, or column order |
+| Taxes zeroed or wrong | `_extract_federal_taxes` (`ebem.py:588`) / `_extract_flanders_renewables` (`ebem.py:609`) | `0-3 MWH` casing, `Beschermende klanten`, or `Totale bijdrage` row drift |
+| Monthly injection indicative missing (fatal) | `_extract_injection` variable branch (`ebem.py:519`) | card stopped printing the realized indicative column |
 
 Regenerate the fixtures from the current card before adjusting a regex, and keep
 the test-encoded illustrative values in sync with the new card.

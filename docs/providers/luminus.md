@@ -129,7 +129,7 @@ of the coordinator's runtime path). It GETs the sitemap
 (`https://www.luminus.be/sitemap.xml`, `luminus.py:135`) and scrapes product
 slugs from the `/fr|nl/particuliers/tarifs-energie|onze-tarieven/<slug>/`
 structure (`_PRODUCT_PAGE_RE`, `luminus.py:139-141`), excluding the regulated
-social-tariff index pages (`_EXCLUDED_SLUGS`, `luminus.py:145`). A failed sitemap
+social-tariff index pages (`_EXCLUDED_SLUGS`, `luminus.py:146`). A failed sitemap
 fetch returns an empty set rather than raising.
 
 ## Parsing
@@ -341,7 +341,7 @@ ascending order**, unlike OCTA+/Bolt where the columns are PIC-first descending
 colon or region (`luminus.py:452-455`); the block runs until
 `INFORMATION SUR VOTRE TARIF` or `Conditions`. Inside the block, values sit alone
 on their own lines, and the parser collects that contiguous run of `-` /
-`_NUM` tokens (`luminus.py:464`). The label order and matching value order are
+`_NUM` tokens (`luminus.py:235`). The label order and matching value order are
 documented in the `_tax_block_values` docstring (`luminus.py:428-451`): BTNR,
 BTR, excise, contribution, and (Wallonia only) connection.
 
