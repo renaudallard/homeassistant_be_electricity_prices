@@ -82,6 +82,7 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
+from .synergrid import SppWeights
 from .coordinator import (
     _compensation_kva,
     local_year_start,
@@ -348,6 +349,42 @@ def _hour_spot(
     return spots.get(utc_hour) if spots else None
 
 
+def _injection_rate_for_hour(
+    snap_h: Any,
+    *,
+    spot: float | None,
+    spots: dict[datetime, float],
+    utc_hour: datetime,
+    local: datetime,
+    spp_weights: SppWeights | None,
+    month_spp_cache: dict[tuple[int, int], float | None],
+    hourly_injection: bool,
+) -> float | None:
+    """The feed-in rate for one backfilled hour, or None when it has none.
+
+    Both backfill passes resolved this identically: the same nine-keyword
+    _spp_injection_spot call followed by the same _historical_injection_rate.
+
+    ``monthly_mean`` stays derived here from THIS hour's snapshot rather than
+    being hoisted by the caller: an archived month can carry a different
+    energy kind from the cohort leg, so the flag is per-hour, not per-run.
+    """
+    inj_spot = _spp_injection_spot(
+        spot,
+        monthly_mean=isinstance(snap_h.energy, SpotMonthlyRates),
+        spp_weights=spp_weights,
+        historical_spots=spots,
+        year=local.year,
+        month=local.month,
+        cache=month_spp_cache,
+        hourly=hourly_injection,
+        hourly_spot=spots.get(utc_hour),
+    )
+    return _historical_injection_rate(
+        snap_h.injection, inj_spot, energy=snap_h.energy, when=local
+    )
+
+
 async def _backfill_price_sensors(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -453,19 +490,15 @@ async def _backfill_price_sensors(
             elif key == "taxes_component":
                 value = bd.taxes
             elif key == _INJECTION_PRICE_SENSOR_KEY:
-                inj_spot = _spp_injection_spot(
-                    spot,
-                    monthly_mean=isinstance(snap_h.energy, SpotMonthlyRates),
+                inj_rate = _injection_rate_for_hour(
+                    snap_h,
+                    spot=spot,
+                    spots=spots,
+                    utc_hour=utc_hour,
+                    local=local,
                     spp_weights=spp_weights,
-                    historical_spots=spots,
-                    year=local.year,
-                    month=local.month,
-                    cache=month_spp_cache,
-                    hourly=hourly_injection,
-                    hourly_spot=spots.get(utc_hour),
-                )
-                inj_rate = _historical_injection_rate(
-                    snap_h.injection, inj_spot, energy=snap_h.energy, when=local
+                    month_spp_cache=month_spp_cache,
+                    hourly_injection=hourly_injection,
                 )
                 if inj_rate is None:
                     continue
@@ -641,19 +674,15 @@ async def _backfill_cost_sensor(
                     running_energy += (cons - inj) * bd.all_in
                 elif regime == SOLAR_REGIME_INJECTION:
                     running_energy += cons * bd.all_in
-                    inj_spot = _spp_injection_spot(
-                        spot,
-                        monthly_mean=isinstance(snap_h.energy, SpotMonthlyRates),
+                    inj_rate = _injection_rate_for_hour(
+                        snap_h,
+                        spot=spot,
+                        spots=spots,
+                        utc_hour=utc_hour,
+                        local=local,
                         spp_weights=spp_weights,
-                        historical_spots=spots,
-                        year=local.year,
-                        month=local.month,
-                        cache=month_spp_cache,
-                        hourly=hourly_injection,
-                        hourly_spot=spots.get(utc_hour),
-                    )
-                    inj_rate = _historical_injection_rate(
-                        snap_h.injection, inj_spot, energy=snap_h.energy, when=local
+                        month_spp_cache=month_spp_cache,
+                        hourly_injection=hourly_injection,
                     )
                     if inj_rate is not None:
                         running_energy -= inj * inj_rate
