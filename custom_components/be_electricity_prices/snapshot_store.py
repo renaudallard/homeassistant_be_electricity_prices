@@ -36,6 +36,8 @@ produces has to move this number with it."""
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass
 from datetime import date
 from datetime import datetime
@@ -55,9 +57,6 @@ from .const import (
     DEFAULT_INCLUDE_VAT,
     DOMAIN,
     STORAGE_VERSION,
-)
-from .synergrid import (
-    _LOGGER,
 )
 from .providers.base import (
     DsoOverlay,
@@ -402,6 +401,9 @@ def _resolve_snapshot(entry: ConfigEntry, snap: SupplierSnapshot) -> SupplierSna
             entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH, DEFAULT_ANNUAL_CONSUMPTION_KWH)
         ),
     )
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class _MigratingStore(Store[dict[str, Any]]):

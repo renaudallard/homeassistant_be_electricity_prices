@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+
 from custom_components.be_electricity_prices import energy_meters
 
 import tempfile
@@ -314,7 +315,7 @@ async def test_ensure_spp_weights_fetches_when_stale(
     coord = BePricesCoordinator(hass, entry)
     fake = {(6, 15, 10): 2.0}
     with patch(
-        "custom_components.be_electricity_prices.coordinator.fetch_spp_weights",
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_spp_weights",
         new=AsyncMock(return_value=fake),
     ) as mock:
         await coord._ensure_spp_weights()
@@ -334,7 +335,7 @@ async def test_ensure_spp_weights_skips_when_fresh(
     coord._spp_weights_year = 2026
     coord._spp_fetched_at = datetime(2026, 7, 10, tzinfo=UTC)  # 5 days old
     with patch(
-        "custom_components.be_electricity_prices.coordinator.fetch_spp_weights",
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_spp_weights",
         new=AsyncMock(return_value={}),
     ) as mock:
         await coord._ensure_spp_weights()
@@ -350,7 +351,7 @@ async def test_ensure_spp_weights_backs_off_after_failure(
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     with patch(
-        "custom_components.be_electricity_prices.coordinator.fetch_spp_weights",
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_spp_weights",
         new=AsyncMock(return_value={}),
     ) as mock:
         await coord._ensure_spp_weights()  # attempt 1 fails

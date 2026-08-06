@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -41,6 +42,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
+)
+from custom_components.be_electricity_prices.coordinator_issues import (
     _successor_for,
 )
 from custom_components.be_electricity_prices.snapshot_store import (
@@ -94,7 +97,7 @@ async def test_ensure_historical_spots_anchors_on_local_day(
         return {}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
     ) as mock_client_cls:
         mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
         await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
@@ -134,7 +137,7 @@ async def test_ensure_historical_spots_skips_permanently_short_day(
         return {start + timedelta(hours=h): 0.05 for h in range(5)}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
     ) as mock_client_cls:
         mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
         await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
@@ -176,7 +179,7 @@ async def test_ensure_historical_spots_records_and_skips_complete_days(
         return {start + timedelta(hours=h): 0.05 for h in range(24)}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
     ) as mock_client_cls:
         mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
         # First pass fetches to fill the empty day.
@@ -274,7 +277,7 @@ async def test_fetch_spot_prices_window_covers_local_day_on_dst_fallback(
         return {}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
     ) as mock_client_cls:
         mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
         await coord._fetch_spot_prices()
@@ -327,7 +330,7 @@ async def test_fetch_spot_prices_tomorrow_flag_follows_response_content(
     # Pre-publication tick: response carries today only -> flag stays
     # False so the next tick will retry.
     with patch(
-        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
     ) as mock_client_cls:
         mock_client_cls.return_value.fetch_day_ahead = _fake_pre
         await coord._fetch_spot_prices()
@@ -336,7 +339,7 @@ async def test_fetch_spot_prices_tomorrow_flag_follows_response_content(
     # The False flag forces the cache check to miss on the next call,
     # mirroring the next hourly coordinator tick.
     with patch(
-        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
     ) as mock_client_cls:
         mock_client_cls.return_value.fetch_day_ahead = _fake_post
         await coord._fetch_spot_prices()
@@ -351,7 +354,7 @@ async def test_fetch_spot_prices_tomorrow_flag_follows_response_content(
         return {}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
     ) as mock_client_cls:
         mock_client_cls.return_value.fetch_day_ahead = _fake_should_not_run
         result = await coord._fetch_spot_prices()
@@ -391,7 +394,7 @@ async def test_fetch_spot_prices_uses_quarter_hourly_for_quarter_contract(
         energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True)
     )
     with patch(
-        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
     ) as mock_client_cls:
         mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
         await coord._fetch_spot_prices()
@@ -404,7 +407,7 @@ async def test_fetch_spot_prices_uses_quarter_hourly_for_quarter_contract(
         energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=False)
     )
     with patch(
-        "custom_components.be_electricity_prices.coordinator.EntsoeClient"
+        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
     ) as mock_client_cls:
         mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
         await coord._fetch_spot_prices()
@@ -462,7 +465,7 @@ async def test_two_coordinators_share_snapshot_and_only_fetch_once(
 
     extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord_a._maybe_refresh_snapshot()
@@ -493,7 +496,7 @@ async def test_force_refresh_keeps_snapshot_when_refetch_fails(
 
     extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord._maybe_refresh_snapshot()
@@ -506,7 +509,7 @@ async def test_force_refresh_keeps_snapshot_when_refetch_fails(
 
     initial_call = False
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord._maybe_refresh_snapshot()
@@ -540,7 +543,7 @@ async def test_force_refresh_evicts_shared_cache_for_other_coordinator(
 
     extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord_a._maybe_refresh_snapshot()  # populates the shared cache
@@ -604,7 +607,7 @@ async def test_probe_match_through_the_shared_cache_refreshes_fetched_at(
         probe=_probe,
     )
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         freezer.move_to("2026-08-01 09:00:00+00:00")
@@ -692,7 +695,7 @@ async def test_force_refresh_not_defeated_by_sibling_cache(
 
     extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         # A starts the user-initiated refresh: own snapshot blanked,
@@ -742,7 +745,7 @@ async def test_force_refresh_not_defeated_by_sibling_failure_marker(
 
     extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         # Step 1: user-initiated refresh sets _force_refresh and
@@ -779,7 +782,7 @@ async def test_shared_cache_expires_after_ttl(hass: HomeAssistant) -> None:
 
     extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord._maybe_refresh_snapshot()
@@ -818,7 +821,7 @@ async def test_probe_match_skips_fetch(hass: HomeAssistant) -> None:
         {"fetch": staticmethod(_fake_fetch), "probe": staticmethod(_fake_probe)},
     )
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord._maybe_refresh_snapshot()  # first call - fetch
@@ -853,7 +856,7 @@ async def test_probe_confirmed_recovery_clears_stale_failure(
         {"fetch": staticmethod(_fake_fetch), "probe": staticmethod(_fake_probe)},
     )
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord._maybe_refresh_snapshot()  # fetch, stores probe_key
@@ -896,7 +899,7 @@ async def test_probe_mismatch_triggers_fetch(hass: HomeAssistant) -> None:
         {"fetch": staticmethod(_fake_fetch), "probe": staticmethod(_fake_probe)},
     )
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord._maybe_refresh_snapshot()  # key-A, fetch
@@ -938,7 +941,7 @@ async def test_probe_none_self_fresh_does_not_reset_fetched_at(
     coord._snapshot_fetched_at = original_fetched_at
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord._maybe_refresh_snapshot()
@@ -973,7 +976,7 @@ async def test_self_fresh_populates_empty_shared_cache(
     assert _shared_snapshots(hass).get(coord._shared_key()) is None
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord._maybe_refresh_snapshot()
@@ -1013,7 +1016,7 @@ async def test_probe_match_self_fresh_refreshes_fetched_at(
     coord._snapshot_fetched_at = old_fetched_at
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord._maybe_refresh_snapshot()
@@ -1045,7 +1048,7 @@ async def test_probe_none_falls_back_to_ttl(hass: HomeAssistant) -> None:
         {"fetch": staticmethod(_fake_fetch), "probe": staticmethod(_fake_probe)},
     )
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord._maybe_refresh_snapshot()  # fetch, fresh
@@ -1086,7 +1089,7 @@ async def test_probe_match_on_shared_cache_avoids_fetch(hass: HomeAssistant) -> 
         {"fetch": staticmethod(_fake_fetch), "probe": staticmethod(_fake_probe)},
     )
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord_a._maybe_refresh_snapshot()  # populates cache + probe key
@@ -1374,7 +1377,7 @@ async def test_transient_failure_defers_extractor_issue_until_threshold(
     drift), and it clears the moment a fetch succeeds. _force_refresh
     bypasses the 5-min negative cache so the test can drive consecutive
     attempts back to back."""
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.coordinator_snapshot import (
         _EXTRACTOR_ISSUE_THRESHOLD,
     )
     from custom_components.be_electricity_prices.snapshot_store import (
@@ -1398,7 +1401,7 @@ async def test_transient_failure_defers_extractor_issue_until_threshold(
 
     extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         # Every attempt up to (threshold - 1) records the error but must
@@ -1445,7 +1448,7 @@ async def test_actionable_failure_raises_extractor_failed_immediately(
 
     extractor = make_stub_extractor(fetch=_fake_fetch)
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         await coord._maybe_refresh_snapshot()
@@ -1926,7 +1929,7 @@ async def test_first_refresh_end_to_end_does_not_crash(hass: HomeAssistant) -> N
     assert getattr(entry, "runtime_data", None) is None
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
         return_value=extractor,
     ):
         # async_refresh runs the same _async_update_data path as

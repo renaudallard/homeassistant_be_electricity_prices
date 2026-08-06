@@ -36,6 +36,11 @@ the cached snapshot and surfaces a repair issue.
 
 from __future__ import annotations
 
+from .coordinator_issues import _IssuesMixin
+from .coordinator_peak import _PeakMixin
+from .coordinator_snapshot import _SnapshotMixin
+from .coordinator_spots import _SpotsMixin
+
 from .cohort import (
     _cohort_energy_leg,
 )
@@ -52,33 +57,23 @@ from .injection import (
     _injection_varies_intraday,
 )
 from .snapshot_store import (
-    SNAPSHOT_REFRESH_HOURS,
     SNAPSHOT_STALE_DAYS,
     _MigratingStore,
-    _SHARED_FAILURE_TTL,
-    _SharedSnapshot,
     _bump_tuple_generation,
     _drop_monthly_rows,
-    _resolve_snapshot,
     _shared_failed_fetches,
-    _shared_lock,
     _shared_snapshots,
     _snapshot_from_dict,
     _snapshot_to_dict,
-    _tuple_generation,
 )
 from .spot_stats import (
-    _drop_future_spots,
     _energy_is_quarter_hourly,
-    _mean_of_month,
-    _spp_weighted_month_mean,
     _spp_weighting_enabled,
 )
 from .ytd_cost import (
     _compute_current_year_cost,
 )
 
-import asyncio
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
@@ -89,23 +84,15 @@ import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import (
     HomeAssistant,
-    State,
 )
-from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import EntsoeAuthError, EntsoeClient, EntsoeError
+from .api import EntsoeAuthError, EntsoeError
 from .const import (
-    CAPACITY_MODE_FIXED,
-    CAPACITY_MODE_SENSOR,
-    CONF_API_KEY,
-    CONF_CAPACITY_FIXED_KW,
-    CONF_CAPACITY_MODE,
-    CONF_CAPACITY_PEAK_SENSOR,
     CONF_CONTRACT,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
@@ -115,8 +102,6 @@ from .const import (
     CONF_SUPPLIER,
     DOMAIN,
     DSO_MODE_BI_HORAIRE,
-    DSO_MODE_IMPACT,
-    METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     REGION_FLANDERS,
     RESOLUTION_HOURLY,
@@ -125,7 +110,6 @@ from .const import (
     STORAGE_VERSION,
     SUPPLIER_CUSTOM,
     UPDATE_INTERVAL_MINUTES,
-    VREG_CAPACITY_FLOOR_KW,
 )
 from .pricing import (
     PriceBreakdown,
@@ -139,12 +123,9 @@ from .providers import (
     SupplierSnapshot,
     get as get_extractor,
 )
-from .providers._pdf import is_transient_fetch_error
-from .providers.custom import build_snapshot as build_custom_snapshot
-from .synergrid import SppWeights, fetch_spp_weights
+from .synergrid import SppWeights
 from .providers.base import (
     EnergyRates,
-    SupplierExtractor,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -161,27 +142,6 @@ def _supplier_label(supplier_id: str | None) -> str:
         return get_extractor(str(supplier_id)).label
     except ExtractorError:
         return str(supplier_id or "") or "Belgian Electricity"
-
-
-def _successor_for(supplier_id: str | None, region: str) -> SupplierExtractor | None:
-    """The successor supplier, but only when it can serve ``region``.
-
-    A withdrawal announcement names one successor for the whole country,
-    while our coverage is per region: EnergyVision took over DATS 24's
-    Flemish and Walloon customers alike, but only its Flanders cards are
-    modelled. Returns ``None`` when the successor is unset, unknown to this
-    build, or has no contract in the region, so the caller can avoid telling
-    a user to pick a supplier the config flow would then refuse.
-    """
-    if not supplier_id:
-        return None
-    try:
-        successor = get_extractor(supplier_id)
-    except ExtractorError:
-        return None
-    if not any(region in c.regions for c in successor.contracts):
-        return None
-    return successor
 
 
 def supplier_device_info(coordinator: "BePricesCoordinator") -> DeviceInfo:
@@ -201,33 +161,6 @@ def supplier_device_info(coordinator: "BePricesCoordinator") -> DeviceInfo:
         manufacturer=_supplier_label(coordinator.entry.data.get(CONF_SUPPLIER, "")),
         entry_type=None,
     )
-
-
-# A single failed fetch is almost always a transient CDN timeout that the
-# next hourly tick recovers. Raising the user-facing "extractor failed"
-# repair issue on the very first failure produced false alarms that wrongly
-# told the user the supplier had changed its tariff layout. Only raise the
-# issue once a failure has survived this many consecutive fetch attempts.
-# The shared negative-fetch row carries the running count and it resets the
-# moment a fetch succeeds; the 7-day snapshot_stale issue stays the backstop
-# for a breakage that outlives every threshold.
-_EXTRACTOR_ISSUE_THRESHOLD = 2
-
-
-# Some past days genuinely have < 20 of 24 hourly day-ahead points at
-# ENTSO-E (source gaps). Without a marker, _ensure_historical_spots
-# re-pulls a whole week-chunk for such a day on every hourly tick for
-# the rest of the year. Record the last attempt per stable past day and
-# skip it for this long; 12 h re-attempts twice a day in case the data
-# lands late, without hammering the rate-limited endpoint hourly.
-_SHORT_SPOT_DAY_TTL = timedelta(hours=12)
-
-# The Synergrid ex-ante SPP profile is revised within the year, so re-fetch the
-# 52 MB workbook at most this often (weights survive restarts via the Store).
-_SPP_REFRESH_DAYS = 30
-# Back off this long after a failed SPP fetch so a persistent problem (e.g. the
-# new-year file not yet published) doesn't re-download 52 MB every hourly tick.
-_SPP_RETRY_TTL = timedelta(hours=12)
 
 
 @dataclass
@@ -328,7 +261,13 @@ def local_year_start(when: datetime | None = None) -> datetime:
     )
 
 
-class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
+class BePricesCoordinator(
+    _SnapshotMixin,
+    _IssuesMixin,
+    _SpotsMixin,
+    _PeakMixin,
+    DataUpdateCoordinator[CoordinatorData],
+):
     """Pull supplier snapshot + ENTSO-E spot, build the hourly price table."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -555,23 +494,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 stale = age > SNAPSHOT_STALE_DAYS * 24
                 self._sync_stale_issue(stale)
             raise
-
-    def _refresh_custom_snapshot(self) -> None:
-        """Build the snapshot locally for the expert custom supplier.
-
-        There is no card to fetch: the user typed the formula and all
-        regulated values, so we assemble the snapshot from the config entry
-        every tick. Always fresh (no probe / TTL), so it never goes stale.
-        """
-        self._set_snapshot(
-            build_custom_snapshot(
-                self.entry.data,
-                self.entry.data.get(CONF_REGION, ""),
-                self.entry.data.get(CONF_DSO, ""),
-            )
-        )
-        self._snapshot_fetched_at = dt_util.utcnow()
-        self._last_error = ""
 
     async def _update_body(self) -> CoordinatorData:
         self._sync_deprecated_supplier_issue()
@@ -817,270 +739,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             ytd_diagnostics=ytd_breakdown or None,
         )
 
-    def _sync_issue(
-        self,
-        key: str,
-        active: bool,
-        *,
-        extra: dict[str, str] | None = None,
-        severity: ir.IssueSeverity = ir.IssueSeverity.WARNING,
-    ) -> None:
-        """Raise or clear one Repairs issue for this entry.
-
-        Five syncers spelled this out: the unloaded guard, the
-        ``f"{translation_key}_{entry_id}"`` id, the create call with its
-        supplier / contract placeholders, and the delete in the else. Only the
-        key, the predicate and a couple of extra placeholders differ.
-
-        The id shape is load-bearing and must stay byte-identical: Repairs
-        persists it, so a changed id leaves an already-raised issue orphaned
-        with no way for the user to clear it.
-        """
-        if self._unloaded:
-            return
-        issue_id = f"{key}_{self.entry.entry_id}"
-        if not active:
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
-            return
-        placeholders = {
-            "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
-            "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
-        }
-        placeholders.update(extra or {})
-        ir.async_create_issue(
-            self.hass,
-            DOMAIN,
-            issue_id,
-            is_fixable=False,
-            severity=severity,
-            translation_key=key,
-            translation_placeholders=placeholders,
-        )
-
-    def _sync_stale_issue(self, stale: bool) -> None:
-        """Raise or clear the 'snapshot stale' repair issue for this entry."""
-        self._sync_issue(
-            "snapshot_stale",
-            stale,
-            extra={
-                "days": str(SNAPSHOT_STALE_DAYS),
-                "last_error": self._last_error or "unknown",
-            },
-        )
-
-    def _sync_exclusive_night_gap_issue(self) -> None:
-        """Flag an exclusive-night meter whose DSO overlay cannot price it.
-
-        ``network_eur_per_kwh`` bills an exclusive-night circuit at its own
-        distribution rate, falling back to off-peak and then to the single
-        (day) rate. When a supplier's card publishes neither, that last
-        fallback silently bills the dedicated night circuit at the day rate.
-        TotalEnergies' Flemish card is the case: its DSO table prints
-        digital/classic prelevement and capacitaire, metering, cotisation,
-        transport and prosumer, with no exclusive-night column at all - even
-        though it does publish an exclusive-night ENERGY rate, so the entry
-        looks fully configured.
-
-        The rate cannot be substituted from anywhere: no EUR value may live
-        in Python source, and borrowing another supplier's Fluvius figure
-        would be a guess. So price it as the engine already does and tell the
-        user, rather than hiding the meter type or silently over-billing.
-        """
-        overlay = (
-            self._snapshot.dsos.get(self.entry.data.get(CONF_DSO, ""))
-            if self._snapshot is not None
-            else None
-        )
-        gap = (
-            self.entry.data.get(CONF_METER) == METER_EXCLUSIVE_NIGHT
-            and overlay is not None
-            and overlay.distribution_exclusive_night is None
-            and overlay.distribution_offpeak is None
-        )
-        self._sync_issue(
-            "exclusive_night_rate_missing",
-            gap,
-            extra={"dso": str(self.entry.data.get(CONF_DSO, ""))},
-        )
-
-    def _sync_impact_gap_issue(self) -> None:
-        """Flag an Impact DSO mode the supplier's card cannot price.
-
-        Only Luminus' Wallonia DYNAMIC card prints the CWaPE Tarif Impact
-        block; its static, variable and TOU Wallonia cards omit it, so the
-        overlay's pic / medium / eco stay None. ``network_eur_per_kwh`` then
-        falls back to the bi-horaire branch while ``_routed_rate`` keeps
-        routing the ENERGY side through ``dso_impact_band``. The two schedules
-        agree for most of the day but not between 22:00 and 01:00, where the
-        Impact MEDIUM band bills the peak energy rate against an off-peak
-        distribution rate.
-
-        The bill stays close (this is a band mismatch, not the mono-rate
-        fallback it looks like from the overlay alone: the static cards do
-        publish peak / offpeak). Still worth telling the user, since they
-        explicitly opted into Impact and are not being billed on it.
-        """
-        overlay = (
-            self._snapshot.dsos.get(self.entry.data.get(CONF_DSO, ""))
-            if self._snapshot is not None
-            else None
-        )
-        gap = (
-            self.entry.data.get(CONF_DSO_TARIFF_MODE) == DSO_MODE_IMPACT
-            and overlay is not None
-            and overlay.distribution_pic is None
-        )
-        self._sync_issue(
-            "impact_rates_missing",
-            gap,
-            extra={"dso": str(self.entry.data.get(CONF_DSO, ""))},
-        )
-
-    def _sync_connection_fee_issue(self) -> None:
-        """Flag a Walloon card that stopped printing the connection fee.
-
-        EnergyVision deleted the row from every one of its Walloon cards on
-        1 August 2026, together with the energy contribution that really was
-        abolished that day. The connection fee was not: Wallonia still levies
-        it and the card's own terms keep taxes and redevances fully passed
-        through to the customer.
-
-        The extractor bills 0 for it rather than failing the fetch, which
-        would leave the entry frozen on a July snapshot still carrying the
-        abolished contribution and the superseded excise, and be the larger
-        error of the two. Say what the cost excludes so the gap is disclosed
-        rather than silent, and clear it the moment the row comes back.
-        """
-        self._sync_issue(
-            "connection_fee_missing",
-            self._snapshot is not None
-            and self._snapshot.taxes.region_connection_fee_unavailable,
-        )
-
-    def _sync_extractor_issue(
-        self, message: str | None, *, transient: bool = False
-    ) -> None:
-        """Raise or clear the supplier-extractor repair issue.
-
-        Two mutually-exclusive flavours share this Repairs slot:
-
-        - actionable (``transient=False``): a parse error, 404 or non-PDF
-          payload that will not self-heal. Surfaces the ``extractor_failed``
-          card whose advice is "the supplier changed its layout, open a
-          GitHub issue".
-        - transient (``transient=True``): a network timeout / reset / 5xx /
-          anti-bot 403 that a later refresh usually recovers. Surfaces the
-          softer ``extractor_unreachable`` card.
-
-        Whichever flavour is raised clears the other so the user never sees
-        both at once. ``message`` ``None`` means the latest fetch succeeded
-        and clears both.
-        """
-        if self._unloaded:
-            return
-        failed_id = f"extractor_failed_{self.entry.entry_id}"
-        unreachable_id = f"extractor_unreachable_{self.entry.entry_id}"
-        if not message:
-            ir.async_delete_issue(self.hass, DOMAIN, failed_id)
-            ir.async_delete_issue(self.hass, DOMAIN, unreachable_id)
-            return
-        raise_id, clear_id, translation_key = (
-            (unreachable_id, failed_id, "extractor_unreachable")
-            if transient
-            else (failed_id, unreachable_id, "extractor_failed")
-        )
-        ir.async_delete_issue(self.hass, DOMAIN, clear_id)
-        ir.async_create_issue(
-            self.hass,
-            DOMAIN,
-            raise_id,
-            is_fixable=False,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key=translation_key,
-            translation_placeholders={
-                "supplier": str(self.entry.data.get(CONF_SUPPLIER, "")),
-                "contract": str(self.entry.data.get(CONF_CONTRACT, "")),
-                "error": message,
-            },
-        )
-
-    def _sync_entsoe_auth_issue(self, active: bool, message: str = "") -> None:
-        """Raise or clear the 'ENTSO-E rejected the API key' issue.
-
-        Fired only on ``EntsoeAuthError`` (transparency.entsoe.eu
-        responded 401), so the user knows the fix is "rotate the token
-        in the entry's options" rather than waiting on a transient
-        outage. Cleared as soon as a refresh succeeds with a key the
-        endpoint accepts.
-        """
-        self._sync_issue(
-            "entsoe_auth_failed",
-            active,
-            extra={"error": message or "401 Unauthorized"},
-            severity=ir.IssueSeverity.ERROR,
-        )
-
-    def _sync_deprecated_supplier_issue(self) -> None:
-        """Raise or clear the 'this supplier is leaving the market' issue.
-
-        Driven purely by the registry's ``deprecated_until`` /
-        ``deprecated_successor`` (``providers/base.py``), never by comparing
-        a date to the clock: the card is an instruction to switch supplier,
-        and it stays up for as long as the entry points at a supplier that
-        has announced its exit. Clears by itself when the user re-points the
-        entry, and on any release that drops the registry flag.
-
-        Kept separate from the extractor / staleness cards on purpose. Those
-        say "the fetch is failing"; this one says "the fetch will keep
-        working and then stop, and here is what to do about it". Prices are
-        untouched -- a user still supplied by DATS 24 in August must still be
-        billed August's rates.
-        """
-        if self._unloaded:
-            return
-        issue_id = f"supplier_deprecated_{self.entry.entry_id}"
-        supplier_id = str(self.entry.data.get(CONF_SUPPLIER, ""))
-        try:
-            extractor = get_extractor(supplier_id)
-        except ExtractorError:
-            # An entry on a supplier this build no longer ships: the
-            # extractor cards already cover that, nothing to add here.
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
-            return
-        if extractor.deprecated_until is None:
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
-            return
-        placeholders = {
-            "supplier": extractor.label,
-            "ends_on": extractor.deprecated_until.isoformat(),
-        }
-        successor = _successor_for(
-            extractor.deprecated_successor, str(self.entry.data.get(CONF_REGION, ""))
-        )
-        if successor is not None:
-            placeholders["successor"] = successor.label
-        ir.async_create_issue(
-            self.hass,
-            DOMAIN,
-            issue_id,
-            is_fixable=False,
-            severity=ir.IssueSeverity.WARNING,
-            # Only tell the user to switch to the successor when we can
-            # actually price it for their region. Naming a supplier the
-            # config flow will refuse (it aborts at the contract step with
-            # supplier_region_unavailable) sends them down a dead end;
-            # the fallback card states the situation without the bad advice.
-            translation_key=(
-                "supplier_deprecated"
-                if successor is not None
-                else "supplier_deprecated_no_successor"
-            ),
-            # Labels, not registry ids: the card tells the user to pick a
-            # supplier from a label-based dropdown, so "DATS 24" and
-            # "EnergyVision" are what they will actually look for.
-            translation_placeholders=placeholders,
-        )
-
     async def async_force_refresh(self) -> None:
         """Force the next coordinator tick to re-fetch the supplier.
 
@@ -1118,23 +776,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             _bump_tuple_generation(self.hass, month_key)
         await self.async_request_refresh()
 
-    async def reset_monthly_peak(self) -> None:
-        """Drop the persisted monthly peak so the next tick rebuilds it.
-
-        Exposed via the diagnostic Reset peak button. Required when an
-        earlier release stored an inflated peak (e.g. a W-unit sensor
-        misread as kW pre-0.5.45) and the rolling-max comparison would
-        otherwise hold the bad value until the next 1st of the month.
-        Persists immediately so the reset survives an HA restart between
-        now and the next coordinator tick. The banked history goes too: a
-        bad value that has already rolled into a completed month would
-        otherwise keep dragging the twelve-month mean for a year.
-        """
-        self._peak_kw = 0.0
-        self._peak_history.clear()
-        await self._save_persistent()
-        await self.async_request_refresh()
-
     @staticmethod
     def _compute_data_signature(entry: ConfigEntry) -> frozenset[tuple[str, Any]]:
         """Frozen snapshot of every load-bearing entry.data field.
@@ -1148,575 +789,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         change can be ignored.
         """
         return frozenset(entry.data.items())
-
-    def _shared_key(self) -> tuple[str, str, str]:
-        return (
-            self.entry.data[CONF_SUPPLIER],
-            self.entry.data[CONF_CONTRACT],
-            self.entry.data[CONF_REGION],
-        )
-
-    def _set_snapshot(self, snap: SupplierSnapshot | None) -> None:
-        """Keep the card as parsed and resolve this entry's VAT preference.
-
-        Every path that produces a snapshot - a fetch, a sibling's shared
-        copy, the persisted cache, the custom-formula build - lands here,
-        so the VAT choice is applied exactly once and never leaks into
-        what other entries on the same tuple see.
-        """
-        self._snapshot_raw = snap
-        self._snapshot = None if snap is None else _resolve_snapshot(self.entry, snap)
-
-    def _adopt_shared(
-        self,
-        shared: _SharedSnapshot,
-        probe_key: str | None = None,
-        now: datetime | None = None,
-    ) -> None:
-        """Take a fresh shared snapshot as our own.
-
-        When the freshness decision came from a PROBE key rather than the
-        TTL, restamp ``fetched_at`` to now, exactly as the self-fresh branch
-        below does and for the same reason: the probe just verified the
-        supplier has not published a new card, so the snapshot is "checked
-        just now", not "fetched whenever the cold fetch happened".
-
-        This path is the one that runs in steady state. The shared row is
-        normally this coordinator's OWN row, written by its cold fetch, and
-        the shortcut is tried before the self-fresh branch, so leaving the
-        stamp alone pinned it at the cold-fetch instant for as long as the
-        supplier kept publishing the same card. Cards are monthly, so after
-        seven days every probe-based supplier raised a false "snapshot
-        stale" Repairs card, with `snapshot_age_hours` reading days while the
-        card had been verified minutes earlier. Restamp the shared row too so
-        siblings agree.
-
-        A TTL-based match must NOT restamp: that would reset the TTL clock on
-        every tick and a probe-less supplier would never be re-fetched.
-        """
-        self._set_snapshot(shared.snapshot)
-        if probe_key is not None and now is not None:
-            shared.fetched_at = now
-            self._snapshot_fetched_at = now
-        else:
-            self._snapshot_fetched_at = shared.fetched_at
-        self._snapshot_probe_key = shared.probe_key
-        self._last_error = ""
-        self._force_refresh = False
-
-    async def _maybe_refresh_snapshot(self) -> None:
-        """Run a cheap probe; only refetch the full PDF when it says so.
-
-        Two paths depending on what the supplier exposes:
-
-          * **Probe available** — call ``extractor.probe`` (HEAD or small
-            listing GET). If the returned key matches what we last saved,
-            the snapshot is still valid; just stamp ``_snapshot_fetched_at``
-            and return. If the key changed, fall through to a real fetch.
-
-          * **No probe** — fall back to the time-based TTL: only refetch
-            when the snapshot is older than ``SNAPSHOT_REFRESH_HOURS`` (24h).
-            DATS 24, Engie and Luminus take this path.
-
-        The shared (supplier, contract, region) cache short-circuits the
-        same way: a probe-key match against a sibling coordinator's
-        snapshot adopts it without doing any work.
-        """
-        ttl = timedelta(hours=SNAPSHOT_REFRESH_HOURS)
-        now = dt_util.utcnow()
-
-        extractor = get_extractor(self.entry.data[CONF_SUPPLIER])
-        contract = self.entry.data[CONF_CONTRACT]
-        region = self.entry.data[CONF_REGION]
-        key = self._shared_key()
-        cache = _shared_snapshots(self.hass)
-
-        # Try a cheap probe first. None means the supplier has no probe
-        # path or the probe failed; we fall through to the TTL-only flow.
-        probe_key: str | None = None
-        probe_fn = getattr(extractor, "probe", None)
-        if probe_fn is not None:
-            try:
-                probe_key = await probe_fn(self._session, contract, region)
-            except (ExtractorError, asyncio.TimeoutError) as err:
-                _LOGGER.debug(
-                    "probe failed for %s/%s: %s",
-                    self.entry.data.get(CONF_SUPPLIER),
-                    contract,
-                    err,
-                )
-                probe_key = None
-
-        # Free, non-blocking shortcut: a sibling coordinator may have a
-        # fresh snapshot we can adopt directly.
-        shared = cache.get(key)
-        if shared is not None and self._shared_is_fresh(shared, probe_key, now, ttl):
-            self._adopt_shared(shared, probe_key, now)
-            return
-
-        # Our own snapshot may already be valid against this probe.
-        if self._snapshot is not None and self._self_is_fresh(probe_key, now, ttl):
-            if probe_key is not None:
-                # Probe verified the supplier hasn't published a new card,
-                # so refresh the snapshot_age sensor's clock to "just
-                # checked". The probe-less / probe-failed path keeps the
-                # original fetched_at; otherwise stamping it on every
-                # tick that passes the TTL check resets the TTL clock
-                # and the supplier is never re-fetched.
-                self._snapshot_fetched_at = now
-                # A successful probe also confirms the supplier is
-                # reachable again, so clear any stale failure left by an
-                # earlier transient fetch error. This path never
-                # re-fetches, so without it a single-entry install (no
-                # sibling to trigger _adopt_shared) would keep the "could
-                # not reach the supplier" Repairs card and _last_error
-                # until the published card changed. Emptying _last_error
-                # lets the caller's top-level clear drop the extractor
-                # issue; pop the negative-cache row so siblings stop
-                # backing off. Gated on probe_key is not None: a failed /
-                # absent probe is not proof of recovery.
-                self._last_error = ""
-                _shared_failed_fetches(self.hass).pop(key, None)
-            # Populate the shared cache when this tick is the first to
-            # verify a disk-loaded snapshot after restart. Without this
-            # every sibling on the same tuple would re-run its own
-            # probe / TTL check on every tick instead of adopting.
-            # Re-use the previous probe_key when the current probe
-            # came back empty (probe-less suppliers stay None; a
-            # transiently-failing probe keeps the last known key).
-            if (
-                cache.get(key) is None
-                and self._snapshot_raw is not None
-                and self._snapshot_fetched_at is not None
-            ):
-                cache[key] = _SharedSnapshot(
-                    snapshot=self._snapshot_raw,
-                    fetched_at=self._snapshot_fetched_at,
-                    probe_key=probe_key
-                    if probe_key is not None
-                    else self._snapshot_probe_key,
-                )
-            return
-
-        # Negative cache: if a sibling just failed on this same key,
-        # don't retry until _SHARED_FAILURE_TTL has elapsed. Propagate
-        # the sibling's error to ours so a cold-start coordinator sees
-        # the real failure reason instead of "cold start".
-        # ``async_force_refresh`` raises ``_force_refresh`` and clears
-        # *its own* view of the marker, but a sibling failing in the
-        # window between the clear and this tick re-populates the row;
-        # bypassing the short-circuit when ``_force_refresh`` is set
-        # keeps the user-facing refresh service from silently no-op'ing.
-        failed = _shared_failed_fetches(self.hass)
-        if not self._force_refresh:
-            last_fail = failed.get(key)
-            if (
-                last_fail is not None
-                and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
-            ):
-                self._last_error = last_fail[1]
-                return
-
-        gen_at_entry = _tuple_generation(self.hass, key)
-        async with _shared_lock(self.hass, key):
-            shared = cache.get(key)
-            locked_now = dt_util.utcnow()
-            if shared is not None and self._shared_is_fresh(
-                shared, probe_key, locked_now, ttl
-            ):
-                self._adopt_shared(shared, probe_key, locked_now)
-                return
-            # Re-check the negative cache under the lock so the second
-            # waiter doesn't repeat what the first just failed; same
-            # _force_refresh bypass as above.
-            if not self._force_refresh:
-                last_fail = failed.get(key)
-                if (
-                    last_fail is not None
-                    and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
-                ):
-                    self._last_error = last_fail[1]
-                    return
-            try:
-                snap = await extractor.fetch(self._session, contract, region)
-                fetched_at = dt_util.utcnow()
-                # Don't write the shared cache if the tuple was evicted
-                # mid-fetch (entry removed or supplier swapped). Our
-                # local self._snapshot is still useful for this tick;
-                # if runtime_data was swapped, _save_persistent will
-                # skip the write.
-                if _tuple_generation(self.hass, key) == gen_at_entry:
-                    cache[key] = _SharedSnapshot(
-                        snapshot=snap, fetched_at=fetched_at, probe_key=probe_key
-                    )
-                    failed.pop(key, None)
-                self._set_snapshot(snap)
-                self._snapshot_fetched_at = fetched_at
-                self._snapshot_probe_key = probe_key
-                self._last_error = ""
-                self._force_refresh = False
-                self._sync_extractor_issue(None)
-            except Exception as err:  # noqa: BLE001 - re-raised below for non-extractor types
-                # Any extractor failure (including unexpected aiohttp /
-                # parser exceptions) must populate the negative cache so
-                # sibling coordinators back off instead of refiring the
-                # same broken request on the next tick. The third tuple
-                # field counts consecutive failures on this key so a lone
-                # transient timeout doesn't immediately raise a repair
-                # issue; the count rides the shared row and resets the
-                # moment a fetch succeeds (failed.pop above).
-                prev = failed.get(key)
-                fail_count = (prev[2] if prev is not None else 0) + 1
-                if _tuple_generation(self.hass, key) == gen_at_entry:
-                    failed[key] = (dt_util.utcnow(), str(err), fail_count)
-                self._last_error = str(err)
-                # A transient network failure (timeout / reset / 5xx /
-                # anti-bot 403) usually recovers on the next tick, so defer
-                # its softer "could not reach the supplier" card until it
-                # has crossed the threshold. A parse error / 404 / non-PDF
-                # payload won't self-heal, so raise the actionable
-                # "extractor failed" card on the first failure.
-                transient = isinstance(
-                    err, asyncio.TimeoutError
-                ) or is_transient_fetch_error(str(err))
-                if not transient:
-                    self._sync_extractor_issue(str(err), transient=False)
-                elif fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
-                    self._sync_extractor_issue(str(err), transient=True)
-                _LOGGER.warning(
-                    "snapshot refresh failed for %s/%s: %s; keeping cached"
-                    " (consecutive failure %d)",
-                    self.entry.data.get(CONF_SUPPLIER),
-                    self.entry.data.get(CONF_CONTRACT),
-                    err,
-                    fail_count,
-                )
-                if not isinstance(err, (ExtractorError, asyncio.TimeoutError)):
-                    raise
-
-    def _self_is_fresh(
-        self, probe_key: str | None, now: datetime, ttl: timedelta
-    ) -> bool:
-        """Whether our own snapshot can be reused without a refetch."""
-        if self._force_refresh:
-            return False
-        if probe_key is not None:
-            return self._snapshot_probe_key == probe_key
-        if self._snapshot_fetched_at is None:
-            return False
-        return now - self._snapshot_fetched_at < ttl
-
-    def _shared_is_fresh(
-        self,
-        shared: _SharedSnapshot,
-        probe_key: str | None,
-        now: datetime,
-        ttl: timedelta,
-    ) -> bool:
-        """Whether a sibling's shared snapshot can be adopted as-is.
-
-        ``async_force_refresh`` flips ``_force_refresh`` to opt the
-        coordinator out of every adoption shortcut: without this guard
-        a sibling that re-seeded the shared cache between the
-        ``_shared_snapshots.pop`` and the next tick would silently
-        satisfy the forced refresh, making the user-facing refresh
-        service a no-op on multi-entry installs.
-        """
-        if self._force_refresh:
-            return False
-        if probe_key is not None:
-            return shared.probe_key == probe_key
-        return now - shared.fetched_at < ttl
-
-    async def _ensure_historical_spots(
-        self, start: date, end: date, api_key: str | None = None
-    ) -> None:
-        """Make sure ``self._historical_spots`` covers every hour of the
-        local days in ``[start, end]``, fetching missing ranges from
-        ENTSO-E.
-
-        ``api_key`` overrides the entry's key, letting the compare flow
-        backfill spots for a spot-indexed target with a key the user typed
-        in the compare step even when their own entry carries none.
-
-        Day boundaries are anchored on local midnight (converted to UTC),
-        matching the recorder window (``_recorder_rows``) and the
-        persistence cut-off (``_save_persistent``). Anchoring on UTC
-        midnight instead would leave the first one or two hours of the
-        local year (local Jan 1 00:00 falls on Dec 31 UTC in Brussels)
-        unfetched, so the dynamic YTD would never credit them even though
-        the recorder reports consumption there.
-
-        Walks the day axis once. A day is considered "present" when at
-        least 20 of its 24 hours are already cached -- ENTSO-E
-        occasionally leaves gaps under the carry-forward rule (and DST
-        seam days have 23/25 hours), and a few missing hours per day
-        shouldn't trigger a re-fetch every coordinator tick. Failed
-        fetches are logged and skipped; the caller treats absent hours as
-        "no data" rather than tearing the YTD computation down.
-        """
-        api_key = api_key or self.entry.data.get(CONF_API_KEY)
-        if not api_key:
-            return
-        now = dt_util.utcnow()
-        # Days older than this are stable enough that a short fetch means
-        # a genuine source gap, not data still being published; only those
-        # get the "attempted, still short" skip marker. Today and yesterday
-        # are always re-fetched so their hours fill in promptly.
-        stable_before = dt_util.now().date() - timedelta(days=1)
-        # Collect contiguous date ranges where the cache is sparse.
-        missing_ranges: list[tuple[date, date]] = []
-        range_start: date | None = None
-        cur = start
-        while cur <= end:
-            if cur in self._complete_spot_days:
-                # Confirmed fully covered on an earlier tick. Treat as present
-                # (so it closes any open missing range) without redoing the tz
-                # conversion and 24 dict lookups.
-                present = 24
-            else:
-                day_start_utc = dt_util.start_of_local_day(cur).astimezone(UTC)
-                present = sum(
-                    1
-                    for h in range(24)
-                    if (day_start_utc + timedelta(hours=h)) in self._historical_spots
-                )
-                # >= 20 is the same threshold the fetch decision below uses, so
-                # a day recorded here is one that would never be re-fetched
-                # anyway; caching it just skips the scan next tick.
-                if present >= 20:
-                    self._complete_spot_days.add(cur)
-            last_attempt = self._short_spot_days.get(cur)
-            recently_short = (
-                present < 20
-                and last_attempt is not None
-                and now - last_attempt < _SHORT_SPOT_DAY_TTL
-            )
-            if present < 20 and not recently_short:
-                if range_start is None:
-                    range_start = cur
-            elif range_start is not None:
-                missing_ranges.append((range_start, cur))
-                range_start = None
-            cur += timedelta(days=1)
-        if range_start is not None:
-            missing_ranges.append((range_start, cur))
-        if not missing_ranges:
-            return
-        client = EntsoeClient(api_key, self._session)
-        for r_start, r_end in missing_ranges:
-            chunk_start = r_start
-            while chunk_start < r_end:
-                # Week-sized chunks: trade off per-request latency
-                # against total round-trips for a 365-day backfill.
-                chunk_end = min(chunk_start + timedelta(days=7), r_end)
-                # Local-midnight anchors (in UTC) so the fetched window
-                # lines up with the local-day grid the recorder and the
-                # present-check above use.
-                start_utc = dt_util.start_of_local_day(chunk_start).astimezone(UTC)
-                end_utc = dt_util.start_of_local_day(chunk_end).astimezone(UTC)
-                try:
-                    prices = await client.fetch_day_ahead(start_utc, end_utc)
-                except (EntsoeError, EntsoeAuthError) as err:
-                    _LOGGER.warning(
-                        "ENTSO-E historical fetch failed for %s..%s: %s",
-                        chunk_start,
-                        chunk_end,
-                        err,
-                    )
-                    chunk_start = chunk_end
-                    continue
-                self._historical_spots.update(prices)
-                # Mark stable past days that are STILL short after this
-                # fetch so the next ticks skip them until the TTL expires;
-                # clear the marker for any day that is now complete.
-                day = chunk_start
-                while day < chunk_end:
-                    ds_utc = dt_util.start_of_local_day(day).astimezone(UTC)
-                    got = sum(
-                        1
-                        for h in range(24)
-                        if (ds_utc + timedelta(hours=h)) in self._historical_spots
-                    )
-                    if got < 20 and day < stable_before:
-                        self._short_spot_days[day] = now
-                    else:
-                        self._short_spot_days.pop(day, None)
-                    day += timedelta(days=1)
-                chunk_start = chunk_end
-
-    async def _fetch_spot_prices(self) -> dict[datetime, float]:
-        api_key = self.entry.data.get(CONF_API_KEY)
-        if not api_key:
-            raise EntsoeError("missing ENTSO-E API key")
-
-        # Window the request on the *local* day (Europe/Brussels) so a
-        # 00:00-02:00 local query doesn't drop yesterday's UTC tail or
-        # miss tomorrow because UTC is still on the previous date.
-        local_today = dt_util.now().date()
-        now_local = dt_util.now()
-        want_tomorrow = now_local.hour >= 11
-        if (
-            self._spot_cache_day == local_today
-            and (not want_tomorrow or self._spot_cache_includes_tomorrow)
-            and self._spot_cache
-        ):
-            return self._spot_cache
-
-        client = EntsoeClient(api_key, self._session)
-        # Anchor both endpoints on local midnight so the fetched UTC
-        # window matches the actual local-day hour count. A naive
-        # ``end = start + timedelta(days=N)`` adds 24 UTC hours and
-        # falls one hour short on the fall-back Sunday (local day has
-        # 25 hours), so the last local hour ends up missing from the
-        # spot cache. Same anchoring as ``_recorder_rows`` uses for the
-        # recorder window.
-        start = dt_util.start_of_local_day(local_today).astimezone(UTC)
-        days = 2 if want_tomorrow else 1
-        end = dt_util.start_of_local_day(local_today + timedelta(days=days)).astimezone(
-            UTC
-        )
-        # Keep the native 15-minute slots only for suppliers that bill on
-        # them (Engie Dynamic); everyone else gets the hourly aggregate.
-        snap = self._snapshot
-        quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
-        prices = await client.fetch_day_ahead(start, end, quarter_hourly=quarter_hourly)
-        self._spot_cache = prices
-        self._spot_cache_day = local_today
-        # Flag what the response actually carries, not what we asked
-        # for: ENTSO-E publishes the day-ahead curve around 12-13 CET,
-        # so a tick that requests tomorrow before publication comes
-        # back with today only. Locking the flag to True on intent
-        # would block the next hourly tick from retrying and tomorrow's
-        # prices wouldn't surface until local midnight (reloading the
-        # entry was the only way out).
-        tomorrow = local_today + timedelta(days=1)
-        self._spot_cache_includes_tomorrow = any(
-            dt_util.as_local(h).date() == tomorrow for h in prices
-        )
-        return prices
-
-    async def _track_monthly_peak(self) -> None:
-        if self.entry.data.get(CONF_REGION) != REGION_FLANDERS:
-            # Outside Flanders the capacity tariff doesn't apply. Reset
-            # any peak left over from a previous Flanders config so it
-            # doesn't linger in diagnostics or the persistent store. The
-            # banked window goes too, or moving back to Flanders later would
-            # resume billing on year-old peaks from the previous address;
-            # Fluvius likewise restarts the window when the grid user changes.
-            self._peak_kw = 0.0
-            self._peak_month = None
-            self._peak_history.clear()
-            return
-        # Roll over on the local 1st-of-month; using UTC would lag CET/CEST
-        # users by 1-2 hours on the boundary and miss late-Dec-31 / early-Jan-1.
-        local_now = dt_util.now()
-        current_month = date(local_now.year, local_now.month, 1)
-        if self._peak_month != current_month:
-            # Bank the month that just closed before resetting: the capacity
-            # tariff bills the mean of the last twelve monthly peaks, not the
-            # one being accumulated. A peak of 0 means the month collected no
-            # reading at all (fresh entry, or HA down throughout), which is not
-            # a measured 0 and must not drag the mean down.
-            if self._peak_month is not None and self._peak_kw > 0.0:
-                self._peak_history[self._peak_month.isoformat()] = self._peak_kw
-            # Eleven completed months plus the running one make twelve.
-            for stale in sorted(self._peak_history)[:-11]:
-                del self._peak_history[stale]
-            self._peak_month = current_month
-            self._peak_kw = 0.0
-
-        mode = self.entry.data.get(CONF_CAPACITY_MODE)
-        if mode == CAPACITY_MODE_FIXED:
-            # Use the configured value directly; rolling-max would
-            # ignore a mid-month decrease the user just made via
-            # OptionsFlow until next month rollover.
-            self._peak_kw = float(
-                self.entry.data.get(CONF_CAPACITY_FIXED_KW, VREG_CAPACITY_FLOOR_KW)
-            )
-        elif mode == CAPACITY_MODE_SENSOR:
-            entity_id = self.entry.data.get(CONF_CAPACITY_PEAK_SENSOR)
-            state: State | None = self.hass.states.get(entity_id) if entity_id else None
-            if state is not None and state.state not in ("unknown", "unavailable"):
-                try:
-                    value = float(state.state)
-                except (TypeError, ValueError):
-                    value = 0.0
-                # Scale by the source unit: the auto-pick walks back
-                # from the Energy dashboard kWh sensor to a Riemann
-                # integration source, which is almost always a power
-                # sensor in W. Without scaling, 4481 W is stored as
-                # 4481 kW and the capacity_cost sensor inflates by
-                # 1000x (issue #19). An empty / missing unit is kept
-                # as kW for back-compat with sensors that never set
-                # the attribute.
-                unit = (state.attributes.get("unit_of_measurement") or "").strip()
-                if unit in ("W", "VA"):
-                    value *= 0.001
-                elif unit not in ("", "kW", "kVA"):
-                    _LOGGER.warning(
-                        "capacity peak sensor %s reports in %r; "
-                        "expected kW/W/VA/kVA, ignoring this update",
-                        entity_id,
-                        unit,
-                    )
-                    value = 0.0
-                if value > self._peak_kw:
-                    self._peak_kw = value
-
-    def _peak_terms(self) -> list[float]:
-        """The monthly peaks that go into the mean, newest last.
-
-        Only count the in-progress month once it HAS a measurement. It is
-        reset to 0 on the local 1st, and a zero floored to 2.5 is not a
-        measured peak: including it dropped the twelve-term mean at every
-        rollover, stepping capacity_cost and current_year_cost down for the
-        first hours of every month and back up as the month accrued. This is
-        the same rule ``_billed_peak_kw`` documents for a month that was never
-        measured, and for the same reason: Fluvius estimates a missing month
-        as the mean of the validated ones, and inserting a set's own mean
-        leaves the mean unchanged, so leaving the gap out lands on the same
-        number.
-
-        The count is published as ``capacity_peak_months``, so it has to come
-        from here rather than be recomputed at the call site: reporting
-        ``len(self._peak_history) + 1`` claimed a month the mean had not taken
-        for as long as the in-progress one stayed unmeasured.
-        """
-        peaks = list(self._peak_history.values())
-        if self._peak_kw > 0.0:
-            peaks.append(self._peak_kw)
-        return peaks
-
-    def _billed_peak_kw(self) -> float:
-        """The kW the capacity tariff is actually charged on.
-
-        Fluvius bills the "gemiddelde maandpiek", and its own methodology gives
-        the formula outright: "Rekenkundig gemiddelde van de Max (Maandpiek
-        (m), 2.5) voor elke maand (m) ... Er worden maximaal 12 maanden
-        gebruikt." So the regulated minimum lands on EACH month before the
-        mean, not on the mean, and one monthly peak is the highest
-        quarter-hour offtake of that month. Because every term is then at
-        least the floor, the mean is too, and no outer clamp is needed.
-
-        Fewer than twelve months of history means the mean is taken over what
-        there is, so a fresh entry starts out billing on this month alone
-        (exactly what it did before the window existed) and converges over the
-        first year. That also covers a month we never measured: Fluvius
-        estimates a missing month as the mean of the validated ones, and
-        inserting a set's own mean into it leaves the mean unchanged, so
-        simply leaving the gap out lands on the same number. Fixed mode
-        bypasses the window entirely: the user is stating a peak, not
-        measuring one.
-        """
-        if self.entry.data.get(CONF_CAPACITY_MODE) == CAPACITY_MODE_FIXED:
-            return max(self._peak_kw, VREG_CAPACITY_FLOOR_KW)
-        peaks = self._peak_terms()
-        if not peaks:
-            # A brand-new entry in the first hours of its first month has
-            # nothing measured anywhere; the regulated minimum is the answer.
-            return VREG_CAPACITY_FLOOR_KW
-        return sum(max(kw, VREG_CAPACITY_FLOOR_KW) for kw in peaks) / len(peaks)
 
     def _build_hourly(
         self,
@@ -1817,148 +889,6 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
             if rate is not None:
                 out[utc] = rate
         return out
-
-    def _billable_spots(
-        self, extra_spots: dict[datetime, float]
-    ) -> dict[datetime, float]:
-        """Persisted year-to-date spots merged with this tick's fresh curve,
-        with anything past today dropped.
-
-        The drop has to happen on the MERGED dict, not on either half: the
-        freshly fetched curve is exactly where tomorrow's prices come from, and
-        letting them into a month mean pulls the flat monthly rate toward a day
-        that has not been billed. Both month means spelled this out.
-        """
-        merged = dict(self._historical_spots)
-        merged.update(extra_spots)
-        return _drop_future_spots(merged, dt_util.now().date())
-
-    def _monthly_spot_mean(
-        self, year: int, month: int, extra_spots: dict[datetime, float]
-    ) -> float | None:
-        """Arithmetic mean of the (year, month)'s hourly Day-Ahead spots.
-
-        Merges the persisted year-to-date cache with ``extra_spots`` (today's
-        freshly fetched curve) so the current month's running mean stays up to
-        date within a tick, and de-duplicates by timestamp. Returns ``None``
-        when no spot for that month is available yet (cold start).
-        """
-        return _mean_of_month(self._billable_spots(extra_spots), year, month)
-
-    def _restore_spp_weights(self, blob: dict[str, Any]) -> None:
-        """Rehydrate the persisted SPP profile blob into ``_spp_weights``."""
-        year = blob.get("year")
-        raw = blob.get("weights")
-        if not isinstance(year, int) or not isinstance(raw, dict):
-            return
-        parsed: SppWeights = {}
-        for key, value in raw.items():
-            if not isinstance(key, str) or not isinstance(value, (int, float)):
-                continue
-            try:
-                month, day, hour = (int(x) for x in key.split(","))
-            except ValueError:
-                continue
-            parsed[(month, day, hour)] = float(value)
-        if not parsed:
-            return
-        self._spp_weights = parsed
-        self._spp_weights_year = year
-        fetched = blob.get("fetched_at")
-        if isinstance(fetched, str):
-            try:
-                self._spp_fetched_at = datetime.fromisoformat(fetched)
-            except ValueError:
-                self._spp_fetched_at = None
-
-    async def _ensure_spp_weights(self) -> None:
-        """Refresh the Synergrid SPP profile for the current year if stale.
-
-        Only called for a custom entry that opted into SPP-weighted injection.
-        The ex-ante file is revised in-year, so re-fetch monthly. Soft-fail: on
-        error keep whatever we already have (the caller degrades to the plain
-        arithmetic mean) and back off ``_SPP_RETRY_TTL`` so a persistent failure
-        doesn't re-download the 52 MB workbook every tick.
-        """
-        now = dt_util.utcnow()
-        year = dt_util.now().year
-        fresh = (
-            self._spp_weights_year == year
-            and self._spp_fetched_at is not None
-            and (now - self._spp_fetched_at) < timedelta(days=_SPP_REFRESH_DAYS)
-        )
-        if fresh:
-            return
-        if (
-            self._spp_failed_at is not None
-            and (now - self._spp_failed_at) < _SPP_RETRY_TTL
-        ):
-            return
-        weights = await fetch_spp_weights(self._session, year)
-        if weights:
-            self._spp_weights = weights
-            self._spp_weights_year = year
-            self._spp_fetched_at = now
-            self._spp_failed_at = None
-        else:
-            self._spp_failed_at = now
-
-    def _spp_weighted_month_mean(
-        self, year: int, month: int, extra_spots: dict[datetime, float]
-    ) -> float | None:
-        """SPP-weighted mean of the delivery month's Day-Ahead spots, or None.
-
-        Weights each hourly price by the Synergrid solar production profile so
-        the injection index matches an SPP-indexed contract. Uses the same
-        local-delivery-month filter as :meth:`_monthly_spot_mean`. Returns
-        ``None`` (caller falls back to the plain mean) when the profile or the
-        month's spots are unavailable.
-        """
-        if not self._spp_weights:
-            return None
-        return _spp_weighted_month_mean(
-            self._billable_spots(extra_spots), self._spp_weights, year, month
-        )
-
-    def _snapshot_age_hours(self) -> float:
-        if self._snapshot_fetched_at is None:
-            return float("inf")
-        return (dt_util.utcnow() - self._snapshot_fetched_at).total_seconds() / 3600.0
-
-    def _prune_historical_spots(self) -> None:
-        """Drop cached spots older than the current YTD window.
-
-        Called each tick so the in-memory dict (and the persisted blob) do
-        not grow unbounded across year boundaries. Anchor on local midnight:
-        in Brussels (UTC+1/+2) the local Jan 1 00:00 falls one or two hours
-        BEFORE UTC Jan 1 00:00, so a UTC anchor would silently drop the first
-        hour or two of YTD. Prior-year keys are pure dead weight -- every
-        consumer filters by the current (year, month) or an exact current-year
-        hour key -- so removing them changes no result."""
-        if not self._historical_spots:
-            return
-        today = dt_util.now().date()
-        keep_after = dt_util.start_of_local_day(date(today.year, 1, 1)).astimezone(UTC)
-        # Within a calendar year every cached hour already sits at or after the
-        # cutoff, so skip rebuilding the whole dict every tick. Only rebuild
-        # when a prior-year key actually needs dropping (the year boundary).
-        # The min() scan is a cheap comparison; it avoids a full dict
-        # reallocation on each of the other 364 days.
-        if min(self._historical_spots) >= keep_after:
-            return
-        # Mutate in place rather than rebinding. _ensure_historical_spots
-        # merges each fetched chunk into this attribute and re-resolves it
-        # after every await, so a prune landing between two chunks (the tick
-        # calls it from _save_persistent while a backfill is mid-fetch) would
-        # rebind the attribute and silently discard everything the earlier
-        # chunks had already merged into the old dict.
-        for stale_hour in [h for h in self._historical_spots if h < keep_after]:
-            del self._historical_spots[stale_hour]
-        # Drop prior year days from the completeness set alongside their spots
-        # so it doesn't grow without bound across years.
-        self._complete_spot_days = {
-            d for d in self._complete_spot_days if d.year >= today.year
-        }
 
     async def _save_persistent(self) -> None:
         # Removal/unload guard: a tick resuming after the entry was removed

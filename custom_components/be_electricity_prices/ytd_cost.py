@@ -36,6 +36,8 @@ shows up as a seam, not an exception."""
 
 from __future__ import annotations
 
+import logging
+
 from collections.abc import AsyncIterator
 from datetime import date
 from datetime import datetime
@@ -90,9 +92,6 @@ from .pricing import (
     compute_breakdown,
     static_breakdown,
 )
-from .synergrid import (
-    _LOGGER,
-)
 from .providers.base import (
     DynamicRates,
     ImpactRates,
@@ -109,6 +108,9 @@ from .spot_stats import (
 from .synergrid import (
     SppWeights,
 )
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _days_through(start: date, end: date) -> list[date]:

@@ -34,6 +34,8 @@ the card rate or a negotiated one."""
 
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Awaitable
 from collections.abc import Callable
 from dataclasses import replace
@@ -56,9 +58,6 @@ from .const import (
     CONF_MANUAL_ENERGY_SINGLE,
     CONF_MANUAL_YEARLY_FEE,
 )
-from .synergrid import (
-    _LOGGER,
-)
 from .providers.base import (
     DynamicRates,
     EnergyRates,
@@ -72,6 +71,9 @@ from .snapshot_store import (
     _include_vat,
     _snapshot_for_month,
 )
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _parse_iso_date(value: Any) -> date | None:
