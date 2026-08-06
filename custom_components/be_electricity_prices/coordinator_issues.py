@@ -63,6 +63,7 @@ from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.util import dt as dt_util
 
 from .providers.base import SupplierSnapshot
 
@@ -251,15 +252,35 @@ class _IssuesMixin:
             and self._snapshot.taxes.region_connection_fee_unavailable,
         )
 
+    def _entry_extractor(self) -> SupplierExtractor | None:
+        """This entry's registry extractor, or None if this build drops it."""
+        try:
+            return get_extractor(str(self.entry.data.get(CONF_SUPPLIER, "")))
+        except ExtractorError:
+            return None
+
     def _cards_unreadable(self) -> bool:
         """True when this entry's supplier publishes unparseable cards."""
-        try:
-            extractor = get_extractor(str(self.entry.data.get(CONF_SUPPLIER, "")))
-        except ExtractorError:
-            # An entry on a supplier this build no longer ships. Fall back to
-            # the ordinary card rather than claim anything about its layout.
+        extractor = self._entry_extractor()
+        # An entry on a supplier this build no longer ships falls back to the
+        # ordinary card rather than claiming anything about its layout.
+        return extractor is not None and extractor.cards_unreadable
+
+    def _supply_ended(self) -> bool:
+        """True once this entry's supplier has stopped supplying.
+
+        The ONE place in the deprecation handling that reads the clock, and
+        deliberately so. ``deprecated_until`` is the date the contracts stop
+        being supplied, so past it a failing fetch is the expected outcome
+        rather than a fault: the supplier simply is not publishing any more.
+
+        Local date, not UTC: the withdrawal is a Belgian calendar event, and
+        a UTC comparison flips a day late for CET/CEST users.
+        """
+        extractor = self._entry_extractor()
+        if extractor is None or extractor.deprecated_until is None:
             return False
-        return extractor.cards_unreadable
+        return dt_util.now().date() > extractor.deprecated_until
 
     def _sync_extractor_issue(
         self, message: str | None, *, transient: bool = False
@@ -292,7 +313,13 @@ class _IssuesMixin:
         unreachable_id = f"extractor_unreachable_{self.entry.entry_id}"
         unreadable_id = f"extractor_unreadable_{self.entry.entry_id}"
         all_ids = (failed_id, unreachable_id, unreadable_id)
-        if not message:
+        # A supplier past its supply end date has stopped publishing, so the
+        # fetch failing is the expected outcome and not news. Reporting it
+        # stacks an alarming "could not reach the supplier" card on top of
+        # the deprecation card that already explains the situation and says
+        # what to do; the user is left to work out they describe one event.
+        # The deprecation card carries this state on its own.
+        if not message or self._supply_ended():
             for issue_id in all_ids:
                 ir.async_delete_issue(self.hass, DOMAIN, issue_id)
             return
@@ -339,10 +366,14 @@ class _IssuesMixin:
         """Raise or clear the 'this supplier is leaving the market' issue.
 
         Driven purely by the registry's ``deprecated_until`` /
-        ``deprecated_successor`` (``providers/base.py``), never by comparing
-        a date to the clock: the card is an instruction to switch supplier,
-        and it stays up for as long as the entry points at a supplier that
-        has announced its exit. Clears by itself when the user re-points the
+        ``deprecated_successor`` (``providers/base.py``): the card is an
+        instruction to switch supplier, and it stays up for as long as the
+        entry points at a supplier that has announced its exit. Whether it
+        shows at all never depends on the clock. The end date is compared to
+        the clock for one thing only, picking the tense: past it the transfer
+        has happened, and a card still saying it will happen on a date now in
+        the past, and that nothing is broken yet, would be misinforming the
+        one user it is aimed at. Clears by itself when the user re-points the
         entry, and on any release that drops the registry flag.
 
         Kept separate from the extractor / staleness cards on purpose. Those
@@ -365,6 +396,7 @@ class _IssuesMixin:
         if extractor.deprecated_until is None:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
             return
+        ended = self._supply_ended()
         placeholders = {
             "supplier": extractor.label,
             "ends_on": extractor.deprecated_until.isoformat(),
@@ -385,10 +417,19 @@ class _IssuesMixin:
             # config flow will refuse (it aborts at the contract step with
             # supplier_region_unavailable) sends them down a dead end;
             # the fallback card states the situation without the bad advice.
+            #
+            # Past the end date the same card would read "is transferring your
+            # contract on <a date in the past>" and "nothing is broken yet",
+            # both false by then, so the elapsed variants say the transfer has
+            # happened and this entry has stopped updating.
             translation_key=(
-                "supplier_deprecated"
+                ("supplier_deprecated_ended" if ended else "supplier_deprecated")
                 if successor is not None
-                else "supplier_deprecated_no_successor"
+                else (
+                    "supplier_deprecated_ended_no_successor"
+                    if ended
+                    else "supplier_deprecated_no_successor"
+                )
             ),
             # Labels, not registry ids: the card tells the user to pick a
             # supplier from a label-based dropdown, so "DATS 24" and

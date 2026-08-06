@@ -589,9 +589,17 @@
       "title": "{supplier} is transferring your contract to {successor} on {ends_on}",
       "description": "{supplier} is leaving the residential energy market: your contract transfers automatically to {successor} on {ends_on}. Prices stay correct until {supplier} stops publishing its tariff card, so nothing is broken yet -- but this entry will stop updating afterwards. Edit the entry and select {successor} as the supplier once your transfer is confirmed."
     },
+    "supplier_deprecated_ended": {
+      "title": "{supplier} has transferred your contract to {successor}",
+      "description": "{supplier} left the residential energy market on {ends_on} and your contract has transferred automatically to {successor}. It has stopped publishing a tariff card, so this entry can no longer update: it is still showing the last prices it read, and those are no longer what you are billed. Edit the entry and select {successor} as the supplier to start pricing your new contract."
+    },
     "supplier_deprecated_no_successor": {
       "title": "{supplier} stops supplying residential energy on {ends_on}",
       "description": "{supplier} is leaving the residential energy market on {ends_on}. Prices stay correct until it stops publishing its tariff card, but this entry will stop updating afterwards. Your contract is being transferred to another supplier: check the letter they send you, then edit this entry and select that supplier. If it is not in the list, this integration does not cover it in your region yet -- please open an issue on GitHub."
+    },
+    "supplier_deprecated_ended_no_successor": {
+      "title": "{supplier} has stopped supplying residential energy",
+      "description": "{supplier} left the residential energy market on {ends_on} and has stopped publishing a tariff card, so this entry can no longer update: it is still showing the last prices it read, and those are no longer what you are billed. Your contract has been transferred to another supplier: check the letter they sent you, then edit this entry and select that supplier. If it is not in the list, this integration does not cover it in your region yet -- please open an issue on GitHub."
     },
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) does not publish an exclusive-night distribution rate",

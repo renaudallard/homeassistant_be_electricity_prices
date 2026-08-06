@@ -1113,11 +1113,14 @@ async def test_sync_stale_issue_creates_and_clears(hass: HomeAssistant) -> None:
 
 
 async def test_sync_deprecated_supplier_issue_creates_and_clears(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """An entry on a supplier that has announced its exit gets a Repairs
     card naming the successor and the date, and an entry on any other
-    supplier gets none. Driven by the registry flag, never by the clock."""
+    supplier gets none. WHETHER the card shows is driven by the registry
+    flag alone; only its tense reads the clock, so this is frozen before
+    DATS 24's end date or it would flip variant on 2026-09-01."""
+    freezer.move_to("2026-08-06 12:00:00+02:00")
     entry = make_entry(
         supplier="dats24", contract="dats24_groen_variabel", region="flanders"
     )
@@ -1136,6 +1139,7 @@ async def test_sync_deprecated_supplier_issue_creates_and_clears(
         "successor": "EnergyVision",
         "ends_on": "2026-08-31",
     }
+    assert issue.translation_key == "supplier_deprecated"
 
     # A supplier with no lifecycle flag must not raise the card, and must
     # clear one left behind by a previous supplier on the same entry.
@@ -1144,6 +1148,98 @@ async def test_sync_deprecated_supplier_issue_creates_and_clears(
     )
     coord._sync_deprecated_supplier_issue()
     assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_extractor_cards_are_suppressed_once_supply_ended(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Past its end date a withdrawn supplier stops publishing, so the fetch
+    failing is expected, not news.
+
+    Reporting it stacks an alarming "could not reach the supplier" card on
+    top of the deprecation card that already explains the situation and says
+    what to do, leaving the user to work out that the two describe one
+    event. DATS 24 stops supplying on 2026-08-31.
+    """
+    entry = make_entry(
+        supplier="dats24", contract="dats24_groen_variabel", region="flanders"
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    registry = ir.async_get(hass)
+    failed_id = f"extractor_failed_{entry.entry_id}"
+    unreachable_id = f"extractor_unreachable_{entry.entry_id}"
+
+    # Before the date the cards still publish, so a failure IS a regression
+    # worth surfacing. Suppressing it early would hide a real break.
+    freezer.move_to("2026-08-30 12:00:00+02:00")
+    coord._sync_extractor_issue("404 fetching the August card")
+    assert registry.async_get_issue(DOMAIN, failed_id) is not None
+
+    # On the last supplied day it is still a real failure.
+    freezer.move_to("2026-08-31 23:00:00+02:00")
+    coord._sync_extractor_issue("404 fetching the August card")
+    assert registry.async_get_issue(DOMAIN, failed_id) is not None
+
+    # The day after, the same 404 is the expected end state and is dropped,
+    # along with any card an earlier tick left behind.
+    freezer.move_to("2026-09-01 09:00:00+02:00")
+    coord._sync_extractor_issue("404 fetching the September card")
+    assert registry.async_get_issue(DOMAIN, failed_id) is None
+    assert registry.async_get_issue(DOMAIN, unreachable_id) is None
+    coord._sync_extractor_issue("TimeoutError", transient=True)
+    assert registry.async_get_issue(DOMAIN, unreachable_id) is None
+
+
+async def test_deprecation_card_switches_tense_after_the_end_date(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Past the end date the card must stop saying the transfer is still
+    coming. The pre-date wording promises prices stay correct and that
+    nothing is broken yet, both false once the supplier has gone, and it
+    names a date now in the past as if it were future."""
+    entry = make_entry(
+        supplier="dats24", contract="dats24_groen_variabel", region="flanders"
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    registry = ir.async_get(hass)
+    issue_id = f"supplier_deprecated_{entry.entry_id}"
+
+    freezer.move_to("2026-08-31 23:00:00+02:00")
+    coord._sync_deprecated_supplier_issue()
+    before = registry.async_get_issue(DOMAIN, issue_id)
+    assert before is not None
+    assert before.translation_key == "supplier_deprecated"
+
+    freezer.move_to("2026-09-01 09:00:00+02:00")
+    coord._sync_deprecated_supplier_issue()
+    issue = registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_key == "supplier_deprecated_ended"
+    # Same id either way, so the panel shows one card that changes wording
+    # rather than a second one appearing beside the first.
+    assert issue.translation_placeholders == {
+        "supplier": "DATS 24",
+        "successor": "EnergyVision",
+        "ends_on": "2026-08-31",
+    }
+
+
+async def test_supply_ended_uses_the_local_date_not_utc(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The withdrawal is a Belgian calendar event. At 00:30 local on 1 Sep
+    it is still 22:30 UTC on 31 Aug, so a UTC comparison would call supply
+    live for another 90 minutes and keep raising extractor cards."""
+    entry = make_entry(
+        supplier="dats24", contract="dats24_groen_variabel", region="flanders"
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    freezer.move_to("2026-09-01 00:30:00+02:00")
+    assert coord._supply_ended() is True
 
 
 async def test_deprecated_supplier_issue_names_the_successor_in_both_regions(
@@ -1552,7 +1648,13 @@ def test_repair_issue_kinds_match_the_declared_strings() -> None:
             / "strings.json"
         ).read_text(encoding="utf-8")
     )
-    declared = set(strings["issues"]) - {"supplier_deprecated_no_successor"}
+    # The three supplier_deprecated variants share ONE issue id and differ
+    # only in translation_key, so only the base name is a removable kind.
+    declared = set(strings["issues"]) - {
+        "supplier_deprecated_no_successor",
+        "supplier_deprecated_ended",
+        "supplier_deprecated_ended_no_successor",
+    }
     assert declared == set(_REPAIR_ISSUE_KINDS)
 
 

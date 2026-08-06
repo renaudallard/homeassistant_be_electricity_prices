@@ -56,7 +56,7 @@ Never read `entry.runtime_data` as "this coordinator" during first refresh.
 `__init__` snapshots two things at construction time so later reload races resolve correctly:
 
 - `self._supplier_tuple` (`coordinator.py:845`): the `(supplier, contract, region)` triple frozen at build time. `async_unload_entry` (`__init__.py:242`) and `_save_persistent` (`coordinator.py:893`) target this *original* tuple even after an OptionsFlow edit has mutated `entry.data`, because HA mutates `entry.data` before firing the reload.
-- `self._entry_data_signature` (`coordinator.py:854`): a `frozenset` of every `entry.data` item, built by `_compute_data_signature` (`coordinator.py:780`). `_async_options_updated` (`__init__.py:332`) compares it against the current entry to skip a needless reload when only `entry.options` changed (an OptionsFlow no-op `options = {}` finalize). Every load-bearing field lives in `entry.data`, so an options-only delta is safe to ignore.
+- `self._entry_data_signature` (`coordinator.py:854`): a `frozenset` of every `entry.data` item, built by `_compute_data_signature` (`coordinator.py:780`). `_async_options_updated` (`__init__.py:333`) compares it against the current entry to skip a needless reload when only `entry.options` changed (an OptionsFlow no-op `options = {}` finalize). Every load-bearing field lives in `entry.data`, so an options-only delta is safe to ignore.
 
 Other important instance fields set in `__init__`:
 
@@ -284,7 +284,7 @@ Widening the table to three local days would also have papered over the symptom,
 
 ### 5.2 Cheapest / most-expensive window
 
-The window computation is *not* owned by the coordinator. `_find_window` (`__init__.py:369`) is a pure helper behind the `cheapest_window` and `most_expensive_window` services (`__init__.py:369`, `__init__.py:369`). It reads `coordinator.data.hourly` and `.resolution`, scales the requested `duration_hours` to slots via `slots_per_hour(resolution)` (`__init__.py:526`), and only considers strictly time-contiguous runs (`__init__.py:526`) so a gap in a dynamic table can't stretch a window past its duration. `_today_ranked` in `sensor.py` computes the `cheapest_4h_today` / `most_expensive_4h_today` attributes on the `current_price` sensor.
+The window computation is *not* owned by the coordinator. `_find_window` (`__init__.py:370`) is a pure helper behind the `cheapest_window` and `most_expensive_window` services (`__init__.py:370`, `__init__.py:370`). It reads `coordinator.data.hourly` and `.resolution`, scales the requested `duration_hours` to slots via `slots_per_hour(resolution)` (`__init__.py:527`), and only considers strictly time-contiguous runs (`__init__.py:527`) so a gap in a dynamic table can't stretch a window past its duration. `_today_ranked` in `sensor.py` computes the `cheapest_4h_today` / `most_expensive_4h_today` attributes on the `current_price` sensor.
 
 ## 6. Monthly capacity peak (Flanders)
 
@@ -376,20 +376,32 @@ Repairs issues, all keyed by `entry_id`:
 | `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 322 |
 | `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) AND the successor has a contract in the entry's region | 338 |
 | `supplier_deprecated_no_successor` | `_sync_deprecated_supplier_issue` | same, but the successor is unset, unknown to this build, or has no contract in the entry's region | 338 |
+| `supplier_deprecated_ended` | `_sync_deprecated_supplier_issue` | same as `supplier_deprecated`, but the local date is past `deprecated_until`: the transfer has happened and this entry has stopped updating | 338 |
+| `supplier_deprecated_ended_no_successor` | `_sync_deprecated_supplier_issue` | same, past the date, with no usable successor | 338 |
 | `connection_fee_missing` | `_sync_connection_fee_issue` | the snapshot carries `TaxOverlay.region_connection_fee_unavailable`, i.e. a Walloon card that stopped printing the connection-fee row | 233 |
 
 The first four are failure states and clear on a successful refresh, as does
 `connection_fee_missing` once the supplier prints the row again.
 `supplier_deprecated` is not: it is a lifecycle notice, evaluated first on every
-tick (`coordinator.py:499`) straight off the registry flag and never against the
-clock, and it clears only when the entry is re-pointed at a supplier that has not
-announced its exit. Both variants share one issue id, so an entry only ever
-carries one of them; `_successor_for` decides which by checking that the named
-successor actually serves the entry's region. Prices are deliberately untouched while it is up -- a user
+tick (`coordinator.py:499`) straight off the registry flag, and it clears only
+when the entry is re-pointed at a supplier that has not
+announced its exit. All four variants share one issue id, so an entry only ever
+carries one of them; `_successor_for` decides whether a successor can be named
+by checking it actually serves the entry's region, and `_supply_ended`
+(`coordinator_issues.py:269`) picks the tense. That date comparison is the only
+clock read in the deprecation path, and it is on the LOCAL date: the withdrawal
+is a Belgian calendar event, so a UTC comparison flips a day late for CET/CEST
+users. Past that date the extractor cards are suppressed too
+(`coordinator_issues.py:322`); the supplier has stopped publishing, so a failing
+fetch is the expected end state rather than a fault, and stacking a "could not
+reach the supplier" card on top of this one would leave the user to work out
+that the two describe a single event. `snapshot_stale` is deliberately NOT
+suppressed: it states a true fact, that the prices being shown are old.
+Prices are deliberately untouched while it is up -- a user
 still being supplied must still be billed correctly for the months they are
 supplied.
 
-`_EXTRACTOR_ISSUE_THRESHOLD` is `2` (`coordinator_snapshot.py:80`): a lone transient CDN timeout does not raise the softer "unreachable" card, because a single failure almost always recovers on the next hourly tick and a false alarm wrongly tells the user the supplier changed its layout. `is_transient_fetch_error` (from `providers._pdf`) classifies the failure (`coordinator_snapshot.py:363`); actionable failures raise on the first occurrence, transient ones only after the threshold. The consecutive count rides the shared negative-cache row and resets to zero on the first success (`failed.pop`, `coordinator_snapshot.py:334`). The `extractor_failed`, `extractor_unreachable` and `extractor_unreadable` slots are mutually exclusive; raising any one clears the other two (`coordinator_issues.py:305`). A supplier flagged `cards_unreadable` takes the third slot in place of the actionable one, because "the supplier changed its layout, open a GitHub issue" is advice nobody can act on when the card has no text layer at all. A transient network error on such a supplier still reports as transient.
+`_EXTRACTOR_ISSUE_THRESHOLD` is `2` (`coordinator_snapshot.py:80`): a lone transient CDN timeout does not raise the softer "unreachable" card, because a single failure almost always recovers on the next hourly tick and a false alarm wrongly tells the user the supplier changed its layout. `is_transient_fetch_error` (from `providers._pdf`) classifies the failure (`coordinator_snapshot.py:363`); actionable failures raise on the first occurrence, transient ones only after the threshold. The consecutive count rides the shared negative-cache row and resets to zero on the first success (`failed.pop`, `coordinator_snapshot.py:334`). The `extractor_failed`, `extractor_unreachable` and `extractor_unreadable` slots are mutually exclusive; raising any one clears the other two (`coordinator_issues.py:333`). A supplier flagged `cards_unreadable` takes the third slot in place of the actionable one, because "the supplier changed its layout, open a GitHub issue" is advice nobody can act on when the card has no text layer at all. A transient network error on such a supplier still reports as transient.
 
 Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`snapshot_store.py:99`, dedupes a burst of update ticks across siblings), `_MONTHLY_FAILURE_TTL` is 30 minutes (`snapshot_store.py:117`, for `fetch_for_month`). A transient `fetch_for_month` failure is deliberately NOT written to `monthly_snapshot_cache` as a `None` (a cached `None` means "no archive for this month"); the separate failure marker (`snapshot_store.py:339`) prevents re-attempting every uncached month each tick while still letting a real recovery repopulate.
 

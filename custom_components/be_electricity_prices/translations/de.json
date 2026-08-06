@@ -589,9 +589,17 @@
       "title": "{supplier} uebertraegt Ihren Vertrag am {ends_on} an {successor}",
       "description": "{supplier} verlaesst den Markt fuer Haushaltsenergie: Ihr Vertrag geht am {ends_on} automatisch an {successor} ueber. Die Preise bleiben korrekt, bis {supplier} seine Tarifkarte nicht mehr veroeffentlicht, es ist also noch nichts defekt -- danach wird dieser Eintrag jedoch nicht mehr aktualisiert. Bearbeiten Sie den Eintrag und waehlen Sie {successor} als Anbieter, sobald Ihre Uebertragung bestaetigt ist."
     },
+    "supplier_deprecated_ended": {
+      "title": "{supplier} hat Ihren Vertrag an {successor} ubertragen",
+      "description": "{supplier} hat den Privatkunden-Energiemarkt am {ends_on} verlassen, und Ihr Vertrag wurde automatisch an {successor} ubertragen. Es wird keine Tarifkarte mehr veroffentlicht, dieser Eintrag kann sich also nicht mehr aktualisieren: er zeigt weiterhin die zuletzt gelesenen Preise, die nicht mehr Ihrer Rechnung entsprechen. Bearbeiten Sie den Eintrag und wahlen Sie {successor} als Anbieter, um Ihren neuen Vertrag zu berechnen."
+    },
     "supplier_deprecated_no_successor": {
       "title": "{supplier} stellt die Belieferung von Haushalten am {ends_on} ein",
       "description": "{supplier} verlaesst am {ends_on} den Markt fuer Haushaltsenergie. Die Preise bleiben korrekt, bis die Tarifkarte nicht mehr veroeffentlicht wird, danach wird dieser Eintrag jedoch nicht mehr aktualisiert. Ihr Vertrag geht an einen anderen Anbieter ueber: pruefen Sie das Schreiben, das Sie erhalten, bearbeiten Sie dann diesen Eintrag und waehlen Sie diesen Anbieter aus. Steht er nicht in der Liste, unterstuetzt diese Integration ihn in Ihrer Region noch nicht -- oeffnen Sie dann bitte ein Issue auf GitHub."
+    },
+    "supplier_deprecated_ended_no_successor": {
+      "title": "{supplier} liefert keine Privatkunden-Energie mehr",
+      "description": "{supplier} hat den Privatkunden-Energiemarkt am {ends_on} verlassen und veroffentlicht keine Tarifkarte mehr: dieser Eintrag kann sich nicht mehr aktualisieren und zeigt weiterhin die zuletzt gelesenen Preise, die nicht mehr Ihrer Rechnung entsprechen. Ihr Vertrag wurde an einen anderen Anbieter ubertragen: prufen Sie das Schreiben, bearbeiten Sie dann diesen Eintrag und wahlen Sie diesen Anbieter. Steht er nicht in der Liste, deckt diese Integration ihn in Ihrer Region noch nicht ab -- bitte eroffnen Sie ein Issue auf GitHub."
     },
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) veroeffentlicht keinen Verteilungstarif fuer Exklusiv-Nacht",

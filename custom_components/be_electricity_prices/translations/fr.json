@@ -589,9 +589,17 @@
       "title": "{supplier} transfere votre contrat a {successor} le {ends_on}",
       "description": "{supplier} quitte le marche de l'energie residentielle : votre contrat sera transfere automatiquement a {successor} le {ends_on}. Les prix restent corrects jusqu'a ce que {supplier} cesse de publier sa carte tarifaire, donc rien n'est casse pour l'instant -- mais cette entree cessera ensuite de se mettre a jour. Modifiez l'entree et selectionnez {successor} comme fournisseur des que votre transfert est confirme."
     },
+    "supplier_deprecated_ended": {
+      "title": "{supplier} a transfere votre contrat a {successor}",
+      "description": "{supplier} a quitte le marche de l'energie residentielle le {ends_on} et votre contrat a ete transfere automatiquement a {successor}. Sa carte tarifaire n'est plus publiee : cette entree ne peut donc plus se mettre a jour et affiche encore les derniers prix lus, qui ne correspondent plus a votre facture. Modifiez l'entree et selectionnez {successor} comme fournisseur pour tarifer votre nouveau contrat."
+    },
     "supplier_deprecated_no_successor": {
       "title": "{supplier} cesse de fournir l'energie residentielle le {ends_on}",
       "description": "{supplier} quitte le marche de l'energie residentielle le {ends_on}. Les prix restent corrects jusqu'a ce que la carte tarifaire ne soit plus publiee, mais cette entree cessera ensuite de se mettre a jour. Votre contrat est transfere a un autre fournisseur : consultez le courrier que vous recevrez, puis modifiez cette entree et selectionnez ce fournisseur. S'il ne figure pas dans la liste, cette integration ne le couvre pas encore dans votre region -- ouvrez alors une issue sur GitHub."
+    },
+    "supplier_deprecated_ended_no_successor": {
+      "title": "{supplier} ne fournit plus d'energie residentielle",
+      "description": "{supplier} a quitte le marche de l'energie residentielle le {ends_on} et ne publie plus de carte tarifaire : cette entree ne peut donc plus se mettre a jour et affiche encore les derniers prix lus, qui ne correspondent plus a votre facture. Votre contrat a ete transfere a un autre fournisseur : consultez le courrier recu, puis modifiez cette entree et selectionnez ce fournisseur. S'il ne figure pas dans la liste, cette integration ne le couvre pas encore dans votre region -- ouvrez une issue sur GitHub."
     },
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) ne publie pas de tarif de distribution exclusif nuit",
