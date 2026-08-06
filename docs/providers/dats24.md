@@ -25,7 +25,7 @@ Related reading:
 | Regions served | Flanders, Wallonia (`dats24.py:520`, `_DATS24_REGIONS`) |
 | Products | one: `dats24_groen_variabel` (`dats24.py:111`) |
 | Card format | one PDF per month on a CDN, month spelled in the filename |
-| Probe | none (`EXTRACTOR` sets no `probe`, `dats24.py:522-539`) |
+| Probe | none (`EXTRACTOR` sets no `probe`, `dats24.py:507-524`) |
 | Archive | none (no `fetch_for_month`); past months fall back to current snapshot |
 | Lifecycle | withdrawn: contracts transfer to EnergyVision on 2026-08-31 |
 
@@ -52,7 +52,7 @@ indicative values rather than a spot formula (see Injection below).
 > publishing and `discover` goes empty rather than raising.
 >
 > This is declared on the registry entry as `deprecated_until=date(2026, 8, 31)`
-> and `deprecated_successor="energyvision"` (`dats24.py:537-538`), which drops
+> and `deprecated_successor="energyvision"` (`dats24.py:522-523`), which drops
 > DATS 24 from the config flow's new-setup and compare pickers and raises the
 > `supplier_deprecated` Repairs card on every entry still using it. Existing
 > entries keep pricing normally -- see
@@ -111,7 +111,7 @@ Two deliberate choices:
 |---|---|---|---|---|
 | `dats24_groen_variabel` | `DATS 24 Elektriciteit Groen Variabel` | `variable` | Flanders, Wallonia | False (default) |
 
-Only one `Contract` is declared (`dats24.py:526-531`). There is no fixed, TOU, or
+Only one `Contract` is declared (`dats24.py:510-517`). There is no fixed, TOU, or
 dynamic product, so `quarter_hourly` does not apply (that flag lives on
 `DynamicRates`, not on a variable contract). `spot_indexed_injection` is left at
 its default `False`: even though the energy is variable, the injection is a
@@ -144,7 +144,7 @@ pages-present-but-no-text document as a hard error (`_pdf.py:337-344`,
 
 ### Probe
 
-There is no `probe`. `EXTRACTOR` (`dats24.py:522-539`) sets only `id`, `label`,
+There is no `probe`. `EXTRACTOR` (`dats24.py:507-524`) sets only `id`, `label`,
 `contracts`, and `fetch`; `probe` and `fetch_for_month` default to `None`. The
 month-keyed URL is not a freshness signal either: within a month the file is
 replaced in place, so a HEAD tells us nothing a cheap diff could use, and the

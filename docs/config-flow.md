@@ -62,7 +62,7 @@ the "Shown when" column gives the gate.
 | `dso_tariff_mode` | `async_step_dso_tariff_mode` (`config_flow.py:436`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia (`config_flow.py:436`) |
 | `api_key` | `async_step_api_key` (`config_flow.py:302`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
 | `custom_energy` | `async_step_custom_energy` | Commodity formula (mode-dependent fields) | `CONF_CUSTOM_ENERGY_*`, `CONF_CUSTOM_YEARLY_FIXED_FEE` | Custom supplier only, after the energy/api-key step. The peak / off-peak energy boxes carry **no default** (`_add_custom_num(..., fallback=True)`): the pricing engine falls back to the single rate when they are absent, and a `vol.Optional` default is submitted verbatim when the user leaves the box alone, which wrote 0,00 into the entry and billed zero. They are shown for **both** `bi` and `dynamic` meters, matching `bi_capable` in `pricing.py:291`; gating on `bi` alone billed a fixed contract on a smart meter at the single rate for all 24 hours |
-| `capacity` | `async_step_capacity` (`config_flow.py:320`) | Peak source (sensor/fixed) + value | `CONF_CAPACITY_MODE`, `CONF_CAPACITY_PEAK_SENSOR`, `CONF_CAPACITY_FIXED_KW` | Region == Flanders (`config_flow.py:320`, `:1418`) |
+| `capacity` | `async_step_capacity` (`config_flow.py:320`) | Peak source (sensor/fixed) + value | `CONF_CAPACITY_MODE`, `CONF_CAPACITY_PEAK_SENSOR`, `CONF_CAPACITY_FIXED_KW` | Region == Flanders (`config_flow.py:507`) |
 | `connection_power` | `async_step_connection_power` (`config_flow.py:464`) | Brussels connection-power tier | `CONF_CONNECTION_KVA_TIER` | Region == Brussels (`config_flow.py:464`) |
 | `solar` | `async_step_solar` (`config_flow.py:336`) | Inverter kVA + regime | `CONF_SOLAR_KVA`, `CONF_SOLAR_REGIME` | Always |
 | `injection_api_key` | `async_step_injection_api_key` (`config_flow.py:373`) | ENTSO-E token (optional) | `CONF_API_KEY` | `_needs_injection_api_key` true (`config_flow.py:346`) |
@@ -125,7 +125,7 @@ in the mixin: `_after_meter` (`config_flow.py:447`), `_after_dso_tariff_mode`
 
 ### `user` / `edit`: supplier + region
 
-Schema `_user_schema` (`config_flow.py:369`). Two dropdowns:
+Schema `_user_schema` (`flow_schemas.py:303`). Two dropdowns:
 
 - Supplier: `_supplier_options()` (`config_flow.py:180`) lists every registered
   extractor by `id`/`label`, minus any carrying `deprecated_until` (a supplier that
@@ -150,7 +150,7 @@ The OptionsFlow's `edit` step seeds instead from `{**entry.data, **entry.options
 
 ### `contract`: region-filtered product list
 
-Schema `_contract_schema` (`config_flow.py:394`). Contracts come from
+Schema `_contract_schema` (`flow_schemas.py:328`). Contracts come from
 `_contracts_for(supplier_id, region)` (`config_flow.py:200`), which reads
 `get_extractor(supplier_id).contracts` and keeps only those whose
 `Contract.regions` frozenset contains the region. `Contract` is defined at
@@ -160,13 +160,13 @@ Schema `_contract_schema` (`config_flow.py:394`). Contracts come from
 Guard: `async_step_contract` aborts with `supplier_region_unavailable` when the
 filtered list is empty (`flow_prefill.py:235`), for example a Flanders-only supplier
 selected with region Wallonia. The default is pre-selected only when the stored
-`CONF_CONTRACT` still exists in the filtered set (`config_flow.py:331`); a stale id
+`CONF_CONTRACT` still exists in the filtered set (`flow_schemas.py:340`); a stale id
 leaves the field unset so the user must repick.
 
 ### `dso`: distribution operator
 
-Schema `_dso_schema` (`config_flow.py:541`). Options come from `DSO_CHOICES[region]`
-(`const.py:101`) via `_region_dso_options` (`config_flow.py:241`): 8 Fluvius
+Schema `_dso_schema` (`flow_schemas.py:475`). Options come from `DSO_CHOICES[region]`
+(`const.py:101`) via `_region_dso_options` (`flow_schemas.py:220`): 8 Fluvius
 sub-areas in Flanders, 5 operators in Wallonia, Sibelga only in Brussels. The DSO
 keys are canonical and stored verbatim in `CONF_DSO`; `const.py:145` warns they are
 "stable forever" because they key into `SupplierSnapshot.dsos`. As with the contract
@@ -186,7 +186,7 @@ Why: dynamic/TOU/Impact contracts bill energy by quarter-hour or hour-of-day and
 require a smart (SMR3) meter. Picking `bi` on a TOU contract would route
 distribution through the bi-horaire DSO peak/offpeak split while the supplier still
 billed energy by TOU slot, two billing modes that do not mix (`config_flow.py:647`
-comment). `_contract_kind` (`config_flow.py:252`) resolves the kind from the
+comment). `_contract_kind` (`flow_schemas.py:231`) resolves the kind from the
 registry and returns `""` when the stored contract is no longer in the catalogue,
 so a stale OptionsFlow entry still renders the meter step with a sensible default
 rather than raising.
@@ -201,7 +201,7 @@ supplier:contract:region:dso tuple; see the unique-id note below.
 
 ### `dso_tariff_mode`: Wallonia-only DSO billing mode
 
-Schema `_dso_tariff_mode_schema` (`config_flow.py:553`), default `DSO_MODE_BI_HORAIRE`.
+Schema `_dso_tariff_mode_schema` (`flow_schemas.py:487`), default `DSO_MODE_BI_HORAIRE`.
 Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:229`),
 `translation_key="dso_tariff_mode"`.
 
@@ -238,7 +238,7 @@ strings map to `config.error.invalid_api_key` / `config.error.cannot_connect`
 ### `capacity`: Flanders capacity-tariff peak source
 
 Schema `_capacity_schema` (`flow_schemas.py:811`). Reached from `_after_api_key` or
-`_after_dso_tariff_mode` when region is Flanders (`config_flow.py:483`, `:1418`).
+`_after_dso_tariff_mode` when region is Flanders (`config_flow.py:483`, `:507`).
 Fields:
 
 - `CONF_CAPACITY_MODE`: `sensor` (default) or `fixed`, `translation_key="capacity_mode"`.
@@ -281,7 +281,7 @@ forces a deliberate choice (issue #19 again, `flow_prefill.py:143`).
 
 ### `connection_power`: Brussels connection-power tier
 
-Schema `_connection_power_schema` (`config_flow.py:569`), default
+Schema `_connection_power_schema` (`flow_schemas.py:503`), default
 `DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:250`). Options are the four
 residential tiers `CONNECTION_KVA_TIERS` (`const.py:244`): `le1_44`, `le6`,
 `le9_6`, `le13`, `translation_key="connection_kva_tier"`. Reached from
@@ -319,7 +319,7 @@ Schema is inline (`config_flow.py:139`), an *optional* `PASSWORD` field. The gat
 2. no `CONF_API_KEY` was already collected (dynamic energy would have collected it),
 3. `_contract_has_spot_injection(supplier, contract)` is true.
 
-`_contract_has_spot_injection` (`config_flow.py:307`) reads the registry's
+`_contract_has_spot_injection` (`flow_schemas.py:286`) reads the registry's
 `Contract.spot_indexed_injection` flag (`providers/base.py:77`). That flag marks a
 non-dynamic product whose *injection* is a per-hour spot formula with no printed
 monthly indicative, currently Cociter Variable: the energy is priced without a spot
@@ -391,15 +391,15 @@ Anything pre-filled stays editable (`strings.json:199`).
 | Rule | Where | Reason |
 | --- | --- | --- |
 | Supplier has no contract in region -> abort `supplier_region_unavailable` | `flow_prefill.py:235` | Region filtering deferred from the supplier step to here |
-| Dynamic/TOU/Impact contract forces `METER_DYNAMIC` | `config_flow.py:656` | Smart meter required; mixing bi-horaire network with TOU energy mis-bills |
-| `dso_tariff_mode` (incl. Impact) only in Wallonia | `config_flow.py:181` | Impact is CWaPE-only; other regions bill differently |
-| `capacity` step only in Flanders | `compare_quote.py:499`, `:1418` | Only Flanders has the capaciteitstarief |
+| Dynamic/TOU/Impact contract forces `METER_DYNAMIC` | `flow_schemas.py:749` | Smart meter required; mixing bi-horaire network with TOU energy mis-bills |
+| `dso_tariff_mode` (incl. Impact) only in Wallonia | `config_flow.py:451` | Impact is CWaPE-only; other regions bill differently |
+| `capacity` step only in Flanders | `config_flow.py:507` | Only Flanders has the capaciteitstarief |
 | `connection_power` step only in Brussels | `config_flow.py:209` | Only Brussels charges the Brugel OSP fee |
 | Compensation regime only in Wallonia | `flow_prefill.py:169` | Avoids double-counting the Flemish capacity tariff |
 | Peak sensor restricted to power/apparent_power | `flow_schemas.py:673` | Issue #19: a kWh sensor would inflate the capacity bill |
 | kWh sensors restricted to device_class energy | `flow_schemas.py:727` | A non-energy sensor would be read as raw kWh |
 | ENTSO-E key validated live before finalize | `config_flow.py:688` | Prevents finalizing an entry that fails on first refresh |
-| Duplicate (supplier, contract, region, dso) tuple rejected | `config_flow.py:309`, `:1544` | Two coordinators on the same tuple double-poll the supplier |
+| Duplicate (supplier, contract, region, dso) tuple rejected | `config_flow.py:611-612`, `:667` | Two coordinators on the same tuple double-poll the supplier |
 
 Note on partial register-pair wiring: the *config flow* accepts any subset of the
 six kWh fields (all are `vol.Optional`). The "partial register-pair wiring on either
@@ -516,14 +516,14 @@ apples-to-apples; only supplier, contract, and (for static targets) meter vary.
 
 | Step | Method | Notes |
 | --- | --- | --- |
-| `compare` | `config_flow.py:413` | Supplier picker via `_compare_supplier_options` (`config_flow.py:324`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
-| `compare_contract` | `config_flow.py:441` | Contract picker via `_compare_contract_schema` (`config_flow.py:349`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
-| `compare_meter` | `config_flow.py:482` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:195`) |
-| `compare_api_key` | `config_flow.py:552` | Shown when `_after_compare_meter` (`compare_flow.py:276`) finds the quote needs spot data the entry lacks: a dynamic target, or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved (`strings.json:227`) |
-| `compare_result` | `config_flow.py:580` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:345`); submit aborts `compare_done` |
+| `compare` | `compare_flow.py:165` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:98`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
+| `compare_contract` | `compare_flow.py:193` | Contract picker via `_compare_contract_schema` (`compare_flow.py:123`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
+| `compare_meter` | `compare_flow.py:234` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:195`) |
+| `compare_api_key` | `compare_flow.py:304` | Shown when `_after_compare_meter` (`compare_flow.py:276`) finds the quote needs spot data the entry lacks: a dynamic target, or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved (`strings.json:227`) |
+| `compare_result` | `compare_flow.py:332` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:345`); submit aborts `compare_done` |
 
 The quoted supplier's freshly fetched card is resolved through
-`coordinator._resolve_snapshot`, the same helper the live path uses, so it gets
+`snapshot_store._resolve_snapshot`, the same helper the live path uses, so it gets
 **both** per-entry transforms: `apply_vat` and `resolve_excise_band`. It previously
 called `apply_vat` alone, which priced a banded professional card at its first
 excise tier however much the household uses (1,421 c€/kWh instead of 1,139 at

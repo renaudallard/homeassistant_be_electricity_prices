@@ -28,8 +28,8 @@ or a test assertion and labelled as such.
 | Label | `Luminus` | `luminus.py:690` |
 | Regions served | Flanders, Wallonia | `luminus.py:686`, `_LUMINUS_REGIONS` |
 | Publication | one fresh PDF per (product, region) via REST endpoint | `luminus.py:89`, `luminus.py:127` |
-| Probe | none (`EXTRACTOR.probe` unset -> `None`) | `luminus.py:688-701` |
-| Archive (`fetch_for_month`) | none (API-only, overwrite-in-place) | `luminus.py:688-701` |
+| Probe | none (`EXTRACTOR.probe` unset -> `None`) | `luminus.py:685-698` |
+| Archive (`fetch_for_month`) | none (API-only, overwrite-in-place) | `luminus.py:685-698` |
 
 Brussels is deliberately out of scope. Luminus sells only the regulated Social
 tariff there, which is auto-assigned to protected customers, carries an all-in
@@ -78,7 +78,7 @@ need a spot for injection.
 | `luminus_dynamic` | Luminus Dynamic | dynamic | `dynamic` | `factor*Belpex H + base`, hourly billing |
 
 Declared in `_CONTRACTS` (`luminus.py:105-122`); `_CONTRACTS_BY_ID` indexes them
-(`luminus.py:124`); `EXTRACTOR.contracts` is built from them (`luminus.py:691-699`).
+(`luminus.py:124`); `EXTRACTOR.contracts` is built from them (`luminus.py:688-696`).
 
 Retired / omitted product: **Luminus Sociaal/Social** (the regulated CREG
 tariff) is intentionally not declared (`luminus.py:118-121`), same reasoning as

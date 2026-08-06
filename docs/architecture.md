@@ -68,7 +68,18 @@ relative to that package directory.
 | Module | Responsibility |
 | --- | --- |
 | `__init__.py` | Integration entry point. Registers domain services once at `async_setup`, sets up and tears down each config entry (`async_setup_entry` / `async_unload_entry` / `async_remove_entry`), owns the slot-boundary push and one-shot backfill scheduling, and implements the `refresh`, `cheapest_window`, `most_expensive_window`, and `backfill_statistics` service handlers. |
-| `coordinator.py` | The `DataUpdateCoordinator` subclass. Fetches the supplier snapshot (with probe, on-disk cache, and TTL), fetches ENTSO-E spots for dynamic and spot-indexed contracts, builds the per-slot price table, and produces the `CoordinatorData` dict every entity reads. Also owns the shared cross-entry snapshot cache and its eviction. |
+| `coordinator.py` | The `DataUpdateCoordinator` subclass and `CoordinatorData`. Owns `__init__`, the tick (`_async_update_data` / `_update_body`), the per-slot price table, and persistence. The four mixins below carry the rest of the class; the leaf modules under them are plain functions the tick calls. |
+| `coordinator_snapshot.py` | `_SnapshotMixin`: the snapshot fetch / freshness state machine. Probe, TTL, the shared cross-entry cache and its adoption, and the negative-fetch cache. |
+| `coordinator_issues.py` | `_IssuesMixin`: the seven Repairs handlers and the shared `_sync_issue` helper they all raise and clear through. A pure reader of coordinator state. |
+| `coordinator_spots.py` | `_SpotsMixin`: ENTSO-E fetching. The live day-ahead curve, the historical spot cache and its week-sized backfill, and the Synergrid SPP refresh. |
+| `coordinator_peak.py` | `_PeakMixin`: the Flemish capacity peak (`_track_monthly_peak`) and its 12-month history. |
+| `snapshot_store.py` | Snapshot serialization to and from `.storage`, the schema-version gate, `_resolve_snapshot` (per-entry VAT and excise-band resolution), and the shared cross-entry snapshot cache with its lock, negative-fetch cache and eviction. |
+| `cohort.py` | Signing-cohort pricing: retrieves the archived signing-month card and splices its energy leg onto the delivery month's overlays. |
+| `injection.py` | The injection taxonomy: which shape a card is, the per-slot rate shared by the live scalar and the YTD walk, and the historical rate. |
+| `fees.py` | Standing charges: capacity tariff, Brussels OSP, prosumer forfait, and the annual static-fee sum the three cost paths share. |
+| `ytd_cost.py` | The year-to-date cost walk: per-month fees, the hourly and per-day energy paths, and the spot-injection credit. |
+| `energy_meters.py` | Reads the configured kWh entities out of the recorder and the live state machine, and fans register pairs into band slots. |
+| `spot_stats.py` | Spot aggregates: the current billing slot's spot, monthly means, and the SPP-weighted variants. |
 | `pricing.py` | Pure pricing engine. `compute_breakdown` fuses a `SupplierSnapshot`, the chosen `DsoOverlay`, the taxes, meter type, DSO tariff mode, and (for dynamic) the slot spot into a `PriceBreakdown`. Also the slot-grid helpers (`slot_start`, `slot_delta`, `slots_per_hour`), `is_offpeak`, and `tou_slot`. No I/O, no HA imports where avoidable, so it is trivially unit-testable. |
 | `config_flow.py` | The config wizard's step handlers (supplier and region, contract, DSO sub-area, meter, DSO billing mode, ENTSO-E key, capacity, connection power, solar, energy meters) and the options flow. |
 | `flow_schemas.py` | The voluptuous schema builders and validators each step calls, including the ENTSO-E key check against the live endpoint. |
@@ -195,7 +206,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |  await coordinator.async_config_entry_first_refresh()
    |        |
    |        v
-   |   _async_update_data                            coordinator.py:1022
+   |   _async_update_data                            coordinator.py:461
    |     |  probe() -> fresh?  yes: reuse cached snapshot
    |     |                     no : EXTRACTOR.fetch(session, contract, region)
    |     |        |
@@ -207,7 +218,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |     |   for each slot: compute_breakdown(snapshot, dso_overlay,
    |     |                    taxes, meter, dso_mode, spot)  ->  PriceBreakdown   pricing.py
    |     |     v
-   |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:738
+   |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:711
    |
    entry.runtime_data = coordinator                  __init__.py:172
    async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor, button
@@ -221,13 +232,13 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
 Numbered walkthrough:
 
 1. The user completes the config flow; HA stores the selections in `entry.data` and calls
-   `async_setup_entry` (`__init__.py:165`).
+   `async_setup_entry` (`__init__.py:166`).
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
    tuple (`coordinator.py:845`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
-3. `async_load_persistent` (`coordinator.py:1087`) loads the last snapshot from `.storage` so an
+3. `async_load_persistent` (`coordinator.py:360`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
-4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:1188`). It runs
+4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:461`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:172`),
@@ -240,9 +251,9 @@ Numbered walkthrough:
 7. For each slot the coordinator calls `compute_breakdown` (`pricing.py`), which fuses the chosen
    DSO overlay, the taxes, the meter type, the DSO tariff mode, and (for dynamic) the slot spot
    into a `PriceBreakdown`. See [pricing-model.md](pricing-model.md).
-8. The result is packed into `CoordinatorData` (`coordinator.py:878`): the `hourly` table keyed by
+8. The result is packed into `CoordinatorData` (`coordinator.py:167`): the `hourly` table keyed by
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
-   suppliers, `coordinator.py:1289`), plus snapshot metadata, the injection price, fees, and the
+   suppliers, `coordinator.py:714`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
 9. `entry.runtime_data` is set to the coordinator, the three platforms are forwarded, and a
    slot-boundary push is registered (`__init__.py:194`). Because `current_price` and
@@ -275,7 +286,7 @@ shared process-wide across config entries keyed by `(supplier, contract, region)
 shared rows are evicted on unload only when no sibling entry still references the tuple
 (`__init__.py:286`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
 (`coordinator.py:242`) and the user-facing "extractor failed" repair issue is raised only after
-the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator.py:264`), so
+the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator_snapshot.py:80`), so
 a single transient CDN timeout does not false-alarm.
 
 The ENTSO-E spot curve is fetched only for contracts that need it: dynamic contracts, and the
