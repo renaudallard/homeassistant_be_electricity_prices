@@ -1463,7 +1463,7 @@ def test_annual_fees_include_data_management() -> None:
     # The digital-meter data-management fee (databeheer) is a fixed
     # EUR/year DSO charge that must be billed alongside the supplier
     # subscription (re-audit F22).
-    from custom_components.be_electricity_prices.config_flow import _annual_fees
+    from custom_components.be_electricity_prices.compare_quote import _annual_fees
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
         FixedRates,
@@ -1490,7 +1490,7 @@ def test_annual_fees_exclude_capacity_for_ytd() -> None:
     # The YTD what-if excludes the Flanders capacity tariff (billed as a
     # separate sensor by current_year_cost); the full annual estimate keeps
     # it. include_capacity toggles just that term.
-    from custom_components.be_electricity_prices.config_flow import _annual_fees
+    from custom_components.be_electricity_prices.compare_quote import _annual_fees
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
         FixedRates,
@@ -1775,7 +1775,7 @@ async def test_compare_prosumer_term_matches_the_live_ytd_sensor(
     the pre-existing options-flow stubs leave it None, which zeroes the whole
     term and is exactly why this went unnoticed.
     """
-    from custom_components.be_electricity_prices.config_flow import _annual_bill
+    from custom_components.be_electricity_prices.compare_quote import _annual_bill
     from custom_components.be_electricity_prices.coordinator import _ytd_prosumer
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
