@@ -3234,6 +3234,30 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
     return _prosumer_monthly_fee(overlay, snapshot, kva)
 
 
+async def _recorder_deltas(
+    hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
+) -> list[tuple[datetime, float]]:
+    """Recorder rows as (UTC slot start, delta) pairs, skipping unusable ones.
+
+    Three callers unpacked the same five lines. What they share is the rule,
+    not the loop: read ``change``, never ``sum``. ``sum`` is the cumulative
+    total of a TOTAL sensor, so using it here would bill a whole meter reading
+    for one slot. A row missing either field is skipped rather than treated as
+    zero, because a zero is a real measurement.
+
+    Callers keep their own bucketing: one wants the local DAY, one the UTC
+    hour, one the local hour so it can split on the off-peak schedule.
+    """
+    out: list[tuple[datetime, float]] = []
+    for row in await _recorder_rows(hass, entity_id, start, end, period):
+        ts = row.get("start")
+        delta = row.get("change")
+        if ts is None or delta is None:
+            continue
+        out.append((datetime.fromtimestamp(ts, tz=UTC), float(delta)))
+    return out
+
+
 async def _recorder_rows(
     hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
 ) -> list[Any]:
@@ -3432,13 +3456,8 @@ async def _recorder_daily_kwh(
     it falls back to the daily statistic when no live reading is available.
     """
     out: dict[date, float] = {}
-    for row in await _recorder_rows(hass, entity_id, start, end, "day"):
-        ts = row.get("start")
-        delta = row.get("change")
-        if ts is None or delta is None:
-            continue
-        local_day = dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC)).date()
-        out[local_day] = float(delta)
+    for when, delta in await _recorder_deltas(hass, entity_id, start, end, "day"):
+        out[dt_util.as_local(when).date()] = delta
     if end == dt_util.now().date():
         live_today = await _live_today_kwh(hass, entity_id, end)
         if live_today is not None:
@@ -3455,15 +3474,8 @@ async def _recorder_hourly_kwh(
     energy rate per hour-of-day, so day-level granularity is too coarse.
     """
     out: dict[datetime, float] = {}
-    for row in await _recorder_rows(hass, entity_id, start, end, "hour"):
-        ts = row.get("start")
-        delta = row.get("change")
-        if ts is None or delta is None:
-            continue
-        utc_hour = datetime.fromtimestamp(ts, tz=UTC).replace(
-            minute=0, second=0, microsecond=0
-        )
-        out[utc_hour] = float(delta)
+    for when, delta in await _recorder_deltas(hass, entity_id, start, end, "hour"):
+        out[when.replace(minute=0, second=0, microsecond=0)] = delta
     return out
 
 
@@ -3548,17 +3560,13 @@ async def _recorder_daily_band_ratio(
     """
     per_day_day: dict[date, float] = {}
     per_day_night: dict[date, float] = {}
-    for row in await _recorder_rows(hass, entity_id, start, end, "hour"):
-        ts = row.get("start")
-        delta = row.get("change")
-        if ts is None or delta is None:
-            continue
-        local = dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC))
+    for when, delta in await _recorder_deltas(hass, entity_id, start, end, "hour"):
+        local = dt_util.as_local(when)
         bucket = local.date()
         if is_offpeak(local, region):
-            per_day_night[bucket] = per_day_night.get(bucket, 0.0) + float(delta)
+            per_day_night[bucket] = per_day_night.get(bucket, 0.0) + delta
         else:
-            per_day_day[bucket] = per_day_day.get(bucket, 0.0) + float(delta)
+            per_day_day[bucket] = per_day_day.get(bucket, 0.0) + delta
     out: dict[date, tuple[float, float]] = {}
     for day in set(per_day_day) | set(per_day_night):
         d = per_day_day.get(day, 0.0)
