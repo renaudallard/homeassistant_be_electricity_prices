@@ -184,6 +184,15 @@ METER_DYNAMIC: Final = "dynamic"
 # mono / bi / dynamic.
 METER_EXCLUSIVE_NIGHT: Final = "exclusive_night"
 
+# TariffKinds that can only be billed on an SMR3 (digital) meter: they price
+# by quarter-hour or by hour-of-day, and a mono/bi meter would route
+# distribution through the bi-horaire split while the supplier billed energy by
+# slot -- two billing modes that do not mix. Named here because both the
+# install flow and the compare flow gate on it, and the copies had already
+# drifted once: tou_impact was missing from the compare side, which offered an
+# impossible mono/bi meter for Mega Off-peak Impact.
+SMART_METER_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "tou", "tou_impact")
+
 METER_TYPES: Final = (METER_MONO, METER_BI, METER_DYNAMIC, METER_EXCLUSIVE_NIGHT)
 
 # DSO-side billing mode, orthogonal to the supplier meter. Wallonia
