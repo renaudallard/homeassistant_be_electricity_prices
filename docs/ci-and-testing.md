@@ -271,19 +271,19 @@ requests.
 
 `_drift_warnings` (`scripts/live_check.py:1713`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
-`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1762`), with per-supplier overrides in
+`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1622`), with per-supplier overrides in
 `_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1639`) for the known-large catalogues (Bolt,
 TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py:1810`) for those same multi-fetch suppliers plus Luminus and Eneco, which
+(`scripts/live_check.py:1669`) for those same multi-fetch suppliers plus Luminus and Eneco, which
 are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request durations,
 not true wallclock, so a supplier that fetches concurrently (Bolt fetches its six PDFs with
-`asyncio.gather`, `scripts/live_check.py:910`) records the sum of its parallel fetches; the budgets
+`asyncio.gather`, `scripts/live_check.py:946`) records the sum of its parallel fetches; the budgets
 are sized around that. The synthetic `_catalog` bucket is skipped in drift analysis because it
-aggregates every supplier's discovery fetch under one name (`scripts/live_check.py:1861`). When a
+aggregates every supplier's discovery fetch under one name (`scripts/live_check.py:1720`). When a
 budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see below). Tuning a
 false-firing drift alert means adjusting the override, not the code.
 
-A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:1868`,
+A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:1727`,
 against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:1700`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
