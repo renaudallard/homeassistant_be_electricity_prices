@@ -481,6 +481,118 @@ async def fetch(
     return parse_snapshot(contract_id, text, region, listed_url)
 
 
+async def _archive_pdf_url(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    region_code: str,
+    year_month: date,
+    *,
+    allow_current: bool = False,
+) -> str | None:
+    """The CDN URL of ``contract``'s card for one month, or None.
+
+    Professional cards never appear in the public listing, so they take the
+    same built filename ``fetch`` uses with the requested month. Residential
+    ones resolve the current URL from the listing and rewrite BOTH month
+    placeholders -- the ``-MMYYYY-`` segment and the ``<MM>`` half of the
+    product's effective-date ``<DD><MM>`` suffix -- while preserving the
+    effective day, which is not the 1st for every product.
+    """
+    if contract.professional:
+        return _pro_pdf_url(contract, region_code, year_month)
+    try:
+        listing = await _fetch_listing_html(session)
+    except ExtractorError:
+        return None
+    current_url = _resolve_pdf_url(listing, contract.product_name, region_code)
+    if current_url is None:
+        return None
+    mmyyyy_re = re.compile(r"-(\d{2})\d{4}-(?=[^/]*\.pdf$)")
+    mmyyyy_match = mmyyyy_re.search(current_url)
+    if mmyyyy_match is None:
+        return None
+    current_mm = mmyyyy_match.group(1)
+    target_mm = f"{year_month.month:02d}"
+    historical_mmyyyy = f"{target_mm}{year_month.year}"
+    new_url = mmyyyy_re.sub(f"-{historical_mmyyyy}-", current_url, count=1)
+    # Cap0106 -> Cap0105, Online0106-Fixed -> Online0105-Fixed, Cosy1306 ->
+    # Cosy1305. A product whose publication day varies month to month
+    # resolves to the CDN's HTML stub, which the PDF magic-byte check
+    # rejects, so the walk falls back to the proxy rather than mis-billing.
+    prefix, sep, tail = new_url.partition(f"-{historical_mmyyyy}-")
+    if sep:
+        tail = re.sub(
+            rf"(\d{{2}}){current_mm}(?=[-.])",
+            rf"\g<1>{target_mm}",
+            tail,
+            count=1,
+        )
+        new_url = prefix + sep + tail
+    # A rewrite that lands back on the listing's own URL means the requested
+    # month IS the current one. fetch_for_month refuses that, so a current
+    # card can never be served as a historical month. The realized-rate
+    # lookup wants it though: for the most recently completed month, the
+    # card carrying its billed figures is precisely the current one.
+    if new_url == current_url and not allow_current:
+        return None
+    return new_url
+
+
+def _next_month(year_month: date) -> date:
+    """First day of the month after ``year_month``."""
+    if year_month.month == 12:
+        return date(year_month.year + 1, 1, 1)
+    return date(year_month.year, year_month.month + 1, 1)
+
+
+async def _realized_rates_for_month(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    region: str,
+    region_code: str,
+    year_month: date,
+) -> dict[str, float]:
+    """Month ``year_month``'s BILLED rates, read off the NEXT month's card.
+
+    A variable or Impact card's headline table is a 12-month simulation, and
+    the "derniers prix constates ... pour le mois de <month>" sentence that
+    overrides it names the month BEFORE the card's own: the June card reports
+    May's regularisation figures. That is the only choice on the live path,
+    where the current month's index does not exist yet -- but on the archive
+    path it shifted every past month of the year-to-date walk by one, billing
+    June at May's rate while June's real rate sat unread on the July card.
+
+    So read the sentence from the M+1 card. Returns an empty mapping when that
+    card is not out yet (M is the current month) or does not resolve, and the
+    caller then keeps the M card's own figures, which is what it did before.
+    """
+    following = _next_month(year_month)
+    if following > date(dt_util.now().year, dt_util.now().month, 1):
+        return {}
+    url = await _archive_pdf_url(
+        session, contract, region_code, following, allow_current=True
+    )
+    if url is None:
+        return {}
+    try:
+        text = await fetch_pdf_text(session, url)
+        following_snap = parse_snapshot(contract.contract_id, text, region, url)
+    except ExtractorError:
+        return {}
+    # Confirm the fetched card really is the following month's before trusting
+    # its sentence: the same validity check the main path runs, so a CDN stub
+    # or a stale issue served under a historical URL cannot shift the rates by
+    # another month instead of simply not applying.
+    if (
+        archive_validity_check(
+            following_snap, text, following, month_names=_FR_MONTH_NAMES
+        )
+        is None
+    ):
+        return {}
+    return _realized_rates(text)
+
+
 async def fetch_for_month(
     session: aiohttp.ClientSession,
     contract_id: str,
@@ -516,69 +628,80 @@ async def fetch_for_month(
     region_code = _REGION_TO_CODE.get(region)
     if region_code is None:
         return None
-    if contract.professional:
-        pro_url = _pro_pdf_url(contract, region_code, year_month)
-        try:
-            text = await fetch_pdf_text(session, pro_url)
-            pro_snap = parse_snapshot(contract_id, text, region, pro_url)
-        except ExtractorError:
-            # Deliberately no previous-month retry, unlike fetch(): a month
-            # Mega never published must resolve to None so the caller falls
-            # back to the current-card proxy, not to a neighbouring month's
-            # card silently billed as this one's.
-            return None
-        return archive_validity_check(
-            pro_snap, text, year_month, month_names=_FR_MONTH_NAMES
+    url = await _archive_pdf_url(session, contract, region_code, year_month)
+    if url is None:
+        return None
+    try:
+        text = await fetch_pdf_text(session, url)
+        snap = parse_snapshot(contract_id, text, region, url)
+    except ExtractorError:
+        # Deliberately no previous-month retry, unlike fetch(): a month Mega
+        # never published must resolve to None so the caller falls back to the
+        # current-card proxy, not to a neighbouring month's card silently
+        # billed as this one's.
+        return None
+    # Cross-check the parsed card actually covers the requested month; if Mega
+    # ever serves a current PDF under a historical URL, the validity / title
+    # check rejects it instead of mis-billing past consumption at current
+    # rates. Same shape as eneco / cociter / ebem.
+    checked = archive_validity_check(
+        snap, text, year_month, month_names=_FR_MONTH_NAMES
+    )
+    if checked is None:
+        return None
+    return await _apply_realized_for_month(
+        session, contract, region, region_code, year_month, checked
+    )
+
+
+async def _apply_realized_for_month(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    region: str,
+    region_code: str,
+    year_month: date,
+    snap: SupplierSnapshot,
+) -> SupplierSnapshot:
+    """Swap in the rates Mega actually billed for ``year_month``.
+
+    The card FOR a month reports the previous month's regularisation figures,
+    so the archive walk was billing each past month at the month before it.
+    The figures that bill month M are printed on the M+1 card; take them from
+    there and splice them onto M's own DSO and tax overlays.
+
+    Only the energy and injection legs move. The overlays, the yearly fee and
+    the cohort coefficients stay M's, because those really are properties of
+    M's card. When the M+1 card is not out yet, or is missing a label, the
+    mapping comes back empty and M keeps its own figures -- the behaviour
+    before this, and still the best available for the newest month.
+    """
+    if contract.kind not in ("variable", "tou_impact"):
+        return snap
+    realized = await _realized_rates_for_month(
+        session, contract, region, region_code, year_month
+    )
+    if not realized:
+        return snap
+    energy = snap.energy
+    if isinstance(energy, VariableRates):
+        energy = replace(
+            energy,
+            current=realized.get("mono", energy.current),
+            peak=realized.get("peak", energy.peak),
+            offpeak=realized.get("offpeak", energy.offpeak),
+            exclusive_night=realized.get("exclusive_night", energy.exclusive_night),
         )
-    try:
-        listing = await _fetch_listing_html(session)
-    except ExtractorError:
-        return None
-    current_url = _resolve_pdf_url(listing, contract.product_name, region_code)
-    if current_url is None:
-        return None
-    # Capture the current card's month from the -MMYYYY- segment so we
-    # can rewrite the matching <MM> half of the effective-date suffix
-    # without touching the year digits.
-    mmyyyy_re = re.compile(r"-(\d{2})\d{4}-(?=[^/]*\.pdf$)")
-    mmyyyy_match = mmyyyy_re.search(current_url)
-    if mmyyyy_match is None:
-        return None
-    current_mm = mmyyyy_match.group(1)
-    target_mm = f"{year_month.month:02d}"
-    historical_mmyyyy = f"{target_mm}{year_month.year}"
-    new_url = mmyyyy_re.sub(f"-{historical_mmyyyy}-", current_url, count=1)
-    # Rewrite the effective-date suffix's month, preserving the day, in
-    # the filename tail after the -MMYYYY- segment (so the year is never
-    # touched): Cap0106 -> Cap0105, Online0106-Fixed -> Online0105-Fixed,
-    # Cosy1306 -> Cosy1305. A product that published on a day that
-    # varies month to month resolves to the CDN's HTML stub, which the
-    # PDF magic-byte check rejects, so the YTD walk falls back to the
-    # proxy snapshot rather than mis-billing.
-    prefix, sep, tail = new_url.partition(f"-{historical_mmyyyy}-")
-    if sep:
-        tail = re.sub(
-            rf"(\d{{2}}){current_mm}(?=[-.])",
-            rf"\g<1>{target_mm}",
-            tail,
-            count=1,
+    elif isinstance(energy, ImpactRates):
+        energy = replace(
+            energy,
+            pic=realized.get("pic", energy.pic),
+            medium=realized.get("medium", energy.medium),
+            eco=realized.get("eco", energy.eco),
         )
-        new_url = prefix + sep + tail
-    if new_url == current_url:
-        return None
-    try:
-        text = await fetch_pdf_text(session, new_url)
-    except ExtractorError:
-        return None
-    try:
-        snap = parse_snapshot(contract_id, text, region, new_url)
-    except ExtractorError:
-        return None
-    # Cross-check the parsed card actually covers the requested month;
-    # if Mega ever serves a current PDF under a historical URL, the
-    # validity / title check rejects it instead of mis-billing past
-    # consumption at current rates. Same shape as eneco / cociter / ebem.
-    return archive_validity_check(snap, text, year_month, month_names=_FR_MONTH_NAMES)
+    injection = snap.injection
+    if injection is not None and realized.get("injection") is not None:
+        injection = replace(injection, current=realized["injection"])
+    return replace(snap, energy=energy, injection=injection)
 
 
 def _assert_card_region(text: str, region: str) -> None:

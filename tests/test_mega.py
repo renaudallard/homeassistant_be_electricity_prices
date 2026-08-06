@@ -900,3 +900,116 @@ def test_returned_offpeak_fixed_builds_its_b2b_url() -> None:
         _CONTRACTS_BY_ID["mega_pro_offpeak_fixed"], "VL", date(2026, 8, 1)
     )
     assert url.endswith("Mega-FR-EL-B2B-VL-082026-Offpeak-Bi0108-Fix.pdf")
+
+
+def test_next_month_rolls_the_year() -> None:
+    from custom_components.be_electricity_prices.providers.mega import _next_month
+
+    assert _next_month(date(2026, 6, 1)) == date(2026, 7, 1)
+    assert _next_month(date(2026, 12, 1)) == date(2027, 1, 1)
+
+
+async def test_archive_bills_each_month_at_its_own_realized_rate() -> None:
+    """A Mega card reports the PREVIOUS month's regularisation figures.
+
+    "Les derniers prix constates ... pour le mois de <month>" on the June card
+    names May. On the live path that lag is unavoidable -- June's index does
+    not exist yet -- but the archive walk was taking it as June's price, so
+    every past month of the year-to-date was billed at the month before it,
+    while the figure that actually bills it sat unread on the next card.
+    Verified on four consecutive real cards: June was billed 14,24 c€/kWh
+    (May's) where Mega settled 16,95.
+
+    Only the energy and injection legs move. The DSO and tax overlays, the
+    yearly fee and the cohort coefficients stay the delivery month's, because
+    those really are properties of its own card.
+    """
+    from custom_components.be_electricity_prices.providers import mega as mega_mod
+
+    snap = parse_snapshot(
+        "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"
+    )
+    assert isinstance(snap.energy, VariableRates)
+    contract = mega_mod._CONTRACTS_BY_ID["mega_smart_flex"]
+    before_fee = snap.energy.yearly_fixed_fee
+    before_dsos = dict(snap.dsos)
+    before_taxes = snap.taxes
+
+    async def _realized(*_a: object, **_k: object) -> dict[str, float]:
+        return {
+            "mono": 0.1799,
+            "peak": 0.198,
+            "offpeak": 0.167,
+            "exclusive_night": 0.167,
+            "injection": 0.0363,
+        }
+
+    with patch.object(mega_mod, "_realized_rates_for_month", new=_realized):
+        out = await mega_mod._apply_realized_for_month(
+            None,  # type: ignore[arg-type]
+            contract,
+            "wallonia",
+            "WL",
+            date(2026, 6, 1),
+            snap,
+        )
+    assert isinstance(out.energy, VariableRates)
+    assert out.energy.current == pytest.approx(0.1799)
+    assert out.energy.peak == pytest.approx(0.198)
+    assert out.energy.offpeak == pytest.approx(0.167)
+    assert out.injection is not None
+    assert out.injection.current == pytest.approx(0.0363)
+    # Everything that belongs to the delivery month's own card is untouched.
+    assert out.energy.yearly_fixed_fee == pytest.approx(before_fee)
+    assert out.dsos == before_dsos
+    assert out.taxes == before_taxes
+
+
+async def test_archive_keeps_its_own_rates_when_the_next_card_is_absent() -> None:
+    """The newest month has no following card yet, so it keeps the figures it
+    has -- the behaviour before this, and still the best available."""
+    from custom_components.be_electricity_prices.providers import mega as mega_mod
+
+    snap = parse_snapshot(
+        "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"
+    )
+    contract = mega_mod._CONTRACTS_BY_ID["mega_smart_flex"]
+
+    async def _none(*_a: object, **_k: object) -> dict[str, float]:
+        return {}
+
+    with patch.object(mega_mod, "_realized_rates_for_month", new=_none):
+        out = await mega_mod._apply_realized_for_month(
+            None,  # type: ignore[arg-type]
+            contract,
+            "wallonia",
+            "WL",
+            date(2026, 6, 1),
+            snap,
+        )
+    assert out is snap
+
+
+async def test_a_fixed_card_is_never_re_read_from_the_next_month() -> None:
+    """Only variable and Impact cards carry the simulation disclaimer; a fixed
+    card's table IS its billed rate, so it must not trigger the extra fetch."""
+    from custom_components.be_electricity_prices.providers import mega as mega_mod
+
+    snap = parse_snapshot(
+        "mega_smart_fixed", fixture_text("mega_smart_fixed_v.pdf"), "flanders"
+    )
+    contract = mega_mod._CONTRACTS_BY_ID["mega_smart_fixed"]
+
+    async def _boom(*_a: object, **_k: object) -> dict[str, float]:
+        raise AssertionError("a fixed contract must not fetch the next card")
+
+    with patch.object(mega_mod, "_realized_rates_for_month", new=_boom):
+        out = await mega_mod._apply_realized_for_month(
+            None,  # type: ignore[arg-type]
+            contract,
+            "flanders",
+            "VL",
+            date(2026, 6, 1),
+            snap,
+        )
+    assert out is snap

@@ -322,6 +322,29 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:402`) enforces it.
 > where Mega settles 15,30 — about **74 EUR/yr** at 3500 kWh — and credited
 > injection at 3,84 where it pays 2,32. `fixed` and `dynamic` cards carry no such
 > disclaimer and are left alone.
+>
+> **The sentence names the month BEFORE the card's own**, so on the ARCHIVE path
+> it has to be read off the *next* month's card. The June card's sentence says
+> "pour le mois de mai"; the figures that bill June are on the July card. On the
+> live path that lag is unavoidable — the current month's index does not exist
+> yet — but `fetch_for_month` was taking it at face value and billing every past
+> month of the year-to-date at the month before it. Measured on four consecutive
+> Walloon Cap cards: May was billed 12,67 c€/kWh where Mega settled 14,24, June
+> 14,24 where it settled 16,95.
+>
+> `_apply_realized_for_month` fetches the M+1 card and splices in only its energy
+> and injection legs; the DSO and tax overlays, the yearly fee and the cohort
+> coefficients stay the delivery month's, because those really are properties of
+> its own card. The M+1 card goes through the same `archive_validity_check` as
+> the main path, so a CDN stub cannot shift the rates by a further month. When
+> that card is not out yet the mapping comes back empty and the month keeps its
+> own figures — the newest month therefore behaves exactly as before.
+>
+> Two consequences worth knowing. It costs **one extra archive fetch per month**
+> for a variable or Impact contract, on a walk that already caches one snapshot
+> per month. And the most recently completed month's source card is the CURRENT
+> one, so `_archive_pdf_url` takes `allow_current=True` there; `fetch_for_month`
+> itself still refuses to serve the current card as a historical month.
 
 The Wallonia Smart Fixed fixture pins mono / peak / offpeak / exclusive-night to
 0.1712 / 0.1938 / 0.1549 / 0.1549 EUR/kWh with a 111.3 EUR/yr fee (illustrative,
