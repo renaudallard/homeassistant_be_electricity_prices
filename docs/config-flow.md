@@ -165,7 +165,7 @@ leaves the field unset so the user must repick.
 Schema `_dso_schema` (`config_flow.py:541`). Options come from `DSO_CHOICES[region]`
 (`const.py:101`) via `_region_dso_options` (`config_flow.py:241`): 8 Fluvius
 sub-areas in Flanders, 5 operators in Wallonia, Sibelga only in Brussels. The DSO
-keys are canonical and stored verbatim in `CONF_DSO`; `const.py:128` warns they are
+keys are canonical and stored verbatim in `CONF_DSO`; `const.py:145` warns they are
 "stable forever" because they key into `SupplierSnapshot.dsos`. As with the contract
 step, a stored value is only defaulted when it is still a valid slug for the region
 (`config_flow.py:440`).
@@ -199,7 +199,7 @@ supplier:contract:region:dso tuple; see the unique-id note below.
 ### `dso_tariff_mode`: Wallonia-only DSO billing mode
 
 Schema `_dso_tariff_mode_schema` (`config_flow.py:553`), default `DSO_MODE_BI_HORAIRE`.
-Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:207`),
+Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:229`),
 `translation_key="dso_tariff_mode"`.
 
 Reached only when region is Wallonia (`_after_meter`, `config_flow.py:1632`). Tarif
@@ -279,8 +279,8 @@ forces a deliberate choice (issue #19 again, `config_flow.py:1088`).
 ### `connection_power`: Brussels connection-power tier
 
 Schema `_connection_power_schema` (`config_flow.py:569`), default
-`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:228`). Options are the four
-residential tiers `CONNECTION_KVA_TIERS` (`const.py:222`): `le1_44`, `le6`,
+`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:250`). Options are the four
+residential tiers `CONNECTION_KVA_TIERS` (`const.py:244`): `le1_44`, `le6`,
 `le9_6`, `le13`, `translation_key="connection_kva_tier"`. Reached from
 `_before_solar` when region is Brussels (`config_flow.py:1660`). Brussels bills a
 Brugel OSP (Obligations de Service Public) annual fee scaled by contractual
@@ -296,7 +296,7 @@ Schema `_solar_schema` (`config_flow.py:1308`). Fields:
 - `CONF_SOLAR_KVA`: `NumberSelector` box 0-50 step 0.1, default 0.0 (0 means no
   panels, no prosumer cost; `const.py:218`).
 - `CONF_SOLAR_REGIME`: `translation_key="solar_regime"`, options built from
-  `SOLAR_REGIMES` (`const.py:262`) with a region filter.
+  `SOLAR_REGIMES` (`const.py:284`) with a region filter.
 
 The region filter (`config_flow.py:1114`): `SOLAR_REGIME_COMPENSATION` is offered
 only when `CONF_REGION == REGION_WALLONIA`. Compensation ("terugdraaiende teller" /
@@ -341,7 +341,7 @@ wirings per side, both feeding the `current_year_cost` computation:
 | Wiring | Keys | Behaviour |
 | --- | --- | --- |
 | Day/night registers | `CONF_DAY_CONSUMPTION_KWH`, `CONF_NIGHT_CONSUMPTION_KWH`, `CONF_DAY_INJECTION_KWH`, `CONF_NIGHT_INJECTION_KWH` | Used as-is; exact from the start, no warm-up |
-| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`config_flow.py:775` docstring; `const.py:249`) |
+| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`config_flow.py:775` docstring; `const.py:271`) |
 
 When both are filled for the same side, the day/night registers win (more accurate;
 `config_flow.py:785`). Each side (consumption, injection) is resolved independently,

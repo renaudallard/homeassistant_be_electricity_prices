@@ -75,6 +75,23 @@ FLUVIUS_KEYS: Final[frozenset[str]] = frozenset(
         DSO_FLUVIUS_ZENNE_DIJLE,
     }
 )
+# The same eight Fluvius areas as FLUVIUS_CARD_LABELS, but as the bare
+# UPPER-CASE area name some cards print (DATS 24, EnergyVision) rather
+# than the Title-case "Fluvius <Area>" spelling. Written out rather than
+# derived: upper-casing the other map yields "FLUVIUS ANTWERPEN", not
+# "ANTWERPEN", so a derivation would silently produce keys that match
+# nothing.
+FLUVIUS_AREA_LABELS_UPPER: Final[dict[str, str]] = {
+    "ANTWERPEN": DSO_FLUVIUS_ANTWERPEN,
+    "HALLE-VILVOORDE": DSO_FLUVIUS_HALLE_VILVOORDE,
+    "IMEWO": DSO_FLUVIUS_IMEWO,
+    "KEMPEN": DSO_FLUVIUS_IVEKA,
+    "LIMBURG": DSO_FLUVIUS_LIMBURG,
+    "MIDDEN-VLAANDEREN": DSO_FLUVIUS_INTERGEM,
+    "WEST": DSO_FLUVIUS_WEST,
+    "ZENNE-DIJLE": DSO_FLUVIUS_ZENNE_DIJLE,
+}
+
 WALLONIA_DSO_KEYS: Final[frozenset[str]] = frozenset(
     {DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW}
 )
@@ -191,6 +208,11 @@ METER_EXCLUSIVE_NIGHT: Final = "exclusive_night"
 # install flow and the compare flow gate on it, and the copies had already
 # drifted once: tou_impact was missing from the compare side, which offered an
 # impossible mono/bi meter for Mega Off-peak Impact.
+# Belgium's standard VAT rate. The professional cards are published
+# excluding it, so the pro extractors gross their values back up by it;
+# three of them declared their own copy with the same comment.
+VAT_RATE_STANDARD: Final = 0.21
+
 SMART_METER_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "tou", "tou_impact")
 
 METER_TYPES: Final = (METER_MONO, METER_BI, METER_DYNAMIC, METER_EXCLUSIVE_NIGHT)

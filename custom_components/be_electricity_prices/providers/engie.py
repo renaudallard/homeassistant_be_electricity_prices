@@ -57,6 +57,7 @@ from dataclasses import dataclass
 import aiohttp
 
 from ..const import (
+    VAT_RATE_STANDARD,
     DSO_AIEG,
     DSO_AIESH,
     DSO_FLUVIUS_ANTWERPEN,
@@ -107,8 +108,6 @@ _API_URL = (
     "https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF"
 )
 
-# Belgian standard rate, which the professional cards price excluding.
-_PRO_VAT_RATE = 0.21
 
 _V = "V"
 _W = "W"
@@ -504,7 +503,7 @@ def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSn
             energy_fund_eur_per_month=energy_fund,
             # The professional card prints everything excluding VAT at
             # 21%; base.apply_vat resolves it for the entry.
-            vat_rate=_PRO_VAT_RATE if professional else 0.0,
+            vat_rate=VAT_RATE_STANDARD if professional else 0.0,
         ),
         source_url=_API_URL,
         publication_label=publication_label,

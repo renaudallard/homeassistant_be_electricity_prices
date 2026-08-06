@@ -539,6 +539,12 @@ def tier_bound_kwh(text: str) -> float:
 # all encountered in the wild; supplier PDFs flip silently between
 # them on re-renders.
 _NEGATIVE_SIGNS = ("-", "‐", "‑", "‒", "–", "—", "−")
+# One capture group around a plain decimal, with NO thousands separator.
+# Named for that constraint on purpose: a card whose values run into four
+# digits needs eneco's wider pattern instead, and reusing this one there
+# truncates the value to its first digits (recorded at eneco.py:140).
+NUM_NO_THOUSANDS = r"([\d]+(?:[.,][\d]+)?)"
+
 SIGN_CHARS = r"+\-‐‑‒–—−"
 """Drop into a regex character class: ``[`` + SIGN_CHARS + ``]``."""
 

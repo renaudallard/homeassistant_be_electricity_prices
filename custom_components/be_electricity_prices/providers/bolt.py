@@ -56,6 +56,7 @@ import aiohttp
 from homeassistant.util import dt as dt_util
 
 from ..const import (
+    VAT_RATE_STANDARD,
     DSO_AIEG,
     DSO_AIESH,
     DSO_FLUVIUS_ANTWERPEN,
@@ -113,8 +114,6 @@ _RESA_REW_LOGGED = False
 
 _BASE_URL = "https://files.boltenergie.be/pricelists"
 
-# Belgian standard rate, which the professional cards price excluding.
-_PRO_VAT_RATE = 0.21
 _LISTING_URL = "https://www.boltenergie.be/fr/listes-des-prix"
 _VARIABLE_SUFFIX = "11"  # current variable-card version
 
@@ -432,7 +431,7 @@ def parse_snapshot(
             # distribution block is still headed TTC, but the numbers match
             # the other suppliers' ex-VAT tables to the cent, so the label
             # is stale, not the values. base.apply_vat resolves it.
-            vat_rate=_PRO_VAT_RATE if professional else 0.0,
+            vat_rate=VAT_RATE_STANDARD if professional else 0.0,
         ),
         source_url=source_url,
         publication_label=publication_label,

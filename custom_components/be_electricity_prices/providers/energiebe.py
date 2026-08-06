@@ -58,6 +58,7 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    NUM_NO_THOUSANDS,
     flanders_tax_overlay,
     SIGN_CHARS,
     fetch_pdf_text_layout,
@@ -120,7 +121,7 @@ _DSO_ROWS: tuple[tuple[str, str], ...] = (
 
 # Accept both decimal separators: a dot-decimal re-render must not truncate a
 # mandatory value to its integer part (matches the sibling extractors).
-_NUM = r"([\d]+(?:[.,][\d]+)?)"
+_NUM = NUM_NO_THOUSANDS
 
 _ENERGY_RE = re.compile(
     rf"formule\s*\(excl\.?\s*BTW\)\s*:?\s*"

@@ -64,16 +64,9 @@ from dataclasses import dataclass
 import aiohttp
 
 from ..const import (
+    FLUVIUS_AREA_LABELS_UPPER,
     DSO_AIEG,
     DSO_AIESH,
-    DSO_FLUVIUS_ANTWERPEN,
-    DSO_FLUVIUS_HALLE_VILVOORDE,
-    DSO_FLUVIUS_IMEWO,
-    DSO_FLUVIUS_INTERGEM,
-    DSO_FLUVIUS_IVEKA,
-    DSO_FLUVIUS_LIMBURG,
-    DSO_FLUVIUS_WEST,
-    DSO_FLUVIUS_ZENNE_DIJLE,
     DSO_ORES,
     DSO_RESA,
     DSO_REW,
@@ -81,6 +74,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    NUM_NO_THOUSANDS,
     flanders_tax_overlay,
     SIGN_CHARS,
     fetch_pdf_text_layout,
@@ -170,7 +164,7 @@ DISCOVER_IDS: frozenset[str] = frozenset(
 
 # Accept both decimal separators: a dot-decimal re-render must not truncate a
 # mandatory value to its integer part (matches the sibling extractors).
-_NUM = r"([\d]+(?:[.,][\d]+)?)"
+_NUM = NUM_NO_THOUSANDS
 
 # The card header prints "Alle prijzen en tarieven zijn inclusief 6% BTW".
 _VAT_RE = re.compile(r"(\d+)\s*%\s*BTW", re.IGNORECASE)
@@ -299,16 +293,7 @@ _ANALOG_MARKER = "Analoge Meter"
 # Upper-case Fluvius area label -> DSO key (EnergyVision prints them in caps,
 # so the shared Title-case FLUVIUS_CARD_LABELS map doesn't apply). Kempen is
 # the Iveka sub-area; Midden-Vlaanderen is Intergem.
-_DSO_ROWS: tuple[tuple[str, str], ...] = (
-    ("ANTWERPEN", DSO_FLUVIUS_ANTWERPEN),
-    ("HALLE-VILVOORDE", DSO_FLUVIUS_HALLE_VILVOORDE),
-    ("IMEWO", DSO_FLUVIUS_IMEWO),
-    ("KEMPEN", DSO_FLUVIUS_IVEKA),
-    ("LIMBURG", DSO_FLUVIUS_LIMBURG),
-    ("MIDDEN-VLAANDEREN", DSO_FLUVIUS_INTERGEM),
-    ("WEST", DSO_FLUVIUS_WEST),
-    ("ZENNE-DIJLE", DSO_FLUVIUS_ZENNE_DIJLE),
-)
+_DSO_ROWS: tuple[tuple[str, str], ...] = tuple(FLUVIUS_AREA_LABELS_UPPER.items())
 
 
 # ---- public entry points -----------------------------------------------------

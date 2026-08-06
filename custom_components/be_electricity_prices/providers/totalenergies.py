@@ -77,6 +77,7 @@ from ._pdf import (
     vat_multiplier,
 )
 from .base import (
+    ALL_REGIONS,
     Contract,
     DsoOverlay,
     DynamicRates,
@@ -102,11 +103,6 @@ _REGION_TO_CODE: dict[str, str] = {
 }
 
 
-_ALL_REGIONS: frozenset[str] = frozenset(
-    {REGION_FLANDERS, REGION_WALLONIA, REGION_BRUSSELS}
-)
-
-
 @dataclass(frozen=True)
 class _ContractDef:
     contract_id: str
@@ -116,7 +112,7 @@ class _ContractDef:
     # Regions the product is actually published in. TotalEnergies's
     # listing page advertises every product in V/W/B but a few only
     # have a Wallonia PDF; the others return a 200 OK HTML 404 page.
-    regions: frozenset[str] = _ALL_REGIONS
+    regions: frozenset[str] = ALL_REGIONS
 
 
 _CONTRACTS: tuple[_ContractDef, ...] = (

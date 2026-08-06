@@ -52,12 +52,12 @@ config (contract_id) ->  probe(): GROQ newest _createdAt  -> freshness key
 The `source_url` stored in the snapshot is the resolved Sanity asset URL (whatever
 `_resolve_pdf_url` returned), not a stable human-facing page. The `publication_label` is
 a lowercased "month year" string ("april 2026") reconstructed from the filename by
-`_resolve_pdf_url` (`providers/frank.py:157`).
+`_resolve_pdf_url` (`providers/frank.py:158`).
 
 ## Contracts
 
-Five tiers are declared in `_TIERS` (`providers/frank.py:95`) and turned into `Contract`
-objects by the `EXTRACTOR` comprehension (`providers/frank.py:470`). Every one is
+Five tiers are declared in `_TIERS` (`providers/frank.py:96`) and turned into `Contract`
+objects by the `EXTRACTOR` comprehension (`providers/frank.py:471`). Every one is
 `kind="dynamic"`, `regions=_FRANK_REGIONS` (Flanders only), and leaves
 `spot_indexed_injection` at its default `False` (a dynamic contract already collects the
 ENTSO-E key via its energy formula, so the injection regime does not need to gate it; see
@@ -89,11 +89,11 @@ sixth tier instead of silently ignoring it.
 
 ### Discovery and download (`fetch`)
 
-`fetch` (`providers/frank.py:211`) validates the contract id and region, calls
+`fetch` (`providers/frank.py:212`) validates the contract id and region, calls
 `_resolve_pdf_url(session, contract_id)` with no target month to get the latest card, then
 `fetch_pdf_text_layout` to download and layout-extract the PDF, then `parse_snapshot`.
 
-`_resolve_pdf_url` (`providers/frank.py:157`) builds a GROQ query. With no target month it
+`_resolve_pdf_url` (`providers/frank.py:158`) builds a GROQ query. With no target month it
 asks for every "Elektriciteit Dynamisch" file asset ordered newest first
 (`[0..29]`):
 
@@ -112,7 +112,7 @@ surviving rows are sorted by `_createdAt` descending and the newest is chosen
 
 ### Probe (freshness key)
 
-`probe` (`providers/frank.py:244`) returns the `_createdAt` of the single newest
+`probe` (`providers/frank.py:245`) returns the `_createdAt` of the single newest
 "Elektriciteit Dynamisch" asset across all tiers:
 
 ```groq
@@ -135,7 +135,7 @@ query will crash on `list(result)` returning the dict's keys.
 ### Archive support (`fetch_for_month`)
 
 Frank has a real, queryable archive: past months' PDFs remain in the Sanity CMS.
-`fetch_for_month` (`providers/frank.py:225`) passes `target_month=year_month` into
+`fetch_for_month` (`providers/frank.py:226`) passes `target_month=year_month` into
 `_resolve_pdf_url`, which switches to the month-scoped GROQ query that adds
 `originalFilename match "*<MonthName>*"` and `"*<year>*"` filters
 (`providers/frank.py:171`). The Dutch month title comes from `_NL_MONTHS_TITLE`
@@ -153,16 +153,16 @@ proxy.
 
 ## Parsing
 
-`parse_snapshot` (`providers/frank.py:303`) assembles the `SupplierSnapshot` from five
+`parse_snapshot` (`providers/frank.py:304`) assembles the `SupplierSnapshot` from five
 sub-parsers. All five run against the layout-preserving text from
 `fetch_pdf_text_layout` (which keeps column alignment, important for the DSO table).
 
 | field | parser | source |
 | --- | --- | --- |
-| `energy` (`DynamicRates`) | `_extract_dynamic` | `providers/frank.py:342` |
-| `injection` (`InjectionRates`) | `_extract_injection` | `providers/frank.py:383` |
-| `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/frank.py:420` |
-| `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/frank.py:435` |
+| `energy` (`DynamicRates`) | `_extract_dynamic` | `providers/frank.py:343` |
+| `injection` (`InjectionRates`) | `_extract_injection` | `providers/frank.py:384` |
+| `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/frank.py:421` |
+| `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/frank.py:436` |
 | `valid_until` | `parse_valid_until` (shared) | `_pdf.py:794` |
 
 ### Number format
@@ -176,7 +176,7 @@ and its dot-replaced twin parse identically.
 
 ## Energy formula
 
-`_extract_dynamic` (`providers/frank.py:342`) parses the PDF formula row with `_FORMULA_RE`
+`_extract_dynamic` (`providers/frank.py:343`) parses the PDF formula row with `_FORMULA_RE`
 (`providers/frank.py:330`), which matches:
 
 ```
@@ -211,15 +211,15 @@ fixture's 2,92 EUR/month resolves to 35.04 EUR/year (illustrative,
 
 Frank's injection is the hourly `factor*spot+base` shape (shape (b) in the taxonomy in
 [../pricing-model.md](../pricing-model.md)), not a monthly indicative and not the
-spot-indexed-variable shape. `_extract_injection` (`providers/frank.py:383`) parses a
-`terugleveringsvergoeding` row with `_INJECTION_RE` (`providers/frank.py:375`):
+spot-indexed-variable shape. `_extract_injection` (`providers/frank.py:384`) parses a
+`terugleveringsvergoeding` row with `_INJECTION_RE` (`providers/frank.py:376`):
 
 ```
 terugleveringsvergoeding: (<factor_pdf> x BELPEX per uur* <sign> <base_cents>)
 ```
 
 Injection is VAT-exempt (Belgian residential feed-in is never VAT-incl,
-`base.py:271`), so no `vat_mult` is applied (`providers/frank.py:349`):
+`base.py:271`), so no `vat_mult` is applied (`providers/frank.py:350`):
 
 ```
 factor = factor_pdf * 10.0
@@ -245,7 +245,7 @@ stays `None` too.
 
 ## Taxes
 
-`_extract_taxes` (`providers/frank.py:420`) parses five levy rows and builds a `TaxOverlay`.
+`_extract_taxes` (`providers/frank.py:421`) parses five levy rows and builds a `TaxOverlay`.
 All card values are VAT-inclusive (6% BTW), so `vat_rate=0.0` is set explicitly
 (`providers/frank.py:447`, comment at :439) and pinned by `test_taxes_vat_rate_zero`
 (`tests/test_frank.py:211`).
@@ -282,8 +282,8 @@ are divided by 100 to reach EUR/kWh.
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/frank.py:435`) covers all eight Fluvius sub-areas via
-`_FLUVIUS_LABELS` (`providers/frank.py:115`), which maps the card's human label to the
+`_extract_dsos` (`providers/frank.py:436`) covers all eight Fluvius sub-areas via
+`_FLUVIUS_LABELS` (`providers/frank.py:116`), which maps the card's human label to the
 canonical DSO key:
 
 | card label | canonical key |
@@ -345,9 +345,9 @@ parsed date is what makes `archive_validity_check` authoritative in `fetch_for_m
 - GROQ `[0]` returns a dict, not a list. `_sanity_query` wraps a lone dict
   (`providers/frank.py:149`); removing that branch breaks `probe`.
 - Suffix is not the tier name. Korting's filename token is `VT`, Slim's is `SL` or the
-  full word `Slim` (aliased in `_SUFFIX_ALIASES`, `providers/frank.py:113`). Both Slim
+  full word `Slim` (aliased in `_SUFFIX_ALIASES`, `providers/frank.py:114`). Both Slim
   spellings are live simultaneously.
-- Both decimal separators must be accepted (`_NUM`, `providers/frank.py:329`); a
+- Both decimal separators must be accepted (`_NUM`, `providers/frank.py:330`); a
   comma-only regex truncated dot-rendered values (`test_dot_decimal_render_matches_comma`).
 - VAT applied only to energy. The `x 1,06` multiplier scales the energy factor and base
   (`providers/frank.py:354`) but not injection (VAT-exempt, `providers/frank.py:396`).
@@ -390,7 +390,7 @@ layout-preserving extraction used in production.
 
 | symptom | likely culprit | why |
 | --- | --- | --- |
-| A tier stops fetching, or a new sixth tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py:132`-139) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
+| A tier stops fetching, or a new sixth tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py:133`-139) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
 | "could not parse Frank Energie energy formula" | `_FORMULA_RE` (`:330`) | BELPEX wording, sign chars, or the `x 1,06` multiplier changed on the card |
 | Wrong per-kWh price after a card update | the EURct->EUR conversion in `_extract_dynamic` (`:354`) | Frank switched units or dropped the VAT multiplier |
 | "monthly fixed fee row not found" | `_MONTHLY_FEE_RE` (`:336`) | "Abonnementskost (EUR/maand)" label reworded |

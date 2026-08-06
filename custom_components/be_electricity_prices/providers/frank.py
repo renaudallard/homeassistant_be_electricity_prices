@@ -60,6 +60,7 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    NUM_NO_THOUSANDS,
     flanders_tax_overlay,
     NL_MONTHS,
     SIGN_CHARS,
@@ -326,7 +327,7 @@ def parse_snapshot(
 # of the card would otherwise truncate values to the integer part - a
 # mandatory tax row silently dropping to 0, or the VAT multiplier 1,06
 # collapsing to 1 - instead of failing loud.
-_NUM = r"([\d]+(?:[.,][\d]+)?)"
+_NUM = NUM_NO_THOUSANDS
 
 _FORMULA_RE = re.compile(
     rf"\({_NUM}\s*x\s*BELPEX\s*per\s*uur\*?\s*"

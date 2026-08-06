@@ -464,7 +464,7 @@ print a single value and offer no exclusive-night), so the standard fee applies.
 - **Wallonia Impact triplet is ECO/MEDIUM/PIC ascending**, opposite to OCTA+/Bolt
   (`luminus.py:655-658`).
 - **Label-to-key remaps**: Fluvius Kempen -> IVEKA, Fluvius Midden-Vlaanderen ->
-  INTERGEM, in the shared `FLUVIUS_CARD_LABELS` (`const.py:92`, aliased at
+  INTERGEM, in the shared `FLUVIUS_CARD_LABELS` (`const.py:109`, aliased at
   `luminus.py:564`).
 - **Trailing-period token hazard** in the dynamic formula, guarded by the
   digit-anchored `_NUM` (`luminus.py:234-238`).

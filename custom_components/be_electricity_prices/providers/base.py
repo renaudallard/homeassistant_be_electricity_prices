@@ -54,7 +54,10 @@ TariffKind = Literal[
     "fixed", "variable", "dynamic", "tou", "tou_impact", "spot_monthly"
 ]
 
-_ALL_REGIONS: frozenset[str] = frozenset(REGIONS)
+# The three Belgian regions, as a Contract.regions default and for the
+# extractors whose every product serves all of them. Public: mega and
+# totalenergies each restated it from the REGION_* constants.
+ALL_REGIONS: frozenset[str] = frozenset(REGIONS)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -67,7 +70,7 @@ class Contract:
     # Regions the product is actually published in. Defaults to all three;
     # extractors override per-contract for products that 404 outside their
     # home region (e.g. TotalEnergies Impact is Wallonia-only).
-    regions: frozenset[str] = field(default_factory=lambda: _ALL_REGIONS)
+    regions: frozenset[str] = field(default_factory=lambda: ALL_REGIONS)
     # True when the supplier sells this product to businesses: its card is
     # published excluding VAT and may band the federal excise by annual
     # volume, so the config flow asks for the VAT treatment and the yearly

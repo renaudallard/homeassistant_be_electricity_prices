@@ -26,7 +26,7 @@ entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 ```
 
-`BePricesCoordinator.__init__` (`coordinator.py:839`) chains to `DataUpdateCoordinator.__init__` with `update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES)` (`coordinator.py:861`). `UPDATE_INTERVAL_MINUTES` is `60` (`const.py:291`): the coordinator ticks hourly for every contract kind, and the dynamic branch piggybacks the ENTSO-E refresh onto the same tick rather than running a second timer.
+`BePricesCoordinator.__init__` (`coordinator.py:839`) chains to `DataUpdateCoordinator.__init__` with `update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES)` (`coordinator.py:861`). `UPDATE_INTERVAL_MINUTES` is `60` (`const.py:313`): the coordinator ticks hourly for every contract kind, and the dynamic branch piggybacks the ENTSO-E refresh onto the same tick rather than running a second timer.
 
 ### 1.2 The runtime_data ordering trap
 
@@ -107,7 +107,7 @@ probe-less supplier is never re-fetched.
 
 `_maybe_refresh_snapshot` (`coordinator.py:1873`) decides whether to re-fetch the full tariff card. It never fetches unconditionally; a full PDF/HTML fetch happens only when a cheap check says the published card changed.
 
-The cheap check is the extractor **probe** (`SnapshotProbe`, `providers/base.py:719`): a `HEAD` or small listing `GET` that returns a freshness key. Same key across calls means the snapshot is still valid; a changed key means re-fetch. The probe is optional; `None` means the supplier has no reliable probe path (Engie/Luminus API endpoints, DATS 24 single PDF) and the time-based TTL takes over.
+The cheap check is the extractor **probe** (`SnapshotProbe`, `providers/base.py:722`): a `HEAD` or small listing `GET` that returns a freshness key. Same key across calls means the snapshot is still valid; a changed key means re-fetch. The probe is optional; `None` means the supplier has no reliable probe path (Engie/Luminus API endpoints, DATS 24 single PDF) and the time-based TTL takes over.
 
 Decision order in `_maybe_refresh_snapshot`:
 
@@ -137,7 +137,7 @@ Two config entries on the same `(supplier, contract, region)` share one fetched 
 
 ### 2.3 The on-disk Store and cache invalidation
 
-The Store is `_MigratingStore` (`coordinator.py:954`), a `Store[dict]` subclass whose `_async_migrate_func` returns `{}` for any blob written under an older `STORAGE_VERSION` (`coordinator.py:965`). Every persisted field is re-derivable from a fresh fetch, so dropping the cache on a major-version mismatch is safe and avoids HA's "missing migration function" warning. `STORAGE_VERSION` is `2` (`const.py:293`).
+The Store is `_MigratingStore` (`coordinator.py:954`), a `Store[dict]` subclass whose `_async_migrate_func` returns `{}` for any blob written under an older `STORAGE_VERSION` (`coordinator.py:965`). Every persisted field is re-derivable from a fresh fetch, so dropping the cache on a major-version mismatch is safe and avoids HA's "missing migration function" warning. `STORAGE_VERSION` is `2` (`const.py:315`).
 
 There is a **second**, finer version inside the serialized snapshot: `_SNAPSHOT_SCHEMA_VERSION`, currently `19` (`coordinator.py:4601`). `_snapshot_to_dict` stamps it (`coordinator.py:4604`); `_snapshot_from_dict` raises `ValueError` when a loaded blob's `_schema_version` is below it (`coordinator.py:4639`), which `async_load_persistent` catches and treats as "discard and re-fetch".
 
@@ -283,7 +283,7 @@ The same charge is accrued into the running bill by `_ytd_capacity`, which walks
 
 ## 7. Year-to-date / current-year cost
 
-`_compute_current_year_cost` (`coordinator.py:4198`) computes the running bill from Jan 1 of the local year to today. It bills each past day at the tariff of the month that day belongs to, using an archived snapshot when the supplier exposes `fetch_for_month` (`providers/base.py:749`) and the current snapshot as a proxy otherwise (`_snapshot_for_month`, `coordinator.py:468`). When a contract start date is set it routes every past month through `_effective_snapshot_for_month` (`coordinator.py:840`) instead, which splices the signing cohort's energy leg onto each delivery month's overlays, and dispatches on that cohort's effective energy kind so a re-priced variable contract takes the monthly-mean path. The whole year is recomputed from scratch each tick by design (`coordinator.py:840`): prior days are not immutable (a late ENTSO-E fill or a backfill correction changes a past rate), and the full replay is cheap pure arithmetic.
+`_compute_current_year_cost` (`coordinator.py:4198`) computes the running bill from Jan 1 of the local year to today. It bills each past day at the tariff of the month that day belongs to, using an archived snapshot when the supplier exposes `fetch_for_month` (`providers/base.py:752`) and the current snapshot as a proxy otherwise (`_snapshot_for_month`, `coordinator.py:468`). When a contract start date is set it routes every past month through `_effective_snapshot_for_month` (`coordinator.py:840`) instead, which splices the signing cohort's energy leg onto each delivery month's overlays, and dispatches on that cohort's effective energy kind so a re-priced variable contract takes the monthly-mean path. The whole year is recomputed from scratch each tick by design (`coordinator.py:840`): prior days are not immutable (a late ENTSO-E fill or a backfill correction changes a past rate), and the full replay is cheap pure arithmetic.
 
 Fees are always summed first and act as the floor: `_ytd_static_fees` (`coordinator.py:3737`, the supplier yearly fee, energy fund, DSO data-management fee, and Brussels OSP fee, pro-rated per archived month) plus `_ytd_prosumer` (`coordinator.py:3772`, the Walloon compensation fee). If no meters are wired the function returns fees only, never `unknown` (`coordinator.py:3772`).
 
@@ -319,7 +319,7 @@ Per-regime day math is documented at `coordinator.py:3833`. For `compensation` t
 
 ## 8. Injection taxonomy and the spot-gating invariant
 
-Belgian residential injection is VAT-exempt, so `InjectionRates` values are never VAT-scaled (`providers/base.py:274`). `InjectionRates` (`providers/base.py:274`) can carry a monthly indicative (`current`), an hourly formula (`factor`/`base`), a per-slot TOU triplet (`peak`/`transition`/`offpeak`), and an opt-in `floor_at_zero` flag. The coordinator distinguishes three shapes:
+Belgian residential injection is VAT-exempt, so `InjectionRates` values are never VAT-scaled (`providers/base.py:277`). `InjectionRates` (`providers/base.py:277`) can carry a monthly indicative (`current`), an hourly formula (`factor`/`base`), a per-slot TOU triplet (`peak`/`transition`/`offpeak`), and an opt-in `floor_at_zero` flag. The coordinator distinguishes three shapes:
 
 | Shape | Fields | Live price source | Example |
 |-------|--------|-------------------|---------|

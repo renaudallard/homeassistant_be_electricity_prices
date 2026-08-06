@@ -69,6 +69,7 @@ import aiohttp
 from homeassistant.util import dt as dt_util
 
 from ..const import (
+    VAT_RATE_STANDARD,
     DSO_AIEG,
     DSO_AIESH,
     DSO_ORES,
@@ -96,6 +97,7 @@ from ._pdf import (
     vat_multiplier,
 )
 from .base import (
+    ALL_REGIONS,
     Contract,
     DsoOverlay,
     DynamicRates,
@@ -141,11 +143,6 @@ _REGION_CARD_LABELS: dict[str, str] = {
 _REGION_SEGMENT_RE = re.compile(r"(?<=-B2C-)(?:BX|VL|WL)(?=-\d{6}-)")
 
 
-_MEGA_ALL_REGIONS: frozenset[str] = frozenset(
-    {REGION_FLANDERS, REGION_WALLONIA, REGION_BRUSSELS}
-)
-
-
 @dataclass(frozen=True)
 class _ContractDef:
     contract_id: str
@@ -155,7 +152,7 @@ class _ContractDef:
     # Regions the product is actually published in. Defaults to all
     # three; Off-peak Impact is Wallonia-only because it requires the
     # CWaPE IMPACT DSO tariff (Wallonia-specific).
-    regions: frozenset[str] = _MEGA_ALL_REGIONS
+    regions: frozenset[str] = ALL_REGIONS
     # B2C (residential) or B2B (professional), the segment in the card's
     # filename. The professional cards are absent from the public listing,
     # so a B2B contract also carries the filename tokens needed to build
@@ -788,7 +785,7 @@ def parse_snapshot(
             ),
             # The professional card prints HTVA throughout; base.apply_vat
             # resolves it for the entry.
-            vat_rate=_PRO_VAT_RATE if professional else 0.0,
+            vat_rate=VAT_RATE_STANDARD if professional else 0.0,
         ),
         source_url=source_url,
         publication_label=publication_label,
@@ -1231,8 +1228,6 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
 
 # ---- taxes --------------------------------------------------------------------
 
-
-_PRO_VAT_RATE = 0.21
 
 _PRO_TIER_RE = re.compile(
     r"Consommation entre\s+([\d.]+)\s+et\s+([\d.]+)\s+kWh\s+([\d.,]+)\s+([\d.,]+)"
