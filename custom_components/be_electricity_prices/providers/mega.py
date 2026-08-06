@@ -82,6 +82,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    require_contract,
     FR_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
@@ -448,9 +449,7 @@ async def fetch(
     region: str,
 ) -> SupplierSnapshot:
     """Fetch the configured region's PDF for ``contract_id``."""
-    if contract_id not in _CONTRACTS_BY_ID:
-        raise ExtractorError(f"unknown Mega contract {contract_id!r}")
-    contract = _CONTRACTS_BY_ID[contract_id]
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Mega")
     region_code = _REGION_TO_CODE.get(region)
     if region_code is None:
         raise ExtractorError(f"Mega: unknown region {region!r}")
@@ -724,9 +723,7 @@ def parse_snapshot(
     contract_id: str, text: str, region: str, source_url: str = _LISTING_URL
 ) -> SupplierSnapshot:
     """Pure parser exposed for unit tests."""
-    if contract_id not in _CONTRACTS_BY_ID:
-        raise ExtractorError(f"unknown Mega contract {contract_id!r}")
-    contract = _CONTRACTS_BY_ID[contract_id]
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Mega")
 
     _assert_card_region(text, region)
 

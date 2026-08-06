@@ -66,6 +66,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    require_contract,
     SIGN_CHARS,
     fetch_pdf_text_layout,
     fetch_text,
@@ -239,9 +240,7 @@ async def fetch(
     region: str,
 ) -> SupplierSnapshot:
     """Fetch the configured region's PDF for ``contract_id``."""
-    if contract_id not in _CONTRACTS_BY_ID:
-        raise ExtractorError(f"unknown TotalEnergies contract {contract_id!r}")
-    contract = _CONTRACTS_BY_ID[contract_id]
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
     if region not in _REGION_TO_CODE:
         raise ExtractorError(f"TotalEnergies: unknown region {region!r}")
     if region not in contract.regions:
@@ -257,9 +256,7 @@ def parse_snapshot(
     contract_id: str, text: str, region: str, source_url: str = _BASE_URL
 ) -> SupplierSnapshot:
     """Pure parser exposed for unit tests."""
-    if contract_id not in _CONTRACTS_BY_ID:
-        raise ExtractorError(f"unknown TotalEnergies contract {contract_id!r}")
-    contract = _CONTRACTS_BY_ID[contract_id]
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
 
     energy = _extract_energy(text, contract.kind)
     injection = _extract_injection(text, contract.kind)

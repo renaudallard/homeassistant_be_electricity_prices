@@ -77,6 +77,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    require_contract,
     SIGN_CHARS,
     fetch_pdf_text,
     fetch_text,
@@ -430,9 +431,7 @@ async def fetch(
     region: str,
 ) -> SupplierSnapshot:
     """Fetch the configured region's PDF for ``contract_id``."""
-    if contract_id not in _CONTRACTS_BY_ID:
-        raise ExtractorError(f"unknown Engie contract {contract_id!r}")
-    contract = _CONTRACTS_BY_ID[contract_id]
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Engie")
 
     region_code = _REGION_TO_CODE.get(region)
     if region_code is None:
@@ -446,9 +445,7 @@ async def fetch(
 
 def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSnapshot:
     """Pure parser used by tests; takes already-extracted PDF text."""
-    if contract_id not in _CONTRACTS_BY_ID:
-        raise ExtractorError(f"unknown Engie contract {contract_id!r}")
-    contract = _CONTRACTS_BY_ID[contract_id]
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Engie")
 
     # Energy formula, injection, federal excise and energy contribution
     # are supplier-set or federal and identical across regions, so we

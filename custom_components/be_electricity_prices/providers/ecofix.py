@@ -67,6 +67,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    require_contract,
     NL_MONTHS,
     SIGN_CHARS,
     fetch_pdf_text_layout,
@@ -136,9 +137,7 @@ async def fetch(
     Same PDF carries Flanders + Wallonia overlays; the parser narrows
     the snapshot down to ``region``.
     """
-    if contract_id not in _CONTRACTS_BY_ID:
-        raise ExtractorError(f"unknown Ecofix contract {contract_id!r}")
-    contract = _CONTRACTS_BY_ID[contract_id]
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Ecofix")
     url = _document_url(contract)
     text = await fetch_pdf_text_layout(session, url)
     return parse_snapshot(contract_id, text, region, url)
@@ -184,9 +183,7 @@ def parse_snapshot(
     contract_id: str, text: str, region: str, source_url: str = _BASE_URL
 ) -> SupplierSnapshot:
     """Parse one Ecofix tariff card into a region-narrowed snapshot."""
-    if contract_id not in _CONTRACTS_BY_ID:
-        raise ExtractorError(f"unknown Ecofix contract {contract_id!r}")
-    contract = _CONTRACTS_BY_ID[contract_id]
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Ecofix")
 
     yearly_fee, flanders_renewables_eur_per_kwh = _extract_fee_and_flanders_renewables(
         text, contract.kind

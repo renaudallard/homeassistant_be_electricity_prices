@@ -76,6 +76,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    require_contract,
     FR_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
@@ -325,9 +326,7 @@ async def fetch(
     region: str,
 ) -> SupplierSnapshot:
     """Fetch the latest Bolt PDF for ``contract_id`` (covers every region)."""
-    if contract_id not in _CONTRACTS_BY_ID:
-        raise ExtractorError(f"unknown Bolt contract {contract_id!r}")
-    contract = _CONTRACTS_BY_ID[contract_id]
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Bolt")
     url, text = await _fetch_pdf_text(session, contract)
     return parse_snapshot(contract_id, text, region, url)
 
@@ -375,9 +374,7 @@ def parse_snapshot(
     contract_id: str, text: str, region: str, source_url: str = _BASE_URL
 ) -> SupplierSnapshot:
     """Pure parser exposed for unit tests."""
-    if contract_id not in _CONTRACTS_BY_ID:
-        raise ExtractorError(f"unknown Bolt contract {contract_id!r}")
-    contract = _CONTRACTS_BY_ID[contract_id]
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Bolt")
     # Bolt's PDFs sprinkle U+2028 LINE SEPARATOR characters where one
     # would expect a newline; normalize to '\n' so a single set of
     # regexes covers every block.

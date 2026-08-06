@@ -34,6 +34,7 @@ import logging
 import re
 import unicodedata
 from collections.abc import Callable, Sequence
+from typing import TypeVar
 from datetime import date
 from io import BytesIO
 from pathlib import Path
@@ -46,6 +47,8 @@ from homeassistant.util import dt as dt_util
 from .base import ExtractorError, SupplierSnapshot, TaxOverlay
 
 _LOGGER = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 
 def _read_version() -> str:
@@ -502,6 +505,24 @@ def fold_accents(text: str) -> str:
         for c in unicodedata.normalize("NFKD", text.lower())
         if not unicodedata.combining(c)
     )
+
+
+def require_contract(by_id: dict[str, _T], contract_id: str, label: str) -> _T:
+    """The contract definition for ``contract_id``, or raise.
+
+    Fourteen call sites across seven extractors spelled out the same lookup and
+    the same "unknown <supplier> contract" message. The guard inside
+    ``parse_snapshot`` is NOT redundant with the one in ``fetch``: that function
+    is the public entry point the tests and the live check call directly.
+
+    ``fetch_for_month`` keeps its own ``return None`` instead: a month a
+    supplier never published has to resolve to None so the caller falls back to
+    the current-card proxy, not blow up the year-to-date walk.
+    """
+    try:
+        return by_id[contract_id]
+    except KeyError:
+        raise ExtractorError(f"unknown {label} contract {contract_id!r}") from None
 
 
 def to_float(text: str) -> float:
