@@ -162,6 +162,38 @@ mypy treats `custom_components/be_electricity_prices` and `tests/` as separate p
 missing stubs for `pypdf`, `pdfplumber`, and `pytest_homeassistant_custom_component`
 (`pyproject.toml:14`).
 
+## scripts/doc_ref_check.py
+
+The docs pin roughly 760 `file.py:line` references. They rot whenever a module grows, and a
+stale pin is worse than no pin: it sends a reader to a line that now says something else.
+`scripts/doc_ref_check.py` resolves each one by CONTENT, never by offset arithmetic. The docs
+almost always name the symbol a reference points at, in backticks, on the same line
+(``_extract_energy`` (`_mega_cards.py:137`)), so the checker resolves that symbol's real definition
+line from an AST index and, with `--write`, repins it.
+
+It runs in the `test` job (`.github/workflows/test.yml:62`), before the suite, and needs no
+network or fixtures.
+
+**It fails the build only on a reference that is provably broken**, i.e. past the end of the
+file it names. Everything else is printed and left to a human, because each has a legitimate
+form the checker cannot distinguish:
+
+| Report | Fails CI | Why not automatic |
+| --- | --- | --- |
+| past EOF (plain, range, or continuation) | yes | the file has no such line; nothing to argue about |
+| `anchored+rewritable` | no | the anchor heuristic takes the nearest preceding backticked identifier, which on a dense sentence is often not the subject. Read the list before running `--write` |
+| `moved-symbol suspects` | no | the same shape is also a correct reference to a USE site (`CONF_CONTRACT` (`config_flow.py:163`) is where the flow reads it, not where `const` defines it). ~63 of these are expected; `--verbose` lists them |
+
+Four reference forms exist and all four are checked. That matters because for a long time only
+the first was, and the other three rotted invisibly behind a clean run: 28 stale ranges (21 of
+them predating the refactor that exposed them), 4 stale continuations, and 31 references to a
+symbol that had moved module while its old line still landed inside the now-shorter file. Ranges
+and continuations are never auto-rewritten: the end of a span is not derivable from an anchor
+symbol, and inventing one is worse than leaving a visible stale pin.
+
+A table row whose reference is a bare number in a "Line" column (`| `_store` | ... | 859 |`)
+is invisible to all of this. Those are checked by hand when the file they point into changes.
+
 ## scripts/live_check.py
 
 The test suite proves the extractors parse the frozen fixtures. It cannot prove that a supplier

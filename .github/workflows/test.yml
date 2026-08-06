@@ -59,5 +59,12 @@ jobs:
         # here means a regression surfaces on PR rather than in the
         # next 06:00 UTC scheduled run.
         run: mypy custom_components/ tests/ scripts/
+      - name: Doc references
+        # The docs pin ~760 file.py:line references, and they rot whenever a
+        # module grows. Fails only on a reference past the end of the file it
+        # names, which is provably broken; the judgement calls are printed
+        # and left to a human. Nothing here needs network or fixtures, so it
+        # runs before the suite and reports in seconds.
+        run: python scripts/doc_ref_check.py
       - name: Tests
         run: pytest tests/ -q
