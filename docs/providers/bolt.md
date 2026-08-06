@@ -77,7 +77,7 @@ done about that from the card alone, and inventing the other bands would put EUR
 The same limitation applies to **Brussels**, and it is worth stating so nobody "fixes" it by
 hardcoding. Sibelga bills two separate regulated annual terms for a residential connection:
 *Activités de mesure et de comptage* and *Puissance mise à disposition ≤13 kVA*. Engie sums both
-(`engie.py:1027`) and so does Mega (`mega.py:1359`, `mesure + fixed_term_le13`), which is why their
+(`engie.py:1027`) and so does Mega (`_mega_overlays.py:258`, `mesure + fixed_term_le13`), which is why their
 Brussels `data_management_per_year` is around 64,80 EUR/yr. **Bolt's card prints only six numbers
 for the Sibelga row**, ending at the metering term, with no ≤13 kVA column anywhere in the
 document, so its Brussels `data_management_per_year` is that term alone and a Bolt Brussels entry

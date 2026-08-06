@@ -35,6 +35,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import _mega_cards as cards_mod
 from custom_components.be_electricity_prices.providers import mega as mega_mod
 from tests import FIXTURES, fixture_text
 from custom_components.be_electricity_prices.providers.base import (
@@ -402,7 +403,7 @@ def test_publication_month_keeps_version_for_august() -> None:
 def test_missing_yearly_fee_is_fatal() -> None:
     # The Redevance fixe standing charge is mandatory; a miss must raise.
     with pytest.raises(ExtractorError, match="Redevance fixe"):
-        mega_mod._extract_yearly_fee("no fee row here")
+        cards_mod._extract_yearly_fee("no fee row here")
 
 
 def test_missing_wallonia_connection_fee_is_fatal() -> None:
@@ -838,7 +839,7 @@ def test_pro_variable_cohort_coefficients_are_not_vat_baked() -> None:
     and a pro card never prints "TVA N% incluse", so the shared call baked 6%
     into an ex-VAT formula and inflated a pro entry's whole energy leg.
     """
-    from custom_components.be_electricity_prices.providers.mega import (
+    from custom_components.be_electricity_prices.providers._mega_cards import (
         _variable_cohort_coefficients,
     )
 
