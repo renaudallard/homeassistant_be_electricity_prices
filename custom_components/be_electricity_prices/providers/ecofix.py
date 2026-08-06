@@ -67,6 +67,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    parse_prosumer_column,
     require_contract,
     NL_MONTHS,
     SIGN_CHARS,
@@ -604,14 +605,9 @@ def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]
 
     prosumer_by_key: dict[str, float] = {}
     if analog_section:
-        for label, key in _FLANDERS_LABELS.items():
-            row = re.search(
-                rf"{re.escape(label)}\s+"
-                + r"[\d.,]+\s+[\d.,]+\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)",
-                analog_section.group(1),
-            )
-            if row:
-                prosumer_by_key[key] = to_float(row.group(1))
+        prosumer_by_key = parse_prosumer_column(
+            analog_section.group(1), _FLANDERS_LABELS
+        )
 
     for label, key in _FLANDERS_LABELS.items():
         row = re.search(

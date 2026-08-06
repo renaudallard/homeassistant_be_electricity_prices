@@ -36,7 +36,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
-from tests import fixture_text
+from tests import make_text_session, fixture_text
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
@@ -253,30 +253,6 @@ _LISTING_HTML = """
 """
 
 
-class _Resp:
-    status = 200
-
-    def __init__(self, body: str) -> None:
-        self._body = body
-
-    async def text(self) -> str:
-        return self._body
-
-    async def __aenter__(self) -> "_Resp":
-        return self
-
-    async def __aexit__(self, *args: Any) -> None:
-        return None
-
-
-class _Session:
-    def __init__(self, body: str) -> None:
-        self._body = body
-
-    def get(self, *_args: Any, **_kwargs: Any) -> _Resp:
-        return _Resp(self._body)
-
-
 def test_fetch_for_month_returns_snapshot_when_listing_has_url() -> None:
     """The Dec-2025 fixture parses cleanly and the listing URL with
     matching YYMM is what fetch_for_month must surface."""
@@ -287,7 +263,7 @@ def test_fetch_for_month_returns_snapshot_when_listing_has_url() -> None:
     ):
         snap = asyncio.run(
             fetch_for_month(
-                _Session(_LISTING_HTML),  # type: ignore[arg-type]
+                make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
                 "cociter_variable",
                 "wallonia",
                 date(2025, 12, 1),
@@ -304,7 +280,7 @@ def test_fetch_for_month_returns_none_when_listing_has_no_match() -> None:
     coordinator falls back to the proxy."""
     snap = asyncio.run(
         fetch_for_month(
-            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
             "cociter_variable",
             "wallonia",
             date(2024, 6, 1),
@@ -317,7 +293,7 @@ def test_fetch_for_month_unknown_contract_returns_none() -> None:
     """A contract id without a registered pattern must return None."""
     snap = asyncio.run(
         fetch_for_month(
-            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
             "unknown_family",
             "wallonia",
             date(2025, 12, 1),

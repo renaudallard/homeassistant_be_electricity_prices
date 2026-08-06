@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
-from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -50,7 +49,7 @@ from custom_components.be_electricity_prices.providers.ecopower import (
     parse_dbs_snapshot,
     parse_snapshot,
 )
-from tests import fixture_text
+from tests import make_text_session, fixture_text
 
 
 def _text(name: str) -> str:
@@ -446,30 +445,6 @@ _LISTING_HTML = """
 """
 
 
-class _Resp:
-    status = 200
-
-    def __init__(self, body: str) -> None:
-        self._body = body
-
-    async def text(self) -> str:
-        return self._body
-
-    async def __aenter__(self) -> "_Resp":
-        return self
-
-    async def __aexit__(self, *args: Any) -> None:
-        return None
-
-
-class _Session:
-    def __init__(self, body: str) -> None:
-        self._body = body
-
-    def get(self, *_args: Any, **_kwargs: Any) -> _Resp:
-        return _Resp(self._body)
-
-
 def test_fetch_for_month_returns_snapshot_when_listing_has_url() -> None:
     """The Feb-2026 fixture parses cleanly and the listing URL with
     matching YYYYMM prefix is what fetch_for_month must surface."""
@@ -480,7 +455,7 @@ def test_fetch_for_month_returns_snapshot_when_listing_has_url() -> None:
     ):
         snap = asyncio.run(
             fetch_for_month(
-                _Session(_LISTING_HTML),  # type: ignore[arg-type]
+                make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
                 "ecopower_burgerstroom",
                 "flanders",
                 date(2026, 2, 1),
@@ -497,7 +472,7 @@ def test_fetch_for_month_skips_inschatting_preview() -> None:
     historical snapshot for any month."""
     snap = asyncio.run(
         fetch_for_month(
-            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
             "ecopower_burgerstroom",
             "flanders",
             date(2026, 5, 1),
@@ -512,7 +487,7 @@ def test_fetch_for_month_returns_none_when_listing_has_no_match() -> None:
     few months around."""
     snap = asyncio.run(
         fetch_for_month(
-            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
             "ecopower_burgerstroom",
             "flanders",
             date(2024, 6, 1),
@@ -524,7 +499,7 @@ def test_fetch_for_month_returns_none_when_listing_has_no_match() -> None:
 def test_fetch_for_month_unknown_contract_returns_none() -> None:
     snap = asyncio.run(
         fetch_for_month(
-            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
             "ecopower_zakelijk",
             "flanders",
             date(2026, 2, 1),
@@ -552,7 +527,7 @@ def test_dbs_fetch_for_month_picks_card_in_effect() -> None:
     ):
         snap = asyncio.run(
             fetch_for_month(
-                _Session(_DBS_LISTING_HTML),  # type: ignore[arg-type]
+                make_text_session(_DBS_LISTING_HTML),  # type: ignore[arg-type]
                 "ecopower_dynamische_burgerstroom",
                 "flanders",
                 date(2025, 11, 1),
@@ -568,7 +543,7 @@ def test_dbs_fetch_for_month_returns_none_before_first_card() -> None:
     the coordinator falls back to the proxy snapshot."""
     snap = asyncio.run(
         fetch_for_month(
-            _Session(_DBS_LISTING_HTML),  # type: ignore[arg-type]
+            make_text_session(_DBS_LISTING_HTML),  # type: ignore[arg-type]
             "ecopower_dynamische_burgerstroom",
             "flanders",
             date(2024, 1, 1),

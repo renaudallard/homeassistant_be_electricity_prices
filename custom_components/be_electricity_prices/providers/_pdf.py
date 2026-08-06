@@ -507,6 +507,29 @@ def fold_accents(text: str) -> str:
     )
 
 
+def parse_prosumer_column(
+    section: str, labels: dict[str, str], *, skip_columns: int = 4
+) -> dict[str, float]:
+    """DSO key -> prosumer EUR/kVA/year, off an analog-meter DSO table.
+
+    The Flemish analog-meter table prints the prosumer forfait as the column
+    after ``skip_columns`` numeric ones. Ecofix and EBEM read it with the same
+    eight lines; only the section they read it from differs, and that stays at
+    the call site along with any per-supplier gate on whether the table exists
+    at all.
+
+    A label the table does not carry is simply absent from the result, the same
+    as before: the caller falls back to leaving the rate unset.
+    """
+    out: dict[str, float] = {}
+    skip = r"[\d.,]+\s+" * skip_columns
+    for label, key in labels.items():
+        row = re.search(rf"{re.escape(label)}\s+" + skip + r"([\d.,]+)", section)
+        if row:
+            out[key] = to_float(row.group(1))
+    return out
+
+
 def require_contract(by_id: dict[str, _T], contract_id: str, label: str) -> _T:
     """The contract definition for ``contract_id``, or raise.
 

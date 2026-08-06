@@ -135,7 +135,7 @@ mis-billing past consumption). When `valid_until` is `None` and `month_names` is
 accepted on the strength of the URL resolver alone (`_pdf.py:787`). This is why
 `_extract_validity` failing silently degrades the safety check, not the fetch.
 
-`test_fetch_for_month_handles_underscore_separator` (`tests/test_ebem.py:354`)
+`test_fetch_for_month_handles_underscore_separator` (`tests/test_ebem.py:329`)
 documents the interaction: the 2026-01 dynamic URL resolves via the underscore
 branch, but the mocked PDF text says `mei 2026`, so the cross-check returns
 `None`. That is correct safety behaviour, not a bug.
@@ -421,7 +421,7 @@ feed-in credit (`ebem.py:529`, `ebem.py:562`, `tests/test_ebem.py:194`).
 | `tests/fixtures/ebem_dynamic_2026-05.pdf` | `dynamic` card (Groen Dyn@mic), May 2026 | dynamic energy / injection / no-prosumer tests |
 | `tests/fixtures/discover/ebem.html` | listing page snapshot | `fetch_for_month` + `discover` tests |
 
-Test constants `_VARIABLE` / `_DYNAMIC` (`tests/test_ebem.py:53`); the listing
+Test constants `_VARIABLE` / `_DYNAMIC` (`tests/test_ebem.py:52`); the listing
 HTML is read at `tests/test_ebem.py:306`. Fixture text is loaded with
 `layout=True` (`tests/test_ebem.py:56`) so it matches the production
 `fetch_pdf_text_layout` extraction.

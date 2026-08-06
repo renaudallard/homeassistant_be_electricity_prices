@@ -63,6 +63,7 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    parse_prosumer_column,
     NL_MONTHS,
     SIGN_CHARS,
     archive_validity_check,
@@ -668,14 +669,9 @@ def _extract_dsos(text: str, contract: _ContractDef) -> dict[str, DsoOverlay]:
     if contract.pdf_kind == "elek":
         analog_section = re.search(r"ANALOGE METER([\s\S]+?)DIGITALE METER", text)
         if analog_section:
-            for label, key in _FLANDERS_LABELS.items():
-                row = re.search(
-                    rf"{re.escape(label)}\s+"
-                    + r"[\d.,]+\s+[\d.,]+\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)",
-                    analog_section.group(1),
-                )
-                if row:
-                    prosumer_by_key[key] = to_float(row.group(1))
+            prosumer_by_key = parse_prosumer_column(
+                analog_section.group(1), _FLANDERS_LABELS
+            )
 
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():

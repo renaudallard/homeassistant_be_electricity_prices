@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
-from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -47,7 +46,7 @@ from custom_components.be_electricity_prices.providers.ebem import (
     fetch_for_month,
     parse_snapshot,
 )
-from tests import FIXTURES, fixture_text
+from tests import make_text_session, FIXTURES, fixture_text
 
 _VARIABLE = "ebem_variable_2026-05.pdf"
 _DYNAMIC = "ebem_dynamic_2026-05.pdf"
@@ -306,30 +305,6 @@ def test_missing_renewables_block_is_fatal() -> None:
 _LISTING_HTML = (FIXTURES / "discover" / "ebem.html").read_text(encoding="utf-8")
 
 
-class _Resp:
-    status = 200
-
-    def __init__(self, body: str) -> None:
-        self._body = body
-
-    async def text(self) -> str:
-        return self._body
-
-    async def __aenter__(self) -> "_Resp":
-        return self
-
-    async def __aexit__(self, *args: Any) -> None:
-        return None
-
-
-class _Session:
-    def __init__(self, body: str) -> None:
-        self._body = body
-
-    def get(self, *_args: Any, **_kwargs: Any) -> _Resp:
-        return _Resp(self._body)
-
-
 def test_fetch_for_month_returns_snapshot_when_listing_has_url() -> None:
     """May 2026 is on the listing fixture; with the parsed PDF text mocked
     in, ``fetch_for_month`` resolves the URL and parses cleanly."""
@@ -340,7 +315,7 @@ def test_fetch_for_month_returns_snapshot_when_listing_has_url() -> None:
     ):
         snap = asyncio.run(
             fetch_for_month(
-                _Session(_LISTING_HTML),  # type: ignore[arg-type]
+                make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
                 "ebem_variable",
                 "flanders",
                 date(2026, 5, 1),
@@ -363,7 +338,7 @@ def test_fetch_for_month_handles_underscore_separator() -> None:
     ):
         snap = asyncio.run(
             fetch_for_month(
-                _Session(_LISTING_HTML),  # type: ignore[arg-type]
+                make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
                 "ebem_dynamic",
                 "flanders",
                 date(2026, 1, 1),
@@ -382,7 +357,7 @@ def test_fetch_for_month_returns_none_when_listing_has_no_match() -> None:
     the coordinator falls back to the current snapshot as a proxy."""
     snap = asyncio.run(
         fetch_for_month(
-            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
             "ebem_dynamic",
             "flanders",
             date(2024, 7, 1),
@@ -394,7 +369,7 @@ def test_fetch_for_month_returns_none_when_listing_has_no_match() -> None:
 def test_fetch_for_month_unknown_contract_returns_none() -> None:
     snap = asyncio.run(
         fetch_for_month(
-            _Session(_LISTING_HTML),  # type: ignore[arg-type]
+            make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
             "bogus",
             "flanders",
             date(2026, 5, 1),
@@ -413,7 +388,7 @@ def test_discover_drops_non_electricity_kinds() -> None:
         '<a href="/media/def/ebem_tariefkaart-gas-05-2026.pdf">gas</a>'
         '<a href="/media/ghi/ebem_tariefkaart-aardgas-05-2026.pdf">aardgas</a>'
     )
-    out = asyncio.run(discover(_Session(listing)))  # type: ignore[arg-type]
+    out = asyncio.run(discover(make_text_session(listing)))  # type: ignore[arg-type]
     assert "gas" not in out
     assert "aardgas" not in out
     assert {"ebem_variable", "ebem_basic_plus"} <= out

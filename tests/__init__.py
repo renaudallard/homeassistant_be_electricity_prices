@@ -174,3 +174,31 @@ __all__ = [
     "make_snapshot",
     "make_stub_extractor",
 ]
+
+
+def make_text_session(body: str) -> Any:
+    """A minimal stand-in for an aiohttp session that serves ``body``.
+
+    Three provider test modules pasted the same _Resp / _Session pair
+    (md5-identical) to exercise a listing fetch. Do NOT fold in
+    test_discover.py's stub: that one is a deliberate superset with a
+    configurable status, a headers dict and a head() method.
+    """
+
+    class _Resp:
+        status = 200
+
+        async def text(self) -> str:
+            return body
+
+        async def __aenter__(self) -> "_Resp":
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            return None
+
+    class _Session:
+        def get(self, *_args: Any, **_kwargs: Any) -> _Resp:
+            return _Resp()
+
+    return _Session()
