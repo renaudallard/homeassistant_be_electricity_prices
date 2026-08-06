@@ -3135,14 +3135,13 @@ def test_all_kwh_resolvers_agree_that_registers_win() -> None:
 
 
 async def test_cohort_leg_bills_the_same_fee_on_every_call_path() -> None:
-    """All three `_cohort_energy_leg` call sites must resolve one fee.
+    """Every `_cohort_energy_leg` call site must resolve one fee.
 
     `apply_vat` zeroes `vat_rate` for an entry that deducts VAT, and that was
-    the only record of the basis the card was published at. The live tick
-    passes the raw card, the year-to-date and monthly paths pass the resolved
-    one, so threading the rate as a parameter reached the live tick alone and
-    left the other two 21 EUR/yr adrift on the same entry. The rate now rides
-    on the snapshot every caller already hands in.
+    the only record of the basis the card was published at. Every caller hands
+    in an already-resolved snapshot, so threading the rate as a parameter
+    reached the live tick alone and left the rest 21 EUR/yr adrift on the same
+    entry. The rate now rides on the snapshot every caller already hands in.
     """
     from custom_components.be_electricity_prices import providers
     from custom_components.be_electricity_prices.cohort import (

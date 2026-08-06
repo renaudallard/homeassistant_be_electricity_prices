@@ -194,15 +194,21 @@ exactly the seven suppliers that keep an archive (issue #54).
 
 A typed yearly fee is entered as the card prints it, so on a card published
 ex-VAT it has to be un-grossed for an entry that deducts VAT. The rate to
-un-gross by is `TaxOverlay.published_vat_rate` (`providers/base.py:505`), read
+un-gross by is `TaxOverlay.published_vat_rate` (`providers/base.py:528`), read
 as `published_vat_rate or vat_rate`. It has to ride on the snapshot rather than
-be passed in, because `apply_vat` zeroes `vat_rate` and there are three
-`_cohort_energy_leg` call sites: the live tick (`coordinator.py:521`) hands in
-the raw card, while the monthly (`cohort.py:362`) and year-to-date
-(`ytd_cost.py:606`) paths hand in the resolved one. Threading it as a
-parameter reached the live tick alone and left the other two 21 EUR/yr adrift
-on the same entry. The `or` fallback also means a probe cache written before
-the field existed still answers correctly, so no schema bump was needed.
+be passed in, because `apply_vat` zeroes `vat_rate` on an ex-VAT resolve, and
+every `_cohort_energy_leg` call site hands in an already-resolved snapshot: the
+live tick (`coordinator.py:521`), the monthly walk (`cohort.py:362`), the
+year-to-date walk (`ytd_cost.py:606`), the backfill accrual
+(`backfill.py:313`), and the compare quote (`compare_flow.py:549`).
+`_set_snapshot` (`coordinator_snapshot.py:141`) is the only writer of
+`self._snapshot` and always routes through `_resolve_snapshot`, so by the time
+the cohort leg reads the taxes there is no other surviving record of the basis
+the card published at. Threading it as a parameter reached the live tick alone
+and left the rest 21 EUR/yr adrift on the same entry. The `or` fallback covers
+the two snapshots that never went through `apply_vat`: a card printed
+VAT-inclusive (`vat_rate` is already `0.0`, so both halves agree) and a probe
+cache written before the field existed, so no schema bump was needed.
 `test_cohort_leg_bills_the_same_fee_on_every_call_path` pins the agreement.
 
 ### 3.1 Resolution selection (hourly vs quarter-hourly)
