@@ -2484,6 +2484,21 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 out[utc] = rate
         return out
 
+    def _billable_spots(
+        self, extra_spots: dict[datetime, float]
+    ) -> dict[datetime, float]:
+        """Persisted year-to-date spots merged with this tick's fresh curve,
+        with anything past today dropped.
+
+        The drop has to happen on the MERGED dict, not on either half: the
+        freshly fetched curve is exactly where tomorrow's prices come from, and
+        letting them into a month mean pulls the flat monthly rate toward a day
+        that has not been billed. Both month means spelled this out.
+        """
+        merged = dict(self._historical_spots)
+        merged.update(extra_spots)
+        return _drop_future_spots(merged, dt_util.now().date())
+
     def _monthly_spot_mean(
         self, year: int, month: int, extra_spots: dict[datetime, float]
     ) -> float | None:
@@ -2494,10 +2509,7 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         date within a tick, and de-duplicates by timestamp. Returns ``None``
         when no spot for that month is available yet (cold start).
         """
-        merged = dict(self._historical_spots)
-        merged.update(extra_spots)
-        merged = _drop_future_spots(merged, dt_util.now().date())
-        return _mean_of_month(merged, year, month)
+        return _mean_of_month(self._billable_spots(extra_spots), year, month)
 
     def _restore_spp_weights(self, blob: dict[str, Any]) -> None:
         """Rehydrate the persisted SPP profile blob into ``_spp_weights``."""
@@ -2570,10 +2582,9 @@ class BePricesCoordinator(DataUpdateCoordinator[CoordinatorData]):
         """
         if not self._spp_weights:
             return None
-        merged = dict(self._historical_spots)
-        merged.update(extra_spots)
-        merged = _drop_future_spots(merged, dt_util.now().date())
-        return _spp_weighted_month_mean(merged, self._spp_weights, year, month)
+        return _spp_weighted_month_mean(
+            self._billable_spots(extra_spots), self._spp_weights, year, month
+        )
 
     def _snapshot_age_hours(self) -> float:
         if self._snapshot_fetched_at is None:
@@ -3006,6 +3017,22 @@ def _floor_injection(rate: float | None, inj: InjectionRates) -> float | None:
     return max(rate, 0.0)
 
 
+def _injection_is_spot_formula(inj: InjectionRates, energy: EnergyRates) -> bool:
+    """True when this injection leg prices off the spot rather than a printed
+    indicative: it has both coefficients, and either the energy is dynamic or
+    the card publishes no flat ``current`` to prefer.
+
+    Written out twice, once where it decides the rate and once where it
+    decides whether the display array varies intraday. A drift between them
+    mis-gates the array against the billed value.
+    """
+    return (
+        inj.factor is not None
+        and inj.base is not None
+        and (isinstance(energy, DynamicRates) or inj.current is None)
+    )
+
+
 def _injection_price_for_slot(
     inj: InjectionRates,
     energy: EnergyRates,
@@ -3036,13 +3063,12 @@ def _injection_price_for_slot(
     tou_rate = _tou_injection_rate(inj, energy, when)
     if tou_rate is not None:
         return tou_rate
-    if (
-        inj.factor is not None
-        and inj.base is not None
-        and (isinstance(energy, DynamicRates) or inj.current is None)
-    ):
+    if _injection_is_spot_formula(inj, energy):
         if spot is None:
             return None
+        # Guaranteed by the predicate; spelled out because a call does not
+        # narrow the Optionals the way the inline check used to.
+        assert inj.factor is not None and inj.base is not None
         return _floor_injection(inj.factor * spot + inj.base, inj)
     return _floor_injection(inj.current, inj)
 
@@ -3111,11 +3137,7 @@ def _injection_varies_intraday(inj: InjectionRates, energy: EnergyRates) -> bool
     ``_injection_price_for_slot``."""
     if isinstance(energy, TimeOfUseRates) and inj.peak is not None:
         return True
-    return (
-        inj.factor is not None
-        and inj.base is not None
-        and (isinstance(energy, DynamicRates) or inj.current is None)
-    )
+    return _injection_is_spot_formula(inj, energy)
 
 
 def _historical_injection_rate(
