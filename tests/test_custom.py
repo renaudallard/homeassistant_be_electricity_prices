@@ -39,6 +39,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.be_electricity_prices import const
 from custom_components.be_electricity_prices.config_flow import (
     _compare_supplier_options,
+)
+from custom_components.be_electricity_prices.flow_schemas import (
     _custom_dso_schema,
     _custom_energy_schema,
 )
@@ -222,7 +224,7 @@ def test_custom_excluded_from_compare_targets() -> None:
 
 
 def test_custom_listed_last_in_supplier_dropdown() -> None:
-    from custom_components.be_electricity_prices.config_flow import _supplier_options
+    from custom_components.be_electricity_prices.flow_schemas import _supplier_options
 
     values = [o["value"] for o in _supplier_options()]
     assert values[-1] == const.SUPPLIER_CUSTOM
@@ -232,7 +234,7 @@ def test_custom_listed_last_in_supplier_dropdown() -> None:
 
 
 def test_withdrawn_supplier_not_offered_to_new_setups() -> None:
-    from custom_components.be_electricity_prices.config_flow import _supplier_options
+    from custom_components.be_electricity_prices.flow_schemas import _supplier_options
 
     assert "dats24" not in {o["value"] for o in _supplier_options()}
     assert "dats24" not in {
@@ -244,7 +246,7 @@ def test_withdrawn_supplier_still_editable_on_an_existing_entry() -> None:
     """The load-bearing half: a SelectSelector rejects a default that is not
     among its options, so an entry already on a withdrawn supplier would
     become impossible to edit if the filter had no ``keep`` escape hatch."""
-    from custom_components.be_electricity_prices.config_flow import _supplier_options
+    from custom_components.be_electricity_prices.flow_schemas import _supplier_options
 
     assert "dats24" in {o["value"] for o in _supplier_options(keep="dats24")}
     # keep= is an exception for one entry, not a global switch-off.
@@ -602,7 +604,7 @@ def test_a_blanked_fallback_box_is_removed_from_the_entry() -> None:
     in that window holds a billed zero -- and without the pop there is no way
     to clear it.
     """
-    from custom_components.be_electricity_prices.config_flow import _drop_blanked
+    from custom_components.be_electricity_prices.flow_schemas import _drop_blanked
 
     data = {
         const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,

@@ -41,7 +41,9 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import const, synergrid
-from custom_components.be_electricity_prices.config_flow import _custom_injection_schema
+from custom_components.be_electricity_prices.flow_schemas import (
+    _custom_injection_schema,
+)
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
     _compute_current_year_cost,

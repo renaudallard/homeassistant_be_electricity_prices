@@ -38,7 +38,7 @@ from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices.config_flow import (
+from custom_components.be_electricity_prices.flow_schemas import (
     _validate_contract_dates,
 )
 from custom_components.be_electricity_prices.const import (
@@ -1363,7 +1363,7 @@ def test_compare_bihourly_meter_weights_peak_offpeak() -> None:
 def test_solar_schema_offers_compensation_only_in_wallonia() -> None:
     # Compensation is a Walloon-only regime; offering it in Flanders/Brussels
     # would let a user double-count the capacity tariff with the prosumer fee.
-    from custom_components.be_electricity_prices.config_flow import _solar_schema
+    from custom_components.be_electricity_prices.flow_schemas import _solar_schema
     from custom_components.be_electricity_prices.const import CONF_SOLAR_REGIME
 
     def _regimes(region: str) -> list[str]:

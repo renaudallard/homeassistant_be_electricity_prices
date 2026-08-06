@@ -36,7 +36,7 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import const
-from custom_components.be_electricity_prices.config_flow import (
+from custom_components.be_electricity_prices.flow_prefill import (
     _apply_energy_manager_capacity_default,
     _apply_energy_manager_defaults,
     _classify_tariff,
