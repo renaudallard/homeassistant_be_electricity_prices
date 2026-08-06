@@ -60,7 +60,8 @@ from .const import (
     RESOLUTION_QUARTER,
     STORAGE_VERSION,
 )
-from .coordinator import BePricesCoordinator, evict_shared_caches
+from .coordinator import BePricesCoordinator
+from .snapshot_store import evict_shared_caches
 from .pricing import PriceBreakdown, slot_delta, slot_start, slots_per_hour
 
 type BePricesConfigEntry = ConfigEntry[BePricesCoordinator]

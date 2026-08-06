@@ -27,6 +27,8 @@
 
 from __future__ import annotations
 
+from custom_components.be_electricity_prices import energy_meters
+
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
@@ -89,7 +91,7 @@ def test_compensation_kva_invalid_inputs_clamp_to_zero() -> None:
     negative. backfill's own _solar_kva used to hold this branch while the
     regime and region halves lived 580 lines away and in coordinator; the
     whole gate is now one function that all three cost paths call."""
-    from custom_components.be_electricity_prices.coordinator import _compensation_kva
+    from custom_components.be_electricity_prices.fees import _compensation_kva
 
     eligible = {"solar_regime": "compensation", "region": "wallonia"}
     e_missing = SimpleNamespace(data={**eligible})
@@ -631,7 +633,7 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
     """A custom monthly entry that opted into SPP-weighted injection must
     have its backfilled cost credit injection at the SPP-weighted month
     mean, matching the live YTD credit, not the plain flat mean."""
-    from custom_components.be_electricity_prices import const, coordinator
+    from custom_components.be_electricity_prices import const
     from custom_components.be_electricity_prices.providers.base import (
         InjectionRates,
         SpotMonthlyRates,
@@ -690,7 +692,7 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
 
     with (
         patch.object(bf, "_month_snapshot_cache", _fake_cache),
-        patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly),
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
             new=_fake_import,

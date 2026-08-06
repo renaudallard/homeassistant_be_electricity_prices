@@ -371,7 +371,7 @@ def _validate_contract_dates(user_input: dict[str, Any]) -> dict[str, str]:
     fine (a bare renewal reminder), so the ordering check only fires when both
     are present.
     """
-    from .coordinator import _parse_iso_date
+    from .cohort import _parse_iso_date
 
     errors: dict[str, str] = {}
     start = _parse_iso_date(user_input.get(CONF_CONTRACT_START_DATE))

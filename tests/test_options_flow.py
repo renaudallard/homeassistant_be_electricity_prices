@@ -27,6 +27,8 @@
 
 from __future__ import annotations
 
+from custom_components.be_electricity_prices import snapshot_store
+
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from typing import Any
@@ -48,7 +50,7 @@ from custom_components.be_electricity_prices.const import (
     CONF_INCLUDE_VAT,
     DOMAIN,
 )
-from custom_components.be_electricity_prices.coordinator import _parse_iso_date
+from custom_components.be_electricity_prices.cohort import _parse_iso_date
 from tests import make_entry
 
 
@@ -753,7 +755,7 @@ async def test_compare_does_not_mutate_live_historical_spots(
         patch.dict(EXTRACTORS, {"cociter": fake}),
         patch.object(coord, "_ensure_historical_spots", _fake_ensure),
         patch(
-            "custom_components.be_electricity_prices.coordinator._compute_current_year_cost",
+            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
             AsyncMock(return_value=123.0),
         ),
     ):
@@ -984,7 +986,7 @@ async def test_compare_uses_measured_rolling_year_kwh(
         return {start: measured_ytd}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator._recorder_daily_kwh",
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
         new=_fake_recorder_daily_kwh,
     ):
         ph = await _drive_compare(hass, entry, other_snap=other_snap)
@@ -1048,7 +1050,7 @@ async def test_compare_compensation_regime_nets_consumption(
         return {}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator._recorder_daily_kwh",
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
         new=_fake_recorder_daily_kwh,
     ):
         ph = await _drive_compare(hass, entry, other_snap=other_snap)
@@ -1127,7 +1129,7 @@ async def test_compare_injection_regime_credits_injection_price(
         return {}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator._recorder_daily_kwh",
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
         new=_fake_recorder_daily_kwh,
     ):
         ph = await _drive_compare(
@@ -1786,7 +1788,7 @@ async def test_compare_prosumer_term_matches_the_live_ytd_sensor(
     term and is exactly why this went unnoticed.
     """
     from custom_components.be_electricity_prices.compare_quote import _annual_bill
-    from custom_components.be_electricity_prices.coordinator import _ytd_prosumer
+    from custom_components.be_electricity_prices.ytd_cost import _ytd_prosumer
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
         FixedRates,
@@ -2030,11 +2032,10 @@ async def test_compare_resolves_the_quote_through_the_shared_resolver(
     uses: 1,421 c€/kWh instead of 1,139 at 60 000 kWh/yr, about 169 EUR/yr
     against the alternative. The user's own side comes off the coordinator and
     IS fully resolved, so the comparison was biased. Both transforms live in
-    `coordinator._resolve_snapshot`; compare must go through it.
+    `snapshot_store._resolve_snapshot`; compare must go through it.
     """
     from dataclasses import replace
 
-    from custom_components.be_electricity_prices import coordinator as coord_mod
     from custom_components.be_electricity_prices.providers import EXTRACTORS
 
     entry = _make_entry()
@@ -2046,7 +2047,7 @@ async def test_compare_resolves_the_quote_through_the_shared_resolver(
     fake = replace(EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap))
 
     seen: list[Any] = []
-    real = coord_mod._resolve_snapshot
+    real = snapshot_store._resolve_snapshot
 
     def _spy(cfg_entry: Any, snap: Any) -> Any:
         seen.append((cfg_entry, snap))
@@ -2054,7 +2055,7 @@ async def test_compare_resolves_the_quote_through_the_shared_resolver(
 
     with (
         patch.dict(EXTRACTORS, {"cociter": fake}),
-        patch.object(coord_mod, "_resolve_snapshot", _spy),
+        patch.object(snapshot_store, "_resolve_snapshot", _spy),
     ):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(

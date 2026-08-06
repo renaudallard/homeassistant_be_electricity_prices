@@ -174,7 +174,7 @@ async def test_diagnostics_includes_consumption_and_monthly_labels(
     from datetime import UTC, datetime
     from unittest.mock import patch
 
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.snapshot_store import (
         _monthly_snapshots,
         _shared_failed_fetches,
     )

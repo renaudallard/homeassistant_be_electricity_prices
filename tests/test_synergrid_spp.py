@@ -27,6 +27,8 @@
 
 from __future__ import annotations
 
+from custom_components.be_electricity_prices import energy_meters
+
 import tempfile
 import zipfile
 from datetime import UTC, date, datetime, timedelta
@@ -46,9 +48,13 @@ from custom_components.be_electricity_prices.flow_schemas import (
 )
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
-    _compute_current_year_cost,
+)
+from custom_components.be_electricity_prices.spot_stats import (
     _spp_weighted_month_mean,
     _spp_weighting_enabled,
+)
+from custom_components.be_electricity_prices.ytd_cost import (
+    _compute_current_year_cost,
 )
 from custom_components.be_electricity_prices.providers.base import (
     InjectionRates,
@@ -522,7 +528,6 @@ async def test_ytd_injection_uses_spp_not_flat_mean(
 ) -> None:
     """Year-to-date injection credit must use the SPP-weighted month mean
     while energy stays on the flat mean."""
-    from custom_components.be_electricity_prices import coordinator
 
     freezer.move_to("2026-07-15 12:00:00+02:00")
     snap = make_snapshot(
@@ -557,7 +562,7 @@ async def test_ytd_injection_uses_spp_not_flat_mean(
             return {datetime(2026, 6, 15, 10, tzinfo=UTC): 1.0}
         return {}
 
-    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         cost = await _compute_current_year_cost(
             hass,
             None,  # type: ignore[arg-type]

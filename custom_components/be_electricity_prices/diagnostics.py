@@ -43,9 +43,13 @@ from .const import (
 )
 from .coordinator import (
     BePricesCoordinator,
+)
+from .energy_meters import (
     _kwh_sensor_ids,
-    _monthly_snapshots,
     _recorder_daily_kwh,
+)
+from .snapshot_store import (
+    _monthly_snapshots,
     _shared_failed_fetches,
 )
 from .pricing import breakdown_row

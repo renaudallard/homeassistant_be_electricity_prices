@@ -27,6 +27,12 @@
 
 from __future__ import annotations
 
+from custom_components.be_electricity_prices import cohort
+from custom_components.be_electricity_prices import snapshot_store
+from custom_components.be_electricity_prices import ytd_cost
+
+from custom_components.be_electricity_prices import energy_meters
+
 import calendar
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
@@ -54,30 +60,42 @@ from custom_components.be_electricity_prices.const import (
     CONF_SUPPLIER,
     DOMAIN,
 )
-from custom_components.be_electricity_prices.coordinator import (
-    BePricesCoordinator,
+from custom_components.be_electricity_prices.cohort import (
     _cohort_energy_from_archived,
     _cohort_energy_leg,
-    _compute_capacity,
-    _compute_current_year_cost,
-    _compute_injection_price,
-    _compute_prosumer,
     _contract_start_month,
-    _days_through,
     _effective_snapshot_for_month,
-    _energy_kind,
+    _manual_energy_leg,
+)
+from custom_components.be_electricity_prices.coordinator import (
+    BePricesCoordinator,
+)
+from custom_components.be_electricity_prices.energy_meters import (
+    _live_today_kwh,
+    _recorder_daily_kwh,
+)
+from custom_components.be_electricity_prices.fees import (
+    _compute_capacity,
+    _compute_prosumer,
+)
+from custom_components.be_electricity_prices.injection import (
+    _compute_injection_price,
     _historical_injection_rate,
     _injection_needs_spot,
     _injection_price_for_slot,
     _injection_varies_intraday,
-    _manual_energy_leg,
-    _monthly_snapshots,
-    _live_today_kwh,
-    _recorder_daily_kwh,
-    _snapshot_for_month,
+)
+from custom_components.be_electricity_prices.snapshot_store import (
     _SNAPSHOT_SCHEMA_VERSION,
+    _energy_kind,
+    _monthly_snapshots,
+    _snapshot_for_month,
     _snapshot_from_dict,
     _snapshot_to_dict,
+)
+from custom_components.be_electricity_prices.ytd_cost import (
+    _compute_current_year_cost,
+    _days_through,
     _ytd_spot_injection_credit,
     _ytd_static_fees,
 )
@@ -242,7 +260,7 @@ def test_the_three_capacity_paths_share_one_formula() -> None:
     Pin that the shared helper answers identically for every shape, including
     a card with no capacity row and a DSO missing from the snapshot.
     """
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.fees import (
         _capacity_monthly_eur,
     )
 
@@ -710,7 +728,6 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
     base) for a spot-indexed-injection contract; hours without a cached
     spot are skipped, and a contract with a monthly indicative is a
     no-op (handled by the daily path instead)."""
-    from custom_components.be_electricity_prices import coordinator
 
     freezer.move_to("2026-05-15 12:00:00+02:00")
     today = dt_util.now().date()
@@ -734,7 +751,7 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
             return {h1: 2.0, h2: 1.0, h2 + timedelta(hours=1): 5.0}
         return {}
 
-    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         credit = await _ytd_spot_injection_credit(hass, snap, entry, today, spots)
     # 2*(0.9*0.10-0.01) + 1*(0.9*0.20-0.01); the 5 kWh hour has no spot.
     assert credit == pytest.approx(2 * (0.9 * 0.10 - 0.01) + 1 * (0.9 * 0.20 - 0.01))
@@ -745,7 +762,7 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
         energy=VariableRates(current=0.16),
         injection=InjectionRates(factor=0.9, base=-0.01, current=0.04),
     )
-    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         assert (
             await _ytd_spot_injection_credit(hass, monthly, entry, today, spots) == 0.0
         )
@@ -1101,7 +1118,7 @@ async def test_top_up_today_hourly_adds_the_uncompiled_remainder(
     hourly-billed contract stepped once an hour at best and froze when
     compilation stalled. Top today up from the live meter, attributing the
     shortfall to the current hour, where the missing energy actually was."""
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.energy_meters import (
         _top_up_today_hourly,
     )
 
@@ -1136,7 +1153,7 @@ async def test_top_up_today_hourly_leaves_caught_up_statistics_alone(
 ) -> None:
     """When statistics already carry today's whole total there is nothing to
     add, and a meter that ran backwards must not invent a negative hour."""
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.energy_meters import (
         _top_up_today_hourly,
     )
 
@@ -1163,7 +1180,7 @@ async def test_top_up_today_hourly_without_a_live_reading_is_a_no_op(
 ) -> None:
     """An unavailable meter leaves the statistics figure standing, exactly as
     the per-day path degrades."""
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.energy_meters import (
         _top_up_today_hourly,
     )
 
@@ -1386,7 +1403,7 @@ async def test_snapshot_for_month_does_not_cache_transient_failures(
     would serve uncredited rates for that month until the next reload.
     Once the negative-cache TTL elapses the next refresh retries and
     a successful retry populates the positive cache normally."""
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.snapshot_store import (
         _monthly_failed_fetches,
     )
 
@@ -1512,14 +1529,13 @@ def _patch_recorder_per_entity(
 ) -> Any:
     """Patch _recorder_daily_kwh to return the configured per-day
     sums per entity_id; raise via empty dict for unmapped entities."""
-    from custom_components.be_electricity_prices import coordinator
 
     async def _fake(
         hass: object, entity_id: str, start: date, end: date
     ) -> dict[date, float]:
         return dict(per_entity_per_day.get(entity_id, {}))
 
-    return patch.object(coordinator, "_recorder_daily_kwh", new=_fake)
+    return patch.object(energy_meters, "_recorder_daily_kwh", new=_fake)
 
 
 async def test_year_cost_recorder_driven_mono_no_solar(
@@ -1796,7 +1812,6 @@ async def test_year_cost_tou_bills_per_hourly_slot(
     """Time-of-Use contracts must read hourly recorder data and apply
     the supplier's slot rate per hour, not the fees-only floor (which
     is what the per-day path returned before)."""
-    from custom_components.be_electricity_prices import coordinator
 
     # Pin a date well past the 2026-01-06 peak hour the test injects so
     # the YTD window always covers it (early-January runs would
@@ -1836,7 +1851,7 @@ async def test_year_cost_tou_bills_per_hourly_slot(
 
     expected_all_in = (0.30 + 0.10 + 0.0145 + 0.05 + 0.002) * 1.0  # vat_factor 1.0
 
-    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         cost = await _compute_current_year_cost(
             hass,
             None,  # type: ignore[arg-type]
@@ -1857,7 +1872,6 @@ async def test_year_cost_exclusive_night_uses_exclusive_night_rate(
     hourly path), not the higher day/single rate the static per-day
     branch would apply. The live current_price sensor already uses the
     exclusive-night rate, so the year-cost must match it."""
-    from custom_components.be_electricity_prices import coordinator
 
     freezer.move_to("2026-05-15 12:00:00+02:00")
     snap = make_snapshot(
@@ -1898,7 +1912,7 @@ async def test_year_cost_exclusive_night_uses_exclusive_night_rate(
     # mono meter on the same card would bill.
     excl_all_in = 0.12 + 0.06 + 0.0145 + 0.05 + 0.002
     mono_all_in = 0.18 + 0.10 + 0.0145 + 0.05 + 0.002
-    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         cost = await _compute_current_year_cost(
             hass,
             None,  # type: ignore[arg-type]
@@ -1917,7 +1931,6 @@ async def test_year_cost_tou_recognises_injection_only_wiring(
     injection sensor (e.g. inverter exposing solar export but no smart-
     meter consumption sensor) must still see their solar credit
     accrue, mirroring the static-path behaviour."""
-    from custom_components.be_electricity_prices import coordinator
 
     # Pin past the 2026-01-06 injection hour the fixture injects.
     freezer.move_to("2026-05-15 12:00:00+02:00")
@@ -1952,7 +1965,7 @@ async def test_year_cost_tou_recognises_injection_only_wiring(
             return {inj_hour.astimezone(UTC): 1.0}
         return {}
 
-    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         cost = await _compute_current_year_cost(
             hass,
             None,  # type: ignore[arg-type]
@@ -1974,7 +1987,6 @@ async def test_year_cost_dynamic_replays_historical_spots(
     a known UTC hour and a known spot for that hour, the YTD cost
     must equal the ``factor*spot+base`` rate * 1 kWh + the DSO/tax
     overlay -- no longer the fees-only floor that v1 returned."""
-    from custom_components.be_electricity_prices import coordinator
 
     # Pin past the 2026-01-06 spot hour the fixture injects.
     freezer.move_to("2026-05-15 12:00:00+02:00")
@@ -2006,7 +2018,7 @@ async def test_year_cost_dynamic_replays_historical_spots(
             return {spot_hour: 1.0}
         return {}
 
-    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         cost = await _compute_current_year_cost(
             hass,
             None,  # type: ignore[arg-type]
@@ -2028,7 +2040,6 @@ async def test_year_cost_spot_injection_credited_on_needs_hourly_path(
     takes the needs_hourly path -- here via DSO Impact mode -- must still
     get its per-hour spot-replayed injection credit, not silently drop it
     as the daily-only credit would."""
-    from custom_components.be_electricity_prices import coordinator
 
     freezer.move_to("2026-05-15 12:00:00+02:00")
     snap = make_snapshot(
@@ -2068,7 +2079,7 @@ async def test_year_cost_spot_injection_credited_on_needs_hourly_path(
     ) -> dict[datetime, float]:
         return {inj_hour: 4.0} if entity_id == "sensor.inj_total" else {}
 
-    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         cost = await _compute_current_year_cost(
             hass,
             None,  # type: ignore[arg-type]
@@ -2089,7 +2100,6 @@ async def test_year_cost_dynamic_falls_back_to_fees_when_no_spots(
     """When the historical-spots cache is empty (cold start, ENTSO-E
     fetch failed entirely), the dynamic YTD must still produce the
     fees-only floor rather than crashing or returning None."""
-    from custom_components.be_electricity_prices import coordinator
 
     freezer.move_to("2026-05-15 12:00:00+02:00")
     snap = make_snapshot(
@@ -2116,7 +2126,7 @@ async def test_year_cost_dynamic_falls_back_to_fees_when_no_spots(
         return {}
 
     today = dt_util.now().date()
-    with patch.object(coordinator, "_recorder_hourly_kwh", new=_fake_hourly):
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         cost = await _compute_current_year_cost(
             hass,
             None,  # type: ignore[arg-type]
@@ -2204,7 +2214,7 @@ async def test_ytd_static_fees_honours_meter_override(hass: HomeAssistant) -> No
         yield snap, None, 365, 365
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator._walk_ytd_months",
+        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
         new=_fake_walk,
     ):
         fee_entry = await _ytd_static_fees(
@@ -2229,7 +2239,7 @@ async def test_ytd_static_fees_honours_meter_override(hass: HomeAssistant) -> No
 
 
 def test_brussels_osp_fee_selects_configured_tier() -> None:
-    from custom_components.be_electricity_prices.coordinator import _brussels_osp_fee
+    from custom_components.be_electricity_prices.fees import _brussels_osp_fee
     from custom_components.be_electricity_prices.providers.base import DsoOverlay
 
     overlay = DsoOverlay(
@@ -2833,7 +2843,7 @@ def _capacity_snapshot(rate: float | None = 52.37) -> SupplierSnapshot:
 async def test_ytd_capacity_accrues_the_monthly_charge(hass: HomeAssistant) -> None:
     """The capacity term is a EUR/kW/year rate billed monthly on the
     gemiddelde maandpiek, so a full year at 4 kW accrues peak x rate."""
-    from custom_components.be_electricity_prices.coordinator import _ytd_capacity
+    from custom_components.be_electricity_prices.ytd_cost import _ytd_capacity
 
     snap = _capacity_snapshot()
 
@@ -2844,7 +2854,7 @@ async def test_ytd_capacity_accrues_the_monthly_charge(hass: HomeAssistant) -> N
             yield snap, date(2026, month, 1), days, days
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator._walk_ytd_months",
+        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
         new=_fake_walk,
     ):
         total = await _ytd_capacity(
@@ -2863,7 +2873,7 @@ async def test_ytd_capacity_accrues_the_monthly_charge(hass: HomeAssistant) -> N
 async def test_ytd_capacity_is_flanders_only(hass: HomeAssistant) -> None:
     """Wallonia and Brussels do not bill a capacity tariff; a leftover rate on
     the overlay must not accrue there."""
-    from custom_components.be_electricity_prices.coordinator import _ytd_capacity
+    from custom_components.be_electricity_prices.ytd_cost import _ytd_capacity
 
     snap = _capacity_snapshot()
 
@@ -2871,7 +2881,7 @@ async def test_ytd_capacity_is_flanders_only(hass: HomeAssistant) -> None:
         yield snap, date(2026, 1, 1), 31, 31
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator._walk_ytd_months",
+        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
         new=_fake_walk,
     ):
         total = await _ytd_capacity(
@@ -2891,7 +2901,7 @@ async def test_ytd_capacity_skips_months_whose_card_omits_the_rate(
 ) -> None:
     """Cards outside Flanders leave capacity_eur_per_kw_year None; such a month
     contributes nothing rather than raising."""
-    from custom_components.be_electricity_prices.coordinator import _ytd_capacity
+    from custom_components.be_electricity_prices.ytd_cost import _ytd_capacity
 
     priced, unpriced = _capacity_snapshot(), _capacity_snapshot(rate=None)
 
@@ -2900,7 +2910,7 @@ async def test_ytd_capacity_skips_months_whose_card_omits_the_rate(
         yield priced, date(2026, 2, 1), 28, 28
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator._walk_ytd_months",
+        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
         new=_fake_walk,
     ):
         total = await _ytd_capacity(
@@ -2918,7 +2928,7 @@ async def test_ytd_capacity_skips_months_whose_card_omits_the_rate(
 async def test_ytd_capacity_prorates_the_running_month(hass: HomeAssistant) -> None:
     """A part-elapsed month accrues its own fraction, the same proration
     _ytd_prosumer uses, so the backfill can meet it at the seam."""
-    from custom_components.be_electricity_prices.coordinator import _ytd_capacity
+    from custom_components.be_electricity_prices.ytd_cost import _ytd_capacity
 
     snap = _capacity_snapshot()
 
@@ -2927,7 +2937,7 @@ async def test_ytd_capacity_prorates_the_running_month(hass: HomeAssistant) -> N
         yield snap, date(2026, 2, 1), 28, 14  # half of February
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator._walk_ytd_months",
+        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
         new=_fake_walk,
     ):
         total = await _ytd_capacity(
@@ -2951,7 +2961,7 @@ def test_manual_signing_rate_blank_fields_keep_the_current_card() -> None:
     typed only their locked energy rate, and zeroed a dynamic formula's base."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.coordinator import _manual_energy_leg
+    from custom_components.be_electricity_prices.cohort import _manual_energy_leg
     from custom_components.be_electricity_prices.providers.base import (
         DynamicRates,
         FixedRates,
@@ -3000,8 +3010,6 @@ async def test_half_wired_registers_bill_nothing_on_every_ytd_path() -> None:
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, patch
 
-    from custom_components.be_electricity_prices import coordinator as co
-
     entry = SimpleNamespace(
         data={
             "supplier": "test",
@@ -3016,15 +3024,15 @@ async def test_half_wired_registers_bill_nothing_on_every_ytd_path() -> None:
         }
     )
 
-    assert co._partial_register_pair(entry, "consumption") is True  # type: ignore[arg-type]
-    assert co._partial_register_pair(entry, "injection") is False  # type: ignore[arg-type]
+    assert energy_meters._partial_register_pair(entry, "consumption") is True  # type: ignore[arg-type]
+    assert energy_meters._partial_register_pair(entry, "injection") is False  # type: ignore[arg-type]
 
     today = date(2026, 8, 1)
-    with patch.object(co, "_recorder_daily_kwh", AsyncMock(return_value={})):
-        daily = await co._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
+    with patch.object(energy_meters, "_recorder_daily_kwh", AsyncMock(return_value={})):
+        daily = await energy_meters._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
     assert daily is None, "static path must refuse a half-wired pair"
 
-    hourly = await co._ytd_hourly_energy(
+    hourly = await ytd_cost._ytd_hourly_energy(
         None,  # type: ignore[arg-type]
         None,  # type: ignore[arg-type]
         None,  # type: ignore[arg-type]
@@ -3037,7 +3045,7 @@ async def test_half_wired_registers_bill_nothing_on_every_ytd_path() -> None:
 
     # A fully wired pair is still accepted by the predicate.
     entry.data["night_consumption_kwh"] = "sensor.night_cons"
-    assert co._partial_register_pair(entry, "consumption") is False  # type: ignore[arg-type]
+    assert energy_meters._partial_register_pair(entry, "consumption") is False  # type: ignore[arg-type]
 
 
 async def test_a_totals_sensor_rescues_a_half_wired_pair() -> None:
@@ -3049,7 +3057,6 @@ async def test_a_totals_sensor_rescues_a_half_wired_pair() -> None:
     current_year_cost at fees only, which reads to the user as the
     integration not working at all.
     """
-    from custom_components.be_electricity_prices import coordinator as co
 
     entry = SimpleNamespace(
         data={
@@ -3064,16 +3071,18 @@ async def test_a_totals_sensor_rescues_a_half_wired_pair() -> None:
             "consumption_kwh": "sensor.grid_import_total",
         }
     )
-    assert co._partial_register_pair(entry, "consumption") is False  # type: ignore[arg-type]
+    assert energy_meters._partial_register_pair(entry, "consumption") is False  # type: ignore[arg-type]
 
     today = date(2026, 8, 1)
-    with patch.object(co, "_recorder_daily_kwh", AsyncMock(return_value={today: 10.0})):
-        daily = await co._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
+    with patch.object(
+        energy_meters, "_recorder_daily_kwh", AsyncMock(return_value={today: 10.0})
+    ):
+        daily = await energy_meters._resolve_daily_kwh(None, entry, today)  # type: ignore[arg-type]
     assert daily is not None, "the totals sensor must still be used"
 
     # With no totals sensor it is still refused.
     del entry.data["consumption_kwh"]
-    assert co._partial_register_pair(entry, "consumption") is True  # type: ignore[arg-type]
+    assert energy_meters._partial_register_pair(entry, "consumption") is True  # type: ignore[arg-type]
 
 
 def test_all_kwh_resolvers_agree_that_registers_win() -> None:
@@ -3088,8 +3097,6 @@ def test_all_kwh_resolvers_agree_that_registers_win() -> None:
     registers win"."""
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices import coordinator as co
-
     both = SimpleNamespace(
         data={
             "day_consumption_kwh": "sensor.day",
@@ -3101,24 +3108,30 @@ def test_all_kwh_resolvers_agree_that_registers_win() -> None:
         }
     )
     # _kwh_sensor_ids feeds the daily path and diagnostics; registers first.
-    day, night, total = co._kwh_sensor_ids(both, "consumption")  # type: ignore[arg-type]
+    day, night, total = energy_meters._kwh_sensor_ids(both, "consumption")  # type: ignore[arg-type]
     assert (day, night) == ("sensor.day", "sensor.night")
     assert total == "sensor.total"
     # The hourly path must pick the same meter.
-    assert co._hourly_consumption_sensors(both) == ["sensor.day", "sensor.night"]  # type: ignore[arg-type]
-    assert co._hourly_injection_sensors(both) == ["sensor.dinj", "sensor.ninj"]  # type: ignore[arg-type]
+    assert energy_meters._hourly_consumption_sensors(both) == [  # type: ignore[arg-type]
+        "sensor.day",
+        "sensor.night",
+    ]  # type: ignore[arg-type]
+    assert energy_meters._hourly_injection_sensors(both) == [  # type: ignore[arg-type]
+        "sensor.dinj",
+        "sensor.ninj",
+    ]  # type: ignore[arg-type]
 
     # Totals-only still resolves to the total.
     totals_only = SimpleNamespace(
         data={"consumption_kwh": "sensor.total", "injection_kwh": "sensor.tinj"}
     )
-    assert co._hourly_consumption_sensors(totals_only) == ["sensor.total"]  # type: ignore[arg-type]
-    assert co._hourly_injection_sensors(totals_only) == ["sensor.tinj"]  # type: ignore[arg-type]
+    assert energy_meters._hourly_consumption_sensors(totals_only) == ["sensor.total"]  # type: ignore[arg-type]
+    assert energy_meters._hourly_injection_sensors(totals_only) == ["sensor.tinj"]  # type: ignore[arg-type]
 
     # Nothing wired stays empty.
     empty = SimpleNamespace(data={})
-    assert co._hourly_consumption_sensors(empty) == []  # type: ignore[arg-type]
-    assert co._hourly_injection_sensors(empty) == []  # type: ignore[arg-type]
+    assert energy_meters._hourly_consumption_sensors(empty) == []  # type: ignore[arg-type]
+    assert energy_meters._hourly_injection_sensors(empty) == []  # type: ignore[arg-type]
 
 
 async def test_cohort_leg_bills_the_same_fee_on_every_call_path() -> None:
@@ -3132,7 +3145,7 @@ async def test_cohort_leg_bills_the_same_fee_on_every_call_path() -> None:
     on the snapshot every caller already hands in.
     """
     from custom_components.be_electricity_prices import providers
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.cohort import (
         _cohort_energy_leg,
     )
     from custom_components.be_electricity_prices.providers.base import apply_vat
@@ -3178,15 +3191,18 @@ async def test_cohort_leg_bills_the_same_fee_on_every_call_path() -> None:
 def test_published_vat_rate_round_trips_and_tolerates_an_old_cache() -> None:
     """Adding the field needs no schema bump: a cache written before it
     existed loads and falls back to the raw card's own vat_rate."""
-    from custom_components.be_electricity_prices import coordinator as co
     from custom_components.be_electricity_prices.providers.base import TaxOverlay
 
     raw = make_snapshot(
         taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0, vat_rate=0.21)
     )
-    payload = co._snapshot_to_dict(raw, datetime(2026, 8, 5, tzinfo=UTC), probe_key="k")
+    payload = snapshot_store._snapshot_to_dict(
+        raw, datetime(2026, 8, 5, tzinfo=UTC), probe_key="k"
+    )
     assert "published_vat_rate" in payload["taxes"]
-    assert co._snapshot_from_dict(payload).taxes.vat_rate == pytest.approx(0.21)
+    assert snapshot_store._snapshot_from_dict(payload).taxes.vat_rate == pytest.approx(
+        0.21
+    )
 
     old = {
         **payload,
@@ -3194,7 +3210,7 @@ def test_published_vat_rate_round_trips_and_tolerates_an_old_cache() -> None:
             k: v for k, v in payload["taxes"].items() if k != "published_vat_rate"
         },
     }
-    restored = co._snapshot_from_dict(old).taxes
+    restored = snapshot_store._snapshot_from_dict(old).taxes
     assert restored.published_vat_rate == 0.0
     assert (restored.published_vat_rate or restored.vat_rate) == pytest.approx(0.21)
 
@@ -3207,7 +3223,6 @@ def test_typed_signing_fee_lands_on_the_entry_basis() -> None:
     as the professional card printed them, so a typed 121,00 sat next to a
     100,00 card fee on the same entry.
     """
-    from custom_components.be_electricity_prices import coordinator as co
     from custom_components.be_electricity_prices.providers.base import FixedRates
 
     card = FixedRates(single=0.20, yearly_fixed_fee=100.0)
@@ -3223,16 +3238,16 @@ def test_typed_signing_fee_lands_on_the_entry_basis() -> None:
         )
 
     # Deducting business: the gross figure is converted to the card's basis.
-    net = co._manual_energy_leg(_entry_with(False), card, 0.21)  # type: ignore[arg-type]
+    net = cohort._manual_energy_leg(_entry_with(False), card, 0.21)  # type: ignore[arg-type]
     assert net is not None
     assert net.yearly_fixed_fee == pytest.approx(100.0)
 
     # Not deducting: the entry bills gross, so the typed figure stands.
-    gross = co._manual_energy_leg(_entry_with(True), card, 0.21)  # type: ignore[arg-type]
+    gross = cohort._manual_energy_leg(_entry_with(True), card, 0.21)  # type: ignore[arg-type]
     assert gross is not None
     assert gross.yearly_fixed_fee == pytest.approx(121.0)
 
     # A residential (VAT-inclusive) card has no conversion to make either way.
-    res = co._manual_energy_leg(_entry_with(False), card, 0.0)  # type: ignore[arg-type]
+    res = cohort._manual_energy_leg(_entry_with(False), card, 0.0)  # type: ignore[arg-type]
     assert res is not None
     assert res.yearly_fixed_fee == pytest.approx(121.0)

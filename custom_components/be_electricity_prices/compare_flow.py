@@ -544,7 +544,7 @@ class _CompareStepsMixin(OptionsFlow):
         # that is not the entry's own, so it can never touch the other side.
         current_snapshot = coord._snapshot
         if current_snapshot is not None:
-            from .coordinator import _cohort_energy_leg
+            from .cohort import _cohort_energy_leg
 
             cohort = await _cohort_energy_leg(
                 self.hass,
@@ -582,7 +582,7 @@ class _CompareStepsMixin(OptionsFlow):
         # 1,421 c€/kWh instead of 1,139 at 60 000 kWh/yr, overstating the
         # alternative by about 169 EUR/yr. The user's own side comes off the
         # coordinator and IS resolved, so the comparison was biased.
-        from .coordinator import _resolve_snapshot
+        from .snapshot_store import _resolve_snapshot
 
         try:
             other_snap = _resolve_snapshot(
@@ -677,7 +677,7 @@ class _CompareStepsMixin(OptionsFlow):
         #      "current rate * ytd_kwh + pro-rated fees" model. Same per_kwh
         #      and same proration on both sides, so the delta still isolates
         #      the supplier-driven difference.
-        from .coordinator import _compute_current_year_cost
+        from .ytd_cost import _compute_current_year_cost
 
         current_extractor = get_extractor(current[CONF_SUPPLIER])
         # Exclude dynamic sides from the archive engine: it bills each

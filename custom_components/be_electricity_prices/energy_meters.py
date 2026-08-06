@@ -1,0 +1,635 @@
+# Copyright (c) 2026, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+"""Reading consumed and injected kWh out of the recorder.
+
+Split out of coordinator.py. A true leaf. Two rules are encoded here rather
+than at the call sites: read change and never sum, and prefer a wired
+day/night register pair over the totals sensor so the hourly and the per-day
+paths bill off the same meter."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from datetime import UTC
+from datetime import date
+from datetime import datetime
+from datetime import timedelta
+from functools import partial
+from homeassistant.components.sensor import ATTR_LAST_RESET
+from homeassistant.components.sensor import ATTR_STATE_CLASS
+from homeassistant.components.sensor import SensorStateClass
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_UNIT_OF_MEASUREMENT
+from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.const import STATE_UNKNOWN
+from homeassistant.const import UnitOfEnergy
+from homeassistant.core import HomeAssistant
+from homeassistant.core import State
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.util import dt as dt_util
+from homeassistant.util.unit_conversion import EnergyConverter
+from typing import Any
+
+from .const import (
+    CONF_CONSUMPTION_KWH,
+    CONF_DAY_CONSUMPTION_KWH,
+    CONF_DAY_INJECTION_KWH,
+    CONF_INJECTION_KWH,
+    CONF_METER,
+    CONF_NIGHT_CONSUMPTION_KWH,
+    CONF_NIGHT_INJECTION_KWH,
+    CONF_REGION,
+    METER_MONO,
+)
+from .pricing import (
+    is_offpeak,
+)
+
+
+async def _recorder_deltas(
+    hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
+) -> list[tuple[datetime, float]]:
+    """Recorder rows as (UTC slot start, delta) pairs, skipping unusable ones.
+
+    Three callers unpacked the same five lines. What they share is the rule,
+    not the loop: read ``change``, never ``sum``. ``sum`` is the cumulative
+    total of a TOTAL sensor, so using it here would bill a whole meter reading
+    for one slot. A row missing either field is skipped rather than treated as
+    zero, because a zero is a real measurement.
+
+    Callers keep their own bucketing: one wants the local DAY, one the UTC
+    hour, one the local hour so it can split on the off-peak schedule.
+    """
+    out: list[tuple[datetime, float]] = []
+    for row in await _recorder_rows(hass, entity_id, start, end, period):
+        ts = row.get("start")
+        delta = row.get("change")
+        if ts is None or delta is None:
+            continue
+        out.append((datetime.fromtimestamp(ts, tz=UTC), float(delta)))
+    return out
+
+
+async def _recorder_rows(
+    hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
+) -> list[Any]:
+    """Fetch HA recorder ``change`` rows for ``entity_id`` over ``[start, end]``.
+
+    Wraps ``statistics_during_period`` via the recorder's executor so a
+    SQLite query never runs on the event loop. Returns a (possibly
+    empty) list -- every failure mode (recorder not ready, no
+    statistics, transient DB error) collapses to ``[]`` so callers can
+    fall back to the fees-only floor without raising.
+
+    Reads the ``change`` field, which the recorder defines as the delta
+    of the cumulative ``sum`` between the bucket's first and last
+    sample. Reading ``sum`` directly would yield the all-time running
+    total -- summing those would multiply the bill by however many
+    years of statistics the meter has accumulated.
+
+    Requests the ``change`` in kWh via ``units={"energy": "kWh"}`` so a
+    meter sensor that stores its statistics in Wh or MWh is normalised by
+    HA's EnergyConverter rather than read as raw kWh, which would bill the
+    user 1000x too much (Wh) or too little (MWh). The OptionsFlow picker
+    restricts the choice to device_class=energy but not the unit, so a
+    Wh / MWh sensor is a legitimate, reachable selection.
+
+    Pass the date directly: HA's start_of_local_day treats a naive
+    datetime as UTC, which round-trips correctly only for tz east of
+    the prime meridian. Hand it the date so the function takes its
+    date-typed branch and produces the unambiguous local midnight.
+    """
+    try:
+        # mypy --strict flags both names because the recorder module
+        # does not re-export them via __all__; they're public per HA's
+        # docs and import-time errors degrade gracefully via the
+        # ImportError handler below.
+        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+            get_instance,
+        )
+        from homeassistant.components.recorder.statistics import (
+            statistics_during_period,
+        )
+    except ImportError:
+        return []
+    start_dt = dt_util.start_of_local_day(start).astimezone(UTC)
+    # Anchor end_dt on the next local midnight so the bucket containing
+    # ``end`` is included. ``start_of_local_day(end).astimezone(UTC) +
+    # timedelta(days=1)`` would be exactly 24 UTC hours later, which
+    # mis-aligns by one hour on Brussels DST seam days (the next local
+    # midnight is 23 or 25 UTC hours away). Computing
+    # start_of_local_day(end + 1 day) keeps the cap on the right local
+    # boundary year-round.
+    end_dt = dt_util.start_of_local_day(end + timedelta(days=1)).astimezone(UTC)
+    try:
+        stats = await get_instance(hass).async_add_executor_job(
+            statistics_during_period,
+            hass,
+            start_dt,
+            end_dt,
+            {entity_id},
+            period,
+            {"energy": "kWh"},
+            {"change"},
+        )
+    except Exception:  # noqa: BLE001 - recorder may surface anything
+        return []
+    rows: list[Any] = list(stats.get(entity_id, []))
+    return rows
+
+
+def _reset_since(state: State, midnight: datetime) -> bool:
+    """Did this meter start a new cycle after ``midnight``?
+
+    ``last_reset`` is what a cycling meter publishes to say "my total went
+    back to zero at this instant", and it is the only signal that survives
+    both state classes: HA's ``utility_meter`` reports ``TOTAL`` when
+    ``net_consumption`` is set and ``TOTAL_INCREASING`` otherwise, and cycles
+    either way. Anything unparseable reads as "no reset", which keeps the
+    caller on the plain delta.
+    """
+    raw = state.attributes.get(ATTR_LAST_RESET)
+    if raw is None:
+        return False
+    parsed = raw if isinstance(raw, datetime) else dt_util.parse_datetime(str(raw))
+    if parsed is None:
+        return False
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed >= midnight
+
+
+async def _live_today_kwh(
+    hass: HomeAssistant, entity_id: str, today: date
+) -> float | None:
+    """Today's kWh for ``entity_id`` from the live meter, or ``None``.
+
+    Reads ``current cumulative total - total at local midnight`` from the
+    state machine and the recorder's state history, bypassing the long-term
+    daily statistics the past-day path relies on. This keeps the running year
+    cost tracking today's consumption in real time and, crucially, keeps it
+    moving when statistics compilation lags or stalls -- states are still
+    recorded regardless. ``None`` means "no reliable live reading": the meter
+    is unavailable / non-numeric, has no reading at midnight yet, or carries a
+    unit that can't be converted to kWh; the caller then keeps the daily
+    statistic as a fallback rather than risk a wrong figure.
+
+    A reading below the midnight one means different things per state class,
+    so the class decides how it is read: only ``total_increasing`` can be
+    read as a counter reset, matching how the recorder's own statistics
+    engine treats that class. A ``total`` meter is allowed to fall, and the
+    signed delta is exactly what the recorder reports as that day's
+    ``change``, so it is returned as-is.
+    """
+    state = hass.states.get(entity_id)
+    if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        return None
+    try:
+        current = float(state.state)
+    except (TypeError, ValueError):
+        return None
+    unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
+    state_class = state.attributes.get(ATTR_STATE_CLASS)
+
+    midnight = dt_util.start_of_local_day(today).astimezone(UTC)
+    try:
+        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+            get_instance,
+        )
+        from homeassistant.components.recorder.history import (
+            get_significant_states,
+        )
+    except ImportError:
+        return None
+    try:
+        history = await get_instance(hass).async_add_executor_job(
+            partial(
+                get_significant_states,
+                hass,
+                midnight,
+                midnight + timedelta(seconds=1),
+                [entity_id],
+                include_start_time_state=True,
+                significant_changes_only=False,
+                no_attributes=True,
+            )
+        )
+    except Exception:  # noqa: BLE001 - recorder may surface anything
+        return None
+    rows = history.get(entity_id, [])
+    if not rows or not isinstance(rows[0], State):
+        return None
+    try:
+        opening = float(rows[0].state)
+    except (TypeError, ValueError):
+        return None
+    delta = current - opening
+    if delta < 0.0 and _reset_since(state, midnight):
+        # The meter published a ``last_reset`` later than local midnight, so
+        # it started a new cycle today and everything it has counted since is
+        # today's consumption. This is the signal that actually generalises:
+        # a utility_meter with net_consumption reports state_class TOTAL, not
+        # TOTAL_INCREASING (HA returns one or the other on exactly that
+        # option), and it still cycles. Gating on the class alone read its
+        # monthly rollover as a genuine fall and returned minus the whole
+        # previous cycle as today's kWh.
+        delta = current
+    elif delta < 0.0 and state_class == SensorStateClass.TOTAL_INCREASING:
+        # A ``total_increasing`` meter that reset since midnight without
+        # publishing ``last_reset``: the class alone promises it cannot fall,
+        # so a fall is a reset.
+        #
+        # Gated on the state class on purpose. The picker accepts any
+        # device_class=energy sensor, so a ``total`` register that nets
+        # injection against consumption (a utility_meter with
+        # net_consumption, a bidirectional meter) is a legitimate choice,
+        # and it falls whenever the site exports more than it draws. Reading
+        # that as a reset would bill its whole lifetime total as one day.
+        delta = current
+    if unit == UnitOfEnergy.KILO_WATT_HOUR:
+        return delta
+    try:
+        return EnergyConverter.convert(delta, unit, UnitOfEnergy.KILO_WATT_HOUR)
+    except HomeAssistantError:
+        # Unknown / non-energy unit: fall back to the normalized daily
+        # statistic rather than risk a 1000x mis-bill from an assumed unit.
+        return None
+
+
+async def _recorder_daily_kwh(
+    hass: HomeAssistant, entity_id: str, start: date, end: date
+) -> dict[date, float]:
+    """Per-day kWh deltas for ``entity_id`` keyed by local-day date.
+
+    Past days come from the recorder's long-term daily statistics. When
+    ``end`` is today, that day is overridden with a live meter reading (see
+    :func:`_live_today_kwh`) so the running year cost tracks today's usage in
+    real time and does not freeze if statistics compilation lags or stalls;
+    it falls back to the daily statistic when no live reading is available.
+    """
+    out: dict[date, float] = {}
+    for when, delta in await _recorder_deltas(hass, entity_id, start, end, "day"):
+        out[dt_util.as_local(when).date()] = delta
+    if end == dt_util.now().date():
+        live_today = await _live_today_kwh(hass, entity_id, end)
+        if live_today is not None:
+            out[end] = live_today
+    return out
+
+
+async def _recorder_hourly_kwh(
+    hass: HomeAssistant, entity_id: str, start: date, end: date
+) -> dict[datetime, float]:
+    """Per-hour kWh deltas for ``entity_id`` keyed by UTC hour.
+
+    Used by the TOU year-cost path: TOU contracts have a different
+    energy rate per hour-of-day, so day-level granularity is too coarse.
+    """
+    out: dict[datetime, float] = {}
+    for when, delta in await _recorder_deltas(hass, entity_id, start, end, "hour"):
+        out[when.replace(minute=0, second=0, microsecond=0)] = delta
+    return out
+
+
+async def _sum_hourly_kwh(
+    hass: HomeAssistant,
+    entity_ids: Iterable[str],
+    start: date,
+    end: date,
+) -> dict[datetime, float]:
+    """Per-UTC-hour kWh summed across ``entity_ids`` into one dict.
+
+    A house with several consumption (or injection) sensors totals them
+    hour by hour; used by the live YTD cost, the injection-credit and the
+    backfill accrual so the binning is written once.
+    """
+    out: dict[datetime, float] = {}
+    for entity_id in entity_ids:
+        for utc_hour, kwh in (
+            await _recorder_hourly_kwh(hass, entity_id, start, end)
+        ).items():
+            out[utc_hour] = out.get(utc_hour, 0.0) + kwh
+    return out
+
+
+async def _top_up_today_hourly(
+    hass: HomeAssistant,
+    entity_ids: Iterable[str],
+    per_hour: dict[datetime, float],
+    today: date,
+) -> None:
+    """Add today's not-yet-compiled kWh to the hourly map, in place.
+
+    The hourly branch reads long-term hourly statistics only, which reflect
+    the last COMPILED hour. Every hourly-billed contract (dynamic,
+    spot-monthly, TOU, Impact, exclusive-night) therefore stepped
+    ``current_year_cost`` once an hour at best and froze outright when
+    statistics compilation lagged or stalled, while the meter kept updating.
+    The per-day branch has read today off the live meter since 0.11.9; this
+    gives the hourly branch the same guarantee.
+
+    The shortfall (live total for today minus what statistics already carry
+    for today) is attributed to the CURRENT hour. That is where the missing
+    energy actually was: statistics trail real time, so what they have not
+    booked yet is the most recent consumption. It also prices the top-up at
+    the hour the user is living through, which is the point of a live read on
+    a dynamic contract.
+
+    A meter with no reliable live reading contributes nothing and leaves the
+    statistics figure standing, exactly as the per-day path degrades.
+    """
+    live_total = 0.0
+    have_live = False
+    for entity_id in entity_ids:
+        live = await _live_today_kwh(hass, entity_id, today)
+        if live is not None:
+            live_total += live
+            have_live = True
+    if not have_live:
+        return
+    midnight = dt_util.start_of_local_day(today).astimezone(UTC)
+    compiled_today = sum(kwh for hour, kwh in per_hour.items() if hour >= midnight)
+    missing = live_total - compiled_today
+    if missing <= 0.0:
+        # Statistics have caught up (or overshot on a meter that ran
+        # backwards); leave them alone rather than inventing a negative hour.
+        return
+    current_hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    per_hour[current_hour] = per_hour.get(current_hour, 0.0) + missing
+
+
+async def _recorder_daily_band_ratio(
+    hass: HomeAssistant, entity_id: str, start: date, end: date, region: str
+) -> dict[date, tuple[float, float]]:
+    """Per-day (day_ratio, night_ratio) for ``entity_id``.
+
+    Used for the totals-only + bi-hourly path: we don't have separate
+    day / night registers, so we recover the band split from hourly
+    statistics by binning each hour on ``is_offpeak``. The two ratios
+    sum to 1.0 (or default to a day-of-week split for days with no
+    accumulation, so a Sunday isn't billed at peak rate just because
+    the hourly stats are flat).
+    """
+    per_day_day: dict[date, float] = {}
+    per_day_night: dict[date, float] = {}
+    for when, delta in await _recorder_deltas(hass, entity_id, start, end, "hour"):
+        local = dt_util.as_local(when)
+        bucket = local.date()
+        if is_offpeak(local, region):
+            per_day_night[bucket] = per_day_night.get(bucket, 0.0) + delta
+        else:
+            per_day_day[bucket] = per_day_day.get(bucket, 0.0) + delta
+    out: dict[date, tuple[float, float]] = {}
+    for day in set(per_day_day) | set(per_day_night):
+        d = per_day_day.get(day, 0.0)
+        n = per_day_night.get(day, 0.0)
+        total = d + n
+        if total > 0:
+            out[day] = (d / total, n / total)
+        else:
+            out[day] = _default_band_ratio_for(day, region)
+    return out
+
+
+async def _resolve_daily_kwh(
+    hass: HomeAssistant, entry: ConfigEntry, today: date
+) -> dict[date, tuple[float, float, float, float]] | None:
+    """Per-day (day_cons, night_cons, day_inj, night_inj) from recorder.
+
+    Each side (consumption, injection) is resolved independently from
+    one of three configurations:
+
+      * **Day + night register pair** (``CONF_DAY_*_KWH`` +
+        ``CONF_NIGHT_*_KWH``): the recorder gives one delta per day per
+        register, fanned out into the corresponding band slots.
+
+      * **Single totals sensor** (``CONF_CONSUMPTION_KWH`` /
+        ``CONF_INJECTION_KWH``): one daily total per side, split by
+        the ``meter`` setting (mono keeps everything in the "day" slot
+        and lets the math sum it; bi/dynamic recovers the per-day
+        band ratio from hourly statistics binned on ``is_offpeak``).
+
+      * **Nothing**: that side contributes zero.
+
+    A side that has only one half of its register pair (e.g.
+    ``CONF_DAY_CONSUMPTION_KWH`` set, ``CONF_NIGHT_CONSUMPTION_KWH``
+    missing) *and no totals sensor* returns ``None`` so the caller falls
+    back to the fees-only floor instead of silently undercounting the
+    missing band. With a totals sensor the odd half is simply ignored and
+    the side bills off the total, which is the rule the meters form
+    enforces too (``flow_schemas.py:866``).
+
+    Returns ``None`` when neither side has any meter inputs at all
+    or when either side has an uncovered partial register wiring.
+    """
+    meter = entry.data.get(CONF_METER, METER_MONO)
+    region = entry.data.get(CONF_REGION, "")
+    jan1 = date(today.year, 1, 1)
+    out: dict[date, list[float]] = {}
+
+    async def _side(
+        day_id: str | None,
+        night_id: str | None,
+        total_id: str | None,
+        slot_day: int,
+        slot_night: int,
+    ) -> bool:
+        """Resolve one side (consumption or injection) into ``out``.
+
+        Returns False when this side has a partial register wiring and no
+        totals sensor to fall back on (caller surfaces the fees-only floor);
+        True otherwise.
+        """
+        if bool(day_id) ^ bool(night_id) and not total_id:
+            return False
+        if day_id and night_id:
+            for day, kwh in (
+                await _recorder_daily_kwh(hass, day_id, jan1, today)
+            ).items():
+                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
+                row[slot_day] += kwh
+            for day, kwh in (
+                await _recorder_daily_kwh(hass, night_id, jan1, today)
+            ).items():
+                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
+                row[slot_night] += kwh
+            return True
+        if not total_id:
+            return True  # nothing wired on this side; contributes zero
+        per_day = await _recorder_daily_kwh(hass, total_id, jan1, today)
+        if meter in ("bi", "dynamic"):
+            ratios = await _recorder_daily_band_ratio(
+                hass, total_id, jan1, today, region
+            )
+            for day, total in per_day.items():
+                d_ratio, n_ratio = ratios.get(day, _default_band_ratio_for(day, region))
+                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
+                row[slot_day] += total * d_ratio
+                row[slot_night] += total * n_ratio
+        else:  # mono: route everything into the "day" slot
+            for day, total in per_day.items():
+                row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
+                row[slot_day] += total
+        return True
+
+    cons_ok = await _side(
+        entry.data.get(CONF_DAY_CONSUMPTION_KWH),
+        entry.data.get(CONF_NIGHT_CONSUMPTION_KWH),
+        entry.data.get(CONF_CONSUMPTION_KWH),
+        slot_day=0,
+        slot_night=1,
+    )
+    inj_ok = await _side(
+        entry.data.get(CONF_DAY_INJECTION_KWH),
+        entry.data.get(CONF_NIGHT_INJECTION_KWH),
+        entry.data.get(CONF_INJECTION_KWH),
+        slot_day=2,
+        slot_night=3,
+    )
+    if not (cons_ok and inj_ok):
+        return None
+    if not out:
+        return None
+
+    return {day: (r[0], r[1], r[2], r[3]) for day, r in out.items()}
+
+
+def _default_band_ratio_for(day: date, region: str) -> tuple[float, float]:
+    """Time-weighted (day_ratio, night_ratio) fallback for a day with no
+    hourly recorder stats yet.
+
+    Assumes uniform consumption across the day's 24 hours (the most
+    neutral guess without a usage profile) and uses the region's
+    bi-horaire schedule (so a Wallonia day picks up the 11-17 off-peak
+    window, a Flanders weekday holiday stays peak). Replaces a previous
+    hardcoded (1.0, 0.0) default that systematically pushed totals into
+    the peak band when hourly stats lagged daily stats."""
+    # Construct each local clock hour directly instead of advancing an
+    # aware datetime by a fixed UTC timedelta: the latter shifts by one
+    # hour on each DST transition, mislabelling one hour twice a year.
+    # is_offpeak only reads the local hour + weekday, both of which are
+    # well-defined per local clock hour even on DST days.
+    peak_hours = 0
+    for hour in range(24):
+        when = datetime(
+            day.year,
+            day.month,
+            day.day,
+            hour,
+            tzinfo=dt_util.DEFAULT_TIME_ZONE,
+        )
+        if not is_offpeak(when, region):
+            peak_hours += 1
+    if peak_hours == 0:
+        return (0.0, 1.0)
+    return (peak_hours / 24.0, (24 - peak_hours) / 24.0)
+
+
+def _partial_register_pair(entry: ConfigEntry, side: str) -> bool:
+    """True when exactly one half of ``side``'s day/night register pair is wired.
+
+    A half-wired pair cannot be billed FROM THE REGISTERS: the missing band's
+    kWh are simply absent, so every path must refuse rather than quietly bill
+    the wired half. A totals sensor on the same side changes that: it covers
+    both bands completely, and the band split is recovered from hourly
+    statistics, so the half-wired pair is merely redundant and the computation
+    should proceed. Refusing regardless threw away a fully wired totals sensor
+    and floored the year cost at fees only. The static
+    per-day path has always enforced this; the hourly path (TOU / Impact /
+    dynamic / exclusive-night) resolved each side independently and only
+    bailed when BOTH were empty, so a half-wired consumption pair collapsed to
+    "no consumption sensors" while a wired injection sensor kept crediting.
+    That billed the feed-in credit against zero consumption and drove the YTD
+    negative. Shared here so the two paths cannot drift apart again.
+    """
+    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
+    return bool(day_id) ^ bool(night_id) and not total_id
+
+
+def _kwh_sensor_ids(
+    entry: ConfigEntry, side: str
+) -> tuple[str | None, str | None, str | None]:
+    """The (day, night, total) recorder entity ids configured for ``side``
+    ("injection" or "consumption"); any element may be ``None``."""
+    if side == "injection":
+        return (
+            entry.data.get(CONF_DAY_INJECTION_KWH),
+            entry.data.get(CONF_NIGHT_INJECTION_KWH),
+            entry.data.get(CONF_INJECTION_KWH),
+        )
+    return (
+        entry.data.get(CONF_DAY_CONSUMPTION_KWH),
+        entry.data.get(CONF_NIGHT_CONSUMPTION_KWH),
+        entry.data.get(CONF_CONSUMPTION_KWH),
+    )
+
+
+def _hourly_consumption_sensors(entry: ConfigEntry) -> list[str]:
+    """Recorder entity ids whose hourly kWh sums add up to total
+    consumption.
+
+    Prefer the full day + night register pair when BOTH halves are wired,
+    matching ``_resolve_daily_kwh`` and the diagnostics roll-up and the
+    documented rule in ``const.py`` ("when both are configured, the
+    day/night registers win"). This helper used to check the totals sensor
+    first, so an entry with both wirings was billed off a different meter
+    on the hourly path (TOU / Impact / dynamic / exclusive-night and the
+    backfill) than on the static per-day path, and the two figures drifted
+    against each other for the same user.
+
+    Falls back to the single totals sensor. Returns an empty list when
+    nothing is wired, or when only one register half is wired and no total
+    covers it, so a partial wiring can't silently undercount the missing
+    band (caller surfaces the fees-only floor).
+    """
+    return _hourly_kwh_sensors(entry, "consumption")
+
+
+def _hourly_injection_sensors(entry: ConfigEntry) -> list[str]:
+    """Mirror of ``_hourly_consumption_sensors`` for the injection side.
+
+    Registers first when both halves are wired, then the totals sensor.
+    Returns an empty list when neither is available, so a partial register
+    wiring doesn't get counted as injection coverage."""
+    return _hourly_kwh_sensors(entry, "injection")
+
+
+def _hourly_kwh_sensors(entry: ConfigEntry, side: str) -> list[str]:
+    """The registers-then-total preference, once, for either side.
+
+    Both sides spelled this out separately while reading the same three keys
+    ``_kwh_sensor_ids`` already returns, so the preference order existed in
+    three places: here twice and in ``_side_is_half_wired``. The order is the
+    load-bearing part -- checking the total first bills the hourly path off a
+    different meter than the static per-day path for a user who wired both,
+    and the two figures then drift against each other.
+    """
+    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
+    if day_id and night_id:
+        return [day_id, night_id]
+    if total_id:
+        return [total_id]
+    return []

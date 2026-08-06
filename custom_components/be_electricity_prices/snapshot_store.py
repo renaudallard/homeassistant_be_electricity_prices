@@ -1,0 +1,586 @@
+# Copyright (c) 2026, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+"""Snapshot persistence and the cross-entry caches.
+
+Split out of coordinator.py. Holds the on-disk Store and its schema version,
+the shared snapshot / lock / failed-fetch dicts that let several entries on the
+same (supplier, contract, region) tuple share one fetch, and the per-entry VAT
+and excise-band resolution applied on load.
+
+_SNAPSHOT_SCHEMA_VERSION lives here with the (de)serialisation it guards: the
+persisted snapshot holds the card AS PARSED, so any change to what an extractor
+produces has to move this number with it."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+from datetime import datetime
+from datetime import timedelta
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
+from typing import Any
+import aiohttp
+import asyncio
+
+from .const import (
+    CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_INCLUDE_VAT,
+    DEFAULT_ANNUAL_CONSUMPTION_KWH,
+    DEFAULT_INCLUDE_VAT,
+    DOMAIN,
+    STORAGE_VERSION,
+)
+from .synergrid import (
+    _LOGGER,
+)
+from .providers.base import (
+    DsoOverlay,
+    DynamicRates,
+    EnergyRates,
+    FixedRates,
+    ImpactRates,
+    InjectionRates,
+    SpotMonthlyRates,
+    SupplierExtractor,
+    SupplierSnapshot,
+    TaxOverlay,
+    TimeOfUseRates,
+    VariableRates,
+    apply_vat,
+    resolve_excise_band,
+)
+
+# Coordinator probes the supplier on every update tick (UPDATE_INTERVAL_MINUTES);
+# SNAPSHOT_REFRESH_HOURS is the fallback TTL for suppliers that have no probe
+# path. With a probe, the snapshot stays cached until the probe key changes.
+SNAPSHOT_REFRESH_HOURS = 24
+SNAPSHOT_STALE_DAYS = 7
+
+# Process-wide snapshot sharing across config entries. Two entries that
+# point at the same (supplier, contract, region) share their freshly
+# fetched SupplierSnapshot, so we never poll the same PDF twice. Each
+# key also has an asyncio.Lock so concurrent first-fetches deduplicate.
+_SHARED_SNAPSHOTS_KEY = "snapshot_cache"
+_SHARED_LOCKS_KEY = "snapshot_locks"
+
+# Negative cache for fetch failures: when extractor.fetch raises, a
+# sibling coordinator on the same (supplier, contract, region) shouldn't
+# repeat the same failing network round-trip on the very next tick.
+# The stored timestamp is the last failure; siblings skip retrying for
+# _SHARED_FAILURE_TTL after that. Long enough to dedupe a tight burst of
+# update ticks, short enough that a real recovery is picked up the next
+# minute.
+_SHARED_FAILED_FETCHES_KEY = "snapshot_failed_fetches"
+_SHARED_FAILURE_TTL = timedelta(minutes=5)
+
+# Per-(supplier, contract, region, YYYY-MM) cache of historical snapshots
+# the time-correct yearly-cost flow uses to bill each past month at its
+# own rate. ``None`` is a negative cache so a probe-less supplier or a
+# month outside the supplier's archive horizon doesn't refetch every
+# refresh. Lives in-memory only; rebuilt fresh on HA restart.
+_MONTHLY_SNAPSHOTS_KEY = "monthly_snapshot_cache"
+
+# Per-(supplier, contract, region, YYYY-MM) timestamp of the last
+# transient ``fetch_for_month`` failure. ``_snapshot_for_month``
+# deliberately does NOT cache a transient error as a negative result
+# (cached None means "no archive for this month"), so without this
+# secondary marker every hourly tick would re-attempt every still-
+# uncached past month against a flaky CDN. The TTL matches the live
+# TTL: long enough to dedupe one hour of update ticks, short enough
+# that a real recovery is picked up promptly.
+_MONTHLY_FAILED_FETCHES_KEY = "monthly_snapshot_failed_fetches"
+_MONTHLY_FAILURE_TTL = timedelta(minutes=30)
+
+
+@dataclass
+class _SharedSnapshot:
+    snapshot: "SupplierSnapshot"
+    fetched_at: datetime
+    # Last probe key seen when this snapshot was fetched. ``None`` for
+    # suppliers without a probe path - those fall back to the time-based
+    # TTL alone.
+    probe_key: str | None = None
+
+
+def _shared_snapshots(
+    hass: HomeAssistant,
+) -> dict[tuple[str, str, str], _SharedSnapshot]:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_SHARED_SNAPSHOTS_KEY, {})  # type: ignore[no-any-return]
+
+
+def _shared_failed_fetches(
+    hass: HomeAssistant,
+) -> dict[tuple[str, str, str], tuple[datetime, str, int]]:
+    """Per-key (timestamp, last-error-message, consecutive-count) of recent
+    fetch failures.
+
+    Storing the error message alongside the timestamp lets a sibling
+    coordinator that hits the negative-cache short-circuit surface the
+    real failure reason in its UpdateFailed instead of an opaque
+    'cold start'. The third field counts consecutive failures on the key so
+    the coordinator can defer the 'extractor failed' repair issue past a lone
+    transient timeout (see _EXTRACTOR_ISSUE_THRESHOLD); it resets whenever a
+    fetch succeeds and the row is popped.
+    """
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_SHARED_FAILED_FETCHES_KEY, {})  # type: ignore[no-any-return]
+
+
+def evict_shared_caches(
+    hass: HomeAssistant, key: tuple[str, str, str], extractor_id: str
+) -> None:
+    """Drop every shared-cache entry pinned to the given supplier tuple.
+
+    Called from ``async_unload_entry`` once the unloaded entry's
+    (supplier, contract, region) is no longer referenced by any other
+    loaded entry. Without this, removing the last entry on a given
+    tuple leaks the snapshot, the per-month archive cache, the
+    failed-fetch marker, and the asyncio.Lock into ``hass.data`` for
+    the lifetime of the HA process.
+    """
+    # Bump the generation counter first so any in-flight cache
+    # writer that resumes after this eviction can detect the change
+    # and skip its write (the bucket row is gone, so a write would
+    # re-create an orphaned row pointing at evicted-tuple data).
+    _bump_tuple_generation(hass, key)
+    for month_key in list(_monthly_snapshots(hass)):
+        if month_key[0] == extractor_id and month_key[1:3] == key[1:3]:
+            _bump_tuple_generation(hass, month_key)
+    _shared_snapshots(hass).pop(key, None)
+    _shared_failed_fetches(hass).pop(key, None)
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    locks: dict[tuple[str, str, str], asyncio.Lock] = bucket.setdefault(
+        _SHARED_LOCKS_KEY, {}
+    )
+    # Only drop the lock when it isn't currently held. If a coroutine
+    # is mid-fetch (held lock) and a future entry on the same tuple
+    # acquired a fresh lock through ``_shared_lock``, the dedup
+    # property would silently break and both coroutines would fan out
+    # the same network call. Leaving a locked lock in place defers
+    # cleanup to the next eviction; the alternative (cancelling the
+    # in-flight fetch) is more invasive than the leak it would
+    # prevent.
+    held = locks.get(key)
+    if held is not None and not held.locked():
+        locks.pop(key, None)
+    monthly_locks: dict[tuple[str, str, str, str], asyncio.Lock] = bucket.setdefault(
+        _MONTHLY_LOCKS_KEY, {}
+    )
+    for k in _drop_monthly_rows(hass, key, extractor_id):
+        held_m = monthly_locks.get(k)
+        if held_m is not None and not held_m.locked():
+            monthly_locks.pop(k, None)
+
+
+def _drop_monthly_rows(
+    hass: HomeAssistant, key: tuple[str, str, str], extractor_id: str
+) -> list[tuple[str, str, str, str]]:
+    """Drop every per-month archive row pinned to one supplier tuple.
+
+    Returns the keys removed so a caller can clean up alongside them. The
+    rows have no TTL, so whoever wants a re-fetch has to say so: on unload
+    that is eviction, on the refresh service it is the user asking for the
+    current card again.
+    """
+    monthly = _monthly_snapshots(hass)
+    monthly_failed = _monthly_failed_fetches(hass)
+    _, contract, region = key
+    stale = [
+        k
+        for k in monthly
+        if k[0] == extractor_id and k[1] == contract and k[2] == region
+    ]
+    for k in stale:
+        monthly.pop(k, None)
+        monthly_failed.pop(k, None)
+    return stale
+
+
+def _shared_lock(hass: HomeAssistant, key: tuple[str, str, str]) -> asyncio.Lock:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    locks: dict[tuple[str, str, str], asyncio.Lock] = bucket.setdefault(
+        _SHARED_LOCKS_KEY, {}
+    )
+    if key not in locks:
+        locks[key] = asyncio.Lock()
+    return locks[key]
+
+
+def _monthly_snapshots(
+    hass: HomeAssistant,
+) -> dict[tuple[str, str, str, str], "SupplierSnapshot | None"]:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_MONTHLY_SNAPSHOTS_KEY, {})  # type: ignore[no-any-return]
+
+
+def _monthly_failed_fetches(
+    hass: HomeAssistant,
+) -> dict[tuple[str, str, str, str], datetime]:
+    """Per-(supplier, contract, region, YYYY-MM) timestamp of the last
+    transient ``fetch_for_month`` failure."""
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_MONTHLY_FAILED_FETCHES_KEY, {})  # type: ignore[no-any-return]
+
+
+_MONTHLY_LOCKS_KEY = "monthly_snapshot_locks"
+
+# Generation counter bumped by evict_shared_caches when a tuple's
+# rows are dropped. Cache writers that may have been awaiting at the
+# moment of eviction (held lock, mid-fetch) check the counter on
+# resume and skip the write if it has advanced. Without this guard a
+# slow fetcher would re-create an orphaned cache row that future
+# entries on the same tuple could read as stale data.
+_TUPLE_GENERATIONS_KEY = "tuple_generations"
+
+
+def _tuple_generation(hass: HomeAssistant, key: tuple[str, ...]) -> int:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    gens: dict[tuple[str, ...], int] = bucket.setdefault(_TUPLE_GENERATIONS_KEY, {})
+    return gens.get(key, 0)
+
+
+def _bump_tuple_generation(hass: HomeAssistant, key: tuple[str, ...]) -> None:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    gens: dict[tuple[str, ...], int] = bucket.setdefault(_TUPLE_GENERATIONS_KEY, {})
+    gens[key] = gens.get(key, 0) + 1
+
+
+def _monthly_lock(hass: HomeAssistant, key: tuple[str, str, str, str]) -> asyncio.Lock:
+    """Per-(supplier, contract, region, YYYY-MM) lock used to dedupe
+    concurrent fetch_for_month calls. Without it, two coordinators on
+    the same supplier tuple racing on first YTD evaluation each fan
+    out 12 monthly fetches before either populates _monthly_snapshots."""
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    locks: dict[tuple[str, str, str, str], asyncio.Lock] = bucket.setdefault(
+        _MONTHLY_LOCKS_KEY, {}
+    )
+    if key not in locks:
+        locks[key] = asyncio.Lock()
+    return locks[key]
+
+
+async def _snapshot_for_month(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: "SupplierExtractor",
+    contract: str,
+    region: str,
+    year_month: date,
+    current_snapshot: "SupplierSnapshot",
+    entry: ConfigEntry | None = None,
+) -> "SupplierSnapshot":
+    """Resolve the historical snapshot for ``year_month`` or fall back.
+
+    Caches the result per (supplier, contract, region, YYYY-MM): a hit
+    skips the network round-trip on subsequent refreshes. ``None`` is
+    cached too -- "supplier doesn't archive this month" is a stable
+    signal we shouldn't keep re-asking. The fallback is the current
+    snapshot, used as a proxy for non-archive suppliers (OCTA+,
+    TotalEnergies, Engie, Luminus, DATS 24, Mega, Bolt).
+
+    The cache is shared across entries, so it holds archived cards exactly
+    as parsed and each caller's own VAT / consumption facts are applied on
+    the way out. ``current_snapshot`` is the caller's own and already
+    resolved, so it is passed through untouched.
+    """
+
+    def resolved(snap: "SupplierSnapshot | None") -> "SupplierSnapshot":
+        if snap is None:
+            return current_snapshot
+        return snap if entry is None else _resolve_snapshot(entry, snap)
+
+    cache = _monthly_snapshots(hass)
+    failed = _monthly_failed_fetches(hass)
+    cache_key = (
+        extractor.id,
+        contract,
+        region,
+        f"{year_month.year:04d}-{year_month.month:02d}",
+    )
+    if cache_key in cache:
+        return resolved(cache[cache_key])
+    fetch_archived = extractor.fetch_for_month
+    if fetch_archived is None:
+        cache[cache_key] = None
+        return current_snapshot
+    # Negative cache: a transient fetch_for_month failure is intentionally
+    # NOT written to ``cache`` (a cached None means "no archive for
+    # this month"); without this secondary marker the hourly YTD walk
+    # would re-attempt every uncached month against a flaky CDN. Skip
+    # the retry while the marker is fresh; current_snapshot is the
+    # documented proxy for non-archive months.
+    last_fail = failed.get(cache_key)
+    if last_fail is not None and dt_util.utcnow() - last_fail < _MONTHLY_FAILURE_TTL:
+        return current_snapshot
+    gen_at_entry = _tuple_generation(hass, cache_key)
+    async with _monthly_lock(hass, cache_key):
+        # Re-check under the lock so the second waiter doesn't repeat
+        # what the first just did.
+        if cache_key in cache:
+            return resolved(cache[cache_key])
+        last_fail = failed.get(cache_key)
+        if (
+            last_fail is not None
+            and dt_util.utcnow() - last_fail < _MONTHLY_FAILURE_TTL
+        ):
+            return current_snapshot
+        fetch_failed = False
+        try:
+            snap = await fetch_archived(session, contract, region, year_month)
+        except Exception as err:  # noqa: BLE001 - per-month fetch must never break the year loop
+            _LOGGER.debug(
+                "fetch_for_month failed for %s/%s/%s/%s: %s",
+                extractor.id,
+                contract,
+                region,
+                cache_key[3],
+                err,
+            )
+            snap = None
+            fetch_failed = True
+            failed[cache_key] = dt_util.utcnow()
+        # Skip the cache write if eviction ran during the await: the
+        # tuple is no longer this entry's, and re-creating the row
+        # would orphan it for any future re-add of the same tuple.
+        # Also skip when the fetch raised: a transient error must not
+        # be cached as "supplier doesn't archive this month", which is
+        # the meaning a cached None carries here. Leaving the key
+        # absent lets the next refresh retry instead of locking in
+        # stale "uncredited" output until the entry reloads.
+        if not fetch_failed and _tuple_generation(hass, cache_key) == gen_at_entry:
+            cache[cache_key] = snap
+    return resolved(snap)
+
+
+def _include_vat(entry: ConfigEntry) -> bool:
+    """Whether this entry wants its prices VAT-inclusive.
+
+    Inert on a residential card, which prints VAT-inclusive already; it
+    only bites on a card published excluding VAT.
+    """
+    return bool(entry.data.get(CONF_INCLUDE_VAT, DEFAULT_INCLUDE_VAT))
+
+
+def _resolve_snapshot(entry: ConfigEntry, snap: SupplierSnapshot) -> SupplierSnapshot:
+    """Resolve a card against the site facts only this entry knows.
+
+    Both steps are identity on a residential card, so this is free for
+    every existing entry. Order is irrelevant: the excise band is a
+    per-kWh rate and ``apply_vat`` never touches those.
+    """
+    resolved = apply_vat(snap, include_vat=_include_vat(entry))
+    return resolve_excise_band(
+        resolved,
+        float(
+            entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH, DEFAULT_ANNUAL_CONSUMPTION_KWH)
+        ),
+    )
+
+
+class _MigratingStore(Store[dict[str, Any]]):
+    """Store subclass that drops blobs from a previous STORAGE_VERSION.
+
+    Every field in the persisted snapshot is re-derivable from a fresh
+    extractor fetch, so wiping the cache on a major-version mismatch is
+    safe and avoids HA logging the default migrator's "missing migration
+    function" warning. Returning an empty dict from
+    ``_async_migrate_func`` makes ``async_load`` return ``{}`` and the
+    coordinator re-fetches on its first refresh.
+    """
+
+    async def _async_migrate_func(
+        self,
+        old_major_version: int,
+        old_minor_version: int,  # noqa: ARG002 - HA signature.
+        old_data: dict[str, Any],  # noqa: ARG002 - dropped wholesale.
+    ) -> dict[str, Any]:
+        if old_major_version < STORAGE_VERSION:
+            return {}
+        return old_data
+
+
+# Bump when a new field is added to the serialized snapshot so old caches
+# get invalidated and re-fetched on first load instead of silently lacking
+# the new field. Loading a snapshot whose schema_version is below this
+# raises in _snapshot_from_dict; async_load_persistent then discards the
+# cache and the coordinator's first refresh repopulates from the supplier.
+# v9: DynamicRates gained ``quarter_hourly``. Bump so a cached dynamic
+# snapshot from a pre-15-min release (Engie, Cociter, EBEM, Ecofix) is
+# dropped and re-fetched with the flag set, rather than lingering on the
+# hourly default until the snapshot next refreshes. The probe-based
+# suppliers (Cociter, EBEM, Ecofix) would otherwise keep the stale flag
+# for weeks, until their next monthly card changes the probe key.
+# v10: OCTA+ Dynamic was missed by the v9 sweep; it indexes on the
+# 15-minute Epex spot and now sets ``quarter_hourly`` too. Bump so a
+# cached OCTA+ dynamic snapshot is dropped and re-fetched with the flag
+# set rather than lingering on the hourly default.
+# v11: snapshots gained supplier_prosumer_eur_per_kva_year (Cociter's
+# compensation-regime PV forfait). Bump so a cached Cociter Variable
+# snapshot is re-fetched with the forfait parsed instead of None.
+# v12: InjectionRates gained per-slot peak/transition/offpeak (Engie
+# Empower Flextime's per-slot feed-in tariff). Bump so a cached Flextime
+# snapshot is re-fetched with the triplet instead of the flat single rate.
+# v13: the July 2026 Eneco cards dropped the "/ VALORISATIE" suffix from
+# the injection heading, so 0.8.3 parsed every Eneco injection to None and
+# cached it. 0.8.4 fixed the anchor but probe-based freshness keeps serving
+# that stale None until Eneco republishes. Bump so the mis-parsed snapshot
+# is dropped and re-fetched with the injection block populated.
+# v14: added the SpotMonthlyRates energy kind (expert custom monthly-average
+# supplier) and the InjectionRates.floor_at_zero flag. Bump so a cached
+# snapshot from before the field existed is dropped and rebuilt with it.
+# v15: VariableRates gained formula_factor / formula_base (numeric BELIX-style
+# coefficients) so a variable contract with a contract start date re-prices its
+# signing cohort against the current month's mean. Bump so a cached variable
+# snapshot from before the fields existed is dropped and re-parsed with them.
+# v16: the persisted snapshot now holds the card as parsed rather than as
+# priced, so the entry's VAT preference is re-applied on load, and TaxOverlay
+# gained federal_excise_bands for cards that print the special excise as a
+# degressive schedule by annual consumption, and InjectionRates gained
+# vat_applies for cards that tax injection. Bump so a cache written under any
+# of the old meanings is dropped.
+# v17: TaxOverlay gained region_connection_fee_unavailable, for a Walloon card
+# that stopped printing the connection-fee row. Bump so an EnergyVision Wallonia
+# entry stranded on its July snapshot by the August tax-block change drops that
+# cache and re-parses the current card instead of waiting for the probe key to
+# move.
+# v18: three extractor fixes changed what is parsed into the snapshot, and all
+# three suppliers are probe-based, so without this bump an existing entry keeps
+# serving the wrong figures until its supplier republishes a card, up to a month
+# later. Ecopower stopped baking 6% VAT into databeheer / capacity / the
+# subscription, Mega now parses the Flemish energy fund instead of hardcoding
+# 0.0, and Bolt reads the non-residential fund row on professional contracts.
+# The rule this keeps tripping over: the persisted snapshot holds the card AS
+# PARSED, so any change to what an extractor produces needs this version moved
+# with it. A change that only affects how a stored card is priced (apply_vat,
+# resolve_excise_band) does not, since those run on load.
+# v19: Mega's realized-rate parser dropped a negative injection rate, so a
+# variable or Impact entry fell back to the 12-month simulation table and
+# credited a rate the card charges. Mega is probe-based and the May cards are
+# already published, so their probe key will not move again; without this bump
+# an affected entry keeps the wrong sign indefinitely.
+_SNAPSHOT_SCHEMA_VERSION = 19
+
+
+def _snapshot_to_dict(
+    snap: SupplierSnapshot, fetched_at: datetime, probe_key: str | None = None
+) -> dict[str, Any]:
+    return {
+        "_cached_at": fetched_at.isoformat(),
+        "_probe_key": probe_key,
+        "_schema_version": _SNAPSHOT_SCHEMA_VERSION,
+        "supplier": snap.supplier,
+        "contract": snap.contract,
+        "energy_kind": _energy_kind(snap.energy),
+        "energy": snap.energy.__dict__,
+        "dsos": {k: v.__dict__ for k, v in snap.dsos.items()},
+        "taxes": snap.taxes.__dict__,
+        "source_url": snap.source_url,
+        "publication_label": snap.publication_label,
+        "valid_until": snap.valid_until.isoformat() if snap.valid_until else None,
+        "injection": snap.injection.__dict__ if snap.injection else None,
+        "supplier_prosumer_eur_per_kva_year": snap.supplier_prosumer_eur_per_kva_year,
+    }
+
+
+def _taxes_from_dict(data: dict[str, Any]) -> TaxOverlay:
+    """Rebuild a TaxOverlay, restoring the excise bands' tuple shape.
+
+    JSON has no tuples: a banded excise round-trips as a list of lists and
+    has to be put back the way the dataclass declares it.
+    """
+    bands = data.get("federal_excise_bands")
+    if bands is None:
+        return TaxOverlay(**data)
+    return TaxOverlay(
+        **{**data, "federal_excise_bands": tuple((b[0], b[1]) for b in bands)}
+    )
+
+
+def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
+    if data.get("_schema_version", 1) < _SNAPSHOT_SCHEMA_VERSION:
+        raise ValueError(
+            "snapshot schema is older than the running integration; "
+            "discarding cache so the next refresh re-fetches"
+        )
+    energy_kind = data["energy_kind"]
+    energy_args = data["energy"]
+    energy: EnergyRates
+    if energy_kind == "fixed":
+        energy = FixedRates(**energy_args)
+    elif energy_kind == "variable":
+        energy = VariableRates(**energy_args)
+    elif energy_kind == "dynamic":
+        energy = DynamicRates(**energy_args)
+    elif energy_kind == "tou":
+        energy = TimeOfUseRates(**energy_args)
+    elif energy_kind == "tou_impact":
+        energy = ImpactRates(**energy_args)
+    elif energy_kind == "spot_monthly":
+        energy = SpotMonthlyRates(**energy_args)
+    else:
+        raise ValueError(f"unknown energy kind {energy_kind!r}")
+    injection_data = data.get("injection")
+    valid_until_iso = data.get("valid_until")
+    valid_until: date | None = None
+    if isinstance(valid_until_iso, str):
+        try:
+            valid_until = date.fromisoformat(valid_until_iso)
+        except ValueError:
+            valid_until = None
+    return SupplierSnapshot(
+        supplier=data["supplier"],
+        contract=data["contract"],
+        energy=energy,
+        dsos={k: DsoOverlay(**v) for k, v in data["dsos"].items()},
+        taxes=_taxes_from_dict(data["taxes"]),
+        source_url=data["source_url"],
+        publication_label=data.get("publication_label", ""),
+        valid_until=valid_until,
+        injection=InjectionRates(**injection_data) if injection_data else None,
+        supplier_prosumer_eur_per_kva_year=data.get(
+            "supplier_prosumer_eur_per_kva_year"
+        ),
+    )
+
+
+def _energy_kind(energy: EnergyRates) -> str:
+    if isinstance(energy, FixedRates):
+        return "fixed"
+    if isinstance(energy, VariableRates):
+        return "variable"
+    if isinstance(energy, DynamicRates):
+        return "dynamic"
+    if isinstance(energy, TimeOfUseRates):
+        return "tou"
+    if isinstance(energy, ImpactRates):
+        return "tou_impact"
+    if isinstance(energy, SpotMonthlyRates):
+        return "spot_monthly"
+    raise TypeError(f"unknown energy rates type {type(energy).__name__}")

@@ -41,11 +41,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
+    _successor_for,
+)
+from custom_components.be_electricity_prices.snapshot_store import (
     _monthly_snapshots,
     _shared_failed_fetches,
     _shared_lock,
     _shared_snapshots,
-    _successor_for,
     evict_shared_caches,
 )
 from custom_components.be_electricity_prices.providers.base import (
@@ -617,7 +619,7 @@ async def test_probe_match_through_the_shared_cache_refreshes_fetched_at(
     assert coord._snapshot_fetched_at > first, "age clock never moved"
     assert coord._snapshot_age_hours() < 1.0
     # The shared row is restamped too, so a sibling sees the same age.
-    from custom_components.be_electricity_prices.coordinator import _shared_snapshots
+    from custom_components.be_electricity_prices.snapshot_store import _shared_snapshots
 
     assert _shared_snapshots(hass)[coord._shared_key()].fetched_at == (
         coord._snapshot_fetched_at
@@ -636,7 +638,7 @@ async def test_force_refresh_drops_the_per_month_archive_rows(
     for the life of the HA process, and this service, whose whole purpose is
     to pick up a corrected card, could not clear it.
     """
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.snapshot_store import (
         _monthly_failed_fetches,
         _monthly_snapshots,
     )
@@ -671,9 +673,9 @@ async def test_force_refresh_not_defeated_by_sibling_cache(
     A still calls extractor.fetch instead of silently adopting B's
     snapshot. Without the guard, the user-facing be_electricity_prices.
     refresh service is a no-op on multi-entry installs."""
-    from custom_components.be_electricity_prices.coordinator import (
-        _shared_snapshots,
+    from custom_components.be_electricity_prices.snapshot_store import (
         _SharedSnapshot,
+        _shared_snapshots,
     )
 
     entry_a = _entry()
@@ -722,7 +724,7 @@ async def test_force_refresh_not_defeated_by_sibling_failure_marker(
     cache short-circuit must NOT fire for A's force-refresh tick or the
     user-facing be_electricity_prices.refresh service silently no-ops
     for up to _SHARED_FAILURE_TTL (5 min)."""
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.snapshot_store import (
         _shared_failed_fetches,
     )
 
@@ -1289,7 +1291,7 @@ async def test_update_data_fetches_spots_for_spot_indexed_injection(
     coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator._compute_current_year_cost",
+        "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
         AsyncMock(return_value=0.0),
     ):
         await coord._async_update_data()
@@ -1374,6 +1376,8 @@ async def test_transient_failure_defers_extractor_issue_until_threshold(
     attempts back to back."""
     from custom_components.be_electricity_prices.coordinator import (
         _EXTRACTOR_ISSUE_THRESHOLD,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
         _shared_failed_fetches,
     )
 
@@ -1524,7 +1528,7 @@ async def test_evict_shared_caches_drops_rows_for_tuple(hass: HomeAssistant) -> 
     """evict_shared_caches must remove every cache row pinned to the
     given (supplier, contract, region) tuple, leaving rows for other
     tuples untouched."""
-    from custom_components.be_electricity_prices.coordinator import _SharedSnapshot
+    from custom_components.be_electricity_prices.snapshot_store import _SharedSnapshot
 
     key_us = ("eneco", "power_fix", "wallonia")
     key_other = ("bolt", "bolt_fix", "wallonia")
@@ -1865,7 +1869,7 @@ async def test_evict_bumps_tuple_generation_blocks_inflight_write(
     """A coroutine mid-fetch when eviction runs must NOT re-create the
     cache row on resume, otherwise the row would orphan and a future
     re-add of the same tuple could read stale data."""
-    from custom_components.be_electricity_prices.coordinator import (
+    from custom_components.be_electricity_prices.snapshot_store import (
         _bump_tuple_generation,
         _shared_failed_fetches,
         _tuple_generation,
@@ -2129,11 +2133,11 @@ async def test_variable_cohort_keeps_its_per_hour_injection_index(
 
     with (
         patch(
-            "custom_components.be_electricity_prices.coordinator._cohort_energy_leg",
+            "custom_components.be_electricity_prices.cohort._cohort_energy_leg",
             new=_cohort,
         ),
         patch(
-            "custom_components.be_electricity_prices.coordinator._compute_current_year_cost",
+            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
         patch.object(coord, "_save_persistent", AsyncMock()),
@@ -2205,11 +2209,11 @@ async def test_variable_cohort_without_key_still_prices(hass: HomeAssistant) -> 
 
     with (
         patch(
-            "custom_components.be_electricity_prices.coordinator._snapshot_for_month",
+            "custom_components.be_electricity_prices.snapshot_store._snapshot_for_month",
             new=_archived,
         ),
         patch(
-            "custom_components.be_electricity_prices.coordinator._compute_current_year_cost",
+            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
         patch.object(coord, "_save_persistent", AsyncMock()),
@@ -2747,7 +2751,7 @@ async def test_spot_monthly_mean_waits_for_the_historical_spot_fill(
 
     with (
         patch(
-            "custom_components.be_electricity_prices.coordinator._compute_current_year_cost",
+            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
             AsyncMock(return_value=0.0),
         ),
         patch.object(coord, "_save_persistent", AsyncMock()),

@@ -85,26 +85,36 @@ from .const import (
     SOLAR_REGIME_INJECTION,
 )
 from .synergrid import SppWeights
-from .coordinator import (
-    _compensation_kva,
-    local_year_start,
-    BePricesCoordinator,
-    _annual_static_fees,
+from .cohort import (
     _cohort_energy_leg,
     _contract_start_month,
-    _historical_injection_rate,
-    _capacity_monthly_eur,
+    _month_snapshot_cache,
+)
+from .coordinator import (
+    BePricesCoordinator,
+    local_year_start,
+)
+from .energy_meters import (
     _hourly_consumption_sensors,
     _hourly_injection_sensors,
+    _partial_register_pair,
+    _sum_hourly_kwh,
+)
+from .fees import (
+    _annual_static_fees,
+    _capacity_monthly_eur,
+    _compensation_kva,
+    _prosumer_monthly_fee,
+)
+from .injection import (
+    _historical_injection_rate,
     _injection_hourly_on_cohort,
     _injection_needs_spot,
-    _partial_register_pair,
+)
+from .spot_stats import (
     _mean_of_month,
-    _month_snapshot_cache,
-    _prosumer_monthly_fee,
     _spp_injection_spot,
     _spp_weighting_enabled,
-    _sum_hourly_kwh,
 )
 from .pricing import DsoTariffMode, MeterType, compute_breakdown
 from .providers import DynamicRates, SpotMonthlyRates, get as get_extractor

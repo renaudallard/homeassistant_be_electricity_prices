@@ -87,7 +87,7 @@ def _compare_injection_credit(
     different instants. Monthly-indexed injection is spot-independent (uses
     the realized monthly value), so delegate that to the live helper.
     """
-    from .coordinator import _compute_injection_price, _floor_injection
+    from .injection import _compute_injection_price, _floor_injection
     from .providers.base import DynamicRates, TimeOfUseRates
 
     inj = getattr(snapshot, "injection", None)
@@ -458,7 +458,7 @@ def _annual_bill(
         # already-annual fee by a month count and quoted the prosumer term 12x
         # over on every date. No test caught it because the options-flow stub
         # DSO publishes no prosumer rate, which zeroes the whole term.
-        from .coordinator import _compute_prosumer
+        from .fees import _compute_prosumer
 
         prosumer_annual = 12.0 * _compute_prosumer(snapshot, entry)
         fees += prosumer_annual * (prosumer_proration / 12.0 - fee_proration)
@@ -489,7 +489,7 @@ def _annual_fees(
     everywhere today: the live ``current_year_cost`` sensor accrues capacity
     through ``_ytd_capacity``, so a what-if that dropped it would quote a
     lower bill than the sensor it sits next to."""
-    from .coordinator import (
+    from .fees import (
         _annual_static_fees,
         _compute_capacity,
         _compute_prosumer,
@@ -520,7 +520,7 @@ async def _read_total_kwh(
     or the recorder has nothing in the requested window -- the caller
     falls back to a default consumption assumption in that case so the
     quote page still renders."""
-    from .coordinator import _kwh_sensor_ids, _recorder_daily_kwh
+    from .energy_meters import _kwh_sensor_ids, _recorder_daily_kwh
 
     day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
     if day_id and night_id:
