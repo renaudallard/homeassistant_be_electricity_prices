@@ -84,16 +84,28 @@ def test_hour_iter_empty_when_start_equals_end() -> None:
     assert bf._hour_iter(when, when) == []
 
 
-def test_solar_kva_invalid_inputs_clamp_to_zero() -> None:
-    # Each branch of the helper: missing key, non-numeric, negative.
-    e_missing = SimpleNamespace(data={})
-    e_bad = SimpleNamespace(data={"solar_kva": "not-a-number"})
-    e_neg = SimpleNamespace(data={"solar_kva": -2.5})
-    e_ok = SimpleNamespace(data={"solar_kva": 5.0})
-    assert bf._solar_kva(e_missing) == 0.0  # type: ignore[arg-type]
-    assert bf._solar_kva(e_bad) == 0.0  # type: ignore[arg-type]
-    assert bf._solar_kva(e_neg) == 0.0  # type: ignore[arg-type]
-    assert bf._solar_kva(e_ok) == 5.0  # type: ignore[arg-type]
+def test_compensation_kva_invalid_inputs_clamp_to_zero() -> None:
+    """The kVA half of the eligibility gate: missing key, non-numeric,
+    negative. backfill's own _solar_kva used to hold this branch while the
+    regime and region halves lived 580 lines away and in coordinator; the
+    whole gate is now one function that all three cost paths call."""
+    from custom_components.be_electricity_prices.coordinator import _compensation_kva
+
+    eligible = {"solar_regime": "compensation", "region": "wallonia"}
+    e_missing = SimpleNamespace(data={**eligible})
+    e_bad = SimpleNamespace(data={**eligible, "solar_kva": "not-a-number"})
+    e_neg = SimpleNamespace(data={**eligible, "solar_kva": -2.5})
+    e_ok = SimpleNamespace(data={**eligible, "solar_kva": 5.0})
+    assert _compensation_kva(e_missing) == 0.0  # type: ignore[arg-type]
+    assert _compensation_kva(e_bad) == 0.0  # type: ignore[arg-type]
+    assert _compensation_kva(e_neg) == 0.0  # type: ignore[arg-type]
+    assert _compensation_kva(e_ok) == 5.0  # type: ignore[arg-type]
+
+    # The other two halves of the gate, which backfill used to apply
+    # separately and 580 lines apart.
+    for override in ({"solar_regime": "injection"}, {"region": "flanders"}):
+        entry = SimpleNamespace(data={**eligible, "solar_kva": 5.0, **override})
+        assert _compensation_kva(entry) == 0.0, override  # type: ignore[arg-type]
 
 
 def test_normalize_window_defaults_to_jan1_through_now() -> None:

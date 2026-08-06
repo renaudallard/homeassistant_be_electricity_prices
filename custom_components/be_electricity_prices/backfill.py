@@ -73,18 +73,17 @@ from .const import (
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_REGION,
-    CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     DOMAIN,
     DSO_MODE_BI_HORAIRE,
     METER_MONO,
     REGION_FLANDERS,
-    REGION_WALLONIA,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
 from .coordinator import (
+    _compensation_kva,
     local_year_start,
     BePricesCoordinator,
     _annual_static_fees,
@@ -124,14 +123,6 @@ _PRICE_SENSOR_KEYS: tuple[str, ...] = (
 )
 _INJECTION_PRICE_SENSOR_KEY = "injection_price"
 _COST_SENSOR_KEY = "current_year_cost"
-
-
-def _solar_kva(entry: ConfigEntry) -> float:
-    try:
-        kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
-    except (TypeError, ValueError):
-        return 0.0
-    return kva if kva > 0.0 else 0.0
 
 
 def _stat_id(hass: HomeAssistant, entry: ConfigEntry, key: str) -> str | None:
@@ -567,7 +558,8 @@ async def _backfill_cost_sensor(
     dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
     is_compensation = regime == SOLAR_REGIME_COMPENSATION
-    kva = _solar_kva(entry) if is_compensation else 0.0
+    # Already includes the regime and Wallonia halves of the gate.
+    kva = _compensation_kva(entry)
     # The kW the Flemish capacity tariff is charged on. Read from the live
     # coordinator so the backfilled series accrues it exactly as the live
     # _ytd_capacity does; the rolling mean is not reconstructable per past
@@ -698,7 +690,7 @@ async def _backfill_cost_sensor(
         # Compensation is Walloon-only (see coordinator._compute_prosumer):
         # gate the prosumer accrual to Wallonia so a Flanders entry never
         # backfills prosumer on top of the capacity tariff.
-        if is_compensation and kva > 0.0 and region == REGION_WALLONIA:
+        if kva:
             overlay = snap_h.dsos.get(dso)
             monthly_fee = _prosumer_monthly_fee(overlay, snap_h, kva)
             if monthly_fee:

@@ -3171,6 +3171,29 @@ def _prosumer_monthly_fee(
     return kva * (dso_rate + supplier_rate) / 12.0
 
 
+def _compensation_kva(entry: ConfigEntry) -> float:
+    """Inverter kVA this entry bills the prosumer fee on, else 0.0.
+
+    The whole eligibility gate in one place: the compensation regime, Wallonia,
+    and a kVA that parses above zero. It was written out three times -- the
+    live tick, the year-to-date walk and the backfill, the last one with the
+    kVA half in its own helper and the region half 580 lines away from it.
+
+    Compensation is Walloon-only: a Flanders PV owner is either on net metering
+    (not modelled here) or on a digital meter paying the capaciteitstarief, and
+    billing the prosumer fee there too would double-count grid recovery.
+    """
+    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_COMPENSATION:
+        return 0.0
+    if entry.data.get(CONF_REGION) != REGION_WALLONIA:
+        return 0.0
+    try:
+        kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+    return kva if kva > 0.0 else 0.0
+
+
 def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
     """Monthly prosumer (compensation regime) cost in EUR.
 
@@ -3182,20 +3205,8 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
       - the configured DSO has no prosumer rate in the snapshot
         (Flemish digital meters, Cociter SMR3 dynamic).
     """
-    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_COMPENSATION:
-        return 0.0
-    # Compensation is Walloon-only: a Flanders PV owner is either on net-
-    # metering (no capacity tariff, but that regime is not modelled here) or
-    # on a digital meter paying the capaciteitstarief. Billing the prosumer
-    # fee in Flanders on top of the always-billed capacity tariff would
-    # double-count grid-recovery, so gate it to Wallonia.
-    if entry.data.get(CONF_REGION) != REGION_WALLONIA:
-        return 0.0
-    try:
-        kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
-    except (TypeError, ValueError):
-        return 0.0
-    if kva <= 0.0:
+    kva = _compensation_kva(entry)
+    if not kva:
         return 0.0
     overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
     return _prosumer_monthly_fee(overlay, snapshot, kva)
@@ -3771,17 +3782,8 @@ async def _ytd_prosumer(
     """Sum the monthly prosumer fee across YTD using each month's archived
     snapshot's DSO overlay, so a CWaPE indexation that lands mid-year is
     honoured for the months it applies to."""
-    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_COMPENSATION:
-        return 0.0
-    # Compensation is Walloon-only (see _compute_prosumer): gate it so a
-    # Flanders entry never bills prosumer on top of the capacity tariff.
-    if entry.data.get(CONF_REGION) != REGION_WALLONIA:
-        return 0.0
-    try:
-        kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))
-    except (TypeError, ValueError):
-        return 0.0
-    if kva <= 0.0:
+    kva = _compensation_kva(entry)
+    if not kva:
         return 0.0
     dso = entry.data.get(CONF_DSO, "")
 
