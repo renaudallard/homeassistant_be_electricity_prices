@@ -3605,7 +3605,7 @@ async def _resolve_daily_kwh(
     back to the fees-only floor instead of silently undercounting the
     missing band. With a totals sensor the odd half is simply ignored and
     the side bills off the total, which is the rule the meters form
-    enforces too (``config_flow.py:896``).
+    enforces too (``flow_schemas.py:866``).
 
     Returns ``None`` when neither side has any meter inputs at all
     or when either side has an uncovered partial register wiring.
