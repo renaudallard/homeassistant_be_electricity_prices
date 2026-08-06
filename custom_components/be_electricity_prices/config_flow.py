@@ -1402,9 +1402,6 @@ class _WizardStepsMixin:
             step_id=self._entry_step_id, data_schema=_user_schema(self._data)
         )
 
-        def async_show_form(self, **kwargs: Any) -> ConfigFlowResult: ...
-        def async_abort(self, **kwargs: Any) -> ConfigFlowResult: ...
-
     async def async_step_contract(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
