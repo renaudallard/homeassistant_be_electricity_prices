@@ -251,6 +251,16 @@ class _IssuesMixin:
             and self._snapshot.taxes.region_connection_fee_unavailable,
         )
 
+    def _cards_unreadable(self) -> bool:
+        """True when this entry's supplier publishes unparseable cards."""
+        try:
+            extractor = get_extractor(str(self.entry.data.get(CONF_SUPPLIER, "")))
+        except ExtractorError:
+            # An entry on a supplier this build no longer ships. Fall back to
+            # the ordinary card rather than claim anything about its layout.
+            return False
+        return extractor.cards_unreadable
+
     def _sync_extractor_issue(
         self, message: str | None, *, transient: bool = False
     ) -> None:
@@ -266,24 +276,35 @@ class _IssuesMixin:
           anti-bot 403 that a later refresh usually recovers. Surfaces the
           softer ``extractor_unreachable`` card.
 
-        Whichever flavour is raised clears the other so the user never sees
-        both at once. ``message`` ``None`` means the latest fetch succeeded
-        and clears both.
+        A supplier flagged ``cards_unreadable`` takes a third slot instead of
+        the actionable one: its cards carry no text layer, so "the supplier
+        changed its layout, open a GitHub issue" is advice nobody can act on.
+        A transient network error on such a supplier still reports as
+        transient, because that one does clear by itself.
+
+        Whichever flavour is raised clears the others so the user never sees
+        two at once. ``message`` ``None`` means the latest fetch succeeded
+        and clears all of them.
         """
         if self._unloaded:
             return
         failed_id = f"extractor_failed_{self.entry.entry_id}"
         unreachable_id = f"extractor_unreachable_{self.entry.entry_id}"
+        unreadable_id = f"extractor_unreadable_{self.entry.entry_id}"
+        all_ids = (failed_id, unreachable_id, unreadable_id)
         if not message:
-            ir.async_delete_issue(self.hass, DOMAIN, failed_id)
-            ir.async_delete_issue(self.hass, DOMAIN, unreachable_id)
+            for issue_id in all_ids:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
             return
-        raise_id, clear_id, translation_key = (
-            (unreachable_id, failed_id, "extractor_unreachable")
-            if transient
-            else (failed_id, unreachable_id, "extractor_failed")
-        )
-        ir.async_delete_issue(self.hass, DOMAIN, clear_id)
+        if transient:
+            raise_id, translation_key = unreachable_id, "extractor_unreachable"
+        elif self._cards_unreadable():
+            raise_id, translation_key = unreadable_id, "extractor_unreadable"
+        else:
+            raise_id, translation_key = failed_id, "extractor_failed"
+        for issue_id in all_ids:
+            if issue_id != raise_id:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
         ir.async_create_issue(
             self.hass,
             DOMAIN,

@@ -577,6 +577,10 @@
       "title": "Lieferant fuer {supplier} ({contract}) nicht erreichbar",
       "description": "Die Integration konnte die Tarifkarte nach mehreren Versuchen nicht herunterladen: {error}. Sie verwendet weiterhin die zuletzt erfolgreich ausgewerteten Preise. Das ist meist ein voruebergehendes Netzwerk- oder CDN-Problem, das sich beim naechsten Aktualisieren von selbst loest; nutzen Sie den Dienst be_electricity_prices.refresh oder pruefen Sie Ihr Netzwerk, falls es weiter auftritt."
     },
+    "extractor_unreadable": {
+      "title": "Die Tarifkarte von {supplier} ist nicht mehr lesbar",
+      "description": "{supplier} veroffentlicht die Tarifkarte jetzt als Seitenbilder ohne Textebene, sodass die Preise nicht mehr ausgelesen werden konnen. Das ist kein Fehler der Integration, und eine Meldung hilft nicht: im Dokument steht nichts Lesbares. Dieser Eintrag verwendet weiter die zuletzt erfolgreich gelesenen Preise ({contract}), die mit jeder neuen Karte weiter von Ihrer echten Rechnung abweichen. Fur korrekte Preise wechseln Sie den Anbieter oder legen Sie einen benutzerdefinierten (Experten-)Eintrag an und tragen die Werte Ihrer Karte selbst ein. Diese Meldung verschwindet von selbst, sobald {supplier} wieder lesbare Karten veroffentlicht."
+    },
     "entsoe_auth_failed": {
       "title": "ENTSO-E hat den API-Schluessel fuer {supplier} ({contract}) abgelehnt",
       "description": "transparency.entsoe.eu antwortete mit 401 fuer den konfigurierten Schluessel: {error}. Bearbeiten Sie die Optionen des Eintrags und ersetzen Sie den Schluessel durch einen neuen aus Ihrem Konto auf transparency.entsoe.eu (My Account Settings -> Web API Security Token). Bis dahin bleiben die dynamischen Preissensoren unbekannt."

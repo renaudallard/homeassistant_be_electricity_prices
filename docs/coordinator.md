@@ -363,19 +363,20 @@ The config-flow consequence: because shape (c) needs a key that the dynamic ener
 
 ## 9. Error handling, backoff, and Repairs
 
-The fail policy is "keep serving the cached snapshot, surface a Repairs issue". `_maybe_refresh_snapshot` catches every fetch exception (`coordinator_snapshot.py:189`), records `_last_error`, populates the shared negative cache with an incremented consecutive-failure count, and re-raises only non-`ExtractorError`/non-`TimeoutError` types (`base.py:779`); a bad card thus keeps the last good data alive.
+The fail policy is "keep serving the cached snapshot, surface a Repairs issue". `_maybe_refresh_snapshot` catches every fetch exception (`coordinator_snapshot.py:189`), records `_last_error`, populates the shared negative cache with an incremented consecutive-failure count, and re-raises only non-`ExtractorError`/non-`TimeoutError` types (`base.py:788`); a bad card thus keeps the last good data alive.
 
 Repairs issues, all keyed by `entry_id`:
 
 | Issue | Raised by | When | Line |
 |-------|-----------|------|------|
-| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d) | 1284 |
-| `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure | 1307 |
-| `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures | 1307 |
-| `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 1354 |
-| `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) AND the successor has a contract in the entry's region | 1383 |
-| `supplier_deprecated_no_successor` | `_sync_deprecated_supplier_issue` | same, but the successor is unset, unknown to this build, or has no contract in the entry's region | 1383 |
-| `connection_fee_missing` | `_sync_connection_fee_issue` | the snapshot carries `TaxOverlay.region_connection_fee_unavailable`, i.e. a Walloon card that stopped printing the connection-fee row | 1541 |
+| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d) | 154 |
+| `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure | 264 |
+| `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures | 264 |
+| `extractor_unreadable` | `_sync_extractor_issue(transient=False)` | same, but the supplier carries `cards_unreadable` in the registry (`providers/base.py:772`): its cards have no text layer, so the card names the custom-supplier workaround instead of asking for a GitHub issue | 264 |
+| `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 322 |
+| `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) AND the successor has a contract in the entry's region | 338 |
+| `supplier_deprecated_no_successor` | `_sync_deprecated_supplier_issue` | same, but the successor is unset, unknown to this build, or has no contract in the entry's region | 338 |
+| `connection_fee_missing` | `_sync_connection_fee_issue` | the snapshot carries `TaxOverlay.region_connection_fee_unavailable`, i.e. a Walloon card that stopped printing the connection-fee row | 233 |
 
 The first four are failure states and clear on a successful refresh, as does
 `connection_fee_missing` once the supplier prints the row again.
@@ -388,7 +389,7 @@ successor actually serves the entry's region. Prices are deliberately untouched 
 still being supplied must still be billed correctly for the months they are
 supplied.
 
-`_EXTRACTOR_ISSUE_THRESHOLD` is `2` (`coordinator_snapshot.py:80`): a lone transient CDN timeout does not raise the softer "unreachable" card, because a single failure almost always recovers on the next hourly tick and a false alarm wrongly tells the user the supplier changed its layout. `is_transient_fetch_error` (from `providers._pdf`) classifies the failure (`coordinator_snapshot.py:363`); actionable failures raise on the first occurrence, transient ones only after the threshold. The consecutive count rides the shared negative-cache row and resets to zero on the first success (`failed.pop`, `coordinator_snapshot.py:334`). The `extractor_failed`/`extractor_unreachable` slots are mutually exclusive; raising one clears the other (`coordinator_issues.py:282`).
+`_EXTRACTOR_ISSUE_THRESHOLD` is `2` (`coordinator_snapshot.py:80`): a lone transient CDN timeout does not raise the softer "unreachable" card, because a single failure almost always recovers on the next hourly tick and a false alarm wrongly tells the user the supplier changed its layout. `is_transient_fetch_error` (from `providers._pdf`) classifies the failure (`coordinator_snapshot.py:363`); actionable failures raise on the first occurrence, transient ones only after the threshold. The consecutive count rides the shared negative-cache row and resets to zero on the first success (`failed.pop`, `coordinator_snapshot.py:334`). The `extractor_failed`, `extractor_unreachable` and `extractor_unreadable` slots are mutually exclusive; raising any one clears the other two (`coordinator_issues.py:305`). A supplier flagged `cards_unreadable` takes the third slot in place of the actionable one, because "the supplier changed its layout, open a GitHub issue" is advice nobody can act on when the card has no text layer at all. A transient network error on such a supplier still reports as transient.
 
 Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`snapshot_store.py:99`, dedupes a burst of update ticks across siblings), `_MONTHLY_FAILURE_TTL` is 30 minutes (`snapshot_store.py:117`, for `fetch_for_month`). A transient `fetch_for_month` failure is deliberately NOT written to `monthly_snapshot_cache` as a `None` (a cached `None` means "no archive for this month"); the separate failure marker (`snapshot_store.py:339`) prevents re-attempting every uncached month each tick while still letting a real recovery repopulate.
 

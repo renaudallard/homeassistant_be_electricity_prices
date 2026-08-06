@@ -314,6 +314,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         "snapshot_stale",
         "extractor_failed",
         "extractor_unreachable",
+        "extractor_unreadable",
         "entsoe_auth_failed",
         "supplier_deprecated",
         "exclusive_night_rate_missing",

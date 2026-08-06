@@ -758,4 +758,9 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     probe=probe,
+    # The August 2026 cards are page images with no text layer. OCR was
+    # measured and rejected: 99.9% per-digit accuracy still only got 96.3% of
+    # values accepted, and a silently wrong tariff is worse than no tariff.
+    # Nothing here can be fixed by re-anchoring the parser.
+    cards_unreadable=True,
 )

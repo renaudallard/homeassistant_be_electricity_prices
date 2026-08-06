@@ -1204,6 +1204,69 @@ async def test_sync_extractor_failed_issue_creates_and_clears(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_unreadable_cards_swap_the_extractor_failed_card(
+    hass: HomeAssistant,
+) -> None:
+    """A supplier flagged ``cards_unreadable`` must raise its own Repairs
+    card instead of ``extractor_failed``.
+
+    Ecofix went to page images in August 2026. The default card tells the
+    user the layout changed and asks them to open a GitHub issue, which is
+    advice nobody can act on: there is no text layer left to re-anchor a
+    parser against. A transient network error on the same supplier still
+    reports as transient, because that one really does clear by itself.
+    """
+    entry = make_entry(supplier="ecofix", contract="ecofix_flexy", region="flanders")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    registry = ir.async_get(hass)
+    failed_id = f"extractor_failed_{entry.entry_id}"
+    unreachable_id = f"extractor_unreachable_{entry.entry_id}"
+    unreadable_id = f"extractor_unreadable_{entry.entry_id}"
+
+    coord._sync_extractor_issue("Ecofix: energy block not found")
+    issue = registry.async_get_issue(DOMAIN, unreadable_id)
+    assert issue is not None
+    assert issue.translation_key == "extractor_unreadable"
+    # The card it replaces must not also be showing.
+    assert registry.async_get_issue(DOMAIN, failed_id) is None
+
+    # A timeout is still a timeout, even on an unreadable-card supplier,
+    # and raising it clears the unreadable card rather than stacking.
+    coord._sync_extractor_issue("TimeoutError", transient=True)
+    transient_issue = registry.async_get_issue(DOMAIN, unreachable_id)
+    assert transient_issue is not None
+    assert transient_issue.translation_key == "extractor_unreachable"
+    assert registry.async_get_issue(DOMAIN, unreadable_id) is None
+    assert registry.async_get_issue(DOMAIN, failed_id) is None
+
+    # Success clears every flavour.
+    coord._sync_extractor_issue(None)
+    for issue_id in (failed_id, unreachable_id, unreadable_id):
+        assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_readable_supplier_keeps_the_extractor_failed_card(
+    hass: HomeAssistant,
+) -> None:
+    """The unreadable-card routing must not leak to normal suppliers: a
+    parse failure on Eneco still raises the actionable card that asks for
+    a GitHub issue, because there it IS actionable."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    registry = ir.async_get(hass)
+
+    coord._sync_extractor_issue("could not parse Eneco fixed energy block")
+    issue = registry.async_get_issue(DOMAIN, f"extractor_failed_{entry.entry_id}")
+    assert issue is not None
+    assert issue.translation_key == "extractor_failed"
+    assert (
+        registry.async_get_issue(DOMAIN, f"extractor_unreadable_{entry.entry_id}")
+        is None
+    )
+
+
 async def test_sync_entsoe_auth_issue_creates_and_clears(
     hass: HomeAssistant,
 ) -> None:
@@ -1464,6 +1527,7 @@ _REPAIR_ISSUE_KINDS = (
     "snapshot_stale",
     "extractor_failed",
     "extractor_unreachable",
+    "extractor_unreadable",
     "entsoe_auth_failed",
     "supplier_deprecated",
     "exclusive_night_rate_missing",

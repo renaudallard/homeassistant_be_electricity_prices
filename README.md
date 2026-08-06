@@ -103,6 +103,11 @@ publication and how to parse it.
 > extractor here behaves. It would also mean shipping an OCR engine as a
 > runtime dependency for one supplier.
 >
+> An Ecofix entry raises a dedicated Repairs card naming this workaround, rather
+> than the usual "the supplier changed its layout, please open a GitHub issue"
+> one: there is no text layer left to re-anchor a parser against, so that
+> report would be unactionable. It clears by itself if readable cards return.
+>
 > **Workaround: use the Expert: custom formula supplier**
 > ([`providers/custom.py`](./custom_components/be_electricity_prices/providers/custom.py),
 > listed in the table above and offered in the supplier picker). It

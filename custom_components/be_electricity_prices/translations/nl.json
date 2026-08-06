@@ -577,6 +577,10 @@
       "title": "Kan de leverancier voor {supplier} ({contract}) niet bereiken",
       "description": "De integratie kon de tariefkaart na meerdere pogingen niet downloaden: {error}. Ze blijft de laatst goed ontledede prijzen tonen. Dit is meestal een tijdelijk netwerk- of CDN-probleem dat bij de volgende vernieuwing vanzelf verdwijnt; gebruik de service be_electricity_prices.refresh of controleer je netwerk als het blijft gebeuren."
     },
+    "extractor_unreadable": {
+      "title": "De tariefkaart van {supplier} is niet meer leesbaar",
+      "description": "{supplier} publiceert zijn tariefkaart nu als paginafoto's zonder tekstlaag, waardoor de prijzen er niet meer uit gelezen kunnen worden. Dit is geen fout in de integratie en melden helpt niet: er valt niets te lezen in het document. Deze invoer blijft de laatst succesvol ingelezen prijzen gebruiken ({contract}); die wijken elke maand verder af van je echte factuur. Om correct te blijven, stap over naar een andere leverancier of maak een Aangepaste (expert) invoer en typ de waarden van je kaart zelf in. Deze melding verdwijnt vanzelf zodra {supplier} weer leesbare kaarten publiceert."
+    },
     "entsoe_auth_failed": {
       "title": "ENTSO-E weigerde de API-sleutel voor {supplier} ({contract})",
       "description": "transparency.entsoe.eu antwoordde 401 op de geconfigureerde sleutel: {error}. Bewerk de opties van deze entry en vervang de sleutel door een nieuwe op transparency.entsoe.eu (My Account Settings -> Web API Security Token). Tot dan zullen de dynamische prijssensoren onbekend zijn."

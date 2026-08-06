@@ -761,6 +761,15 @@ class SupplierExtractor:
     # supplied. Purely declarative: nothing compares these to the clock.
     deprecated_until: date | None = None
     deprecated_successor: str | None = None
+    # Set when the supplier still sells, but publishes cards no parser can
+    # read - Ecofix went to page images in August 2026. This is NOT a normal
+    # extractor breakage: the default Repairs card tells the user the layout
+    # changed and asks them to open a GitHub issue, which here is advice
+    # nobody can act on, because there is no text layer to re-anchor a parser
+    # against. Setting this swaps that card for one naming the real
+    # workaround, the custom supplier. Clear it the moment readable cards
+    # return; nothing compares it to the clock.
+    cards_unreadable: bool = False
 
     def regions(self) -> frozenset[str]:
         """Union of regions across this supplier's contracts."""
