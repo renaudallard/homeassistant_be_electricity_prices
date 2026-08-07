@@ -1347,6 +1347,80 @@ async def test_unreadable_cards_swap_the_extractor_failed_card(
         assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_a_textless_card_fetch_reaches_the_unreadable_repairs_card(
+    hass: HomeAssistant,
+) -> None:
+    """The SEAM: a fetch raising CardNotReadableError must end up showing
+    the extractor_unreadable card, not the generic one.
+
+    Detection (providers/_pdf.py) and routing (_sync_extractor_issue) each
+    have their own tests, but nothing joined them, and the join is the part
+    that rots: the coordinator computes ``unreadable`` from the exception
+    type, so any refactor that widens the except clause or drops the
+    isinstance check would silently fall back to "open a GitHub issue"
+    while both unit tests stayed green.
+    """
+    from custom_components.be_electricity_prices.providers.base import (
+        CardNotReadableError,
+    )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _textless_fetch(*args: Any, **kwargs: Any) -> None:
+        raise CardNotReadableError(
+            "card has no text layer: 172 characters across 5 page(s)"
+        )
+
+    extractor = make_stub_extractor(fetch=_textless_fetch)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+
+    registry = ir.async_get(hass)
+    issue = registry.async_get_issue(DOMAIN, f"extractor_unreadable_{entry.entry_id}")
+    assert issue is not None
+    assert issue.translation_key == "extractor_unreadable"
+    # and NOT the card that asks the user to report a layout change
+    assert (
+        registry.async_get_issue(DOMAIN, f"extractor_failed_{entry.entry_id}") is None
+    )
+
+
+async def test_an_ordinary_parse_failure_still_reaches_the_failed_card(
+    hass: HomeAssistant,
+) -> None:
+    """The other side of the seam: a normal ExtractorError must NOT be
+    routed to the unreadable card, or every layout drift would stop asking
+    to be reported."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _bad_parse(*args: Any, **kwargs: Any) -> None:
+        raise ExtractorError("could not parse Eneco fixed energy block")
+
+    extractor = make_stub_extractor(fetch=_bad_parse)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._maybe_refresh_snapshot()
+
+    registry = ir.async_get(hass)
+    assert (
+        registry.async_get_issue(DOMAIN, f"extractor_failed_{entry.entry_id}")
+        is not None
+    )
+    assert (
+        registry.async_get_issue(DOMAIN, f"extractor_unreadable_{entry.entry_id}")
+        is None
+    )
+
+
 async def test_readable_supplier_keeps_the_extractor_failed_card(
     hass: HomeAssistant,
 ) -> None:
