@@ -239,27 +239,27 @@ asserts the publication label is non-empty, the expected DSO keys for the region
 positive, and then calls `_validate_snapshot`.
 
 The federal energy contribution is the exception to "taxes are positive". It is bounds-checked by
-`_expect_energy_contribution` (`scripts/live_check.py:506`) instead, which accepts
+`_expect_energy_contribution` (`scripts/live_check.py:529`) instead, which accepts
 `[0, 0.01]` EUR/kWh. A `> 0` gate on four suppliers used to enforce it, but the levy was abolished
 on 2026-08-01: EBEM's August card failed CI three times over for reporting the zero it actually
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py:1315`) runs two gates:
+`_validate_snapshot` (`scripts/live_check.py:1338`) runs two gates:
 
-- `_validate_energy` (`scripts/live_check.py:1375`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:1398`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
   additionally assert band ordering (peak >= transition >= offpeak; pic >= medium >= eco). An
   unrecognised energy class is a failure.
-- `_validate_injection` (`scripts/live_check.py:1173`) gates that the feed-in credit parsed and
+- `_validate_injection` (`scripts/live_check.py:1196`) gates that the feed-in credit parsed and
   kept the right shape. This exists because the coordinator drops the credit entirely when
   `injection` is None, so a relabelled injection row silently zeroes a solar user's credit and
   used to pass CI green (issues #31, F53). The `shape` argument pins expectations: `"none"`
   (region pays no feed-in, injection must be absent), `"monthly"` (`current` set, `factor`/`base`
   None), `"spot"` (`factor`/`base` set), or `"present"` (present, shape unconstrained). Per-contract
-  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1241`); the DATS 24 check passes
+  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1264`); the DATS 24 check passes
   `injection_shape` explicitly because its Wallonia card pays no feed-in while its Flanders card is
   monthly-indexed.
 
@@ -278,12 +278,12 @@ Reading a row correctly needs three facts about which hook feeds which column:
 - **Fetches / Fetch time** come from `on_request_end`, which fires once per request that reached
   its final response headers, after the redirect chain and **before** the body is read. So the
   latency figure is time-to-headers, and a 302-to-CDN fetch counts as one.
-- **Bytes received** are summed in `_on_response_chunk_received` (`scripts/live_check.py:262`)
+- **Bytes received** are summed in `_on_response_chunk_received` (`scripts/live_check.py:271`)
   rather than read from `Content-Length`, because that header is None on chunked responses and
   would silently count as zero. `ClientResponse.read()` fires that hook once with the whole body,
   so the count is all-or-nothing: a fetch with a counted request but `-` bytes got its headers and
   then stalled mid-body.
-- **Failed (n / s)** comes from `_on_request_exception` (`scripts/live_check.py:286`), which is the
+- **Failed (n / s)** comes from `_on_request_exception` (`scripts/live_check.py:295`), which is the
   only hook a request that never produced a response fires. Failures are kept out of the success
   columns deliberately, so the latency budgets below stay calibrated on successful fetches; before
   this counter existed a supplier whose every attempt timed out reported 0 fetches and 0 s and read
@@ -301,10 +301,10 @@ under that cap, or the supplier is killed before it can report the drift the bud
 The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:1679`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:1713`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:1773`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1622`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1639`) for the known-large catalogues (Bolt,
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1686`) for the known-large catalogues (Bolt,
 TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
 (`scripts/live_check.py:1669`) for those same multi-fetch suppliers plus Luminus and Eneco, which
 are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request durations,
@@ -316,7 +316,7 @@ budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see 
 false-firing drift alert means adjusting the override, not the code.
 
 A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:1727`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:1700`). The
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:1760`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever
@@ -339,13 +339,30 @@ The exit code is bit-encoded (`scripts/live_check.py:1648`):
 
 | Bit | Value | Meaning | Retried by workflow? |
 | --- | --- | --- | --- |
-| 0 | 1 | extractor failure (fetch or parse regression) | yes |
+| 0 | 1 | extractor **regression** (fetch or parse), excluding unreadable cards | yes |
 | 1 | 2 | catalog signal (a new product appeared at a supplier) | no |
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
 | - | 8 | harness crash (top-level Python exception in the script) | no |
 
 `rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:1764`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
+
+### Unreadable cards do not gate bit 0
+
+A supplier that publishes its tariff card as page images fails every check against it, forever,
+and no change to this repository can fix it. Counting that as a regression meant one such supplier
+set bit 0 on every run, drove the workflow's retry loop to exhaustion, and refiled a fresh issue
+each time the previous one was closed (issues #53, #56 and #58 all carried the same six Ecofix
+rows). It also handed every other supplier seven rolls of the dice at a transient timeout, which
+is where the collateral rows in those issues came from.
+
+`_record` (`scripts/live_check.py:440`) marks such a check `expected`, and `_extractor_regressions`
+(`scripts/live_check.py:1747`) is the single definition of what gates CI. The classification reads
+the exception type the fetch sites already write into the detail string
+(`CardNotReadableError`, raised by `providers/_pdf.py`), so it follows the card actually
+published rather than a hardcoded supplier list: a supplier that goes back to publishing text
+starts gating again by itself, with no edit here. The rows still appear in the report, under their
+own heading and counted separately in the headline, so a green run never hides them.
 
 ### The transient-only retry helper
 

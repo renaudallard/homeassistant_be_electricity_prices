@@ -163,6 +163,15 @@ class Check:
     #                separate issue so the two failure modes don't get
     #                conflated in one thread.
     kind: str = "extractor"
+    # A failure that is real but KNOWN and unactionable: the supplier
+    # publishes its card as page images, so no parser change can read it.
+    # Still reported, still visibly failing in the table, but it does not
+    # set the extractor bit -- otherwise one such supplier fails every run
+    # forever, exhausts the workflow's retry loop, and refiles a fresh
+    # issue each time the last one is closed. Set by _record from the
+    # exception type, so it tracks the current card rather than a
+    # hardcoded supplier list.
+    expected: bool = False
 
 
 CHECKS: list[Check] = []
@@ -422,8 +431,22 @@ async def _attributed_check(
             )
 
 
+# Every fetch call site records its failure detail as
+# f"{type(err).__name__}: {err}", so the exception type is machine-written
+# at the front of the string. Matching on it is exact, not prose matching.
+_UNREADABLE_MARKER = "CardNotReadableError"
+
+
 def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
-    CHECKS.append(Check(label=label, ok=ok, detail=detail, kind=kind))
+    CHECKS.append(
+        Check(
+            label=label,
+            ok=ok,
+            detail=detail,
+            kind=kind,
+            expected=not ok and detail.startswith(_UNREADABLE_MARKER),
+        )
+    )
 
 
 def _expect(label: str, condition: bool, detail: str = "") -> bool:
@@ -1487,19 +1510,43 @@ def _render_report(
     checks: Iterable[Check], metrics: dict[str, dict[str, float]] | None = None
 ) -> str:
     rows: list[str] = []
+    checks = list(checks)
     pass_count = sum(1 for c in checks if c.ok)
-    fail_count = sum(1 for c in checks if not c.ok)
-    rows.append(f"# Live extractor check — {pass_count} pass, {fail_count} fail")
+    regressions = [c for c in checks if not c.ok and not c.expected]
+    expected = [c for c in checks if not c.ok and c.expected]
+    headline = f"# Live extractor check — {pass_count} pass, {len(regressions)} fail"
+    if expected:
+        # Say it in the headline. A run that reads "0 fail" while the table
+        # below lists failing rows reads like a bug in the harness.
+        headline += f", {len(expected)} unreadable (expected)"
+    rows.append(headline)
     rows.append("")
-    if fail_count:
+    if regressions:
         rows.append("## Failures")
         rows.append("")
         rows.append("| Check | Detail |")
         rows.append("| --- | --- |")
-        for c in checks:
-            if not c.ok:
-                detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
-                rows.append(f"| `{c.label}` | {detail} |")
+        for c in regressions:
+            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
+            rows.append(f"| `{c.label}` | {detail} |")
+        rows.append("")
+    if expected:
+        rows.append("## Unreadable cards (expected, not a regression)")
+        rows.append("")
+        rows.append(
+            "These suppliers publish their tariff card as page images, so there "
+            "is no text layer to parse. No change to this repository can fix "
+            "them; affected entries raise the `extractor_unreadable` Repairs "
+            "card pointing at the custom-supplier workaround. These rows do "
+            "not fail the run, and they disappear on their own if the supplier "
+            "goes back to publishing text."
+        )
+        rows.append("")
+        rows.append("| Check | Detail |")
+        rows.append("| --- | --- |")
+        for c in expected:
+            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
+            rows.append(f"| `{c.label}` | {detail} |")
         rows.append("")
     rows.append("## All checks")
     rows.append("")
@@ -1599,7 +1646,7 @@ async def _run() -> int:
     (ROOT / "catalog_report.md").write_text(_render_report(catalog_checks))
     drift_warnings = _drift_warnings(METRICS, _failed_suppliers(extractor_checks))
     (ROOT / "drift_report.md").write_text(_render_drift(drift_warnings))
-    extractor_failed = any(not c.ok for c in extractor_checks)
+    extractor_failed = bool(_extractor_regressions(extractor_checks))
     catalog_failed = any(not c.ok for c in catalog_checks)
     drift_alert = bool(drift_warnings)
     # Bit-encoded exit codes:
@@ -1695,6 +1742,19 @@ def _bytes_budget(supplier: str) -> int:
 
 def _latency_budget(supplier: str) -> float:
     return _LATENCY_BUDGET_OVERRIDES.get(supplier, LATENCY_WARN_THRESHOLD_S)
+
+
+def _extractor_regressions(checks: Iterable[Check]) -> list[Check]:
+    """Failures that should gate CI.
+
+    An unreadable card is a real failure but not a regression: the supplier
+    publishes page images, and no change to this repository can read them.
+    Letting it set the extractor bit meant one such supplier failed every
+    run forever, exhausted the workflow's retry loop, and refiled a fresh
+    issue each time the last was closed. It still shows in the report, in
+    its own table, so it is visible without being actionable noise.
+    """
+    return [c for c in checks if not c.ok and not c.expected]
 
 
 def _failed_suppliers(checks: Iterable[Check]) -> frozenset[str]:

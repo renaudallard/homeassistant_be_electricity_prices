@@ -37,7 +37,7 @@ Mega publishes each monthly card under a predictable CDN filename
 https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-<REGION>-<MMYYYY>-<SUFFIX>.pdf
 ```
 
-`<REGION>` is one of `VL` / `WL` / `BX` (`_REGION_TO_CODE`, `mega.py:124`). The
+`<REGION>` is one of `VL` / `WL` / `BX` (`_REGION_TO_CODE`, `mega.py:125`). The
 `<MMYYYY>` segment rolls every month, and the product `<SUFFIX>` (for example
 `Smart0104`, `Smart2204-Fixed`, `Cap0104`) carries an internal launch-date code that
 drifts whenever Mega launches a product variant. Because the suffix is unstable, the
@@ -45,16 +45,16 @@ extractor never constructs the URL from a hardcoded suffix. Instead it scrapes t
 public listing page `https://www.mega.be/fr/energie/cartes-tarifaires` (`_LISTING_URL`,
 `mega.py:116`), where every product card exposes an
 `<a data-product-element="<Product Name>" ... href="<PDF URL>">` anchor, and matches
-the anchor to its PDF with a regex (`_find_pdf_url`, `mega.py:315`).
+the anchor to its PDF with a regex (`_find_pdf_url`, `mega.py:316`).
 
 The `source_url` recorded on the snapshot is the resolved PDF URL for the live
-`fetch` (`mega.py:447`); the pure `parse_snapshot` defaults it to `_LISTING_URL`
+`fetch` (`mega.py:448`); the pure `parse_snapshot` defaults it to `_LISTING_URL`
 when called without one (`mega.py:440`).
 
 ## Contracts
 
 Eleven residential electricity products are registered, plus nine professional
-editions (`_CONTRACTS`, `mega.py:171`; the test pins
+editions (`_CONTRACTS`, `mega.py:172`; the test pins
 `len(contract_ids) == 20` at `test_mega.py:70`). Zen Fixed's residential edition
 was retired in August 2026 (its professional one survives). Off-peak Fixed was
 retired in July 2026 and **came back for the August 2026 card**, in all three
@@ -101,14 +101,14 @@ Notes on the enumeration:
 The catalog also carries `Prepaid Fixed` / `Prepaid Flex`, which are topup-card
 products with a different billing model (no monthly invoice, no recorder-backed
 consumption sensors), out of scope for the Energy-dashboard integration
-(`_KNOWN_UNSUPPORTED_PRODUCTS`, `mega.py:304`).
+(`_KNOWN_UNSUPPORTED_PRODUCTS`, `mega.py:305`).
 
 ### The professional editions
 
 Mega publishes a B2B card for eight of its products, to the same CDN, but never
 links them from the public listing: the `data-product-element` anchors carry
 only `Mega-FR-EL-B2C-` hrefs. There is nothing to scrape, so the pro lane builds
-the URL instead (`_pro_pdf_url`, `mega.py:399`):
+the URL instead (`_pro_pdf_url`, `mega.py:400`):
 
 ```
 https://my.mega.be/resources/tarif/Mega-FR-EL-B2B-<REGION>-<MMYYYY>-<Family>01<MM>[-<Variant>].pdf
@@ -156,23 +156,23 @@ a wrong-region card mis-prices silently.
 `fetch(session, contract_id, region)` (`mega.py:434`):
 
 1. Validate the contract id and resolve the region to its `VL` / `WL` / `BX` code.
-2. GET the listing HTML (`_fetch_listing_html`, `mega.py:371`).
-3. Resolve the current PDF URL with `_resolve_pdf_url` (`mega.py:333`). It first
-   regexes the listing with `_find_pdf_url` (`mega.py:315`), which pins the pattern
+2. GET the listing HTML (`_fetch_listing_html`, `mega.py:372`).
+3. Resolve the current PDF URL with `_resolve_pdf_url` (`mega.py:334`). It first
+   regexes the listing with `_find_pdf_url` (`mega.py:316`), which pins the pattern
    to `data-product-element="<Product Name>"` followed by an `href` matching
    `Mega-FR-EL-B2C-<REGION>-\d{6}-...\.pdf`. Pinning to `Mega-FR-EL-B2C-<REGION>-` is
    what stops the gas links (`Mega-FR-NG-...`) and the other-region links from
    matching (`mega.py:221`). When that regional block is missing but the card is
    still published (Dynamic Wallonia, July 2026, #42), the resolver rewrites a
    surviving sibling region's URL by swapping the `-B2C-<REGION>-` code
-   (`_REGION_SEGMENT_RE`, `mega.py:145`). The test
-   `test_listing_url_finder_picks_electricity_for_region` (`test_mega.py:74`) confirms
+   (`_REGION_SEGMENT_RE`, `mega.py:146`). The test
+   `test_listing_url_finder_picks_electricity_for_region` (`test_mega.py:75`) confirms
    a Smart Fixed / WL match ends `Smart2204-Fixed.pdf` and never contains `NG`;
-   `test_resolver_falls_back_to_sibling_region_when_block_missing` (`test_mega.py:100`)
+   `test_resolver_falls_back_to_sibling_region_when_block_missing` (`test_mega.py:101`)
    covers the fallback.
 4. Download the PDF text (`fetch_pdf_text`, `_pdf.py:187`) and hand it to
    `parse_snapshot`, which asserts the card's own `Client résidentiel - <Region>`
-   header matches the requested region (`_assert_card_region`, `mega.py:704`) so a
+   header matches the requested region (`_assert_card_region`, `mega.py:712`) so a
    wrong sibling guess fails loud rather than mis-pricing a region's overlays.
 
 `fetch` raises `ExtractorError` on an unknown contract, an unknown region, or a
@@ -199,7 +199,7 @@ while the effective day `<DD>` is preserved (most products publish on the 1st; C
 for example, uses another day). The rewrite:
 
 1. Resolve the current URL from the listing (never guess a suffix).
-2. Match the `-MMYYYY-` segment (`mmyyyy_re`, `mega.py:507`) and capture the current
+2. Match the `-MMYYYY-` segment (`mmyyyy_re`, `mega.py:515`) and capture the current
    month, then substitute the requested `MMYYYY` (year untouched).
 3. In the filename tail after the `-MMYYYY-` segment, rewrite the two-digit
    effective-date month while preserving the day (`Cap0106 -> Cap0105`,
@@ -226,7 +226,7 @@ rewrite missed. Requesting March 2026 must yield a URL ending
 
 A **professional** contract skips all of that: the B2B cards are absent from the
 listing, so `fetch_for_month` builds the filename with `_pro_pdf_url` for the
-requested month exactly as `fetch` does (`mega.py:447`). Routing them through the
+requested month exactly as `fetch` does (`mega.py:448`). Routing them through the
 listing matched the residential card of the same `product_name` (`Smart Fixed` is
 shared by `mega_smart_fixed` and `mega_pro_smart_fixed`) and billed a B2B contract
 at residential rates on every archived month. Unlike `fetch`, the archive branch has
@@ -243,14 +243,14 @@ the listing minus `_KNOWN_UNSUPPORTED_PRODUCTS`. It is best-effort catalog signa
 for the daily live-check: diffing against `{c.product_name for c in _CONTRACTS}`
 flags any new Mega product to add to the registry. Filtering out the prepaid
 products keeps them from re-opening the same catalog issue every day (regression
-2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:611`).
+2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:612`).
 On a listing fetch failure it returns an empty set rather than raising.
 
 ## Parsing
 
 `parse_snapshot(contract_id, text, region, source_url)` (`mega.py:439`) is the pure,
 unit-tested parser. It first asserts the card is the requested region's edition
-(`_assert_card_region`, `mega.py:704`), anchoring on the `Client résidentiel -
+(`_assert_card_region`, `mega.py:712`), anchoring on the `Client résidentiel -
 <Region>` header rather than a bare region name (every card names all three regions
 in its cross-region Cotisation Verte table); this backstops the sibling-region URL
 fallback so a wrong guess raises instead of applying the wrong region's overlays.
@@ -281,7 +281,7 @@ Fields pulled and their helpers:
 (`_extract_yearly_fee`, `_mega_cards.py:386`), which accepts both the split dynamic layout
 (`Redevance fixe\n(€/an)\n42.4`) and the joined fixed layout
 (`Redevance fixe (€/an)\n111.3`). A missing standing charge raises (it is on every
-card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:403`) enforces it.
+card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:404`) enforces it.
 
 - `dynamic`: parse the consumption formula (see next section) into `DynamicRates`.
 - `tou_impact`: parse three CWaPE bands (`_extract_impact_tier` for `PIC`,
@@ -373,7 +373,7 @@ Each is matched by its own label-anchored regex (`_CONSUMPTION_FORMULA_RE`
 `mega.py:544`, `_INJECTION_FORMULA_RE` `_mega_cards.py:79`) sharing `_FORMULA_TAIL`
 (`mega.py:536`). This is critical because Mega prints the injection formula BEFORE
 the consumption formula, so a naive "first / second formula" policy swaps them; the
-test `test_dynamic_consumption_and_injection_are_not_swapped` (`test_mega.py:225`)
+test `test_dynamic_consumption_and_injection_are_not_swapped` (`test_mega.py:226`)
 guards against exactly that. `_parse_formula` (`_mega_cards.py:84`) converts factor and
 signed base-cents to EUR via `to_float` and `parse_sign`. The sign parser accepts any
 Unicode dash, which matters because the injection base uses an en-dash, not an ASCII
@@ -389,7 +389,7 @@ EUR (`test_mega.py:164`).
 
 ### DSO overlays
 
-The region dispatch in `parse_snapshot` (`mega.py:723`) selects exactly one DSO
+The region dispatch in `parse_snapshot` (`mega.py:731`) selects exactly one DSO
 parser and one renewables levy per snapshot.
 
 Flanders (`_extract_flanders_dsos`, `_mega_overlays.py:250`, `_FLANDERS_LABELS` `_mega_overlays.py:247`)
@@ -413,7 +413,7 @@ PIC, MEDIUM, ECO, transport. The Impact triplet (`distribution_pic` / `_medium` 
 `_eco`) is always populated here because every Wallonia card prints the three CWaPE
 bands. Prosumer rates come from a separate small `Tarif Prosumer (€/kW/an)` table
 further down and are cross-referenced onto each overlay
-(`test_wallonia_dso_carries_prosumer_rate_from_separate_table`, `test_mega.py:278`).
+(`test_wallonia_dso_carries_prosumer_rate_from_separate_table`, `test_mega.py:279`).
 
 Brussels (`_extract_brussels_dsos`, `_mega_overlays.py:381`) maps the single Sibelga row, an
 8-number block: mono, jour, nuit, excl_nuit, transport, mesure_comptage (€/an),
@@ -422,7 +422,7 @@ terme_fixe <=13kVA (€/an), terme_fixe >13kVA (€/an). Brussels has no capacit
 Sibelga <=13kVA fixed term) are folded into `data_management_per_year`; the >13kVA
 term (group 8) is not billed here. The Brugel OSP annual fee table is parsed by the
 shared `parse_brussels_osp` (`_pdf.py:644`) and keyed by connection-power tier. The
-test `test_smart_fixed_brussels_extracts_sibelga_row` (`test_mega.py:257`) pins the
+test `test_smart_fixed_brussels_extracts_sibelga_row` (`test_mega.py:258`) pins the
 folded fee to 14.73 + 50.0744 and the OSP tiers to
 `{le1_44: 0.0, le6: 13.36, le9_6: 21.37, le13: 26.71}` (illustrative).
 
@@ -430,7 +430,7 @@ folded fee to 14.73 + 50.0744 and the OSP tiers to
 
 `_extract_publication_month` (`_mega_cards.py:401`) first tries the versioned Smart Fixed
 prefix `V<n> <month> <year>` (the token class includes `é` and `û` so `août` keeps
-its version, `test_publication_month_keeps_version_for_august`, `test_mega.py:396`),
+its version, `test_publication_month_keeps_version_for_august`, `test_mega.py:397`),
 then falls back to `Prix du mois MM/YYYY` rendered as `<month-name> YYYY` from
 `_FR_MONTH_NAMES` (`_mega_cards.py:398`). `valid_until` prefers the shared
 `parse_valid_until` keyword scan and falls back to `_extract_valid_until`
@@ -474,7 +474,7 @@ month (Mega cards are valid for the printed month).
   This is the same convention as Eneco and Cociter; do not add a VAT multiplier when
   parsing.
 
-The test `test_taxes_split_correctly_per_region` (`test_mega.py:371`) pins the
+The test `test_taxes_split_correctly_per_region` (`test_mega.py:372`) pins the
 cross-region excise (0.0503288) and the per-region renewables split.
 
 ## Injection
@@ -585,7 +585,7 @@ The fixtures under `tests/fixtures/` that this provider's tests exercise:
 
 Ranked by how likely each is to break when Mega restyles or rotates its card, and why:
 
-1. `_find_pdf_url` (`mega.py:315`) and the listing HTML shape. If Mega changes the
+1. `_find_pdf_url` (`mega.py:316`) and the listing HTML shape. If Mega changes the
    `data-product-element` attribute, the CDN host, or the `Mega-FR-EL-B2C-<REGION>-`
    filename convention, every `fetch` / `probe` / `fetch_for_month` / `discover`
    fails at once. Start here on a total outage.
@@ -603,7 +603,7 @@ Ranked by how likely each is to break when Mega restyles or rotates its card, an
 5. `_extract_supplier_prosumer` (`_mega_overlays.py:99`). A reworded `Forfait panneaux` line,
    or the appearance of the forfait on a card the code currently treats as
    legitimately absent, raises where it should not (or vice versa).
-6. `fetch_for_month` (`mega.py:593`). If Mega changes the effective-date suffix
+6. `fetch_for_month` (`mega.py:601`). If Mega changes the effective-date suffix
    scheme (day placement, variant tokens), the two-placeholder rewrite mis-targets;
    the YTD walk then silently falls back to the proxy, which is safe but hides the
    archive.

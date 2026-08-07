@@ -203,6 +203,83 @@ def test_drift_still_fires_for_a_supplier_that_passed() -> None:
     assert len(warnings) == 2
 
 
+def test_an_unreadable_card_is_recorded_as_expected() -> None:
+    """A card with no text layer is a real failure but not a regression, so
+    _record must mark it expected.
+
+    Classification comes from the exception type the fetch sites already
+    write into the detail, not from a per-supplier list: the previous
+    attempt at this was a `cards_unreadable` registry flag, which froze one
+    month of observation into source and kept claiming a supplier was
+    unreadable after it went back to publishing text.
+    """
+    lc.CHECKS.clear()
+    lc._record(
+        "ecofix/ecofix_motion/flanders: fetch",
+        False,
+        "CardNotReadableError: card has no text layer: 172 characters "
+        "across 5 page(s), so it is published as page images",
+    )
+    lc._record(
+        "eneco/power_fix/wallonia: fetch",
+        False,
+        "ExtractorError: could not parse Eneco fixed energy block",
+    )
+    unreadable, regression = lc.CHECKS
+    assert unreadable.expected is True
+    assert regression.expected is False
+    # Both still count as failures; only the gating differs.
+    assert unreadable.ok is False
+    lc.CHECKS.clear()
+
+
+def test_an_unreadable_card_alone_does_not_fail_the_run() -> None:
+    """The whole point: Ecofix alone must not set the extractor bit.
+
+    Before this, one permanently-unreadable supplier failed every run,
+    exhausted the workflow's 7-attempt retry loop, and refiled a fresh issue
+    each time the previous one was closed (#53, #56, #58 all carried the
+    same six Ecofix rows).
+    """
+    expected_only = [
+        lc.Check(label="ecofix/a/flanders: fetch", ok=False, expected=True),
+        lc.Check(label="eneco/b/wallonia: fetch", ok=True),
+    ]
+    assert lc._extractor_regressions(expected_only) == []
+
+    # A genuine failure alongside it must still gate.
+    genuine = lc.Check(label="bolt/c/flanders: fetch", ok=False)
+    assert lc._extractor_regressions([*expected_only, genuine]) == [genuine]
+
+
+def test_the_report_separates_expected_failures_from_regressions() -> None:
+    """A run reading "0 fail" while the table lists failing rows looks like
+    a harness bug, so the headline and the tables have to distinguish."""
+    report = lc._render_report(
+        [
+            lc.Check(
+                label="ecofix/a/flanders: fetch",
+                ok=False,
+                expected=True,
+                detail="CardNotReadableError: card has no text layer",
+            ),
+            lc.Check(
+                label="eneco/b/wallonia: fetch",
+                ok=False,
+                detail="ExtractorError: regex miss",
+            ),
+            lc.Check(label="bolt/c/flanders: energy", ok=True),
+        ]
+    )
+    assert "1 pass, 1 fail, 1 unreadable (expected)" in report
+    assert "## Failures" in report
+    assert "## Unreadable cards (expected, not a regression)" in report
+    # The regression must not be filed under the expected table.
+    failures_block = report.split("## Failures")[1].split("##")[0]
+    assert "eneco/b/wallonia" in failures_block
+    assert "ecofix/a/flanders" not in failures_block
+
+
 def test_failed_suppliers_reads_the_supplier_off_the_label() -> None:
     checks = [
         lc.Check("ecofix/ecofix_motion/flanders: fetch", False, "boom"),

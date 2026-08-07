@@ -119,7 +119,7 @@ every probe-based supplier raised a false `snapshot_stale` Repairs card with
 A TTL-based match must NOT restamp, or the TTL clock resets every tick and a
 probe-less supplier is never re-fetched.
 
-`_maybe_refresh_snapshot` (`coordinator_snapshot.py:190`) decides whether to re-fetch the full tariff card. It never fetches unconditionally; a full PDF/HTML fetch happens only when a cheap check says the published card changed.
+`_maybe_refresh_snapshot` (`coordinator_snapshot.py:194`) decides whether to re-fetch the full tariff card. It never fetches unconditionally; a full PDF/HTML fetch happens only when a cheap check says the published card changed.
 
 The cheap check is the extractor **probe** (`SnapshotProbe`, `providers/base.py:743`): a `HEAD` or small listing `GET` that returns a freshness key. Same key across calls means the snapshot is still valid; a changed key means re-fetch. The probe is optional; `None` means the supplier has no reliable probe path (Engie/Luminus API endpoints, DATS 24 single PDF) and the time-based TTL takes over.
 
@@ -127,7 +127,7 @@ Decision order in `_maybe_refresh_snapshot`:
 
 1. Run `extractor.probe` if present (`coordinator_snapshot.py:222`); a failed or absent probe yields `probe_key = None`.
 2. **Adopt a sibling** (`coordinator_snapshot.py:236`): if a shared-cache entry for this `(supplier, contract, region)` tuple is fresh against the probe/TTL, adopt it with `_adopt_shared` and return, doing zero network work.
-3. **Reuse our own snapshot** (`coordinator_snapshot.py:240`): `_self_is_fresh` (`coordinator_snapshot.py:388`) returns True when, with a probe, `self._snapshot_probe_key == probe_key`, or without a probe, `now - fetched_at < ttl`. On a probe match it restamps `_snapshot_fetched_at = now` (so the age sensor reads "just checked") and clears any stale failure marker. Note: the restamp only happens on a positive probe (`probe_key is not None`); stamping on a TTL pass would reset the TTL clock and the supplier would never re-fetch.
+3. **Reuse our own snapshot** (`coordinator_snapshot.py:240`): `_self_is_fresh` (`coordinator_snapshot.py:392`) returns True when, with a probe, `self._snapshot_probe_key == probe_key`, or without a probe, `now - fetched_at < ttl`. On a probe match it restamps `_snapshot_fetched_at = now` (so the age sensor reads "just checked") and clears any stale failure marker. Note: the restamp only happens on a positive probe (`probe_key is not None`); stamping on a TTL pass would reset the TTL clock and the supplier would never re-fetch.
 4. **Negative-cache short-circuit** (`coordinator_snapshot.py:297`): if a sibling just failed on this key within `_SHARED_FAILURE_TTL` (5 minutes), skip the retry and adopt the sibling's error message. Bypassed when `_force_refresh` is set.
 5. **Fetch under the shared lock** (`coordinator_snapshot.py:303`): re-check the sibling cache and negative cache under the lock, then call `extractor.fetch`. On success populate the shared cache, clear the failure marker, and clear the extractor Repairs issue.
 
@@ -147,7 +147,7 @@ Two config entries on the same `(supplier, contract, region)` share one fetched 
 | `monthly_snapshot_locks` | `dict[key, asyncio.Lock]` | dedup lock per month key | 405 |
 | `tuple_generations` | `dict[tuple, int]` | generation counter for eviction races | 413 |
 
-`_SharedSnapshot` (`snapshot_store.py:121`) carries the snapshot, `fetched_at`, and the `probe_key` seen at fetch. `evict_shared_caches` (`snapshot_store.py:155`) is called from `async_unload_entry` (`__init__.py:242`) only when no other loaded entry still references the tuple; it bumps the generation counter first so an in-flight fetch that resumes after eviction detects the change and skips its write (`coordinator_snapshot.py:331`), preventing an orphaned cache row.
+`_SharedSnapshot` (`snapshot_store.py:121`) carries the snapshot, `fetched_at`, and the `probe_key` seen at fetch. `evict_shared_caches` (`snapshot_store.py:155`) is called from `async_unload_entry` (`__init__.py:242`) only when no other loaded entry still references the tuple; it bumps the generation counter first so an in-flight fetch that resumes after eviction detects the change and skips its write (`coordinator_snapshot.py:335`), preventing an orphaned cache row.
 
 ### 2.3 The on-disk Store and cache invalidation
 
@@ -201,7 +201,7 @@ every `_cohort_energy_leg` call site hands in an already-resolved snapshot: the
 live tick (`coordinator.py:521`), the monthly walk (`cohort.py:362`), the
 year-to-date walk (`ytd_cost.py:606`), the backfill accrual
 (`backfill.py:313`), and the compare quote (`compare_flow.py:549`).
-`_set_snapshot` (`coordinator_snapshot.py:142`) is the only writer of
+`_set_snapshot` (`coordinator_snapshot.py:146`) is the only writer of
 `self._snapshot` and always routes through `_resolve_snapshot`, so by the time
 the cohort leg reads the taxes there is no other surviving record of the basis
 the card published at. Threading it as a parameter reached the live tick alone
@@ -363,7 +363,7 @@ The config-flow consequence: because shape (c) needs a key that the dynamic ener
 
 ## 9. Error handling, backoff, and Repairs
 
-The fail policy is "keep serving the cached snapshot, surface a Repairs issue". `_maybe_refresh_snapshot` catches every fetch exception (`coordinator_snapshot.py:190`), records `_last_error`, populates the shared negative cache with an incremented consecutive-failure count, and re-raises only non-`ExtractorError`/non-`TimeoutError` types (`base.py:800`); a bad card thus keeps the last good data alive.
+The fail policy is "keep serving the cached snapshot, surface a Repairs issue". `_maybe_refresh_snapshot` catches every fetch exception (`coordinator_snapshot.py:194`), records `_last_error`, populates the shared negative cache with an incremented consecutive-failure count, and re-raises only non-`ExtractorError`/non-`TimeoutError` types (`base.py:800`); a bad card thus keeps the last good data alive.
 
 Repairs issues, all keyed by `entry_id`:
 
@@ -401,7 +401,7 @@ Prices are deliberately untouched while it is up -- a user
 still being supplied must still be billed correctly for the months they are
 supplied.
 
-`_EXTRACTOR_ISSUE_THRESHOLD` is `2` (`coordinator_snapshot.py:81`): a lone transient CDN timeout does not raise the softer "unreachable" card, because a single failure almost always recovers on the next hourly tick and a false alarm wrongly tells the user the supplier changed its layout. `is_transient_fetch_error` (from `providers._pdf`) classifies the failure (`coordinator_snapshot.py:364`); actionable failures raise on the first occurrence, transient ones only after the threshold. The consecutive count rides the shared negative-cache row and resets to zero on the first success (`failed.pop`, `coordinator_snapshot.py:335`). The `extractor_failed`, `extractor_unreachable` and `extractor_unreadable` slots are mutually exclusive; raising any one clears the other two (`coordinator_issues.py:333`). A fetch that raises `CardNotReadableError` takes the third slot in place of the actionable one, because "the supplier changed its layout, open a GitHub issue" is advice nobody can act on when the card has no text layer at all. That signal is DERIVED from the download (`providers/_pdf.py:70`), not declared per supplier: the first version was a registry flag, which froze one month of observation into source and would have kept claiming a supplier was unreadable after it went back to publishing text, until someone shipped a release to clear it. Deriving it self-heals on the next fetch and covers any supplier that starts rasterizing. A transient network error still reports as transient.
+`_EXTRACTOR_ISSUE_THRESHOLD` is `2` (`coordinator_snapshot.py:81`): a lone transient CDN timeout does not raise the softer "unreachable" card, because a single failure almost always recovers on the next hourly tick and a false alarm wrongly tells the user the supplier changed its layout. `is_transient_fetch_error` (from `providers._pdf`) classifies the failure (`coordinator_snapshot.py:368`); actionable failures raise on the first occurrence, transient ones only after the threshold. The consecutive count rides the shared negative-cache row and resets to zero on the first success (`failed.pop`, `coordinator_snapshot.py:339`). The `extractor_failed`, `extractor_unreachable` and `extractor_unreadable` slots are mutually exclusive; raising any one clears the other two (`coordinator_issues.py:333`). A fetch that raises `CardNotReadableError` takes the third slot in place of the actionable one, because "the supplier changed its layout, open a GitHub issue" is advice nobody can act on when the card has no text layer at all. That signal is DERIVED from the download (`providers/_pdf.py:70`), not declared per supplier: the first version was a registry flag, which froze one month of observation into source and would have kept claiming a supplier was unreadable after it went back to publishing text, until someone shipped a release to clear it. Deriving it self-heals on the next fetch and covers any supplier that starts rasterizing. A transient network error still reports as transient.
 
 Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`snapshot_store.py:99`, dedupes a burst of update ticks across siblings), `_MONTHLY_FAILURE_TTL` is 30 minutes (`snapshot_store.py:117`, for `fetch_for_month`). A transient `fetch_for_month` failure is deliberately NOT written to `monthly_snapshot_cache` as a `None` (a cached `None` means "no archive for this month"); the separate failure marker (`snapshot_store.py:339`) prevents re-attempting every uncached month each tick while still letting a real recovery repopulate.
 
@@ -416,4 +416,4 @@ Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`snapshot_store.py:99`,
 - **Identity guard** (`coordinator.py:912`): skip when `runtime_data` is a *different* coordinator (must not skip during first refresh, when it is `UNDEFINED`).
 - **Tuple guard** (`coordinator.py:932`): skip when live `entry.data` has drifted from `_supplier_tuple` (the OptionsFlow window where `entry.data` changed but `runtime_data` is still swapping).
 
-Serialization is `_snapshot_to_dict` / `_snapshot_from_dict` (`snapshot_store.py:528`, `4404`), which stamp and check `_SNAPSHOT_SCHEMA_VERSION` as described in section 2.3. What is persisted is the card **as parsed**, not as priced: `_set_snapshot` keeps both, and the per-entry VAT and excise-band resolution is re-applied on load. Historical spots are pruned with a local-midnight Jan 1 anchor (`coordinator_snapshot.py:142`) so a Brussels restart in early January doesn't drop the first hour or two of YTD. On entry removal, `async_remove_entry` (`__init__.py:295`) deletes every Repairs issue id and removes the Store file so nothing outlives the entry; `test_repair_issue_kinds_match_the_declared_strings` pins that list against `strings.json` so a newly added issue cannot skip it.
+Serialization is `_snapshot_to_dict` / `_snapshot_from_dict` (`snapshot_store.py:528`, `4404`), which stamp and check `_SNAPSHOT_SCHEMA_VERSION` as described in section 2.3. What is persisted is the card **as parsed**, not as priced: `_set_snapshot` keeps both, and the per-entry VAT and excise-band resolution is re-applied on load. Historical spots are pruned with a local-midnight Jan 1 anchor (`coordinator_snapshot.py:146`) so a Brussels restart in early January doesn't drop the first hour or two of YTD. On entry removal, `async_remove_entry` (`__init__.py:295`) deletes every Repairs issue id and removes the Store file so nothing outlives the entry; `test_repair_issue_kinds_match_the_declared_strings` pins that list against `strings.json` so a newly added issue cannot skip it.
