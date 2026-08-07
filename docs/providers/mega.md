@@ -243,7 +243,7 @@ the listing minus `_KNOWN_UNSUPPORTED_PRODUCTS`. It is best-effort catalog signa
 for the daily live-check: diffing against `{c.product_name for c in _CONTRACTS}`
 flags any new Mega product to add to the registry. Filtering out the prepaid
 products keeps them from re-opening the same catalog issue every day (regression
-2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:535`).
+2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:606`).
 On a listing fetch failure it returns an empty set rather than raising.
 
 ## Parsing
@@ -264,10 +264,10 @@ Fields pulled and their helpers:
 
 | Field | Helper | Location |
 | --- | --- | --- |
-| Energy rates (per kind) | `_extract_energy` | `_mega_cards.py:137` |
-| Injection | `_extract_injection` | `_mega_cards.py:378` |
-| Publication label | `_extract_publication_month` | `_mega_cards.py:347` |
-| Valid until | `parse_valid_until` then `_extract_valid_until` | `_pdf.py:858`, `_mega_cards.py:366` |
+| Energy rates (per kind) | `_extract_energy` | `_mega_cards.py:190` |
+| Injection | `_extract_injection` | `_mega_cards.py:432` |
+| Publication label | `_extract_publication_month` | `_mega_cards.py:401` |
+| Valid until | `parse_valid_until` then `_extract_valid_until` | `_pdf.py:858`, `_mega_cards.py:420` |
 | Federal excise | `_extract_federal_excise` | `_mega_overlays.py:149` |
 | Energy contribution | `_extract_energy_contribution` | `_mega_overlays.py:180` |
 | Wallonia connection fee | `_extract_connection_fee` (Wallonia only) | `_mega_overlays.py:198` |
@@ -277,8 +277,8 @@ Fields pulled and their helpers:
 
 ### Energy block
 
-`_extract_energy` (`_mega_cards.py:137`) always reads the yearly standing charge first
-(`_extract_yearly_fee`, `_mega_cards.py:332`), which accepts both the split dynamic layout
+`_extract_energy` (`_mega_cards.py:190`) always reads the yearly standing charge first
+(`_extract_yearly_fee`, `_mega_cards.py:386`), which accepts both the split dynamic layout
 (`Redevance fixe\n(€/an)\n42.4`) and the joined fixed layout
 (`Redevance fixe (€/an)\n111.3`). A missing standing charge raises (it is on every
 card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:403`) enforces it.
@@ -288,9 +288,18 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:403`) enforces it.
   `MEDIUM`, `ECO`, `mega.py:655`) plus the footnote formula text into `ImpactRates`.
   The regex is permissive on the `Tarif` prefix because circulating cards print a
   bare `PIC` on the last row and lowercase `tarif` in the footnote.
+  `_impact_band_coefficients` (`_mega_cards.py:155`) also parses the footnote's three
+  per-band formulas (`Epex * 0,8528 + 0,95 c€/kWh` and friends) into numeric
+  coefficients, converted the same way the variable card's are: x 1,06 and /100 on a
+  residential card, left ex-VAT on a professional one. Inverting the three bands on
+  that basis lands on one index (8,466 c€/kWh), which is what proves the conversion;
+  the ex-VAT reading does not agree across bands. PIC's printed rate is one unit in
+  the last decimal above what its own formula gives, because Mega rounds each band
+  separately -- `test_offpeak_impact_coefficients_agree_with_the_printed_rates` pins
+  that rather than hiding it.
 - `fixed` / `variable`: read `Compteur mono-horaire` (mono), plus `Tarif jour`
   (peak), `Tarif nuit` (offpeak) and `Exclusif nuit` (exclusive night) via
-  `_extract_meter_value` (`_mega_cards.py:307`). The bi-hourly labels are only read inside
+  `_extract_meter_value` (`_mega_cards.py:361`). The bi-hourly labels are only read inside
   the `Compteur bi-horaire` scope so a later mention in a dynamic-formula footnote
   cannot shadow the energy-block value; the anchor regex tolerates the newline pypdf
   inserts inside `Compteur bi-horaire`. A missing mono rate raises. `fixed` builds
@@ -303,7 +312,7 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:403`) enforces it.
 > prix de l'energie pour une livraison les 12 prochains mois."* The rates Mega
 > settles on are in the sentence below it, *"Les derniers prix constates et utilises
 > pour le calcul de votre facture de regularisation pour le mois de &lt;month&gt;"*,
-> in c€/kWh. `_realized_rates` (`_mega_cards.py:212`) parses that sentence and both
+> in c€/kWh. `_realized_rates` (`_mega_cards.py:266`) parses that sentence and both
 > `_extract_energy` and `_extract_injection` prefer it, falling back to the table
 > when it is absent.
 >
@@ -419,11 +428,11 @@ folded fee to 14.73 + 50.0744 and the OSP tiers to
 
 ### Publication label and validity
 
-`_extract_publication_month` (`_mega_cards.py:347`) first tries the versioned Smart Fixed
+`_extract_publication_month` (`_mega_cards.py:401`) first tries the versioned Smart Fixed
 prefix `V<n> <month> <year>` (the token class includes `é` and `û` so `août` keeps
 its version, `test_publication_month_keeps_version_for_august`, `test_mega.py:396`),
 then falls back to `Prix du mois MM/YYYY` rendered as `<month-name> YYYY` from
-`_FR_MONTH_NAMES` (`_mega_cards.py:344`). `valid_until` prefers the shared
+`_FR_MONTH_NAMES` (`_mega_cards.py:398`). `valid_until` prefers the shared
 `parse_valid_until` keyword scan and falls back to `_extract_valid_until`
 (`mega.py:727`), which reads `mois MM/YYYY` and returns the last calendar day of that
 month (Mega cards are valid for the printed month).
@@ -470,7 +479,7 @@ cross-region excise (0.0503288) and the per-region renewables split.
 
 ## Injection
 
-`_extract_injection` (`_mega_cards.py:378`) produces an `InjectionRates` from the same energy
+`_extract_injection` (`_mega_cards.py:432`) produces an `InjectionRates` from the same energy
 block, second column. There are three shapes depending on the kind:
 
 - `tou_impact`: injection is the second number under any of the three tier labels

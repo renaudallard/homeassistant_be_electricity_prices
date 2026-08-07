@@ -261,6 +261,27 @@ class ImpactRates:
     eco: float
     yearly_fixed_fee: float = 0.0
     formula: str | None = None
+    # Numeric coefficients of each band's indexation formula
+    # (``factor * this_month_mean + base``), when the extractor can parse
+    # them, on the same basis as the resolved rates above: baked to TVAC
+    # EUR/kWh on a residential card, left ex-VAT on a professional one. The
+    # cards print them in c€/kWh Hors TVA, so both conversions are applied.
+    #
+    # These are DIAGNOSTIC only today. Signing-cohort re-pricing does not use
+    # them: an Impact contract is monthly-indexed, so re-pricing a cohort
+    # correctly needs a three-band monthly-mean energy shape that resolves
+    # downstream, the way SpotMonthlyRates does for the single-rate case, and
+    # that shape does not exist. Freezing the archived card's resolved bands
+    # instead would pin the signing-month index, which is the exact bug
+    # ``_cohort_energy_from_archived`` exists to avoid, so it returns None for
+    # this shape and the entry bills at the current card. Capturing the
+    # coefficients here is the prerequisite if that shape is ever built.
+    pic_factor: float | None = None
+    pic_base: float | None = None
+    medium_factor: float | None = None
+    medium_base: float | None = None
+    eco_factor: float | None = None
+    eco_base: float | None = None
 
 
 EnergyRates = (

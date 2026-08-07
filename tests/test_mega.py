@@ -473,6 +473,82 @@ def test_offpeak_impact_parses_three_tier_rates() -> None:
     assert "PIC" in snap.energy.formula
 
 
+def test_offpeak_impact_exposes_per_band_coefficients() -> None:
+    """The Impact card prints an indexation formula per CWaPE band; the
+    snapshot must carry the numbers, not just the sentence.
+
+    Card text: ECO Epex*0,8528+0,95, MEDIUM Epex*1,1832+2,2, PIC
+    Epex*1,4267+2,8, all in c€/kWh Hors TVA. They are stored on the same
+    basis as the resolved band rates beside them, i.e. baked to TVAC
+    EUR/kWh, so factor x 1,06 and base x 1,06 / 100.
+    """
+    snap = parse_snapshot(
+        "mega_offpeak_impact_var",
+        fixture_text("mega_offpeak_impact_w.pdf"),
+        "wallonia",
+    )
+    energy = snap.energy
+    assert isinstance(energy, ImpactRates)
+    assert energy.eco_factor == pytest.approx(0.8528 * 1.06)
+    assert energy.eco_base == pytest.approx(0.95 * 1.06 / 100.0)
+    assert energy.medium_factor == pytest.approx(1.1832 * 1.06)
+    assert energy.medium_base == pytest.approx(2.2 * 1.06 / 100.0)
+    assert energy.pic_factor == pytest.approx(1.4267 * 1.06)
+    assert energy.pic_base == pytest.approx(2.8 * 1.06 / 100.0)
+    # Ordering must survive the conversion: PIC is the priciest band.
+    # Narrowed explicitly so a silently-None coefficient fails here rather
+    # than sliding through as an unorderable comparison.
+    assert energy.pic_factor is not None
+    assert energy.medium_factor is not None
+    assert energy.eco_factor is not None
+    assert energy.pic_factor > energy.medium_factor > energy.eco_factor
+
+
+def test_offpeak_impact_coefficients_agree_with_the_printed_rates() -> None:
+    """Inverting each band's formula must land on ONE index, which is what
+    proves the TVAC basis is right.
+
+    On the ex-VAT reading the three bands disagree; on the TVAC reading they
+    agree at 8,466 c€/kWh. The exception is PIC, which comes back one unit
+    in the card's last printed decimal high (0,1578 printed, 0,1577 implied)
+    because Mega rounds each band independently. That is the card's own
+    arithmetic, not a parse error, so it is pinned here rather than papered
+    over: no single index reproduces all three printed rates exactly.
+    """
+    energy = parse_snapshot(
+        "mega_offpeak_impact_var",
+        fixture_text("mega_offpeak_impact_w.pdf"),
+        "wallonia",
+    ).energy
+    assert isinstance(energy, ImpactRates)
+    implied = {
+        band: (getattr(energy, band) - getattr(energy, f"{band}_base"))
+        / getattr(energy, f"{band}_factor")
+        for band in ("eco", "medium", "pic")
+    }
+    assert implied["eco"] == pytest.approx(0.08466, abs=1e-5)
+    assert implied["medium"] == pytest.approx(0.08466, abs=1e-5)
+    # PIC carries the card's rounding; still the same index to 4 decimals.
+    assert implied["pic"] == pytest.approx(0.08466, abs=1e-4)
+    assert round(energy.eco_factor * implied["eco"] + energy.eco_base, 4) == 0.0866
+
+
+def test_impact_coefficients_are_absent_when_the_formula_is_missing() -> None:
+    """A card without the formula block must leave every coefficient None
+    rather than guess, so a future consumer can tell "not published" from
+    "published as zero"."""
+    text = fixture_text("mega_offpeak_impact_w.pdf")
+    stripped = text.replace("Epex", "XXXX")
+    energy = parse_snapshot("mega_offpeak_impact_var", stripped, "wallonia").energy
+    assert isinstance(energy, ImpactRates)
+    for band in ("eco", "medium", "pic"):
+        assert getattr(energy, f"{band}_factor") is None
+        assert getattr(energy, f"{band}_base") is None
+    # The resolved rates still parse: the coefficients are a bonus, not a
+    # dependency, so losing them must not break pricing.
+    assert energy.pic == pytest.approx(0.1578)
+
+
 def test_offpeak_impact_injection_uses_per_tier_column() -> None:
     snap = parse_snapshot(
         "mega_offpeak_impact_var",

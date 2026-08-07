@@ -101,6 +101,24 @@ _VARIABLE_MONO_FORMULA_RE = re.compile(
 )
 
 
+def _impact_band_formula_re(band: str) -> re.Pattern[str]:
+    """Per-band Impact formula matcher.
+
+    Case-insensitive on the label because the card mixes "Tarif ECO" with a
+    lower-case "tarif PIC" in the same sentence.
+    """
+    return re.compile(
+        rf"tarif\s+{band}\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
+        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh",
+        re.IGNORECASE,
+    )
+
+
+_IMPACT_BAND_RES = {
+    band: _impact_band_formula_re(band) for band in ("pic", "medium", "eco")
+}
+
+
 def _variable_cohort_coefficients(
     text: str, *, professional: bool = False
 ) -> tuple[float | None, float | None]:
@@ -132,6 +150,41 @@ def _variable_cohort_coefficients(
     factor = to_float(match.group(1)) * vat_mult
     base = parse_sign(match.group(2)) * to_float(match.group(3)) * vat_mult / 100.0
     return factor, base
+
+
+def _impact_band_coefficients(
+    text: str, *, professional: bool = False
+) -> dict[str, float | None]:
+    """Per-band coefficients of the Impact indexation formulas.
+
+    Same basis conversion as :func:`_variable_cohort_coefficients`, and for
+    the same reason: the formula block is printed Hors TVA in c€/kWh while a
+    residential card's resolved band rates are TVAC EUR/kWh. Verified against
+    the real Walloon card, where inverting all three bands on the TVAC
+    reading yields one consistent Epex (8,47 c€/kWh) while the ex-VAT reading
+    does not.
+
+    Missing or unparseable bands come back ``None`` individually, so a card
+    that prints only some of them still contributes what it has.
+    """
+    flat = re.sub(r"\s+", " ", text)
+    vat_mult = (
+        1.0
+        if professional
+        else vat_multiplier(text, re.compile(r"TVA\s*(\d+)\s*%\s*incluse", re.I))
+    )
+    out: dict[str, float | None] = {}
+    for band, pattern in _IMPACT_BAND_RES.items():
+        match = pattern.search(flat)
+        if match is None:
+            out[f"{band}_factor"] = None
+            out[f"{band}_base"] = None
+            continue
+        out[f"{band}_factor"] = to_float(match.group(1)) * vat_mult
+        out[f"{band}_base"] = (
+            parse_sign(match.group(2)) * to_float(match.group(3)) * vat_mult / 100.0
+        )
+    return out
 
 
 def _extract_energy(
@@ -181,6 +234,7 @@ def _extract_energy(
             eco=eco,
             yearly_fixed_fee=yearly_fee,
             formula=formula,
+            **_impact_band_coefficients(text, professional=professional),
         )
 
     mono = _extract_meter_value(text, "Compteur mono-horaire")

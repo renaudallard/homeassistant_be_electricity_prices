@@ -292,6 +292,24 @@ eco    : 01:00-07:00 + 11:00-17:00      (lowest)
 | `eco` | `float` | required | Eco-band (lowest) rate. |
 | `yearly_fixed_fee` | `float` | `0.0` | Yearly standing charge. |
 | `formula` | `str \| None` | `None` | Per-band formula text for diagnostics. |
+| `pic_factor` / `pic_base` | `float \| None` | `None` | PIC band's indexation coefficients. |
+| `medium_factor` / `medium_base` | `float \| None` | `None` | MEDIUM band's coefficients. |
+| `eco_factor` / `eco_base` | `float \| None` | `None` | ECO band's coefficients. |
+
+The six coefficients are the numeric form of `formula`, on the same basis as the
+resolved rates beside them: baked to TVAC EUR/kWh on a residential card, left ex-VAT
+on a professional one, since the cards print them in c€/kWh Hors TVA. Each band is
+parsed independently, so a card that prints only some of them still contributes what
+it has, and `None` means "not published" rather than zero.
+
+They are **diagnostic only**. Signing-cohort re-pricing does not use them:
+`_cohort_energy_from_archived` (`cohort.py:190`) returns `None` for this shape. An
+Impact contract is monthly-indexed, so re-pricing a cohort correctly needs a
+three-band monthly-mean shape that resolves downstream the way `SpotMonthlyRates`
+does for the single-rate case, and that shape does not exist. Freezing the archived
+card's resolved bands instead would pin the signing-month index, the exact bug that
+function exists to avoid. Capturing the coefficients is the prerequisite if the shape
+is ever built.
 
 ### SpotMonthlyRates
 
