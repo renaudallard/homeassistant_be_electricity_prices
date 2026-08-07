@@ -1303,16 +1303,17 @@ async def test_sync_extractor_failed_issue_creates_and_clears(
 async def test_unreadable_cards_swap_the_extractor_failed_card(
     hass: HomeAssistant,
 ) -> None:
-    """A supplier flagged ``cards_unreadable`` must raise its own Repairs
-    card instead of ``extractor_failed``.
+    """A card with no text layer must raise its own Repairs card instead of
+    ``extractor_failed``.
 
     Ecofix went to page images in August 2026. The default card tells the
     user the layout changed and asks them to open a GitHub issue, which is
-    advice nobody can act on: there is no text layer left to re-anchor a
-    parser against. A transient network error on the same supplier still
-    reports as transient, because that one really does clear by itself.
+    advice nobody can act on: there is no text layer to re-anchor a parser
+    against. The signal is derived from the error the fetch raised, not a
+    per-supplier flag, so any supplier that starts doing this is covered and
+    the card stops by itself when readable cards return.
     """
-    entry = make_entry(supplier="ecofix", contract="ecofix_flexy", region="flanders")
+    entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     registry = ir.async_get(hass)
@@ -1320,23 +1321,27 @@ async def test_unreadable_cards_swap_the_extractor_failed_card(
     unreachable_id = f"extractor_unreachable_{entry.entry_id}"
     unreadable_id = f"extractor_unreadable_{entry.entry_id}"
 
-    coord._sync_extractor_issue("Ecofix: energy block not found")
+    coord._sync_extractor_issue("card has no text layer", unreadable=True)
     issue = registry.async_get_issue(DOMAIN, unreadable_id)
     assert issue is not None
     assert issue.translation_key == "extractor_unreadable"
-    # The card it replaces must not also be showing.
     assert registry.async_get_issue(DOMAIN, failed_id) is None
 
-    # A timeout is still a timeout, even on an unreadable-card supplier,
-    # and raising it clears the unreadable card rather than stacking.
+    # A timeout is still a timeout, and raising it clears the unreadable
+    # card rather than stacking beside it.
     coord._sync_extractor_issue("TimeoutError", transient=True)
     transient_issue = registry.async_get_issue(DOMAIN, unreachable_id)
     assert transient_issue is not None
     assert transient_issue.translation_key == "extractor_unreachable"
     assert registry.async_get_issue(DOMAIN, unreadable_id) is None
-    assert registry.async_get_issue(DOMAIN, failed_id) is None
 
-    # Success clears every flavour.
+    # The next fetch reading a card WITH text must fall back to the ordinary
+    # card, with no code change: this is the self-healing property the
+    # derived signal exists for.
+    coord._sync_extractor_issue("could not parse energy block")
+    assert registry.async_get_issue(DOMAIN, failed_id) is not None
+    assert registry.async_get_issue(DOMAIN, unreadable_id) is None
+
     coord._sync_extractor_issue(None)
     for issue_id in (failed_id, unreachable_id, unreadable_id):
         assert registry.async_get_issue(DOMAIN, issue_id) is None

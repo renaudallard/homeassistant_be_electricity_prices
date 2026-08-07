@@ -782,15 +782,6 @@ class SupplierExtractor:
     # supplied. Purely declarative: nothing compares these to the clock.
     deprecated_until: date | None = None
     deprecated_successor: str | None = None
-    # Set when the supplier still sells, but publishes cards no parser can
-    # read - Ecofix went to page images in August 2026. This is NOT a normal
-    # extractor breakage: the default Repairs card tells the user the layout
-    # changed and asks them to open a GitHub issue, which here is advice
-    # nobody can act on, because there is no text layer to re-anchor a parser
-    # against. Setting this swaps that card for one naming the real
-    # workaround, the custom supplier. Clear it the moment readable cards
-    # return; nothing compares it to the clock.
-    cards_unreadable: bool = False
 
     def regions(self) -> frozenset[str]:
         """Union of regions across this supplier's contracts."""
@@ -808,3 +799,21 @@ class SupplierProtocol(Protocol):
 
 class ExtractorError(Exception):
     """Raised when a supplier's source cannot be fetched or parsed."""
+
+
+class CardNotReadableError(ExtractorError):
+    """The card downloaded fine but carries no text layer to read.
+
+    A supplier that publishes its tariff card as page images cannot be
+    parsed by any amount of regex work, so the user needs different advice
+    from "the layout changed, please report it": there is nothing in the
+    document to report. Ecofix started doing this in August 2026.
+
+    Deliberately DERIVED per fetch rather than declared per supplier. The
+    first version of this was a ``cards_unreadable`` flag in the registry,
+    which encoded one month's observation as a permanent property: had the
+    supplier gone back to publishing text, the flag would have kept claiming
+    otherwise until someone shipped a release to clear it. Raising on what
+    the current download actually contains self-heals the moment readable
+    cards return, and covers any supplier that starts doing this.
+    """

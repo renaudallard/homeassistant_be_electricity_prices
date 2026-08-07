@@ -35,7 +35,12 @@ import pytest
 
 import re
 
+from custom_components.be_electricity_prices.providers.base import (
+    CardNotReadableError,
+)
 from custom_components.be_electricity_prices.providers._pdf import (
+    _MIN_TEXT_LAYER_CHARS,
+    extract_pdf_text,
     _MAX_PDF_BYTES,
     _read_pdf_bytes,
     archive_validity_check,
@@ -389,10 +394,17 @@ def test_pdfplumber_extractors_fail_loud_on_textless_pdf() -> None:
     # A valid PDF with a page but no decodable text must raise rather than
     # return "" and let every downstream regex miss silently (only
     # mandatory fields fail loud; nullable ones would zero).
-    with pytest.raises(ExtractorError, match="no text decoded"):
+    #
+    # It now raises the more specific CardNotReadableError: zero decoded
+    # characters is the extreme of "published as page images", so the two
+    # conditions were folded into one check rather than kept as near
+    # duplicates. CardNotReadableError IS an ExtractorError, so every
+    # existing caller still catches it.
+    with pytest.raises(CardNotReadableError, match="no text layer"):
         extract_pdf_text_layout(_BLANK_PDF)
-    with pytest.raises(ExtractorError, match="no text decoded"):
+    with pytest.raises(CardNotReadableError, match="no text layer"):
         extract_pdf_text_aligned(_BLANK_PDF)
+    assert issubclass(CardNotReadableError, ExtractorError)
 
 
 def test_text_mentions_month_tolerates_split_whitespace() -> None:
@@ -451,3 +463,55 @@ def test_parse_brussels_osp_across_extractor_formats() -> None:
         assert parse_brussels_osp(fixture_text(name, layout=layout)) == expected
     # A card without the OSP block (non-Brussels) yields None.
     assert parse_brussels_osp(fixture_text("mega_smart_fixed_w.pdf")) is None
+
+
+def _one_page_pdf(text: str) -> bytes:
+    """A single-page PDF carrying exactly ``text``, built with pypdf so the
+    fixture is generated rather than checked in."""
+    import pypdf
+
+    writer = pypdf.PdfWriter()
+    page = writer.add_blank_page(width=595, height=842)
+    if text:
+        writer.pages[0].merge_page(page)
+    import io
+
+    buf = io.BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
+
+
+def test_card_with_no_text_layer_raises_a_distinct_error() -> None:
+    """An image-only card must raise CardNotReadableError, not the generic
+    parse error.
+
+    The distinction is what routes the user to the workaround instead of to
+    "the layout changed, please report it", and it has to come from the
+    document rather than from a per-supplier flag: a flag encodes one
+    month's observation permanently, and Ecofix overwrites its card in
+    place every month, so a revert to text would leave the flag lying.
+    """
+    blank = _one_page_pdf("")
+    with pytest.raises(CardNotReadableError) as excinfo:
+        extract_pdf_text(blank)
+    assert "no text layer" in str(excinfo.value)
+    # It is still an ExtractorError, so every existing handler keeps working.
+    assert isinstance(excinfo.value, ExtractorError)
+
+
+def test_a_real_card_is_never_mistaken_for_an_image_only_one() -> None:
+    """The threshold must clear every card we actually ship.
+
+    Measured across all fixtures the least texty readable card carries 6134
+    characters against 172 and 342 for the rasterized Ecofix ones, so the
+    600-character line has an order of magnitude of headroom either side.
+    This asserts the margin rather than the constant, so shrinking the
+    threshold toward real data fails here.
+    """
+    from tests import FIXTURES
+
+    smallest = min(
+        len(extract_pdf_text(path.read_bytes()).strip())
+        for path in sorted(FIXTURES.glob("*.pdf"))
+    )
+    assert smallest > 4 * _MIN_TEXT_LAYER_CHARS

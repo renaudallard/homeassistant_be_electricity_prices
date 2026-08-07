@@ -36,6 +36,7 @@ from datetime import timedelta
 from .providers import get as get_extractor
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .providers._pdf import is_transient_fetch_error
+from .providers.base import CardNotReadableError
 
 import logging
 
@@ -110,7 +111,11 @@ class _SnapshotMixin:
         hass: HomeAssistant
 
         def _sync_extractor_issue(
-            self, message: str | None, *, transient: bool = False
+            self,
+            message: str | None,
+            *,
+            transient: bool = False,
+            unreadable: bool = False,
         ) -> None: ...
         def _sync_deprecated_supplier_issue(self) -> None: ...
 
@@ -361,8 +366,16 @@ class _SnapshotMixin:
                 transient = isinstance(
                     err, asyncio.TimeoutError
                 ) or is_transient_fetch_error(str(err))
+                # A card with no text layer is a third case: it downloaded
+                # fine and no parser change can read it, so the user needs
+                # the workaround rather than a request to report a layout
+                # change. Derived from THIS download, so it stops by itself
+                # when the supplier goes back to publishing text.
+                unreadable = isinstance(err, CardNotReadableError)
                 if not transient:
-                    self._sync_extractor_issue(str(err), transient=False)
+                    self._sync_extractor_issue(
+                        str(err), transient=False, unreadable=unreadable
+                    )
                 elif fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
                     self._sync_extractor_issue(str(err), transient=True)
                 _LOGGER.warning(

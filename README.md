@@ -106,7 +106,10 @@ publication and how to parse it.
 > An Ecofix entry raises a dedicated Repairs card naming this workaround, rather
 > than the usual "the supplier changed its layout, please open a GitHub issue"
 > one: there is no text layer left to re-anchor a parser against, so that
-> report would be unactionable. It clears by itself if readable cards return.
+> report would be unactionable. The integration decides this from the card it
+> just downloaded rather than from a hardcoded per-supplier flag, so the moment
+> Ecofix publishes a card with a text layer again everything resumes on the next
+> refresh, with no update needed on your side.
 >
 > **Workaround: use the Expert: custom formula supplier**
 > ([`providers/custom.py`](./custom_components/be_electricity_prices/providers/custom.py),

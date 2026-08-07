@@ -259,13 +259,6 @@ class _IssuesMixin:
         except ExtractorError:
             return None
 
-    def _cards_unreadable(self) -> bool:
-        """True when this entry's supplier publishes unparseable cards."""
-        extractor = self._entry_extractor()
-        # An entry on a supplier this build no longer ships falls back to the
-        # ordinary card rather than claiming anything about its layout.
-        return extractor is not None and extractor.cards_unreadable
-
     def _supply_ended(self) -> bool:
         """True once this entry's supplier has stopped supplying.
 
@@ -283,7 +276,11 @@ class _IssuesMixin:
         return dt_util.now().date() > extractor.deprecated_until
 
     def _sync_extractor_issue(
-        self, message: str | None, *, transient: bool = False
+        self,
+        message: str | None,
+        *,
+        transient: bool = False,
+        unreadable: bool = False,
     ) -> None:
         """Raise or clear the supplier-extractor repair issue.
 
@@ -297,11 +294,13 @@ class _IssuesMixin:
           anti-bot 403 that a later refresh usually recovers. Surfaces the
           softer ``extractor_unreachable`` card.
 
-        A supplier flagged ``cards_unreadable`` takes a third slot instead of
-        the actionable one: its cards carry no text layer, so "the supplier
+        ``unreadable`` takes a third slot instead of the actionable one: the
+        card downloaded fine but carries no text layer, so "the supplier
         changed its layout, open a GitHub issue" is advice nobody can act on.
-        A transient network error on such a supplier still reports as
-        transient, because that one does clear by itself.
+        The caller derives it from the error THIS fetch raised, not from a
+        per-supplier flag, so the card stops appearing by itself the moment
+        readable cards come back. A transient network error still reports as
+        transient, because that one clears by itself too.
 
         Whichever flavour is raised clears the others so the user never sees
         two at once. ``message`` ``None`` means the latest fetch succeeded
@@ -325,7 +324,7 @@ class _IssuesMixin:
             return
         if transient:
             raise_id, translation_key = unreachable_id, "extractor_unreachable"
-        elif self._cards_unreadable():
+        elif unreadable:
             raise_id, translation_key = unreadable_id, "extractor_unreadable"
         else:
             raise_id, translation_key = failed_id, "extractor_failed"

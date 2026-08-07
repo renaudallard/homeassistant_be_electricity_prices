@@ -44,7 +44,12 @@ import aiohttp
 import pypdf
 from homeassistant.util import dt as dt_util
 
-from .base import ExtractorError, SupplierSnapshot, TaxOverlay
+from .base import (
+    CardNotReadableError,
+    ExtractorError,
+    SupplierSnapshot,
+    TaxOverlay,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -189,6 +194,24 @@ async def fetch_pdf_text(
     return await asyncio.to_thread(extract_pdf_text, payload)
 
 
+# A tariff card that carries a text layer is never anywhere near this small:
+# measured across all 82 shipped fixtures the LEAST texty is 6134 characters,
+# while Ecofix's rasterized August 2026 cards yield 172 and 342. Anything in
+# between separates the two cleanly, and 600 leaves an order of magnitude of
+# headroom on both sides. Raising here only changes WHICH error the user is
+# shown: a card with no text layer was already going to fail its parse.
+_MIN_TEXT_LAYER_CHARS = 600
+
+
+def _require_text_layer(text: str, pages: int) -> None:
+    """Raise :class:`CardNotReadableError` for an image-only PDF."""
+    if pages and len(text.strip()) < _MIN_TEXT_LAYER_CHARS:
+        raise CardNotReadableError(
+            f"card has no text layer: {len(text.strip())} characters across "
+            f"{pages} page(s), so it is published as page images"
+        )
+
+
 def extract_pdf_text(payload: bytes) -> str:
     try:
         reader = pypdf.PdfReader(BytesIO(payload))
@@ -210,7 +233,9 @@ def extract_pdf_text(payload: bytes) -> str:
             chunks.append(text)
         if pages and failures == len(pages):
             raise ExtractorError("PDF parse error: every page failed to decode")
-        return "\n".join(chunks)
+        text = "\n".join(chunks)
+        _require_text_layer(text, len(pages))
+        return text
     except ExtractorError:
         raise
     except Exception as err:  # noqa: BLE001 - rewrap pypdf surface as ExtractorError
@@ -233,10 +258,12 @@ def _pdfplumber_text(payload: bytes, kind: str, render: Callable[[Any], str]) ->
 
         with pdfplumber.open(BytesIO(payload)) as pdf:
             text = render(pdf)
-            if pdf.pages and not text.strip():
-                raise ExtractorError(
-                    f"PDF {kind} parse error: pages present but no text decoded"
-                )
+            # Ecofix reaches this path, not the pypdf one, so the text-layer
+            # check has to live on both or the classification would depend on
+            # which extractor a supplier happens to use. This subsumes the
+            # older "pages present but no text decoded" check: zero decoded
+            # characters is the same condition, just its extreme.
+            _require_text_layer(text, len(pdf.pages))
             return text
     except ExtractorError:
         raise

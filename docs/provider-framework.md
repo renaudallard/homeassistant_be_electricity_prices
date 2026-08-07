@@ -502,35 +502,35 @@ consistent.
 
 | Symbol | Signature (async unless noted) | Solves |
 | --- | --- | --- |
-| `USER_AGENT` | module constant | `Home Assistant be_electricity_prices/<version>`, read from `manifest.json` (`_pdf.py:62`). Sent on every request. |
-| `fetch_text` | `fetch_text(session, url, *, timeout=20) -> str` | GET an HTML listing / index / plain-text source. Raises `ExtractorError` on non-2xx or network error (`_pdf.py:444`). |
-| `fetch_pdf_text` | `fetch_pdf_text(session, url, *, timeout=30) -> str` | Download a PDF and return concatenated pypdf text; parsing runs in a worker thread so a multi-page card never stalls the HA event loop (`_pdf.py:182`). |
-| `fetch_pdf_text_layout` | `fetch_pdf_text_layout(session, url, *, timeout=30) -> str` | Layout-preserving pdfplumber variant (`_pdf.py:337`). |
-| `fetch_pdf_text_aligned` | `fetch_pdf_text_aligned(session, url, x_join_threshold=0.0, *, timeout=30) -> str` | Word-coordinate aligned pdfplumber variant (`_pdf.py:323`). |
+| `USER_AGENT` | module constant | `Home Assistant be_electricity_prices/<version>`, read from `manifest.json` (`_pdf.py:67`). Sent on every request. |
+| `fetch_text` | `fetch_text(session, url, *, timeout=20) -> str` | GET an HTML listing / index / plain-text source. Raises `ExtractorError` on non-2xx or network error (`_pdf.py:471`). |
+| `fetch_pdf_text` | `fetch_pdf_text(session, url, *, timeout=30) -> str` | Download a PDF and return concatenated pypdf text; parsing runs in a worker thread so a multi-page card never stalls the HA event loop (`_pdf.py:187`). |
+| `fetch_pdf_text_layout` | `fetch_pdf_text_layout(session, url, *, timeout=30) -> str` | Layout-preserving pdfplumber variant (`_pdf.py:364`). |
+| `fetch_pdf_text_aligned` | `fetch_pdf_text_aligned(session, url, x_join_threshold=0.0, *, timeout=30) -> str` | Word-coordinate aligned pdfplumber variant (`_pdf.py:350`). |
 | `flanders_tax_overlay` | `flanders_tax_overlay(text, *, supplier, excise, renewables, contribution=None, fund=None) -> TaxOverlay` | The tax block of a Flanders-only, VAT-inclusive card. Callers pass their own compiled anchors; this holds the POLICY, which is what drifted: excise mandatory (patterns tried in order, so a flat row wins over the tiered one being phased out), renewables mandatory and all summed, contribution optional (absent = the levy abolished on 2026-08-01, not a layout drift), fund optional and in EUR/month so unscaled. Used by Frank, energie.be and EnergyVision. |
-| `head_freshness_key` | `head_freshness_key(session, url, *, prefer=("Last-Modified", "ETag")) -> str \| None` | Cheap `SnapshotProbe` implementation: HEAD the card and return the first present preferred header, else `None`. Bolt prefers `ETag` first (its `Last-Modified` flips per CDN edge); everyone else prefers `Last-Modified` (`_pdf.py:350`). |
+| `head_freshness_key` | `head_freshness_key(session, url, *, prefer=("Last-Modified", "ETag")) -> str \| None` | Cheap `SnapshotProbe` implementation: HEAD the card and return the first present preferred header, else `None`. Bolt prefers `ETag` first (its `Last-Modified` flips per CDN edge); everyone else prefers `Last-Modified` (`_pdf.py:377`). |
 
 Internals worth knowing:
 
-- `_fetch_validated_pdf_bytes` (`_pdf.py:143`) is shared by the three
+- `_fetch_validated_pdf_bytes` (`_pdf.py:148`) is shared by the three
   `fetch_pdf_text*` variants. It catches both `aiohttp.ClientError` and
   `TimeoutError` (aiohttp's `ClientTimeout` fires `asyncio.TimeoutError`, which
   is not a `ClientError`) and wraps them with the exact prefix
   `network error fetching`. That prefix is load-bearing: `is_transient_fetch_error`
   keys on it. HTTP >= 400 is wrapped as `HTTP <status> fetching <url>`.
-- `error_text` (`_pdf.py:89`) renders the wrapped exception as `str(err)` or, when
+- `error_text` (`_pdf.py:94`) renders the wrapped exception as `str(err)` or, when
   that is empty, its class name. aiohttp raises its timeouts argless, so without
   it the message ended in a bare colon -- and that message is user-visible on the
   `snapshot_stale` Repairs card, the `last_error` sensor attribute, and in
   diagnostics. The ENTSO-E client uses it for the same reason (`api.py:127`).
-- `_is_pdf_payload` (`_pdf.py:129`) validates by magic bytes (`%PDF`, allowing a
+- `_is_pdf_payload` (`_pdf.py:134`) validates by magic bytes (`%PDF`, allowing a
   leading UTF-8 BOM that OCTA+ prepends), not Content-Type, because some CDNs
   return 200 + text/html for a missing PDF, and Engie's API returns
   octet-stream for valid PDFs.
-- `_read_pdf_bytes` (`_pdf.py:112`) refuses a body whose declared Content-Length
+- `_read_pdf_bytes` (`_pdf.py:117`) refuses a body whose declared Content-Length
   exceeds `_MAX_PDF_BYTES` (64 MiB, about 12x the largest real card), bounding
   what a broken or hostile CDN can pull into coordinator memory.
-- `is_transient_fetch_error(message: str) -> bool` (`_pdf.py:62`) classifies an
+- `is_transient_fetch_error(message: str) -> bool` (`_pdf.py:67`) classifies an
   `ExtractorError` message: `network error fetching` is always transient; among
   HTTP statuses, 5xx plus 408/429/403 are transient (Cloudflare-fronted
   suppliers intermittently answer with a 403 anti-bot challenge or a retryable
@@ -546,32 +546,32 @@ downstream regex would miss silently.
 
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
-| `extract_pdf_text` | `extract_pdf_text(payload: bytes) -> str` | Default pypdf extraction. Logs and skips pages pypdf returns `None` for (undecodable fonts); raises only if every page fails (`_pdf.py:192`). |
-| `extract_pdf_text_layout` | `extract_pdf_text_layout(payload: bytes) -> str` | pdfplumber layout mode for cards with rotated DSO/tax columns that pypdf drops (TotalEnergies). Runs `dedupe_chars()` first to drop stacked duplicate glyphs (for example `55,,09` rendered instead of `5,09`) (`_pdf.py:247`). |
-| `extract_pdf_text_aligned` | `extract_pdf_text_aligned(payload, y_tolerance=3, x_join_threshold=0.0) -> str` | Re-groups `extract_words()` output into visual rows by y-coordinate for column-major cards (OCTA+). `x_join_threshold` is opt-in: leave `0.0` to keep words separate; pass ~1.0pt to glue sub-point-gap glyphs (`5 ,0 3 2 9` into `5,0329`). Pages joined with form-feeds (`_pdf.py:271`). |
+| `extract_pdf_text` | `extract_pdf_text(payload: bytes) -> str` | Default pypdf extraction. Logs and skips pages pypdf returns `None` for (undecodable fonts); raises only if every page fails (`_pdf.py:215`). |
+| `extract_pdf_text_layout` | `extract_pdf_text_layout(payload: bytes) -> str` | pdfplumber layout mode for cards with rotated DSO/tax columns that pypdf drops (TotalEnergies). Runs `dedupe_chars()` first to drop stacked duplicate glyphs (for example `55,,09` rendered instead of `5,09`) (`_pdf.py:274`). |
+| `extract_pdf_text_aligned` | `extract_pdf_text_aligned(payload, y_tolerance=3, x_join_threshold=0.0) -> str` | Re-groups `extract_words()` output into visual rows by y-coordinate for column-major cards (OCTA+). `x_join_threshold` is opt-in: leave `0.0` to keep words separate; pass ~1.0pt to glue sub-point-gap glyphs (`5 ,0 3 2 9` into `5,0329`). Pages joined with form-feeds (`_pdf.py:298`). |
 
 ### Number, sign and VAT parsing
 
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
-| `to_float` | `to_float(text: str) -> float` | Parse a Belgian/French decimal (`15,93` or `0.102`). Strips every Unicode space variant used as a thousands separator (NBSP, thin space, NNBSP, line separator) before swapping comma for dot, so `5 029` does not raise (`_pdf.py:551`). |
-| `parse_sign` | `parse_sign(char: str) -> float` | Return `-1.0` for any hyphen/dash/Unicode-minus, `+1.0` otherwise. Use as `base = parse_sign(m.group(N)) * to_float(m.group(N+1))` so a card that swaps to U+2212 or flips polarity does not silently break the parser (`_pdf.py:596`). |
-| `SIGN_CHARS` | module constant | Character-class string `+\-` plus six dash variants, to drop into a regex as `[` + `SIGN_CHARS` + `]` (`_pdf.py:592`). Supplier PDFs flip silently between these on re-renders. |
-| `fold_accents` | `fold_accents(text: str) -> str` | Lowercase and strip Latin diacritics, so a literal test for `août` still matches an extraction that lost the accent to `aout`. Fold both haystack and needle (`_pdf.py:494`). |
-| `vat_multiplier` | `vat_multiplier(text, *patterns, default=1.06) -> float` | Read the VAT percentage from a card header (each supplier phrases it differently) and return `1 + N/100` via `to_float` (so `21,5%` works). Falls back to `default` (1.06, illustrative current Belgian residential rate) when no pattern matches (`_pdf.py:551`). |
+| `to_float` | `to_float(text: str) -> float` | Parse a Belgian/French decimal (`15,93` or `0.102`). Strips every Unicode space variant used as a thousands separator (NBSP, thin space, NNBSP, line separator) before swapping comma for dot, so `5 029` does not raise (`_pdf.py:578`). |
+| `parse_sign` | `parse_sign(char: str) -> float` | Return `-1.0` for any hyphen/dash/Unicode-minus, `+1.0` otherwise. Use as `base = parse_sign(m.group(N)) * to_float(m.group(N+1))` so a card that swaps to U+2212 or flips polarity does not silently break the parser (`_pdf.py:623`). |
+| `SIGN_CHARS` | module constant | Character-class string `+\-` plus six dash variants, to drop into a regex as `[` + `SIGN_CHARS` + `]` (`_pdf.py:619`). Supplier PDFs flip silently between these on re-renders. |
+| `fold_accents` | `fold_accents(text: str) -> str` | Lowercase and strip Latin diacritics, so a literal test for `août` still matches an extraction that lost the accent to `aout`. Fold both haystack and needle (`_pdf.py:521`). |
+| `vat_multiplier` | `vat_multiplier(text, *patterns, default=1.06) -> float` | Read the VAT percentage from a card header (each supplier phrases it differently) and return `1 + N/100` via `to_float` (so `21,5%` works). Falls back to `default` (1.06, illustrative current Belgian residential rate) when no pattern matches (`_pdf.py:578`). |
 
 ### Belgium-specific table and date parsers
 
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
-| `parse_brussels_osp` | `parse_brussels_osp(text: str) -> dict[str, float] \| None` | Parse the Brussels Brugel OSP annual-fee table off a Sibelga card. Anchors on the `Obligations de Service` block (case-insensitive: Bolt lowercases `s`) and each `<bound> kVA <value>` row, returning the four residential tiers (`le1_44`/`le6`/`le9_6`/`le13`) or `None` when absent. Populates `DsoOverlay.brussels_osp_by_tier` (`_pdf.py:617`). |
-| `parse_valid_until` | `parse_valid_until(text: str) -> date \| None` | Best-effort parse of the card's validity date, anchored within ~200 chars after a validity keyword (`geldig`/`valable`/`validit`/`valid `). Tries spelled-out `<day> <month> <year>`, numeric `DD/MM/YYYY` (or `DD/MM/YY`), then bare `<month> <year>` (last day of month). Clamps candidates to a symmetric 5-year horizon around Brussels-local today so a corrupted footer date does not produce a bogus year. Returns the latest match or `None`. Populates `SupplierSnapshot.valid_until` (`_pdf.py:858`). |
-| `text_mentions_month` | `text_mentions_month(text, year_month: date, month_names: tuple[str, ...]) -> bool` | Heuristic that `text` references the requested month+year inside an anchored window (first 1000 chars where the card title prints, plus validity-keyword windows). Accent-folds both sides and collapses whitespace so `mei\n2026` matches (`_pdf.py:199`). |
-| `archive_validity_check` | `archive_validity_check(snap, text, year_month, *, month_names=None) -> SupplierSnapshot \| None` | Confirm an archived snapshot actually covers `year_month`. Returns `snap` on pass, `None` otherwise, so a provider's `fetch_for_month` can fall back to the proxy rather than mis-bill. Two tiers: authoritative `snap.valid_until` month check when present; otherwise require a textual month mention (when `month_names` given, as eneco/cociter do) or accept on the URL resolver alone (when `None`, as ebem does) (`_pdf.py:819`). |
+| `parse_brussels_osp` | `parse_brussels_osp(text: str) -> dict[str, float] \| None` | Parse the Brussels Brugel OSP annual-fee table off a Sibelga card. Anchors on the `Obligations de Service` block (case-insensitive: Bolt lowercases `s`) and each `<bound> kVA <value>` row, returning the four residential tiers (`le1_44`/`le6`/`le9_6`/`le13`) or `None` when absent. Populates `DsoOverlay.brussels_osp_by_tier` (`_pdf.py:644`). |
+| `parse_valid_until` | `parse_valid_until(text: str) -> date \| None` | Best-effort parse of the card's validity date, anchored within ~200 chars after a validity keyword (`geldig`/`valable`/`validit`/`valid `). Tries spelled-out `<day> <month> <year>`, numeric `DD/MM/YYYY` (or `DD/MM/YY`), then bare `<month> <year>` (last day of month). Clamps candidates to a symmetric 5-year horizon around Brussels-local today so a corrupted footer date does not produce a bogus year. Returns the latest match or `None`. Populates `SupplierSnapshot.valid_until` (`_pdf.py:885`). |
+| `text_mentions_month` | `text_mentions_month(text, year_month: date, month_names: tuple[str, ...]) -> bool` | Heuristic that `text` references the requested month+year inside an anchored window (first 1000 chars where the card title prints, plus validity-keyword windows). Accent-folds both sides and collapses whitespace so `mei\n2026` matches (`_pdf.py:236`). |
+| `archive_validity_check` | `archive_validity_check(snap, text, year_month, *, month_names=None) -> SupplierSnapshot \| None` | Confirm an archived snapshot actually covers `year_month`. Returns `snap` on pass, `None` otherwise, so a provider's `fetch_for_month` can fall back to the proxy rather than mis-bill. Two tiers: authoritative `snap.valid_until` month check when present; otherwise require a textual month mention (when `month_names` given, as eneco/cociter do) or accept on the URL resolver alone (when `None`, as ebem does) (`_pdf.py:846`). |
 
-Two supporting internals back these date parsers: `_MONTH_NAMES` (`_pdf.py:682`)
+Two supporting internals back these date parsers: `_MONTH_NAMES` (`_pdf.py:709`)
 maps Dutch, French (with and without accents) and English month names to their
-1-12 index, and `_validity_windows` (`_pdf.py:757`) returns the ~200-char
+1-12 index, and `_validity_windows` (`_pdf.py:784`) returns the ~200-char
 context after each validity keyword so a retrospective month mention elsewhere
 in the PDF does not masquerade as a validity statement. `_OSP_BOUND_TO_TIER`
 (`_pdf.py:545`) maps kVA upper bounds to the shared tier keys and is kept as

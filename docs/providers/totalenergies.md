@@ -151,7 +151,7 @@ Fields pulled and their helpers:
 | DSO overlay (Flanders) | `_extract_flanders_dsos` | `totalenergies.py:680` |
 | DSO overlay (Wallonia) | `_extract_wallonia_dsos` | `totalenergies.py:724` |
 | DSO overlay (Brussels) | `_extract_brussels_dsos` | `totalenergies.py:768` |
-| Validity date | `parse_valid_until` (shared) | `_pdf.py:858` |
+| Validity date | `parse_valid_until` (shared) | `_pdf.py:885` |
 
 Notable parsing hurdles:
 
@@ -396,7 +396,7 @@ Ordered by how likely a card change is to break them:
    new DSO name, a renamed sub-area, or a changed column order needs the label map
    and the fixed group indices updated together.
 8. **Publication label + validity**: `_extract_publication_month`
-   (`totalenergies.py:470`) and the shared `parse_valid_until` (`_pdf.py:858`) drive
+   (`totalenergies.py:470`) and the shared `parse_valid_until` (`_pdf.py:885`) drive
    the `publication_label` and `valid_until` diagnostics.
 9. **Discovery (CI)**: `discover` (`totalenergies.py:211`). If the listing markup or
    the `tariff-card/latest/<SLUG>_ELECTRICITY_<REGION>_FR` link format changes,

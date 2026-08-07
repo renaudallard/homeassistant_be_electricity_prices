@@ -286,7 +286,7 @@ shared process-wide across config entries keyed by `(supplier, contract, region)
 shared rows are evicted on unload only when no sibling entry still references the tuple
 (`__init__.py:286`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
 (`coordinator.py:242`) and the user-facing "extractor failed" repair issue is raised only after
-the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator_snapshot.py:80`), so
+the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator_snapshot.py:81`), so
 a single transient CDN timeout does not false-alarm.
 
 The ENTSO-E spot curve is fetched only for contracts that need it: dynamic contracts, and the
@@ -299,7 +299,7 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:803`). It declares the
+   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:794`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.

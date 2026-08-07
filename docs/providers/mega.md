@@ -170,7 +170,7 @@ a wrong-region card mis-prices silently.
    a Smart Fixed / WL match ends `Smart2204-Fixed.pdf` and never contains `NG`;
    `test_resolver_falls_back_to_sibling_region_when_block_missing` (`test_mega.py:100`)
    covers the fallback.
-4. Download the PDF text (`fetch_pdf_text`, `_pdf.py:182`) and hand it to
+4. Download the PDF text (`fetch_pdf_text`, `_pdf.py:187`) and hand it to
    `parse_snapshot`, which asserts the card's own `Client résidentiel - <Region>`
    header matches the requested region (`_assert_card_region`, `mega.py:704`) so a
    wrong sibling guess fails loud rather than mis-pricing a region's overlays.
@@ -207,13 +207,13 @@ for example, uses another day). The rewrite:
    The rewrite cannot anchor on `.pdf` because the suffix can sit mid-token before a
    `-Fixed` / `-Green` / `-Fix` variant.
 4. Download, parse, then cross-check the parsed card against the requested month
-   with `archive_validity_check` (`_pdf.py:819`), passing `_FR_MONTH_NAMES`
+   with `archive_validity_check` (`_pdf.py:846`), passing `_FR_MONTH_NAMES`
    (`mega.py:419`). If validity or the month text does not match, return `None` so
    the YTD walk falls back to the proxy snapshot rather than mis-billing.
 
 `fetch_for_month` returns `None` when the URL 404s, when the CDN serves its HTML
 stub for a non-archived effective day (the PDF magic-byte check in
-`_is_pdf_payload`, `_pdf.py:129`, rejects it), when the parse fails, or when the
+`_is_pdf_payload`, `_pdf.py:134`, rejects it), when the parse fails, or when the
 requested month falls outside the archive. A product whose publication day varies
 month to month resolves to the HTML stub and correctly falls back to the proxy
 (`mega.py:389`).
@@ -243,7 +243,7 @@ the listing minus `_KNOWN_UNSUPPORTED_PRODUCTS`. It is best-effort catalog signa
 for the daily live-check: diffing against `{c.product_name for c in _CONTRACTS}`
 flags any new Mega product to add to the registry. Filtering out the prepaid
 products keeps them from re-opening the same catalog issue every day (regression
-2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:606`).
+2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:611`).
 On a listing fetch failure it returns an empty set rather than raising.
 
 ## Parsing
@@ -267,7 +267,7 @@ Fields pulled and their helpers:
 | Energy rates (per kind) | `_extract_energy` | `_mega_cards.py:190` |
 | Injection | `_extract_injection` | `_mega_cards.py:432` |
 | Publication label | `_extract_publication_month` | `_mega_cards.py:401` |
-| Valid until | `parse_valid_until` then `_extract_valid_until` | `_pdf.py:858`, `_mega_cards.py:420` |
+| Valid until | `parse_valid_until` then `_extract_valid_until` | `_pdf.py:885`, `_mega_cards.py:420` |
 | Federal excise | `_extract_federal_excise` | `_mega_overlays.py:149` |
 | Energy contribution | `_extract_energy_contribution` | `_mega_overlays.py:180` |
 | Wallonia connection fee | `_extract_connection_fee` (Wallonia only) | `_mega_overlays.py:198` |
@@ -421,7 +421,7 @@ terme_fixe <=13kVA (€/an), terme_fixe >13kVA (€/an). Brussels has no capacit
 (capacity is Flanders-only), so both flat annual euros (the metering fee and the
 Sibelga <=13kVA fixed term) are folded into `data_management_per_year`; the >13kVA
 term (group 8) is not billed here. The Brugel OSP annual fee table is parsed by the
-shared `parse_brussels_osp` (`_pdf.py:617`) and keyed by connection-power tier. The
+shared `parse_brussels_osp` (`_pdf.py:644`) and keyed by connection-power tier. The
 test `test_smart_fixed_brussels_extracts_sibelga_row` (`test_mega.py:257`) pins the
 folded fee to 14.73 + 50.0744 and the OSP tiers to
 `{le1_44: 0.0, le6: 13.36, le9_6: 21.37, le13: 26.71}` (illustrative).
@@ -524,7 +524,7 @@ The land mines a future maintainer must know, drawn from the module comments:
   first in the Dynamic PDF; anchor on the distinct labels, never on position
   (`mega.py:531`, `test_mega.py:177`).
 - **The injection base can be an en-dash, not an ASCII hyphen.** `SIGN_CHARS` /
-  `parse_sign` handle every Unicode dash variant (`_pdf.py:596`); do not narrow the
+  `parse_sign` handle every Unicode dash variant (`_pdf.py:623`); do not narrow the
   sign class (`test_mega.py:164`).
 - **VAT convention is TVAC (`vat_rate=0.0`).** Both energy and taxes are already
   VAT-incl; the PV forfait is TVA 6% incl and must not be VAT-scaled
