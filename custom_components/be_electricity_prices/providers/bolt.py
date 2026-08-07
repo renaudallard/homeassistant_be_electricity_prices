@@ -90,6 +90,7 @@ from ._pdf import (
     vat_multiplier,
 )
 from .base import (
+    CardNotReadableError,
     Contract,
     DsoOverlay,
     DynamicRates,
@@ -301,7 +302,12 @@ async def _fetch_pdf_text(
         # parseable valid_until, so the fallback can't signal staleness
         # through it; the warning logged below is the only trace that
         # last month's card is being served.
-        if contract.folder != "fix":
+        # A card that downloaded fine and carries no text layer is NOT an
+        # unpublished card, so it must not take this path: falling back
+        # would serve last month's prices with no Repairs card and no
+        # staleness signal (the successful fetch resets the snapshot age),
+        # which is worse than the loud failure it replaced.
+        if contract.folder != "fix" or isinstance(primary_err, CardNotReadableError):
             raise
         # Same Brussels-local anchor as ``_document_url``: the
         # "previous month" boundary follows local time so we don't

@@ -38,6 +38,7 @@ from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import _mega_cards as cards_mod
 from custom_components.be_electricity_prices.providers import mega as mega_mod
 from tests import FIXTURES, fixture_text
+from custom_components.be_electricity_prices.providers.mega import fetch as mega_fetch
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
@@ -1090,3 +1091,46 @@ async def test_a_fixed_card_is_never_re_read_from_the_next_month() -> None:
             snap,
         )
     assert out is snap
+
+
+async def test_pro_textless_card_is_not_rolled_back_to_last_month() -> None:
+    """Mega's professional fetch falls back a month when the new card has
+    not landed yet. A card that downloaded fine with no text layer must not
+    take that path.
+
+    Worse here than on Bolt: three of the professional contracts are
+    variable and one is dynamic, so last month's card carries last month's
+    index. Rolling back silently would bill the wrong rate, not merely a
+    stale one, with no Repairs card and no staleness signal to show for it.
+    """
+    import io
+    from unittest.mock import patch
+
+    import pypdf
+
+    from custom_components.be_electricity_prices.providers import _pdf
+    from custom_components.be_electricity_prices.providers.base import (
+        CardNotReadableError,
+    )
+
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=595, height=842)
+    buf = io.BytesIO()
+    writer.write(buf)
+    textless = buf.getvalue()
+
+    served: list[str] = []
+
+    async def _serve(session: object, url: str, *, timeout: int = 30) -> bytes:
+        served.append(url)
+        return textless
+
+    with patch.object(_pdf, "_fetch_validated_pdf_bytes", _serve):
+        with pytest.raises(CardNotReadableError):
+            await mega_fetch(
+                None,  # type: ignore[arg-type]
+                "mega_pro_dynamic",
+                "wallonia",
+            )
+    # It must not have reached for the previous month's card.
+    assert len(served) == 1

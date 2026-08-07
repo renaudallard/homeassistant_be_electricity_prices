@@ -465,17 +465,20 @@ def test_parse_brussels_osp_across_extractor_formats() -> None:
     assert parse_brussels_osp(fixture_text("mega_smart_fixed_w.pdf")) is None
 
 
-def _one_page_pdf(text: str) -> bytes:
-    """A single-page PDF carrying exactly ``text``, built with pypdf so the
-    fixture is generated rather than checked in."""
+def _blank_one_page_pdf() -> bytes:
+    """A single-page PDF with NO text layer, generated rather than checked in.
+
+    Deliberately takes no argument. The first version accepted a ``text``
+    parameter and never drew it (it merged the blank page with itself), so a
+    later "short but non-empty card" test would have passed vacuously while
+    believing it exercised a real text layer.
+    """
+    import io
+
     import pypdf
 
     writer = pypdf.PdfWriter()
-    page = writer.add_blank_page(width=595, height=842)
-    if text:
-        writer.pages[0].merge_page(page)
-    import io
-
+    writer.add_blank_page(width=595, height=842)
     buf = io.BytesIO()
     writer.write(buf)
     return buf.getvalue()
@@ -491,7 +494,7 @@ def test_card_with_no_text_layer_raises_a_distinct_error() -> None:
     month's observation permanently, and Ecofix overwrites its card in
     place every month, so a revert to text would leave the flag lying.
     """
-    blank = _one_page_pdf("")
+    blank = _blank_one_page_pdf()
     with pytest.raises(CardNotReadableError) as excinfo:
         extract_pdf_text(blank)
     assert "no text layer" in str(excinfo.value)

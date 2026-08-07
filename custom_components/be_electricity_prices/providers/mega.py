@@ -106,6 +106,7 @@ from ._mega_cards import (
     _realized_rates,
 )
 from .base import (
+    CardNotReadableError,
     ALL_REGIONS,
     Contract,
     ExtractorError,
@@ -460,6 +461,13 @@ async def fetch(
         pdf_url = _pro_pdf_url(contract, region_code, today)
         try:
             text = await fetch_pdf_text(session, pdf_url)
+        except CardNotReadableError:
+            # Downloaded fine but has no text layer: not an unpublished
+            # card, so it must surface rather than silently roll back a
+            # month. Three of these professional contracts are variable
+            # and one is dynamic, so last month's card carries last
+            # month's index -- the prices would be wrong, not just old.
+            raise
         except ExtractorError:
             # Early in a month Mega can lag a day or two before the new
             # card lands; the one still in force is last month's.

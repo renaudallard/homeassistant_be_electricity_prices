@@ -37,8 +37,9 @@ import pytest
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.pricing import compute_breakdown
-from tests import fixture_text
+from tests import FIXTURES, fixture_text
 from custom_components.be_electricity_prices.providers.base import (
+    CardNotReadableError,
     DynamicRates,
     ExtractorError,
     FixedRates,
@@ -581,3 +582,75 @@ def test_footnote_marker_is_not_read_as_the_flanders_tax_value() -> None:
         "bolt_fix", fixture_text("bolt_fix.pdf", layout=True), "flanders", "test://"
     )
     assert snap.taxes.federal_excise == pytest.approx(0.050329)
+
+
+def _textless_pdf() -> bytes:
+    """A one-page PDF with no text layer, the Ecofix-rasterized shape."""
+    import io
+
+    import pypdf
+
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=595, height=842)
+    buf = io.BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
+
+
+async def test_a_textless_card_is_not_treated_as_an_unpublished_one() -> None:
+    """Bolt's fix-family fallback exists for a card that is not published
+    yet on the 1st of the month. A card that downloaded fine and carries no
+    text layer is a different thing and must NOT take that path.
+
+    Letting it through was a real regression: CardNotReadableError subclasses
+    ExtractorError, so the `except ExtractorError` here swallowed it and
+    served last month's card with no Repairs card and no staleness signal
+    (the successful fetch resets the snapshot age, and live-check only
+    asserts a non-empty publication label). The loud failure it replaced was
+    strictly better.
+    """
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices.providers import _pdf
+
+    textless = _textless_pdf()
+    served: list[str] = []
+
+    async def _serve(session: object, url: str, *, timeout: int = 30) -> bytes:
+        served.append(url)
+        return textless
+
+    with patch.object(_pdf, "_fetch_validated_pdf_bytes", _serve):
+        with pytest.raises(CardNotReadableError):
+            await bolt_mod._fetch_pdf_text(
+                None,  # type: ignore[arg-type]
+                bolt_mod._CONTRACTS_BY_ID["bolt_fix"],
+            )
+    # One fetch only: it must not even try the previous month.
+    assert len(served) == 1
+
+
+async def test_an_unpublished_card_still_falls_back_to_last_month() -> None:
+    """The other direction: the fallback the fix above narrows must keep
+    working for the case it was written for, a 404 on the 1st."""
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices.providers import _pdf
+
+    real = (FIXTURES / "bolt_fix.pdf").read_bytes()
+    served: list[str] = []
+
+    async def _serve(session: object, url: str, *, timeout: int = 30) -> bytes:
+        served.append(url)
+        if len(served) == 1:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+        return real
+
+    with patch.object(_pdf, "_fetch_validated_pdf_bytes", _serve):
+        url, text = await bolt_mod._fetch_pdf_text(
+            None,  # type: ignore[arg-type]
+            bolt_mod._CONTRACTS_BY_ID["bolt_fix"],
+        )
+    assert len(text) > 1000
+    assert url == served[-1]
+    assert len(served) == 2
