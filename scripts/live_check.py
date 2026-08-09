@@ -1715,6 +1715,14 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
 # it can ever report the drift these budgets exist to catch.
 _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     "bolt": 400.0,
+    # EBEM and Luminus (below) are slow only from GitHub runners, the same
+    # shape as eneco: from a residential line their 6 and 20 fetches sum to
+    # 0.7s and 1.4s for byte-identical payloads. Sized off 63 attempts
+    # across 11 runs, where ebem ran 41s median / 112s max and luminus 111s
+    # median / 169s max. The old 90s default and 150s budget sat on their
+    # p95, so the alert fired on whichever attempt the extractor retry loop
+    # happened to end on rather than on any change to the cards (issue #60).
+    "ebem": 130.0,
     # eneco.be answers slowly from GitHub runners and fast from anywhere
     # else: the listing page it times out on in CI serves in ~1.3 s and
     # ~180 KB from a residential line. Its six small fetches summed to
@@ -1724,7 +1732,8 @@ _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     # the mega runner-IP block.
     "eneco": 150.0,
     "engie": 260.0,
-    "luminus": 150.0,
+    # See the EBEM note above.
+    "luminus": 210.0,
     "mega": 240.0,
     # TotalEnergies and OCTA+ fetch every (contract, region) PDF
     # sequentially (25 and 21 fetches), so their summed elapsed_s blows

@@ -301,22 +301,22 @@ under that cap, or the supplier is killed before it can report the drift the bud
 The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:1679`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:1773`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:1782`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
-`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1622`), with per-supplier overrides in
+`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1668`), with per-supplier overrides in
 `_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1686`) for the known-large catalogues (Bolt,
 TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py:1669`) for those same multi-fetch suppliers plus Luminus and Eneco, which
-are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request durations,
-not true wallclock, so a supplier that fetches concurrently (Bolt fetches its six PDFs with
-`asyncio.gather`, `scripts/live_check.py:946`) records the sum of its parallel fetches; the budgets
-are sized around that. The synthetic `_catalog` bucket is skipped in drift analysis because it
-aggregates every supplier's discovery fetch under one name (`scripts/live_check.py:1720`). When a
+(`scripts/live_check.py:1716`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
+which are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request
+durations, not true wallclock, so a supplier that fetches concurrently (Bolt fetches its six PDFs
+with `asyncio.gather`, `scripts/live_check.py:969`) records the sum of its parallel fetches; the
+budgets are sized around that. The synthetic `_catalog` bucket is skipped in drift analysis because
+it aggregates every supplier's discovery fetch under one name (`scripts/live_check.py:1789`). When a
 budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see below). Tuning a
 false-firing drift alert means adjusting the override, not the code.
 
-A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:1727`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:1760`). The
+A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:1796`,
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:1769`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever
