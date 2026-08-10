@@ -207,7 +207,7 @@ swapping comma for dot.
 
 `_extract_publication_month` (`eneco.py:294-296`) captures `Tariefkaart <month>
 <year>` (for example `mei 2026`). `valid_until` comes from the shared
-`parse_valid_until` (`_pdf.py:885`), which reads the "Geldig van ... t.e.m. ..."
+`parse_valid_until` (`_pdf.py:922`), which reads the "Geldig van ... t.e.m. ..."
 line. `test_extracts_valid_until_from_geldig_line` (`tests/test_eneco.py:231-243`)
 pins April 30 2026 on all three fixtures so the `tomorrow_prices_available` binary
 sensor flips off at month end.
@@ -236,7 +236,7 @@ the earlier rigid four-newline skip and took Power Flex offline.
 `test_flex_yearly_fee_survives_extra_header_line` (`tests/test_eneco.py:182-191`)
 injects an extra header line to guard the anchor. The current rate is the first of
 four numbers before `Maandprijs`; the formula string accepts any sign character
-between the Belpex factor and the base (`SIGN_CHARS`, `_pdf.py:619`) so a polarity
+between the Belpex factor and the base (`SIGN_CHARS`, `_pdf.py:656`) so a polarity
 flip does not drop the display string. Illustrative:
 `current = 0.1390`, `yearly_fixed_fee = 65.0`
 (`test_flex_extracts_current_monthly_rate`, `tests/test_eneco.py:174-179`).

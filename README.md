@@ -462,9 +462,10 @@ inspecting attributes; each auto-clears on the next successful refresh:
   Raised on the first failure, since a parse error will not self-heal;
   cached prices keep serving.
 - **`extractor_unreachable_<entry>`** — the tariff card could not be
-  downloaded (network timeout, reset or a transient server error). Raised
-  only after several consecutive failed refreshes, since a single CDN
-  hiccup usually clears on the next tick; cached prices keep serving.
+  downloaded (network timeout, reset, a transient server error, or the
+  supplier's own file store refusing the download). Raised only after
+  several consecutive failed refreshes, since a single CDN hiccup usually
+  clears on the next tick; cached prices keep serving.
 - **`entsoe_auth_failed_<entry>`** *(dynamic contracts only)* — ENTSO-E
   returned 401 for the configured API key. Edit the entry's options
   and replace the key with a fresh token from

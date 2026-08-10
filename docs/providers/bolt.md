@@ -141,7 +141,7 @@ The month suffix in `_document_url` is deliberately `dt_util.now()` (Brussels lo
 ### `probe` (freshness)
 
 `probe` (`bolt.py:236`) HEADs the listing page and returns the first present header, preferring
-`ETag` then `Last-Modified` via `head_freshness_key` (`_pdf.py:377`). Bolt is the reason
+`ETag` then `Last-Modified` via `head_freshness_key` (`_pdf.py:414`). Bolt is the reason
 `head_freshness_key` accepts a `prefer` order: its listing returns a stable `ETag` while
 `Last-Modified` flips on every CDN edge cache, so every other supplier prefers `Last-Modified` and
 Bolt inverts it (`_pdf.py:361`). The probe returns a single key for the whole listing (it ignores
@@ -247,7 +247,7 @@ newline is expected, replacing them with `\n` so one set of regexes covers every
 | `taxes.energy_fund_eur_per_month` | `_extract_energy_fund` (`bolt.py:857`) | Flanders only. The card prints both categories: a domiciled residential connection pays the `résidentiel` row, which is `-` (0); a **professional** contract pays the `non-résidentiel` row (10,07 EUR/month on the August 2026 card). The two rows need separate patterns, since the residential value sits after a U+2028 and the non-residential values are inline on the label line |
 | `taxes.{flanders,wallonia,brussels}_renewables` | `_extract_renewables` (`bolt.py:898`) | certificats verts + Flanders WKK; zeroed outside the active region |
 | `dsos` | `_extract_flanders_dsos` / `_extract_wallonia_dsos` / `_extract_brussels_dsos` | picked by region |
-| `valid_until` | `parse_valid_until` (`_pdf.py:885`) | always `None` in practice; Bolt prints no parseable validity date |
+| `valid_until` | `parse_valid_until` (`_pdf.py:922`) | always `None` in practice; Bolt prints no parseable validity date |
 
 The region argument slices the multi-region document: `parse_snapshot` zeroes the two non-active
 regional renewables columns (`bolt.py:331`) and calls exactly one of the three DSO parsers. The

@@ -366,15 +366,16 @@ own heading and counted separately in the headline, so a green run never hides t
 
 ### The transient-only retry helper
 
-`_fetch_with_retry(factory, *, attempts=3)` (`scripts/live_check.py:398`) calls `factory()`, and on
+`_fetch_with_retry(factory, *, attempts=3)` (`scripts/live_check.py:551`) calls `factory()`, and on
 a transient network failure retries with a short backoff (`_RETRY_BACKOFF_S = (1.0, 3.0)`). A
 failure is "transient" only if it is a bare `TimeoutError` or an `ExtractorError` whose message the
 shared `providers/_pdf.is_transient_fetch_error` predicate classifies as transient (a wrapped
-"network error fetching" or an HTTP 5xx/408/429/403). A 404/410 (card renamed or withdrawn) or any
-parse error propagates immediately so a real regression is not masked by retries. A fresh awaitable
+"network error fetching", a "storage error fetching" from an object store refusing the read, or an
+HTTP 5xx/408/429/403). A 404/410 (card renamed or withdrawn) or any parse error propagates
+immediately so a real regression is not masked by retries. A fresh awaitable
 is built via `factory()` per attempt (awaitables are single-use), which is why callers pass
 `functools.partial(...)` rather than a pre-created coroutine. The transient predicate is imported
-from `providers/_pdf.py` (`scripts/live_check.py:95`) so the harness and the coordinator classify
+from `providers/_pdf.py` (`scripts/live_check.py:135`) so the harness and the coordinator classify
 errors identically and cannot drift apart.
 
 This retry helper is CI-only. Do not port it into `coordinator.py`: the coordinator has its own

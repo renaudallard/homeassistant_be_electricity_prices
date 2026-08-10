@@ -143,7 +143,7 @@ unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 | `taxes.flanders_renewables` | `_extract_flanders_renewables` (`:516`) | Flanders only, green + cogen |
 | `taxes.wallonia_renewables` | `_extract_wallonia_renewables` (`:501`) | Wallonia only |
 | `dsos` | `_extract_flanders_dsos` (`:609`) or `_extract_wallonia_dsos` (`:557`) | region-branched |
-| `valid_until` | `parse_valid_until` (`_pdf.py:885`) | shared helper |
+| `valid_until` | `parse_valid_until` (`_pdf.py:922`) | shared helper |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` (`:239`) | PV forfait, annualised |
 
 ### Energy block (`_extract_energy`, `octaplus.py:321-389`)

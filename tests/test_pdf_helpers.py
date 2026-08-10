@@ -42,6 +42,7 @@ from custom_components.be_electricity_prices.providers._pdf import (
     _MIN_TEXT_LAYER_CHARS,
     extract_pdf_text,
     _MAX_PDF_BYTES,
+    _fetch_validated_pdf_bytes,
     _read_pdf_bytes,
     archive_validity_check,
     extract_pdf_text_aligned,
@@ -241,6 +242,94 @@ async def test_blank_stringifying_exception_is_named_not_dropped(
     # The "network error fetching" prefix is load-bearing: the coordinator and
     # the live-check both key retry behaviour on it.
     assert is_transient_fetch_error(str(excinfo.value))
+
+
+class _FakeBodySession:
+    """Session stand-in whose .get() answers 200 with a fixed body."""
+
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def get(self, *_args: object, **_kwargs: object) -> "_FakeBodyCtx":
+        return _FakeBodyCtx(self._body)
+
+
+class _FakeBodyCtx:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    async def __aenter__(self) -> "_FakeBodyResp":
+        return _FakeBodyResp(self._body)
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+
+class _FakeBodyResp:
+    def __init__(self, body: bytes) -> None:
+        self.status = 200
+        self.content_length = len(body)
+        self._body = body
+
+    async def read(self) -> bytes:
+        return self._body
+
+
+_AZURE_ERROR_BODY = (
+    b'\xef\xbb\xbf<?xml version="1.0" encoding="utf-8"?><Error>'
+    b"<Code>PublicAccessNotPermitted</Code><Message>Public access is not "
+    b"permitted on this storage account.\nRequestId:09de2d10\n</Message></Error>"
+)
+
+_S3_ERROR_BODY = (
+    b'<?xml version="1.0" encoding="UTF-8"?>\n'
+    b"<Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>"
+)
+
+
+@pytest.mark.parametrize(
+    ("body", "code"),
+    [
+        (_AZURE_ERROR_BODY, "PublicAccessNotPermitted"),
+        (_S3_ERROR_BODY, "AccessDenied"),
+    ],
+)
+async def test_object_store_error_document_is_transient_not_a_parse_failure(
+    body: bytes, code: str
+) -> None:
+    """An object store that refuses the read answers through the proxy as a
+    200 carrying its own XML error document. Read as a plain non-PDF payload
+    it reported as a permanent parse failure, so every entry on that supplier
+    raised the extractor_failed card asking the user to report a layout change
+    that had not happened (Luminus, 2026-08-10). No code change can fix it,
+    which is what transient means in this taxonomy.
+    """
+    session = _FakeBodySession(body)
+    with pytest.raises(ExtractorError) as excinfo:
+        await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
+    assert str(excinfo.value) == f"storage error fetching https://x/card.pdf: {code}"
+    assert is_transient_fetch_error(str(excinfo.value))
+
+
+async def test_a_disguised_404_page_is_still_a_permanent_parse_failure() -> None:
+    """Narrowness guard for the check above: a CDN serving an HTML page in
+    place of a withdrawn PDF must keep failing fast. Classing every non-PDF
+    payload as transient would hide a card that was renamed or pulled.
+    """
+    session = _FakeBodySession(b"<!DOCTYPE html><html><title>404</title></html>")
+    with pytest.raises(ExtractorError) as excinfo:
+        await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
+    assert str(excinfo.value).startswith("expected a PDF at https://x/card.pdf")
+    assert not is_transient_fetch_error(str(excinfo.value))
+
+
+async def test_an_error_element_inside_an_html_page_is_not_a_storage_error() -> None:
+    """The match is anchored at the start of the payload: a page that merely
+    mentions an <Error><Code> block is not the store refusing the read.
+    """
+    session = _FakeBodySession(b"<html><body><Error><Code>x</Code></body></html>")
+    with pytest.raises(ExtractorError, match="expected a PDF"):
+        await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
 
 
 async def test_non_empty_exception_message_is_passed_through() -> None:

@@ -124,7 +124,7 @@ Notes:
 1. Validates `contract_id` against `_CONTRACTS_BY_ID`, raising `ExtractorError` on
    an unknown id.
 2. Builds the URL with `_document_url` and downloads the PDF as
-   **layout-preserving text** via `fetch_pdf_text_layout` (`_pdf.py:364`). Layout
+   **layout-preserving text** via `fetch_pdf_text_layout` (`_pdf.py:401`). Layout
    mode is mandatory here: pdfplumber's row reconstruction keeps each DSO row on
    one line, whereas pypdf returns the Wallonia DSO block in column-major order
    that the row-anchored regexes cannot match (`ecofix.py:42`). `fetch_pdf_text_layout`

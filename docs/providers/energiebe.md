@@ -120,7 +120,7 @@ the `SupplierSnapshot` from four sub-parsers plus the shared `parse_valid_until`
 | `injection` (`InjectionRates`) | `_extract_injection` | `providers/energiebe.py:233` |
 | `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/energiebe.py:251` |
 | `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/energiebe.py:269` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:885` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:922` |
 
 `_NUM = r"([\d]+(?:[.,][\d]+)?)"` accepts both decimal separators; a dot-decimal re-render
 must not truncate a mandatory value to its integer part.
@@ -270,7 +270,7 @@ that does not match is skipped (not fatal); the eight-sub-area test is the safet
 
 ## valid_until
 
-`parse_valid_until` (`_pdf.py:885`) is the shared best-effort validity parser. energie.be's
+`parse_valid_until` (`_pdf.py:922`) is the shared best-effort validity parser. energie.be's
 card carries no month name inside a validity-keyword window (the "juli 2026" sits in the
 page header, not after "geldig"), so `valid_until` resolves to `None`. That is the
 documented "treat as available" fallback and is correct for a dynamic contract, whose

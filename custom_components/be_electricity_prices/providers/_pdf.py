@@ -72,16 +72,19 @@ def is_transient_fetch_error(message: str) -> bool:
     failure a later refresh is likely to recover, rather than a permanent
     one (parse error, 404, non-PDF payload) that needs a code fix.
 
-    The fetch helpers in this module wrap aiohttp surface errors with two
-    stable prefixes: ``network error fetching`` (timeout / reset / DNS)
-    and ``HTTP <status>``. A bare ``network error`` is always transient.
-    Among HTTP statuses, 5xx plus 408 / 429 / 403 are transient (the
-    Cloudflare-fronted suppliers intermittently answer an otherwise
+    The fetch helpers in this module wrap aiohttp surface errors with three
+    stable prefixes: ``network error fetching`` (timeout / reset / DNS),
+    ``storage error fetching`` (the object store behind the url refused the
+    read) and ``HTTP <status>``. A bare ``network error`` is always
+    transient. Among HTTP statuses, 5xx plus 408 / 429 / 403 are transient
+    (the Cloudflare-fronted suppliers intermittently answer an otherwise
     healthy resource with a 403 anti-bot challenge or a 429 that succeeds
     on retry); 404 / 410 mean the card was renamed or withdrawn and must
     fail fast.
     """
     if message.startswith("network error fetching"):
+        return True
+    if message.startswith("storage error fetching"):
         return True
     if message.startswith("HTTP "):
         head = message[len("HTTP ") :].split(None, 1)[0]
@@ -145,6 +148,33 @@ def _is_pdf_payload(payload: bytes) -> bool:
     return False
 
 
+# An object store that refuses the read answers the proxy in front of it
+# with its own XML error document, and the proxy passes that through as a
+# 200. Azure Blob and S3 both shape it as a root <Error> carrying a <Code>.
+_STORAGE_ERROR_RE = re.compile(
+    rb"^(?:\xef\xbb\xbf)?\s*(?:<\?xml[^>]*\?>\s*)?<Error>\s*<Code>([^<]{1,64})</Code>",
+    re.IGNORECASE,
+)
+
+
+def _storage_error_code(payload: bytes) -> str | None:
+    """The error code if ``payload`` is an object-store error document.
+
+    Luminus switched anonymous access off on the storage account behind
+    ``api-next/get-pricelist`` on 2026-08-10, and every card came back as
+    a 248-byte ``PublicAccessNotPermitted`` document under a 200. Read as
+    a plain non-PDF payload that reports as a permanent parse failure, so
+    every Luminus entry raised the ``extractor_failed`` card asking the
+    user to report a layout change that had not happened. The supplier's
+    own download button was broken the same way, and nothing here could
+    fix it, which is the definition of transient in this taxonomy.
+    """
+    match = _STORAGE_ERROR_RE.match(payload)
+    if match is None:
+        return None
+    return match.group(1).decode("ascii", "replace").strip() or None
+
+
 async def _fetch_validated_pdf_bytes(
     session: aiohttp.ClientSession, url: str, *, timeout: int = 30
 ) -> bytes:
@@ -174,6 +204,13 @@ async def _fetch_validated_pdf_bytes(
         ) from err
 
     if not _is_pdf_payload(payload):
+        # An object store refusing the read is the one non-PDF payload no
+        # code change can fix, so it gets its own prefix and lands on the
+        # transient side of is_transient_fetch_error rather than asking
+        # the user to report a layout change.
+        code = _storage_error_code(payload)
+        if code is not None:
+            raise ExtractorError(f"storage error fetching {url}: {code}")
         # Some CDNs return 200 + text/html for missing PDFs (a 404
         # disguised as success). Engie's API returns octet-stream
         # for valid PDFs, so checking the magic bytes is more

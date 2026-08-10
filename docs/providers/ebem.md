@@ -95,9 +95,9 @@ If EBEM revives one, its PDF kind (e.g. `fix`) surfaces verbatim from
    filters `_PDF_RE` matches to the requested `pdf_kind`, sorts ascending by
    `(YYYY, MM)`, and returns the newest `(url, "YYYY-MM")`. It raises
    `ExtractorError` when no card of that kind is linked.
-3. `fetch_pdf_text_layout` (`_pdf.py:364`) downloads the PDF and extracts
+3. `fetch_pdf_text_layout` (`_pdf.py:401`) downloads the PDF and extracts
    layout-preserving text. This variant rejects CDNs that return HTTP 200 with
-   `text/html` for a missing PDF (`_pdf.py:364`).
+   `text/html` for a missing PDF (`_pdf.py:401`).
 4. `parse_snapshot` (`ebem.py:260`) does the parsing.
 
 Two of the three contracts (`ebem_variable`, `ebem_basic_plus`) share the same
@@ -106,7 +106,7 @@ block (`ebem.py:336`).
 
 ### `probe` (`ebem.py:196`)
 
-HEADs the listing page via `head_freshness_key` (`_pdf.py:377`) and returns its
+HEADs the listing page via `head_freshness_key` (`_pdf.py:414`) and returns its
 `Last-Modified` (preferred) or `ETag`. EBEM publishes a new monthly card by
 editing the listing page (the opaque media-hash URL changes for every month),
 so the listing's freshness header is the right key for *every* contract at once;
@@ -125,7 +125,7 @@ be billed at their own rates instead of the current-snapshot proxy.
    not published.
 4. Resolve the URL, set `label = "YYYY-MM"`, download + parse; return `None` on
    `ExtractorError`.
-5. Pass the result through `archive_validity_check` (`_pdf.py:846`).
+5. Pass the result through `archive_validity_check` (`_pdf.py:883`).
 
 `archive_validity_check` is called with `month_names=None`. When
 `snap.valid_until` parsed, it rejects the snapshot if that date does not fall in
