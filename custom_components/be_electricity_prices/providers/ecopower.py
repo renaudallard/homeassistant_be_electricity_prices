@@ -49,9 +49,12 @@ Ecopower sells two residential electricity products in Flanders only:
 
    The dynamic card lives on the product page
    ``ecopower.be/groene-stroom/dynamische-burgerstroom`` as
-   ``<YYYYMM>_dbs_tariefkaart.pdf``. Unlike the monthly gbs card, the
-   dynamic card is republished only when the formula, DSO or tax rates
-   change, so the latest card is the one in effect today.
+   ``<YYYYMM>_dbs_tariefkaart.pdf``, or ``<YYYYMMDD>_...`` from the
+   August 2026 card onwards. Unlike the monthly gbs card, the dynamic
+   card is republished only when the formula, DSO or tax rates change,
+   so the latest card is the one in effect today -- which is why a
+   pattern that cannot see the newer filename goes unnoticed: the older
+   card it keeps resolving is a real card that still parses.
 
 All amounts on both cards are HTVA. Residential customers pay 6% VAT;
 the snapshot's ``TaxOverlay.vat_rate=0.06`` instructs ``compute_breakdown``
@@ -111,9 +114,26 @@ _PRICE_PAGE = f"{_BASE_URL}/groene-stroom/prijs-nieuw"
 # for a next-month "inschatting" (estimation) that gets replaced by the
 # definitive card on the 1st. Match only the definitive form.
 _CARD_RE = re.compile(
-    r'(https?://[^"]+/(?P<yyyymm>20\d{4})_gbs_tariefkaart\.pdf[^"]*)"',
+    r'(https?://[^"]+/(?P<stamp>20\d{4}(?:\d{2})?)_gbs_tariefkaart\.pdf[^"]*)"',
     re.IGNORECASE,
 )
+
+
+def _card_stamp_keys(stamp: str) -> tuple[str, str]:
+    """Return ``(sort_key, yyyymm)`` for a tariff-card filename stamp.
+
+    Ecopower named every card ``YYYYMM_...`` until the August 2026
+    dynamic card arrived as ``YYYYMMDD_...``. Both forms sit on the page
+    at once, so they have to order against each other, and a six-digit
+    pattern silently skips the eight-digit ones: that is how the January
+    card kept billing after the August one shipped. Padding the
+    month-only form to eight digits sorts it before a dated card in the
+    same month, which is the right precedence -- a card dated the 1st
+    supersedes a bare month card for that month -- while the month key
+    stays the first six digits for either form.
+    """
+    return stamp.ljust(8, "0"), stamp[:6]
+
 
 _DSO_LABELS = FLUVIUS_CARD_LABELS
 
@@ -127,11 +147,13 @@ _DBS_PAGE = f"{_BASE_URL}/groene-stroom/dynamische-burgerstroom"
 
 # Dynamic card filenames look like 202601_dbs_tariefkaart.pdf, with older
 # variants carrying a letter suffix (202501b_dbs_tariefkaart.pdf) or a
-# trailing brand token (202406_dbs_tariefkaart_ecopower.pdf). The yyyymm
-# group captures the six leading digits; the optional letter is consumed
-# but not captured so month ordering stays numeric.
+# trailing brand token (202406_dbs_tariefkaart_ecopower.pdf), and from the
+# August 2026 card a full date (20260801_dbs_tariefkaart.pdf). The stamp
+# group captures six or eight digits -- pinned at six, this pattern could
+# not see the dated card and kept resolving January's; the optional letter
+# is consumed but not captured so ordering stays numeric.
 _DBS_CARD_RE = re.compile(
-    r'(https?://[^"]+/(?P<yyyymm>20\d{4})[a-z]?_dbs_tariefkaart[^"]*\.pdf[^"]*)"',
+    r'(https?://[^"]+/(?P<stamp>20\d{4}(?:\d{2})?)[a-z]?_dbs_tariefkaart[^"]*\.pdf[^"]*)"',
     re.IGNORECASE,
 )
 
@@ -187,16 +209,20 @@ async def fetch_for_month(
         html = await fetch_text(session, _PRICE_PAGE)
     except ExtractorError:
         return None
-    pdf_url: str | None = None
-    for match in _CARD_RE.finditer(html):
-        if (
-            match.group("yyyymm") == target
-            and "inschatting" not in match.group(1).lower()
-        ):
-            pdf_url = match.group(1)
-            break
-    if pdf_url is None:
+    # Highest stamp wins rather than first match: a month can carry both a
+    # bare YYYYMM card and a dated YYYYMMDD reissue, and the reissue is the
+    # one that billed.
+    in_month = sorted(
+        (sort_key, url)
+        for sort_key, yyyymm, url in (
+            (*_card_stamp_keys(m.group("stamp")), m.group(1))
+            for m in _CARD_RE.finditer(html)
+        )
+        if yyyymm == target and "inschatting" not in url.lower()
+    )
+    if not in_month:
         return None
+    pdf_url = in_month[-1][1]
     try:
         text = await fetch_pdf_text_layout(session, pdf_url)
         label = f"{target[:4]}-{target[4:]}"
@@ -776,16 +802,17 @@ async def _resolve_latest_pdf(
     html = await fetch_text(session, _PRICE_PAGE)
 
     matches = [
-        (yyyymm, url)
-        for url, yyyymm in (
-            (m.group(1), m.group("yyyymm")) for m in _CARD_RE.finditer(html)
+        (sort_key, yyyymm, url)
+        for sort_key, yyyymm, url in (
+            (*_card_stamp_keys(m.group("stamp")), m.group(1))
+            for m in _CARD_RE.finditer(html)
         )
         if "inschatting" not in url.lower()
     ]
     if not matches:
         raise ExtractorError(f"no Ecopower tariefkaart link found on {_PRICE_PAGE}")
     matches.sort()
-    yyyymm, url = matches[-1]
+    _sort_key, yyyymm, url = matches[-1]
     label = f"{yyyymm[:4]}-{yyyymm[4:]}"
     return url, label
 
@@ -801,11 +828,12 @@ async def _resolve_latest_dbs_pdf(
     """
     html = await fetch_text(session, _DBS_PAGE)
     matches = sorted(
-        (m.group("yyyymm"), m.group(1)) for m in _DBS_CARD_RE.finditer(html)
+        (*_card_stamp_keys(m.group("stamp")), m.group(1))
+        for m in _DBS_CARD_RE.finditer(html)
     )
     if not matches:
         raise ExtractorError(f"no Ecopower dbs tariefkaart link found on {_DBS_PAGE}")
-    yyyymm, url = matches[-1]
+    _sort_key, yyyymm, url = matches[-1]
     return url, f"{yyyymm[:4]}-{yyyymm[4:]}"
 
 
@@ -827,13 +855,16 @@ async def _fetch_dbs_for_month(
     except ExtractorError:
         return None
     eligible = sorted(
-        (m.group("yyyymm"), m.group(1))
-        for m in _DBS_CARD_RE.finditer(html)
-        if m.group("yyyymm") <= target
+        (sort_key, yyyymm, url)
+        for sort_key, yyyymm, url in (
+            (*_card_stamp_keys(m.group("stamp")), m.group(1))
+            for m in _DBS_CARD_RE.finditer(html)
+        )
+        if yyyymm <= target
     )
     if not eligible:
         return None
-    yyyymm, url = eligible[-1]
+    _sort_key, yyyymm, url = eligible[-1]
     try:
         text = await fetch_pdf_text_layout(session, url)
     except ExtractorError:

@@ -43,8 +43,10 @@ from custom_components.be_electricity_prices.providers.base import (
     apply_vat,
 )
 from custom_components.be_electricity_prices.providers.ecopower import (
+    _card_stamp_keys,
     _extract_energy,
     _extract_injection,
+    _resolve_latest_dbs_pdf,
     fetch_for_month,
     parse_dbs_snapshot,
     parse_snapshot,
@@ -550,6 +552,66 @@ def test_dbs_fetch_for_month_returns_none_before_first_card() -> None:
         )
     )
     assert snap is None
+
+
+_DBS_LISTING_HTML_DATED = """
+<a href="https://cdn.example/202510_dbs_tariefkaart.pdf">2025-10</a>
+<a href="https://cdn.example/202601_dbs_tariefkaart.pdf">2026-01</a>
+<a href="https://cdn.example/20260801_dbs_tariefkaart.pdf">2026-08</a>
+"""
+
+
+def test_dbs_resolver_reads_the_dated_yyyymmdd_card() -> None:
+    # Ecopower switched the dynamic card to a YYYYMMDD filename with the
+    # August 2026 issue. A six-digit pattern cannot match eight digits, so
+    # the resolver silently kept serving the January card -- and it parsed
+    # fine, so nothing failed. The month label must stay YYYY-MM.
+    url, label = asyncio.run(
+        _resolve_latest_dbs_pdf(
+            make_text_session(_DBS_LISTING_HTML_DATED),  # type: ignore[arg-type]
+        )
+    )
+    assert url.endswith("20260801_dbs_tariefkaart.pdf")
+    assert label == "2026-08"
+
+
+def test_dbs_dated_card_sorts_above_the_bare_month_form() -> None:
+    # Both filename forms are live on the page at once, so they have to
+    # order against each other rather than within their own shape.
+    assert _card_stamp_keys("202601") == ("20260100", "202601")
+    assert _card_stamp_keys("20260801") == ("20260801", "202608")
+    assert _card_stamp_keys("202608") < _card_stamp_keys("20260801")
+    assert _card_stamp_keys("20260801") < _card_stamp_keys("202609")
+
+
+@pytest.mark.parametrize(
+    ("month", "expected"),
+    [
+        pytest.param(date(2026, 7, 1), "2026-01", id="before-the-dated-card"),
+        pytest.param(date(2026, 8, 1), "2026-08", id="the-dated-card-month"),
+        pytest.param(date(2026, 9, 1), "2026-08", id="after-the-dated-card"),
+    ],
+)
+def test_dbs_fetch_for_month_spans_both_filename_forms(
+    month: date, expected: str
+) -> None:
+    # The archive comparison was string-vs-YYYYMM, which excluded a
+    # YYYYMMDD card from its own month: "20260801" > "202608".
+    text = _text("ecopower_dynamische_burgerstroom_jan.pdf")
+    with patch(
+        "custom_components.be_electricity_prices.providers.ecopower.fetch_pdf_text_layout",
+        new=AsyncMock(return_value=text),
+    ):
+        snap = asyncio.run(
+            fetch_for_month(
+                make_text_session(_DBS_LISTING_HTML_DATED),  # type: ignore[arg-type]
+                "ecopower_dynamische_burgerstroom",
+                "flanders",
+                month,
+            )
+        )
+    assert snap is not None
+    assert snap.publication_label == expected
 
 
 def test_energy_fund_marker_is_not_read_as_a_third_decimal() -> None:
