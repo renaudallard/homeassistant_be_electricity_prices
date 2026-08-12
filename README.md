@@ -641,10 +641,13 @@ runs two phases against the live supplier endpoints:
   from the registry opens a separate issue
   `[live-check] new supplier products detected …` so a parser regression
   and a catalogue addition stay in distinct threads.
-- **Freshness phase** — for suppliers whose card URL is resolved from a
-  listing, the card actually resolved is compared against the newest one
-  the supplier advertises. A superseded card still downloads and still
-  parses, so without this a stale URL looks identical to a healthy run.
+- **Freshness phase** — for the eight supplier-families that pick a card
+  from several advertised ones, the card actually resolved is compared
+  against the newest one the supplier advertises. A superseded card still
+  downloads and still parses, so without this a stale URL looks identical
+  to a healthy run. Suppliers that construct a single URL per contract are
+  excluded: there is no candidate set to choose wrongly from, so a bad
+  resolution fails loudly on its own.
 
 ## License
 

@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -455,3 +456,119 @@ def test_freshness_fails_when_a_fallback_supplier_advertises_nothing() -> None:
     (row,) = _rows("bolt/freshness")
     assert row.ok is False
     assert "fallback" in row.detail
+
+
+# --- ordering keys ------------------------------------------------------------
+#
+# None of the eight supplier stamp formats sorts naively, and each breaks at a
+# different boundary. Every case below is one a naive max() gets WRONG.
+
+
+@pytest.mark.parametrize(
+    ("key", "older", "newer", "what"),
+    [
+        pytest.param(
+            lc._mega_month_key,
+            "122026",
+            "012027",
+            "MMYYYY month-major",
+            id="mega-year-end",
+        ),
+        pytest.param(
+            lc._eneco_issue_key,
+            "032_022604",
+            "032_012605",
+            "volume-major issue",
+            id="eneco-reissue",
+        ),
+        pytest.param(
+            lc._month_year_key, "12-2025", "08-2026", "MM-YYYY", id="ebem-numeric"
+        ),
+        pytest.param(
+            lc._month_year_key,
+            "december-2025",
+            "augustus-2026",
+            "month name",
+            id="ebem-named",
+        ),
+        pytest.param(
+            lc._frank_month_key,
+            "December 2026",
+            "April 2027",
+            "month word",
+            id="frank-year-end",
+        ),
+        pytest.param(
+            lc._mmyy_key, "1226", "0127", "MMYY month-major", id="energyvision-year-end"
+        ),
+    ],
+)
+def test_stamp_keys_order_where_a_naive_max_does_not(
+    key: Callable[[str], int], older: str, newer: str, what: str
+) -> None:
+    assert max(older, newer) == older, f"{what}: pick a case naive max gets wrong"
+    assert max([older, newer], key=key) == newer
+
+
+@pytest.mark.parametrize(
+    ("key", "stamp", "real"),
+    [
+        pytest.param(lc._mega_month_key, "2026-09", "012027", id="mega-dashed"),
+        pytest.param(
+            lc._eneco_issue_key, "032_2026-09", "032_012605", id="eneco-dashed"
+        ),
+        pytest.param(lc._month_year_key, "2026Q3", "08-2026", id="ebem-quarter"),
+        pytest.param(lc._frank_month_key, "Q3 2026", "April 2027", id="frank-quarter"),
+        pytest.param(lc._mmyy_key, "0826b", "0127", id="energyvision-letter"),
+        pytest.param(lc._version_key, "13b", "13", id="bolt-letter"),
+        pytest.param(
+            lc._ecopower_date_key, "2026-09", "20260801", id="ecopower-dashed"
+        ),
+    ],
+)
+def test_an_unreadable_stamp_sorts_above_every_real_one(
+    key: Callable[[str], int], stamp: str, real: str
+) -> None:
+    """A shape the extractor cannot resolve must become the NEWEST advertised
+    so the comparison fails. Scoring it low is what let Bolt's filename-shape
+    change pass green. ``real`` is a stamp this key genuinely understands."""
+    assert key(real) != lc._UNREADABLE_STAMP, "pick a stamp this key can read"
+    assert key(stamp) == lc._UNREADABLE_STAMP
+    assert key(stamp) > key(real)
+
+
+def test_cociter_key_ignores_the_reupload_counter() -> None:
+    """The captured stamp carries the language token and a WordPress duplicate
+    counter, which must not join the comparison."""
+    assert lc._yymm_key("2608-fr") == lc._yymm_key("2608-fr-1")
+    assert lc._yymm_key("2601-fr") > lc._yymm_key("2512-fr-1")
+
+
+# --- the two sides of an unknown stamp ----------------------------------------
+
+
+def test_a_served_url_the_pattern_cannot_read_fails() -> None:
+    """The unreadable sentinel sorts ABOVE every real stamp, which is right for
+    the advertised side and exactly backwards for the served side: reused there
+    it reads as "newer than anything advertised" and passes. Caught by
+    sabotaging a resolver, which is the only reason it did not ship."""
+    assert lc._stamps_from(_GBS_RE, "https://cdn.example/not-a-card.pdf") == [None]
+    assert lc._stamps_from(_GBS_RE, "https://cdn.example/202607_gbs_x.pdf") == [
+        "202607"
+    ]
+
+
+def test_freshness_matching_is_case_insensitive() -> None:
+    """Every provider module compiles its card patterns with re.IGNORECASE, so a
+    case-sensitive gate is stricter than the extractor it audits and goes blind
+    exactly where the extractor still sees."""
+    lc._expect_newest_card(
+        "ecopower/freshness",
+        '<a href="https://cdn.example/202608_GBS_Tariefkaart.pdf">Aug</a>',
+        _GBS_RE,
+        "202607",
+        key=_date_key,
+    )
+    (row,) = _rows("ecopower/freshness")
+    assert row.ok is False
+    assert "202608" in row.detail

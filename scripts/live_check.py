@@ -1233,10 +1233,18 @@ def _expect_newest_card(
     breakage and a redesigned page reported here too would be noise. Where
     the extractor instead falls back to a hardcoded version, nothing else
     fails, and a pass here would leave that pin serving silently.
+
+    Matching is case-INSENSITIVE, and not as a convenience: every provider
+    module compiles its card patterns with ``re.IGNORECASE``, so a gate
+    matching case-sensitively is stricter than the extractor it audits in
+    that one dimension, and goes blind exactly where the extractor still
+    sees. A supplier recasing a filename would keep resolving fine while
+    this scan found nothing and, for a supplier whose empty case is a
+    pass, reported green.
     """
     advertised = [
         m.group(1)
-        for m in re.finditer(pattern, html)
+        for m in re.finditer(pattern, html, re.IGNORECASE)
         if not exclude or exclude not in m.group(0).lower()
     ]
     if not advertised:
@@ -1267,10 +1275,213 @@ def _version_key(stamp: str) -> int:
     return int(stamp) if stamp.isdigit() else 10**9
 
 
+# Every stamp format below fails a naive max(), each at a different
+# boundary, so each supplier needs its own key. The shared rule: a stamp
+# that does not fit the expected shape scores _UNREADABLE_STAMP, ABOVE
+# every real one, so it becomes the "newest advertised" and fails the
+# comparison. Scoring an unparseable stamp low is what let Bolt's
+# filename-shape case pass green.
+_UNREADABLE_STAMP = 10**9
+
+# Dutch month names, 3-letter prefixes, as they appear in EBEM and Frank
+# filenames. "maa"/"mrt" both occur for March.
+_NL_MONTH_PREFIX = {
+    "jan": 1,
+    "feb": 2,
+    "maa": 3,
+    "mrt": 3,
+    "apr": 4,
+    "mei": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "okt": 10,
+    "nov": 11,
+    "dec": 12,
+}
+
+
+def _ecopower_date_key(stamp: str) -> int:
+    """Order an Ecopower ``YYYYMM`` or ``YYYYMMDD`` stamp.
+
+    Year-major, so it sorts once both widths are padded to eight: a dated
+    reissue then outranks the bare month card it replaces.
+    """
+    return int(stamp.ljust(8, "0")) if stamp.isdigit() else _UNREADABLE_STAMP
+
+
+def _mega_month_key(stamp: str) -> int:
+    """Order a Mega ``MMYYYY`` stamp.
+
+    Month-major, so it sorts neither numerically nor lexically: 122026
+    (December 2026) outranks 012027 (January 2027) both ways. Left naive,
+    the gate would call a fresh January card stale every year end.
+    """
+    if len(stamp) == 6 and stamp.isdigit():
+        return int(stamp[2:]) * 100 + int(stamp[:2])
+    return _UNREADABLE_STAMP
+
+
+def _eneco_issue_key(stamp: str) -> int:
+    """Order an Eneco ``BC_<form>_<VOLYYMM>`` stamp.
+
+    The issue is volume-major (``01`` = first publication of that month,
+    ``02``+ a re-issue), so a plain int mis-orders: an April re-issue
+    022604 outranks May's first issue 012605, and a genuinely stale April
+    card would pass green.
+    """
+    issue = stamp.rsplit("_", 1)[-1]
+    if len(issue) != 6 or not issue.isdigit():
+        return _UNREADABLE_STAMP
+    return int(issue[2:6]) * 100 + int(issue[0:2])
+
+
+def _month_year_key(stamp: str) -> int:
+    """Order an EBEM ``MM-YYYY`` / ``<maand>-YYYY`` / ``YYYY-MM`` stamp.
+
+    "12-2025" outranks "08-2026" lexically, and a month NAME does not sort
+    at all. Accepts all three shapes the page has carried and normalises
+    to YYYYMM.
+    """
+    parts = re.split(r"[-_]", stamp, maxsplit=1)
+    if len(parts) != 2:
+        return _UNREADABLE_STAMP
+    first, second = parts
+    if not second.isdigit():
+        return _UNREADABLE_STAMP
+    if first.isdigit():
+        # YYYY-MM when the first half is the wider one, else MM-YYYY.
+        if len(first) == 4:
+            return int(first) * 100 + int(second)
+        return int(second) * 100 + int(first)
+    month = _NL_MONTH_PREFIX.get(first[:3].lower())
+    return int(second) * 100 + month if month else _UNREADABLE_STAMP
+
+
+def _frank_month_key(stamp: str) -> int:
+    """Order a Frank ``<maand> YYYY`` label, or a numeric ``YYYY-MM``.
+
+    Frank names its cards with a Dutch month WORD, which sorts wrong in
+    every direction: "April 2026" > "Augustus 2026" and "December 2026" <
+    "Januari 2027" lexically.
+    """
+    stamp = stamp.strip().lower()
+    numeric = re.fullmatch(r"(20\d{2})[-_ ]?(0[1-9]|1[0-2])", stamp)
+    if numeric:
+        return int(numeric.group(1)) * 100 + int(numeric.group(2))
+    worded = re.fullmatch(r"([a-z]+)\s+(20\d{2})", stamp)
+    if not worded:
+        return _UNREADABLE_STAMP
+    month = _NL_MONTH_PREFIX.get(worded.group(1)[:3])
+    return int(worded.group(2)) * 100 + month if month else _UNREADABLE_STAMP
+
+
+def _mmyy_key(stamp: str) -> int:
+    """Order an EnergyVision ``MMYY`` stamp: 0826, 1226, 0127.
+
+    Month-major like Mega's, one digit shorter.
+    """
+    if len(stamp) == 4 and stamp.isdigit():
+        return int(stamp[2:]) * 100 + int(stamp[:2])
+    return _UNREADABLE_STAMP
+
+
+def _yymm_key(stamp: str) -> int:
+    """Order a Cociter ``YYMM`` stamp, ignoring any trailing tail.
+
+    Year-major, so the leading four digits do sort -- but the captured
+    stamp carries the language token and a WordPress duplicate counter
+    ("2608-fr-1"), which must not join the comparison.
+    """
+    head = re.match(r"(\d{4})", stamp)
+    return int(head.group(1)) if head else _UNREADABLE_STAMP
+
+
+async def _freshness_row(
+    label: str,
+    session: aiohttp.ClientSession,
+    page: str,
+    pattern: str,
+    served_of: Callable[[str], Awaitable[list[str | None]]],
+    key: Callable[[str], int],
+    exclude: str = "",
+    resolver_falls_back: bool = False,
+) -> None:
+    """One supplier-family freshness row.
+
+    ``served_of`` receives the page HTML (several resolvers are pure and
+    take the already-fetched document) and returns every stamp the
+    extractor resolves for that family. The OLDEST is compared, so one
+    lagging contract fails the row rather than hiding behind its siblings.
+
+    ``resolver_falls_back`` says what an unreadable or unrecognisable page
+    means for THIS supplier, and it is read out of the resolver, never
+    assumed. A resolver that RAISES is already reported by the extractor
+    phase, so this row passes and does not duplicate it. A resolver that
+    falls back to a constant or an older card leaves every other check
+    green, so this row is the only thing that can report it and must fail.
+    """
+    try:
+        html = await _fetch_text(session, page)
+        served = await served_of(html)
+    except _EXTRACTOR_ERROR as err:
+        # Only the provider fetch error. A renamed symbol or a changed
+        # signature propagates to the caller and is recorded as a failure:
+        # catching those made the gate pass green precisely when it had
+        # stopped working.
+        detail = f"page unreadable: {type(err).__name__}: {err}"
+        if resolver_falls_back:
+            _expect(label, False, f"{detail}; extractor is serving its fallback")
+        else:
+            _record(label, True, detail)
+        return
+    if not served:
+        _expect(label, False, "extractor resolved no card at all")
+        return
+    if any(stamp is None for stamp in served):
+        # The gate's own pattern cannot read a URL the extractor resolved,
+        # so there is nothing to compare. That is a finding: it means the
+        # two have diverged, which is the whole point of the row.
+        _expect(label, False, "cannot read a card stamp out of a resolved URL")
+        return
+    _expect_newest_card(
+        label,
+        html,
+        pattern,
+        min([s for s in served if s is not None], key=key),
+        key=key,
+        exclude=exclude,
+        empty_is_ok=not resolver_falls_back,
+    )
+
+
+def _stamps_from(pattern: str, *urls: str | None) -> list[str | None]:
+    """Pull the stamp out of each resolved URL with the gate's own pattern.
+
+    Using the same pattern on both sides keeps the comparison honest: a
+    URL the loose pattern cannot read is a finding, not something to skip.
+    ``None`` marks exactly that, and the caller fails the row on it.
+
+    The unreadable SENTINEL cannot be reused here. It sorts above every
+    real stamp so an unknown ADVERTISED shape becomes the newest and fails
+    the comparison -- but applied to the SERVED side that same score reads
+    as "newer than anything advertised" and PASSES. The two sides need
+    opposite treatment of the same unknown.
+    """
+    out: list[str | None] = []
+    for url in urls:
+        if url is None:
+            continue
+        m = re.search(pattern, url, re.IGNORECASE)
+        out.append(m.group(1) if m else None)
+    return out
+
+
 async def _check_card_freshness(
     session: aiohttp.ClientSession, modules: dict[str, types.ModuleType]
 ) -> None:
-    """Assert Bolt and Ecopower serve the NEWEST card they advertise.
+    """Assert every listing-resolved supplier serves its NEWEST card.
 
     Every other check here asks whether the fetch succeeded and the parse
     made sense. Both are true of a superseded card, so a pinned or
@@ -1278,93 +1489,240 @@ async def _check_card_freshness(
     formula for ten weeks behind a green board, and Ecopower served
     January's tax block once its dynamic card was renamed to YYYYMMDD.
 
-    Only these two, not every listing-resolved supplier. Several others
-    also resolve a card URL from a page and are NOT covered here; each
-    needs its own advertised-card pattern, and claiming otherwise in this
-    docstring would read as coverage that does not exist.
+    Covered: the eight supplier-families that pick a card from a set of
+    several advertised ones, which is the shape that can silently resolve
+    an older card. OCTA+, TotalEnergies, Engie and Luminus construct one
+    URL per contract with no candidate set, so a wrong resolution 404s
+    loudly instead; a row here would be noise, not coverage.
     """
-    bolt, ecopower = modules.get("bolt"), modules.get("ecopower")
+    bolt = modules.get("bolt")
     if bolt is not None:
-        label = "bolt/freshness: serving the newest advertised variable card"
-        try:
-            html = await _fetch_text(session, bolt._LISTING_URL)
+
+        async def _bolt_served(_html: str) -> list[str | None]:
             contract = bolt._CONTRACTS_BY_ID["bolt_variable"]
-            served = await bolt._resolve_variable_suffix(session, contract)
-        except _EXTRACTOR_ERROR as err:
-            # An unreadable listing is a FAILURE for Bolt, unlike Ecopower
-            # below. Bolt's resolver swallows the fetch error and returns
-            # _VARIABLE_SUFFIX_FALLBACK, so the card still downloads, still
-            # parses and _check_bolt stays green: this row is the only
-            # thing that can report it. Two suppliers in this repo have
-            # blocked or lost their listing for weeks, and through such an
-            # outage the fallback IS the hardcoded pin this gate exists to
-            # prevent. A transient blip does not file anything -- the
-            # workflow only opens an issue for a check that fails every
-            # retry.
-            #
-            # Only the provider fetch error lands here. A renamed symbol or
-            # changed signature propagates to the caller and is recorded as
-            # a failure: catching those here made the gate pass green
-            # precisely when it had stopped working.
-            _expect(
-                label,
-                False,
-                f"listing unreadable ({type(err).__name__}: {err}); extractor is "
-                f"serving its hardcoded fallback version",
-            )
-        else:
-            _expect_newest_card(
-                label,
-                html,
-                # \w+ where the extractor demands \d+: a version that grows
-                # a letter must fail loudly, not resolve to the old number.
-                r"pricelists/var/bolt_res_el_fr_(\w+)\.pdf",
-                served,
-                key=_version_key,
-                # A reshaped Bolt listing puts the resolver on its fallback
-                # just as surely as an unreachable one, and nothing else
-                # fails. Ecopower's resolver raises instead, so its own
-                # extractor row reports that case and this one stays quiet.
-                empty_is_ok=False,
-            )
-    if ecopower is None:
-        return
+            return [await bolt._resolve_variable_suffix(session, contract)]
 
-    def date_key(stamp: str) -> int:
-        """Dates that may or may not carry a day, so pad before comparing."""
-        return int(stamp.ljust(8, "0"))
+        await _freshness_row(
+            "bolt/freshness: serving the newest advertised variable card",
+            session,
+            bolt._LISTING_URL,
+            # \w+ where the extractor demands \d+: a version that grows a
+            # letter must fail loudly, not resolve to the old number.
+            r"pricelists/var/bolt_res_el_fr_(\w+)\.pdf",
+            _bolt_served,
+            key=_version_key,
+            # Bolt's resolver returns _VARIABLE_SUFFIX_FALLBACK when the
+            # listing will not load, so the card still downloads and parses
+            # and nothing else fails. Through such an outage that constant
+            # IS the hardcoded pin this gate exists to prevent.
+            resolver_falls_back=True,
+        )
 
-    for family, page, resolver, exclude in (
-        ("dynamic", ecopower._DBS_PAGE, ecopower._resolve_latest_dbs_pdf, ""),
-        (
-            "definitive",
-            ecopower._PRICE_PAGE,
-            ecopower._resolve_latest_pdf,
-            "inschatting",
-        ),
-    ):
-        label = f"ecopower/freshness: serving the newest advertised {family} card"
-        try:
-            html = await _fetch_text(session, page)
-            url, _label = await resolver(session)
-        except _EXTRACTOR_ERROR as err:
-            _record(label, True, f"page unreadable: {type(err).__name__}: {err}")
-            continue
-        # Spans the whole filename, not just the stamp: ``exclude`` tests
-        # the matched text, and "inschatting" sits AFTER the stamp. Match
-        # only as far as the family and the preview card counts as the
-        # newest definitive one.
+    ecopower = modules.get("ecopower")
+    if ecopower is not None:
+        for family, page, resolver, exclude in (
+            ("dynamic", ecopower._DBS_PAGE, ecopower._resolve_latest_dbs_pdf, ""),
+            (
+                "definitive",
+                ecopower._PRICE_PAGE,
+                ecopower._resolve_latest_pdf,
+                "inschatting",
+            ),
+        ):
+            # Spans the whole filename, not just the stamp: ``exclude``
+            # tests the matched text and "inschatting" sits AFTER the stamp.
+            pattern = (
+                rf"/(\d{{4,8}})[a-z]?_{'dbs' if family == 'dynamic' else 'gbs'}_"
+                r"[^\"\s]*?\.pdf"
+            )
+
+            async def _eco_served(
+                _html: str, _r: object = resolver, _p: str = pattern
+            ) -> list[str | None]:
+                url, _label = await _r(session)  # type: ignore[operator]
+                return _stamps_from(_p, url)
+
+            await _freshness_row(
+                f"ecopower/freshness: serving the newest advertised {family} card",
+                session,
+                page,
+                pattern,
+                _eco_served,
+                key=_ecopower_date_key,
+                exclude=exclude,
+            )
+
+    mega = modules.get("mega")
+    if mega is not None:
+        # Drops the data-product-element anchor, the product name and the
+        # per-region pin the extractor requires, and widens FR/B2C/\d{6} to
+        # \w+. Keeps the literal -EL- so the gas cards sharing the page
+        # cannot match. "prepaid" is advertised but is not a billed card.
+        pattern = r"/tarif/Mega-\w+-EL-\w+-(?:BX|VL|WL)-(\w+)-[^\"'\s]*\.pdf"
+
+        async def _mega_served(html: str) -> list[str | None]:
+            urls = [
+                mega._resolve_pdf_url(html, c.product_name, code)
+                for c in mega._CONTRACTS
+                if not getattr(c, "professional", False)
+                for region, code in mega._REGION_TO_CODE.items()
+                if region in c.regions
+            ]
+            return _stamps_from(pattern, *urls)
+
+        await _freshness_row(
+            "mega/freshness: serving the newest advertised card",
+            session,
+            mega._LISTING_URL,
+            pattern,
+            _mega_served,
+            key=_mega_month_key,
+            exclude="prepaid",
+        )
+
+    eneco = modules.get("eneco")
+    if eneco is not None:
+        # POWER_ keeps the gas cards out; the stamp group spans the form
+        # number and the issue, which _eneco_issue_key splits.
+        pattern = r"BC_([\w.-]+?)_NL_ENECO_POWER_"
+
+        async def _eneco_served(html: str) -> list[str | None]:
+            urls = [eneco._resolve_url(html, cid) for cid in eneco._CONTRACT_SLUGS]
+            return _stamps_from(pattern, *urls)
+
+        await _freshness_row(
+            "eneco/freshness: serving the newest advertised card",
+            session,
+            eneco._LISTING_URL,
+            pattern,
+            _eneco_served,
+            key=_eneco_issue_key,
+        )
+
+    ebem = modules.get("ebem")
+    if ebem is not None:
+        # Tolerates a trailing _web/_v2 suffix, an underscore separator and
+        # an ISO flip, none of which the extractor's pattern allows.
         pattern = (
-            rf"/(\d{{4,8}})[a-z]?_{'dbs' if family == 'dynamic' else 'gbs'}_"
-            r"[^\"\s]*?\.pdf"
+            r"tariefkaart[-_][a-z]*[-_]?"
+            r"([a-z]{3,10}[-_]\d{4}|\d{2}[-_]\d{4}|\d{4}[-_]\d{2})"
+            r"[^\"'/]*\.pdf"
         )
-        served_match = re.search(pattern, url)
-        if served_match is None:
-            _expect(label, False, f"cannot read a card stamp out of {url}")
-            continue
-        _expect_newest_card(
-            label, html, pattern, served_match.group(1), key=date_key, exclude=exclude
+
+        async def _ebem_served(_html: str) -> list[str | None]:
+            out = []
+            for kind in ("elek", "dynamic"):
+                _url, label = await ebem._find_latest(session, kind)
+                out.append(label)  # already YYYY-MM, which the key accepts
+            return out
+
+        await _freshness_row(
+            "ebem/freshness: serving the newest advertised card",
+            session,
+            ebem._LISTING_URL,
+            pattern,
+            _ebem_served,
+            key=_month_year_key,
         )
+
+    cociter = modules.get("cociter")
+    if cociter is not None:
+        for family, contract_id in (
+            ("variable", "cociter_variable"),
+            ("dynamic", "cociter_dynamic"),
+        ):
+            head = "RCVar_YMR" if family == "variable" else "RCDyn_SM3"
+            # \d{2,8} with optional dashed groups, so a dashed or widened
+            # date is visible; the extractor pins an exact 4-digit YYMM.
+            pattern = (
+                rf"{head}[^\"\s]*?[-_]"
+                r"(\d{2,8}(?:[-_]\d{1,2}){0,2}[^\"/\s]*)\.pdf"
+            )
+
+            async def _coc_served(
+                _html: str, _cid: str = contract_id, _p: str = pattern
+            ) -> list[str | None]:
+                url, _label = await cociter._find_latest(
+                    session, cociter._CONTRACT_PATTERNS[_cid]
+                )
+                return _stamps_from(_p, url)
+
+            await _freshness_row(
+                f"cociter/freshness: serving the newest advertised {family} card",
+                session,
+                cociter._INDEX_URL,
+                pattern,
+                _coc_served,
+                key=_yymm_key,
+            )
+
+    frank = modules.get("frank")
+    if frank is not None:
+        # Frank has no listing page: its cards live in a Sanity CMS and the
+        # resolved URL is a content hash carrying no month at all, so the
+        # served stamp is the parsed LABEL. The advertised side is a
+        # deliberately loose GROQ with no filename predicate, scanned for a
+        # Dutch month word -- the "Elektriciteit" token the extractor keys
+        # on is exactly the layer that went blind before.
+        label = "frank/freshness: serving the newest advertised dynamic card"
+        pattern = (
+            r"(?m)^(?=.*dynamis).*?((?:januari|februari|maart|april|mei|juni|juli|"
+            r"augustus|september|oktober|november|december)\s+20\d{2}"
+            r"|20\d{2}[-_ ]?(?:0[1-9]|1[0-2]))"
+        )
+        try:
+            rows = await frank._sanity_query(
+                session,
+                '*[_type=="sanity.fileAsset"]{originalFilename,_createdAt}'
+                " | order(_createdAt desc)[0..59]",
+            )
+            blob = "\n".join(str(r.get("originalFilename", "")) for r in rows)
+            served = []
+            for tier_id, _tier_label, _suffix in frank._TIERS:
+                _url, card_label = await frank._resolve_pdf_url(session, tier_id)
+                served.append(card_label)
+        except _EXTRACTOR_ERROR as err:
+            _record(label, True, f"CMS unreadable: {type(err).__name__}: {err}")
+        else:
+            # Every tier, not just frank_dynamic: the break that actually
+            # happened hit the four SUFFIXED tiers while the base tier was
+            # fine, so a single-tier row would have missed it.
+            unreadable = [s for s in served if _frank_month_key(s) == _UNREADABLE_STAMP]
+            if unreadable:
+                _expect(label, False, f"cannot read a month out of {unreadable[0]!r}")
+            else:
+                _expect_newest_card(
+                    label,
+                    blob,
+                    pattern,
+                    min(served, key=_frank_month_key),
+                    key=_frank_month_key,
+                    exclude="combi",
+                )
+
+    energyvision = modules.get("energyvision")
+    if energyvision is not None:
+        for contract in energyvision._CONTRACTS:
+            # The trailing literal hyphen after the code keeps the GS1JVG
+            # gas card out of the GS1JV row.
+            pattern = (
+                rf"inline-files/EV-([^\"]*?)-{re.escape(contract.code)}-[^\"]*\.pdf"
+            )
+
+            async def _ev_served(
+                _html: str, _c: object = contract, _p: str = pattern
+            ) -> list[str | None]:
+                url = await energyvision._resolve_card_url(session, _c)
+                return _stamps_from(_p, url)
+
+            await _freshness_row(
+                f"energyvision/freshness: newest advertised {contract.code} card",
+                session,
+                energyvision._LISTING_URL,
+                pattern,
+                _ev_served,
+                key=_mmyy_key,
+            )
 
 
 def _validate_injection(prefix: str, snap: object, shape: str = "present") -> None:

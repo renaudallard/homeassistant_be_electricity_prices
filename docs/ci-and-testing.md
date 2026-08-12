@@ -244,7 +244,7 @@ main()                       scripts/live_check.py:1760  asyncio.run(_run()); rc
 
 ### Card freshness
 
-`_check_card_freshness` (`scripts/live_check.py:1270`) asks a question no other check here asks:
+`_check_card_freshness` (`scripts/live_check.py:1481`) asks a question no other check here asks:
 not "did the fetch work" but "is this the card the supplier is currently advertising". A superseded
 card downloads, parses and validates exactly like a current one, so a stale URL reads as a green
 run -- Bolt billed June's variable formula for ten weeks behind a passing board, and Ecopower served
@@ -255,16 +255,54 @@ the same listing page the extractor does, but with a **looser** pattern. When a 
 filename shape, the extractor's strict pattern stops seeing the new file and keeps resolving the old
 one; the loose pattern still sees it, and the mismatch fails the run.
 
-What an unreadable or unrecognisable page means depends on how that supplier's resolver fails, and
-the two here differ. Ecopower's `_resolve_latest_pdf` / `_resolve_latest_dbs_pdf` **raise** when the
-page will not load or carries no card, so its own extractor row already reports the breakage and
-this gate records a pass rather than duplicating it. Bolt's `_resolve_variable_suffix` instead falls
-back to `_VARIABLE_SUFFIX_FALLBACK`: the card still downloads, still parses, and `_check_bolt` stays
+### Which suppliers are covered, and which deliberately are not
+
+The gate covers the **eight supplier-families that pick a card from a set of several advertised
+ones** -- Bolt, Ecopower (definitive + dynamic), Mega, Eneco, EBEM, Cociter (variable + dynamic),
+Frank and EnergyVision (one row per product code), twelve rows in all. That shape is the one that
+can silently resolve an older card, because the older card is still there and still parses.
+
+OCTA+, TotalEnergies, Engie and Luminus are **not** covered, on purpose. Each constructs one URL
+per contract from static constants or a parameter-only API query, with no candidate set to choose
+wrongly from, so a wrong resolution 404s loudly and the extractor phase reports it. A row here
+would be noise dressed as coverage.
+
+Mega's nine *professional* contracts are also outside it: `_pro_pdf_url` builds a filename from the
+current date with an explicit fall-back-to-previous-month branch and there is no page advertising
+them, so there is nothing to compare against. That fallback is a genuine silent-stale lane and is
+recorded here as a known gap rather than papered over.
+
+### The stamps do not sort
+
+Every one of the eight formats fails a naive `max()`, each at a different boundary, so each has its
+own key (`scripts/live_check.py:1257` onwards): Mega's `MMYYYY` is month-major (`122026` outranks
+`012027`), Eneco's issue is volume-major (an April re-issue `022604` outranks May's first issue
+`012605`), EBEM's `MM-YYYY` sorts lexically wrong (`12-2025` over `08-2026`) and may be a Dutch
+month *name*, Frank names its cards with a month word (`December 2026` over `April 2027`), and
+EnergyVision's `MMYY` is month-major like Mega's. Left naive, most of these would call a fresh
+January card stale every year end.
+
+A stamp that does not fit the expected shape scores `_UNREADABLE_STAMP`, **above** every real one,
+so an unknown ADVERTISED shape becomes the newest and fails the comparison. That sentinel must not
+be reused for the SERVED side: there it would read as "newer than anything advertised" and pass. A
+served URL the gate's own pattern cannot read fails the row instead.
+
+### What an unreadable page means differs per supplier
+
+It depends on how that supplier's resolver fails, and it is read out of the resolver, never assumed.
+Most of them -- Ecopower, Mega, Eneco, EBEM, Cociter, EnergyVision, Frank -- **raise** when the page
+will not load or carries no card, so their own extractor row already reports the breakage and this
+gate records a pass rather than duplicating it. Bolt's `_resolve_variable_suffix` instead falls back
+to `_VARIABLE_SUFFIX_FALLBACK`: the card still downloads, still parses, and `_check_bolt` stays
 green while that constant quietly becomes the pin this whole gate exists to prevent. So for Bolt an
-unreadable *or* reshaped listing is a **failure** (`empty_is_ok=False`), and it is the only signal
-that would report it. Two suppliers in this repo have lost or blocked their listing for weeks, so
-this is not hypothetical; a transient blip still files nothing, because the workflow only opens an
-issue for a check that fails every retry.
+unreadable *or* reshaped listing is a **failure** (`resolver_falls_back=True`), and it is the only
+signal that would report it. Two suppliers in this repo have lost or blocked their listing for
+weeks, so this is not hypothetical; a transient blip still files nothing, because the workflow only
+opens an issue for a check that fails every retry.
+
+Matching is case-**insensitive**. Every provider module compiles its card patterns with
+`re.IGNORECASE`, so a case-sensitive gate is stricter than the extractor it audits in that one
+dimension and goes blind exactly where the extractor still sees.
 
 The gate catches only the exceptions a provider raises for a failed fetch. Anything else -- a
 renamed symbol, a changed signature -- propagates and is recorded as a failure, because swallowing
@@ -284,21 +322,21 @@ on 2026-08-01: EBEM's August card failed CI three times over for reporting the z
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py:1512`) runs two gates:
+`_validate_snapshot` (`scripts/live_check.py:1870`) runs two gates:
 
-- `_validate_energy` (`scripts/live_check.py:1572`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:1930`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
   additionally assert band ordering (peak >= transition >= offpeak; pic >= medium >= eco). An
   unrecognised energy class is a failure.
-- `_validate_injection` (`scripts/live_check.py:1370`) gates that the feed-in credit parsed and
+- `_validate_injection` (`scripts/live_check.py:1728`) gates that the feed-in credit parsed and
   kept the right shape. This exists because the coordinator drops the credit entirely when
   `injection` is None, so a relabelled injection row silently zeroes a solar user's credit and
   used to pass CI green (issues #31, F53). The `shape` argument pins expectations: `"none"`
   (region pays no feed-in, injection must be absent), `"monthly"` (`current` set, `factor`/`base`
   None), `"spot"` (`factor`/`base` set), or `"present"` (present, shape unconstrained). Per-contract
-  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1438`); the DATS 24 check passes
+  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1796`); the DATS 24 check passes
   `injection_shape` explicitly because its Wallonia card pays no feed-in while its Flanders card is
   monthly-indexed.
 
@@ -340,10 +378,10 @@ under that cap, or the supplier is killed before it can report the drift the bud
 The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:1683`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:1989`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:2347`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1672`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1876`) for the known-large catalogues (Bolt,
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2234`) for the known-large catalogues (Bolt,
 TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
 (`scripts/live_check.py:1720`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
 which are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request
@@ -355,7 +393,7 @@ budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see 
 false-firing drift alert means adjusting the override, not the code.
 
 A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:1817`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:1976`). The
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2334`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever
