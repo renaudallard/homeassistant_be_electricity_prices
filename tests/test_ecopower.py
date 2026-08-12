@@ -47,6 +47,7 @@ from custom_components.be_electricity_prices.providers.ecopower import (
     _extract_energy,
     _extract_injection,
     _resolve_latest_dbs_pdf,
+    _resolve_latest_pdf,
     fetch_for_month,
     parse_dbs_snapshot,
     parse_snapshot,
@@ -559,6 +560,46 @@ _DBS_LISTING_HTML_DATED = """
 <a href="https://cdn.example/202601_dbs_tariefkaart.pdf">2026-01</a>
 <a href="https://cdn.example/20260801_dbs_tariefkaart.pdf">2026-08</a>
 """
+
+
+_GBS_LISTING_DATED = """
+<a href="https://cdn.example/202607_gbs_tariefkaart.pdf">July</a>
+<a href="https://cdn.example/20260715_gbs_tariefkaart.pdf">July reissue</a>
+<a href="https://cdn.example/202608_gbs_inschatting_tariefkaart_ecopower.pdf">Aug preview</a>
+"""
+
+
+def test_gbs_resolver_takes_the_dated_reissue_and_skips_the_preview() -> None:
+    # The gbs half of the widened pattern: a month can carry both a bare
+    # and a dated card, and the dated reissue is the one billing. The
+    # next-month inschatting preview is still not a billable card.
+    url, label = asyncio.run(
+        _resolve_latest_pdf(
+            make_text_session(_GBS_LISTING_DATED),  # type: ignore[arg-type]
+        )
+    )
+    assert url.endswith("20260715_gbs_tariefkaart.pdf")
+    assert label == "2026-07"
+
+
+def test_gbs_fetch_for_month_prefers_the_dated_reissue() -> None:
+    # docs/providers/ecopower.md states this explicitly ("take the highest
+    # stamp among them"), and nothing pinned it.
+    text = _text("ecopower_burgerstroom_jul.pdf")
+    with patch(
+        "custom_components.be_electricity_prices.providers.ecopower.fetch_pdf_text_layout",
+        new=AsyncMock(return_value=text),
+    ):
+        snap = asyncio.run(
+            fetch_for_month(
+                make_text_session(_GBS_LISTING_DATED),  # type: ignore[arg-type]
+                "ecopower_burgerstroom",
+                "flanders",
+                date(2026, 7, 1),
+            )
+        )
+    assert snap is not None
+    assert snap.source_url.endswith("20260715_gbs_tariefkaart.pdf")
 
 
 def test_dbs_resolver_reads_the_dated_yyyymmdd_card() -> None:

@@ -98,11 +98,11 @@ fetch(session, contract_id, region)              ecopower.py:149
 
 ### Current card discovery
 
-- **gbs** (`_resolve_latest_pdf`, `ecopower.py:791`): GET the price page HTML, run `_CARD_RE`
+- **gbs** (`_resolve_latest_pdf`, `ecopower.py:797`): GET the price page HTML, run `_CARD_RE`
   (`ecopower.py:113`) over it to collect every `(sort_key, YYYYMM, url)` triple, **drop any URL
   containing `inschatting`** (the next-month estimation preview), sort ascending and take the
   highest. That is the card billing today. Label is `YYYY-MM`.
-- **dbs** (`_resolve_latest_dbs_pdf`, `ecopower.py:820`): GET the dynamic product page, run
+- **dbs** (`_resolve_latest_dbs_pdf`, `ecopower.py:826`): GET the dynamic product page, run
   `_DBS_CARD_RE` (`ecopower.py:155`), sort and take the highest. The dynamic formula is
   stable across months, so the newest card is the one in effect.
 
@@ -143,7 +143,7 @@ possible.
   for the textual fallback when `valid_until` is absent. This guards against the CDN serving the
   current card under a historical URL and mis-billing past consumption at current rates. Returns
   `None` when the listing lacks the month, the URL 404s, or the PDF does not parse.
-- **dbs** (`_fetch_dbs_for_month`, `ecopower.py:840`): dynamic cards do not rotate monthly, so
+- **dbs** (`_fetch_dbs_for_month`, `ecopower.py:846`): dynamic cards do not rotate monthly, so
   pick the most recent card whose **month** is not after the requested one (`yyyymm <= target`,
   taken from `_card_stamp_keys` rather than the raw stamp -- comparing the raw stamp excluded a
   `YYYYMMDD` card from its own month, since `"20260801" > "202608"`). That is the card that was
@@ -179,10 +179,10 @@ same layout text through `fixture_text(name, layout=True)` (`test_ecopower.py:55
 
 | Snapshot field | gbs source | dbs source |
 | --- | --- | --- |
-| `energy` | `_extract_energy` (`ecopower.py:380`) -> `VariableRates.current` | `_extract_dbs_energy` (`ecopower.py:418`) -> `DynamicRates` |
-| `dsos` | `_extract_dsos` (`ecopower.py:464`) | `_extract_dbs_dsos` (`ecopower.py:541`) |
-| `taxes` | `_extract_taxes` (`ecopower.py:607`) | same helper reused |
-| `injection` | `_extract_injection` (`ecopower.py:724`) | `_extract_dbs_injection` (`ecopower.py:770`) |
+| `energy` | `_extract_energy` (`ecopower.py:386`) -> `VariableRates.current` | `_extract_dbs_energy` (`ecopower.py:424`) -> `DynamicRates` |
+| `dsos` | `_extract_dsos` (`ecopower.py:470`) | `_extract_dbs_dsos` (`ecopower.py:547`) |
+| `taxes` | `_extract_taxes` (`ecopower.py:613`) | same helper reused |
+| `injection` | `_extract_injection` (`ecopower.py:730`) | `_extract_dbs_injection` (`ecopower.py:776`) |
 | `valid_until` | `parse_valid_until` (`_pdf.py:922`) | same |
 | `publication_label` | passed in (`YYYY-MM`) | passed in |
 
@@ -193,7 +193,7 @@ same layout text through `fixture_text(name, layout=True)` (`test_ecopower.py:55
 (illustrative `0,1274 euro/kWh` in the April fixture, `test_ecopower.py:92-97`). Three regexes,
 tried in this order:
 
-- `_ENERGY_RE` (`ecopower.py:348`): same-line `Groene burgerstroom ... <rate> euro/kWh`.
+- `_ENERGY_RE` (`ecopower.py:354`): same-line `Groene burgerstroom ... <rate> euro/kWh`.
 - `_ENERGY_VARIABEL_RE` (`ecopower.py:346-351`): the July 2026 layout, which broke the 50/50 split
   onto its own `VAST` and `VARIABEL` lines with the resolved rate trailing the VARIABEL half.
   It anchors on those two literal rows rather than merely skipping a line: a looser
@@ -219,7 +219,7 @@ parse time, and carrying a variable cost without a live spot is what `VariableRa
   silently.
 - Values stay HTVA; `vat_rate=0.06` scales them later. They are NOT pre-scaled.
 
-The monthly subscription `Abonnementskost <n> euro/maand` (`_ABONNEMENT_RE`, `ecopower.py:415`)
+The monthly subscription `Abonnementskost <n> euro/maand` (`_ABONNEMENT_RE`, `ecopower.py:421`)
 maps to `yearly_fixed_fee` via `_extract_dbs_abonnement` (`ecopower.py:421-432`). Because
 `yearly_fixed_fee` is summed as actual euros, the parser multiplies the monthly figure by 12 and
 leaves it HTVA (`5 × 12 = 60,00`); `apply_vat` turns that into the `63,60` an entry is billed.
@@ -280,7 +280,7 @@ printed, HTVA; `apply_vat` grosses them), `transport = 0.0`.
 
 The dbs DSO block has a wrapped-label hurdle: on the narrower dynamic card pdfplumber wraps the
 longest label `Fluvius Midden-Vlaanderen` across three lines (`Fluvius Midden-` /
-`<numbers>` / `Vlaanderen`). `_DBS_WRAPPED_LABEL_RE` (`ecopower.py:538`) plus the `.sub`
+`<numbers>` / `Vlaanderen`). `_DBS_WRAPPED_LABEL_RE` (`ecopower.py:544`) plus the `.sub`
 (`ecopower.py:533-535`) stitches the two label fragments back around the rate row so the per-DSO
 row regex sees one line. Tests assert the stitched row keeps its real rates
 (`test_ecopower.py:336-343`).

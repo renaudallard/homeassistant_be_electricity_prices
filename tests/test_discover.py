@@ -345,6 +345,20 @@ def test_ecopower_discover_skips_inschatting_preview() -> None:
     assert discovered == {ecopower_mod._CONTRACT_ID}
 
 
+def test_ecopower_discover_sees_a_family_named_with_a_full_date() -> None:
+    """Ecopower moved the dynamic card to a YYYYMMDD filename. Pinned at
+    six digits, discover() cannot see a NEW family published under that
+    naming either, so the one check meant to notice a new Ecopower product
+    would stay silent on it."""
+    page = (
+        '<a href="https://cdn.example/20260801_dbs_tariefkaart.pdf">dbs</a>'
+        '<a href="https://cdn.example/20260901_groenestroom_tariefkaart.pdf">new</a>'
+    )
+    discovered = _run(ecopower_mod.discover(_FakeSession(page)))
+    assert ecopower_mod._DBS_DISCOVER_ID in discovered
+    assert "ecopower_groenestroom" in discovered
+
+
 def test_ecopower_discover_finds_dynamic_card() -> None:
     """The dynamic "Dynamische burgerstroom" card lives on its own page,
     not the gbs price page, so discover() must scrape that page too.

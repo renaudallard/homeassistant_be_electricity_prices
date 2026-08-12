@@ -283,10 +283,16 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
         out.add(_CONTRACT_ID)
     if _DBS_CARD_RE.search(combined):
         out.add(_DBS_DISCOVER_ID)
+    # Six OR eight digits, matching the card patterns above: pinned at six,
+    # a family published under the YYYYMMDD naming would be invisible to
+    # catalog drift detection, which is the one thing meant to notice a new
+    # Ecopower product.
     for other in re.findall(
-        r'/(20\d{4}[a-z]?_(?:[a-z_]+_)?tariefkaart[^"]*)\.pdf', combined, re.IGNORECASE
+        r'/(20\d{4}(?:\d{2})?[a-z]?_(?:[a-z_]+_)?tariefkaart[^"]*)\.pdf',
+        combined,
+        re.IGNORECASE,
     ):
-        family = re.sub(r"^20\d{4}[a-z]?_", "", other)
+        family = re.sub(r"^20\d{4}(?:\d{2})?[a-z]?_", "", other)
         family = re.sub(r"_tariefkaart.*$", "", family)
         if family and not family.startswith(("gbs", "dbs")):
             out.add(f"ecopower_{family}")
