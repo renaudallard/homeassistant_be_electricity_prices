@@ -69,8 +69,24 @@ jobs:
           # the issue always gets filed; the job timeout only needs to
           # cover this plus one final sweep and the gh steps.
           retry_deadline=$((SECONDS + 5400))
+          # A check is worth filing only if it fails in EVERY attempt.
+          # Breaking out on the first all-green attempt was not enough: on a
+          # slow runner each attempt times out on a DIFFERENT random subset
+          # of suppliers, so no attempt is ever green, and the loop filed
+          # whichever three hosts were unlucky on the last one (issue #61:
+          # six attempts, 21 failures, all TimeoutError, all transient, and
+          # every one of them fetched fine off-runner). Intersecting the
+          # per-attempt failures keeps a real regression (a parse error or
+          # a withdrawn card fails the same checks every time) and drops
+          # rotating network noise.
+          : > persistent_failures.txt
+          seeded=0
           for i in $(seq 1 "$attempts"); do
             echo "::group::attempt $i"
+            # Drop the previous attempt's list so a harness death that
+            # skips writing it can never be intersected as if it were
+            # this attempt's result.
+            rm -f extractor_failures.txt
             python scripts/live_check.py > report.md
             rc=$?
             cat report.md
@@ -84,6 +100,25 @@ jobs:
             #        issue-creation steps below fire for rc=8, so the
             #        PR check (last step) is the only push-time signal.
             if [ $((rc & 1)) -eq 0 ]; then
+              # A green sweep clears the intersection: every earlier
+              # failure has now passed at least once.
+              : > persistent_failures.txt
+              break
+            fi
+            # extractor_failures.txt is this attempt's failing check labels,
+            # written by live_check.py alongside report.md. LC_ALL is pinned
+            # because comm needs both inputs sorted in the same collation.
+            LC_ALL=C sort -u extractor_failures.txt > attempt_failures.txt
+            if [ "$seeded" -eq 0 ]; then
+              cp attempt_failures.txt persistent_failures.txt
+              seeded=1
+            else
+              LC_ALL=C comm -12 persistent_failures.txt attempt_failures.txt \
+                > persistent_failures.tmp
+              mv persistent_failures.tmp persistent_failures.txt
+            fi
+            if [ ! -s persistent_failures.txt ]; then
+              echo "no check failed in every attempt; transient, not filing" >&2
               break
             fi
             if [ "$i" -lt "$attempts" ]; then
@@ -97,6 +132,13 @@ jobs:
               sleep "$sleep_for"
             fi
           done
+          # Nothing failed every attempt: clear the extractor bit so the
+          # steps below see the same rc they would on a green sweep. The
+          # catalog and drift bits are stable across attempts and stay.
+          if [ ! -s persistent_failures.txt ] && [ $((rc & 1)) -ne 0 ]; then
+            echo "clearing extractor bit from rc=$rc (no persistent failure)" >&2
+            rc=$((rc & ~1))
+          fi
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           # Exit 0 here so subsequent issue-creation steps run regardless
           # of which kind of failure was detected; they branch on rc.
@@ -123,6 +165,15 @@ jobs:
             echo "## Run"
             echo
             echo "$run_url"
+            echo
+            # The report below is the LAST attempt's, which on a slow runner
+            # also carries checks that failed only that once. These are the
+            # ones that failed every attempt, so they are what to look at.
+            echo "## Persistent failures"
+            echo
+            echo "Failed on every attempt of the retry loop:"
+            echo
+            sed 's/^/- `/; s/$/`/' persistent_failures.txt
             echo
             echo "## Last report"
             echo

@@ -632,9 +632,10 @@ runs two phases against the live supplier endpoints:
 - **Extractor phase** — every (contract, region) tuple is fetched and
   parsed; each fetch retries transient network errors up to three times,
   and the CI workflow re-runs the whole check up to seven times with
-  escalating backoff. Persistent failures open or update a GitHub issue
-  titled
-  `[live-check] supplier extractor broken …`.
+  escalating backoff. Only a check that fails in *every* one of those
+  runs opens or updates a GitHub issue titled
+  `[live-check] supplier extractor broken …`, so a slow runner timing
+  out on a different supplier each time stays quiet.
 - **Catalog phase** — each supplier's `discover()` is run against its
   public listing page; any product visible at the supplier but missing
   from the registry opens a separate issue

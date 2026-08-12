@@ -1646,7 +1646,11 @@ async def _run() -> int:
     (ROOT / "catalog_report.md").write_text(_render_report(catalog_checks))
     drift_warnings = _drift_warnings(METRICS, _failed_suppliers(extractor_checks))
     (ROOT / "drift_report.md").write_text(_render_drift(drift_warnings))
-    extractor_failed = bool(_extractor_regressions(extractor_checks))
+    regressions = _extractor_regressions(extractor_checks)
+    # Side-channel: this attempt's failing check labels for the workflow's
+    # retry loop to intersect across attempts.
+    _write_failure_labels(ROOT / "extractor_failures.txt", regressions)
+    extractor_failed = bool(regressions)
     catalog_failed = any(not c.ok for c in catalog_checks)
     drift_alert = bool(drift_warnings)
     # Bit-encoded exit codes:
@@ -1764,6 +1768,23 @@ def _extractor_regressions(checks: Iterable[Check]) -> list[Check]:
     its own table, so it is visible without being actionable noise.
     """
     return [c for c in checks if not c.ok and not c.expected]
+
+
+def _write_failure_labels(path: Path, checks: Iterable[Check]) -> None:
+    """Write one check label per line, sorted, for the workflow's retry loop.
+
+    The loop intersects this file across its attempts and only files an
+    issue for what failed in EVERY attempt. On a slow runner each attempt
+    times out on a different random subset of suppliers, so no attempt is
+    green and the loop used to file whichever hosts were unlucky on the
+    last one (issue #61); a parse error or a withdrawn card fails the same
+    checks every attempt and still files.
+
+    Only pass regressions here. An unreadable card fails every attempt by
+    definition, so feeding it in would intersect with itself and refile
+    daily - the exact noise _extractor_regressions exists to drop.
+    """
+    path.write_text("".join(f"{label}\n" for label in sorted(c.label for c in checks)))
 
 
 def _failed_suppliers(checks: Iterable[Check]) -> frozenset[str]:

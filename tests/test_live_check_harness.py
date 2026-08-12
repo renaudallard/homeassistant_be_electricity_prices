@@ -287,3 +287,52 @@ def test_failed_suppliers_reads_the_supplier_off_the_label() -> None:
         lc.Check("totalenergies: hard timeout", False, "exceeded 600s"),
     ]
     assert lc._failed_suppliers(checks) == frozenset({"ecofix", "totalenergies"})
+
+
+def test_failure_labels_carry_only_the_regressions(tmp_path: Path) -> None:
+    """The workflow intersects this file across its retry attempts, so an
+    unreadable card in it would intersect with itself and refile an issue
+    every day - the noise the expected flag exists to drop."""
+    checks = [
+        lc.Check(
+            label="ecofix/ecofix_motion/flanders: fetch",
+            ok=False,
+            detail="CardNotReadableError: card has no text layer",
+            expected=True,
+        ),
+        lc.Check(
+            label="eneco/power_flex: fetch",
+            ok=False,
+            detail="ExtractorError: network error fetching: TimeoutError",
+        ),
+        lc.Check(label="bolt/bolt_online/flanders: energy", ok=True),
+    ]
+    path = tmp_path / "extractor_failures.txt"
+    lc._write_failure_labels(path, lc._extractor_regressions(checks))
+    assert path.read_text() == "eneco/power_flex: fetch\n"
+
+
+def test_failure_labels_are_sorted_for_comm(tmp_path: Path) -> None:
+    """comm -12 in the workflow needs both sides sorted, and it re-sorts
+    under LC_ALL=C; emit the same order here so the two agree."""
+    checks = [
+        lc.Check(label="mega/mega_smart_fixed: fetch", ok=False, detail="boom"),
+        lc.Check(label="bolt/bolt_online: fetch", ok=False, detail="boom"),
+        lc.Check(label="engie/engie_dynamic: fetch", ok=False, detail="boom"),
+    ]
+    path = tmp_path / "extractor_failures.txt"
+    lc._write_failure_labels(path, checks)
+    assert path.read_text().splitlines() == [
+        "bolt/bolt_online: fetch",
+        "engie/engie_dynamic: fetch",
+        "mega/mega_smart_fixed: fetch",
+    ]
+
+
+def test_no_failures_writes_an_empty_file(tmp_path: Path) -> None:
+    """An empty intersection is how the loop decides not to file, so a
+    green attempt must leave an empty file rather than no file at all."""
+    path = tmp_path / "extractor_failures.txt"
+    lc._write_failure_labels(path, [])
+    assert path.exists()
+    assert path.read_text() == ""

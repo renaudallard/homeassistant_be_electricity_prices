@@ -215,7 +215,7 @@ loaded `base` module.
 ### Structure and main functions
 
 ```
-main()                       scripts/live_check.py:1756  asyncio.run(_run()); rc=8 on harness crash
+main()                       scripts/live_check.py:1760  asyncio.run(_run()); rc=8 on harness crash
   _run()                     scripts/live_check.py:1537  load providers, gather checks, render, exit code
     _load_providers()        scripts/live_check.py:62    file-path import of every provider (no HA)
     _attributed_check(...)   scripts/live_check.py:322   per-supplier wait_for + trace attribution
@@ -227,7 +227,7 @@ main()                       scripts/live_check.py:1756  asyncio.run(_run()); rc
     _check_catalogs(...)     scripts/live_check.py:1188   run each discover(), flag new product ids
     _fetch_with_retry(...)   scripts/live_check.py:398   transient-only retry with backoff
     _validate_snapshot(...)  scripts/live_check.py:1365  energy + injection shape gates
-    _drift_warnings(...)     scripts/live_check.py:1721  latency / byte budget checks
+    _drift_warnings(...)     scripts/live_check.py:1725  latency / byte budget checks
     _render_report(...)      scripts/live_check.py:1508  markdown pass/fail report
 ```
 
@@ -298,25 +298,25 @@ hard cap (`scripts/live_check.py:327`, raised from 240s when the professional ed
 doubled Engie's and Mega's sequential fetch counts), recorded as an extractor failure rather than
 propagating so one hung supplier cannot starve the `gather()`. Every latency budget below must stay
 under that cap, or the supplier is killed before it can report the drift the budget exists to catch.
-The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:1679`) bounds individual
+The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:1683`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:1782`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:1803`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
-`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1668`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1686`) for the known-large catalogues (Bolt,
+`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1672`), with per-supplier overrides in
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:1690`) for the known-large catalogues (Bolt,
 TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py:1716`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
+(`scripts/live_check.py:1720`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
 which are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request
 durations, not true wallclock, so a supplier that fetches concurrently (Bolt fetches its six PDFs
 with `asyncio.gather`, `scripts/live_check.py:969`) records the sum of its parallel fetches; the
 budgets are sized around that. The synthetic `_catalog` bucket is skipped in drift analysis because
-it aggregates every supplier's discovery fetch under one name (`scripts/live_check.py:1789`). When a
+it aggregates every supplier's discovery fetch under one name (`scripts/live_check.py:1810`). When a
 budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see below). Tuning a
 false-firing drift alert means adjusting the override, not the code.
 
-A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:1796`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:1769`). The
+A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:1817`,
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:1790`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever
@@ -344,7 +344,7 @@ The exit code is bit-encoded (`scripts/live_check.py:1648`):
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
 | - | 8 | harness crash (top-level Python exception in the script) | no |
 
-`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:1764`) so the workflow
+`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:1768`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
 
 ### Unreadable cards do not gate bit 0
@@ -357,7 +357,7 @@ rows). It also handed every other supplier seven rolls of the dice at a transien
 is where the collateral rows in those issues came from.
 
 `_record` (`scripts/live_check.py:440`) marks such a check `expected`, and `_extractor_regressions`
-(`scripts/live_check.py:1747`) is the single definition of what gates CI. The classification reads
+(`scripts/live_check.py:1760`) is the single definition of what gates CI. The classification reads
 the exception type the fetch sites already write into the detail string
 (`CardNotReadableError`, raised by `providers/_pdf.py`), so it follows the card actually
 published rather than a hardcoded supplier list: a supplier that goes back to publishing text
@@ -439,6 +439,22 @@ is still broken roughly an hour after first detection, not for a transient CDN b
 seven attempts with delays `10 30 60 120 300 3000` seconds, bounded by a 5400s wall-clock deadline
 so the job always reaches the issue-creation steps before the 120-minute job timeout. Only a bit-0
 (extractor) failure is retried; catalog and drift signals are stable and break out immediately.
+
+Breaking out on a green attempt is not enough on its own. On a slow runner every attempt times out
+on a *different* random subset of suppliers, so no attempt is ever green and the loop filed
+whichever hosts were unlucky on the last one: issue #61 ran six attempts and produced 21 failures,
+all `TimeoutError`, all transient, and every card fetched fine off-runner. So the loop also
+intersects the per-attempt failures and only a check that failed in **every** attempt is filed.
+`scripts/live_check.py` writes each attempt's failing check labels to `extractor_failures.txt`
+alongside `report.md`, and the loop folds them with `comm -12` under `LC_ALL=C`. When the
+intersection empties it stops retrying (there is nothing persistent left to confirm) and clears
+bit 0 from `rc`, leaving the catalog and drift bits alone. A real regression - a parse error, a
+withdrawn card - fails the same checks every attempt and still files. The trade-off is that a
+genuinely intermittent regression, say a CDN serving two card layouts round-robin, is suppressed
+until it becomes consistent.
+
+The extractor issue body leads with those persistent failures, because the report under them is the
+last attempt's and on a slow runner also lists checks that failed only that once.
 
 The job then branches on the captured `rc` to open or update three distinct, label-deduplicated
 issues (dedup is on a deterministic label, not a title substring, so a manually opened issue cannot
