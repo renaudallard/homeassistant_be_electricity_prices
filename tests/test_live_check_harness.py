@@ -336,3 +336,83 @@ def test_no_failures_writes_an_empty_file(tmp_path: Path) -> None:
     lc._write_failure_labels(path, [])
     assert path.exists()
     assert path.read_text() == ""
+
+
+_GBS_PAGE = """
+<a href="https://cdn.example/202607_gbs_tariefkaart.pdf?x=1">July</a>
+<a href="https://cdn.example/202608_gbs_inschatting_tariefkaart_ecopower.pdf?x=1">Aug preview</a>
+"""
+
+_VERSIONED_PAGE = """
+<a href="https://f.example/pricelists/var/bolt_res_el_fr_9.pdf">old</a>
+<a href="https://f.example/pricelists/var/bolt_res_el_fr_13.pdf">current</a>
+"""
+
+_VERSION_RE = r"pricelists/var/bolt_res_el_fr_(\w+)\.pdf"
+_GBS_RE = r"/(\d{4,8})[a-z]?_gbs_[a-z_]*\.pdf"
+
+
+def _version_key(stamp: str) -> int:
+    return int(stamp) if stamp.isdigit() else -1
+
+
+def _date_key(stamp: str) -> int:
+    return int(stamp.ljust(8, "0"))
+
+
+def test_freshness_flags_a_superseded_version() -> None:
+    """The Bolt shape: the pinned card still exists and still parses, so
+    only the listing says it has been superseded."""
+    lc._expect_newest_card(
+        "bolt/freshness", _VERSIONED_PAGE, _VERSION_RE, "11", key=_version_key
+    )
+    (row,) = _rows("bolt/freshness")
+    assert row.ok is False
+    assert "advertises 13" in row.detail
+
+
+def test_freshness_compares_versions_numerically() -> None:
+    """A lexical max would rank "9" above "13" and report a current card
+    as stale every time the version crosses a digit boundary."""
+    lc._expect_newest_card(
+        "bolt/freshness", _VERSIONED_PAGE, _VERSION_RE, "13", key=_version_key
+    )
+    assert _rows("bolt/freshness")[0].ok is True
+
+
+def test_freshness_ignores_the_inschatting_preview() -> None:
+    """Ecopower publishes next month's estimate alongside the definitive
+    cards. It is advertised but not billable, so serving July while an
+    August preview is up is correct, not stale."""
+    lc._expect_newest_card(
+        "ecopower/freshness",
+        _GBS_PAGE,
+        _GBS_RE,
+        "202607",
+        key=_date_key,
+        exclude="inschatting",
+    )
+    assert _rows("ecopower/freshness")[0].ok is True
+
+
+def test_freshness_spans_stamp_widths() -> None:
+    """The Ecopower shape: a renamed card the extractor's stricter pattern
+    cannot see, so it keeps resolving the older one."""
+    page = """
+    <a href="https://cdn.example/202601_dbs_tariefkaart.pdf">Jan</a>
+    <a href="https://cdn.example/20260801_dbs_tariefkaart.pdf">Aug</a>
+    """
+    pattern = r"/(\d{4,8})[a-z]?_dbs_[a-z_]*\.pdf"
+    lc._expect_newest_card("ecopower/dbs", page, pattern, "202601", key=_date_key)
+    (row,) = _rows("ecopower/dbs")
+    assert row.ok is False
+    assert "advertises 20260801" in row.detail
+
+
+def test_freshness_stays_quiet_when_the_page_shape_is_unrecognised() -> None:
+    """A redesigned page must not read as staleness: there is nothing to
+    compare against, and the extractor check already covers a real break."""
+    lc._expect_newest_card(
+        "ecopower/freshness", "<p>no cards here</p>", _GBS_RE, "202607", key=_date_key
+    )
+    assert _rows("ecopower/freshness")[0].ok is True

@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util as iu
+import re
 import sys
 import time
 import traceback
@@ -131,8 +132,9 @@ def _load_providers() -> dict[str, types.ModuleType]:
     _RATE_TOU = base.TimeOfUseRates
     _RATE_IMPACT = base.ImpactRates
     pdf = _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
-    global _is_transient_fetch_error
+    global _is_transient_fetch_error, _fetch_text
     _is_transient_fetch_error = pdf.is_transient_fetch_error
+    _fetch_text = pdf.fetch_text
     loaded = {
         supplier: _load(
             f"be_pkg.providers.{supplier}", PKG / "providers" / f"{supplier}.py"
@@ -212,6 +214,13 @@ _RATE_IMPACT: type = object
 # rather than duplicating it. Placeholder until the providers package loads.
 def _is_transient_fetch_error(_message: str) -> bool:
     return False
+
+
+# Bound by _load_providers to providers/_pdf.fetch_text, so the freshness
+# probe can read a supplier's listing page directly rather than reaching
+# into whichever provider module happens to re-export the helper.
+async def _fetch_text(_session: aiohttp.ClientSession, _url: str) -> str:
+    raise RuntimeError("providers not loaded")
 
 
 # Per-supplier fetch-time (summed per-request durations) + bytes-received
@@ -1193,6 +1202,107 @@ async def _check_catalogs(
         )
 
 
+def _expect_newest_card(
+    label: str,
+    html: str,
+    pattern: str,
+    served: str,
+    key: Callable[[str], int],
+    exclude: str = "",
+) -> None:
+    """Assert ``served`` is the highest card stamp ``html`` advertises.
+
+    ``pattern`` is deliberately looser than the extractor's own: that is
+    the whole mechanism. When a supplier changes the filename SHAPE the
+    strict pattern stops seeing the new file and keeps resolving the old
+    one, which still exists, still returns 200 and still parses -- so
+    every other check in this script passes. The loose pattern still sees
+    it, and the two disagree.
+    """
+    advertised = [
+        m.group(1)
+        for m in re.finditer(pattern, html)
+        if not exclude or exclude not in m.group(0).lower()
+    ]
+    if not advertised:
+        _record(label, True, "page advertises no card in the expected shape")
+        return
+    newest = max(advertised, key=key)
+    if key(served) >= key(newest):
+        _record(label, True)
+        return
+    _expect(label, False, f"supplier advertises {newest}, extractor resolves {served}")
+
+
+async def _check_card_freshness(
+    session: aiohttp.ClientSession, modules: dict[str, types.ModuleType]
+) -> None:
+    """Assert each listing-resolved supplier serves its NEWEST card.
+
+    Every other check here asks whether the fetch succeeded and the parse
+    made sense. Both are true of a superseded card, so a pinned or
+    unmatched URL reads as a perfectly healthy run: Bolt served June's
+    formula for ten weeks behind a green board, and Ecopower served
+    January's tax block once its dynamic card was renamed to YYYYMMDD.
+    """
+    bolt, ecopower = modules.get("bolt"), modules.get("ecopower")
+    if bolt is not None:
+        label = "bolt/freshness: serving the newest advertised variable card"
+        try:
+            html = await _fetch_text(session, bolt._LISTING_URL)
+            served = await bolt._resolve_variable_suffix(session)
+        except Exception as err:  # noqa: BLE001
+            # A listing outage is not a staleness signal, and the
+            # supplier's own extractor check reports a fetch regression.
+            _record(label, True, f"listing unreadable: {type(err).__name__}: {err}")
+        else:
+            _expect_newest_card(
+                label,
+                html,
+                # \w+ where the extractor demands \d+: a version that grows
+                # a letter must fail loudly, not resolve to the old number.
+                r"pricelists/var/bolt_res_el_fr_(\w+)\.pdf",
+                served,
+                # Plain version numbers, so "9" must not outrank "13".
+                key=lambda s: int(s) if s.isdigit() else -1,
+            )
+    if ecopower is None:
+        return
+
+    def date_key(stamp: str) -> int:
+        """Dates that may or may not carry a day, so pad before comparing."""
+        return int(stamp.ljust(8, "0"))
+
+    for family, page, resolver, exclude in (
+        ("dynamic", ecopower._DBS_PAGE, ecopower._resolve_latest_dbs_pdf, ""),
+        (
+            "definitive",
+            ecopower._PRICE_PAGE,
+            ecopower._resolve_latest_pdf,
+            "inschatting",
+        ),
+    ):
+        label = f"ecopower/freshness: serving the newest advertised {family} card"
+        try:
+            html = await _fetch_text(session, page)
+            url, _label = await resolver(session)
+        except Exception as err:  # noqa: BLE001
+            _record(label, True, f"page unreadable: {type(err).__name__}: {err}")
+            continue
+        # Spans the whole filename, not just the stamp: ``exclude`` tests
+        # the matched text, and "inschatting" sits AFTER the stamp. Match
+        # only as far as the family and the preview card counts as the
+        # newest definitive one.
+        pattern = rf"/(\d{{4,8}})[a-z]?_{'dbs' if family == 'dynamic' else 'gbs'}_[a-z_]*\.pdf"
+        served_match = re.search(pattern, url)
+        if served_match is None:
+            _expect(label, False, f"cannot read a card stamp out of {url}")
+            continue
+        _expect_newest_card(
+            label, html, pattern, served_match.group(1), key=date_key, exclude=exclude
+        )
+
+
 def _validate_injection(prefix: str, snap: object, shape: str = "present") -> None:
     """Gate that injection parsed AND kept the right shape (issues #31, F53).
 
@@ -1625,6 +1735,18 @@ async def _run() -> int:
                 # extractor report that was already computed above.
                 _record(
                     "_catalog: probe crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                    kind="catalog",
+                )
+            # Its own try: a catalog crash must not swallow the freshness
+            # gate, which is the one check that sees a supplier superseding
+            # a card we still resolve.
+            try:
+                await _check_card_freshness(session, modules)
+            except Exception as err:  # noqa: BLE001
+                _record(
+                    "_freshness: probe crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                     kind="catalog",

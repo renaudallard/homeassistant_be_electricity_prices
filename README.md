@@ -62,7 +62,7 @@ publication and how to parse it.
 - **Translated UI** — English, French, Dutch and German.
 - **One-off supplier comparison** — the OptionsFlow has a *Compare another supplier* path that quotes a different supplier and contract against your current region / DSO / peak / solar settings. **Static and dynamic contracts can be quoted against each other** ("should I switch from fixed to dynamic?"); the flow prompts for an ENTSO-E key when a side needs spot data (a dynamic contract, or a spot-indexed-injection target like Cociter Variable on the injection regime) and you don't already have one saved. The annual estimate uses your **measured rolling-year consumption** (and, for solar users, injection) read from the same kWh sensors that feed `current_year_cost`, with a sensible 3500 kWh fallback when no sensor is wired. The result page also shows a **year-to-date what-if**: the actual kWh you've used since 1 January re-priced at each supplier's current rate, with two-row unicode bar charts so the difference reads at a glance. The meter type is overridable for static contracts (compare *what if I were on bi-hourly billing under supplier X*). Solar regimes are honoured: compensation nets consumption against injection, injection regime credits each supplier's own injection price. No second entry, no extra polling, nothing saved.
 - **Self-healing** — last-known prices keep serving on outage. Five repair issues surface under **Settings → System → Repairs**: snapshot older than 7 days, a supplier extractor parse failure (layout drift), the supplier being unreachable after repeated fetch failures, ENTSO-E rejecting the API key, and a supplier that has announced it is leaving the residential market. A single transient fetch timeout no longer raises an issue; each auto-clears on the next successful refresh.
-- **Catalog drift detection** — the daily live-check diffs each supplier's public catalog against the registry and opens a GitHub issue when a new product appears, plus per-supplier wallclock + bytes-received telemetry to flag silent slowdowns and PDF size jumps.
+- **Catalog drift detection** — the daily live-check diffs each supplier's public catalog against the registry and opens a GitHub issue when a new product appears, verifies the card resolved is the newest one the supplier advertises, plus per-supplier wallclock + bytes-received telemetry to flag silent slowdowns and PDF size jumps.
 - **Expert custom formula** — an escape hatch for suppliers that publish no public tariff card (group-purchase deals, B2B-flavoured products). You type the commodity formula (`factor × spot + base`, a monthly-averaged spot rate, or a flat rate) and all regulated DSO + tax values; there is no live card, so it's a static snapshot with none of the auto-update or drift-check safety net. Listed last in the supplier dropdown and clearly labelled as expert.
 
 ## Supported providers
@@ -641,6 +641,10 @@ runs two phases against the live supplier endpoints:
   from the registry opens a separate issue
   `[live-check] new supplier products detected …` so a parser regression
   and a catalogue addition stay in distinct threads.
+- **Freshness phase** — for suppliers whose card URL is resolved from a
+  listing, the card actually resolved is compared against the newest one
+  the supplier advertises. A superseded card still downloads and still
+  parses, so without this a stale URL looks identical to a healthy run.
 
 ## License
 
