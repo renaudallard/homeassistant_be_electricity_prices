@@ -18,11 +18,12 @@ only the first was and the other three rotted in silence:
   4. a symbol that MOVED to another module, whose old line still happens to
      land inside the now-shorter file, so nothing looks broken
 
-CI runs this without ``--write`` and fails only on references that are
-PROVABLY broken: past the end of the file they name. Everything else is
-reported for a human, never auto-corrected, because the same shapes have
-legitimate forms. A ref pointing at a USE site rather than a definition is
-correct and common, and the anchor heuristic cannot tell it from a stale one.
+CI runs this without ``--write`` and fails on references that are PROVABLY
+broken (past the end of the file they name) and on any INCREASE in the
+rewritable count over the baseline below. Everything else is reported for a
+human, never auto-corrected, because the same shapes have legitimate forms. A
+ref pointing at a USE site rather than a definition is correct and common, and
+the anchor heuristic cannot tell it from a stale one.
 
 Usage:  doc_ref_check.py [--write] [--verbose]
 """
@@ -35,6 +36,19 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# Rewritable references tolerated on a green run. These are pins that name a
+# symbol but deliberately point at the code implementing the behaviour the
+# prose describes, which the anchor heuristic reports as rewritable and a
+# human must not "fix": four of the five sit on a line that does not even
+# mention the symbol, so no per-reference rule can tell them from a stale pin.
+# Freezing the COUNT gates the case that rule cannot: a commit that shifts
+# source lines under pins that used to resolve. That leaves this number
+# untouched (an ambiguous pin stays ambiguous however the file moves) while a
+# batch of newly rotted pins pushes it up, which is exactly the drift that
+# used to land green -- one branch shifted 98 refs and CI never noticed.
+# Raise it only for a pin deliberately aimed at an implementation site, and
+# say which in the commit message; lower it whenever one is resolved.
+_REWRITABLE_BASELINE = 5
 REF = re.compile(r"`([A-Za-z0-9_./]+\.py):(\d+)`")
 # Range refs ("`coordinator.py:2653-2675`"). REF does not match these, so for
 # as long as the sweep only knew about single-line refs they were never
@@ -272,11 +286,9 @@ def main() -> int:
         for x in suspect:
             print("   ", x)
 
-    # Fail ONLY on references that are provably broken: they name a line past
-    # the end of the file. Everything else needs a human. The rewritable list
-    # is not a failure because the anchor heuristic mis-fires on a ref that
-    # legitimately points at a use site, and the suspects list is a judgement
-    # call by construction. Failing on those would train people to ignore it.
+    # Fail on references that are provably broken: they name a line past the
+    # end of the file. The suspects list stays a report, being a judgement call
+    # by construction; failing on it would train people to ignore it.
     broken = stale_unresolved + len(stale_ranges)
     if broken and not write:
         print(
@@ -285,6 +297,25 @@ def main() -> int:
             f"the source and repin, never by adding an offset."
         )
         return 1
+    # And fail on rewritable refs above the baseline. No single one of them is
+    # provably stale, but a rise means pins that used to resolve no longer do.
+    if fixed > _REWRITABLE_BASELINE and not write:
+        print(
+            f"\nFAIL: {fixed} rewritable reference(s), baseline "
+            f"{_REWRITABLE_BASELINE}: {fixed - _REWRITABLE_BASELINE} pin(s) that "
+            f"used to resolve no longer do. They are listed above as "
+            f"'doc: symbol file:old -> :new'. Re-derive each by content and "
+            f"repin, never by adding an offset. If a new pin genuinely aims at "
+            f"an implementation site rather than a definition, raise the "
+            f"baseline in this script and say which pin in the commit message."
+        )
+        return 1
+    if fixed < _REWRITABLE_BASELINE and not write:
+        print(
+            f"\nNote: rewritable refs ({fixed}) are below the baseline "
+            f"({_REWRITABLE_BASELINE}); lower _REWRITABLE_BASELINE to keep the "
+            f"ratchet tight."
+        )
     return 0
 
 

@@ -174,15 +174,25 @@ line from an AST index and, with `--write`, repins it.
 It runs in the `test` job (`.github/workflows/test.yml:62`), before the suite, and needs no
 network or fixtures.
 
-**It fails the build only on a reference that is provably broken**, i.e. past the end of the
-file it names. Everything else is printed and left to a human, because each has a legitimate
-form the checker cannot distinguish:
+**It fails the build on a reference that is provably broken** (past the end of the file it
+names) **and on any rise in the rewritable count**. The rest is printed and left to a human,
+because each has a legitimate form the checker cannot distinguish:
 
 | Report | Fails CI | Why not automatic |
 | --- | --- | --- |
 | past EOF (plain, range, or continuation) | yes | the file has no such line; nothing to argue about |
-| `anchored+rewritable` | no | the anchor heuristic takes the nearest preceding backticked identifier, which on a dense sentence is often not the subject. Read the list before running `--write` |
+| `anchored+rewritable` | only above the baseline | the anchor heuristic takes the nearest preceding backticked identifier, which on a dense sentence is often not the subject. Read the list before running `--write` |
 | `moved-symbol suspects` | no | the same shape is also a correct reference to a USE site (`CONF_CONTRACT` (`config_flow.py:163`) is where the flow reads it, not where `const` defines it). ~63 of these are expected; `--verbose` lists them |
+
+No single rewritable reference is provably stale, so none can gate on its own: four of the five
+on `main` sit on a line that does not even mention the symbol the prose names, being deliberate
+pins at the code implementing the behaviour. The COUNT still gates, because it is stable for
+that class - an ambiguous pin stays ambiguous however the file moves - and rises only when pins
+that used to resolve stop resolving. `_REWRITABLE_BASELINE` (`scripts/doc_ref_check.py:51`)
+freezes it. Without this, a branch that inserted three import lines shifted 98 pins (764 correct
+down to 666) and the checker still exited 0. Raise the baseline only for a pin deliberately
+aimed at an implementation site, naming it in the commit message; lower it when one is resolved,
+which the checker prints a note asking for.
 
 Four reference forms exist and all four are checked. That matters because for a long time only
 the first was, and the other three rotted invisibly behind a clean run: 28 stale ranges (21 of
