@@ -487,7 +487,15 @@ class _MigratingStore(Store[dict[str, Any]]):
 # credited a rate the card charges. Mega is probe-based and the May cards are
 # already published, so their probe key will not move again; without this bump
 # an affected entry keeps the wrong sign indefinitely.
-_SNAPSHOT_SCHEMA_VERSION = 19
+# v20: two extractors were resolving a superseded card URL, so the cache holds a
+# card that parsed perfectly and is simply the wrong one. Bolt pinned the
+# variable-family version suffix and served June's formula for ten weeks after
+# the August revision shipped; Ecopower's six-digit filename pattern could not
+# see the YYYYMMDD card that replaced it and kept serving January's tax block.
+# Neither supplier's probe key moves on its own here -- the pinned URL's card is
+# unchanged, which is exactly why nothing noticed -- so without this bump an
+# existing entry keeps the stale prices indefinitely.
+_SNAPSHOT_SCHEMA_VERSION = 20
 
 
 def _snapshot_to_dict(

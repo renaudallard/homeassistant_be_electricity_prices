@@ -350,12 +350,106 @@ def test_pro_document_url_swaps_the_segment() -> None:
         _document_url,
     )
 
-    assert _document_url(_CONTRACTS_BY_ID["bolt_variable"]).endswith(
-        "/var/bolt_res_el_fr_11.pdf"
+    # Pin the segment, not the version: the variable version is resolved
+    # from the listing at fetch time, so asserting a number here is what
+    # let a stale pin sit unnoticed for ten weeks.
+    assert _document_url(_CONTRACTS_BY_ID["bolt_variable"], suffix="13").endswith(
+        "/var/bolt_res_el_fr_13.pdf"
     )
-    assert _document_url(_CONTRACTS_BY_ID["bolt_pro_variable"]).endswith(
-        "/var/bolt_pro_el_fr_11.pdf"
+    assert _document_url(_CONTRACTS_BY_ID["bolt_pro_variable"], suffix="13").endswith(
+        "/var/bolt_pro_el_fr_13.pdf"
     )
+
+
+_LISTING_HTML = """
+<a href="https://files.boltenergie.be/pricelists/fix/fix_res_el_fr_202608.pdf">fix</a>
+<a href="https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_9.pdf">old</a>
+<a href="https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_13.pdf">current</a>
+<a href="https://files.boltenergie.be/pricelists/var/online_res_el_fr_13.pdf">online</a>
+"""
+
+
+def test_variable_suffix_is_resolved_numerically_from_the_listing() -> None:
+    # Bolt bumps the variable version in place and leaves every superseded
+    # file served, so the stale URL keeps answering 200 with an old card.
+    # The listing is the only signal, and "9" must not outrank "13".
+    async def _run() -> None:
+        with patch.object(
+            bolt_mod, "fetch_text", new=AsyncMock(return_value=_LISTING_HTML)
+        ):
+            assert await bolt_mod._resolve_variable_suffix(None) == "13"  # type: ignore[arg-type]
+
+    asyncio.run(_run())
+
+
+@pytest.mark.parametrize(
+    "listing",
+    [
+        pytest.param(ExtractorError("listing down"), id="unreadable"),
+        pytest.param(
+            "<a href='/pricelists/fix/fix_res_el_fr_202608.pdf'>f</a>", id="no-var-card"
+        ),
+    ],
+)
+def test_variable_suffix_falls_back_when_the_listing_gives_nothing(
+    listing: str | ExtractorError,
+) -> None:
+    # A listing outage must degrade to a known version, not fail every
+    # Bolt entry: the card itself is still being served.
+    mock = (
+        AsyncMock(side_effect=listing)
+        if isinstance(listing, ExtractorError)
+        else AsyncMock(return_value=listing)
+    )
+
+    async def _run() -> None:
+        with patch.object(bolt_mod, "fetch_text", new=mock):
+            resolved = await bolt_mod._resolve_variable_suffix(None)  # type: ignore[arg-type]
+            assert resolved == bolt_mod._VARIABLE_SUFFIX_FALLBACK
+
+    asyncio.run(_run())
+
+
+def test_variable_fetch_uses_the_resolved_version_not_a_pin() -> None:
+    # Regression: a hardcoded _VARIABLE_SUFFIX billed June's formula for
+    # ten weeks after Bolt shipped _13, with no error to notice.
+    text = fixture_text("bolt_variable.pdf", layout=True)
+    seen: list[str] = []
+
+    async def _capture(_session: object, url: str, **_kw: object) -> str:
+        seen.append(url)
+        return text
+
+    async def _run() -> None:
+        with (
+            patch.object(
+                bolt_mod, "fetch_text", new=AsyncMock(return_value=_LISTING_HTML)
+            ),
+            patch.object(bolt_mod, "fetch_pdf_text_layout", new=_capture),
+        ):
+            await bolt_mod.fetch(None, "bolt_variable", "flanders")  # type: ignore[arg-type]
+
+    asyncio.run(_run())
+    assert seen == ["https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_13.pdf"]
+
+
+def test_fix_fetch_does_not_consult_the_listing() -> None:
+    # Fixed cards are URL-keyed by month and need no version lookup;
+    # spending a listing round-trip on them would be pure waste.
+    text = fixture_text("bolt_fix.pdf", layout=True)
+    listing = AsyncMock(return_value=_LISTING_HTML)
+
+    async def _run() -> None:
+        with (
+            patch.object(bolt_mod, "fetch_text", new=listing),
+            patch.object(
+                bolt_mod, "fetch_pdf_text_layout", new=AsyncMock(return_value=text)
+            ),
+        ):
+            await bolt_mod.fetch(None, "bolt_fix", "flanders")  # type: ignore[arg-type]
+
+    asyncio.run(_run())
+    listing.assert_not_awaited()
 
 
 def test_pro_card_is_parsed_ex_vat() -> None:
