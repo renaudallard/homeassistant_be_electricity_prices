@@ -26,7 +26,7 @@ Related reading:
 | Label | `Engie` (`engie.py:876`) |
 | Regions served | Flanders, Wallonia, Brussels (union across contracts, `engie.py:870`) |
 | Publication form | Per (contract, region) PDF behind a REST query endpoint |
-| `source_url` | the bare API base, `engie.py:396` |
+| `source_url` | the bare API base, `engie.py:505` |
 | `probe` | none declared (TTL-only, see below) |
 | `fetch_for_month` | none declared (API is overwrite-in-place) |
 
@@ -64,7 +64,7 @@ one snapshot (`engie.py:39`, `engie.py:343`).
 
 Eighteen products are declared in `_CONTRACTS` (`engie.py:149`): ten
 residential, and eight professional editions of the same families. Every
-`Contract` exposed to the registry (`engie.py:1050`) sets `regions` from the
+`Contract` exposed to the registry (`engie.py:1041`) sets `regions` from the
 contract's `months_per_region` keys (`engie.py:132`) and `professional` from
 its `segment`; none set `spot_indexed_injection` (dynamic contracts already
 collect the ENTSO-E key via their energy formula, so the flag stays False,
@@ -289,10 +289,10 @@ otherwise cancel out (`0.1039 * 10.6 == 0.1039 * 1.06 * 10`).
 
 | kind | Returned dataclass | How the rates map |
 | --- | --- | --- |
-| fixed | `FixedRates` via `fixed_or_variable_rates` (`engie.py:528`) | `single/peak/offpeak/exclusive_night` from the 4- or 7-column row + `yearly_fixed_fee`. |
-| variable | `VariableRates` via `fixed_or_variable_rates` (`engie.py:528`) | `current/peak/offpeak/exclusive_night`; monthly-indexed. Reads the `Prix mensuels` row, not the `Prix annuels estimés` row (see quirks). |
-| dynamic | `DynamicRates` (`engie.py:470`) | `factor * eSpot_15 + base`, VAT-scaled, `quarter_hourly=True`. |
-| tou | `TimeOfUseRates` (`engie.py:499`) | Flextime triplet from columns 4/5/6, `weekend_rule="weekend_no_peak"`. |
+| fixed | `FixedRates` via `fixed_or_variable_rates` (`engie.py:649`) | `single/peak/offpeak/exclusive_night` from the 4- or 7-column row + `yearly_fixed_fee`. |
+| variable | `VariableRates` via `fixed_or_variable_rates` (`engie.py:649`) | `current/peak/offpeak/exclusive_night`; monthly-indexed. Reads the `Prix mensuels` row, not the `Prix annuels estimés` row (see quirks). |
+| dynamic | `DynamicRates` (`engie.py:591`) | `factor * eSpot_15 + base`, VAT-scaled, `quarter_hourly=True`. |
+| tou | `TimeOfUseRates` (`engie.py:620`) | Flextime triplet from columns 4/5/6, `weekend_rule="weekend_no_peak"`. |
 
 Empower Flextime (`kind="tou"`) is the SMR3-only TOU billing mode of the Empower
 Variable product, sharing the same PDF (`engie.py:194`). It requires the 7-price
@@ -309,7 +309,7 @@ publication (`engie.py:197`, framework schedule `base.py:202`).
 Reads the `Compteur digital` Fluvius table only (the analog table is ignored,
 `engie.py:723`). Fluvius distribution rates already include Elia transport
 (`incluant déjà les coûts de transport`), so the parser sets `transport=0` and
-rolls the full c€/kWh into `distribution_single` (`engie.py:742`, test
+rolls the full c€/kWh into `distribution_single` (`engie.py:906`, test
 `test_dynamic_flanders_dso_includes_transport_in_distribution`
 `tests/test_engie.py:187`). The eight Fluvius sub-areas are mapped through
 `_FLANDERS_LABELS` (`engie.py:866`); note the card labels do not match the
@@ -360,7 +360,7 @@ Two gotchas guard this parser:
 Reads the single Sibelga row (`engie.py:841`). Brussels has no separate capacity
 charge (capacity is Flanders-only), so the parser folds two flat annual euros,
 the metering fee (`Activité de mesure`, column 5) and the Sibelga <=13kVA power
-term (column 6), into `data_management_per_year` (`engie.py:861`, test
+term (column 6), into `data_management_per_year` (`engie.py:1024`, test
 `test_dynamic_brussels_extracts_sibelga` `tests/test_engie.py:214`, illustrative
 `14.73 + 50.07`). It also parses the Brugel OSP annual-fee table via the shared
 `parse_brussels_osp` (`_pdf.py:681`) into `brussels_osp_by_tier`.
@@ -378,7 +378,7 @@ term (column 6), into `data_management_per_year` (`engie.py:861`, test
 | `brussels_renewables` | `_extract_consumption_renewables` | Brussels text only (`engie.py:734`). |
 | `region_connection_fee` | `_extract_connection_fee` | Wallonia only (`engie.py:851`). |
 | `energy_fund_eur_per_month` | `_extract_energy_fund` | Flanders only (`engie.py:826`). |
-| `vat_rate` | hardcoded `0.0` (`engie.py:394`) | Card is 6% VAT inclusive. |
+| `vat_rate` | hardcoded `0.0` (`engie.py:503`) | Card is 6% VAT inclusive. |
 
 `vat_rate=0.0` is the "prices are already VAT-incl" convention (`base.py:471`).
 Engie's cards print 6% VAT inclusive (`engie.py:42`), so the extracted energy /

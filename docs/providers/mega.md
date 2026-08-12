@@ -439,7 +439,7 @@ month (Mega cards are valid for the printed month).
 
 ## Taxes
 
-`TaxOverlay` (`mega.py:476`) is assembled from:
+`TaxOverlay` (`mega.py:781`) is assembled from:
 
 - Federal excise: the flat `Accise speciale (c€/kWh)` value when the card prints
   one, else the first tier `Consommation entre 0 et 3000 kWh`
@@ -470,7 +470,7 @@ month (Mega cards are valid for the printed month).
   amount on a missing reduced row, so a household is never billed the business
   rate. This was hardcoded 0.0 until it was found to drop 120,84 EUR/yr on every
   professional Flanders contract.
-- `vat_rate`: **0.0**, meaning the snapshot's prices are already VAT-incl (`mega.py:484`).
+- `vat_rate`: **0.0**, meaning the snapshot's prices are already VAT-incl (`mega.py:794`).
   This is the same convention as Eneco and Cociter; do not add a VAT multiplier when
   parsing.
 
@@ -560,7 +560,7 @@ The land mines a future maintainer must know, drawn from the module comments:
   abolished, so an absent row is a real zero rather than drift.
 - **`fetch_for_month` must rotate two month placeholders and preserve the effective
   day**, and reject the CDN HTML stub via the PDF magic-byte check plus
-  `archive_validity_check` (`mega.py:470`).
+  `archive_validity_check` (`mega.py:652`).
 - **Every segment-aware path needs the `contract.professional` branch.** `fetch`,
   `probe` and `fetch_for_month` all have to know that the B2B cards live off the
   listing; `fetch_for_month` lacked it and served the residential card, because the

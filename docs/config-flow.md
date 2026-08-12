@@ -180,7 +180,7 @@ Schema `_meter_schema` (`flow_schemas.py:736`). The key rule (`flow_schemas.py:7
 - If contract kind is `dynamic`, `tou`, or `tou_impact`, the only option is
   `METER_DYNAMIC` and the default is `METER_DYNAMIC`.
 - Otherwise the full `METER_TYPES` list applies (`mono`, `bi`, `dynamic`,
-  `exclusive_night`; `const.py:163`) with `METER_MONO` as the fallback.
+  `exclusive_night`; `const.py:218`) with `METER_MONO` as the fallback.
 
 Why: dynamic/TOU/Impact contracts bill energy by quarter-hour or hour-of-day and
 require a smart (SMR3) meter. Picking `bi` on a TOU contract would route

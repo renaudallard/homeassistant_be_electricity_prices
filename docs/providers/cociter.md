@@ -162,7 +162,7 @@ text with pypdf off the event loop.
 
 The yearly abonnement is common to both products, matched by
 `(\d+,\d+) €/an ... TVAC` (`cociter.py:317`). A miss is fatal
-(`ExtractorError`, `cociter.py:322`) rather than a silent zero standing charge.
+(`ExtractorError`, `cociter.py:362`) rather than a silent zero standing charge.
 The comment notes the abonnement is 53,00 EUR/an TVAC (illustrative), and the
 variable test pins `yearly_fixed_fee == 53.0` (`test_cociter.py:70`).
 

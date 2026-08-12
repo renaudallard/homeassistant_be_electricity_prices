@@ -168,7 +168,7 @@ sub-parsers. All five run against the layout-preserving text from
 ### Number format
 
 `_NUM = r"([\d]+(?:[.,][\d]+)?)"` (`providers/frank.py:328`) accepts both decimal
-separators and `to_float` normalises either. The comment (`providers/frank.py:323`)
+separators and `to_float` normalises either. The comment (`providers/frank.py:325`)
 records why: a dot-decimal re-render of the card would otherwise truncate a mandatory tax
 row to 0 or collapse the VAT multiplier 1,06 to 1 rather than failing loud.
 `test_dot_decimal_render_matches_comma` (`tests/test_frank.py:132`) pins that a comma card
@@ -200,7 +200,7 @@ formula on the card is stated ex-VAT and multiplied by `x 1,06`. `test_energy_fo
 
 The monthly standing charge is parsed by `_MONTHLY_FEE_RE` matching
 `Abonnementskost (EUR/maand) <num>` (`providers/frank.py:336`) and multiplied by 12 to
-`yearly_fixed_fee` (`providers/frank.py:363`). A missing row is fatal: the comment notes
+`yearly_fixed_fee` (`providers/frank.py:365`). A missing row is fatal: the comment notes
 the ~35 EUR/yr charge is mandatory, so a miss raises "monthly fixed fee row not found"
 rather than silently billing zero (`providers/frank.py:362`).
 `test_missing_monthly_fee_is_fatal` (`tests/test_frank.py:177`) locks this. The April

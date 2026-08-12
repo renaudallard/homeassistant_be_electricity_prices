@@ -231,7 +231,7 @@ them out of state-attribute storage stops long-term-database bloat.
 
 ### `current_year_cost`: state class and last_reset
 
-`current_year_cost` (`sensor.py:432`) is the only sensor with a non-trivial
+`current_year_cost` (`sensor.py:435`) is the only sensor with a non-trivial
 statistics setup, documented in its source comment:
 
 - `device_class=MONETARY` so HA's Energy dashboard auto-suggests it in the
@@ -351,7 +351,7 @@ Both call `_resolve_window_inputs` (`__init__.py:523`) then `_find_window`
   quarter-hourly one, so on a 15-minute (Engie Dynamic) contract the window can
   start on any quarter-hour boundary.
 - `earliest_start` is truncated down to its slot boundary
-  (`slot_start`, `__init__.py:385`), so 14:30 still considers the 14:00 slot
+  (`slot_start`, `__init__.py:398`), so 14:30 still considers the 14:00 slot
   (14:30 on a 15-minute contract). A naive datetime from YAML is interpreted in
   the HA time zone (typically Europe/Brussels), not the host's tz
   (`_to_utc`, `__init__.py:560`).

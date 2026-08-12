@@ -341,7 +341,7 @@ Wallonia-only (`dats24.py:433-447`):
   the word `Wallonië` (`dats24.py:435-441`). Both are mandatory; either miss raises
   `DATS 24: Wallonia CV / connection fee not found` (`dats24.py:442-445`).
 
-`TaxOverlay` sets `vat_rate=0.0` (`dats24.py:456`): all card values are already
+`TaxOverlay` sets `vat_rate=0.0` (`dats24.py:441`): all card values are already
 TVAC (6% VAT), so `compute_breakdown` must not re-scale them. The card footer reads
 `Alle prijzen ... inclusief 6% btw, tenzij anders vermeld`; the two exceptions
 tagged `Niet aan btw onderworpen` (the Walloon connection fee and the Flemish

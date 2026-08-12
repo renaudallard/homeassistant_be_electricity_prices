@@ -224,7 +224,7 @@ Yearly fee: `_extract_yearly_fee_abonnement` (`ebem.py:508`), the
 `Abonnement ... €/jaar ... €/jaar` row (incl-VAT second column). Illustrative
 `70` (`tests/test_ebem.py:260`).
 
-### Groen B@sic+ (`VariableRates`, `ebem.py:369`)
+### Groen B@sic+ (`VariableRates`, `ebem.py:370`)
 
 Single rate for all hours. The formula row is
 `Verbruik alle uren <factor> Belpex <sign> <base>` (`ebem.py:370`). The stored
@@ -235,7 +235,7 @@ the shared card's dedicated night fee (illustrative `35.04`) because an
 exclusive-night meter bills that even though the energy is single-rate
 (`ebem.py:378`). `peak` / `offpeak` / `exclusive_night` energy are left `None`.
 
-### Groen Variabel (`VariableRates`, `ebem.py:399`)
+### Groen Variabel (`VariableRates`, `ebem.py:400`)
 
 Parses four meter-type formula rows into `parsed` (only used to build the
 diagnostic `formula` string):

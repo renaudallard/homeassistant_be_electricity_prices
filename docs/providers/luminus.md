@@ -353,7 +353,7 @@ BTR, excise, contribution, and (Wallonia only) connection.
 | `energy_fund_eur_per_month` | `_extract_energy_fund` BTR row | Flanders only, `values[1]` |
 | `flanders_renewables` | `_extract_flanders_renewables` | Flanders only |
 | `wallonia_renewables` | `_extract_wallonia_renewables` | Wallonia only |
-| `vat_rate` | `0.0` (prices already VAT-incl) | `luminus.py:221` |
+| `vat_rate` | `0.0` (prices already VAT-incl) | `luminus.py:218` |
 
 `_extract_per_kwh_taxes` raises on a short block (`< 4` values) or a missing
 Walloon connection row, rather than silently zeroing a regulated tax and
