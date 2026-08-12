@@ -34,9 +34,11 @@ Fixed contracts roll monthly via the YYYYMM suffix. Variable contracts
 carry a version-number suffix that Bolt bumps in place whenever it
 revises the formula, on no fixed schedule; the superseded files stay
 served, so pinning a version reads a stale card that still answers 200
-and still parses. The version is therefore read from the listing page
-(the highest one Bolt advertises), never hardcoded -- a pinned ``_11``
-kept billing June's formula for ten weeks after ``_13`` shipped.
+and still parses. The version is therefore read from the listing page,
+per (slug, segment), never hardcoded and never as one version across the
+whole family -- a pinned ``_11`` kept billing June's formula for ten
+weeks after ``_13`` shipped, and a global maximum would 404 any slug
+whose counter lagged.
 Each PDF covers all three regions in one document - same convention as
 Eneco.
 
@@ -123,10 +125,11 @@ _RESA_REW_LOGGED = False
 _BASE_URL = "https://files.boltenergie.be/pricelists"
 
 _LISTING_URL = "https://www.boltenergie.be/fr/listes-des-prix"
-# Every card URL on the listing page, as (folder, slug, version). The
-# version group is what keeps the variable family current; ``discover``
-# ignores it and diffs on folder/slug alone.
-_CARD_URL_RE = re.compile(r"pricelists/(fix|var)/([a-z_]+)_res_el_fr_(\d+)\.pdf")
+# Every card URL on the listing page, as (folder, slug, segment, version).
+# The version group is what keeps the variable family current; ``discover``
+# ignores it, and filters to the residential segment, so it still diffs on
+# folder/slug alone.
+_CARD_URL_RE = re.compile(r"pricelists/(fix|var)/([a-z_]+)_(res|pro)_el_fr_(\d+)\.pdf")
 # Used only when the listing page cannot be read at all. Serving a known
 # version beats failing every Bolt entry on a listing outage, but it is a
 # floor, not a pin: it is the newest version seen when this was last
@@ -247,17 +250,25 @@ def _document_url(contract: _ContractDef, suffix: str | None = None) -> str:
     )
 
 
-async def _resolve_variable_suffix(session: aiohttp.ClientSession) -> str:
-    """Return the highest variable-card version the listing advertises.
+async def _resolve_variable_suffix(
+    session: aiohttp.ClientSession, contract: _ContractDef
+) -> str:
+    """Return the current variable-card version for ``contract``.
 
     Bolt bumps this suffix in place and leaves every superseded file
     served, so the old URL keeps answering 200 with a stale card: there
     is no 404, no expiry and no error to notice. The listing page is the
     only thing that says which version is current, so read it.
 
+    Resolved PER (slug, segment), not as one version across the whole
+    variable family. The four slugs happen to move in lockstep today, but
+    nothing makes them: taking a global maximum would point a slug whose
+    counter lagged at a file that does not exist, turning a stale card
+    into a 404 for that product.
+
     Compared numerically, not lexically -- ``"9"`` must not outrank
     ``"13"``. Falls back to :data:`_VARIABLE_SUFFIX_FALLBACK` when the
-    listing is unreachable or carries no variable card, so a listing
+    listing is unreachable or does not advertise this card, so a listing
     outage degrades to a known version instead of failing every Bolt
     entry.
     """
@@ -266,19 +277,22 @@ async def _resolve_variable_suffix(session: aiohttp.ClientSession) -> str:
     except ExtractorError:
         _LOGGER.warning(
             "Bolt: listing page unreadable; falling back to variable card "
-            "version _%s, which may be superseded",
+            "version _%s for %s, which may be superseded",
             _VARIABLE_SUFFIX_FALLBACK,
+            contract.contract_id,
         )
         return _VARIABLE_SUFFIX_FALLBACK
     versions: list[str] = [
         version
-        for folder, _slug, version in _CARD_URL_RE.findall(html)
-        if folder == "var"
+        for folder, slug, segment, version in _CARD_URL_RE.findall(html)
+        if folder == "var" and slug == contract.slug and segment == contract.segment
     ]
     if not versions:
         _LOGGER.warning(
-            "Bolt: listing page advertises no variable card; falling back to "
-            "version _%s, which may be superseded",
+            "Bolt: listing page advertises no %s/%s variable card; falling back "
+            "to version _%s, which may be superseded",
+            contract.slug,
+            contract.segment,
             _VARIABLE_SUFFIX_FALLBACK,
         )
         return _VARIABLE_SUFFIX_FALLBACK
@@ -316,7 +330,11 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
         html = await fetch_text(session, _LISTING_URL)
     except ExtractorError:
         return set()
-    return {f"{folder}/{slug}" for folder, slug, _version in _CARD_URL_RE.findall(html)}
+    return {
+        f"{folder}/{slug}"
+        for folder, slug, segment, _version in _CARD_URL_RE.findall(html)
+        if segment == "res"
+    }
 
 
 # ---- top-level fetch + parser -------------------------------------------------
@@ -345,7 +363,7 @@ async def _fetch_pdf_text(
         # fetch-the-index-then-the-card shape is what Ecopower already
         # does. A cache here would only add a staleness window to the
         # very thing that exists to prevent staleness.
-        suffix: str | None = await _resolve_variable_suffix(session)
+        suffix: str | None = await _resolve_variable_suffix(session, contract)
     else:
         suffix = None
     url = _document_url(contract, suffix=suffix)

@@ -361,12 +361,27 @@ def test_pro_document_url_swaps_the_segment() -> None:
     )
 
 
+# Deliberately a version AHEAD of _VARIABLE_SUFFIX_FALLBACK. Pinning the
+# fixture to the fallback value made every assertion below satisfiable by
+# the fallback itself, so deleting the resolver outright still passed.
 _LISTING_HTML = """
 <a href="https://files.boltenergie.be/pricelists/fix/fix_res_el_fr_202608.pdf">fix</a>
 <a href="https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_9.pdf">old</a>
-<a href="https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_13.pdf">current</a>
-<a href="https://files.boltenergie.be/pricelists/var/online_res_el_fr_13.pdf">online</a>
+<a href="https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_14.pdf">current</a>
+<a href="https://files.boltenergie.be/pricelists/var/bolt_pro_el_fr_14.pdf">pro</a>
+<a href="https://files.boltenergie.be/pricelists/var/online_res_el_fr_14.pdf">online</a>
 """
+
+# The four variable slugs move in lockstep today, but nothing makes them.
+_LISTING_HTML_LAGGING = """
+<a href="https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_13.pdf">bolt</a>
+<a href="https://files.boltenergie.be/pricelists/var/online_res_el_fr_12.pdf">online</a>
+<a href="https://files.boltenergie.be/pricelists/var/plenty_res_el_fr_11.pdf">plenty</a>
+"""
+
+
+def _var(contract_id: str) -> bolt_mod._ContractDef:
+    return bolt_mod._CONTRACTS_BY_ID[contract_id]
 
 
 def test_variable_suffix_is_resolved_numerically_from_the_listing() -> None:
@@ -377,7 +392,14 @@ def test_variable_suffix_is_resolved_numerically_from_the_listing() -> None:
         with patch.object(
             bolt_mod, "fetch_text", new=AsyncMock(return_value=_LISTING_HTML)
         ):
-            assert await bolt_mod._resolve_variable_suffix(None) == "13"  # type: ignore[arg-type]
+            suffix = await bolt_mod._resolve_variable_suffix(
+                None,  # type: ignore[arg-type]
+                _var("bolt_variable"),
+            )
+            assert suffix == "14"
+            # Not the fallback: a resolver that silently stopped working
+            # would return that and this assertion must not accept it.
+            assert suffix != bolt_mod._VARIABLE_SUFFIX_FALLBACK
 
     asyncio.run(_run())
 
@@ -404,7 +426,51 @@ def test_variable_suffix_falls_back_when_the_listing_gives_nothing(
 
     async def _run() -> None:
         with patch.object(bolt_mod, "fetch_text", new=mock):
-            resolved = await bolt_mod._resolve_variable_suffix(None)  # type: ignore[arg-type]
+            resolved = await bolt_mod._resolve_variable_suffix(
+                None,  # type: ignore[arg-type]
+                _var("bolt_variable"),
+            )
+            assert resolved == bolt_mod._VARIABLE_SUFFIX_FALLBACK
+
+    asyncio.run(_run())
+
+
+@pytest.mark.parametrize(
+    ("contract_id", "expected"),
+    [
+        pytest.param("bolt_variable", "13", id="leading-slug"),
+        pytest.param("bolt_online", "12", id="lagging-slug"),
+        pytest.param("bolt_plenty", "11", id="furthest-behind-slug"),
+    ],
+)
+def test_variable_suffix_is_resolved_per_slug(contract_id: str, expected: str) -> None:
+    # A global max across the variable family would hand a lagging slug a
+    # version that does not exist for it, turning a stale card into a 404
+    # for that product.
+    async def _run() -> None:
+        with patch.object(
+            bolt_mod, "fetch_text", new=AsyncMock(return_value=_LISTING_HTML_LAGGING)
+        ):
+            resolved = await bolt_mod._resolve_variable_suffix(
+                None,  # type: ignore[arg-type]
+                _var(contract_id),
+            )
+            assert resolved == expected
+
+    asyncio.run(_run())
+
+
+def test_variable_suffix_does_not_borrow_the_other_segment() -> None:
+    # res and pro are separate files at the same path. A pro card missing
+    # from the listing must fall back, not silently take the res version.
+    res_only = '<a href="/pricelists/var/bolt_res_el_fr_13.pdf">res</a>'
+
+    async def _run() -> None:
+        with patch.object(bolt_mod, "fetch_text", new=AsyncMock(return_value=res_only)):
+            resolved = await bolt_mod._resolve_variable_suffix(
+                None,  # type: ignore[arg-type]
+                _var("bolt_pro_variable"),
+            )
             assert resolved == bolt_mod._VARIABLE_SUFFIX_FALLBACK
 
     asyncio.run(_run())
@@ -430,7 +496,7 @@ def test_variable_fetch_uses_the_resolved_version_not_a_pin() -> None:
             await bolt_mod.fetch(None, "bolt_variable", "flanders")  # type: ignore[arg-type]
 
     asyncio.run(_run())
-    assert seen == ["https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_13.pdf"]
+    assert seen == ["https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_14.pdf"]
 
 
 def test_fix_fetch_does_not_consult_the_listing() -> None:
