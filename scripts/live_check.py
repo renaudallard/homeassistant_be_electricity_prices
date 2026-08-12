@@ -132,9 +132,10 @@ def _load_providers() -> dict[str, types.ModuleType]:
     _RATE_TOU = base.TimeOfUseRates
     _RATE_IMPACT = base.ImpactRates
     pdf = _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
-    global _is_transient_fetch_error, _fetch_text
+    global _is_transient_fetch_error, _fetch_text, _EXTRACTOR_ERROR
     _is_transient_fetch_error = pdf.is_transient_fetch_error
     _fetch_text = pdf.fetch_text
+    _EXTRACTOR_ERROR = base.ExtractorError
     loaded = {
         supplier: _load(
             f"be_pkg.providers.{supplier}", PKG / "providers" / f"{supplier}.py"
@@ -221,6 +222,12 @@ def _is_transient_fetch_error(_message: str) -> bool:
 # into whichever provider module happens to re-export the helper.
 async def _fetch_text(_session: aiohttp.ClientSession, _url: str) -> str:
     raise RuntimeError("providers not loaded")
+
+
+# Bound by _load_providers to providers/base.ExtractorError. The freshness
+# probe catches ONLY this, so a page that will not load stays a pass while a
+# renamed symbol or a changed signature surfaces as a failure.
+_EXTRACTOR_ERROR: type[Exception] = RuntimeError
 
 
 # Per-supplier fetch-time (summed per-request durations) + bytes-received
@@ -1209,6 +1216,7 @@ def _expect_newest_card(
     served: str,
     key: Callable[[str], int],
     exclude: str = "",
+    empty_is_ok: bool = True,
 ) -> None:
     """Assert ``served`` is the highest card stamp ``html`` advertises.
 
@@ -1218,6 +1226,13 @@ def _expect_newest_card(
     one, which still exists, still returns 200 and still parses -- so
     every other check in this script passes. The loose pattern still sees
     it, and the two disagree.
+
+    ``empty_is_ok`` decides what a page carrying no recognisable card
+    means, and that differs per supplier. Where the extractor RAISES when
+    it cannot resolve a card, the extractor phase already reports the
+    breakage and a redesigned page reported here too would be noise. Where
+    the extractor instead falls back to a hardcoded version, nothing else
+    fails, and a pass here would leave that pin serving silently.
     """
     advertised = [
         m.group(1)
@@ -1225,7 +1240,12 @@ def _expect_newest_card(
         if not exclude or exclude not in m.group(0).lower()
     ]
     if not advertised:
-        _record(label, True, "page advertises no card in the expected shape")
+        _record(
+            label,
+            empty_is_ok,
+            "page advertises no card in the expected shape"
+            + ("" if empty_is_ok else "; extractor is serving its hardcoded fallback"),
+        )
         return
     newest = max(advertised, key=key)
     if key(served) >= key(newest):
@@ -1234,27 +1254,64 @@ def _expect_newest_card(
     _expect(label, False, f"supplier advertises {newest}, extractor resolves {served}")
 
 
+def _version_key(stamp: str) -> int:
+    """Order a Bolt variable-card version.
+
+    Plain numbers, so "9" must not outrank "13". A version that is NOT
+    purely numeric sorts above every real one on purpose: the extractor
+    matches \\d+ and cannot resolve such a card at all, so it must become
+    the "newest advertised" and fail the comparison. Scoring it low
+    instead made the filename-shape change this gate exists to catch pass
+    green, which is the exact failure mode it was written for.
+    """
+    return int(stamp) if stamp.isdigit() else 10**9
+
+
 async def _check_card_freshness(
     session: aiohttp.ClientSession, modules: dict[str, types.ModuleType]
 ) -> None:
-    """Assert each listing-resolved supplier serves its NEWEST card.
+    """Assert Bolt and Ecopower serve the NEWEST card they advertise.
 
     Every other check here asks whether the fetch succeeded and the parse
     made sense. Both are true of a superseded card, so a pinned or
     unmatched URL reads as a perfectly healthy run: Bolt served June's
     formula for ten weeks behind a green board, and Ecopower served
     January's tax block once its dynamic card was renamed to YYYYMMDD.
+
+    Only these two, not every listing-resolved supplier. Several others
+    also resolve a card URL from a page and are NOT covered here; each
+    needs its own advertised-card pattern, and claiming otherwise in this
+    docstring would read as coverage that does not exist.
     """
     bolt, ecopower = modules.get("bolt"), modules.get("ecopower")
     if bolt is not None:
         label = "bolt/freshness: serving the newest advertised variable card"
         try:
             html = await _fetch_text(session, bolt._LISTING_URL)
-            served = await bolt._resolve_variable_suffix(session)
-        except Exception as err:  # noqa: BLE001
-            # A listing outage is not a staleness signal, and the
-            # supplier's own extractor check reports a fetch regression.
-            _record(label, True, f"listing unreadable: {type(err).__name__}: {err}")
+            contract = bolt._CONTRACTS_BY_ID["bolt_variable"]
+            served = await bolt._resolve_variable_suffix(session, contract)
+        except _EXTRACTOR_ERROR as err:
+            # An unreadable listing is a FAILURE for Bolt, unlike Ecopower
+            # below. Bolt's resolver swallows the fetch error and returns
+            # _VARIABLE_SUFFIX_FALLBACK, so the card still downloads, still
+            # parses and _check_bolt stays green: this row is the only
+            # thing that can report it. Two suppliers in this repo have
+            # blocked or lost their listing for weeks, and through such an
+            # outage the fallback IS the hardcoded pin this gate exists to
+            # prevent. A transient blip does not file anything -- the
+            # workflow only opens an issue for a check that fails every
+            # retry.
+            #
+            # Only the provider fetch error lands here. A renamed symbol or
+            # changed signature propagates to the caller and is recorded as
+            # a failure: catching those here made the gate pass green
+            # precisely when it had stopped working.
+            _expect(
+                label,
+                False,
+                f"listing unreadable ({type(err).__name__}: {err}); extractor is "
+                f"serving its hardcoded fallback version",
+            )
         else:
             _expect_newest_card(
                 label,
@@ -1263,8 +1320,12 @@ async def _check_card_freshness(
                 # a letter must fail loudly, not resolve to the old number.
                 r"pricelists/var/bolt_res_el_fr_(\w+)\.pdf",
                 served,
-                # Plain version numbers, so "9" must not outrank "13".
-                key=lambda s: int(s) if s.isdigit() else -1,
+                key=_version_key,
+                # A reshaped Bolt listing puts the resolver on its fallback
+                # just as surely as an unreachable one, and nothing else
+                # fails. Ecopower's resolver raises instead, so its own
+                # extractor row reports that case and this one stays quiet.
+                empty_is_ok=False,
             )
     if ecopower is None:
         return
@@ -1286,14 +1347,17 @@ async def _check_card_freshness(
         try:
             html = await _fetch_text(session, page)
             url, _label = await resolver(session)
-        except Exception as err:  # noqa: BLE001
+        except _EXTRACTOR_ERROR as err:
             _record(label, True, f"page unreadable: {type(err).__name__}: {err}")
             continue
         # Spans the whole filename, not just the stamp: ``exclude`` tests
         # the matched text, and "inschatting" sits AFTER the stamp. Match
         # only as far as the family and the preview card counts as the
         # newest definitive one.
-        pattern = rf"/(\d{{4,8}})[a-z]?_{'dbs' if family == 'dynamic' else 'gbs'}_[a-z_]*\.pdf"
+        pattern = (
+            rf"/(\d{{4,8}})[a-z]?_{'dbs' if family == 'dynamic' else 'gbs'}_"
+            r"[^\"\s]*?\.pdf"
+        )
         served_match = re.search(pattern, url)
         if served_match is None:
             _expect(label, False, f"cannot read a card stamp out of {url}")

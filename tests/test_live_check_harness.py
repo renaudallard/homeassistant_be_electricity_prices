@@ -352,8 +352,7 @@ _VERSION_RE = r"pricelists/var/bolt_res_el_fr_(\w+)\.pdf"
 _GBS_RE = r"/(\d{4,8})[a-z]?_gbs_[a-z_]*\.pdf"
 
 
-def _version_key(stamp: str) -> int:
-    return int(stamp) if stamp.isdigit() else -1
+_version_key = lc._version_key
 
 
 def _date_key(stamp: str) -> int:
@@ -409,10 +408,50 @@ def test_freshness_spans_stamp_widths() -> None:
     assert "advertises 20260801" in row.detail
 
 
+def test_freshness_fails_when_the_version_stops_being_numeric() -> None:
+    """The shape change this gate exists to catch. The extractor matches
+    \\d+ and cannot resolve `_13b` at all, so it keeps serving `_13` and
+    every other check passes. Scoring a non-numeric version LOW ranked it
+    below the stale one and let exactly that case through green."""
+    page = '<a href="/pricelists/var/bolt_res_el_fr_13b.pdf">renamed</a>'
+    lc._expect_newest_card("bolt/freshness", page, _VERSION_RE, "13", key=_version_key)
+    (row,) = _rows("bolt/freshness")
+    assert row.ok is False
+    assert "13b" in row.detail
+
+
+def test_freshness_only_forgives_a_page_that_will_not_load() -> None:
+    """The gate caught bare Exception and recorded a pass, so a renamed
+    provider symbol would have read as green for exactly as long as nobody
+    looked. Only the provider fetch error is forgiven; anything else has to
+    reach the caller and be recorded as a failure."""
+    assert lc._EXTRACTOR_ERROR is not Exception
+    assert not issubclass(AttributeError, lc._EXTRACTOR_ERROR)
+    assert not issubclass(TypeError, lc._EXTRACTOR_ERROR)
+
+
 def test_freshness_stays_quiet_when_the_page_shape_is_unrecognised() -> None:
-    """A redesigned page must not read as staleness: there is nothing to
-    compare against, and the extractor check already covers a real break."""
+    """A redesigned Ecopower page must not read as staleness: there is
+    nothing to compare against, and its resolver RAISES when it cannot find
+    a card, so the extractor check already covers a real break."""
     lc._expect_newest_card(
         "ecopower/freshness", "<p>no cards here</p>", _GBS_RE, "202607", key=_date_key
     )
     assert _rows("ecopower/freshness")[0].ok is True
+
+
+def test_freshness_fails_when_a_fallback_supplier_advertises_nothing() -> None:
+    """Bolt is the other case. Its resolver swallows the failure and returns
+    a hardcoded version, so the card still downloads, still parses, and this
+    row is the only thing that can report that a pin is being served."""
+    lc._expect_newest_card(
+        "bolt/freshness",
+        "<p>redesigned</p>",
+        _VERSION_RE,
+        "13",
+        key=_version_key,
+        empty_is_ok=False,
+    )
+    (row,) = _rows("bolt/freshness")
+    assert row.ok is False
+    assert "fallback" in row.detail
