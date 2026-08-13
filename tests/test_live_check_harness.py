@@ -38,6 +38,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from datetime import date, datetime
+from types import SimpleNamespace
 from collections.abc import Callable
 from pathlib import Path
 
@@ -756,3 +757,95 @@ def test_mega_professional_transport_failure_is_not_a_publication_signal() -> No
     (row,) = _rows("mega/freshness: professional")
     assert row.ok is True
     assert "HEAD failed" in row.detail
+
+
+# --- card period --------------------------------------------------------------
+#
+# The third freshness mechanism. The rows above ask whether a NEWER card exists
+# somewhere; this asks the card itself whether it is current, which is the only
+# question available for a supplier that overwrites one fixed URL in place
+# (OCTA+, TotalEnergies, Engie, Luminus).
+
+
+def _snap(label: str, valid_until: date | None = None) -> SimpleNamespace:
+    return SimpleNamespace(publication_label=label, valid_until=valid_until)
+
+
+@pytest.mark.parametrize(
+    ("label", "expect"),
+    [
+        pytest.param("08/2026", (2026, 8), id="numeric-slash"),
+        pytest.param("2026-08", (2026, 8), id="iso"),
+        pytest.param("août 2026", (2026, 8), id="fr-accented"),
+        pytest.param("Août 2026", (2026, 8), id="fr-titlecase"),
+        pytest.param("Aôut 2026", (2026, 8), id="fr-supplier-typo"),
+        pytest.param("augustus 2026", (2026, 8), id="nl"),
+        pytest.param("décembre 2026", (2026, 12), id="fr-december"),
+        pytest.param("Q3 2026", None, id="unknown-shape"),
+        pytest.param("", None, id="empty"),
+    ],
+)
+def test_label_month_reads_every_shape_the_cards_print(
+    label: str, expect: tuple[int, int] | None
+) -> None:
+    """A character class that forgets the u in "aout" fails to read 104 of the
+    236 live labels, and an unreadable label is skipped -- so the check would
+    have quietly covered almost nothing."""
+    assert lc._label_month(label) == expect
+
+
+def test_a_card_from_a_past_month_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    lc._expect_card_period(
+        "octaplus/octaplus_fixed", "octaplus_fixed", _snap("Juin 2026")
+    )
+    rows = [c for c in lc.CHECKS if not c.ok]
+    assert rows and "Juin 2026" in rows[0].detail
+
+
+def test_a_card_published_early_is_not_stale() -> None:
+    """A label NEWER than the current month means the supplier published
+    ahead, which is not staleness."""
+    lc._expect_card_period("engie/x", "engie_easy_fixed", _snap("december 2099"))
+    assert all(c.ok for c in lc.CHECKS)
+
+
+def test_an_expired_valid_until_fails() -> None:
+    lc._expect_card_period(
+        "luminus/x", "luminus_comfy", _snap("december 2099", date(2020, 1, 31))
+    )
+    rows = [c for c in lc.CHECKS if not c.ok]
+    assert rows and "valid_until" in rows[0].detail
+
+
+def test_an_unknown_label_shape_is_reported_but_does_not_fail() -> None:
+    """Unknown is not evidence of staleness -- but it is recorded, so a new
+    label shape is visible rather than silently uncovered."""
+    lc._expect_card_period("engie/x", "engie_easy_fixed", _snap("carte tarifaire"))
+    (row,) = lc.CHECKS
+    assert row.ok is True
+    assert "unparsed" in row.detail
+
+
+@pytest.mark.parametrize(
+    ("prefix", "contract_id"),
+    [
+        pytest.param("dats24/x", "dats24_groen_variabel", id="withdrawing"),
+        pytest.param("ecopower/x", "ecopower_burgerstroom", id="arrears"),
+    ],
+)
+def test_documented_exemptions_record_nothing(prefix: str, contract_id: str) -> None:
+    """Both legitimately serve a card that is not for the current month, and
+    both reasons are recorded in _PERIOD_EXEMPT rather than in a reader's head."""
+    lc._expect_card_period(prefix, contract_id, _snap("juli 2026", date(2026, 7, 31)))
+    assert lc.CHECKS == []
+
+
+def test_every_exemption_states_a_reason() -> None:
+    assert all(reason.strip() for reason in lc._PERIOD_EXEMPT.values())
+
+
+def test_the_ecopower_dynamic_card_is_not_exempt() -> None:
+    """Only the definitive card publishes in arrears. Exempting the supplier
+    wholesale would have re-hidden the dynamic bug fixed in 0.12.5."""
+    assert "ecopower" not in lc._PERIOD_EXEMPT
+    assert "ecopower_dynamische_burgerstroom" not in lc._PERIOD_EXEMPT

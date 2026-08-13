@@ -49,10 +49,12 @@ from collections.abc import Awaitable, Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TypeVar
+from zoneinfo import ZoneInfo
 
 import aiohttp
 
@@ -1963,6 +1965,135 @@ def _expect_region_basics(prefix: str, region_key: str, snap: object) -> None:
     )
 
 
+# Suppliers whose card legitimately is NOT for the current month, with the
+# reason. Everything else is expected to serve a card labelled for the month
+# it is being billed in; measured across all 251 contract-regions, 202 of 206
+# non-exempt ones did, and the four that did not were the Bolt bug this gate
+# was built for.
+_PERIOD_EXEMPT: dict[str, str] = {
+    # Exits residential energy 2026-08-31; the July card is its last and its
+    # valid_until has already passed. See the DATS 24 provider doc.
+    "dats24": "withdrawing from residential energy, July card is the last",
+    # Definitive cards publish in ARREARS: the card for a month lands at that
+    # month's end, so mid-August the newest definitive card is July's. The
+    # dynamic sibling is not exempt -- it is republished only on a change and
+    # carries the month it took effect.
+    "ecopower_burgerstroom": "definitive cards publish in arrears",
+}
+
+# Days into a month before a card still labelled for the previous month is
+# treated as stale rather than as a supplier publishing a little late. Same
+# reasoning as _PRO_PUBLICATION_GRACE_DAYS.
+_PERIOD_GRACE_DAYS = 5
+
+_FR_MONTH_NAMES: dict[str, int] = {
+    "janvier": 1,
+    "février": 2,
+    "fevrier": 2,
+    "mars": 3,
+    "avril": 4,
+    "mai": 5,
+    "juin": 6,
+    "juillet": 7,
+    "août": 8,
+    "aout": 8,
+    "aôut": 8,
+    "septembre": 9,
+    "octobre": 10,
+    "novembre": 11,
+    "décembre": 12,
+    "decembre": 12,
+}
+_NL_MONTH_NAMES: dict[str, int] = {
+    "januari": 1,
+    "februari": 2,
+    "maart": 3,
+    "april": 4,
+    "mei": 5,
+    "juni": 6,
+    "juli": 7,
+    "augustus": 8,
+    "september": 9,
+    "oktober": 10,
+    "november": 11,
+    "december": 12,
+}
+
+
+def _label_month(label: str) -> tuple[int, int] | None:
+    """Read ``(year, month)`` out of a card's publication label.
+
+    Every shape the suppliers actually print: ``08/2026``, ``2026-08`` and a
+    French or Dutch month name with a year. The name match is unicode-aware
+    on purpose -- a class that forgets the ``u`` in ``août`` silently fails to
+    read 104 of the 236 live labels, and an unreadable label is skipped, so
+    the check would have quietly covered almost nothing.
+
+    Returns None when the shape is unknown, which the caller reports without
+    failing: an unrecognised label is not evidence of staleness.
+    """
+    s = label.strip().lower()
+    m = re.fullmatch(r"(\d{2})/(\d{4})", s)
+    if m:
+        return int(m.group(2)), int(m.group(1))
+    m = re.fullmatch(r"(\d{4})-(\d{2})", s)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    m = re.fullmatch(r"([^\W\d_]+)\s+(\d{4})", s, re.UNICODE)
+    if m:
+        num = _FR_MONTH_NAMES.get(m.group(1)) or _NL_MONTH_NAMES.get(m.group(1))
+        if num:
+            return int(m.group(2)), num
+    return None
+
+
+def _expect_card_period(prefix: str, contract_id: str, snap: object) -> None:
+    """Assert the card being billed says it is for the current month.
+
+    The other freshness checks ask whether a NEWER card exists somewhere.
+    This asks the card itself, which is the only question available when the
+    supplier overwrites one fixed URL in place: OCTA+, TotalEnergies, Engie
+    and Luminus each construct a single URL per contract, so no comparison
+    against an advertised set is possible, and a supplier that simply stopped
+    updating that file would serve a year-old card behind a green board.
+
+    Two assertions, both from the snapshot the caller already fetched:
+    ``valid_until`` must not have passed, and the publication label must not
+    name a month earlier than this one. A label NEWER than the current month
+    passes -- publishing early is not staleness.
+    """
+    supplier = prefix.split("/", 1)[0]
+    if supplier in _PERIOD_EXEMPT or contract_id in _PERIOD_EXEMPT:
+        return
+    today = datetime.now(ZoneInfo("Europe/Brussels")).date()
+
+    valid_until = getattr(snap, "valid_until", None)
+    if valid_until is not None and valid_until < today:
+        _expect(
+            f"{prefix}: card has not expired",
+            False,
+            f"valid_until {valid_until} passed on {today}",
+        )
+
+    label = str(getattr(snap, "publication_label", "") or "")
+    parsed = _label_month(label)
+    if parsed is None:
+        # Not a failure: an unknown label shape is not evidence of staleness.
+        # Reported so a new shape is visible rather than silently uncovered.
+        _record(f"{prefix}: card period readable", True, f"unparsed label {label!r}")
+        return
+    year, month = parsed
+    behind = (today.year, today.month) > (year, month)
+    # Recorded pass or fail, like every other assertion here. A check that
+    # emits a row only when it fails cannot be told apart from one that never
+    # ran, which is the shape this whole gate exists to stamp out.
+    _expect(
+        f"{prefix}: card is for the current month",
+        not (behind and today.day > _PERIOD_GRACE_DAYS),
+        f"card is labelled {label!r} on {today}",
+    )
+
+
 def _validate_snapshot(
     prefix: str,
     contract_id: str,
@@ -1976,6 +2107,7 @@ def _validate_snapshot(
     supplier-specific DSO / tax assertions. ``injection_shape`` overrides
     the per-contract default (used for region-dependent cases like
     DATS 24, whose Wallonia card pays no feed-in)."""
+    _expect_card_period(prefix, contract_id, snap)
     _validate_energy(prefix, contract_id, getattr(snap, "energy", None))
     shape = injection_shape or _expected_injection_shape(contract_id)
     _validate_injection(prefix, snap, shape)
