@@ -283,10 +283,23 @@ Measured across all 251 contract-regions before it was enabled: 202 of the 206 n
 already carried a current-month label, and the four that did not were the Bolt bug this whole gate
 was built for. So this check would have caught the original defect directly.
 
-One contract is exempt outright: Ecopower's *definitive* card publishes in arrears, landing at the
-end of the month it covers, and the reason is recorded in `_PERIOD_EXEMPT` rather than in a
-reader's head. The exemption is keyed on the **contract**, not the supplier, so Ecopower's dynamic
-card is still checked - exempting Ecopower wholesale would have re-hidden the bug fixed in 0.12.5.
+Where some lag is legitimate, `_PERIOD_MAX_LAG_MONTHS` records **how much**, and that is a ceiling
+rather than a skip. Ecopower's *definitive* card publishes in arrears, landing at the end of the
+month it covers, so through August the newest definitive card is July's: exactly one month, every
+month, measured against a live page that carries `202604..202607` contiguously. Two months behind
+is therefore not arrears - it is Ecopower having stopped - and still fails. A plain exemption would
+have hidden that forever, which is the difference between "this supplier is allowed to be a month
+behind" and "stop checking this supplier".
+
+The entry is keyed on the **contract**, not the supplier, so Ecopower's dynamic card is still held
+to the current month - exempting Ecopower wholesale would have re-hidden the bug fixed in 0.12.5.
+
+That allowance rests on a publishing convention rather than a date the supplier declares, so
+nothing can expire it the way `deprecated_until` does. It carries `_PERIOD_LAG_REVIEW_BY` instead,
+enforced by a **test** rather than at runtime: a runtime expiry would start failing on perfectly
+normal arrears, which is a false alarm by construction. When that date passes, CI fails with an
+instruction to re-verify how the supplier publishes and then move the date. Same convention as the
+re-verify note in `providers/bolt.py`.
 
 A supplier on its way out is handled differently, and not by name. `_DEPRECATED_UNTIL` is bound
 from each `EXTRACTOR.deprecated_until` at load, so the withdrawal date is declared once, on the
@@ -375,9 +388,9 @@ on 2026-08-01: EBEM's August card failed CI three times over for reporting the z
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py:2127`) runs two gates:
+`_validate_snapshot` (`scripts/live_check.py:2147`) runs two gates:
 
-- `_validate_energy` (`scripts/live_check.py:2188`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:2208`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
@@ -431,10 +444,10 @@ under that cap, or the supplier is killed before it can report the drift the bud
 The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2153`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:2605`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:2625`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1672`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2492`) for the known-large catalogues (Bolt,
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2512`) for the known-large catalogues (Bolt,
 TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
 (`scripts/live_check.py:1720`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
 which are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request
@@ -446,7 +459,7 @@ budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see 
 false-firing drift alert means adjusting the override, not the code.
 
 A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:2370`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2592`). The
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2612`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever

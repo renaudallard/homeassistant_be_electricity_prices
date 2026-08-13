@@ -1988,16 +1988,33 @@ def _expect_region_basics(prefix: str, region_key: str, snap: object) -> None:
 # it is being billed in; measured across all 251 contract-regions, 202 of 206
 # non-exempt ones did, and the four that did not were the Bolt bug this gate
 # was built for.
-_PERIOD_EXEMPT: dict[str, str] = {
-    # A supplier winding down is NOT listed here: its withdrawal date lives on
-    # its own EXTRACTOR (deprecated_until) and _expect_card_period reads it, so
-    # the allowance expires by itself instead of outliving the reason for it.
-    # Definitive cards publish in ARREARS: the card for a month lands at that
-    # month's end, so mid-August the newest definitive card is July's. The
-    # dynamic sibling is not exempt -- it is republished only on a change and
-    # carries the month it took effect.
-    "ecopower_burgerstroom": "definitive cards publish in arrears",
+# How many months behind the current one a contract's card may legitimately
+# be. Zero for almost everything: a supplier bills the month it is in. An
+# entry here is an ALLOWANCE WITH A CEILING, not a skip -- a card further
+# behind than its entry still fails, so a supplier that stops publishing
+# altogether is caught even where some lag is expected.
+#
+# A supplier winding down is NOT handled here; its date lives on its own
+# EXTRACTOR (deprecated_until) and is read below, so that allowance expires
+# with the withdrawal.
+_PERIOD_MAX_LAG_MONTHS: dict[str, int] = {
+    # Ecopower's DEFINITIVE card publishes in arrears, landing at the end of
+    # the month it covers, so through August the newest definitive card is
+    # July's: exactly one month, every month. Measured on the live page,
+    # which carries 202604..202607 contiguously with no gap. Two months
+    # behind is therefore not arrears, it is Ecopower having stopped, and
+    # still fails. Keyed on the CONTRACT: the dynamic sibling publishes
+    # normally and exempting the supplier would re-hide the 0.12.5 bug.
+    "ecopower_burgerstroom": 1,
 }
+
+# The arrears allowance above rests on a publishing convention, not on a
+# date the supplier declares, so nothing can expire it automatically the way
+# deprecated_until does. It is pinned to a review date instead, enforced by
+# a test rather than at runtime: a runtime expiry would start failing on
+# perfectly normal arrears, which is a false alarm by construction. Same
+# convention as the Bolt re-verify note in providers/bolt.py.
+_PERIOD_LAG_REVIEW_BY = date(2027, 2, 1)
 
 # Days into a month before a card still labelled for the previous month is
 # treated as stale rather than as a supplier publishing a little late. Same
@@ -2081,8 +2098,6 @@ def _expect_card_period(prefix: str, contract_id: str, snap: object) -> None:
     passes -- publishing early is not staleness.
     """
     supplier = prefix.split("/", 1)[0]
-    if supplier in _PERIOD_EXEMPT or contract_id in _PERIOD_EXEMPT:
-        return
     today = datetime.now(ZoneInfo("Europe/Brussels")).date()
 
     # A supplier on its way out keeps publishing until its last day, so an
@@ -2113,14 +2128,19 @@ def _expect_card_period(prefix: str, contract_id: str, snap: object) -> None:
         _record(f"{prefix}: card period readable", True, f"unparsed label {label!r}")
         return
     year, month = parsed
-    behind = (today.year, today.month) > (year, month)
+    lag = (today.year - year) * 12 + (today.month - month)
+    allowed = _PERIOD_MAX_LAG_MONTHS.get(contract_id, 0)
+    if today.day <= _PERIOD_GRACE_DAYS:
+        # A supplier publishing a few days late is not a stale card.
+        allowed += 1
     # Recorded pass or fail, like every other assertion here. A check that
     # emits a row only when it fails cannot be told apart from one that never
     # ran, which is the shape this whole gate exists to stamp out.
     _expect(
-        f"{prefix}: card is for the current month",
-        not (behind and today.day > _PERIOD_GRACE_DAYS),
-        f"{marker}card is labelled {label!r} on {today}",
+        f"{prefix}: card is recent enough",
+        lag <= allowed,
+        f"{marker}card is labelled {label!r} on {today}: {lag} month(s) behind, "
+        f"at most {allowed} expected",
     )
 
 

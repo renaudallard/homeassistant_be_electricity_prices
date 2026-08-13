@@ -826,12 +826,66 @@ def test_an_unknown_label_shape_is_reported_but_does_not_fail() -> None:
     assert "unparsed" in row.detail
 
 
-def test_the_arrears_exemption_records_nothing() -> None:
-    """Ecopower's definitive card legitimately is not for the current month,
-    and the reason is recorded in _PERIOD_EXEMPT rather than in a reader's
-    head."""
-    lc._expect_card_period("ecopower/x", "ecopower_burgerstroom", _snap("2026-07"))
-    assert lc.CHECKS == []
+@pytest.mark.parametrize(
+    ("label", "today", "ok", "note"),
+    [
+        pytest.param(
+            "2026-07", date(2026, 8, 20), True, "normal arrears", id="one-month"
+        ),
+        pytest.param(
+            "2026-06", date(2026, 8, 20), False, "not arrears", id="two-months"
+        ),
+        pytest.param(
+            "2026-01", date(2026, 8, 20), False, "stopped publishing", id="seven-months"
+        ),
+        pytest.param(
+            "2026-06",
+            date(2026, 8, 2),
+            True,
+            "grace, publishing late",
+            id="two-in-grace",
+        ),
+    ],
+)
+def test_the_arrears_allowance_has_a_ceiling(
+    label: str, today: date, ok: bool, note: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ecopower's definitive card publishes in arrears, so ONE month behind is
+    expected every month. Two is not arrears, it is Ecopower having stopped -
+    an unbounded skip would have hidden that forever."""
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(today))
+    lc._expect_card_period("ecopower/x", "ecopower_burgerstroom", _snap(label))
+    rows = [c for c in lc.CHECKS if "recent enough" in c.label]
+    assert rows and rows[0].ok is ok, note
+
+
+def test_a_supplier_with_no_allowance_must_be_on_the_current_month(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(date(2026, 8, 20)))
+    lc._expect_card_period("engie/x", "engie_easy_fixed", _snap("juli 2026"))
+    rows = [c for c in lc.CHECKS if "recent enough" in c.label]
+    assert rows and rows[0].ok is False
+
+
+def test_the_arrears_allowance_carries_a_review_date() -> None:
+    """It rests on a publishing convention, not on a date the supplier
+    declares, so nothing can expire it automatically. The review date is
+    enforced by the test below instead of at runtime, because a runtime
+    expiry would fail on perfectly normal arrears."""
+    assert lc._PERIOD_LAG_REVIEW_BY > date(2026, 8, 13)
+
+
+def test_the_arrears_allowance_is_still_believed() -> None:
+    """Fails once the review date passes. Re-verify that Ecopower still
+    publishes its definitive card at month end -- the page should carry
+    contiguous YYYYMM cards ending one month back - then move the date."""
+    today = datetime.now().date()
+    assert today < lc._PERIOD_LAG_REVIEW_BY, (
+        f"_PERIOD_MAX_LAG_MONTHS is due for review ({lc._PERIOD_LAG_REVIEW_BY}): "
+        "confirm each allowance still reflects how that supplier publishes, "
+        "then move the date"
+    )
 
 
 class _FrozenDatetime:
@@ -891,15 +945,17 @@ def test_the_withdrawal_date_is_read_from_the_registry() -> None:
     from custom_components.be_electricity_prices.providers import dats24
 
     assert dats24.EXTRACTOR.deprecated_until == date(2026, 8, 31)
-    assert "dats24" not in lc._PERIOD_EXEMPT
+    assert "dats24" not in lc._PERIOD_MAX_LAG_MONTHS
 
 
-def test_every_exemption_states_a_reason() -> None:
-    assert all(reason.strip() for reason in lc._PERIOD_EXEMPT.values())
+def test_every_allowance_is_a_ceiling_not_a_skip() -> None:
+    """A zero or negative entry would be pointless and a huge one would be a
+    skip wearing a number."""
+    assert all(1 <= n <= 2 for n in lc._PERIOD_MAX_LAG_MONTHS.values())
 
 
 def test_the_ecopower_dynamic_card_is_not_exempt() -> None:
     """Only the definitive card publishes in arrears. Exempting the supplier
     wholesale would have re-hidden the dynamic bug fixed in 0.12.5."""
-    assert "ecopower" not in lc._PERIOD_EXEMPT
-    assert "ecopower_dynamische_burgerstroom" not in lc._PERIOD_EXEMPT
+    assert "ecopower" not in lc._PERIOD_MAX_LAG_MONTHS
+    assert "ecopower_dynamische_burgerstroom" not in lc._PERIOD_MAX_LAG_MONTHS
