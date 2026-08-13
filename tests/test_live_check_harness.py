@@ -826,18 +826,72 @@ def test_an_unknown_label_shape_is_reported_but_does_not_fail() -> None:
     assert "unparsed" in row.detail
 
 
+def test_the_arrears_exemption_records_nothing() -> None:
+    """Ecopower's definitive card legitimately is not for the current month,
+    and the reason is recorded in _PERIOD_EXEMPT rather than in a reader's
+    head."""
+    lc._expect_card_period("ecopower/x", "ecopower_burgerstroom", _snap("2026-07"))
+    assert lc.CHECKS == []
+
+
+class _FrozenDatetime:
+    def __init__(self, when: date) -> None:
+        self._when = datetime(when.year, when.month, when.day, 12, 0)
+
+    def now(self, _tz: object = None) -> datetime:
+        return self._when
+
+
 @pytest.mark.parametrize(
-    ("prefix", "contract_id"),
+    ("today", "rows", "note"),
     [
-        pytest.param("dats24/x", "dats24_groen_variabel", id="withdrawing"),
-        pytest.param("ecopower/x", "ecopower_burgerstroom", id="arrears"),
+        pytest.param(date(2026, 8, 13), 0, "still selling", id="before"),
+        pytest.param(date(2026, 8, 31), 0, "last day", id="on-the-date"),
+        pytest.param(date(2026, 9, 15), 2, "gone", id="after"),
     ],
 )
-def test_documented_exemptions_record_nothing(prefix: str, contract_id: str) -> None:
-    """Both legitimately serve a card that is not for the current month, and
-    both reasons are recorded in _PERIOD_EXEMPT rather than in a reader's head."""
-    lc._expect_card_period(prefix, contract_id, _snap("juli 2026", date(2026, 7, 31)))
-    assert lc.CHECKS == []
+def test_a_withdrawing_supplier_allowance_expires_by_itself(
+    today: date, rows: int, note: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The allowance is derived from the supplier's own deprecated_until, not
+    from a name listed here, so it ends when the withdrawal does and there is
+    nothing to remember to remove."""
+    monkeypatch.setitem(lc._DEPRECATED_UNTIL, "dats24", date(2026, 8, 31))
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(today))
+    lc._expect_card_period(
+        "dats24/dats24_groen_variabel",
+        "dats24_groen_variabel",
+        _snap("juli 2026", date(2026, 7, 31)),
+    )
+    assert len(lc.CHECKS) == rows, note
+
+
+def test_a_withdrawn_supplier_reports_but_does_not_gate_ci(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Its final card stays up and stays stale forever. Real and worth
+    showing, but no change here can fix it, so it must not set the extractor
+    bit and refile an issue every night -- the same treatment an unreadable
+    card already gets."""
+    monkeypatch.setitem(lc._DEPRECATED_UNTIL, "dats24", date(2026, 8, 31))
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(date(2026, 11, 1)))
+    lc._expect_card_period(
+        "dats24/dats24_groen_variabel",
+        "dats24_groen_variabel",
+        _snap("juli 2026", date(2026, 7, 31)),
+    )
+    failures = [c for c in lc.CHECKS if not c.ok]
+    assert failures
+    assert all(c.expected for c in failures)
+    assert lc._extractor_regressions(lc.CHECKS) == []
+
+
+def test_the_withdrawal_date_is_read_from_the_registry() -> None:
+    """Declared on the supplier's own EXTRACTOR, so it lives in one place."""
+    from custom_components.be_electricity_prices.providers import dats24
+
+    assert dats24.EXTRACTOR.deprecated_until == date(2026, 8, 31)
+    assert "dats24" not in lc._PERIOD_EXEMPT
 
 
 def test_every_exemption_states_a_reason() -> None:

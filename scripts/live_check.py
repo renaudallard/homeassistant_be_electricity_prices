@@ -49,7 +49,7 @@ from collections.abc import Awaitable, Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
@@ -155,6 +155,13 @@ def _load_providers() -> dict[str, types.ModuleType]:
     }
     if mismatched:
         raise RuntimeError(f"provider module / supplier id mismatch: {mismatched}")
+    _DEPRECATED_UNTIL.update(
+        {
+            supplier: mod.EXTRACTOR.deprecated_until
+            for supplier, mod in loaded.items()
+            if getattr(mod.EXTRACTOR, "deprecated_until", None) is not None
+        }
+    )
     return loaded
 
 
@@ -224,6 +231,12 @@ def _is_transient_fetch_error(_message: str) -> bool:
 # into whichever provider module happens to re-export the helper.
 async def _fetch_text(_session: aiohttp.ClientSession, _url: str) -> str:
     raise RuntimeError("providers not loaded")
+
+
+# supplier -> its own EXTRACTOR.deprecated_until, bound by _load_providers.
+# Read from the registry rather than restated here so a withdrawal date is
+# declared in exactly one place and the checks below expire with it.
+_DEPRECATED_UNTIL: dict[str, date] = {}
 
 
 # Bound by _load_providers to providers/base.ExtractorError. The freshness
@@ -453,6 +466,10 @@ async def _attributed_check(
 # f"{type(err).__name__}: {err}", so the exception type is machine-written
 # at the front of the string. Matching on it is exact, not prose matching.
 _UNREADABLE_MARKER = "CardNotReadableError"
+# A supplier past its own deprecated_until has left the market; its final
+# card stays up and stays stale forever. Real, visible, and not actionable
+# by any change here -- the same class as an unreadable card.
+_WITHDRAWN_MARKER = "SupplierWithdrawn"
 
 
 def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
@@ -462,7 +479,8 @@ def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> 
             ok=ok,
             detail=detail,
             kind=kind,
-            expected=not ok and detail.startswith(_UNREADABLE_MARKER),
+            expected=not ok
+            and detail.startswith((_UNREADABLE_MARKER, _WITHDRAWN_MARKER)),
         )
     )
 
@@ -1971,9 +1989,9 @@ def _expect_region_basics(prefix: str, region_key: str, snap: object) -> None:
 # non-exempt ones did, and the four that did not were the Bolt bug this gate
 # was built for.
 _PERIOD_EXEMPT: dict[str, str] = {
-    # Exits residential energy 2026-08-31; the July card is its last and its
-    # valid_until has already passed. See the DATS 24 provider doc.
-    "dats24": "withdrawing from residential energy, July card is the last",
+    # A supplier winding down is NOT listed here: its withdrawal date lives on
+    # its own EXTRACTOR (deprecated_until) and _expect_card_period reads it, so
+    # the allowance expires by itself instead of outliving the reason for it.
     # Definitive cards publish in ARREARS: the card for a month lands at that
     # month's end, so mid-August the newest definitive card is July's. The
     # dynamic sibling is not exempt -- it is republished only on a change and
@@ -2067,12 +2085,24 @@ def _expect_card_period(prefix: str, contract_id: str, snap: object) -> None:
         return
     today = datetime.now(ZoneInfo("Europe/Brussels")).date()
 
+    # A supplier on its way out keeps publishing until its last day, so an
+    # older card is not yet evidence of anything. Past that date it has left
+    # the market: its final card stays up and stays stale forever, which is
+    # real and worth showing but cannot be fixed here, so it reports without
+    # setting the extractor bit or filing an issue every night. The date is
+    # the supplier's own deprecated_until, so this allowance ends when the
+    # withdrawal does, with nothing here to remember to remove.
+    withdrawn = _DEPRECATED_UNTIL.get(supplier)
+    if withdrawn is not None and today <= withdrawn:
+        return
+    marker = f"{_WITHDRAWN_MARKER}: " if withdrawn is not None else ""
+
     valid_until = getattr(snap, "valid_until", None)
     if valid_until is not None and valid_until < today:
         _expect(
             f"{prefix}: card has not expired",
             False,
-            f"valid_until {valid_until} passed on {today}",
+            f"{marker}valid_until {valid_until} passed on {today}",
         )
 
     label = str(getattr(snap, "publication_label", "") or "")
@@ -2090,7 +2120,7 @@ def _expect_card_period(prefix: str, contract_id: str, snap: object) -> None:
     _expect(
         f"{prefix}: card is for the current month",
         not (behind and today.day > _PERIOD_GRACE_DAYS),
-        f"card is labelled {label!r} on {today}",
+        f"{marker}card is labelled {label!r} on {today}",
     )
 
 
