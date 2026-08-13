@@ -86,6 +86,7 @@ from .compare_quote import (
     _read_total_kwh,
     _solar_note,
     _tou_weighted_per_kwh,
+    _uncredited_note,
 )
 from .flow_schemas import (
     _contract_has_spot_injection,
@@ -619,15 +620,39 @@ class _CompareStepsMixin(OptionsFlow):
         # injection regime.
         current_inj_price: float | None = None
         compare_inj_price: float | None = None
+        # One clause per side that ends up crediting nothing. Both the
+        # "no injection tariff on the card" and the "spot-indexed but no
+        # spot" cases land on the same silent no-credit branch of
+        # _annual_bill, so the page has to name them or it reads as if the
+        # printed credit applied to both sides.
+        uncredited: list[str] = []
         if regime == "injection":
             if current_snapshot is not None:
                 current_inj_price = _compare_injection_credit(
                     current_snapshot, self.config_entry, spot_dict, avg_spot
                 )
+                if current_inj_price is None and rolling_inj_kwh > 0:
+                    uncredited.append(
+                        _uncredited_note(
+                            current_snapshot,
+                            _label_for_supplier(current[CONF_SUPPLIER]),
+                        )
+                    )
             if other_snap is not None:
                 compare_inj_price = _compare_injection_credit(
                     other_snap, self.config_entry, spot_dict, avg_spot
                 )
+                if compare_inj_price is None and rolling_inj_kwh > 0:
+                    uncredited.append(
+                        _uncredited_note(
+                            other_snap,
+                            _label_for_supplier(self._compare[CONF_SUPPLIER]),
+                        )
+                    )
+        if uncredited:
+            placeholders["solar_note"] = _solar_note(
+                regime, rolling_inj_kwh, uncredited
+            )
 
         if current_per_kwh is not None:
             placeholders["current_per_kwh"] = f"{current_per_kwh:.4f}"

@@ -1147,6 +1147,85 @@ async def test_compare_injection_regime_credits_injection_price(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_names_the_side_that_credits_no_injection(
+    hass: HomeAssistant,
+) -> None:
+    """A card that publishes no injection tariff credits nothing, and
+    _annual_bill folds that into the same branch as the no-solar case. The
+    page stated the injected kWh were "credited at each supplier's
+    injection price" either way, so a supplier that genuinely pays nothing
+    was indistinguishable from one the quote could not price. The note now
+    names the side and the reason."""
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.cons",
+            "injection_kwh": "sensor.inj",
+            "solar_regime": "injection",
+            "solar_kva": 5.0,
+        },
+        title="Eneco - Wallonia injection",
+    )
+    entry.add_to_hass(hass)
+
+    current_snap = _stub_snapshot("eneco", "power_fix", 0.20)
+    object.__setattr__(current_snap, "injection", InjectionRates(current=0.05))
+    # No injection block at all on the target's card.
+    other_snap = make_snapshot(
+        supplier="mega",
+        contract="mega_online_fixed",
+        energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
+        dsos=current_snap.dsos,
+        taxes=current_snap.taxes,
+        injection=None,
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return {start: 5000.0}
+        if entity_id == "sensor.inj":
+            return {start: 4000.0}
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        ph = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+        )
+    assert "Mega publishes no injection tariff" in ph["solar_note"]
+    # The user's own side prices its injection fine, so it must not be
+    # named alongside it.
+    assert "Eneco publishes no injection tariff" not in ph["solar_note"]
+    # The credit really is absent on that side: same energy rate, same
+    # fees, so the alternative costs exactly the credit the current side
+    # gets (0.05 * 4000 = 200 EUR).
+    diff = float(ph["compare_annual"]) - float(ph["current_annual"])
+    assert abs(diff - 200.0) < 1.0
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_meter_override_changes_per_kwh(
     hass: HomeAssistant,
 ) -> None:

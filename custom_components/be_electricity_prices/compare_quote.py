@@ -40,6 +40,7 @@ local before: they close what would otherwise be an import cycle.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
@@ -388,18 +389,44 @@ def _bar_chart(values: dict[str, float], width: int = 20) -> str:
     return "\n".join(rows)
 
 
-def _solar_note(regime: str, rolling_inj_kwh: float) -> str:
+def _uncredited_note(snapshot: Any, label: str) -> str:
+    """Why one side of the quote credits nothing for the injected kWh.
+
+    ``_compare_injection_credit`` returns None for two different reasons:
+    the card publishes no injection tariff at all, or a spot-indexed
+    injection had no day-ahead window to price against. The first is the
+    true bill with that supplier; the second understates the credit. Both
+    fall through to the no-credit branch of ``_annual_bill``, so without a
+    note on the page the two are indistinguishable from a supplier that
+    genuinely pays nothing.
+    """
+    if getattr(snapshot, "injection", None) is None:
+        return f"{label} publishes no injection tariff, so nothing is credited there"
+    return (
+        f"{label}'s injection is spot-indexed and no day-ahead price was "
+        "available, so nothing is credited there"
+    )
+
+
+def _solar_note(
+    regime: str, rolling_inj_kwh: float, uncredited: Sequence[str] = ()
+) -> str:
     """One-line description of how solar is folded into the comparison.
 
     Renders into the result form's description placeholder. Empty for
-    the no-solar case so the page doesn't show a misleading label."""
+    the no-solar case so the page doesn't show a misleading label.
+    ``uncredited`` carries one clause per side whose injection could not
+    be priced, so the page never claims a credit it did not apply."""
     if regime == "compensation":
         if rolling_inj_kwh > 0:
             return f"compensation regime: meter netted (consumption -= {rolling_inj_kwh:.0f} kWh, surplus forfeited)"
         return "compensation regime configured but no injection sensor wired - net = consumption"
     if regime == "injection":
         if rolling_inj_kwh > 0:
-            return f"injection regime: {rolling_inj_kwh:.0f} kWh credited at each supplier's injection price"
+            note = f"injection regime: {rolling_inj_kwh:.0f} kWh credited at each supplier's injection price"
+            for reason in uncredited:
+                note += f" - {reason}"
+            return note
         return "injection regime configured but no injection sensor wired - no injection credit applied"
     return ""
 

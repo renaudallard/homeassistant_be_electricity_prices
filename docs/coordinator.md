@@ -200,7 +200,7 @@ be passed in, because `apply_vat` zeroes `vat_rate` on an ex-VAT resolve, and
 every `_cohort_energy_leg` call site hands in an already-resolved snapshot: the
 live tick (`coordinator.py:521`), the monthly walk (`cohort.py:362`), the
 year-to-date walk (`ytd_cost.py:606`), the backfill accrual
-(`backfill.py:313`), and the compare quote (`compare_flow.py:549`).
+(`backfill.py:313`), and the compare quote (`compare_flow.py:550`).
 `_set_snapshot` (`coordinator_snapshot.py:146`) is the only writer of
 `self._snapshot` and always routes through `_resolve_snapshot`, so by the time
 the cohort leg reads the taxes there is no other surviving record of the basis

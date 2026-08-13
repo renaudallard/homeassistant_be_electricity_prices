@@ -463,7 +463,7 @@ stale stored value never renders as an invalid pre-selection:
 | Menu option | Step | Effect |
 | --- | --- | --- |
 | `edit` | `async_step_edit` (`config_flow.py:648`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
-| `compare` | `async_step_compare` (`compare_flow.py:165`) | One-off quote against another supplier; nothing saved |
+| `compare` | `async_step_compare` (`compare_flow.py:166`) | One-off quote against another supplier; nothing saved |
 
 Menu labels live in `options.step.init.menu_options` (`strings.json:193`).
 
@@ -516,11 +516,11 @@ apples-to-apples; only supplier, contract, and (for static targets) meter vary.
 
 | Step | Method | Notes |
 | --- | --- | --- |
-| `compare` | `compare_flow.py:165` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:98`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
-| `compare_contract` | `compare_flow.py:193` | Contract picker via `_compare_contract_schema` (`compare_flow.py:123`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
-| `compare_meter` | `compare_flow.py:234` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:195`) |
-| `compare_api_key` | `compare_flow.py:304` | Shown when `_after_compare_meter` (`compare_flow.py:276`) finds the quote needs spot data the entry lacks: a dynamic target, or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved (`strings.json:227`) |
-| `compare_result` | `compare_flow.py:332` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:345`); submit aborts `compare_done` |
+| `compare` | `compare_flow.py:166` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:99`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
+| `compare_contract` | `compare_flow.py:194` | Contract picker via `_compare_contract_schema` (`compare_flow.py:124`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
+| `compare_meter` | `compare_flow.py:235` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:195`) |
+| `compare_api_key` | `compare_flow.py:305` | Shown when `_after_compare_meter` (`compare_flow.py:277`) finds the quote needs spot data the entry lacks: a dynamic target, or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved (`strings.json:227`) |
+| `compare_result` | `compare_flow.py:333` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:346`); submit aborts `compare_done` |
 
 The quoted supplier's freshly fetched card is resolved through
 `snapshot_store._resolve_snapshot`, the same helper the live path uses, so it gets
@@ -536,7 +536,7 @@ The compare-meter narrowing mirrors the install `_meter_schema` exactly (dynamic
 tou/tou_impact all require a smart meter; `config_flow.py:500` comment). The
 compare result never mutates coordinator state: when it must borrow the historical
 spot cache for a spot-indexed injection it saves and restores
-`coord._historical_spots` around the fetch (`compare_flow.py:715`). Placeholder
+`coord._historical_spots` around the fetch (`compare_flow.py:740`). Placeholder
 tokens map to `options.step.compare_result.description` (`strings.json:236`), which
 references `{meter_used}`, `{current_annual}`, `{delta_ytd}`, the ASCII bar charts
 `{annual_chart}`/`{ytd_chart}`, and so on; `_build_compare_placeholders` always
