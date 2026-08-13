@@ -130,6 +130,8 @@ from .const import (
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
+    CONF_WHATIF_CONSUMPTION_KWH,
+    CONF_WHATIF_INJECTION_KWH,
     CONNECTION_KVA_TIERS,
     CUSTOM_CONTRACT_DYNAMIC,
     CUSTOM_CONTRACT_FIXED,
@@ -931,17 +933,28 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(fields)
 
 
-def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
-    # The compensation ("terugdraaiende teller" / net-metering) regime is
-    # Walloon-only: that meter pays the prosumer tariff and no capacity
-    # tariff, so offering it in Flanders would double-count the Flanders
-    # capaciteitstarief. Outside Wallonia only "none" / "injection" apply.
-    regimes = [
+def _regime_options(region: Any) -> list[str]:
+    """Solar regimes that can apply in ``region``.
+
+    The compensation ("terugdraaiende teller" / net-metering) regime is
+    Walloon-only: that meter pays the prosumer tariff and no capacity
+    tariff, so offering it in Flanders would double-count the Flanders
+    capaciteitstarief. Outside Wallonia only "none" / "injection" apply.
+
+    Shared with the compare flow's what-if picker, which has to narrow the
+    same way: a Flemish entry quoted on the compensation regime would net
+    injection 1:1 against consumption while still paying the capacity
+    tariff and no prosumer fee, a bill no Belgian contract can issue.
+    """
+    return [
         r
         for r in SOLAR_REGIMES
-        if r != SOLAR_REGIME_COMPENSATION
-        or defaults.get(CONF_REGION) == REGION_WALLONIA
+        if r != SOLAR_REGIME_COMPENSATION or region == REGION_WALLONIA
     ]
+
+
+def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
+    regimes = _regime_options(defaults.get(CONF_REGION))
     stored = defaults.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     default_regime = stored if stored in regimes else SOLAR_REGIME_NONE
     return vol.Schema(
@@ -966,3 +979,58 @@ def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
             ),
         }
     )
+
+
+def _compare_solar_schema(defaults: dict[str, Any], *, ask_volumes: bool) -> vol.Schema:
+    """What-if solar picker for the compare branch.
+
+    Same regime list as the install step, narrowed the same way, but
+    nothing here is written back: it only re-prices the quote.
+
+    Deliberately no inverter-kVA field. The kVA only reaches the bill
+    through the Walloon prosumer fee, which only the compensation regime
+    pays, so it could only matter for a what-if INTO compensation, and
+    that regime is closed to installations certified after 2024: anyone
+    eligible is already on it and has a kVA set. An entry that somehow
+    reaches it without one is told so on the result page instead.
+
+    The two volume fields appear only when the entry has no injection
+    sensor to read. A compensation meter may net injection against
+    consumption in a single register, and that reading is not what the
+    injection tariff bills, so those users type the two gross yearly
+    figures instead of having a netted one silently re-used.
+    """
+    regimes = _regime_options(defaults.get(CONF_REGION))
+    stored = defaults.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
+    fields: dict[Any, Any] = {
+        vol.Required(
+            CONF_SOLAR_REGIME,
+            default=stored if stored in regimes else SOLAR_REGIME_NONE,
+        ): SelectSelector(
+            SelectSelectorConfig(
+                options=regimes,
+                mode=SelectSelectorMode.LIST,
+                translation_key="solar_regime",
+            )
+        ),
+    }
+    if ask_volumes:
+        for key in (CONF_WHATIF_CONSUMPTION_KWH, CONF_WHATIF_INJECTION_KWH):
+            selector = NumberSelector(
+                NumberSelectorConfig(
+                    min=0.0, max=200000.0, step=1.0, mode=NumberSelectorMode.BOX
+                )
+            )
+            typed = defaults.get(key)
+            # A figure already typed is a SUGGESTION, not a default: a
+            # voluptuous default is re-injected on a blank submit, and the
+            # "both volumes or none" check could then never fire. Same
+            # shape the manual-rate and meter fields use. Without it, the
+            # half a user did fill in is wiped by the error re-show.
+            if typed is None:
+                fields[vol.Optional(key)] = selector
+            else:
+                fields[vol.Optional(key, description={"suggested_value": typed})] = (
+                    selector
+                )
+    return vol.Schema(fields)

@@ -41,12 +41,13 @@ argument for it.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
+from homeassistant.config_entries import ConfigEntry, ConfigFlowResult, OptionsFlow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.selector import (
@@ -68,8 +69,11 @@ from .const import (
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_REGION,
+    CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
+    CONF_WHATIF_CONSUMPTION_KWH,
+    CONF_WHATIF_INJECTION_KWH,
     DSO_MODE_BI_HORAIRE,
     METER_DYNAMIC,
     METER_MONO,
@@ -87,8 +91,10 @@ from .compare_quote import (
     _solar_note,
     _tou_weighted_per_kwh,
     _uncredited_note,
+    _whatif_note,
 )
 from .flow_schemas import (
+    _compare_solar_schema,
     _contract_has_spot_injection,
     _contract_kind,
     _contracts_for,
@@ -156,6 +162,61 @@ def _label_for_contract(supplier_id: str, contract_id: str) -> str:
     except Exception:  # noqa: BLE001 - stale id
         pass
     return contract_id
+
+
+@dataclass(frozen=True)
+class _QuoteEntry:
+    """Read-only stand-in for the ConfigEntry, carrying a what-if regime.
+
+    Every helper the quote reaches (the annual bill, the fee legs, the
+    injection price, the year-to-date walk) reads the solar regime off
+    ``entry.data`` and touches nothing else on the entry, so swapping the
+    mapping is enough to price a what-if.
+
+    The alternative, threading a regime override down as a parameter,
+    would change signatures the live coordinator and the backfill share.
+    A defaulted override falling back to ``entry.data`` in one of those
+    three paths and not the others is exactly how the cost legs have
+    drifted apart before, and none of that risk buys anything here: the
+    compare branch is the only caller that needs a hypothetical regime.
+
+    Purpose-built rather than a copy of the real entry: HA's ConfigEntry
+    refuses to rebind ``data``, and a copy would carry the same entry id
+    into anything that later looked at it.
+    """
+
+    data: Mapping[str, Any]
+
+
+def _effective_regime(current: Mapping[str, Any], compare: Mapping[str, Any]) -> str:
+    """The solar regime this quote prices on: the what-if pick when the
+    compare_solar step ran, else the entry's own."""
+    stored = current.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
+    return str(compare.get(CONF_SOLAR_REGIME, stored))
+
+
+def _quote_entry(entry: ConfigEntry, regime: str) -> ConfigEntry:
+    """``entry`` itself when the what-if matches it, else a proxy holding
+    the overridden regime.
+
+    Returning the real entry unchanged on the common path keeps every
+    quote that does not use the what-if on exactly the code it ran
+    before, proxy included.
+    """
+    if regime == entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE):
+        return entry
+    # Only entry.data is ever read through this (audited across the quote,
+    # fee, injection and year-to-date helpers), so the mapping is a
+    # complete stand-in; the cast is what tells mypy that.
+    return cast(ConfigEntry, _QuoteEntry({**entry.data, CONF_SOLAR_REGIME: regime}))
+
+
+def _kva(data: Mapping[str, Any]) -> float:
+    """Configured inverter capacity, 0.0 when unset or unparseable."""
+    try:
+        return float(data.get(CONF_SOLAR_KVA, 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class _CompareStepsMixin(OptionsFlow):
@@ -246,7 +307,7 @@ class _CompareStepsMixin(OptionsFlow):
         """
         if user_input is not None:
             self._compare.update(user_input)
-            return await self._after_compare_meter()
+            return await self.async_step_compare_solar()
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
         )
@@ -257,7 +318,7 @@ class _CompareStepsMixin(OptionsFlow):
         # compare flow show an impossible mono/bi meter for it.)
         if other_kind in SMART_METER_CONTRACT_KINDS:
             self._compare[CONF_METER] = METER_DYNAMIC
-            return await self._after_compare_meter()
+            return await self.async_step_compare_solar()
         current_meter = self.config_entry.data.get(CONF_METER, METER_MONO)
         return self.async_show_form(
             step_id="compare_meter",
@@ -274,6 +335,66 @@ class _CompareStepsMixin(OptionsFlow):
             ),
         )
 
+    async def async_step_compare_solar(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Optionally quote both sides under a different solar regime.
+
+        The regime is a property of the grid connection, not of the
+        supplier: two suppliers at one address are necessarily on the same
+        one. So unlike the meter type, which is a billing mode the target
+        contract can differ on, this override applies to BOTH sides. A
+        target-only version would fold hundreds of euros of connection-side
+        change into what reads as a supplier-vs-supplier delta.
+
+        Runs before ``_after_compare_meter`` because that step decides
+        whether the quote needs an ENTSO-E key, and on the injection regime
+        a spot-indexed feed-in needs one. Deciding that on the stored
+        regime would send a compensation entry quoting Cociter Variable
+        straight to the result page with no key and silently credit zero.
+
+        Skipped entirely for an entry with no solar, so the common case
+        gains no click.
+        """
+        current = self.config_entry.data
+        stored = current.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
+        if stored == SOLAR_REGIME_NONE and _kva(current) <= 0.0:
+            return await self._after_compare_meter()
+        # A netted register cannot be told apart from a gross one by
+        # reading it, so the volumes are asked for on the wiring that
+        # cannot supply them rather than on the reading that comes back.
+        from .energy_meters import _kwh_sensor_ids
+
+        day_id, night_id, total_id = _kwh_sensor_ids(self.config_entry, "injection")
+        ask_volumes = not ((day_id and night_id) or total_id)
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            picked = user_input.get(CONF_SOLAR_REGIME, stored)
+            typed = (
+                user_input.get(CONF_WHATIF_CONSUMPTION_KWH),
+                user_input.get(CONF_WHATIF_INJECTION_KWH),
+            )
+            if picked != stored and ask_volumes and any(v is None for v in typed):
+                # Refuse rather than quietly quoting the override off a
+                # possibly-netted register: the error names what is
+                # missing, where silently dropping the override would look
+                # exactly like the picker not working.
+                errors[CONF_WHATIF_CONSUMPTION_KWH] = "whatif_volumes_required"
+            else:
+                self._compare.update(user_input)
+                return await self._after_compare_meter()
+        # No {stored_regime} placeholder: the picker is a LIST selector with
+        # the entry's own regime preselected and translated, so naming it in
+        # prose would only interpolate an English label into the nl / fr / de
+        # descriptions.
+        return self.async_show_form(
+            step_id="compare_solar",
+            data_schema=_compare_solar_schema(
+                {**current, **(user_input or {})}, ask_volumes=ask_volumes
+            ),
+            errors=errors,
+        )
+
     async def _after_compare_meter(self) -> ConfigFlowResult:
         """Hand off to compare_result, prompting for an ENTSO-E key first
         when either side needs spot data the user's current entry doesn't
@@ -288,7 +409,7 @@ class _CompareStepsMixin(OptionsFlow):
             self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
         )
         needs_spot = other_kind == "dynamic" or (
-            current.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
+            _effective_regime(current, self._compare) == SOLAR_REGIME_INJECTION
             and (
                 _contract_has_spot_injection(
                     self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
@@ -408,7 +529,14 @@ class _CompareStepsMixin(OptionsFlow):
         # live sensor bills. Flooring _peak_kw here instead would quote a
         # seasonal household its winter peak against the year.
         peak_kw = coord._billed_peak_kw()
-        regime = current.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
+        # The what-if regime, if the compare_solar step ran, and a proxy
+        # entry carrying it. Everything downstream that prices money takes
+        # the proxy; the real entry stays for runtime_data and for reading
+        # the household's own meters, which are facts, not hypotheses.
+        stored_regime = current.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
+        regime = _effective_regime(current, self._compare)
+        quote_entry = _quote_entry(self.config_entry, regime)
+        overridden = quote_entry is not self.config_entry
 
         now_utc = dt_util.utcnow()
         today_local = dt_util.now().date()
@@ -479,15 +607,20 @@ class _CompareStepsMixin(OptionsFlow):
         avg_spot = sum(spot_dict.values()) / len(spot_dict) if spot_dict else None
 
         # Measured consumption / injection from the user's kWh sensors.
-        # Injection is only relevant when a solar regime is configured;
-        # for the "none" regime it stays 0 even if a sensor is wired.
+        # Injection is only relevant when a solar regime is configured; for
+        # the "none" regime it stays 0 even if a sensor is wired. Read it
+        # when EITHER regime has solar, not just the quoted one: a what-if
+        # into "none" still prices the baseline leg on the entry's own
+        # regime, and zeroing the volume there would un-net a compensation
+        # baseline (or drop an injection credit) and quote the user's own
+        # contract as costing more than it does.
         rolling_year_kwh = await _read_total_kwh(
             self.hass, self.config_entry, year_ago, today_local
         )
         ytd_kwh = await _read_total_kwh(self.hass, self.config_entry, jan1, today_local)
         rolling_inj_kwh = 0.0
         ytd_inj_kwh = 0.0
-        if regime != SOLAR_REGIME_NONE:
+        if regime != SOLAR_REGIME_NONE or stored_regime != SOLAR_REGIME_NONE:
             r = await _read_total_kwh(
                 self.hass, self.config_entry, year_ago, today_local, side="injection"
             )
@@ -504,6 +637,17 @@ class _CompareStepsMixin(OptionsFlow):
             consumption_source = (
                 "default 3500 kWh - wire a kWh sensor for a measured estimate"
             )
+        # Volumes typed on the what-if step replace the measured pair. The
+        # step only offers them when no injection sensor is wired, which is
+        # the wiring whose consumption register may already be netted, so
+        # the typed figures are the only gross ones available.
+        typed_cons = self._compare.get(CONF_WHATIF_CONSUMPTION_KWH)
+        typed_inj = self._compare.get(CONF_WHATIF_INJECTION_KWH)
+        volumes_typed = typed_cons is not None and typed_inj is not None
+        if typed_cons is not None and typed_inj is not None:
+            annual_kwh = float(typed_cons)
+            rolling_inj_kwh = float(typed_inj)
+            consumption_source = "entered for the what-if"
 
         placeholders: dict[str, str] = {
             "current_supplier": _label_for_supplier(current[CONF_SUPPLIER]),
@@ -523,11 +667,17 @@ class _CompareStepsMixin(OptionsFlow):
             "compare_ytd": "-",
             "delta_ytd": "-",
             "annual_kwh": f"{annual_kwh:.0f}",
-            "ytd_kwh": f"{ytd_kwh:.0f}" if ytd_kwh is not None else "-",
+            # Typed volumes describe a full year, not the elapsed part of
+            # this one, and the year-to-date legs replay meter history that
+            # was recorded under the configured regime, so both are left
+            # blank rather than mixing the two.
+            "ytd_kwh": ("-" if volumes_typed or ytd_kwh is None else f"{ytd_kwh:.0f}"),
             "annual_chart": "",
             "ytd_chart": "",
             "ytd_injection_kwh": (
-                f"{ytd_inj_kwh:.0f}" if regime != SOLAR_REGIME_NONE else "-"
+                f"{ytd_inj_kwh:.0f}"
+                if regime != SOLAR_REGIME_NONE and not volumes_typed
+                else "-"
             ),
             "solar_note": _solar_note(regime, rolling_inj_kwh),
             "consumption_source": consumption_source,
@@ -544,6 +694,27 @@ class _CompareStepsMixin(OptionsFlow):
         # feature exists for. _cohort_energy_leg returns None for a contract
         # that is not the entry's own, so it can never touch the other side.
         current_snapshot = coord._snapshot
+        # The card the entry is actually configured on, which the baseline
+        # leg prices. Only the expert custom supplier builds its snapshot
+        # out of entry.data, so only there can the what-if card and the
+        # configured one differ at all.
+        baseline_snapshot = current_snapshot
+        if overridden and current[CONF_SUPPLIER] == SUPPLIER_CUSTOM:
+            # That supplier has no card to fetch, and its injection block is
+            # dropped unless entry.data says injection, so a what-if has to
+            # rebuild it from the proxy or the custom side credits nothing
+            # whatever the user picks. Resolve it the way the coordinator
+            # does: build_snapshot returns the card ex-VAT with the entered
+            # rate on taxes, and nothing else grosses the fixed fees.
+            from .providers.custom import build_snapshot
+            from .snapshot_store import _resolve_snapshot
+
+            try:
+                current_snapshot = _resolve_snapshot(
+                    quote_entry, build_snapshot(quote_entry.data, region, dso)
+                )
+            except Exception:  # noqa: BLE001 - keep the configured snapshot
+                pass
         if current_snapshot is not None:
             from .cohort import _cohort_energy_leg
 
@@ -553,11 +724,17 @@ class _CompareStepsMixin(OptionsFlow):
                 get_extractor(current[CONF_SUPPLIER]),
                 current[CONF_CONTRACT],
                 region,
-                self.config_entry,
+                quote_entry,
                 current_snapshot,
             )
             if cohort is not None:
-                current_snapshot = replace(current_snapshot, energy=cohort)
+                spliced = replace(current_snapshot, energy=cohort)
+                # The splice carries the signed yearly fee, which the fee
+                # legs read, so the baseline has to follow it whenever the
+                # two are the same card.
+                if baseline_snapshot is current_snapshot:
+                    baseline_snapshot = spliced
+                current_snapshot = spliced
 
         current_per_kwh: float | None = None
         if current_snapshot is not None:
@@ -587,7 +764,7 @@ class _CompareStepsMixin(OptionsFlow):
 
         try:
             other_snap = _resolve_snapshot(
-                self.config_entry,
+                quote_entry,
                 await other_extractor.fetch(
                     session, self._compare[CONF_CONTRACT], region
                 ),
@@ -626,10 +803,10 @@ class _CompareStepsMixin(OptionsFlow):
         # _annual_bill, so the page has to name them or it reads as if the
         # printed credit applied to both sides.
         uncredited: list[str] = []
-        if regime == "injection":
+        if regime == SOLAR_REGIME_INJECTION:
             if current_snapshot is not None:
                 current_inj_price = _compare_injection_credit(
-                    current_snapshot, self.config_entry, spot_dict, avg_spot
+                    current_snapshot, quote_entry, spot_dict, avg_spot
                 )
                 if current_inj_price is None and rolling_inj_kwh > 0:
                     uncredited.append(
@@ -640,7 +817,7 @@ class _CompareStepsMixin(OptionsFlow):
                     )
             if other_snap is not None:
                 compare_inj_price = _compare_injection_credit(
-                    other_snap, self.config_entry, spot_dict, avg_spot
+                    other_snap, quote_entry, spot_dict, avg_spot
                 )
                 if compare_inj_price is None and rolling_inj_kwh > 0:
                     uncredited.append(
@@ -649,21 +826,60 @@ class _CompareStepsMixin(OptionsFlow):
                             _label_for_supplier(self._compare[CONF_SUPPLIER]),
                         )
                     )
-        if uncredited:
-            placeholders["solar_note"] = _solar_note(
-                regime, rolling_inj_kwh, uncredited
-            )
 
+        current_annual: float | None = None
         if current_per_kwh is not None:
-            placeholders["current_per_kwh"] = f"{current_per_kwh:.4f}"
-            placeholders["current_annual"] = (
-                f"{_annual_bill(current_snapshot, self.config_entry, peak_kw, current_per_kwh, annual_kwh, rolling_inj_kwh, current_inj_price, meter=current_meter):.2f}"
+            current_annual = _annual_bill(
+                current_snapshot,
+                quote_entry,
+                peak_kw,
+                current_per_kwh,
+                annual_kwh,
+                rolling_inj_kwh,
+                current_inj_price,
+                meter=current_meter,
             )
+            placeholders["current_per_kwh"] = f"{current_per_kwh:.4f}"
+            placeholders["current_annual"] = f"{current_annual:.2f}"
         if other_per_kwh is not None and other_snap is not None:
             placeholders["compare_per_kwh"] = f"{other_per_kwh:.4f}"
             placeholders["compare_annual"] = (
-                f"{_annual_bill(other_snap, self.config_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, meter=meter):.2f}"
+                f"{_annual_bill(other_snap, quote_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, meter=meter):.2f}"
             )
+
+        # The compare branch cannot quote the user against their own
+        # contract (the picker excludes it), so a regime what-if that moves
+        # both sides together barely moves the printed supplier delta. Price
+        # the user's own contract once more under the entry as configured:
+        # that difference is the whole question a what-if is asking.
+        baseline_annual: float | None = None
+        if overridden and current_per_kwh is not None and baseline_snapshot is not None:
+            baseline_inj_price = (
+                _compare_injection_credit(
+                    baseline_snapshot, self.config_entry, spot_dict, avg_spot
+                )
+                if stored_regime == SOLAR_REGIME_INJECTION
+                else None
+            )
+            baseline_annual = _annual_bill(
+                baseline_snapshot,
+                self.config_entry,
+                peak_kw,
+                current_per_kwh,
+                annual_kwh,
+                rolling_inj_kwh,
+                baseline_inj_price,
+                meter=current_meter,
+            )
+        placeholders["solar_note"] = _whatif_note(
+            _solar_note(regime, rolling_inj_kwh, uncredited),
+            stored_regime=stored_regime,
+            regime=regime,
+            baseline_eur=baseline_annual,
+            whatif_eur=current_annual,
+            volumes_typed=volumes_typed,
+            missing_kva=_kva(current) <= 0.0,
+        )
         if (
             current_per_kwh is not None
             and other_per_kwh is not None
@@ -672,7 +888,7 @@ class _CompareStepsMixin(OptionsFlow):
         ):
             delta = _annual_bill(
                 other_snap,
-                self.config_entry,
+                quote_entry,
                 peak_kw,
                 other_per_kwh,
                 annual_kwh,
@@ -681,7 +897,7 @@ class _CompareStepsMixin(OptionsFlow):
                 meter=meter,
             ) - _annual_bill(
                 current_snapshot,
-                self.config_entry,
+                quote_entry,
                 peak_kw,
                 current_per_kwh,
                 annual_kwh,
@@ -690,6 +906,19 @@ class _CompareStepsMixin(OptionsFlow):
                 meter=current_meter,
             )
             placeholders["delta_annual"] = f"{'+' if delta >= 0 else ''}{delta:.2f}"
+
+        # Both year-to-date paths replay the household's own meter history,
+        # which was recorded under the configured regime and whose
+        # consumption register may already be netted. Typed volumes are a
+        # yearly hypothesis with no history behind them, so the legs stay
+        # blank rather than mixing a what-if with a measured past.
+        if volumes_typed:
+            _populate_charts(
+                placeholders,
+                current_label=_label_for_supplier(current[CONF_SUPPLIER]),
+                compare_label=_label_for_supplier(self._compare[CONF_SUPPLIER]),
+            )
+            return placeholders
 
         # Year-to-date what-if. Two paths:
         #   1. Archive-capable suppliers (Eneco / Cociter / Ecopower):
@@ -756,7 +985,7 @@ class _CompareStepsMixin(OptionsFlow):
                     # this is idempotent; the DSO and tax overlays are the
                     # raw card's either way.
                     current_snapshot,
-                    self.config_entry,
+                    quote_entry,
                     historical_spots=hist_spots,
                     billed_peak_kw=peak_kw,
                 )
@@ -765,7 +994,7 @@ class _CompareStepsMixin(OptionsFlow):
                     session,
                     other_extractor,
                     other_snap,
-                    self.config_entry,
+                    quote_entry,
                     contract_override=self._compare[CONF_CONTRACT],
                     meter_override=meter,
                     historical_spots=hist_spots,
@@ -803,7 +1032,7 @@ class _CompareStepsMixin(OptionsFlow):
             # it).
             current_ytd = _annual_bill(
                 current_snapshot,
-                self.config_entry,
+                quote_entry,
                 peak_kw,
                 current_per_kwh,
                 ytd_kwh,
@@ -815,7 +1044,7 @@ class _CompareStepsMixin(OptionsFlow):
             )
             compare_ytd = _annual_bill(
                 other_snap,
-                self.config_entry,
+                quote_entry,
                 peak_kw,
                 other_per_kwh,
                 ytd_kwh,

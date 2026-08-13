@@ -52,6 +52,8 @@ from .const import (
     CONF_SOLAR_REGIME,
     METER_MONO,
     REGION_FLANDERS,
+    SOLAR_REGIME_COMPENSATION,
+    SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
 )
 
@@ -387,6 +389,81 @@ def _bar_chart(values: dict[str, float], width: int = 20) -> str:
         bar = "█" * filled + "░" * (width - filled)
         rows.append(f"  {label.ljust(label_w)} {bar} {v:.0f} EUR")
     return "\n".join(rows)
+
+
+_VOLUMES_CLAUSE = (
+    " Yearly volumes entered by hand, so the year-to-date rows are left "
+    "blank: they replay measured meter history, not the figures typed."
+)
+
+
+def _regime_label(regime: str) -> str:
+    """Solar regime in the words the result page and the what-if step use.
+
+    Deliberately not the selector's own translated option: these render
+    inside a sentence, where "Compensation regime (Wallonia, certified
+    before 2024-01-01, until 2030)" does not fit. Every call site prefixes
+    a definite article, so each label has to read after "the".
+    """
+    if regime == SOLAR_REGIME_COMPENSATION:
+        return "compensation regime"
+    if regime == SOLAR_REGIME_INJECTION:
+        return "injection tariff"
+    return "no-solar regime"
+
+
+def _whatif_note(
+    base_note: str,
+    *,
+    stored_regime: str,
+    regime: str,
+    baseline_eur: float | None,
+    whatif_eur: float | None,
+    volumes_typed: bool,
+    missing_kva: bool = False,
+) -> str:
+    """The solar note, prefixed and qualified when a what-if regime is in
+    play.
+
+    Returns ``base_note`` untouched when the quote runs on the entry's own
+    regime, so an ordinary comparison reads exactly as before.
+
+    The baseline clause exists because the compare branch cannot quote a
+    user against their own contract: the picker excludes it. With the
+    regime moving both sides together, the printed supplier delta barely
+    shifts, and the number the user actually came for, their own contract
+    under the other regime, would otherwise appear nowhere.
+    """
+    if regime == stored_regime:
+        # Typed volumes blank the year-to-date rows on their own, without
+        # any regime change, so the sentence that explains the blank rows
+        # cannot hang off the regime having moved.
+        return f"{base_note}{_VOLUMES_CLAUSE}".lstrip() if volumes_typed else base_note
+    note = (
+        f"what-if: both sides quoted on the {_regime_label(regime)} "
+        f"(your entry is on the {_regime_label(stored_regime)})."
+    )
+    if base_note:
+        note += f" {base_note}."
+    if baseline_eur is not None and whatif_eur is not None:
+        delta = whatif_eur - baseline_eur
+        note += (
+            f" On your own contract that is {baseline_eur:.2f} EUR/year as "
+            f"configured versus {whatif_eur:.2f} EUR/year under the "
+            f"{_regime_label(regime)} ({'+' if delta >= 0 else ''}{delta:.2f} "
+            "EUR/year)."
+        )
+    if volumes_typed:
+        note += _VOLUMES_CLAUSE
+    if missing_kva and regime == SOLAR_REGIME_COMPENSATION:
+        # The prosumer fee is billed per kVA of inverter, so an entry that
+        # never set one quotes the compensation regime without it. Say so
+        # rather than print a figure that is short by a few hundred euros.
+        note += (
+            " No inverter capacity is set on this entry, so no Walloon "
+            "prosumer fee is included and the figure is that much too low."
+        )
+    return note + " Your entry is unchanged."
 
 
 def _uncredited_note(snapshot: Any, label: str) -> str:

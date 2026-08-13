@@ -202,7 +202,8 @@
       "start_date_in_future": "De startdatum van het contract kan niet in de toekomst liggen.",
       "end_before_start": "De einddatum van het contract moet na de startdatum liggen.",
       "register_pair_incomplete": "Vul zowel het dag- als het nachtregister in, of vul in de plaats de totaalsensor in, of laat ze alle drie leeg. Met een register van het paar en geen totaal kan de jaarkost uw verbruik niet splitsen en valt hij terug op enkel de vaste kosten.",
-      "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio."
+      "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio.",
+      "whatif_volumes_required": "Een ander regime offreren vereist je jaarlijkse afname en injectie in kWh: aan deze ingang is geen injectiemeter gekoppeld, dus ze kunnen niet uit je meters gelezen worden."
     },
     "step": {
       "init": {
@@ -222,7 +223,7 @@
       },
       "compare": {
         "title": "Andere leverancier vergelijken",
-        "description": "Kies een leverancier om mee te vergelijken. Regio, DNB, piek en zonneparameters blijven dezelfde als bij je huidige ingang. Zowel statische als dynamische leveranciers worden getoond, zodat je over contracttypes heen kan vergelijken; voor een statisch contract kan je het metertype in een latere stap aanpassen.",
+        "description": "Kies een leverancier om mee te vergelijken. Regio, DNB en piek blijven dezelfde als bij je huidige ingang; het metertype en het zonneregime kun je in een latere stap wijzigen voor een wat-als-berekening. Zowel statische als dynamische leveranciers worden getoond, zodat je over contractsoorten heen kunt vergelijken.",
         "data": {
           "supplier": "Leverancier"
         }
@@ -239,6 +240,15 @@
         "description": "Metertype voor de vergelijking. Standaard de instelling van je huidige ingang; wijzig om te zien wat de factuur zou zijn onder een ander factuurmodel (mono = enkelvoudig tarief, bi = piek / dal).",
         "data": {
           "meter": "Metertype"
+        }
+      },
+      "compare_solar": {
+        "title": "Andere leverancier vergelijken",
+        "description": "Zonneregime voor deze offerte. Kies een ander regime om te zien wat je zou betalen onder een andere meteropstelling; het regime van je ingang staat voorgeselecteerd. Anders dan het metertype geldt dit voor beide zijden, want het regime hoort bij je netaansluiting en niet bij de leverancier. Er wordt niets opgeslagen. De twee volumevelden verschijnen wanneer er geen injectiemeter aan deze ingang gekoppeld is: een terugdraaiende teller meldt het verbruik al verrekend met de injectie, en dat is niet wat het injectietarief factureert. Vul dan je bruto jaarcijfers in uit je omvormer-app of je jaarlijkse meterstand.",
+        "data": {
+          "solar_regime": "Regime",
+          "whatif_consumption_kwh": "Van het net afgenomen (kWh/jaar)",
+          "whatif_injection_kwh": "Op het net geinjecteerd (kWh/jaar)"
         }
       },
       "compare_api_key": {

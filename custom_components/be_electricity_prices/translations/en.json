@@ -202,7 +202,8 @@
       "start_date_in_future": "The contract start date cannot be in the future.",
       "end_before_start": "The contract end date must be after the start date.",
       "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",
-      "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Pick a different supplier or region."
+      "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Pick a different supplier or region.",
+      "whatif_volumes_required": "Quoting a different regime needs your yearly consumption and injection in kWh: this entry has no injection meter wired, so they cannot be read from your meters."
     },
     "step": {
       "init": {
@@ -222,7 +223,7 @@
       },
       "compare": {
         "title": "Compare another supplier",
-        "description": "Pick a supplier to quote against. Region, DSO, peak and solar settings stay the same as your current entry. Both static and dynamic suppliers are listed, so you can quote across contract kinds; for a static contract you can change the meter type on a later step.",
+        "description": "Pick a supplier to quote against. Region, DSO and peak stay the same as your current entry; the meter type and the solar regime can be changed on a later step to quote a what-if. Both static and dynamic suppliers are listed, so you can quote across contract kinds.",
         "data": {
           "supplier": "Supplier"
         }
@@ -239,6 +240,15 @@
         "description": "Meter type for the comparison. Defaults to your current entry's setting; change it to see what the bill would look like under a different billing mode (mono = single rate, bi = peak / off-peak).",
         "data": {
           "meter": "Meter type"
+        }
+      },
+      "compare_solar": {
+        "title": "Compare another supplier",
+        "description": "Solar regime for this quote. Pick a different one to see what you would pay under another metering arrangement; the regime your entry uses is preselected. Unlike the meter type this applies to both sides, because the regime belongs to your grid connection and not to the supplier. Nothing is saved. The two volume fields appear when no injection meter is wired to this entry: a meter that runs backwards reports consumption already netted against injection, which is not what the injection tariff bills, so enter your gross yearly figures from your inverter app or your annual meter readout.",
+        "data": {
+          "solar_regime": "Regime",
+          "whatif_consumption_kwh": "Electricity taken from the grid (kWh/year)",
+          "whatif_injection_kwh": "Electricity injected into the grid (kWh/year)"
         }
       },
       "compare_api_key": {

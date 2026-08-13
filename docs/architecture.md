@@ -265,7 +265,7 @@ Numbered walkthrough:
 
 ## Freshness and caching, at a glance
 
-The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:313`). Freshness has
+The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:321`). Freshness has
 three layers; the deep detail is in [coordinator.md](coordinator.md).
 
 - Probe: each tick runs the supplier's cheap `probe()` (a HEAD or listing GET returning a
@@ -275,7 +275,7 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
 - TTL fallback: suppliers with no usable probe (Engie, Luminus, DATS 24, where the only cheap
   response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
   `coordinator.py:224`).
-- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:315`)
+- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:323`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
   `coordinator.py:814`).

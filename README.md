@@ -60,7 +60,7 @@ publication and how to parse it.
 - **Renewal reminder** — set an optional **contract end date** when you add or edit the entry and it is exposed as a `contract_end_date` timestamp sensor, so an automation can remind you to shop around before your contract rolls over. Purely informational; it does not affect pricing.
 - **ENTSO-E key validated at setup** — the config flow hits the real endpoint with the entered token and rejects bad keys before the entry is saved.
 - **Translated UI** — English, French, Dutch and German.
-- **One-off supplier comparison** — the OptionsFlow has a *Compare another supplier* path that quotes a different supplier and contract against your current region / DSO / peak / solar settings. **Static and dynamic contracts can be quoted against each other** ("should I switch from fixed to dynamic?"); the flow prompts for an ENTSO-E key when a side needs spot data (a dynamic contract, or a spot-indexed-injection target like Cociter Variable on the injection regime) and you don't already have one saved. The annual estimate uses your **measured rolling-year consumption** (and, for solar users, injection) read from the same kWh sensors that feed `current_year_cost`, with a sensible 3500 kWh fallback when no sensor is wired. The result page also shows a **year-to-date what-if**: the actual kWh you've used since 1 January re-priced at each supplier's current rate, with two-row unicode bar charts so the difference reads at a glance. The meter type is overridable for static contracts (compare *what if I were on bi-hourly billing under supplier X*). Solar regimes are honoured: compensation nets consumption against injection, injection regime credits each supplier's own injection price. No second entry, no extra polling, nothing saved.
+- **One-off supplier comparison** — the OptionsFlow has a *Compare another supplier* path that quotes a different supplier and contract against your current region / DSO / peak settings. **Static and dynamic contracts can be quoted against each other** ("should I switch from fixed to dynamic?"); the flow prompts for an ENTSO-E key when a side needs spot data (a dynamic contract, or a spot-indexed-injection target like Cociter Variable on the injection regime) and you don't already have one saved. The annual estimate uses your **measured rolling-year consumption** (and, for solar users, injection) read from the same kWh sensors that feed `current_year_cost`, with a sensible 3500 kWh fallback when no sensor is wired. The result page also shows a **year-to-date what-if**: the actual kWh you've used since 1 January re-priced at each supplier's current rate, with two-row unicode bar charts so the difference reads at a glance. The meter type is overridable for static contracts (compare *what if I were on bi-hourly billing under supplier X*). Solar regimes are honoured: compensation nets consumption against injection, injection regime credits each supplier's own injection price. The regime itself is overridable too (compare *what if I moved off the compensation regime*): unlike the meter type it applies to **both** sides, because it belongs to your grid connection and not to the supplier, and the result page prints your own contract priced both ways so the answer does not depend on the supplier you happened to pick. Entries with no injection meter are asked for their gross yearly volumes first, since a meter that runs backwards reports consumption already netted against injection. No second entry, no extra polling, nothing saved.
 - **Self-healing** — last-known prices keep serving on outage. Five repair issues surface under **Settings → System → Repairs**: snapshot older than 7 days, a supplier extractor parse failure (layout drift), the supplier being unreachable after repeated fetch failures, ENTSO-E rejecting the API key, and a supplier that has announced it is leaving the residential market. A single transient fetch timeout no longer raises an issue; each auto-clears on the next successful refresh.
 - **Catalog drift detection** — the daily live-check diffs each supplier's public catalog against the registry and opens a GitHub issue when a new product appears, verifies the card resolved is the newest one the supplier advertises, plus per-supplier wallclock + bytes-received telemetry to flag silent slowdowns and PDF size jumps.
 - **Expert custom formula** — an escape hatch for suppliers that publish no public tariff card (group-purchase deals, B2B-flavoured products). You type the commodity formula (`factor × spot + base`, a monthly-averaged spot rate, or a flat rate) and all regulated DSO + tax values; there is no live card, so it's a static snapshot with none of the auto-update or drift-check safety net. Listed last in the supplier dropdown and clearly labelled as expert.
@@ -403,7 +403,7 @@ opens a two-option menu:
   parameters — anything. The integration reloads automatically when you
   finish, picking the new tariff card on the next refresh.
 - **Compare another supplier** — one-off price quote against a different
-  supplier and contract, with your region / DSO / peak / solar
+  supplier and contract, with your region / DSO / peak
   settings held fixed for an apples-to-apples comparison. **Static
   ↔ dynamic crossings are allowed**: the flow prompts for an ENTSO-E
   API key when a side needs spot data (a dynamic contract, or a
@@ -420,7 +420,15 @@ opens a two-option menu:
   unicode bar charts so the difference reads at a glance. Solar
   regimes are honoured: compensation nets consumption against
   injection, injection regime credits each supplier's own injection
-  price against the bill.
+  price against the bill. A solar step lets you quote the whole thing
+  under a **different regime** ("what would I pay off the compensation
+  regime?"): it moves both sides, drops or adds the Walloon prosumer
+  fee accordingly, and prints your own contract priced both ways.
+  Without an injection meter it asks for your gross yearly consumption
+  and injection first, because a meter that runs backwards reports a
+  netted figure that the injection tariff does not bill; the
+  year-to-date rows are then left blank, since they replay meter
+  history recorded under your configured regime.
   Submit closes the dialog without changing anything; nothing is saved.
 
 ## Daily operation

@@ -202,7 +202,8 @@
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
       "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert kann die Jahreskosten Ihren Verbrauch nicht aufteilen und fällt auf die reinen Gebühren zurück.",
-      "supplier_region_unavailable": "Dieser Lieferant verkauft in der gewählten Region keinen Haushaltsstrom. Wählen Sie einen anderen Lieferanten oder eine andere Region."
+      "supplier_region_unavailable": "Dieser Lieferant verkauft in der gewählten Region keinen Haushaltsstrom. Wählen Sie einen anderen Lieferanten oder eine andere Region.",
+      "whatif_volumes_required": "Ein anderes Regime zu berechnen erfordert Ihre Jahreswerte fuer Bezug und Einspeisung in kWh: diesem Eintrag ist kein Einspeisezaehler zugeordnet, sie koennen also nicht ausgelesen werden."
     },
     "step": {
       "init": {
@@ -222,7 +223,7 @@
       },
       "compare": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Lieferanten zum Vergleich waehlen. Region, Netzbetreiber, Spitze und Solar-Einstellungen bleiben gleich wie beim aktuellen Eintrag. Statische und dynamische Lieferanten werden aufgelistet, sodass Sie ueber Vertragsarten hinweg vergleichen koennen; bei einem statischen Vertrag koennen Sie die Zaehlerart in einem spaeteren Schritt aendern.",
+        "description": "Lieferanten zum Vergleich waehlen. Region, Netzbetreiber und Spitze bleiben gleich wie beim aktuellen Eintrag; Zaehlerart und Solarregime lassen sich in einem spaeteren Schritt aendern, um eine Was-waere-wenn-Rechnung zu erhalten. Statische und dynamische Lieferanten werden aufgelistet, sodass Sie ueber Vertragsarten hinweg vergleichen koennen.",
         "data": {
           "supplier": "Lieferant"
         }
@@ -239,6 +240,15 @@
         "description": "Zaehlerart fuer den Vergleich. Standard ist die Einstellung Ihres aktuellen Eintrags; aendern, um die Rechnung unter einer anderen Abrechnungsart zu sehen (mono = einheitlich, bi = Spitze / Nebenzeit).",
         "data": {
           "meter": "Zaehlerart"
+        }
+      },
+      "compare_solar": {
+        "title": "Anderen Lieferanten vergleichen",
+        "description": "Solarregime fuer dieses Angebot. Waehlen Sie ein anderes, um zu sehen, was Sie bei einer anderen Zaehlerregelung zahlen wuerden; das Regime Ihres Eintrags ist vorausgewaehlt. Anders als die Zaehlerart gilt dies fuer beide Seiten, denn das Regime gehoert zu Ihrem Netzanschluss und nicht zum Lieferanten. Es wird nichts gespeichert. Die beiden Mengenfelder erscheinen, wenn diesem Eintrag kein Einspeisezaehler zugeordnet ist: ein rueckwaerts laufender Zaehler meldet den Verbrauch bereits mit der Einspeisung verrechnet, und das ist nicht die Grundlage des Einspeisetarifs. Tragen Sie dann Ihre Brutto-Jahreswerte aus der Wechselrichter-App oder vom Jahresablesewert ein.",
+        "data": {
+          "solar_regime": "Regime",
+          "whatif_consumption_kwh": "Aus dem Netz bezogen (kWh/Jahr)",
+          "whatif_injection_kwh": "Ins Netz eingespeist (kWh/Jahr)"
         }
       },
       "compare_api_key": {

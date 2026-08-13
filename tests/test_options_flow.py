@@ -489,6 +489,20 @@ def _stub_snapshot(supplier: str, contract: str, single_rate: float) -> Any:
     )
 
 
+async def _pass_compare_solar(
+    hass: HomeAssistant, entry: MockConfigEntry, result: Any
+) -> Any:
+    """Submit the entry's own solar settings on the what-if step, so a
+    test that is not about the regime override walks straight through it.
+    The step is only shown for an entry that has solar at all."""
+    if result["step_id"] != "compare_solar":
+        return result
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"solar_regime": entry.data.get("solar_regime", "none")},
+    )
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_branch_quotes_against_other_supplier(
     hass: HomeAssistant,
@@ -630,7 +644,10 @@ async def test_compare_branch_static_to_dynamic_prompts_for_api_key(
         )
         # Dynamic locks the meter to dynamic and skips compare_meter,
         # then routes to compare_api_key because the static entry has
-        # no saved api_key.
+        # no saved api_key. The solar what-if step sits in between: it is
+        # shown for a dynamic target too, so the key gate can see the
+        # regime the quote will actually be priced on.
+        result = await _pass_compare_solar(hass, entry, result)
         assert result["step_id"] == "compare_api_key"
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"api_key": "valid-token"}
@@ -700,6 +717,7 @@ async def test_compare_branch_spot_injection_target_prompts_for_api_key(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"meter": "mono"}
         )
+        result = await _pass_compare_solar(hass, entry, result)
         assert result["step_id"] == "compare_api_key"
 
 
@@ -772,6 +790,7 @@ async def test_compare_does_not_mutate_live_historical_spots(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"meter": "mono"}
         )
+        result = await _pass_compare_solar(hass, entry, result)
         assert result["step_id"] == "compare_api_key"
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"api_key": "TESTKEY"}
@@ -844,6 +863,7 @@ async def test_compare_branch_spot_injection_current_prompts_for_api_key(
         )
         # The target is a plain static contract, but the CURRENT entry is
         # spot-indexed Cociter Variable with no saved key -> still prompt.
+        result = await _pass_compare_solar(hass, entry, result)
         assert result["step_id"] == "compare_api_key"
 
 
@@ -912,12 +932,18 @@ async def _drive_compare(
     other_supplier: str = "cociter",
     other_contract: str = "cociter_variable",
     meter: str = "mono",
+    regime: str | None = None,
+    whatif_kwh: tuple[float, float] | None = None,
 ) -> dict[str, str]:
     """Walk the compare flow end-to-end and return the result form's
     description placeholders. Replaces the alternative supplier's
     fetch with a stub returning ``other_snap`` (SupplierExtractor is
     a frozen dataclass, so we swap the registry entry instead of
-    patching .fetch directly)."""
+    patching .fetch directly).
+
+    ``regime`` / ``whatif_kwh`` drive the solar what-if step;
+    left unset it submits the entry's own values, which quotes exactly as
+    the flow did before that step existed."""
     from dataclasses import replace
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
@@ -937,6 +963,16 @@ async def _drive_compare(
         if result["step_id"] == "compare_meter":
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"], {"meter": meter}
+            )
+        if result["step_id"] == "compare_solar":
+            payload: dict[str, Any] = {
+                "solar_regime": regime or entry.data.get("solar_regime", "none")
+            }
+            if whatif_kwh is not None:
+                payload["whatif_consumption_kwh"] = whatif_kwh[0]
+                payload["whatif_injection_kwh"] = whatif_kwh[1]
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], payload
             )
         assert result["step_id"] == "compare_result"
     placeholders = result["description_placeholders"]
@@ -1223,6 +1259,631 @@ async def test_compare_names_the_side_that_credits_no_injection(
     # gets (0.05 * 4000 = 200 EUR).
     diff = float(ph["compare_annual"]) - float(ph["current_annual"])
     assert abs(diff - 200.0) < 1.0
+
+
+def _prosumer_entry_and_snapshots(hass: HomeAssistant) -> tuple[Any, Any, Any]:
+    """A Walloon compensation entry whose DSO actually publishes a prosumer
+    rate, plus both sides' snapshots. The stubs used elsewhere leave that
+    rate None, which zeroes the term the regime what-if turns on and off."""
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        FixedRates,
+        InjectionRates,
+        TaxOverlay,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.cons",
+            "injection_kwh": "sensor.inj",
+            "solar_regime": "compensation",
+            "solar_kva": 5.0,
+        },
+        title="Eneco - Wallonia compensation",
+    )
+    entry.add_to_hass(hass)
+    dsos = {
+        "ores": DsoOverlay(
+            distribution_single=0.10,
+            transport=0.0145,
+            prosumer_eur_per_kva_year=82.0,
+        )
+    }
+    taxes = TaxOverlay(federal_excise=0.0, energy_contribution=0.0)
+    current_snap = make_snapshot(
+        supplier="eneco",
+        contract="power_fix",
+        energy=FixedRates(single=0.20, yearly_fixed_fee=0.0),
+        dsos=dsos,
+        taxes=taxes,
+        injection=InjectionRates(current=0.05),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    other_snap = make_snapshot(
+        supplier="mega",
+        contract="mega_online_fixed",
+        energy=FixedRates(single=0.20, yearly_fixed_fee=0.0),
+        dsos=dsos,
+        taxes=taxes,
+        injection=InjectionRates(current=0.05),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    return entry, current_snap, other_snap
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_solar_whatif_reprices_both_sides(
+    hass: HomeAssistant,
+) -> None:
+    """Quoting a compensation entry on the injection tariff has to move
+    three things at once: the Walloon prosumer fee stops being billed, the
+    meter stops netting, and the injected kWh start earning a credit. The
+    regime reaches those through entry.data, so a picker that only changed
+    a local variable would leave every euro exactly where it was."""
+    entry, current_snap, other_snap = _prosumer_entry_and_snapshots(hass)
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+
+    cons = 5000.0
+    inj = 4000.0
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return {start: cons}
+        if entity_id == "sensor.inj":
+            return {start: inj}
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        as_configured = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+        )
+        whatif = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+            regime="injection",
+        )
+
+    # The regime is an arithmetic wrapper around the bill, never a
+    # re-pricing: the all-in EUR/kWh must not move.
+    assert whatif["current_per_kwh"] == as_configured["current_per_kwh"]
+    assert whatif["compare_per_kwh"] == as_configured["compare_per_kwh"]
+
+    per_kwh = float(whatif["current_per_kwh"])
+    # Leaving compensation drops 5 kVA * 82 EUR/kVA/year of prosumer fee,
+    # stops netting the 4000 injected kWh off the consumption, and credits
+    # them at 0.05 instead.
+    expected = -5.0 * 82.0 + inj * per_kwh - 0.05 * inj
+    moved = float(whatif["current_annual"]) - float(as_configured["current_annual"])
+    assert moved == pytest.approx(expected, abs=0.5)
+    # Both sides move together: the regime belongs to the connection, so
+    # the supplier-vs-supplier delta is what must stay put.
+    assert whatif["delta_annual"] == as_configured["delta_annual"]
+    # The year-to-date legs price through the same proxy, so they move with
+    # the regime as well. Prorated by the elapsed year, hence compared
+    # against the other run rather than a fixed figure.
+    assert whatif["current_ytd"] != as_configured["current_ytd"]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_solar_whatif_prints_the_own_contract_baseline(
+    hass: HomeAssistant,
+) -> None:
+    """The compare branch cannot quote a user against their own contract,
+    and a regime override moves both sides equally, so the printed supplier
+    delta answers nothing about the regime. The note has to carry the
+    user's own contract priced both ways or the question is unanswerable
+    on the page."""
+    entry, current_snap, other_snap = _prosumer_entry_and_snapshots(hass)
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return {start: 5000.0}
+        if entity_id == "sensor.inj":
+            return {start: 4000.0}
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        as_configured = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+        )
+        whatif = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+            regime="injection",
+        )
+
+    note = whatif["solar_note"]
+    assert note.startswith("what-if: both sides quoted on the injection tariff")
+    assert "your entry is on the compensation regime" in note
+    assert "Your entry is unchanged." in note
+    # The baseline is the same contract, same volumes, under the entry's
+    # own regime, so it must equal what the unmodified quote printed.
+    assert f"{as_configured['current_annual']} EUR/year as configured" in note
+    assert f"{whatif['current_annual']} EUR/year under the injection tariff" in note
+    # An unmodified quote keeps the plain note it always had.
+    assert as_configured["solar_note"].startswith("compensation regime:")
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_solar_requires_volumes_without_an_injection_meter(
+    hass: HomeAssistant,
+) -> None:
+    """A compensation meter may net injection against consumption in one
+    register, and that reading is not what the injection tariff bills. With
+    no injection sensor to separate the two, the step must refuse rather
+    than quote the override off the netted figure. Silently dropping the
+    override instead would look exactly like the picker not working, which
+    is the complaint this step exists to answer."""
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.cons",
+            "solar_regime": "compensation",
+            "solar_kva": 5.0,
+        },
+        title="Eneco - no injection meter",
+    )
+    entry.add_to_hass(hass)
+    current_snap = _stub_snapshot("eneco", "power_fix", 0.20)
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+    other_snap = make_snapshot(
+        supplier="mega",
+        contract="mega_online_fixed",
+        energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
+        dsos=current_snap.dsos,
+        taxes=current_snap.taxes,
+        injection=InjectionRates(current=0.05),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    fake = replace(EXTRACTORS["mega"], fetch=AsyncMock(return_value=other_snap))
+    with patch.dict(EXTRACTORS, {"mega": fake}):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "mega"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "mega_online_fixed"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        assert result["step_id"] == "compare_solar"
+        # The volume fields are offered precisely because no injection
+        # sensor is wired.
+        data_schema = result["data_schema"]
+        assert data_schema is not None
+        schema = data_schema.schema
+        assert {"whatif_consumption_kwh", "whatif_injection_kwh"} <= {
+            str(k) for k in schema
+        }
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"solar_regime": "injection"}
+        )
+        assert result["step_id"] == "compare_solar"
+        assert result["errors"] == {"whatif_consumption_kwh": "whatif_volumes_required"}
+        # Keeping the entry's own regime needs no volumes.
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"solar_regime": "compensation"}
+        )
+        assert result["step_id"] == "compare_result"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_solar_typed_volumes_blank_the_year_to_date(
+    hass: HomeAssistant,
+) -> None:
+    """Typed volumes are a yearly hypothesis with no meter history behind
+    them, and the year-to-date legs replay exactly that history, recorded
+    under the configured regime. Mixing the two would print a what-if
+    annual next to a measured YTD and invite reading them as one bill."""
+    entry, current_snap, other_snap = _prosumer_entry_and_snapshots(hass)
+    # Drop the injection sensor: this is the netted-register wiring.
+    hass.config_entries.async_update_entry(
+        entry, data={k: v for k, v in entry.data.items() if k != "injection_kwh"}
+    )
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return {start: 3500.0}
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        ph = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+            regime="injection",
+            whatif_kwh=(6160.0, 2660.0),
+        )
+
+    assert ph["annual_kwh"] == "6160"
+    assert ph["consumption_source"] == "entered for the what-if"
+    assert ph["current_ytd"] == "-"
+    assert ph["compare_ytd"] == "-"
+    assert ph["delta_ytd"] == "-"
+    assert ph["ytd_kwh"] == "-"
+    assert ph["ytd_injection_kwh"] == "-"
+    assert ph["ytd_chart"] == ""
+    assert "year-to-date rows are left blank" in ph["solar_note"]
+    # The gross pair is what got billed, not the netted 3500 the sensor
+    # reports: consumption at the full rate, injection credited.
+    per_kwh = float(ph["current_per_kwh"])
+    expected = 6160.0 * per_kwh - 2660.0 * 0.05
+    assert float(ph["current_annual"]) == pytest.approx(expected, abs=0.5)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_solar_whatif_to_none_keeps_the_baseline_netted(
+    hass: HomeAssistant,
+) -> None:
+    """Quoting "no solar" must not zero the injected volume for the
+    BASELINE leg, which is still priced on the entry's own regime. Reading
+    the injection sensor only when the quoted regime has solar un-netted
+    the compensation baseline and printed the user's own contract as
+    costing hundreds more than an ordinary quote says it does."""
+    entry, current_snap, other_snap = _prosumer_entry_and_snapshots(hass)
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return {start: 5000.0}
+        if entity_id == "sensor.inj":
+            return {start: 4000.0}
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        as_configured = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+        )
+        whatif = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+            regime="none",
+        )
+
+    # The baseline is the same contract under the same regime as the plain
+    # quote, so it has to print the same euro figure.
+    assert (
+        f"{as_configured['current_annual']} EUR/year as configured"
+        in (whatif["solar_note"])
+    )
+    # And the what-if leg really did drop both the netting and the prosumer
+    # fee: full consumption billed, no 5 kVA * 82 EUR/kVA/year.
+    per_kwh = float(whatif["current_per_kwh"])
+    assert float(whatif["current_annual"]) == pytest.approx(5000.0 * per_kwh, abs=0.5)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_solar_typed_volumes_explain_themselves_without_a_flip(
+    hass: HomeAssistant,
+) -> None:
+    """Typed volumes blank the year-to-date rows on their own, with no
+    regime change involved, so the sentence explaining the blank rows must
+    not hang off the regime having moved."""
+    entry, current_snap, other_snap = _prosumer_entry_and_snapshots(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={k: v for k, v in entry.data.items() if k != "injection_kwh"}
+    )
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return {start: 3500.0}
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        ph = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+            whatif_kwh=(6160.0, 2660.0),
+        )
+
+    assert ph["current_ytd"] == "-"
+    assert "year-to-date rows are left blank" in ph["solar_note"]
+    # No regime moved, so no what-if framing.
+    assert "what-if:" not in ph["solar_note"]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_solar_error_reshow_keeps_a_typed_volume(
+    hass: HomeAssistant,
+) -> None:
+    """Filling one volume box and submitting must not wipe it: the form
+    comes back with the error, and a user who has to retype what they
+    already entered reasonably concludes the step is broken."""
+    entry, current_snap, other_snap = _prosumer_entry_and_snapshots(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={k: v for k, v in entry.data.items() if k != "injection_kwh"}
+    )
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+
+    from dataclasses import replace as dc_replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    fake = dc_replace(EXTRACTORS["mega"], fetch=AsyncMock(return_value=other_snap))
+    with patch.dict(EXTRACTORS, {"mega": fake}):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "mega"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "mega_online_fixed"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        assert result["step_id"] == "compare_solar"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {"solar_regime": "injection", "whatif_consumption_kwh": 6160.0},
+        )
+        assert result["step_id"] == "compare_solar"
+        assert result["errors"]
+        data_schema = result["data_schema"]
+        assert data_schema is not None
+        marker = next(
+            k for k in data_schema.schema if str(k) == "whatif_consumption_kwh"
+        )
+        assert marker.description == {"suggested_value": 6160.0}
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_solar_step_narrows_compensation_to_wallonia(
+    hass: HomeAssistant,
+) -> None:
+    """Same regional narrowing as the install step. A Flemish entry quoted
+    on the compensation regime would net injection 1:1 while still paying
+    the capacity tariff and no prosumer fee: a bill no Belgian contract can
+    issue."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "solar_kva": 5.0,
+        },
+        title="Eneco - Flanders injection",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.20)
+    )
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "compare"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "mega"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "mega_online_fixed"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "mono"}
+    )
+    assert result["step_id"] == "compare_solar"
+    data_schema = result["data_schema"]
+    assert data_schema is not None
+    schema = data_schema.schema
+    marker = next(k for k in schema if str(k) == "solar_regime")
+    options = set(schema[marker].config["options"])
+    assert options == {"none", "injection"}
+    # No injection sensor is wired, so the volume fields are offered.
+    assert "whatif_consumption_kwh" in {str(k) for k in schema}
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_solar_whatif_resolves_the_custom_rebuild(
+    hass: HomeAssistant,
+) -> None:
+    """The expert custom supplier is the one whose snapshot is built out of
+    entry.data, so it is the only one a regime what-if has to rebuild. Two
+    things have to hold for that rebuild: it goes through the same resolver
+    the coordinator applies (build_snapshot returns the card ex-VAT and
+    nothing else grosses the fixed fees), and the baseline leg keeps being
+    priced on the card the entry is configured on, which is the only one
+    that still carries the injection block."""
+    from custom_components.be_electricity_prices.providers.base import FixedRates
+    from custom_components.be_electricity_prices.providers.custom import build_snapshot
+    from custom_components.be_electricity_prices.snapshot_store import _resolve_snapshot
+    from tests import make_snapshot
+
+    data = {
+        "supplier": "custom",
+        "contract": "custom_fixed",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "mono",
+        "consumption_kwh": "sensor.cons",
+        "injection_kwh": "sensor.inj",
+        "solar_regime": "injection",
+        "solar_kva": 5.0,
+        "custom_energy_single": 0.20,
+        "custom_yearly_fixed_fee": 100.0,
+        "custom_dso_distribution_single": 0.10,
+        "custom_injection_mode": "current",
+        "custom_injection_current": 0.05,
+        "custom_vat_rate": 0.06,
+    }
+    entry = MockConfigEntry(domain=DOMAIN, data=data, title="custom injection")
+    entry.add_to_hass(hass)
+    # What the live coordinator holds: built from entry.data, then resolved.
+    stored_snap = _resolve_snapshot(entry, build_snapshot(data, "wallonia", "ores"))
+    entry.runtime_data = _real_coordinator(hass, entry, stored_snap)
+    other_snap = make_snapshot(
+        supplier="mega",
+        contract="mega_online_fixed",
+        energy=FixedRates(single=0.20, yearly_fixed_fee=100.0),
+        dsos=stored_snap.dsos,
+        taxes=stored_snap.taxes,
+        injection=None,
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return {start: 5000.0}
+        if entity_id == "sensor.inj":
+            return {start: 4000.0}
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        as_configured = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+        )
+        whatif = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+            regime="compensation",
+        )
+
+    # The rebuilt card is VAT-resolved: the entered 100 EUR yearly fee is
+    # billed at 106, not 100. An unresolved rebuild shows up here directly.
+    per_kwh = float(whatif["current_per_kwh"])
+    # Compensation nets 5000 - 4000 and adds no prosumer fee (the custom
+    # DSO overlay publishes no prosumer rate).
+    assert float(whatif["current_annual"]) == pytest.approx(
+        106.0 + 1000.0 * per_kwh, abs=0.5
+    )
+    # And the baseline still credits the injection the configured card
+    # carries, which the rebuilt one drops (it is not on that regime).
+    assert (
+        f"{as_configured['current_annual']} EUR/year as configured"
+        in (whatif["solar_note"])
+    )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_solar_step_skipped_without_solar(
+    hass: HomeAssistant,
+) -> None:
+    """An entry with no panels gains no click: the what-if step is for
+    households that have a regime to wonder about."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    assert entry.data.get("solar_regime") in (None, "none")
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "compare"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "cociter"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "cociter_variable"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "mono"}
+    )
+    assert result["step_id"] == "compare_result"
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

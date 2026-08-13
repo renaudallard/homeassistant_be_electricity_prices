@@ -287,6 +287,14 @@ SOLAR_REGIMES: Final = (
     SOLAR_REGIME_INJECTION,
 )
 
+# Compare-flow only, never persisted to entry.data: the yearly volumes a
+# what-if needs when the entry's own meter cannot supply them. A meter on
+# the compensation regime may net injection against consumption in a
+# single register, and that reading is not what the injection tariff
+# bills, so the user types the two gross figures instead.
+CONF_WHATIF_CONSUMPTION_KWH: Final = "whatif_consumption_kwh"
+CONF_WHATIF_INJECTION_KWH: Final = "whatif_injection_kwh"
+
 CAPACITY_MODE_SENSOR: Final = "sensor"
 CAPACITY_MODE_FIXED: Final = "fixed"
 

@@ -40,7 +40,7 @@ entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 ```
 
-`BePricesCoordinator.__init__` (`coordinator.py:839`) chains to `DataUpdateCoordinator.__init__` with `update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES)` (`coordinator.py:861`). `UPDATE_INTERVAL_MINUTES` is `60` (`const.py:313`): the coordinator ticks hourly for every contract kind, and the dynamic branch piggybacks the ENTSO-E refresh onto the same tick rather than running a second timer.
+`BePricesCoordinator.__init__` (`coordinator.py:839`) chains to `DataUpdateCoordinator.__init__` with `update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES)` (`coordinator.py:861`). `UPDATE_INTERVAL_MINUTES` is `60` (`const.py:321`): the coordinator ticks hourly for every contract kind, and the dynamic branch piggybacks the ENTSO-E refresh onto the same tick rather than running a second timer.
 
 ### 1.2 The runtime_data ordering trap
 
@@ -151,7 +151,7 @@ Two config entries on the same `(supplier, contract, region)` share one fetched 
 
 ### 2.3 The on-disk Store and cache invalidation
 
-The Store is `_MigratingStore` (`snapshot_store.py:409`), a `Store[dict]` subclass whose `_async_migrate_func` returns `{}` for any blob written under an older `STORAGE_VERSION` (`snapshot_store.py:420`). Every persisted field is re-derivable from a fresh fetch, so dropping the cache on a major-version mismatch is safe and avoids HA's "missing migration function" warning. `STORAGE_VERSION` is `2` (`const.py:315`).
+The Store is `_MigratingStore` (`snapshot_store.py:409`), a `Store[dict]` subclass whose `_async_migrate_func` returns `{}` for any blob written under an older `STORAGE_VERSION` (`snapshot_store.py:420`). Every persisted field is re-derivable from a fresh fetch, so dropping the cache on a major-version mismatch is safe and avoids HA's "missing migration function" warning. `STORAGE_VERSION` is `2` (`const.py:323`).
 
 There is a **second**, finer version inside the serialized snapshot: `_SNAPSHOT_SCHEMA_VERSION`, currently `20` (`snapshot_store.py:498`). `_snapshot_to_dict` stamps it (`snapshot_store.py:501`); `_snapshot_from_dict` raises `ValueError` when a loaded blob's `_schema_version` is below it (`snapshot_store.py:536`), which `async_load_persistent` catches and treats as "discard and re-fetch".
 
@@ -292,7 +292,7 @@ The window computation is *not* owned by the coordinator. `_find_window` (`__ini
 
 - Outside Flanders it resets both to 0/`None` (`coordinator_peak.py:112`) so a stale peak from a former Flanders config doesn't linger.
 - It rolls over on the local 1st of the month (`coordinator_peak.py:127`); UTC would lag CET/CEST users at the boundary.
-- `CAPACITY_MODE_FIXED` uses the configured value directly (`const.py:291`); `CAPACITY_MODE_SENSOR` takes a rolling max of the peak-power sensor (`const.py:290`), scaling W/VA to kW (`const.py:290`, issue #19: an unscaled 4481 W stored as 4481 kW inflated capacity cost 1000x).
+- `CAPACITY_MODE_FIXED` uses the configured value directly (`const.py:299`); `CAPACITY_MODE_SENSOR` takes a rolling max of the peak-power sensor (`const.py:298`), scaling W/VA to kW (`const.py:298`, issue #19: an unscaled 4481 W stored as 4481 kW inflated capacity cost 1000x).
 - On rollover the closing month is banked into `_peak_history` and the window is pruned to the eleven most recent completed months, so with the running one the mean covers twelve. A month still at `0.0` is not banked: no reading was ever collected, which is not a measured zero.
 
 `_billed_peak_kw` turns that window into the quantity Fluvius actually charges on, the "gemiddelde maandpiek". Its methodology gives the formula outright: `Rekenkundig gemiddelde van de Max (Maandpiek (m), 2.5) voor elke maand (m)`, i.e. the floor lands on each month BEFORE the mean, not on the mean. Every term is then at least the floor, so the mean is too and no outer clamp is needed. `CAPACITY_MODE_FIXED` bypasses the window and floors the configured value directly. `_peak_kw` itself is left raw, so `monthly_peak_kw` reports a measurement rather than a billing figure. The in-progress month only joins the mean once it HAS a reading: it is reset to 0 on the local 1st, and a zero floored to 2,5 kW is not a measured peak, so counting it stepped the mean (and with it `capacity_cost` and `current_year_cost`) down at every rollover and back up as the month accrued. This is the same estimate-the-gap rule already applied to a month that was never measured.
