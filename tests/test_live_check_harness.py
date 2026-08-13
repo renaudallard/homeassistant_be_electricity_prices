@@ -572,3 +572,72 @@ def test_freshness_matching_is_case_insensitive() -> None:
     (row,) = _rows("ecopower/freshness")
     assert row.ok is False
     assert "202608" in row.detail
+
+
+_MEGA_RE = r"/tarif/Mega-\w+-EL-\w+-(?:BX|VL|WL)-(\w+)-[^\"'\s]*\.pdf"
+_MEGA_PAGE = (
+    '<a href="https://x/tarif/Mega-FR-EL-B2C-VL-092026-A-Fixed.pdf">rolled</a>'
+    '<a href="https://x/tarif/Mega-FR-EL-B2C-WL-082026-A-Fixed.pdf">not yet</a>'
+)
+
+
+def test_a_supplier_publication_stagger_is_not_staleness() -> None:
+    """Comparing the OLDEST resolved card looks stricter and is wrong: a
+    supplier that rolls one region's card before another's then gets named
+    broken for its own schedule. Mega's listing is demonstrably not atomic."""
+    lc._expect_newest_card(
+        "mega/freshness", _MEGA_PAGE, _MEGA_RE, "092026", key=lc._mega_month_key
+    )
+    assert _rows("mega/freshness")[0].ok is True
+
+
+def test_a_family_wide_stale_resolution_still_fails() -> None:
+    """What the row exists for: a resolver blind to the new filename shape
+    takes out every card at once, so the newest resolved is still behind."""
+    lc._expect_newest_card(
+        "mega/freshness", _MEGA_PAGE, _MEGA_RE, "072026", key=lc._mega_month_key
+    )
+    (row,) = _rows("mega/freshness")
+    assert row.ok is False
+    assert "092026" in row.detail
+
+
+_EBEM_RE = (
+    r"tariefkaart[-_][a-z]*[-_]?"
+    r"([a-z]{3,10}[-_]\d{4}|\d{2}[-_]\d{4}|\d{4}[-_]\d{2})"
+    r"[^\"'/]*\.pdf"
+)
+_EBEM_PAGE = (
+    '<a href="/media/a/ebem_tariefkaart-elek-08-2026.pdf">elek</a>'
+    '<a href="/media/b/ebem_tariefkaart-gas-09-2026.pdf">gas, published early</a>'
+)
+
+
+def test_ebem_gas_cards_are_not_advertised_electricity_cards() -> None:
+    """The kind token is matched loosely so a renamed electricity card still
+    registers, and that looseness swallows "gas". EBEM has twice rolled its
+    gas card days ahead of the electricity one, which would fail this row for
+    a card the integration does not parse."""
+    lc._expect_newest_card(
+        "ebem/freshness",
+        _EBEM_PAGE,
+        _EBEM_RE,
+        "2026-08",
+        key=lc._month_year_key,
+        exclude="gas",
+    )
+    assert _rows("ebem/freshness")[0].ok is True
+
+
+def test_ebem_still_fails_on_a_stale_electricity_card() -> None:
+    lc._expect_newest_card(
+        "ebem/freshness",
+        _EBEM_PAGE,
+        _EBEM_RE,
+        "2026-07",
+        key=lc._month_year_key,
+        exclude="gas",
+    )
+    (row,) = _rows("ebem/freshness")
+    assert row.ok is False
+    assert "08-2026" in row.detail

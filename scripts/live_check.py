@@ -1412,8 +1412,16 @@ async def _freshness_row(
 
     ``served_of`` receives the page HTML (several resolvers are pure and
     take the already-fetched document) and returns every stamp the
-    extractor resolves for that family. The OLDEST is compared, so one
-    lagging contract fails the row rather than hiding behind its siblings.
+    extractor resolves for that family. The NEWEST is compared, not the
+    oldest. Comparing the oldest looks stricter and is actually wrong: a
+    supplier that rolls one product's or one region's card ahead of its
+    siblings then fails the row and gets named broken for its own
+    publication schedule. Mega's listing is demonstrably not atomic. The
+    defect this gate exists for -- a resolver that cannot see the new
+    filename shape -- takes out every card in the family at once, so the
+    newest resolved stamp still falls behind the newest advertised and the
+    row still fails. Where a break really can hit one member at a time,
+    the caller emits a row per member instead of collapsing them.
 
     ``resolver_falls_back`` says what an unreadable or unrecognisable page
     means for THIS supplier, and it is read out of the resolver, never
@@ -1449,7 +1457,7 @@ async def _freshness_row(
         label,
         html,
         pattern,
-        min([s for s in served if s is not None], key=key),
+        max([s for s in served if s is not None], key=key),
         key=key,
         exclude=exclude,
         empty_is_ok=not resolver_falls_back,
@@ -1623,6 +1631,15 @@ async def _check_card_freshness(
             pattern,
             _ebem_served,
             key=_month_year_key,
+            # The kind token is matched loosely so a renamed electricity
+            # card still registers, and that same looseness swallows "gas".
+            # EBEM publishes 42 gas cards on this page and has twice rolled
+            # them days ahead of the electricity ones, which would fail this
+            # row for a card the integration does not even parse. Every
+            # other multi-fuel supplier here pins its fuel in the pattern
+            # (mega -EL-, eneco POWER_, frank dynamis); EBEM cannot, because
+            # the token it would pin is the one being kept loose.
+            exclude="gas",
         )
 
     cociter = modules.get("cociter")
@@ -1664,7 +1681,6 @@ async def _check_card_freshness(
         # deliberately loose GROQ with no filename predicate, scanned for a
         # Dutch month word -- the "Elektriciteit" token the extractor keys
         # on is exactly the layer that went blind before.
-        label = "frank/freshness: serving the newest advertised dynamic card"
         pattern = (
             r"(?m)^(?=.*dynamis).*?((?:januari|februari|maart|april|mei|juni|juli|"
             r"augustus|september|oktober|november|december)\s+20\d{2}"
@@ -1677,25 +1693,32 @@ async def _check_card_freshness(
                 " | order(_createdAt desc)[0..59]",
             )
             blob = "\n".join(str(r.get("originalFilename", "")) for r in rows)
-            served = []
+            served = {}
             for tier_id, _tier_label, _suffix in frank._TIERS:
                 _url, card_label = await frank._resolve_pdf_url(session, tier_id)
-                served.append(card_label)
+                served[tier_id] = card_label
         except _EXTRACTOR_ERROR as err:
-            _record(label, True, f"CMS unreadable: {type(err).__name__}: {err}")
+            _record(
+                "frank/freshness: serving the newest advertised dynamic card",
+                True,
+                f"CMS unreadable: {type(err).__name__}: {err}",
+            )
         else:
-            # Every tier, not just frank_dynamic: the break that actually
-            # happened hit the four SUFFIXED tiers while the base tier was
-            # fine, so a single-tier row would have missed it.
-            unreadable = [s for s in served if _frank_month_key(s) == _UNREADABLE_STAMP]
-            if unreadable:
-                _expect(label, False, f"cannot read a month out of {unreadable[0]!r}")
-            else:
+            # One row PER TIER, not one collapsed row. The break that
+            # actually happened hit the four suffixed tiers while the base
+            # tier stayed fine, so a family-wide comparison would have gone
+            # green on it: the base tier's correct stamp is the newest and
+            # hides the other four.
+            for tier_id, card_label in served.items():
+                label = f"frank/freshness: newest advertised {tier_id} card"
+                if _frank_month_key(card_label) == _UNREADABLE_STAMP:
+                    _expect(label, False, f"cannot read a month out of {card_label!r}")
+                    continue
                 _expect_newest_card(
                     label,
                     blob,
                     pattern,
-                    min(served, key=_frank_month_key),
+                    card_label,
                     key=_frank_month_key,
                     exclude="combi",
                 )
