@@ -37,9 +37,11 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from datetime import date, datetime
 from collections.abc import Callable
 from pathlib import Path
 
+import aiohttp
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
@@ -641,3 +643,116 @@ def test_ebem_still_fails_on_a_stale_electricity_card() -> None:
     (row,) = _rows("ebem/freshness")
     assert row.ok is False
     assert "08-2026" in row.detail
+
+
+# --- Mega professional cards --------------------------------------------------
+#
+# These have no advertised set at all: Mega never links the B2B cards from a
+# page, so the CDN's own answer is the signal (application/pdf = published,
+# text/html stub = not). What makes it worth checking is that fetch() rolls
+# back a month when the card is missing, and four of the nine professional
+# contracts are variable or dynamic, so last month's card carries last
+# month's index.
+
+
+class _FakeHead:
+    def __init__(self, ctype: str) -> None:
+        self.headers = {"Content-Type": ctype}
+
+    async def __aenter__(self) -> "_FakeHead":
+        return self
+
+    async def __aexit__(self, *a: object) -> None:
+        return None
+
+
+class _FakeSession:
+    def __init__(self, ctype: str) -> None:
+        self._ctype = ctype
+        self.calls = 0
+
+    def head(self, _url: str, **_kw: object) -> _FakeHead:
+        self.calls += 1
+        return _FakeHead(self._ctype)
+
+
+class _FakeClock:
+    """Stands in for homeassistant.util.dt, whose now() returns a datetime."""
+
+    def __init__(self, when: date) -> None:
+        self._when = datetime(when.year, when.month, when.day, 12, 0)
+
+    def now(self) -> datetime:
+        return self._when
+
+
+def _mega_module() -> object:
+    from custom_components.be_electricity_prices.providers import mega
+
+    return mega
+
+
+@pytest.mark.parametrize(
+    ("ctype", "day", "ok", "needle"),
+    [
+        pytest.param("application/pdf", 20, True, "", id="published"),
+        pytest.param(
+            "text/html; charset=utf-8", 2, True, "grace", id="missing-in-grace"
+        ),
+        pytest.param(
+            "text/html; charset=utf-8",
+            20,
+            False,
+            "past publication",
+            id="missing-past-grace",
+        ),
+    ],
+)
+def test_mega_professional_publication_check(
+    ctype: str, day: int, ok: bool, needle: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mega = _mega_module()
+    monkeypatch.setattr(mega, "dt_util", _FakeClock(date(2026, 9, day)), raising=False)
+    session = _FakeSession(ctype)
+    asyncio.run(lc._check_mega_professional(session, mega))  # type: ignore[arg-type]
+    (row,) = _rows("mega/freshness: professional")
+    assert row.ok is ok
+    if needle:
+        assert needle in row.detail
+
+
+def test_mega_professional_check_covers_every_contract_region(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One HEAD per (professional contract, region). A per-contract check
+    would miss Mega publishing one region and not another, which its
+    residential listing has already done once (the Wallonia Dynamic block)."""
+    mega = _mega_module()
+    monkeypatch.setattr(mega, "dt_util", _FakeClock(date(2026, 9, 20)), raising=False)
+    session = _FakeSession("application/pdf")
+    asyncio.run(lc._check_mega_professional(session, mega))  # type: ignore[arg-type]
+    expected = len(
+        [
+            1
+            for c in mega._CONTRACTS  # type: ignore[attr-defined]
+            if c.professional
+            for r in mega._REGION_TO_CODE  # type: ignore[attr-defined]
+            if r in c.regions
+        ]
+    )
+    assert session.calls == expected == 27
+
+
+def test_mega_professional_transport_failure_is_not_a_publication_signal() -> None:
+    """A dead network is not Mega failing to publish, and the extractor rows
+    already report a real break."""
+
+    class _Boom:
+        def head(self, _url: str, **_kw: object) -> _FakeHead:
+            raise aiohttp.ClientError("connection reset")
+
+    mega = _mega_module()
+    asyncio.run(lc._check_mega_professional(_Boom(), mega))  # type: ignore[arg-type]
+    (row,) = _rows("mega/freshness: professional")
+    assert row.ok is True
+    assert "HEAD failed" in row.detail

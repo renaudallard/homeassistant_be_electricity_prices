@@ -1486,6 +1486,78 @@ def _stamps_from(pattern: str, *urls: str | None) -> list[str | None]:
     return out
 
 
+# Days into a month after which Mega's professional card for that month is
+# expected to exist. fetch() falls back to the previous month when it does
+# not, and mega.py's own comment puts the lag at "a day or two"; the extra
+# margin keeps a normal publication delay from filing an issue every month.
+_PRO_PUBLICATION_GRACE_DAYS = 5
+
+
+async def _check_mega_professional(
+    session: aiohttp.ClientSession, mega: types.ModuleType
+) -> None:
+    """Assert Mega's B2B cards for the current month exist.
+
+    These cannot use a freshness ROW: Mega never links the professional
+    cards from any page, so there is no advertised set to compare against.
+    The CDN answers for itself instead -- a published month returns
+    ``application/pdf`` and an unpublished one a ``text/html`` stub under
+    the same 200 -- so HEAD is the whole check, and no card is downloaded.
+
+    What makes this worth a check at all is that ``fetch`` silently rolls
+    back one month when the current card is missing. Four of the nine
+    professional contracts are variable or dynamic, so last month's card
+    carries last month's index: the prices are WRONG, not merely old, and
+    nothing else in this run would say so.
+
+    Early in a month the rollback is correct behaviour, not a defect, so
+    this only fails past :data:`_PRO_PUBLICATION_GRACE_DAYS`. Mega does not
+    publish ahead -- next month's URL is a stub today -- so failing without
+    that grace would file an issue every month.
+    """
+    today = mega.dt_util.now().date()
+    label = "mega/freshness: professional cards published for the current month"
+    missing: list[str] = []
+    for contract in mega._CONTRACTS:
+        if not contract.professional:
+            continue
+        for region, code in mega._REGION_TO_CODE.items():
+            if region not in contract.regions:
+                continue
+            url = mega._pro_pdf_url(contract, code, today)
+            try:
+                async with session.head(url, allow_redirects=True) as resp:
+                    ctype = resp.headers.get("Content-Type", "")
+            except aiohttp.ClientError as err:
+                # A transport failure is not a publication signal, and the
+                # supplier's own extractor rows already report a real break.
+                _record(label, True, f"HEAD failed: {type(err).__name__}: {err}")
+                return
+            if "pdf" not in ctype.lower():
+                missing.append(f"{contract.contract_id}/{region}")
+    if not missing:
+        _record(label, True)
+        return
+    if today.day <= _PRO_PUBLICATION_GRACE_DAYS:
+        _record(
+            label,
+            True,
+            f"day {today.day} of the month, still within the publication "
+            f"grace; {len(missing)} card(s) not yet up, extractor is serving "
+            f"last month's",
+        )
+        return
+    _expect(
+        label,
+        False,
+        f"{len(missing)} professional card(s) missing for {today:%Y-%m} well "
+        f"past publication; the extractor is silently serving last month's, "
+        f"which carries last month's index on the variable and dynamic "
+        f"contracts: {', '.join(sorted(missing)[:6])}"
+        + (" ..." if len(missing) > 6 else ""),
+    )
+
+
 async def _check_card_freshness(
     session: aiohttp.ClientSession, modules: dict[str, types.ModuleType]
 ) -> None:
@@ -1587,6 +1659,7 @@ async def _check_card_freshness(
             key=_mega_month_key,
             exclude="prepaid",
         )
+        await _check_mega_professional(session, mega)
 
     eneco = modules.get("eneco")
     if eneco is not None:

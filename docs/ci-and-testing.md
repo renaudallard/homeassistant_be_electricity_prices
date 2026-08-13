@@ -244,7 +244,7 @@ main()                       scripts/live_check.py:1760  asyncio.run(_run()); rc
 
 ### Card freshness
 
-`_check_card_freshness` (`scripts/live_check.py:1489`) asks a question no other check here asks:
+`_check_card_freshness` (`scripts/live_check.py:1561`) asks a question no other check here asks:
 not "did the fetch work" but "is this the card the supplier is currently advertising". A superseded
 card downloads, parses and validates exactly like a current one, so a stale URL reads as a green
 run -- Bolt billed June's variable formula for ten weeks behind a passing board, and Ecopower served
@@ -267,10 +267,22 @@ per contract from static constants or a parameter-only API query, with no candid
 wrongly from, so a wrong resolution 404s loudly and the extractor phase reports it. A row here
 would be noise dressed as coverage.
 
-Mega's nine *professional* contracts are also outside it: `_pro_pdf_url` builds a filename from the
-current date with an explicit fall-back-to-previous-month branch and there is no page advertising
-them, so there is nothing to compare against. That fallback is a genuine silent-stale lane and is
-recorded here as a known gap rather than papered over.
+Mega's nine *professional* contracts get a **different** check, `_check_mega_professional`, because
+they have no advertised set at all: Mega never links the B2B cards from any page, so there is no
+"newest advertised" to compare against. The CDN answers for itself instead - a published month
+returns `application/pdf`, an unpublished one a `text/html` stub under the same 200 - so the check
+is one HEAD per (contract, region), 27 in all, downloading nothing.
+
+What makes it worth checking is that `fetch` silently rolls back one month when the current card is
+missing. Four of the nine professional contracts are variable or dynamic, so last month's card
+carries last month's index: the prices are *wrong*, not merely old, and nothing else in the run
+would say so.
+
+Early in a month that rollback is correct behaviour rather than a defect, so the check only fails
+past `_PRO_PUBLICATION_GRACE_DAYS`. Mega does not publish ahead - next month's URL is a stub today,
+measured - so failing without that grace would file an issue every single month. Within the grace
+the row passes and records how many cards are not yet up, which is the honest report: the fallback
+is in use, and that is fine for now.
 
 ### The stamps do not sort
 
@@ -322,21 +334,21 @@ on 2026-08-01: EBEM's August card failed CI three times over for reporting the z
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py:1893`) runs two gates:
+`_validate_snapshot` (`scripts/live_check.py:1966`) runs two gates:
 
-- `_validate_energy` (`scripts/live_check.py:1953`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:2026`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
   additionally assert band ordering (peak >= transition >= offpeak; pic >= medium >= eco). An
   unrecognised energy class is a failure.
-- `_validate_injection` (`scripts/live_check.py:1751`) gates that the feed-in credit parsed and
+- `_validate_injection` (`scripts/live_check.py:1824`) gates that the feed-in credit parsed and
   kept the right shape. This exists because the coordinator drops the credit entirely when
   `injection` is None, so a relabelled injection row silently zeroes a solar user's credit and
   used to pass CI green (issues #31, F53). The `shape` argument pins expectations: `"none"`
   (region pays no feed-in, injection must be absent), `"monthly"` (`current` set, `factor`/`base`
   None), `"spot"` (`factor`/`base` set), or `"present"` (present, shape unconstrained). Per-contract
-  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1819`); the DATS 24 check passes
+  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1892`); the DATS 24 check passes
   `injection_shape` explicitly because its Wallonia card pays no feed-in while its Flanders card is
   monthly-indexed.
 
@@ -378,10 +390,10 @@ under that cap, or the supplier is killed before it can report the drift the bud
 The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2153`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:2370`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:2443`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1672`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2257`) for the known-large catalogues (Bolt,
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2330`) for the known-large catalogues (Bolt,
 TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
 (`scripts/live_check.py:1720`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
 which are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request
@@ -393,7 +405,7 @@ budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see 
 false-firing drift alert means adjusting the override, not the code.
 
 A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:2370`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2357`). The
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2430`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever
