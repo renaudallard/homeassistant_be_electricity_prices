@@ -129,7 +129,16 @@ _LISTING_URL = "https://www.boltenergie.be/fr/listes-des-prix"
 # The version group is what keeps the variable family current; ``discover``
 # ignores it, and filters to the residential segment, so it still diffs on
 # folder/slug alone.
-_CARD_URL_RE = re.compile(r"pricelists/(fix|var)/([a-z_]+)_(res|pro)_el_fr_(\d+)\.pdf")
+#
+# The version is \w+ and the match is case-insensitive so that ``discover``
+# keeps seeing a card whose suffix stops being purely numeric or whose
+# extension is uppercased. Pinning \d+ here to serve the resolver narrowed
+# discovery as a side effect, and a slug it cannot see is a new product the
+# catalog diff reports as silence. _resolve_variable_suffix does its own
+# numeric filtering instead, which it needs regardless for max(key=int).
+_CARD_URL_RE = re.compile(
+    r"pricelists/(fix|var)/([a-z_]+)_(res|pro)_el_fr_(\w+)\.pdf", re.IGNORECASE
+)
 # Used only when the listing page cannot be read at all. Serving a known
 # version beats failing every Bolt entry on a listing outage, but it is a
 # floor, not a pin: it is the newest version seen when this was last
@@ -285,7 +294,14 @@ async def _resolve_variable_suffix(
     versions: list[str] = [
         version
         for folder, slug, segment, version in _CARD_URL_RE.findall(html)
-        if folder == "var" and slug == contract.slug and segment == contract.segment
+        # isdigit(): the URL builder and max(key=int) below both need a
+        # number. A non-numeric suffix means Bolt reshaped the filename, so
+        # fall back rather than crash -- and the live-check freshness gate,
+        # which scans with \w+, fails the run so the reshape gets noticed.
+        if folder.lower() == "var"
+        and slug.lower() == contract.slug
+        and segment.lower() == contract.segment
+        and version.isdigit()
     ]
     if not versions:
         _LOGGER.warning(
@@ -331,9 +347,9 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     except ExtractorError:
         return set()
     return {
-        f"{folder}/{slug}"
+        f"{folder.lower()}/{slug.lower()}"
         for folder, slug, segment, _version in _CARD_URL_RE.findall(html)
-        if segment == "res"
+        if segment.lower() == "res"
     }
 
 

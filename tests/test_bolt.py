@@ -814,3 +814,38 @@ async def test_an_unpublished_card_still_falls_back_to_last_month() -> None:
     assert len(text) > 1000
     assert url == served[-1]
     assert len(served) == 2
+
+
+def test_discover_still_sees_a_reshaped_or_uppercased_card_url() -> None:
+    # _CARD_URL_RE is shared with the version resolver. Pinning its version
+    # group to \d+ for the resolver's benefit silently narrowed discovery,
+    # and a slug discover() cannot see is a new product the catalog diff
+    # reports as silence rather than as a finding.
+    listing = (
+        '<a href="https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_13.pdf">a</a>'
+        '<a href="https://files.boltenergie.be/pricelists/var/newprod_res_el_fr_11b.pdf">b</a>'
+        '<a href="https://files.boltenergie.be/pricelists/fix/fix_res_el_fr_202608.PDF">c</a>'
+    )
+
+    async def _run() -> None:
+        with patch.object(bolt_mod, "fetch_text", new=AsyncMock(return_value=listing)):
+            found = await bolt_mod.discover(None)  # type: ignore[arg-type]
+        assert found == {"var/bolt", "var/newprod", "fix/fix"}
+
+    asyncio.run(_run())
+
+
+def test_a_non_numeric_version_does_not_break_the_resolver() -> None:
+    # The resolver needs a number for the URL and for max(key=int), so it
+    # filters rather than crashing on the wider pattern discover() needs.
+    listing = '<a href="/pricelists/var/bolt_res_el_fr_11b.pdf">reshaped</a>'
+
+    async def _run() -> None:
+        with patch.object(bolt_mod, "fetch_text", new=AsyncMock(return_value=listing)):
+            resolved = await bolt_mod._resolve_variable_suffix(
+                None,  # type: ignore[arg-type]
+                _var("bolt_variable"),
+            )
+        assert resolved == bolt_mod._VARIABLE_SUFFIX_FALLBACK
+
+    asyncio.run(_run())
