@@ -19,7 +19,7 @@
     <img src="https://img.shields.io/badge/Home%20Assistant-2026.4%2B-41BDF5?logo=home-assistant&logoColor=white&style=flat-square" alt="Home Assistant"/>
   </a>
   <a href="https://hacs.xyz">
-    <img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square" alt="HACS"/>
+    <img src="https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=flat-square" alt="HACS"/>
   </a>
   <a href="./LICENSE">
     <img src="https://img.shields.io/github/license/renaudallard/homeassistant_be_electricity_prices?style=flat-square" alt="License"/>
@@ -260,10 +260,10 @@ All sensors share one device per config entry.
 
 ### HACS (recommended)
 
-1. Open HACS, three-dot menu → **Custom repositories**.
-2. Add `https://github.com/renaudallard/homeassistant_be_electricity_prices` as type **Integration**.
-3. Install **Belgian Electricity Prices** and restart Home Assistant.
-4. **Settings → Devices & services → Add integration → Belgian Electricity Prices**.
+1. Open HACS and search for **Belgian Electricity Prices** — it ships in the
+   HACS default store, so no custom repository is needed.
+2. Install it and restart Home Assistant.
+3. **Settings → Devices & services → Add integration → Belgian Electricity Prices**.
 
 ### Manual
 
