@@ -175,31 +175,50 @@ It runs in the `test` job (`.github/workflows/test.yml:62`), before the suite, a
 network or fixtures.
 
 **It fails the build on a reference that is provably broken** (past the end of the file it
-names) **and on any rise in the rewritable count**. The rest is printed and left to a human,
-because each has a legitimate form the checker cannot distinguish:
+names, or landing on a line that holds nothing) **and on any rise in the rewritable or
+unanchored-markdown counts**. The rest is printed and left to a human, because each has a
+legitimate form the checker cannot distinguish:
 
 | Report | Fails CI | Why not automatic |
 | --- | --- | --- |
-| past EOF (plain, range, or continuation) | yes | the file has no such line; nothing to argue about |
+| past EOF (plain, range, continuation, or markdown) | yes | the file has no such line; nothing to argue about |
+| `markdown BROKEN` | yes | the pin lands on a blank line, a bare fence, or a table rule, so it points at nothing whatever the prose claims |
 | `anchored+rewritable` | only above the baseline | the anchor heuristic takes the nearest preceding backticked identifier, which on a dense sentence is often not the subject. Read the list before running `--write` |
+| `markdown unanchored` | only above the baseline | a markdown target has no symbol to resolve, so the word score is a smoke test rather than a proof; a claim can also have no good passage to point at |
 | `moved-symbol suspects` | no | the same shape is also a correct reference to a USE site (`CONF_CONTRACT` (`config_flow.py:163`) is where the flow reads it, not where `const` defines it). ~63 of these are expected; `--verbose` lists them |
 
 No single rewritable reference is provably stale, so none can gate on its own: four of the five
 on `main` sit on a line that does not even mention the symbol the prose names, being deliberate
 pins at the code implementing the behaviour. The COUNT still gates, because it is stable for
 that class - an ambiguous pin stays ambiguous however the file moves - and rises only when pins
-that used to resolve stop resolving. `_REWRITABLE_BASELINE` (`scripts/doc_ref_check.py:51`)
+that used to resolve stop resolving. `_REWRITABLE_BASELINE` (`scripts/doc_ref_check.py:55`)
 freezes it. Without this, a branch that inserted three import lines shifted 98 pins (764 correct
 down to 666) and the checker still exited 0. Raise the baseline only for a pin deliberately
 aimed at an implementation site, naming it in the commit message; lower it when one is resolved,
 which the checker prints a note asking for.
 
-Four reference forms exist and all four are checked. That matters because for a long time only
-the first was, and the other three rotted invisibly behind a clean run: 28 stale ranges (21 of
-them predating the refactor that exposed them), 4 stale continuations, and 31 references to a
-symbol that had moved module while its old line still landed inside the now-shorter file. Ranges
+Five reference forms exist and all five are checked. That matters because for a long time only
+the first was, and the other four rotted invisibly behind a clean run: 28 stale ranges (21 of
+them predating the refactor that exposed them), 4 stale continuations, 31 references to a
+symbol that had moved module while its old line still landed inside the now-shorter file, and
+12 of the glossary's 15 `README.md:line` pins, some off by over 100 lines. Ranges
 and continuations are never auto-rewritten: the end of a span is not derivable from an anchor
 symbol, and inventing one is worse than leaving a visible stale pin.
+
+Markdown pins are the fifth form, and they need a different anchor: `README.md` has no symbols
+to index, so `MDREF` (`scripts/doc_ref_check.py:77`) scores each pin on the DISTINCTIVE words its
+claim shares with the passage it lands on. A word is distinctive when it appears on at most 3% of
+the target file's lines, which drops "the" and "energy" and keeps "energiefonds" and "picker";
+the passage is the paragraph or list item around the pinned line
+(`_md_passage` (`scripts/doc_ref_check.py:183`)), because README prose is hard-wrapped and the
+claim rarely fits on one line. Fewer than
+`_MD_MIN_SHARED` (`scripts/doc_ref_check.py:96`) shared words is reported, never rewritten: there
+is no AST truth to rewrite to. The threshold was measured against the pins as they stood before
+the 2026-08-17 repin, where all 12 stale ones scored 3 or less and the three that still resolved
+scored 4, 7 and 14.
+`_MD_UNANCHORED_BASELINE` (`scripts/doc_ref_check.py:103`) tolerates the one pin on `main` with no
+better target: the glossary's TSO row defines Elia and the transmission charge, which README never
+states.
 
 A table row whose reference is a bare number in a "Line" column (`| `_store` | ... | 859 |`)
 is invisible to all of this. Those are checked by hand when the file they point into changes.
@@ -660,7 +679,7 @@ maintainer.
 
 ## Local dev commands before committing
 
-Run the same four gates the `test.yml` job runs, from the repo root, before committing. These are
+Run the same five gates the `test.yml` job runs, from the repo root, before committing. These are
 the exact invocations derived from `.github/workflows/test.yml`:
 
 ```
@@ -668,6 +687,7 @@ ruff check .
 ruff format .          # workflow uses `ruff format --check .`; run the formatter locally
 mypy --strict custom_components/be_electricity_prices
 mypy custom_components/ tests/ scripts/
+python scripts/doc_ref_check.py
 pytest tests/ -q
 ```
 
@@ -677,6 +697,10 @@ Notes:
   formatting, then commit; a stray unformatted file fails the check step.
 - Both mypy passes matter: `--strict` on production code, and the non-strict pass over
   `tests/`/`scripts/` that also type-checks `live_check.py`.
+- `doc_ref_check.py` needs no network or fixtures and reports in seconds, so run it after any doc
+  edit: it fails on a pin past the end of its file or on a dead line, and on a rise in the
+  rewritable or unanchored-markdown counts. `--verbose` adds the moved-symbol suspects, and
+  `--write` repins only what an AST symbol can resolve.
 - To iterate on a single provider, target its module, for example
   `pytest tests/test_bolt.py -q`.
 - The full live check is network-bound and can be run locally with

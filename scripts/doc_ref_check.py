@@ -9,21 +9,24 @@ almost always names the symbol it points at, in backticks, on the same line
 (``_extract_energy`` (`_mega_cards.py:137`)); this resolves that symbol's real
 definition line and, with ``--write``, rewrites the number when it moved.
 
-Four reference forms exist and all four are checked, because for a long time
-only the first was and the other three rotted in silence:
+Five reference forms exist and all five are checked, because for a long time
+only the first was and the other four rotted in silence:
 
   1. ``file.py:12``          plain
   2. ``file.py:12-34``       a range
   3. ``(`file.py:12`, `:34`)`` a continuation, inheriting the last filename
   4. a symbol that MOVED to another module, whose old line still happens to
      land inside the now-shorter file, so nothing looks broken
+  5. ``README.md:214``       a line in a MARKDOWN file, which has no symbols
+     to anchor on, so it is scored on shared distinctive words instead
 
 CI runs this without ``--write`` and fails on references that are PROVABLY
-broken (past the end of the file they name) and on any INCREASE in the
-rewritable count over the baseline below. Everything else is reported for a
-human, never auto-corrected, because the same shapes have legitimate forms. A
-ref pointing at a USE site rather than a definition is correct and common, and
-the anchor heuristic cannot tell it from a stale one.
+broken (past the end of the file they name, or landing on a dead line) and on
+any INCREASE in the rewritable or unanchored counts over the baselines below.
+Everything else is reported for a human, never auto-corrected, because the same
+shapes have legitimate forms. A ref pointing at a USE site rather than a
+definition is correct and common, and the anchor heuristic cannot tell it from
+a stale one.
 
 Usage:  doc_ref_check.py [--write] [--verbose]
 """
@@ -33,6 +36,7 @@ from __future__ import annotations
 import ast
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -63,6 +67,40 @@ CONT = re.compile(r"`([A-Za-z0-9_./]+\.py):\d+(?:-\d+)?`|`:(\d+)(?:-(\d+))?`")
 # Backtick-quoted identifiers on the same line, longest first so
 # `_extract_energy_fund` wins over `_extract_energy`.
 IDENT = re.compile(r"`([A-Za-z_][A-Za-z0-9_.]*)`")
+# Pins into a MARKDOWN file ("README.md:214"), which none of the three
+# regexes above can see: they all require a .py name inside backticks. The
+# glossary pins README passages this way, and 12 of its 15 pins had rotted --
+# some by over 100 lines, onto a fragment like "> month." or "overwritten." --
+# while every run printed a clean sweep. A markdown line has no symbol to
+# anchor on, so these are scored on how many DISTINCTIVE words the doc's claim
+# shares with the passage the pin lands in.
+MDREF = re.compile(r"([A-Za-z0-9_./-]+\.md):(\d+)(?:-(\d+))?")
+# Any file:line pin, stripped before scoring so a shared "README" or "py" can
+# never stand in for a shared word of the claim itself.
+FILEREF = re.compile(r"[A-Za-z0-9_./-]+\.(?:py|md):\d+(?:-\d+)?")
+WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# Lines that OPEN a markdown block. A pin's passage stops at them, so an
+# anchor from a neighbouring bullet is never credited to this pin.
+MD_BLOCK = re.compile(r"\s*(?:[-*+]\s|\d+\.\s|#{1,6}\s|\||```|>)")
+# A pin landing here points at nothing at all: a blank line, a bare fence, or
+# a table rule. Provably useless, so it fails rather than being reported.
+MD_DEAD = re.compile(r"\s*(?:```|\|[\s|:-]*\|)?\s*$")
+# A word counts as distinctive when it appears on at most this share of the
+# target file's lines: "the" and "energy" are on hundreds of README lines and
+# say nothing about where a pin belongs, "energiefonds" and "picker" do.
+_MD_COMMON_LINE_RATIO = 0.03
+# How many distinctive words the claim and the pinned passage must share.
+# Measured over the 15 README pins as they stood before the 2026-08-17 repin:
+# all 12 stale pins scored 3 or less (six scored 0) and the three that still
+# resolved scored 4, 7 and 14. After the repin the spread is 3..17.
+_MD_MIN_SHARED = 3
+# Unanchored markdown pins tolerated on a green run, same ratchet as the
+# rewritable baseline above. The one tolerated pin is the glossary's TSO row:
+# it defines Elia and the transmission charge, which README never states, so
+# the closest honest target is the `network_component` sensor row and that
+# shares only "distribution" and "transport". Raise this only for a pin with
+# no better target in the file, and say which in the commit message.
+_MD_UNANCHORED_BASELINE = 1
 
 
 def _source_for(rel: str) -> Path | None:
@@ -128,15 +166,65 @@ def _package_index() -> dict[str, list[tuple[str, int]]]:
     return out
 
 
+def _md_words(text: str) -> set[str]:
+    """Lowercased word set of a claim or a passage, pins stripped out."""
+    return {w.lower() for w in WORD.findall(FILEREF.sub(" ", text))}
+
+
+def _md_index(path: Path) -> tuple[list[str], Counter[str]]:
+    """A markdown file's lines, plus how many lines each word appears on."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    freq: Counter[str] = Counter()
+    for line in lines:
+        freq.update(_md_words(line))
+    return lines, freq
+
+
+def _md_passage(lines: list[str], num: int) -> tuple[int, int]:
+    """The paragraph or list item the pinned line belongs to.
+
+    README prose is hard-wrapped, so the claim a pin aims at rarely fits on
+    the pinned line alone: the injection-regime pin lands on the bullet's
+    first line and names ``injection_price`` on its second. Widening to the
+    surrounding block picks that up, while stopping at a blank line and at
+    the head of the next block keeps a bullet from borrowing its neighbour's
+    words -- and a table row, which carries its whole claim, stays one line.
+    """
+    start = end = num
+    while (
+        start > 1 and lines[start - 2].strip() and not MD_BLOCK.match(lines[start - 1])
+    ):
+        start -= 1
+    while end < len(lines) and lines[end].strip() and not MD_BLOCK.match(lines[end]):
+        end += 1
+    return start, end
+
+
+def _md_claim(lines: list[str], i: int) -> str:
+    """The doc text whose claim the pin on line ``i`` (1-based) supports.
+
+    A table row carries its whole claim. Running prose does not: the glossary
+    states the all-in formula on one line and pins it on the next, so the
+    line above comes along.
+    """
+    line = lines[i - 1]
+    if line.lstrip().startswith("|"):
+        return line
+    return " ".join(lines[max(0, i - 2) : i])
+
+
 def main() -> int:
     write = "--write" in sys.argv
     verbose = "--verbose" in sys.argv
     cache: dict[Path, dict[str, int]] = {}
-    fixed = stale_unresolved = ok = 0
+    md_cache: dict[Path, tuple[list[str], Counter[str]]] = {}
+    fixed = stale_unresolved = ok = md_ok = 0
     unresolved: list[str] = []
     stale_ranges: list[str] = []
     suspect: list[str] = []
     samples: list[str] = []
+    md_dead: list[str] = []
+    md_unanchored: list[str] = []
 
     index = _package_index()
     docs = sorted((ROOT / "docs").rglob("*.md")) + [ROOT / "README.md"]
@@ -171,6 +259,42 @@ def main() -> int:
                     stale_ranges.append(
                         f"{doc.name}:{i + 1} {r.group(0).strip('`')} (file has {total})"
                     )
+            for md in MDREF.finditer(line):
+                target = _source_for(md.group(1))
+                if target is None:
+                    continue
+                if target not in md_cache:
+                    md_cache[target] = _md_index(target)
+                md_lines, md_freq = md_cache[target]
+                nums = [int(v) for v in (md.group(2), md.group(3)) if v]
+                if any(n > len(md_lines) for n in nums):
+                    md_dead.append(
+                        f"{doc.name}:{i + 1} {md.group(0)} "
+                        f"(file has {len(md_lines)} lines)"
+                    )
+                    continue
+                num = nums[0]
+                if MD_DEAD.match(md_lines[num - 1]):
+                    md_dead.append(
+                        f"{doc.name}:{i + 1} {md.group(0)} lands on a blank "
+                        f"line, a bare fence or a table rule"
+                    )
+                    continue
+                lo, hi = _md_passage(md_lines, num)
+                cap = max(5, int(len(md_lines) * _MD_COMMON_LINE_RATIO))
+                passage = _md_words(" ".join(md_lines[lo - 1 : hi]))
+                shared = sorted(
+                    w
+                    for w in _md_words(_md_claim(lines, i + 1)) & passage
+                    if md_freq[w] <= cap
+                )
+                if len(shared) >= _MD_MIN_SHARED:
+                    md_ok += 1
+                    continue
+                md_unanchored.append(
+                    f"{doc.name}:{i + 1} {md.group(0)} -> passage {lo}-{hi} "
+                    f"shares only {shared or 'nothing'}"
+                )
             refs = list(REF.finditer(line))
             if not refs:
                 continue
@@ -285,16 +409,27 @@ def main() -> int:
     if verbose:
         for x in suspect:
             print("   ", x)
+    print(f"markdown pins ok   : {md_ok}")
+    print(f"markdown BROKEN    : {len(md_dead)}")
+    for d in md_dead:
+        print("   ", d)
+    print(
+        f"markdown unanchored: {len(md_unanchored)} "
+        f"(baseline {_MD_UNANCHORED_BASELINE})"
+    )
+    for u in md_unanchored:
+        print("   ", u)
 
     # Fail on references that are provably broken: they name a line past the
     # end of the file. The suspects list stays a report, being a judgement call
     # by construction; failing on it would train people to ignore it.
-    broken = stale_unresolved + len(stale_ranges)
+    broken = stale_unresolved + len(stale_ranges) + len(md_dead)
     if broken and not write:
         print(
             f"\nFAIL: {broken} reference(s) point past the end of the file they "
-            f"name. Re-derive them by content: find what the prose describes in "
-            f"the source and repin, never by adding an offset."
+            f"name, or at a line holding nothing. Re-derive them by content: "
+            f"find what the prose describes in the source and repin, never by "
+            f"adding an offset."
         )
         return 1
     # And fail on rewritable refs above the baseline. No single one of them is
@@ -315,6 +450,27 @@ def main() -> int:
             f"\nNote: rewritable refs ({fixed}) are below the baseline "
             f"({_REWRITABLE_BASELINE}); lower _REWRITABLE_BASELINE to keep the "
             f"ratchet tight."
+        )
+    # Same ratchet for the markdown pins. A markdown target has no symbol to
+    # resolve, so nothing here is auto-rewritten and no single miss proves rot;
+    # a RISE does, because a section inserted into README shifts every pin
+    # below it and most land on prose about something else.
+    if len(md_unanchored) > _MD_UNANCHORED_BASELINE and not write:
+        print(
+            f"\nFAIL: {len(md_unanchored)} markdown pin(s) share fewer than "
+            f"{_MD_MIN_SHARED} distinctive words with the passage they name, "
+            f"baseline {_MD_UNANCHORED_BASELINE}. Re-derive each by content: "
+            f"grep the target file for what the pinned sentence CLAIMS, never "
+            f"by adding an offset. If a claim genuinely has no better passage "
+            f"to point at, raise the baseline and say which pin in the commit "
+            f"message."
+        )
+        return 1
+    if len(md_unanchored) < _MD_UNANCHORED_BASELINE and not write:
+        print(
+            f"\nNote: unanchored markdown pins ({len(md_unanchored)}) are below "
+            f"the baseline ({_MD_UNANCHORED_BASELINE}); lower "
+            f"_MD_UNANCHORED_BASELINE to keep the ratchet tight."
         )
     return 0
 
