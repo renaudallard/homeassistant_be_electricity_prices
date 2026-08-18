@@ -693,12 +693,41 @@ series:
 ```
 
 On the injection regime the `injection_price` sensor exposes the same
-`today` / `tomorrow` shape with an `injection` key instead of `all_in`,
-so the first card works for the injection curve after swapping the
-entity and the field. It only publishes those arrays on contracts whose
-injection actually varies during the day (every dynamic contract,
-Cociter Variable, Engie Empower Flextime); a flat or monthly-indexed
-injection has no curve to draw.
+`today` / `tomorrow` shape, with an `injection` key instead of `all_in`,
+so the same card draws the injection curve after swapping the entity and
+the field:
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Injection Price
+graph_span: 2d
+span:
+  start: day
+now:
+  show: true
+  label: Now
+update_interval: 1min
+yaxis:
+  - decimals: 1
+series:
+  - entity: sensor.YOUR_ENTRY_injection_price
+    name: Injection price
+    type: column
+    unit: c€/kWh
+    float_precision: 2
+    data_generator: |
+      const rows = [...(entity.attributes.today || []),
+                    ...(entity.attributes.tomorrow || [])];
+      return rows.map(r => [new Date(r.start).getTime(), r.injection * 100]);
+```
+
+The bars can dip below zero at low spot, where you pay to inject. The
+sensor only publishes those arrays on contracts whose injection actually
+varies during the day (every dynamic contract, Cociter Variable, Engie
+Empower Flextime); a flat or monthly-indexed injection has no curve to
+draw, so the chart comes up empty.
 
 ## Exclusive-night meter circuit
 
