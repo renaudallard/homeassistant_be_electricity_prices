@@ -34,6 +34,7 @@ from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
+    SpotMonthlyRates,
     SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.energiebe import parse_snapshot
@@ -46,6 +47,14 @@ def _text() -> str:
 
 def _snap() -> SupplierSnapshot:
     return parse_snapshot(_text(), "test://energiebe-jul")
+
+
+def _var_text() -> str:
+    return fixture_text("energiebe_variable_aug.pdf", layout=True)
+
+
+def _var_snap() -> SupplierSnapshot:
+    return parse_snapshot(_var_text(), "test://energiebe-var-aug", "energiebe_variable")
 
 
 def test_energy_is_dynamic_rates() -> None:
@@ -205,11 +214,22 @@ def test_missing_gsc_wkk_is_fatal() -> None:
 
 
 def test_missing_injection_is_fatal() -> None:
-    # Every dynamic card prints the terugleveringsvergoeding; a miss must raise
-    # rather than silently zero the solar feed-in credit.
-    text = _text().replace("injectievergoeding", "XXX")
+    # Every card prints the terugleveringsvergoeding; a miss must raise rather
+    # than silently zero the solar feed-in credit. The parser anchors on the
+    # section header, which both products share, rather than on the body
+    # wording, which does not ("injectievergoeding" on the dynamic card,
+    # "terugleververgoeding" on the variable one).
+    text = _text().replace("Terugleveringsvergoeding", "XXX")
     with pytest.raises(ExtractorError, match="injection formula"):
         parse_snapshot(text, "test://energiebe-jul")
+
+
+def test_dynamic_body_wording_alone_is_not_the_anchor() -> None:
+    """The two products word the same row differently; neither wording is load-bearing."""
+    text = _text().replace("injectievergoeding", "terugleververgoeding")
+    snap = parse_snapshot(text, "test://energiebe-jul")
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(1.0)
 
 
 def test_supplier_and_contract_metadata() -> None:
@@ -226,12 +246,19 @@ def test_energiebe_is_registered() -> None:
     assert "energiebe" in EXTRACTORS
     assert EXTRACTORS["energiebe"].label == "energie.be"
     contract_ids = {c.id for c in EXTRACTORS["energiebe"].contracts}
-    assert contract_ids == {"energiebe_dynamic"}
+    assert contract_ids == {"energiebe_dynamic", "energiebe_variable"}
 
 
-def test_contract_is_dynamic_and_flanders_only() -> None:
+def test_contract_kinds_and_flanders_only() -> None:
+    kinds = {c.id: c.kind for c in EXTRACTORS["energiebe"].contracts}
+    assert kinds == {
+        "energiebe_dynamic": "dynamic",
+        # Not "variable": the card resolves the month from a monthly index and
+        # prints only a forecast of it, so the price has to be computed from
+        # the index rather than read off the card.
+        "energiebe_variable": "spot_monthly",
+    }
     for c in EXTRACTORS["energiebe"].contracts:
-        assert c.kind == "dynamic"
         assert c.regions == frozenset({"flanders"})
 
 
@@ -276,3 +303,293 @@ def test_an_abolished_contribution_row_no_longer_takes_the_supplier_offline() ->
         assert broken != text, pattern
         with pytest.raises(ExtractorError):
             _extract_taxes(broken)
+
+
+# ---- variable contract ----------------------------------------------------------
+
+
+def test_variable_energy_is_spot_monthly_rates() -> None:
+    """(1,12 x Belpex_RLP + 0,80) is a monthly index, not a per-slot spot."""
+    assert isinstance(_var_snap().energy, SpotMonthlyRates)
+
+
+def test_variable_energy_formula_factor() -> None:
+    """Belpex_RLP prints in c€/kWh like the dynamic card's Belpex: no *10."""
+    snap = _var_snap()
+    assert isinstance(snap.energy, SpotMonthlyRates)
+    assert snap.energy.factor == pytest.approx(1.12 * 1.06)
+
+
+def test_variable_energy_formula_base() -> None:
+    """base = 0.80 c€/kWh => 0.008 EUR/kWh, times the 1.06 VAT multiplier."""
+    snap = _var_snap()
+    assert isinstance(snap.energy, SpotMonthlyRates)
+    assert snap.energy.base == pytest.approx(0.80 / 100.0 * 1.06)
+
+
+def test_variable_yearly_fixed_fee() -> None:
+    """35 EUR/jaar, and the row's unit label is a line below its number.
+
+    The variable card wraps a sentence of body text between the two ("35
+    methodologie): 12,75c €/kWh."), which a same-line pattern misses.
+    """
+    snap = _var_snap()
+    assert isinstance(snap.energy, SpotMonthlyRates)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(35.0)
+
+
+@pytest.mark.parametrize(
+    "unit",
+    ["( € / jaar )", "(EUR/jaar)", "(euro/jaar)", "(€/jaar )", "(?/jaar)"],
+)
+def test_fee_unit_spelling_is_not_load_bearing(unit: str) -> None:
+    r"""Any "…/jaar" unit must bind the fee, however the renderer spells it.
+
+    The same cards already render the sibling energy-fund unit as
+    "(EUR/maand )" with a stray space, and a PDF re-render can drop the € glyph
+    entirely. A missing fee is fatal by design, so pinning the exact spelling
+    would take BOTH energie.be contracts offline over a font quirk - which is
+    why the tax regexes match the unit as `\([^)]*\)` and this one follows them.
+    """
+    text = _var_text().replace("(€/jaar)", unit)
+    snap = parse_snapshot(text, "test://energiebe-var-aug", "energiebe_variable")
+    assert isinstance(snap.energy, SpotMonthlyRates)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(35.0)
+
+
+def test_fee_row_on_a_single_line_still_binds() -> None:
+    """The unit may also sit on the number's own line.
+
+    Only the variable card wraps body text between the two; the dynamic card
+    prints them on consecutive lines and a future re-render could collapse
+    them. Pinning the wrap would silently make the collapsed form fatal.
+    """
+    text = _text().replace("Vaste vergoeding", "Vaste vergoeding 25 (€/jaar) XX", 1)
+    snap = parse_snapshot(text, "test://energiebe-jul")
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(25.0)
+
+
+def test_negative_injection_indicative_is_read_not_fatal() -> None:
+    """(0,60 x Belpex_SPP - 0,80) prints NEGATIVE below 1,33 c€/kWh SPP.
+
+    energie.be's own published index table bottoms out at 1,65, so this is one
+    sunny spring away. InjectionRates and live_check's _validate_injection both
+    state a monthly indicative is allowed to settle negative; a sign-blind
+    column pattern would not mis-credit such a card, it would fail to read it
+    and take the whole contract offline.
+    """
+    for rendered in ("-0,15", "–0,15"):  # hyphen and the en dash the card uses
+        text = _var_text().replace("3,43 een variabele", f"{rendered} een variabele")
+        snap = parse_snapshot(text, "test://energiebe-var-aug", "energiebe_variable")
+        assert snap.injection is not None
+        assert snap.injection.current == pytest.approx(-0.0015)
+
+
+def test_variable_energy_coefficients_are_the_formula_not_the_printed_price() -> None:
+    """The card's 15,98 c€/kWh is the VNR forecast, and must not reach pricing.
+
+    The July 2026 card printed 13,13 c€/kWh on a forecast index of 10,34 while
+    the month settled at a realized Belpex_RLP of 11,42 - a rate of 14,41.
+
+    Pinned by evaluating the parsed coefficients AT the card's own forecast
+    index: they must reproduce the printed price exactly, which is what proves
+    they are the formula's and not back-derived from the price. Asserting the
+    absence of a ``current`` attribute instead would pass whatever the parser
+    did - ``SpotMonthlyRates`` has no such field for any instance.
+    """
+    snap = _var_snap()
+    assert isinstance(snap.energy, SpotMonthlyRates)
+    forecast_index = 12.75 / 100.0  # "ingeschatte index (VNR methodologie)"
+    printed = 15.98 / 100.0  # the Energieprijs column, incl. VAT
+    assert snap.energy.factor * forecast_index + snap.energy.base == pytest.approx(
+        printed,
+        abs=1e-4,  # the card rounds its printed price to two decimals
+    )
+    # And the printed price itself is nowhere in the leg: a parser that stored
+    # it as the base would satisfy neither this nor the factor test.
+    assert snap.energy.base != pytest.approx(printed)
+
+
+def test_variable_injection_is_monthly_indicative_only() -> None:
+    """Zonnestroom 3,43 c€/kWh, VAT-exempt, with no factor/base pair.
+
+    The injection formula indexes on Belpex_SPP while the energy leg indexes
+    on Belpex_RLP. Emitting factor/base would have the coordinator bake the
+    credit against the energy leg's monthly mean: in July 2026 that was 11,42
+    c€/kWh against the SPP's 6,34, which would have roughly doubled the credit.
+    """
+    snap = _var_snap()
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(3.43 / 100.0)
+    assert snap.injection.factor is None
+    assert snap.injection.base is None
+
+
+def test_variable_injection_formula_is_kept_for_display() -> None:
+    snap = _var_snap()
+    assert snap.injection is not None
+    assert snap.injection.formula is not None
+    assert "Belpex_SPP" in snap.injection.formula
+
+
+def test_variable_dsos_cover_all_eight_fluvius_subareas() -> None:
+    assert set(_var_snap().dsos) == set(FLUVIUS_KEYS)
+
+
+def test_variable_shares_the_regulated_overlays_with_the_dynamic_card() -> None:
+    """DSO and tax rows are regulated: same month, same values, both products.
+
+    Pinned because the two cards are separate PDFs published independently;
+    a parse that drifted on one would show up as a difference here.
+    """
+    var, dyn = _var_snap(), _snap()
+    # The DSO table is a regulated, supplier- and product-independent
+    # publication that did not change between the two fixtures' months, so the
+    # two cards must yield the SAME overlays, row for row. This is the real
+    # cross-check: literals alone would pass even if one parser drifted onto
+    # the wrong columns in exactly the way the other did.
+    assert var.dsos == dyn.dsos
+    # The tax block DID change on 2026-08-01, and the two fixtures straddle it:
+    # the excise went flat and the federal contribution was folded into it.
+    assert dyn.taxes.federal_excise == pytest.approx(5.0329 / 100.0)
+    assert var.taxes.federal_excise == pytest.approx(4.8760 / 100.0)
+    assert dyn.taxes.energy_contribution == pytest.approx(0.2042 / 100.0)
+    assert var.taxes.energy_contribution == pytest.approx(0.0)
+    # Everything else on the regulated half is shared.
+    assert var.taxes.flanders_renewables == dyn.taxes.flanders_renewables
+    assert var.taxes.energy_fund_eur_per_month == pytest.approx(0.0)
+    assert var.taxes.vat_rate == 0.0
+
+
+def test_variable_metadata_and_publication_label() -> None:
+    snap = _var_snap()
+    assert snap.supplier == "energiebe"
+    assert snap.contract == "energiebe_variable"
+    assert snap.publication_label == "augustus 2026"
+
+
+def test_variable_abolished_contribution_row_is_read_as_zero() -> None:
+    """The August 2026 card prints the abolished federal contribution as 0."""
+    assert _var_snap().taxes.energy_contribution == pytest.approx(0.0)
+
+
+def test_variable_missing_fee_is_fatal() -> None:
+    text = _var_text().replace("Vaste vergoeding", "XXX")
+    with pytest.raises(ExtractorError, match="vaste vergoeding"):
+        parse_snapshot(text, "test://energiebe-var-aug", "energiebe_variable")
+
+
+def test_variable_missing_injection_is_fatal() -> None:
+    text = _var_text().replace("Zonnestroom", "XXX")
+    with pytest.raises(ExtractorError, match="injection indicative"):
+        parse_snapshot(text, "test://energiebe-var-aug", "energiebe_variable")
+
+
+def test_variable_missing_energy_formula_is_fatal() -> None:
+    text = _var_text().replace("Belpex_RLP", "XXX")
+    with pytest.raises(ExtractorError, match="variable energy formula"):
+        parse_snapshot(text, "test://energiebe-var-aug", "energiebe_variable")
+
+
+def test_variable_dot_decimal_render_matches_comma() -> None:
+    comma = _var_snap()
+    dot = parse_snapshot(
+        _var_text().replace(",", "."), "test://energiebe-var-aug", "energiebe_variable"
+    )
+    assert isinstance(comma.energy, SpotMonthlyRates)
+    assert isinstance(dot.energy, SpotMonthlyRates)
+    assert dot.energy.factor == pytest.approx(comma.energy.factor)
+    assert dot.energy.base == pytest.approx(comma.energy.base)
+    assert dot.energy.yearly_fixed_fee == pytest.approx(comma.energy.yearly_fixed_fee)
+    assert dot.injection is not None and comma.injection is not None
+    assert dot.injection.current == pytest.approx(comma.injection.current)
+
+
+def test_an_unknown_contract_is_rejected() -> None:
+    """parse_snapshot defaults to the dynamic shape; fetch guards the id."""
+    import asyncio
+
+    from custom_components.be_electricity_prices.providers.energiebe import fetch
+
+    with pytest.raises(ExtractorError, match="unknown energie.be contract"):
+        asyncio.run(fetch(None, "energiebe_nope", "flanders"))  # type: ignore[arg-type]
+
+
+# ---- variable card URL resolution -----------------------------------------------
+
+
+def _resolve(body: str) -> str:
+    """Run _resolve_variable_card_url against a canned contracts-API body."""
+    import asyncio
+
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        return body
+
+    original = energiebe.fetch_text
+    energiebe.fetch_text = _fake_fetch_text  # type: ignore[assignment]
+    try:
+        return asyncio.run(energiebe._resolve_variable_card_url(None))  # type: ignore[arg-type]
+    finally:
+        energiebe.fetch_text = original  # type: ignore[assignment]
+
+
+_GOOD_BODY = (
+    '{"contracts": ['
+    '{"tariffType": "Fixed", "contractTypeElRes": {"tariffDocument": "https://x/vast.pdf"}},'
+    '{"tariffType": "Variable", "contractTypeElRes": {"tariffDocument": "https://x/var.pdf"},'
+    ' "contractTypeElPro": {"tariffDocument": "https://x/var-pro.pdf"}}]}'
+)
+
+
+def test_resolver_picks_the_residential_variable_document() -> None:
+    """Not the fixed sibling, and not the professional edition of the same product."""
+    assert _resolve(_GOOD_BODY) == "https://x/var.pdf"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        '{"contracts": null}',
+        '{"contracts": 5}',
+        '{"contracts": "Variable"}',
+        "[]",
+        "7",
+        "<html>login</html>",
+        '{"contracts": []}',
+        '{"contracts": ["Variable"]}',
+        '{"contracts": [{"tariffType": "Fixed", "contractTypeElRes": {"tariffDocument": "https://x/a.pdf"}}]}',
+        '{"contracts": [{"tariffType": "Variable", "contractTypeElRes": null}]}',
+        '{"contracts": [{"tariffType": "Variable", "contractTypeElRes": {"tariffDocument": {"u": 1}}}]}',
+        '{"contracts": [{"tariffType": "Variable", "contractTypeElRes": {"tariffDocument": "http://x/a.pdf"}}]}',
+    ],
+)
+def test_resolver_funnels_every_bad_shape_into_extractor_error(body: str) -> None:
+    """Callers catch ExtractorError and nothing else.
+
+    A payload that is well-formed JSON but the wrong shape used to walk into
+    ``for contract in contracts`` and raise a bare TypeError, which escapes the
+    extractor contract and surfaces as an unhandled error rather than a failed
+    fetch. A non-string tariffDocument was worse: ``str()`` turned it into a
+    nonsense URL that was then fetched.
+    """
+    with pytest.raises(ExtractorError):
+        _resolve(body)
+
+
+def test_resolver_never_falls_back_to_another_card() -> None:
+    """There is deliberately no fallback.
+
+    The ``?key=Tariffs`` document key still answers 200 with an April 2024 card
+    whose DSO sub-areas no longer exist. Being offline for a tick is the better
+    failure, so a body with no residential variable entry must raise rather
+    than return some other product's URL.
+    """
+    body = (
+        '{"contracts": [{"tariffType": "Dynamic",'
+        ' "contractTypeElRes": {"tariffDocument": "https://x/dyn.pdf"}}]}'
+    )
+    with pytest.raises(ExtractorError, match="no residential variable card"):
+        _resolve(body)

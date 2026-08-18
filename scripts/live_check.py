@@ -128,11 +128,13 @@ def _load_providers() -> dict[str, types.ModuleType]:
     # _validate_energy. Class identity matches because every provider
     # imports from this same loaded module via ``from ..base import``.
     global _RATE_FIXED, _RATE_VARIABLE, _RATE_DYNAMIC, _RATE_TOU, _RATE_IMPACT
+    global _RATE_SPOT_MONTHLY
     _RATE_FIXED = base.FixedRates
     _RATE_VARIABLE = base.VariableRates
     _RATE_DYNAMIC = base.DynamicRates
     _RATE_TOU = base.TimeOfUseRates
     _RATE_IMPACT = base.ImpactRates
+    _RATE_SPOT_MONTHLY = base.SpotMonthlyRates
     pdf = _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
     global _is_transient_fetch_error, _fetch_text, _EXTRACTOR_ERROR
     _is_transient_fetch_error = pdf.is_transient_fetch_error
@@ -210,13 +212,14 @@ _RENEWABLES_FIELD: dict[str, str] = {
 # until startup so isinstance() in _validate_energy still type-checks
 # pre-load (it runs only after _load_providers, but mypy walks both
 # paths). Bound to the actual base.FixedRates / VariableRates /
-# DynamicRates / TimeOfUseRates / ImpactRates classes once the
-# providers package is loaded.
+# DynamicRates / TimeOfUseRates / ImpactRates / SpotMonthlyRates classes
+# once the providers package is loaded.
 _RATE_FIXED: type = object
 _RATE_VARIABLE: type = object
 _RATE_DYNAMIC: type = object
 _RATE_TOU: type = object
 _RATE_IMPACT: type = object
+_RATE_SPOT_MONTHLY: type = object
 
 
 # Bound by _load_providers to providers/_pdf.is_transient_fetch_error so
@@ -864,13 +867,13 @@ async def _check_ecopower(
         _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
 
 
-async def _check_flanders_dynamic(
+async def _check_flanders_card(
     session: aiohttp.ClientSession,
     mod: types.ModuleType,
     supplier: str,
     cid: str,
 ) -> None:
-    """One Flanders-only dynamic card: all eight Fluvius rows, the federal and
+    """One Flanders-only card: all eight Fluvius rows, the federal and
     regional levies, and a VAT-inclusive card.
 
     Frank and energie.be checked exactly this, in two functions that differed
@@ -878,6 +881,9 @@ async def _check_flanders_dynamic(
     ``mod.EXTRACTOR.contracts``: Frank sells five tiers off one card and this
     deliberately checks the default one, so iterating them would multiply
     Frank's wallclock and byte draw by five and trip the drift budgets.
+
+    Nothing here is dynamic-specific -- the energy leg is validated by shape in
+    _validate_energy -- so energie.be's spot-monthly variable card reuses it.
     """
     prefix = f"{supplier}/{cid}"
     try:
@@ -912,13 +918,16 @@ async def _check_flanders_dynamic(
 async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) -> None:
     # Own coroutine so the per-supplier byte / latency attribution keeps its
     # own bucket; same for energie.be below.
-    await _check_flanders_dynamic(session, frank, "frank", "frank_dynamic")
+    await _check_flanders_card(session, frank, "frank", "frank_dynamic")
 
 
 async def _check_energiebe(
     session: aiohttp.ClientSession, energiebe: types.ModuleType
 ) -> None:
-    await _check_flanders_dynamic(session, energiebe, "energiebe", "energiebe_dynamic")
+    # Two products, two independently published PDFs, two fetches: the
+    # variable card is not a section of the dynamic one and drifts on its own.
+    for cid in ("energiebe_dynamic", "energiebe_variable"):
+        await _check_flanders_card(session, energiebe, "energiebe", cid)
 
 
 async def _check_energyvision(
@@ -1921,6 +1930,14 @@ _INJECTION_SHAPE: dict[str, str] = {
     # while current happens to be None, so a regression that set current
     # would slip the shape check.
     "cociter_variable": "spot",
+    # energie.be Variabel is kind "spot_monthly", whose default shape is
+    # presence-only because a spot-monthly card MAY index its injection to the
+    # same monthly mean as its energy (the groepsaankoop shape). This one may
+    # not: its injection indexes on Belpex_SPP while the energy indexes on
+    # Belpex_RLP, so a factor/base pair would be baked against the wrong mean
+    # and roughly double the credit in a sunny month. Pin the monthly shape so
+    # that regression fails here instead of over-crediting in silence.
+    "energiebe_variable": "monthly",
 }
 
 # contract id -> Contract, populated in _run once the providers are loaded so
@@ -2231,6 +2248,21 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:  # 
         )
         _expect(
             f"{prefix}: dynamic base in [0, 0.10] EUR/kWh",
+            base is not None and 0.0 <= base <= 0.10,
+            detail=f"base={base}",
+        )
+    elif isinstance(energy, _RATE_SPOT_MONTHLY):
+        factor = getattr(energy, "factor", None)
+        base = getattr(energy, "base", None)
+        # Same units as the dynamic leg: the monthly mean spot is substituted
+        # for the slot price, so the coefficients live on the same scale.
+        _expect(
+            f"{prefix}: spot-monthly factor in [0.5, 3.0]",
+            factor is not None and 0.5 <= factor <= 3.0,
+            detail=f"factor={factor}",
+        )
+        _expect(
+            f"{prefix}: spot-monthly base in [0, 0.10] EUR/kWh",
             base is not None and 0.0 <= base <= 0.10,
             detail=f"base={base}",
         )

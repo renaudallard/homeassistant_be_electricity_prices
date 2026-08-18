@@ -2943,3 +2943,133 @@ async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
         assert ph["current_per_kwh"] != "-"
         assert float(ph["current_per_kwh"]) == pytest.approx(at_month_mean, abs=2e-3)
         assert float(ph["current_per_kwh"]) != pytest.approx(at_day_mean, abs=2e-3)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_branch_static_to_spot_monthly_prompts_for_api_key(
+    hass: HomeAssistant,
+) -> None:
+    """A spot-monthly target needs a spot just as much as a dynamic one.
+
+    Its energy leg is `factor x monthly_mean(spot) + base` with no resolved
+    rate on the card, so without a spot the quote has nothing to price and
+    the result page would render a bare "-" for the contract the user asked
+    about. The gate keyed on the dynamic kind alone until energie.be
+    Variabel became the first scraped spot-monthly contract.
+    """
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        FixedRates,
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+    from custom_components.be_electricity_prices.pricing import compute_breakdown
+    from tests import make_entry, make_snapshot
+
+    # energie.be sells in Flanders only, so the current side has to be a
+    # Flemish entry for it to appear in the compare supplier picker at all.
+    flemish_dsos = {
+        "fluvius_antwerpen": DsoOverlay(distribution_single=0.10, transport=0.0145)
+    }
+    entry = make_entry(region="flanders", dso="fluvius_antwerpen")
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass,
+        entry,
+        make_snapshot(
+            supplier="eneco",
+            contract="power_fix",
+            energy=FixedRates(single=0.18, yearly_fixed_fee=60.0),
+            dsos=flemish_dsos,
+            source_url="test://stub",
+            publication_label="april 2026",
+        ),
+    )
+    other_snap = make_snapshot(
+        supplier="energiebe",
+        contract="energiebe_variable",
+        energy=SpotMonthlyRates(factor=1.1872, base=0.00848, yearly_fixed_fee=35.0),
+        dsos=flemish_dsos,
+        injection=InjectionRates(current=0.0343),
+        source_url="test://stub",
+        publication_label="augustus 2026",
+    )
+    # Month-to-date spots at 0.10 EUR/kWh, today's day-ahead window at 0.02:
+    # the delivery-month mean and the day-ahead mean must not be confusable.
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+
+    now_local = dt_util.now()
+    month_start = now_local.replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    ).astimezone(UTC)
+    today_start = dt_util.start_of_local_day().astimezone(UTC)
+    coord = entry.runtime_data
+    hist: dict[datetime, float] = {}
+    t = month_start
+    while t < today_start:
+        hist[t] = 0.10
+        t += timedelta(hours=1)
+    coord._historical_spots = hist
+    coord._spot_cache = {today_start + timedelta(hours=h): 0.02 for h in range(24)}
+    # What the coordinator itself would bill this month at, and what quoting
+    # off the day-ahead window alone would produce instead.
+    month_mean = coord._monthly_spot_mean(
+        now_local.year, now_local.month, coord._spot_cache
+    )
+    assert month_mean is not None and month_mean > 0.05  # month-to-date dominates
+
+    fake = replace(EXTRACTORS["energiebe"], fetch=AsyncMock(return_value=other_snap))
+    with patch.dict(EXTRACTORS, {"energiebe": fake}):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "energiebe"}
+        )
+        assert result["step_id"] == "compare_contract"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "energiebe_variable"}
+        )
+        # Unlike a dynamic target this one does NOT lock the meter: a
+        # monthly-indexed rate is flat across the day, so mono / bi-hourly
+        # billing stays a real choice.
+        assert result["step_id"] == "compare_meter"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        result = await _pass_compare_solar(hass, entry, result)
+        assert result["step_id"] == "compare_api_key"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"api_key": "valid-token"}
+        )
+        assert result["step_id"] == "compare_result"
+        # Reaching the page is not the point: the key is collected so the
+        # spot-monthly side can actually be PRICED. Without the widened
+        # need_spot gate the quote arrives with no spot at all and the target
+        # renders a bare "-", which is the failure this whole branch exists to
+        # avoid.
+        ph = result["description_placeholders"]
+        assert ph is not None
+        assert ph["compare_per_kwh"] != "-"
+        assert ph["compare_annual"] != "-"
+        assert ph["delta_annual"] != "-"
+        # And priced on the DELIVERY MONTH's mean, not on the day-ahead window.
+        # The month is seeded at 0.10 EUR/kWh and today's curve at 0.02, so the
+        # two answers are far apart and the wrong one is unmistakable. A
+        # spot-monthly contract bills one flat rate per month; quoting it off a
+        # single day makes the page swing with the day it was opened and
+        # contradict the user's own current_price sensor.
+        at_month_mean = compute_breakdown(
+            other_snap, "fluvius_antwerpen", "flanders", now_local, month_mean, "mono"
+        ).all_in
+        at_day_mean = compute_breakdown(
+            other_snap, "fluvius_antwerpen", "flanders", now_local, 0.02, "mono"
+        ).all_in
+        assert float(ph["compare_per_kwh"]) == pytest.approx(at_month_mean, abs=2e-3)
+        assert float(ph["compare_per_kwh"]) != pytest.approx(at_day_mean, abs=2e-3)
