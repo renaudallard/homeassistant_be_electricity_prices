@@ -587,6 +587,119 @@ menu **→ Download diagnostics** dumps the active config (with the ENTSO-E
 API key redacted), the snapshot metadata, and the full hourly breakdown
 for today + tomorrow. Attach it when reporting an issue.
 
+## Dashboard cards
+
+The `current_price` sensor already carries the whole price curve in its
+`today` and `tomorrow` attributes, so a price graph needs no second
+integration (EPEX Spot, Nordpool) alongside this one, and it plots your
+own all-in rate rather than the raw wholesale spot.
+
+The built-in history and statistics cards cannot draw it: they only
+render the past, while half of this curve is in the future, and the
+`today` / `tomorrow` arrays are deliberately kept out of the recorder so
+they never bloat the database. Use the
+[ApexCharts Card](https://github.com/RomRider/apexcharts-card) (HACS,
+frontend) and build the series from the live attributes with
+`data_generator`, which bypasses history entirely:
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Electricity Prices
+graph_span: 2d
+span:
+  start: day
+now:
+  show: true
+  label: Now
+update_interval: 1min
+yaxis:
+  - decimals: 1
+series:
+  - entity: sensor.YOUR_ENTRY_current_price
+    name: All-in price
+    type: column
+    unit: c€/kWh
+    float_precision: 2
+    data_generator: |
+      const rows = [...(entity.attributes.today || []),
+                    ...(entity.attributes.tomorrow || [])];
+      return rows.map(r => [new Date(r.start).getTime(), r.all_in * 100]);
+```
+
+Replace `sensor.YOUR_ENTRY_current_price` with your own entity id
+(Developer Tools → States, search `current_price`). The `* 100`
+converts EUR/kWh to c€/kWh; drop it to plot EUR/kWh.
+
+`update_interval` is what keeps the **Now** marker honest. ApexCharts
+only redraws when the sensor writes a new state, which here happens once
+an hour, so without it the marker drifts up to an hour behind the clock.
+It costs nothing because `data_generator` reads the attributes directly
+and never queries the database.
+
+Two notes on the `tomorrow` half of the chart:
+
+- On a **dynamic** contract it stays empty until the day-ahead curve
+  publishes, around 13:00 CET. The `tomorrow_prices_available` binary
+  sensor on the same device says when it has arrived.
+- On a **fixed or variable** contract the curve is flat by design, so
+  the chart is a row of equal bars, except on a bi-hourly meter or a
+  time-of-use contract, where the day/night step shows.
+
+Each row also carries the `energy`, `network` and `taxes` components, so
+stacking them shows where the money actually goes — something a spot
+price alone cannot tell you. Set `stacked: true` and give each component
+its own series:
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Electricity Prices
+graph_span: 2d
+span:
+  start: day
+stacked: true
+now:
+  show: true
+  label: Now
+update_interval: 1min
+series:
+  - entity: sensor.YOUR_ENTRY_current_price
+    name: Energy
+    type: column
+    unit: c€/kWh
+    data_generator: |
+      return [...(entity.attributes.today || []),
+              ...(entity.attributes.tomorrow || [])]
+        .map(r => [new Date(r.start).getTime(), r.energy * 100]);
+  - entity: sensor.YOUR_ENTRY_current_price
+    name: Network
+    type: column
+    unit: c€/kWh
+    data_generator: |
+      return [...(entity.attributes.today || []),
+              ...(entity.attributes.tomorrow || [])]
+        .map(r => [new Date(r.start).getTime(), r.network * 100]);
+  - entity: sensor.YOUR_ENTRY_current_price
+    name: Taxes
+    type: column
+    unit: c€/kWh
+    data_generator: |
+      return [...(entity.attributes.today || []),
+              ...(entity.attributes.tomorrow || [])]
+        .map(r => [new Date(r.start).getTime(), r.taxes * 100]);
+```
+
+On the injection regime the `injection_price` sensor exposes the same
+`today` / `tomorrow` shape with an `injection` key instead of `all_in`,
+so the first card works for the injection curve after swapping the
+entity and the field. It only publishes those arrays on contracts whose
+injection actually varies during the day (every dynamic contract,
+Cociter Variable, Engie Empower Flextime); a flat or monthly-indexed
+injection has no curve to draw.
+
 ## Exclusive-night meter circuit
 
 Belgian households with an electric water heater or night-storage
