@@ -111,6 +111,7 @@ from .const import (
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     SOLAR_REGIME_INJECTION,
+    SPOT_PRICED_CONTRACT_KINDS,
     SUPPLIER_CUSTOM,
     DOMAIN,
     METER_EXCLUSIVE_NIGHT,
@@ -481,11 +482,11 @@ class _WizardStepsMixin:
         return await self.async_step_solar()
 
     async def _after_dso_tariff_mode(self) -> ConfigFlowResult:
-        # Dynamic and spot-monthly (custom) energy both price off ENTSO-E
-        # spots, so both collect the API key first.
-        if _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT]) in (
-            "dynamic",
-            "spot_monthly",
+        # Dynamic and spot-monthly energy both price off ENTSO-E spots, so
+        # both collect the API key first.
+        if (
+            _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
+            in SPOT_PRICED_CONTRACT_KINDS
         ):
             return await self.async_step_api_key()
         return await self._after_energy_key()

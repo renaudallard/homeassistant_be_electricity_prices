@@ -253,7 +253,7 @@
       },
       "compare_api_key": {
         "title": "Comparer un autre fournisseur",
-        "description": "L'option choisie necessite les prix day-ahead d'ENTSO-E pour le devis: soit un contrat dynamique, soit un contrat dont l'injection solaire est indexee sur le prix horaire (Cociter Variable en regime d'injection). Collez un jeton ENTSO-E pour que le devis recupere le prix horaire courant. Le jeton n'est utilise que pour ce devis et n'est pas enregistre.",
+        "description": "L'option choisie necessite les prix day-ahead d'ENTSO-E pour le devis: un contrat indexe sur le spot (dynamique par créneau, ou mensuel sur la moyenne du mois de fourniture), soit un contrat dont l'injection solaire est indexee sur le prix horaire (Cociter Variable en regime d'injection). Collez un jeton ENTSO-E pour que le devis recupere les prix spot. Le jeton n'est utilise que pour ce devis et n'est pas enregistre.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }

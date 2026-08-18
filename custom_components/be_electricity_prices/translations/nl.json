@@ -253,7 +253,7 @@
       },
       "compare_api_key": {
         "title": "Andere leverancier vergelijken",
-        "description": "De gekozen optie heeft ENTSO-E day-ahead prijzen nodig voor de offerte: ofwel een dynamisch contract, ofwel een contract waarvan de zonne-injectie gekoppeld is aan de uurspot (Cociter Variable in injectieregime). Plak een ENTSO-E API-token zodat de offerte de huidige spot kan ophalen. De token wordt enkel voor deze offerte gebruikt, niet opgeslagen.",
+        "description": "De gekozen optie heeft ENTSO-E day-ahead prijzen nodig voor de offerte: een contract dat op de spot geprijsd wordt (een dynamisch per kwartier of uur, een maandgeindexeerd op het maandgemiddelde), ofwel een contract waarvan de zonne-injectie gekoppeld is aan de uurspot (Cociter Variable in injectieregime). Plak een ENTSO-E API-token zodat de offerte de spotprijzen kan ophalen. De token wordt enkel voor deze offerte gebruikt, niet opgeslagen.",
         "data": {
           "api_key": "ENTSO-E API-sleutel"
         }

@@ -61,6 +61,7 @@ from homeassistant.helpers.selector import (
 )
 
 from .providers import all_extractors, get as get_extractor
+from .providers.base import SpotMonthlyRates, SupplierSnapshot
 
 from .const import (
     CONF_API_KEY,
@@ -81,6 +82,7 @@ from .const import (
     SMART_METER_CONTRACT_KINDS,
     SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
+    SPOT_PRICED_CONTRACT_KINDS,
     SUPPLIER_CUSTOM,
 )
 from .compare_quote import (
@@ -186,6 +188,17 @@ class _QuoteEntry:
     """
 
     data: Mapping[str, Any]
+
+
+def _needs_month_mean(snapshot: SupplierSnapshot | None) -> bool:
+    """True when this side's energy bills the delivery month's mean spot.
+
+    A ``SpotMonthlyRates`` leg is flat for the whole month, so quoting it at a
+    day-ahead window mean is not an approximation of what it bills, it is a
+    different number - and one that moves day to day while the contract's does
+    not.
+    """
+    return snapshot is not None and isinstance(snapshot.energy, SpotMonthlyRates)
 
 
 def _effective_regime(current: Mapping[str, Any], compare: Mapping[str, Any]) -> str:
@@ -398,7 +411,8 @@ class _CompareStepsMixin(OptionsFlow):
     async def _after_compare_meter(self) -> ConfigFlowResult:
         """Hand off to compare_result, prompting for an ENTSO-E key first
         when either side needs spot data the user's current entry doesn't
-        already carry: a dynamic target, or (on the injection regime) a
+        already carry: a spot-priced target (dynamic per slot, spot-monthly
+        per delivery month), or (on the injection regime) a
         spot-indexed-injection contract on EITHER side -- the target like
         Cociter Variable, or the user's own keyless Cociter Variable entry
         -- whose feed-in credit is priced off the hourly day-ahead. Keep
@@ -408,7 +422,7 @@ class _CompareStepsMixin(OptionsFlow):
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
         )
-        needs_spot = other_kind == "dynamic" or (
+        needs_spot = other_kind in SPOT_PRICED_CONTRACT_KINDS or (
             _effective_regime(current, self._compare) == SOLAR_REGIME_INJECTION
             and (
                 _contract_has_spot_injection(
@@ -564,11 +578,14 @@ class _CompareStepsMixin(OptionsFlow):
         spot_dict: dict[datetime, float] = (
             dict(coord._spot_cache) if coord._spot_cache else {}
         )
-        # Cross-kind comparisons (static <-> dynamic) need spot data
-        # for the dynamic side. The user's coordinator already has
-        # spots when they're on dynamic; otherwise borrow the api key
+        # Cross-kind comparisons (static <-> spot-priced) need spot data
+        # for the spot-priced side. The user's coordinator already has
+        # spots when they're on one; otherwise borrow the api key
         # they just typed in compare_api_key (or the one already on
         # their entry) and fetch the day-ahead window for today.
+        # A spot-monthly side counts: without a spot its energy leg cannot be
+        # priced at all and the quote renders a bare "-" for a contract the
+        # user explicitly asked about.
         current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
@@ -582,7 +599,11 @@ class _CompareStepsMixin(OptionsFlow):
                 self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
             )
         )
-        need_spot = "dynamic" in (current_kind, other_kind) or compare_spot_injection
+        need_spot = (
+            current_kind in SPOT_PRICED_CONTRACT_KINDS
+            or other_kind in SPOT_PRICED_CONTRACT_KINDS
+            or compare_spot_injection
+        )
         if need_spot and not spot_dict:
             api_key = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
             if api_key:
@@ -605,6 +626,39 @@ class _CompareStepsMixin(OptionsFlow):
         # the estimate doesn't reflect whichever minute the dialog opened
         # (Belgian day-ahead swings from negative to >0.30 EUR/kWh intraday).
         avg_spot = sum(spot_dict.values()) / len(spot_dict) if spot_dict else None
+        # A SPOT-MONTHLY leg is different: it does not average out over a year,
+        # it bills one flat rate per delivery month, and that month's mean is a
+        # number the coordinator already computes. Pricing it off a single
+        # day-ahead window instead makes the quote swing with the day the
+        # dialog happened to open, and prints a "per kWh now" for the user's
+        # OWN entry that contradicts their current_price sensor. Resolved
+        # lazily and once: the month backfill is only worth its fetch when a
+        # side actually bills on it, and the target's snapshot is not retrieved
+        # until further down.
+        month_spot_resolved: list[float | None] = []
+
+        async def _month_spot() -> float | None:
+            if month_spot_resolved:
+                return month_spot_resolved[0]
+            value = avg_spot
+            key = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
+            try:
+                await coord._ensure_historical_spots(
+                    today_local.replace(day=1), today_local, key
+                )
+            except Exception:  # noqa: BLE001 - degrade to the day-ahead mean
+                pass
+            resolved = coord._monthly_spot_mean(
+                today_local.year, today_local.month, spot_dict
+            )
+            if resolved is not None:
+                value = resolved
+            month_spot_resolved.append(value)
+            return value
+
+        async def _spot_for(snapshot: SupplierSnapshot | None) -> float | None:
+            """The spot this side's energy shape actually bills on."""
+            return await _month_spot() if _needs_month_mean(snapshot) else avg_spot
 
         # Measured consumption / injection from the user's kWh sensors.
         # Injection is only relevant when a solar regime is configured; for
@@ -743,7 +797,7 @@ class _CompareStepsMixin(OptionsFlow):
                 dso,
                 region,
                 dt_util.as_local(now_utc),
-                avg_spot,
+                await _spot_for(current_snapshot),
                 current_meter,
                 dso_mode,
             )
@@ -782,7 +836,7 @@ class _CompareStepsMixin(OptionsFlow):
                     dso,
                     region,
                     dt_util.as_local(now_utc),
-                    avg_spot,
+                    await _spot_for(other_snap),
                     meter,
                     dso_mode,
                 )
@@ -934,19 +988,24 @@ class _CompareStepsMixin(OptionsFlow):
         from .ytd_cost import _compute_current_year_cost
 
         current_extractor = get_extractor(current[CONF_SUPPLIER])
-        # Exclude dynamic sides from the archive engine: it bills each
-        # past hour at factor*spot+base and needs the historical spot
-        # cache, which _compute_current_year_cost only receives on the
-        # live coordinator path -- called without it here it returns the
-        # fees-only floor (zero energy), so a fixed-vs-dynamic compare
-        # would show the dynamic side missing its entire energy bill.
+        # Exclude spot-priced sides from the archive engine: it bills each
+        # past hour at factor*spot+base (or the month's mean) and needs the
+        # historical spot cache, which _compute_current_year_cost only
+        # receives on the live coordinator path -- called without it here it
+        # returns the fees-only floor (zero energy), so a fixed-vs-dynamic
+        # compare would show the dynamic side missing its entire energy bill.
         # The simple per-kwh model below prices both sides off the same
         # current per-kwh rate and proration, so the delta stays honest.
+        # spot_monthly is in that set for the same reason as dynamic. It
+        # cannot be reached today (no spot-monthly supplier keeps an archive,
+        # so the fetch_for_month test already fails), but energie.be does
+        # publish one and wiring it up is a live proposal - which would arm
+        # this the moment it lands.
         archive_capable = (
             current_extractor.fetch_for_month is not None
             and other_extractor.fetch_for_month is not None
-            and current_kind != "dynamic"
-            and other_kind != "dynamic"
+            and current_kind not in SPOT_PRICED_CONTRACT_KINDS
+            and other_kind not in SPOT_PRICED_CONTRACT_KINDS
         )
         if archive_capable and other_snap is not None and current_snapshot is not None:
             # Replay the coordinator's historical spot cache so a

@@ -253,7 +253,7 @@
       },
       "compare_api_key": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Die gewaehlte Option benoetigt ENTSO-E day-ahead Preise fuer das Angebot: entweder ein dynamischer Vertrag, oder ein Vertrag, dessen Solareinspeisung an den Stundenpreis gekoppelt ist (Cociter Variable im Einspeiseregime). ENTSO-E API-Token einfuegen, damit das Angebot den aktuellen Stundenpreis abruft. Der Token wird nur fuer dieses Angebot verwendet, nicht gespeichert.",
+        "description": "Die gewaehlte Option benoetigt ENTSO-E day-ahead Preise fuer das Angebot: ein am Spotpreis indexierter Vertrag (dynamisch je Zeitfenster oder monatlich indexiert auf den Monatsmittelwert), oder ein Vertrag, dessen Solareinspeisung an den Stundenpreis gekoppelt ist (Cociter Variable im Einspeiseregime). ENTSO-E API-Token einfuegen, damit das Angebot die Spotpreise abruft. Der Token wird nur fuer dieses Angebot verwendet, nicht gespeichert.",
         "data": {
           "api_key": "ENTSO-E API-Schluessel"
         }

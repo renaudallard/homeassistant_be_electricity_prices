@@ -215,6 +215,12 @@ VAT_RATE_STANDARD: Final = 0.21
 
 SMART_METER_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "tou", "tou_impact")
 
+# Contract kinds whose energy leg cannot be priced without an ENTSO-E spot:
+# dynamic resolves per slot, spot_monthly against the delivery month's mean.
+# Both make the config flow collect an API key, and both make the compare
+# flow fetch a spot before it can quote either side of a switch.
+SPOT_PRICED_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "spot_monthly")
+
 METER_TYPES: Final = (METER_MONO, METER_BI, METER_DYNAMIC, METER_EXCLUSIVE_NIGHT)
 
 # DSO-side billing mode, orthogonal to the supplier meter. Wallonia

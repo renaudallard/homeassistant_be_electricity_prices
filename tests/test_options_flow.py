@@ -2849,3 +2849,97 @@ def test_region_mismatch_is_a_form_error_not_an_abort() -> None:
     assert (
         _region_mismatch_error({CONF_SUPPLIER: "nope", CONF_REGION: "wallonia"}) is None
     )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
+    hass: HomeAssistant,
+) -> None:
+    """A monthly-indexed contract bills one flat rate per delivery month.
+
+    Quoting it at the mean of the fetched day-ahead window instead is not an
+    approximation of what it bills, it is a different number - and one that
+    moves day to day while the contract's does not, so the page contradicts
+    the user's own current_price sensor and the annual delta swings with
+    whichever day the dialog happened to be opened on.
+
+    The month is seeded at 0.10 EUR/kWh and today's curve at 0.02 so the two
+    candidate answers are far apart and the wrong one is unmistakable.
+    """
+    from dataclasses import replace
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.pricing import compute_breakdown
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers.base import (
+        SpotMonthlyRates,
+    )
+    from tests import make_entry, make_snapshot
+
+    # The user is on the expert custom monthly-average contract; the target is
+    # an ordinary static one. Only the current side is spot-monthly here, which
+    # is exactly the case a shared day-ahead mean gets wrong: the other side
+    # does not move with spot, so the delta is not self-cancelling.
+    entry = make_entry(supplier="custom", contract="custom_monthly")
+    entry.add_to_hass(hass)
+    own = make_snapshot(
+        supplier="custom",
+        contract="custom_monthly",
+        energy=SpotMonthlyRates(factor=1.10, base=0.01, yearly_fixed_fee=50.0),
+    )
+    entry.runtime_data = _real_coordinator(hass, entry, own)
+
+    now_local = dt_util.now()
+    month_start = now_local.replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    ).astimezone(UTC)
+    today_start = dt_util.start_of_local_day().astimezone(UTC)
+    coord = entry.runtime_data
+    hist: dict[datetime, float] = {}
+    t = month_start
+    while t < today_start:
+        hist[t] = 0.10
+        t += timedelta(hours=1)
+    coord._historical_spots = hist
+    coord._spot_cache = {today_start + timedelta(hours=h): 0.02 for h in range(24)}
+    month_mean = coord._monthly_spot_mean(
+        now_local.year, now_local.month, coord._spot_cache
+    )
+    assert month_mean is not None and month_mean > 0.05
+
+    other = _stub_snapshot("eneco", "power_fix", 0.18)
+    fake = replace(EXTRACTORS["eneco"], fetch=AsyncMock(return_value=other))
+    with patch.dict(EXTRACTORS, {"eneco": fake}):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "eneco"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "power_fix"}
+        )
+        if result["step_id"] == "compare_meter":
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"meter": "mono"}
+            )
+        result = await _pass_compare_solar(hass, entry, result)
+        if result["step_id"] == "compare_api_key":
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"api_key": "valid-token"}
+            )
+        assert result["step_id"] == "compare_result"
+        ph = result["description_placeholders"]
+        assert ph is not None
+        at_month_mean = compute_breakdown(
+            own, "ores", "wallonia", now_local, month_mean, "mono"
+        ).all_in
+        at_day_mean = compute_breakdown(
+            own, "ores", "wallonia", now_local, 0.02, "mono"
+        ).all_in
+        assert ph["current_per_kwh"] != "-"
+        assert float(ph["current_per_kwh"]) == pytest.approx(at_month_mean, abs=2e-3)
+        assert float(ph["current_per_kwh"]) != pytest.approx(at_day_mean, abs=2e-3)
