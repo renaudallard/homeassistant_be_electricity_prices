@@ -112,11 +112,12 @@ def _manual_energy_leg(
     integration can retrieve: ``card`` is the leg that would otherwise bill
     (the archived signing-month card when the supplier keeps one, else the
     current card) and every box the user filled replaces its field. Shaped to
-    match the contract's kind (dynamic -> factor / base, fixed -> single /
-    peak / offpeak / exclusive night). Per-kWh values are stored as entered
+    match the contract's kind (dynamic and spot-monthly -> factor / base,
+    fixed -> single / peak / offpeak / exclusive night). Per-kWh values are
+    stored as entered
     (grossed by compute_breakdown at the current card's VAT rate). ``None``
-    when every box was left blank, or the contract is neither fixed nor
-    dynamic.
+    when every box was left blank, or the contract carries none of those
+    shapes (TOU / Impact / a plain variable card).
 
     The fee box is labelled "incl. VAT" and the typed figure is taken at that
     word, so it has to be put onto whatever basis this entry bills on. That is
@@ -155,6 +156,21 @@ def _manual_energy_leg(
             yearly_fixed_fee=fee,
             quarter_hourly=energy.quarter_hourly,
         )
+    if isinstance(energy, SpotMonthlyRates):
+        # Same two boxes as the dynamic leg: this kind is a coefficient pair
+        # too, just resolved against the delivery month's mean instead of the
+        # slot price. Without this branch a spot-monthly customer who signed
+        # at a negotiated coefficient had nowhere to put it.
+        factor = entry.data.get(CONF_MANUAL_ENERGY_FACTOR)
+        base = entry.data.get(CONF_MANUAL_ENERGY_BASE)
+        if factor is None and base is None and fee_raw is None:
+            return None
+        return SpotMonthlyRates(
+            factor=float(factor) if factor is not None else energy.factor,
+            base=float(base) if base is not None else energy.base,
+            yearly_fixed_fee=fee,
+            yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
+        )
     if isinstance(energy, FixedRates):
         single = entry.data.get(CONF_MANUAL_ENERGY_SINGLE)
         peak = entry.data.get(CONF_MANUAL_ENERGY_PEAK)
@@ -192,15 +208,22 @@ def _cohort_energy_from_archived(
 ) -> EnergyRates | None:
     """The energy leg a signing cohort bills at, from its archived card.
 
-    Fixed / dynamic: the archived leg is exactly the locked rate. Variable:
-    re-price the cohort's numeric formula coefficients against the CURRENT
-    month's mean (a SpotMonthlyRates leg) rather than freeze the archived
-    card's stale resolved rate, which would pin the signing-month index.
+    Fixed / dynamic / spot-monthly: the archived leg is exactly the locked
+    rate or coefficient pair. Variable: re-price the cohort's numeric formula
+    coefficients against the CURRENT month's mean (a SpotMonthlyRates leg)
+    rather than freeze the archived card's stale resolved rate, which would
+    pin the signing-month index.
     ``None`` when the archived card exposes no re-priceable rate (a variable
     card whose coefficients couldn't be parsed, or a TOU / Impact kind).
     """
     energy = archived.energy
-    if isinstance(energy, (FixedRates, DynamicRates)):
+    if isinstance(energy, (FixedRates, DynamicRates, SpotMonthlyRates)):
+        # SpotMonthlyRates is already the right shape to carry forward: the
+        # archived card's coefficients are exactly what the cohort signed, and
+        # the leg re-resolves against the CURRENT month's mean every tick, so
+        # nothing pins the signing-month index. No spot-monthly supplier keeps
+        # an archive yet (energie.be publishes one that is not wired up), which
+        # is the only reason this has never been reachable.
         return energy
     if isinstance(energy, VariableRates) and energy.formula_factor is not None:
         return SpotMonthlyRates(

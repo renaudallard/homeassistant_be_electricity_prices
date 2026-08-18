@@ -228,6 +228,10 @@ class _WizardStepsMixin:
         return _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT]) in (
             "fixed",
             "dynamic",
+            # A spot-monthly card is a coefficient pair like a dynamic one, so
+            # a negotiated factor / base is just as typeable - and just as
+            # invisible to the integration otherwise.
+            "spot_monthly",
         )
 
     async def _after_contract(self) -> ConfigFlowResult:

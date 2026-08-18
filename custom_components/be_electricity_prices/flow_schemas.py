@@ -159,6 +159,7 @@ from .const import (
     SOLAR_REGIMES,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_NONE,
+    SPOT_PRICED_CONTRACT_KINDS,
     VREG_CAPACITY_FLOOR_KW,
 )
 from .providers import get as get_extractor
@@ -462,7 +463,9 @@ def _signed_rate_schema(defaults: dict[str, Any]) -> vol.Schema:
         defaults.get(CONF_SUPPLIER, ""), defaults.get(CONF_CONTRACT, "")
     )
     fields: dict[Any, Any] = {}
-    if kind == "dynamic":
+    # Both spot-priced kinds sign a coefficient pair, not a rate: dynamic
+    # resolves it per slot, spot-monthly against the delivery month's mean.
+    if kind in SPOT_PRICED_CONTRACT_KINDS:
         _add_manual_num(fields, defaults, CONF_MANUAL_ENERGY_FACTOR, negative=True)
         _add_manual_num(fields, defaults, CONF_MANUAL_ENERGY_BASE, negative=True)
     else:

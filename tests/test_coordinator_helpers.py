@@ -2547,6 +2547,33 @@ def test_manual_energy_leg_dynamic_keeps_quarter_hourly() -> None:
     )
 
 
+def test_manual_energy_leg_spot_monthly() -> None:
+    """A spot-monthly contract signs a coefficient pair, like a dynamic one.
+
+    energie.be Variabel is the first scraped contract of that kind; before it
+    existed the manual leg only shaped fixed and dynamic, so a customer who
+    negotiated a factor had nowhere to type it and the step was never offered.
+    """
+    current = make_snapshot(energy=SpotMonthlyRates(factor=1.19, base=0.009))
+    entry = _entry(
+        contract="test",
+        **{
+            CONF_MANUAL_ENERGY_FACTOR: 1.08,
+            CONF_MANUAL_ENERGY_BASE: 0.004,
+            CONF_MANUAL_YEARLY_FEE: 30.0,
+        },
+    )
+    assert _manual_energy_leg(entry, current.energy) == SpotMonthlyRates(
+        factor=1.08, base=0.004, yearly_fixed_fee=30.0
+    )
+
+
+def test_manual_energy_leg_spot_monthly_blank_step_is_no_override() -> None:
+    """No box filled means "price off the card", not "price off zero"."""
+    current = make_snapshot(energy=SpotMonthlyRates(factor=1.19, base=0.009))
+    assert _manual_energy_leg(_entry(contract="test"), current.energy) is None
+
+
 def test_manual_energy_leg_day_night_without_a_mono_rate() -> None:
     """Issue #54: no box on the step is a master switch.
 
