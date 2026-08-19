@@ -843,6 +843,20 @@ def test_a_fixed_card_and_an_indexed_card_are_not_interchangeable(
         parse_snapshot(text, "test://x", contract)
 
 
+def test_a_flat_rate_card_without_the_vaste_prijs_wording_is_refused() -> None:
+    """The second half of the fixed-card guard, which the formula check cannot
+    stand in for.
+
+    A card carrying no indexation formula is not thereby the fixed
+    ELECTRICITY card - it could be any other flat-rate card energie.be
+    publishes. Deleting this guard leaves the formula check green, so pin it
+    on a card whose only defect is the missing wording.
+    """
+    text = _fixed_text().replace("is een vaste prijs", "is een prijs")
+    with pytest.raises(ExtractorError, match="does not print a 'vaste prijs'"):
+        parse_snapshot(text, "test://x", "energiebe_fixed")
+
+
 def test_fixed_contract_is_registered() -> None:
     contracts = {c.id: c.kind for c in EXTRACTORS["energiebe"].contracts}
     assert contracts["energiebe_fixed"] == "fixed"
