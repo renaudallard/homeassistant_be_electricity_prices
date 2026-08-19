@@ -816,6 +816,51 @@ async def test_an_unpublished_card_still_falls_back_to_last_month() -> None:
     assert len(served) == 2
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "network error fetching https://x/fix_res_el_fr_202608.pdf: TimeoutError",
+        "HTTP 500 fetching https://x/fix_res_el_fr_202608.pdf",
+        "HTTP 403 fetching https://x/fix_res_el_fr_202608.pdf",
+    ],
+)
+async def test_a_transient_failure_is_not_treated_as_an_unpublished_card(
+    message: str,
+) -> None:
+    """Same rule as the textless card, for the other thing that is not an
+    unpublished card: a fetch that failed transiently.
+
+    This month's card is probably fine and simply did not arrive, so falling
+    back would serve last month's prices with no Repairs card and no
+    staleness signal - the successful fallback fetch resets the snapshot age.
+    Failing instead lets the coordinator keep the snapshot it already has,
+    which IS this month's.
+
+    Measured on live-check run 32223861276: a runner-wide network slowdown
+    timed out three fixed contracts, each quietly fell back a month, and the
+    card-period gate then reported nine stale-card failures against a
+    supplier that was publishing normally.
+    """
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices.providers import _pdf
+
+    served: list[str] = []
+
+    async def _serve(session: object, url: str, *, timeout: int = 30) -> bytes:
+        served.append(url)
+        raise ExtractorError(message)
+
+    with patch.object(_pdf, "_fetch_validated_pdf_bytes", _serve):
+        with pytest.raises(ExtractorError):
+            await bolt_mod._fetch_pdf_text(
+                None,  # type: ignore[arg-type]
+                bolt_mod._CONTRACTS_BY_ID["bolt_fix"],
+            )
+    # One fetch only: it must not even try the previous month.
+    assert len(served) == 1
+
+
 def test_discover_still_sees_a_reshaped_or_uppercased_card_url() -> None:
     # _CARD_URL_RE is shared with the version resolver. Pinning its version
     # group to \d+ for the resolver's benefit silently narrowed discovery,

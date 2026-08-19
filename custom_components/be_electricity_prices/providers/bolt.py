@@ -91,6 +91,7 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    is_transient_fetch_error,
     parse_brussels_osp,
     parse_sign,
     parse_valid_until,
@@ -392,12 +393,28 @@ async def _fetch_pdf_text(
         # parseable valid_until, so the fallback can't signal staleness
         # through it; the warning logged below is the only trace that
         # last month's card is being served.
-        # A card that downloaded fine and carries no text layer is NOT an
-        # unpublished card, so it must not take this path: falling back
-        # would serve last month's prices with no Repairs card and no
-        # staleness signal (the successful fetch resets the snapshot age),
-        # which is worse than the loud failure it replaced.
-        if contract.folder != "fix" or isinstance(primary_err, CardNotReadableError):
+        #
+        # Which makes it critical that ONLY an unpublished card takes this
+        # path. Two things that are not one:
+        #  * a card that downloaded fine and carries no text layer, and
+        #  * a fetch that failed transiently - a timeout, a 5xx, a 403.
+        # Either would serve last month's prices with no Repairs card and no
+        # staleness signal (the successful fallback fetch resets the snapshot
+        # age), which is worse than the loud failure it replaces. A transient
+        # error means THIS month's card is probably fine and simply did not
+        # arrive, so the right move is to fail and let the coordinator keep
+        # the snapshot it already has - which is this month's.
+        # An unpublished card answers 404, which is classified permanent, so
+        # the 1st-of-month case this exists for still works.
+        # Live-check run 32223861276 is what this cost: a runner-wide network
+        # slowdown timed out three fixed contracts, each silently fell back a
+        # month, and the card-period gate reported nine stale-card failures
+        # against a supplier that was publishing normally.
+        if (
+            contract.folder != "fix"
+            or isinstance(primary_err, CardNotReadableError)
+            or is_transient_fetch_error(str(primary_err))
+        ):
             raise
         # Same Brussels-local anchor as ``_document_url``: the
         # "previous month" boundary follows local time so we don't
