@@ -34,6 +34,7 @@ from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
+    FixedRates,
     SpotMonthlyRates,
     SupplierSnapshot,
 )
@@ -55,6 +56,14 @@ def _var_text() -> str:
 
 def _var_snap() -> SupplierSnapshot:
     return parse_snapshot(_var_text(), "test://energiebe-var-aug", "energiebe_variable")
+
+
+def _fixed_text() -> str:
+    return fixture_text("energiebe_fixed_aug.pdf", layout=True)
+
+
+def _fixed_snap() -> SupplierSnapshot:
+    return parse_snapshot(_fixed_text(), "test://energiebe-fix-aug", "energiebe_fixed")
 
 
 def test_energy_is_dynamic_rates() -> None:
@@ -246,7 +255,11 @@ def test_energiebe_is_registered() -> None:
     assert "energiebe" in EXTRACTORS
     assert EXTRACTORS["energiebe"].label == "energie.be"
     contract_ids = {c.id for c in EXTRACTORS["energiebe"].contracts}
-    assert contract_ids == {"energiebe_dynamic", "energiebe_variable"}
+    assert contract_ids == {
+        "energiebe_dynamic",
+        "energiebe_variable",
+        "energiebe_fixed",
+    }
 
 
 def test_contract_kinds_and_flanders_only() -> None:
@@ -257,6 +270,8 @@ def test_contract_kinds_and_flanders_only() -> None:
         # prints only a forecast of it, so the price has to be computed from
         # the index rather than read off the card.
         "energiebe_variable": "spot_monthly",
+        # The one card of the three that prints a rate, so it needs no key.
+        "energiebe_fixed": "fixed",
     }
     for c in EXTRACTORS["energiebe"].contracts:
         assert c.regions == frozenset({"flanders"})
@@ -654,8 +669,8 @@ def test_an_unknown_contract_is_rejected() -> None:
 # ---- variable card URL resolution -----------------------------------------------
 
 
-def _resolve(body: str) -> str:
-    """Run _resolve_variable_card_url against a canned contracts-API body."""
+def _resolve(body: str, tariff_type: str = "Variable") -> str:
+    """Run _resolve_card_url against a canned contracts-API body."""
     import asyncio
 
     from custom_components.be_electricity_prices.providers import energiebe
@@ -666,7 +681,9 @@ def _resolve(body: str) -> str:
     original = energiebe.fetch_text
     energiebe.fetch_text = _fake_fetch_text  # type: ignore[assignment]
     try:
-        return asyncio.run(energiebe._resolve_variable_card_url(None))  # type: ignore[arg-type]
+        return asyncio.run(
+            energiebe._resolve_card_url(None, tariff_type)  # type: ignore[arg-type]
+        )
     finally:
         energiebe.fetch_text = original  # type: ignore[assignment]
 
@@ -714,6 +731,13 @@ def test_resolver_funnels_every_bad_shape_into_extractor_error(body: str) -> Non
         _resolve(body)
 
 
+def test_resolver_selects_by_tariff_type() -> None:
+    """The tariffType is a parameter now, so a fixed contract must not be able
+    to pick up the variable document (or vice versa) from the same payload."""
+    assert _resolve(_GOOD_BODY, "Variable") == "https://x/var.pdf"
+    assert _resolve(_GOOD_BODY, "Fixed") == "https://x/vast.pdf"
+
+
 def test_resolver_never_falls_back_to_another_card() -> None:
     """There is deliberately no fallback.
 
@@ -726,5 +750,104 @@ def test_resolver_never_falls_back_to_another_card() -> None:
         '{"contracts": [{"tariffType": "Dynamic",'
         ' "contractTypeElRes": {"tariffDocument": "https://x/dyn.pdf"}}]}'
     )
-    with pytest.raises(ExtractorError, match="no residential variable card"):
+    with pytest.raises(ExtractorError, match="no residential Variable card"):
         _resolve(body)
+
+
+# ---- fixed contract -------------------------------------------------------------
+
+
+def test_fixed_energy_is_a_flat_vat_inclusive_rate() -> None:
+    """18,26 c€/kWh, and NOT grossed by the VAT multiplier.
+
+    The other two products print their formula "(excl. btw)" and have to be
+    grossed; this column carries no such marker, and the card header says every
+    price on it is VAT-inclusive unless marked. Running it through _VAT_MULT
+    anyway would bill 19,36 c€/kWh - a 6% overcharge that looks entirely
+    plausible on a bill.
+    """
+    snap = _fixed_snap()
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(18.26 / 100.0)
+    assert snap.energy.single != pytest.approx(18.26 / 100.0 * 1.06)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(35.0)
+    assert snap.taxes.vat_rate == 0.0
+
+
+def test_fixed_card_publishes_one_rate_for_every_meter() -> None:
+    """No peak / offpeak or exclusive-night column exists on this card.
+
+    Leaving them None is what makes the pricing engine fall back to ``single``
+    for a bi-hourly meter, which is correct here rather than an approximation.
+    """
+    snap = _fixed_snap()
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.peak is None
+    assert snap.energy.offpeak is None
+    assert snap.energy.exclusive_night is None
+    assert snap.energy.yearly_fixed_fee_exclusive_night is None
+
+
+def test_fixed_injection_is_the_indicative_only() -> None:
+    """The card prints the same Belpex_SPP formula as the variable one, and
+    for a fixed contract it is deliberately NOT stored.
+
+    A fixed contract collects no ENTSO-E key and its energy leg fetches no
+    spots, so there is no monthly mean to resolve the formula against.
+    Emitting factor/base would set ``spp_indexed`` and pull Synergrid's 52 MB
+    profile for a weighting that could never be applied.
+    """
+    snap = _fixed_snap()
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(3.43 / 100.0)
+    assert snap.injection.factor is None
+    assert snap.injection.base is None
+    assert snap.injection.spp_indexed is False
+    # the formula string is still carried for display
+    assert snap.injection.formula is not None
+    assert "Belpex_SPP" in snap.injection.formula
+
+
+def test_fixed_shares_the_regulated_overlays() -> None:
+    snap = _fixed_snap()
+    assert snap.dsos == _var_snap().dsos
+    assert snap.taxes.federal_excise == pytest.approx(4.8760 / 100.0)
+    assert snap.taxes.flanders_renewables == pytest.approx((1.17 + 0.39) / 100.0)
+    assert snap.publication_label == "augustus 2026"
+    assert snap.contract == "energiebe_fixed"
+
+
+@pytest.mark.parametrize(
+    ("text_fn", "contract", "match"),
+    [
+        ("var", "energiebe_fixed", "indexed \\(variable/dynamic\\) card"),
+        ("dyn", "energiebe_fixed", "indexed \\(variable/dynamic\\) card"),
+        ("fix", "energiebe_variable", "variable energy formula"),
+        ("fix", "energiebe_dynamic", "energie.be energy formula"),
+    ],
+)
+def test_a_fixed_card_and_an_indexed_card_are_not_interchangeable(
+    text_fn: str, contract: str, match: str
+) -> None:
+    """The fixed card prints a RATE where the other two print a formula, and
+    all three use the identical "Energieprijs" column label.
+
+    So the rate alone cannot say which card this is: the guard is the absence
+    of an indexation formula plus the card's own "vaste prijs" wording. Without
+    it a fixed entry served the variable card would bill 15,98 c€/kWh as though
+    it were locked, and a variable entry served the fixed card would find no
+    formula at all.
+    """
+    text = {"var": _var_text, "dyn": _text, "fix": _fixed_text}[text_fn]()
+    with pytest.raises(ExtractorError, match=match):
+        parse_snapshot(text, "test://x", contract)
+
+
+def test_fixed_contract_is_registered() -> None:
+    contracts = {c.id: c.kind for c in EXTRACTORS["energiebe"].contracts}
+    assert contracts["energiebe_fixed"] == "fixed"
+    assert {c.id for c in EXTRACTORS["energiebe"].contracts} == {
+        "energiebe_dynamic",
+        "energiebe_variable",
+        "energiebe_fixed",
+    }

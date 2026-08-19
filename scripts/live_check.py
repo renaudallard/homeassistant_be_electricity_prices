@@ -924,9 +924,9 @@ async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) 
 async def _check_energiebe(
     session: aiohttp.ClientSession, energiebe: types.ModuleType
 ) -> None:
-    # Two products, two independently published PDFs, two fetches: the
-    # variable card is not a section of the dynamic one and drifts on its own.
-    for cid in ("energiebe_dynamic", "energiebe_variable"):
+    # Three products, three independently published PDFs, three fetches: each
+    # card is its own document and drifts on its own.
+    for cid in ("energiebe_dynamic", "energiebe_variable", "energiebe_fixed"):
         await _check_flanders_card(session, energiebe, "energiebe", cid)
 
 
@@ -1971,6 +1971,12 @@ _INJECTION_SHAPE: dict[str, str] = {
     # credit in a sunny month, and without the indicative there is nothing to
     # credit while the Synergrid profile is unavailable.
     "energiebe_variable": "spp",
+    # The fixed card prints the same Belpex_SPP formula, but a fixed contract
+    # collects no ENTSO-E key and fetches no spots, so there is no monthly mean
+    # to resolve it against. Only the printed indicative is emitted, and
+    # "monthly" is what asserts that no unresolvable coefficient sneaks in -
+    # which would pull the 52 MB Synergrid profile for nothing.
+    "energiebe_fixed": "monthly",
 }
 
 # contract id -> Contract, populated in _run once the providers are loaded so

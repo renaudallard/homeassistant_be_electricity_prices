@@ -86,7 +86,9 @@ from .base import (
     Contract,
     DsoOverlay,
     DynamicRates,
+    EnergyRates,
     ExtractorError,
+    FixedRates,
     InjectionRates,
     SpotMonthlyRates,
     SupplierExtractor,
@@ -113,8 +115,13 @@ _CONTRACT_ID = "energiebe_dynamic"
 _CONTRACT_LABEL = "energie.be Dynamisch"
 _VARIABLE_ID = "energiebe_variable"
 _VARIABLE_LABEL = "energie.be Variabel"
+_FIXED_ID = "energiebe_fixed"
+_FIXED_LABEL = "energie.be Vast"
 _ENERGIEBE_REGIONS = frozenset({REGION_FLANDERS})
-_VALID_IDS = frozenset({_CONTRACT_ID, _VARIABLE_ID})
+_VALID_IDS = frozenset({_CONTRACT_ID, _VARIABLE_ID, _FIXED_ID})
+# The contracts API's own tariffType per contract id; the residential
+# electricity document of that entry is the card.
+_TARIFF_TYPE = {_VARIABLE_ID: "Variable", _FIXED_ID: "Fixed"}
 
 # Belgian residential electricity VAT. energie.be quotes its energy and
 # injection formulas "(excl. BTW)" while stating every other value on the
@@ -175,6 +182,13 @@ _INJECTION_RE = re.compile(
     rf"(\(\s*{_NUM}\s*x\s*Belpex(?P<spp>_SPP)?\s*([{SIGN_CHARS}])\s*{_NUM}\))",
     re.IGNORECASE | re.DOTALL,
 )
+# The fixed card prints a rate where the other two print a formula. The column
+# label is identical on all three, so the rate alone cannot say which card this
+# is; _extract_fixed_energy pairs it with the wording below and with the
+# ABSENCE of an indexation formula.
+_FIXED_ENERGY_RE = re.compile(rf"Energieprijs\s+{_NUM}", re.IGNORECASE)
+_VASTE_PRIJS_RE = re.compile(r"energieprijs\s+is\s+een\s+vaste\s+prijs", re.IGNORECASE)
+
 # The printed monthly indicative, left of the formula in its own column. The
 # sign is captured: this formula (0,60 x Belpex_SPP - 0,80) prints NEGATIVE
 # whenever Belpex_SPP falls below 1,33 c€/kWh, and the lowest value in
@@ -225,14 +239,16 @@ async def fetch(
     if region != REGION_FLANDERS:
         raise ExtractorError("energie.be only operates in Flanders")
     url = _CARD_URL
-    if contract_id == _VARIABLE_ID:
-        url = await _resolve_variable_card_url(session)
+    if contract_id in _TARIFF_TYPE:
+        url = await _resolve_card_url(session, _TARIFF_TYPE[contract_id])
     text = await fetch_pdf_text_layout(session, url)
     return parse_snapshot(text, url, contract_id)
 
 
-async def _resolve_variable_card_url(session: aiohttp.ClientSession) -> str:
-    """URL of the current residential variable card, from the contracts API.
+async def _resolve_card_url(session: aiohttp.ClientSession, tariff_type: str) -> str:
+    """URL of the current residential card for ``tariff_type``, from the
+    contracts API ("Variable" or "Fixed"; the dynamic product has its own
+    document key and does not come through here).
 
     Raises rather than falling back to any other card. The obvious fallback,
     the ``?key=Tariffs`` document key, still serves an April 2024 card whose
@@ -260,7 +276,7 @@ async def _resolve_variable_card_url(session: aiohttp.ClientSession) -> str:
     for contract in contracts:
         if not isinstance(contract, dict):
             continue
-        if contract.get("tariffType") != "Variable":
+        if contract.get("tariffType") != tariff_type:
             continue
         residential = contract.get("contractTypeElRes")
         url = (
@@ -270,7 +286,9 @@ async def _resolve_variable_card_url(session: aiohttp.ClientSession) -> str:
         # treat it as a missing card instead.
         if isinstance(url, str) and url.startswith("https://"):
             return url
-    raise ExtractorError("energie.be: no residential variable card in contracts API")
+    raise ExtractorError(
+        f"energie.be: no residential {tariff_type} card in contracts API"
+    )
 
 
 # ---- snapshot parser ---------------------------------------------------------
@@ -284,20 +302,28 @@ def parse_snapshot(
 ) -> SupplierSnapshot:
     section = _residential(text)
     variable = contract_id == _VARIABLE_ID
+    fixed = contract_id == _FIXED_ID
+    if fixed:
+        energy: EnergyRates = _extract_fixed_energy(section)
+    elif variable:
+        energy = _extract_variable_energy(section)
+    else:
+        energy = _extract_energy(section)
     return SupplierSnapshot(
         supplier="energiebe",
         contract=contract_id,
-        energy=(
-            _extract_variable_energy(section) if variable else _extract_energy(section)
-        ),
+        energy=energy,
         dsos=_extract_dsos(section),
         taxes=_extract_taxes(section),
         source_url=source_url,
         publication_label=publication_label or _publication_label(section),
         valid_until=parse_valid_until(section),
         injection=(
-            _extract_variable_injection(section)
-            if variable
+            # A fixed contract collects no ENTSO-E key, so the SPP formula on
+            # its card can never be resolved; only the printed indicative is
+            # emitted for it (see _extract_monthly_injection).
+            _extract_monthly_injection(section, spp_resolvable=variable)
+            if (variable or fixed)
             else _extract_injection(section)
         ),
     )
@@ -378,9 +404,49 @@ def _extract_variable_energy(text: str) -> SpotMonthlyRates:
     )
 
 
-def _extract_variable_injection(text: str) -> InjectionRates:
-    """The variable card's injection: the SPP formula, with the card's own
-    printed indicative kept as the fallback.
+def _extract_fixed_energy(text: str) -> FixedRates:
+    """The fixed card's flat rate.
+
+    One rate for every meter type: the card prints no peak / offpeak or
+    exclusive-night column, so a bi-hourly customer bills the same number and
+    the pricing engine's fallback to ``single`` is correct rather than a
+    silent approximation.
+
+    NO VAT multiplier here, unlike the other two products. Their formulas are
+    labelled "(excl. btw)" and have to be grossed; this column is not, and the
+    card's header says every price on it is VAT-inclusive unless marked. The
+    same 18,26 read through _VAT_MULT would bill 19,36.
+    """
+    if _ENERGY_RE.search(text):
+        # An indexation formula means this is the variable or dynamic card.
+        raise ExtractorError(
+            "energie.be: fixed contract served an indexed (variable/dynamic) card"
+        )
+    if not _VASTE_PRIJS_RE.search(text):
+        raise ExtractorError(
+            "energie.be: fixed contract card does not print a 'vaste prijs'"
+        )
+    m = _FIXED_ENERGY_RE.search(text)
+    if not m:
+        raise ExtractorError("could not parse energie.be fixed energy price")
+    return FixedRates(
+        single=to_float(m.group(1)) / 100.0,
+        yearly_fixed_fee=_yearly_fee(text),
+    )
+
+
+def _extract_monthly_injection(text: str, *, spp_resolvable: bool) -> InjectionRates:
+    """The variable and fixed cards' injection row. Both print the same
+    formula, and whether it is RESOLVABLE is what differs.
+
+    ``spp_resolvable`` is True for the variable contract: the SPP formula,
+    with the card's own printed indicative kept as the fallback.
+
+    It is False for the fixed contract, which emits only the indicative. A
+    fixed contract never collects an ENTSO-E key and its energy leg fetches no
+    spots, so there is no monthly mean to resolve the formula against - and
+    claiming otherwise would set ``spp_indexed`` and pull Synergrid's 52 MB
+    profile for a weighting that could never be applied.
 
     The formula indexes on Belpex_SPP, the SOLAR-weighted monthly mean, while
     the energy leg indexes on Belpex_RLP. ``spp_indexed`` says so, which makes
@@ -412,13 +478,15 @@ def _extract_variable_injection(text: str) -> InjectionRates:
     # formula settles negative and the producer pays to inject.
     factor_pdf = to_float(formula.group(2))
     base_cents = parse_sign(formula.group(4)) * to_float(formula.group(5))
-    return InjectionRates(
-        current=parse_sign(current.group(1)) * to_float(current.group(2)) / 100.0,
-        factor=factor_pdf,
-        base=base_cents / 100.0,
-        formula=formula.group(1),
-        spp_indexed=True,
-    )
+    rates: dict[str, object] = {
+        "current": parse_sign(current.group(1)) * to_float(current.group(2)) / 100.0,
+        "formula": formula.group(1),
+    }
+    if spp_resolvable:
+        rates["factor"] = factor_pdf
+        rates["base"] = base_cents / 100.0
+        rates["spp_indexed"] = True
+    return InjectionRates(**rates)  # type: ignore[arg-type]
 
 
 def _yearly_fee(text: str) -> float:
@@ -523,6 +591,14 @@ EXTRACTOR = SupplierExtractor(
             id=_VARIABLE_ID,
             label=_VARIABLE_LABEL,
             kind="spot_monthly",
+            regions=_ENERGIEBE_REGIONS,
+        ),
+        # The only one of the three whose card prints a rate rather than a
+        # formula, so it needs no ENTSO-E key and no spot at all.
+        Contract(
+            id=_FIXED_ID,
+            label=_FIXED_LABEL,
+            kind="fixed",
             regions=_ENERGIEBE_REGIONS,
         ),
     ),
