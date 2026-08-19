@@ -109,10 +109,12 @@ from .fees import (
 from .injection import (
     _historical_injection_rate,
     _injection_hourly_on_cohort,
+    _injection_needs_month_spot,
     _injection_needs_spot,
 )
 from .spot_stats import (
     _injection_is_spp_indexed,
+    _injection_on_month_mean,
     _mean_of_month,
     _spp_injection_spot,
     _spp_weighting_enabled,
@@ -322,9 +324,11 @@ async def _ensure_dynamic_spots(
         )
         if cohort is not None:
             eff_energy = cohort
-    if not isinstance(
-        eff_energy, (DynamicRates, SpotMonthlyRates)
-    ) and not _injection_needs_spot(snap, entry):
+    if (
+        not isinstance(eff_energy, (DynamicRates, SpotMonthlyRates))
+        and not _injection_needs_spot(snap, entry)
+        and not _injection_needs_month_spot(snap, entry)
+    ):
         return {}
     # _ensure_historical_spots anchors each fetched day on LOCAL midnight,
     # so feed it LOCAL dates: passing the UTC date of end (which lands on
@@ -469,7 +473,7 @@ def _injection_rate_for_hour(
     """
     inj_spot = _spp_injection_spot(
         spot,
-        monthly_mean=isinstance(snap_h.energy, SpotMonthlyRates),
+        monthly_mean=_injection_on_month_mean(snap_h),
         # An SPP-indexed formula may only resolve against the SPP-weighted
         # mean; without one _historical_injection_rate falls through to the
         # card's printed indicative rather than the energy leg's mean.

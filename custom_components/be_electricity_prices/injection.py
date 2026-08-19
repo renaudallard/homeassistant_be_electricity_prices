@@ -113,6 +113,37 @@ def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> boo
     )
 
 
+def _injection_needs_month_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> bool:
+    """True when the injection is indexed on a MONTHLY mean that nothing
+    else on this entry fetches spots for.
+
+    energie.be Vast is the shape: a flat energy rate whose feed-in credit is
+    the monthly Belpex_SPP formula ("de terugleveringsvergoeding wordt
+    geindexeerd op basis van de Belpex_SPP parameter"). The energy leg needs
+    no spot, so without this the credit would sit at the card's printed
+    indicative forever, and that indicative is the formula on the VNR
+    FORECAST rather than the realized month.
+
+    Deliberately NOT folded into ``_injection_needs_spot``: that predicate
+    means a PER-HOUR index, and ``_injection_hourly_on_cohort`` reads it to
+    conclude the injection keeps its own hourly formula. Widening it would
+    make this monthly shape look hourly and skip the month-mean bake, which
+    is the opposite of what the card says. Contracts whose energy leg
+    already fetches spots are excluded here for the same reason: they resolve
+    through the energy path.
+    """
+    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
+        return False
+    inj = snapshot.injection
+    return (
+        inj is not None
+        and inj.spp_indexed
+        and inj.factor is not None
+        and inj.base is not None
+        and not isinstance(snapshot.energy, (DynamicRates, SpotMonthlyRates))
+    )
+
+
 def _injection_hourly_on_cohort(snapshot: SupplierSnapshot, entry: ConfigEntry) -> bool:
     """True when this entry's injection keeps a PER-HOUR spot index even though
     its energy is being priced on a monthly mean.

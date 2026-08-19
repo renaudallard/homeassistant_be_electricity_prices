@@ -503,7 +503,12 @@ class _MigratingStore(Store[dict[str, Any]]):
 # refetch; and every earlier InjectionRates field (per-slot rates, floor_at_zero,
 # vat_applies) bumped for the same reason, since _snapshot_from_dict splats the
 # stored dict straight into the dataclass and an unknown key is a TypeError.
-_SNAPSHOT_SCHEMA_VERSION = 21
+# v22: energie.be Vast now parses the same injection formula, having only
+# emitted the printed indicative before. Same reason as v21: a snapshot written
+# earlier carries no factor/base for that contract, so the entry would keep
+# crediting the VNR forecast (measured 3,6x the contractual credit in April
+# 2026) until the 24 h TTL happened to refetch.
+_SNAPSHOT_SCHEMA_VERSION = 22
 
 
 def _snapshot_to_dict(

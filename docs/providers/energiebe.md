@@ -93,7 +93,7 @@ network tariffs, and a re-template would arm exactly the silent mis-billing this
 about. Hence no fallback, by design.
 
 The `publication_label` is a lowercased "month year" string ("juli 2026") reconstructed
-from the residential card header by `_publication_label` (`providers/energiebe.py:338`).
+from the residential card header by `_publication_label` (`providers/energiebe.py:335`).
 
 ## Contracts
 
@@ -103,7 +103,7 @@ Three contracts are declared in the `EXTRACTOR`:
 | --- | --- | --- | --- | --- |
 | `energiebe_dynamic` | energie.be Dynamisch | dynamic | flanders | yes, per quarter-hour |
 | `energiebe_variable` | energie.be Variabel | spot_monthly | flanders | yes, for the month's mean |
-| `energiebe_fixed` | energie.be Vast | fixed | flanders | no |
+| `energiebe_fixed` | energie.be Vast | fixed | flanders | injection only, for the month's SPP mean |
 
 `quarter_hourly=True` on the dynamic contract: the card bills "op kwartierbasis" on
 the Day-Ahead EPEX SPOT Belgium 15-minute curve, so the live price table, next-slot sensor
@@ -166,7 +166,7 @@ around.
 The `?key=DynamicTariffs` PDF bundles a residential block (pages 1-2) and a professional
 block (pages 3-4). The two blocks share the same energy and injection formula but differ on
 GSC/WKK, the tax rows and the DSO net-tariff table (e.g. residential databeheer 18,92
-EUR/yr vs professional 17,85). `_residential` (`providers/energiebe.py:332`) slices the
+EUR/yr vs professional 17,85). `_residential` (`providers/energiebe.py:329`) slices the
 text at the professional section header `_PROF_MARKER = "dynamisch tarief professioneel"`
 (`providers/energiebe.py:138`) so no professional row can leak into a residential snapshot.
 `test_only_residential_block_is_parsed` (`tests/test_energiebe.py`) pins that the parsed
@@ -186,7 +186,7 @@ only the energy and injection legs branch on the contract id.
 | field | dynamic | variable | fixed |
 | --- | --- | --- | --- |
 | `energy` | `_extract_energy` -> `DynamicRates` | `_extract_variable_energy` -> `SpotMonthlyRates` | `_extract_fixed_energy` -> `FixedRates` |
-| `injection` | `_extract_injection` -> factor/base | `_extract_monthly_injection(spp_resolvable=True)` | `_extract_monthly_injection(spp_resolvable=False)` |
+| `injection` | `_extract_injection` -> factor/base | `_extract_monthly_injection` -> SPP formula | `_extract_monthly_injection` -> SPP formula |
 | `taxes` (`TaxOverlay`) | `_extract_taxes` | same | same |
 | `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | same | same |
 | `valid_until` | `parse_valid_until` (shared) | same | same |
@@ -212,7 +212,7 @@ wrong would 10x the energy leg. See the conversion in `_extract_energy`
 
 ## Energy formula
 
-`_extract_energy` (`providers/energiebe.py:343`) parses the formula row with `_ENERGY_RE`
+`_extract_energy` (`providers/energiebe.py:340`) parses the formula row with `_ENERGY_RE`
 (`providers/energiebe.py:170`), anchored on "formule (excl. BTW):" so it binds the energy
 formula and not the injection one that shares the `(factor x Belpex +/- base)` shape:
 
@@ -381,16 +381,22 @@ problem. A missing row is fatal: "energie.be: injection indicative row not found
 and flag all present - so dropping any one of them fails CI rather than mis-crediting in
 silence.
 
-The FIXED card prints the same formula and gets `spp_resolvable=False`, so only the
-indicative is stored. A fixed contract collects no ENTSO-E key and its energy leg fetches
-no spots, so there is no monthly mean to resolve the formula against; setting
-`spp_indexed` there would pull Synergrid's 52 MB profile for a weighting that could never
-be applied. Its live-check shape is `monthly`, which asserts exactly that no unresolvable
-coefficient sneaks in.
+The FIXED card prints the same formula and resolves it the same way. A fixed ENERGY leg
+does not make the feed-in credit fixed: the card says the compensation "wordt geindexeerd
+op basis van de Belpex_SPP parameter" and that the invoiced amount follows the index of
+the month being billed. The contract therefore declares `spot_indexed_injection`, which
+offers the same optional, skippable ENTSO-E key Cociter Variable uses; skip it and the
+credit falls back to the printed indicative. Its live-check shape is `spp`, the same as
+the variable card.
+
+Storing only the indicative (what this extractor did before) froze the credit at the VNR
+forecast for the life of the card. Against energie.be's own published realized index that
+is 3,6x the contractual credit in April 2026 and 0,56x in January, and because energie.be
+keeps no archive the same frozen number reaches every past month of `current_year_cost`.
 
 ## Taxes
 
-`_extract_taxes` (`providers/energiebe.py:526`) parses four levy rows and builds a
+`_extract_taxes` (`providers/energiebe.py:521`) parses four levy rows and builds a
 `TaxOverlay`. All card values are VAT-inclusive (the federal excise and the energy fund are
 VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`).
 
@@ -415,7 +421,7 @@ pins GSC 1,17 + WKK 0,39 = 1,56 c€/kWh. All c€/kWh values are divided by 100
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/energiebe.py:544`) covers all eight Fluvius sub-areas via
+`_extract_dsos` (`providers/energiebe.py:539`) covers all eight Fluvius sub-areas via
 `_DSO_ROWS` (`providers/energiebe.py:144`), which maps each card label prefix to the
 canonical DSO key:
 
@@ -470,7 +476,7 @@ tomorrow prices come from the ENTSO-E day-ahead publication rather than the card
   unlike Frank / Bolt (`providers/energiebe.py:321`, `:410`). Verified against the printed
   11,93 c€/kWh incl. VAT.
 - **Two blocks in one PDF.** `_residential` must run before any parsing or the professional
-  GSC/WKK, taxes and DSO rows leak in (`providers/energiebe.py:332`).
+  GSC/WKK, taxes and DSO rows leak in (`providers/energiebe.py:329`).
 - **Injection unit label interleaved.** "(c€/kWh)" sits between "de formule:" and the
   injection formula, so `_INJECTION_RE` anchors on the "Terugleveringsvergoeding" section
   header and skips to the first parenthesised formula (`providers/energiebe.py:180`). The

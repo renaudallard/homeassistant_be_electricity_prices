@@ -1971,12 +1971,11 @@ _INJECTION_SHAPE: dict[str, str] = {
     # credit in a sunny month, and without the indicative there is nothing to
     # credit while the Synergrid profile is unavailable.
     "energiebe_variable": "spp",
-    # The fixed card prints the same Belpex_SPP formula, but a fixed contract
-    # collects no ENTSO-E key and fetches no spots, so there is no monthly mean
-    # to resolve it against. Only the printed indicative is emitted, and
-    # "monthly" is what asserts that no unresolvable coefficient sneaks in -
-    # which would pull the 52 MB Synergrid profile for nothing.
-    "energiebe_fixed": "monthly",
+    # The fixed card prints the same Belpex_SPP formula and settles on it too:
+    # a fixed ENERGY leg does not make the feed-in credit fixed. Same shape as
+    # the variable card, so a drift that drops the formula from one card is
+    # caught on both.
+    "energiebe_fixed": "spp",
 }
 
 # contract id -> Contract, populated in _run once the providers are loaded so

@@ -81,6 +81,8 @@ from custom_components.be_electricity_prices.fees import (
 from custom_components.be_electricity_prices.injection import (
     _compute_injection_price,
     _historical_injection_rate,
+    _injection_hourly_on_cohort,
+    _injection_needs_month_spot,
     _injection_needs_spot,
     _injection_price_for_slot,
     _injection_varies_intraday,
@@ -3277,3 +3279,55 @@ def test_typed_signing_fee_lands_on_the_entry_basis() -> None:
     res = cohort._manual_energy_leg(_entry_with(False), card, 0.0)  # type: ignore[arg-type]
     assert res is not None
     assert res.yearly_fixed_fee == pytest.approx(121.0)
+
+
+def _spp_snap() -> SupplierSnapshot:
+    """A flat energy leg with a monthly Belpex_SPP-indexed feed-in credit
+    (energie.be Vast)."""
+    return _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=FixedRates(single=0.1826),
+        injection=InjectionRates(
+            factor=0.6, base=-0.008, current=0.0343, spp_indexed=True
+        ),
+    )
+
+
+def test_month_spot_needed_for_a_flat_card_with_an_spp_indexed_credit() -> None:
+    """energie.be Vast: the energy leg needs no spot, the credit does.
+
+    Without this the credit sits at the card's printed indicative forever,
+    and that indicative is the formula on the VNR FORECAST rather than the
+    realized month.
+    """
+    assert _injection_needs_month_spot(_spp_snap(), _entry(solar_regime="injection"))
+    # Nothing reads the credit off the injection regime.
+    assert not _injection_needs_month_spot(_spp_snap(), _entry(solar_regime="none"))
+
+
+def test_month_spot_not_needed_when_the_energy_leg_already_fetches_spots() -> None:
+    """A spot-monthly or dynamic leg resolves the credit through the energy
+    path; claiming it here would fetch the same spots twice."""
+    inj = InjectionRates(factor=0.6, base=-0.008, current=0.0343, spp_indexed=True)
+    for energy in (
+        SpotMonthlyRates(factor=1.19, base=0.008),
+        DynamicRates(factor=1.1, base=0.005),
+    ):
+        assert not _injection_needs_month_spot(
+            _snapshot(prosumer=None, capacity=None, energy=energy, injection=inj),
+            _entry(solar_regime="injection"),
+        )
+
+
+def test_an_spp_indexed_credit_is_never_read_as_a_per_hour_one() -> None:
+    """The reason _injection_needs_month_spot is its own predicate rather than
+    a widening of _injection_needs_spot.
+
+    _injection_hourly_on_cohort reads that one to conclude the injection keeps
+    its OWN hourly formula and must not be baked to a month mean. Folding this
+    monthly shape into it would skip the bake and credit the card's printed
+    indicative forever, which is the bug this shape exists to fix.
+    """
+    entry = _entry(solar_regime="injection")
+    assert not _injection_hourly_on_cohort(_spp_snap(), entry)

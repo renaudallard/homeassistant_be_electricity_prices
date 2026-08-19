@@ -857,24 +857,40 @@ def test_fixed_card_publishes_one_rate_for_every_meter() -> None:
     assert snap.energy.yearly_fixed_fee_exclusive_night is None
 
 
-def test_fixed_injection_is_the_indicative_only() -> None:
-    """The card prints the same Belpex_SPP formula as the variable one, and
-    for a fixed contract it is deliberately NOT stored.
+def test_fixed_injection_resolves_the_spp_formula() -> None:
+    """A FIXED energy leg does not make the feed-in credit fixed.
 
-    A fixed contract collects no ENTSO-E key and its energy leg fetches no
-    spots, so there is no monthly mean to resolve the formula against.
-    Emitting factor/base would set ``spp_indexed`` and pull Synergrid's 52 MB
-    profile for a weighting that could never be applied.
+    The card carries the same Belpex_SPP formula as the variable one and says
+    the compensation is indexed on that parameter, settled on the month being
+    billed. Storing only the printed indicative froze the credit at the VNR
+    forecast: 3,6x the contractual credit in April 2026 against energie.be's
+    own published realized index, and 0,56x in January.
     """
     snap = _fixed_snap()
     assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(0.60)
+    assert snap.injection.base == pytest.approx(-0.80 / 100.0)
+    assert snap.injection.spp_indexed is True
+    # the printed indicative is kept as the no-profile fallback
     assert snap.injection.current == pytest.approx(3.43 / 100.0)
-    assert snap.injection.factor is None
-    assert snap.injection.base is None
-    assert snap.injection.spp_indexed is False
-    # the formula string is still carried for display
     assert snap.injection.formula is not None
     assert "Belpex_SPP" in snap.injection.formula
+
+
+def test_fixed_and_variable_publish_identical_injection_terms() -> None:
+    """Same formula, same index, same fallback: the two products differ on the
+    ENERGY leg only. Two entries whose cards print the same feed-in terms must
+    not diverge in what they credit."""
+    assert _fixed_snap().injection == _var_snap().injection
+
+
+def test_fixed_contract_offers_the_optional_injection_key() -> None:
+    """Its energy needs no spot, its injection does, so the key is offered
+    after the solar step and is skippable - the Cociter Variable shape."""
+    contract = next(
+        c for c in EXTRACTORS["energiebe"].contracts if c.id == "energiebe_fixed"
+    )
+    assert contract.spot_indexed_injection is True
 
 
 def test_fixed_shares_the_regulated_overlays() -> None:

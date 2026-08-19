@@ -319,10 +319,7 @@ def parse_snapshot(
         publication_label=publication_label or _publication_label(section),
         valid_until=parse_valid_until(section),
         injection=(
-            # A fixed contract collects no ENTSO-E key, so the SPP formula on
-            # its card can never be resolved; only the printed indicative is
-            # emitted for it (see _extract_monthly_injection).
-            _extract_monthly_injection(section, spp_resolvable=variable)
+            _extract_monthly_injection(section)
             if (variable or fixed)
             else _extract_injection(section)
         ),
@@ -435,18 +432,17 @@ def _extract_fixed_energy(text: str) -> FixedRates:
     )
 
 
-def _extract_monthly_injection(text: str, *, spp_resolvable: bool) -> InjectionRates:
+def _extract_monthly_injection(text: str) -> InjectionRates:
     """The variable and fixed cards' injection row. Both print the same
-    formula, and whether it is RESOLVABLE is what differs.
+    formula and both settle on it.
 
-    ``spp_resolvable`` is True for the variable contract: the SPP formula,
-    with the card's own printed indicative kept as the fallback.
-
-    It is False for the fixed contract, which emits only the indicative. A
-    fixed contract never collects an ENTSO-E key and its energy leg fetches no
-    spots, so there is no monthly mean to resolve the formula against - and
-    claiming otherwise would set ``spp_indexed`` and pull Synergrid's 52 MB
-    profile for a weighting that could never be applied.
+    A FIXED energy leg does not make the feed-in credit fixed: the card says
+    the compensation "wordt geindexeerd op basis van de Belpex_SPP parameter",
+    and that the invoiced amount follows the index of the month being billed,
+    so the credit is monthly-indexed on both contracts. The fixed contract
+    therefore declares ``spot_indexed_injection`` and offers the same
+    optional, skippable ENTSO-E key that Cociter Variable does; without a key
+    the printed indicative below is credited instead.
 
     The formula indexes on Belpex_SPP, the SOLAR-weighted monthly mean, while
     the energy leg indexes on Belpex_RLP. ``spp_indexed`` says so, which makes
@@ -482,10 +478,9 @@ def _extract_monthly_injection(text: str, *, spp_resolvable: bool) -> InjectionR
         "current": parse_sign(current.group(1)) * to_float(current.group(2)) / 100.0,
         "formula": formula.group(1),
     }
-    if spp_resolvable:
-        rates["factor"] = factor_pdf
-        rates["base"] = base_cents / 100.0
-        rates["spp_indexed"] = True
+    rates["factor"] = factor_pdf
+    rates["base"] = base_cents / 100.0
+    rates["spp_indexed"] = True
     return InjectionRates(**rates)  # type: ignore[arg-type]
 
 
@@ -594,12 +589,16 @@ EXTRACTOR = SupplierExtractor(
             regions=_ENERGIEBE_REGIONS,
         ),
         # The only one of the three whose card prints a rate rather than a
-        # formula, so it needs no ENTSO-E key and no spot at all.
+        # formula for ENERGY, so it needs no key to price consumption. Its
+        # INJECTION is the same monthly Belpex_SPP formula the variable card
+        # carries, hence the optional key: skip it and the credit falls back
+        # to the card's printed indicative.
         Contract(
             id=_FIXED_ID,
             label=_FIXED_LABEL,
             kind="fixed",
             regions=_ENERGIEBE_REGIONS,
+            spot_indexed_injection=True,
         ),
     ),
     fetch=fetch,

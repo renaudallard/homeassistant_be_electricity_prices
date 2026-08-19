@@ -104,6 +104,7 @@ from .spot_stats import (
     _bucket_by_local_month,
     _injection_is_spp_indexed,
     _month_mean,
+    _injection_on_month_mean,
     _spp_injection_spot,
 )
 from .synergrid import (
@@ -759,6 +760,12 @@ async def _compute_current_year_cost(
         return bundle
 
     energy_cost = 0.0
+    # A flat energy leg can still carry a monthly-indexed feed-in credit
+    # (energie.be Vast). The daily walk has no spot of its own, so resolve the
+    # delivery month's SPP-weighted mean here, memoised per month, and let the
+    # shared helper fall back to the card's indicative when it is missing.
+    day_spp: dict[tuple[int, int], float | None] = {}
+    day_bucket = _bucket_by_local_month(historical_spots) if historical_spots else {}
     for day in _days_through(jan1, today):
         bundle = await _resolve_month(date(day.year, day.month, 1))
         if bundle is None:
@@ -784,7 +791,19 @@ async def _compute_current_year_cost(
                 d_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
             else:
                 d_cost = total_cons * single_bd.all_in
-            inj_rate = _historical_injection_rate(snap_d.injection)
+            inj_rate = _historical_injection_rate(
+                snap_d.injection,
+                _spp_injection_spot(
+                    None,
+                    monthly_mean=_injection_on_month_mean(snap_d),
+                    strict=_injection_is_spp_indexed(snap_d),
+                    spp_weights=spp_weights,
+                    bucket=day_bucket,
+                    year=day.year,
+                    month=day.month,
+                    cache=day_spp,
+                ),
+            )
             if inj_rate is not None:
                 d_cost -= total_inj * inj_rate
         else:  # none

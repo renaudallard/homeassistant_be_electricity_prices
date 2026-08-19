@@ -52,6 +52,7 @@ from .injection import (
     _bake_monthly_injection,
     _compute_injection_price,
     _injection_hourly_on_cohort,
+    _injection_needs_month_spot,
     _injection_needs_spot,
     _injection_price_for_slot,
     _injection_varies_intraday,
@@ -572,9 +573,12 @@ class BePricesCoordinator(
                 if not self._spot_cache:
                     raise UpdateFailed(f"ENTSO-E: {err}") from err
                 spot_prices = dict(self._spot_cache)
-        elif _injection_needs_spot(self._snapshot, self.entry):
-            # Static-energy contract with a spot-indexed injection
-            # (Cociter Variable): the energy is priced without a spot, so
+        elif _injection_needs_spot(
+            self._snapshot, self.entry
+        ) or _injection_needs_month_spot(self._snapshot, self.entry):
+            # Static-energy contract whose injection carries its own index:
+            # Cociter Variable per hour, energie.be Vast on the month's
+            # Belpex_SPP. The energy is priced without a spot, so
             # a spot failure (missing key, ENTSO-E outage) must NOT tear
             # the entry down -- only the
             # injection credit goes unavailable. Fetch softly, falling
@@ -593,7 +597,11 @@ class BePricesCoordinator(
         # the opt-in falls back to the plain mean, an SPP-indexed card must
         # not and keeps its printed indicative instead (see the bake below).
         spp_weighted = _spp_weighting_enabled(self.entry, self._snapshot)
-        if spp_weighted:
+        # Only worth the download when there are prices to weight. energie.be
+        # Vast offers its ENTSO-E key as optional, so an entry that skipped it
+        # reaches here with no spots at all and would otherwise pull 52 MB to
+        # weight nothing, every restart.
+        if spp_weighted and (spot_prices or self._historical_spots):
             await self._ensure_spp_weights()
 
         # A spot-monthly contract bills a flat rate = factor * this month's
@@ -614,9 +622,11 @@ class BePricesCoordinator(
         # On a cold start that flat rate was ~46% off, and it is what the
         # whole today+tomorrow table and the baked injection credit use until
         # the next tick.
-        if isinstance(
-            priced.energy, (DynamicRates, SpotMonthlyRates)
-        ) or _injection_needs_spot(self._snapshot, self.entry):
+        if (
+            isinstance(priced.energy, (DynamicRates, SpotMonthlyRates))
+            or _injection_needs_spot(self._snapshot, self.entry)
+            or _injection_needs_month_spot(self._snapshot, self.entry)
+        ):
             today_local = dt_util.now().date()
             await self._ensure_historical_spots(
                 date(today_local.year, 1, 1), today_local
@@ -673,8 +683,9 @@ class BePricesCoordinator(
         # systematically over-credits. _injection_needs_spot identifies that
         # shape (factor/base with no printed indicative), so leave it alone.
         injection_snapshot = self._snapshot
-        if isinstance(
-            priced.energy, SpotMonthlyRates
+        if (
+            isinstance(priced.energy, SpotMonthlyRates)
+            or _injection_needs_month_spot(self._snapshot, self.entry)
         ) and not _injection_hourly_on_cohort(self._snapshot, self.entry):
             inj_mean = monthly_mean
             spp_only = _injection_is_spp_indexed(self._snapshot)
