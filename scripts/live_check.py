@@ -1917,6 +1917,23 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
             detail=f"current={current}, factor={factor}, base={base}, "
             f"spp_indexed={getattr(injection, 'spp_indexed', None)}",
         )
+        # Presence alone would ship a coefficient drift green. The old
+        # "monthly" pin at least guaranteed structurally that no coefficient
+        # could reach the bake; now that one does, bound it. A feed-in
+        # formula redistributes a FRACTION of the spot, so the factor sits
+        # below 1, and the offset is a small deduction in EUR/kWh.
+        if factor is not None:
+            _expect(
+                f"{prefix}: SPP injection factor in (0, 1]",
+                0.0 < factor <= 1.0,
+                detail=f"factor={factor}",
+            )
+        if base is not None:
+            _expect(
+                f"{prefix}: SPP injection base in [-0.05, 0.05] EUR/kWh",
+                -0.05 <= base <= 0.05,
+                detail=f"base={base}",
+            )
     if current is not None:
         _expect(
             f"{prefix}: injection credit in [-0.10, 0.20] EUR/kWh",

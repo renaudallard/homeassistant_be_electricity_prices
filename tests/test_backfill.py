@@ -1015,3 +1015,44 @@ def test_normalize_window_clamps_a_future_end_to_now() -> None:
     past = now - timedelta(days=30)
     _start, end = bf._normalize_window(None, past)
     assert end == bf._floor_to_hour_utc(past)
+
+
+def test_backfill_credits_the_card_indicative_for_an_spp_card_without_a_profile() -> (
+    None
+):
+    """The strict= wiring in the backfill's own injection helper.
+
+    The backfill writes long-term statistics, so a wrong rate here is
+    persisted history rather than a value that self-corrects on the next
+    tick. An SPP-indexed card with no Synergrid profile must fall through to
+    the card's printed indicative; resolving the formula against the ENERGY
+    leg's mean would write 0,5 x 0,20 = 0,10 EUR/kWh into the recorder where
+    the card says 0,03.
+    """
+    from datetime import UTC, datetime
+
+    from custom_components.be_electricity_prices.backfill import (
+        _injection_rate_for_hour,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.0),
+        injection=InjectionRates(current=0.03, factor=0.5, base=0.0, spp_indexed=True),
+    )
+    utc_hour = datetime(2026, 6, 15, 10, tzinfo=UTC)
+    rate = _injection_rate_for_hour(
+        snap,
+        spot=0.20,  # the ENERGY leg's flat month mean - the wrong index here
+        spots={utc_hour: 0.20},
+        utc_hour=utc_hour,
+        local=dt_util.as_local(utc_hour),
+        spp_weights=None,  # no Synergrid profile
+        month_spp_cache={},
+        hourly_injection=False,
+    )
+    assert rate == pytest.approx(0.03)

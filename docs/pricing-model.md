@@ -455,7 +455,7 @@ step on the injection regime (`providers/base.py:71-77`). At runtime,
 `_injection_needs_spot` detects it (`injection.py:91-104`):
 
 ```python
-def _injection_needs_spot(snapshot, entry) -> bool:   # injection.py:82
+def _injection_needs_spot(snapshot, entry) -> bool:   # injection.py:91
     if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
         return False
     inj = snapshot.injection
@@ -478,19 +478,19 @@ in the live, backfill and compare paths, or the credit drifts.
 
 `_compute_injection_price(snapshot, entry, spot_prices)` returns the current-hour
 EUR/kWh price only on the injection regime and only when the snapshot has injection
-data (`injection.py:213-236`). Priority:
+data (`injection.py:223-236`). Priority:
 
-1. **Per-slot TOU** via `_tou_injection_rate` (`injection.py:127-146`).
+1. **Per-slot TOU** via `_tou_injection_rate` (`injection.py:137-146`).
 2. **Spot formula** `factor * spot + base` when either the energy is
    `DynamicRates` (shape b) OR `inj.current is None` (shape c). If no spot is
    available it returns `None` rather than fabricate a value
    (`injection.py:203-205`). The spot is looked up on the contract's own grid
    (`RESOLUTION_QUARTER` when `_energy_is_quarter_hourly`, else hourly), snapped
    with `slot_start`, and a nearest substitute is accepted only within one billing
-   slot (900 s quarter-hourly, 3600 s hourly) (`spot_stats.py:188-214`).
+   slot (900 s quarter-hourly, 3600 s hourly) (`spot_stats.py:214-214`).
 3. **Monthly indicative** `inj.current` otherwise, including static-energy cards
    whose injection carries a monthly index but also a printed `current` (Ecofix
-   Flexy, EBEM Groen Variabel / B@sic+) (`injection.py:157-170`,
+   Flexy, EBEM Groen Variabel / B@sic+) (`injection.py:167-170`,
    `injection.py:210`).
 
 This scalar is resolved once per coordinator tick, so it is not what the
@@ -511,7 +511,7 @@ drifted (issue #44, Engie Empower Flextime).
 `_tou_injection_rate(inj, energy, when)` returns a per-slot rate only when the
 energy is `TimeOfUseRates` and `inj.peak` is set (Engie Empower Flextime publishes
 a peak/transition/super-off-peak feed-in triplet, monthly-realized)
-(`injection.py:127-148`, fields at `providers/base.py:304-306`). It reuses the
+(`injection.py:137-148`, fields at `providers/base.py:304-306`). It reuses the
 energy contract's own `weekend_rule` via `tou_slot` so injection and consumption
 agree on the slot for a given hour (`injection.py:141`). Returns `None`
 otherwise so the caller falls back to the current / factor+base path.
@@ -520,7 +520,7 @@ otherwise so the caller falls back to the current / factor+base path.
 
 `_historical_injection_rate(injection, spot, *, energy, when)` mirrors the live
 priority for a past hour: TOU slot first, then `factor*spot+base` when both the
-formula and a historical spot exist, then `current` (`injection.py:251-282`).
+formula and a historical spot exist, then `current` (`injection.py:261-282`).
 The ordering (formula before `current`) is a bug fix: several dynamic-injection
 contracts (Engie, OCTA+, TotalEnergies, Luminus, Mega) publish BOTH a `current`
 indicative and `factor`/`base`, and checking `current` first made the YTD credit
@@ -537,22 +537,22 @@ from swallowing these cards is the `inj.current is None` clause in both
 `_injection_needs_spot` (`injection.py:91`) and `_compute_injection_price`
 (`injection.py:169`): when a card prints a monthly `current`, the spot branch
 is skipped and the realized rate is used, keeping the live sensor consistent with
-the YTD credit for the same hour (`injection.py:157-170`). A latent mis-price
+the YTD credit for the same hour (`injection.py:167-170`). A latent mis-price
 here is masked whenever the indicative prints, which is why it was fixed
 explicitly rather than left to fall through.
 
 ### YTD injection paths
 
-Past-month YTD billing routes injection per regime (`ytd_cost.py:270-437`,
+Past-month YTD billing routes injection per regime (`ytd_cost.py:271-437`,
 context):
 
 - `compensation`: per-hour `(cons - inj) * all_in`, netting injection against
   consumption (per band when bi) and clamping at zero.
 - `injection`: per-hour `cons * all_in - inj * inj_rate`, where `inj_rate` comes
-  from `_historical_injection_rate` (`injection.py:251-282`).
+  from `_historical_injection_rate` (`injection.py:261-282`).
 
 Shape (c) has a dedicated YTD helper `_ytd_spot_injection_credit`
-(`ytd_cost.py:440`) that credits a static-energy contract whose injection is a
+(`ytd_cost.py:444`) that credits a static-energy contract whose injection is a
 pure BELPEX formula with no fixed credit; it is a no-op unless the injection is
 exactly that shape and an injection sensor is wired, and it skips hours with no
 cached spot (`ytd_cost.py:478-480`).
@@ -657,7 +657,7 @@ l'envers") applies only to installations certified before 2024-01-01 and stays
 valid until 2030-12-31; newer installations use the `injection` tariff (no per-kVA
 fee); Flemish digital meters are SMR3 from the start. The YTD counterpart
 `_ytd_prosumer` sums the monthly fee across the year using each month's archived
-overlay, gated the same Walloon-only way (`ytd_cost.py:202-229`).
+overlay, gated the same Walloon-only way (`ytd_cost.py:203-229`).
 
 ## Brussels OSP tier
 

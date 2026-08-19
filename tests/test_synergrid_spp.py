@@ -717,6 +717,60 @@ async def test_ytd_injection_uses_spp_not_flat_mean(
     assert cost == pytest.approx(-(0.5 * 0.15))
 
 
+async def test_ytd_credits_the_card_indicative_for_an_spp_card_without_a_profile(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The strict= wiring at the YTD call site, end to end.
+
+    An SPP-indexed card may only resolve its injection formula against the
+    SPP-weighted mean. With no Synergrid profile there is none, so the credit
+    falls through to the card's printed indicative. Dropping strict= would
+    silently resolve it against the ENERGY leg's mean instead: 0,5 x 0,20 =
+    0,10 EUR/kWh here, against a card that says 0,03.
+    """
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    snap = make_snapshot(
+        supplier="energiebe",
+        contract="energiebe_variable",
+        energy=SpotMonthlyRates(factor=1.0, base=0.0),
+        injection=InjectionRates(current=0.03, factor=0.5, base=0.0, spp_indexed=True),
+    )
+    entry = _entry(
+        **{
+            const.CONF_REGION: const.REGION_WALLONIA,
+            const.CONF_DSO: const.DSO_ORES,
+            const.CONF_METER: const.METER_MONO,
+            const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+            const.CONF_INJECTION_KWH: "sensor.inj_total",
+            const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_BI_HORAIRE,
+        }
+    )
+    spots = {
+        datetime(2026, 6, 15, 10, tzinfo=UTC): 0.10,
+        datetime(2026, 6, 15, 11, tzinfo=UTC): 0.30,
+    }
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.inj_total":
+            return {datetime(2026, 6, 15, 10, tzinfo=UTC): 1.0}
+        return {}
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots=spots,
+            spp_weights=None,  # the profile never arrived
+        )
+    # 1 kWh injected, no consumption: the card's own 0,03, not 0,5 x 0,20.
+    assert cost == pytest.approx(-0.03)
+
+
 def test_workbook_xml_entity_expansion_is_refused() -> None:
     """The four parses here run over a REMOTE workbook.
 

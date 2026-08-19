@@ -3009,3 +3009,52 @@ async def test_spot_monthly_mean_waits_for_the_historical_spot_fill(
     assert order[: order.index("mean") + 1].count("fill") == 1, (
         f"the spot cache must be filled before the month mean is taken, got {order}"
     )
+
+
+async def test_live_tick_never_bakes_an_spp_formula_against_the_energy_mean(
+    hass: HomeAssistant,
+) -> None:
+    """energie.be Variabel prices consumption on Belpex_RLP and injection on
+    the solar-weighted Belpex_SPP. Those are different numbers, not a coarse
+    and a fine version of one, so the live bake must resolve the injection
+    formula against the SPP-weighted mean or not at all.
+
+    Without the Synergrid profile there is no SPP mean, and the card's own
+    printed indicative is credited instead. Baking against the energy leg's
+    mean would pay 6,05 c/kWh where the contract owes 3,00 - and silently,
+    because nothing downstream can tell which mean produced the number.
+    """
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+
+    # make_entry's default is Wallonia / ORES, matching make_snapshot's DSO.
+    entry = make_entry(solar_regime="injection")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    # The shape the energie.be variable card parses to.
+    coord._snapshot = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.1872, base=0.00848),
+        injection=InjectionRates(
+            current=0.0343, factor=0.60, base=-0.008, spp_indexed=True
+        ),
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    # A month of spots at the ENERGY index, and no SPP profile at all.
+    coord._historical_spots = {
+        datetime(2026, 7, 15, h, tzinfo=UTC): 0.1142 for h in range(24)
+    }
+    coord._spot_cache = dict(coord._historical_spots)
+    coord._spp_weights = {}
+    coord._fetch_spot_prices = AsyncMock(  # type: ignore[method-assign]
+        return_value=dict(coord._historical_spots)
+    )
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_spp_weights = AsyncMock()  # type: ignore[method-assign]
+
+    data = await coord._async_update_data()
+
+    # The card's printed indicative, not 0.60 * 0.1142 - 0.008 = 0.0605.
+    assert data.injection_price_eur_per_kwh == pytest.approx(0.0343)

@@ -85,7 +85,7 @@ Loading an offline boot from disk lets the entry serve last-known prices before 
 The base class calls `_async_update_data` (`coordinator.py:462`) every tick. It wraps `_update_body` (`coordinator.py:499`) and, on `UpdateFailed`, refreshes the stale-snapshot Repairs placeholder with the current `_last_error` before re-raising (`coordinator.py:499`). The body runs these steps in order.
 
 ```
-_update_body (coordinator.py:498)
+_update_body (coordinator.py:499)
  ├─ _maybe_refresh_snapshot()            probe / TTL / fetch, may adopt sibling cache
  ├─ _track_monthly_peak()                Flanders capacity peak (rolling max)
  ├─ if self._snapshot is None: raise UpdateFailed("no supplier snapshot ...")
