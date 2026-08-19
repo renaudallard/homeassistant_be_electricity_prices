@@ -411,19 +411,109 @@ def test_variable_energy_coefficients_are_the_formula_not_the_printed_price() ->
     assert snap.energy.base != pytest.approx(printed)
 
 
-def test_variable_injection_is_monthly_indicative_only() -> None:
-    """Zonnestroom 3,43 c€/kWh, VAT-exempt, with no factor/base pair.
+def test_variable_injection_carries_the_spp_formula_and_its_fallback() -> None:
+    """(0,60 x Belpex_SPP - 0,80), plus Zonnestroom 3,43 c€/kWh as fallback.
 
-    The injection formula indexes on Belpex_SPP while the energy leg indexes
-    on Belpex_RLP. Emitting factor/base would have the coordinator bake the
-    credit against the energy leg's monthly mean: in July 2026 that was 11,42
-    c€/kWh against the SPP's 6,34, which would have roughly doubled the credit.
+    All three parts matter. The formula is what makes the credit exact; the
+    printed indicative is what gets credited while the Synergrid profile is
+    unavailable; and ``spp_indexed`` is what keeps the formula off the energy
+    leg's mean, which indexes on Belpex_RLP - 11,42 c€/kWh in July 2026
+    against the SPP's 6,34, so resolving it there would roughly double the
+    credit. Belpex prints in c€/kWh on this card, so no x10 and no VAT.
     """
     snap = _var_snap()
     assert snap.injection is not None
     assert snap.injection.current == pytest.approx(3.43 / 100.0)
-    assert snap.injection.factor is None
-    assert snap.injection.base is None
+    assert snap.injection.factor == pytest.approx(0.60)
+    assert snap.injection.base == pytest.approx(-0.80 / 100.0)
+    assert snap.injection.spp_indexed is True
+
+
+@pytest.mark.parametrize("weights", [None, {}])
+def test_variable_injection_falls_back_to_the_card_without_a_profile(
+    weights: dict[tuple[int, int, int], float] | None,
+) -> None:
+    """No Synergrid profile means the card's indicative, never the energy mean.
+
+    Both states a failed profile leaves behind are covered: never fetched
+    (``None``) and fetched-but-empty (``{}``, what the back-off leaves). The
+    historical walk must answer "no spot" for either, so the credit falls
+    through to the printed indicative. Handing back the energy leg's Belpex_RLP
+    mean instead would pay 6,05 c€/kWh against a contract that owes 3,00.
+    """
+    from custom_components.be_electricity_prices.injection import (
+        _historical_injection_rate,
+    )
+    from custom_components.be_electricity_prices.spot_stats import (
+        _injection_is_spp_indexed,
+        _spp_injection_spot,
+    )
+
+    snap = _var_snap()
+    assert snap.injection is not None
+    rlp_mean = 11.42 / 100.0  # July 2026's energy index - the wrong one here
+    spot = _spp_injection_spot(
+        rlp_mean,
+        monthly_mean=True,
+        spp_weights=weights,
+        historical_spots={},
+        year=2026,
+        month=7,
+        cache={},
+        strict=_injection_is_spp_indexed(snap),
+    )
+    assert spot is None
+    credited = _historical_injection_rate(snap.injection, spot, energy=snap.energy)
+    assert credited == pytest.approx(3.43 / 100.0)
+
+
+def test_variable_injection_never_prices_off_an_hourly_spot() -> None:
+    """Carrying factor/base must not turn the credit into an hourly one.
+
+    ``_injection_is_spot_formula`` fires only when the energy leg is dynamic
+    or the card prints no indicative; this card is neither, so the live
+    sensor keeps the flat monthly value whatever the current hour costs. That
+    guard predates this contract and is now load-bearing for a second reason:
+    the formula it would otherwise resolve indexes on a MONTHLY solar-weighted
+    mean, so pricing it per hour is the wrong axis entirely, not merely noisy.
+    """
+    from datetime import datetime, timezone
+
+    from custom_components.be_electricity_prices.injection import (
+        _injection_price_for_slot,
+        _injection_varies_intraday,
+    )
+
+    snap = _var_snap()
+    assert snap.injection is not None
+    when = datetime(2026, 8, 19, 13, 0, tzinfo=timezone.utc)
+    flat = 3.43 / 100.0
+    for spot in (0.30, -0.02, 0.0, None):
+        assert _injection_price_for_slot(
+            snap.injection, snap.energy, spot, when
+        ) == pytest.approx(flat)
+    # and it publishes no today/tomorrow array, which would imply it varies
+    assert _injection_varies_intraday(snap.injection, snap.energy) is False
+
+
+def test_variable_injection_resolves_exactly_on_the_spp_mean() -> None:
+    """The whole point of carrying the formula: July 2026 owed 3,00 c€/kWh.
+
+    Belpex_SPP settled at 6,34 that month and Belpex_RLP at 11,42. Baking the
+    formula against the SPP mean reproduces the contract exactly; against the
+    energy leg's mean it pays 6,05, and the card's own indicative (a VNR
+    forecast) pays 2,77.
+    """
+    from custom_components.be_electricity_prices.injection import (
+        _bake_monthly_injection,
+    )
+
+    snap = _var_snap()
+    on_spp = _bake_monthly_injection(snap, 6.34 / 100.0).injection
+    on_rlp = _bake_monthly_injection(snap, 11.42 / 100.0).injection
+    assert on_spp is not None and on_rlp is not None
+    assert on_spp.current == pytest.approx(3.004 / 100.0, abs=1e-6)
+    assert on_rlp.current == pytest.approx(6.052 / 100.0, abs=1e-6)
 
 
 def test_variable_injection_formula_is_kept_for_display() -> None:

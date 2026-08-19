@@ -102,6 +102,7 @@ from .providers.base import (
 )
 from .spot_stats import (
     _bucket_by_local_month,
+    _injection_is_spp_indexed,
     _month_mean,
     _spp_injection_spot,
 )
@@ -406,11 +407,14 @@ async def _ytd_hourly_energy(
             d_cost = kwh_cons * bd.all_in
             # Energy bills at the flat month-mean (spot); the injection credit
             # uses the SPP-weighted month-mean when the entry opted in, falling
-            # back to the flat mean when the profile is missing for the month.
-            #
+            # back to the flat mean when the profile is missing for the month
+            # - unless the CARD indexes on Belpex_SPP, where the flat mean is
+            # a different index rather than a coarser one and the card's own
+            # indicative is credited instead.
             inj_spot = _spp_injection_spot(
                 spot,
                 monthly_mean=monthly_mean,
+                strict=_injection_is_spp_indexed(snap_h),
                 spp_weights=spp_weights,
                 bucket=month_bucket,
                 year=local.year,

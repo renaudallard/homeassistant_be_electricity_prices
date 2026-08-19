@@ -57,6 +57,7 @@ from .pricing import (
 from .providers.base import (
     DynamicRates,
     EnergyRates,
+    SupplierSnapshot,
 )
 from .synergrid import (
     SppWeights,
@@ -168,19 +169,44 @@ def _spp_weighted_month_mean(
     return _spp_month_mean(_bucket_by_local_month(spots), weights, year, month)
 
 
-def _spp_weighting_enabled(entry: ConfigEntry) -> bool:
-    """True when this entry actually uses SPP-weighted injection: a custom
-    monthly-average contract, injection regime, formula injection, flag set.
+def _injection_is_spp_indexed(snapshot: SupplierSnapshot | None) -> bool:
+    """True when the CARD says its injection formula indexes on Belpex_SPP.
 
-    The contract + injection-mode conditions matter: without them a stale flag
-    left after switching a monthly entry to fixed/dynamic (the options flow
-    reseeds it), or a monthly entry on flat-rate injection, would trigger the
-    52 MB profile download even though the weights are then discarded."""
+    A property of the published card, not of a user preference: energie.be
+    Variabel prices consumption on Belpex_RLP and injection on the
+    solar-weighted Belpex_SPP, so its formula may only ever be resolved
+    against an SPP-weighted mean.
+    """
+    inj = getattr(snapshot, "injection", None)
+    return bool(getattr(inj, "spp_indexed", False))
+
+
+def _spp_weighting_enabled(
+    entry: ConfigEntry, snapshot: SupplierSnapshot | None = None
+) -> bool:
+    """True when this entry actually uses SPP-weighted injection.
+
+    Two ways in, both requiring the injection regime (nothing else reads the
+    credit, and the profile is a 52 MB download):
+
+      * the CARD indexes its injection on Belpex_SPP (energie.be Variabel).
+        Not optional: resolving that formula against any other mean roughly
+        doubles the credit in a sunny month.
+      * the expert custom monthly-average contract opted in by hand.
+
+    For the custom route the contract + injection-mode conditions matter:
+    without them a stale flag left after switching a monthly entry to
+    fixed/dynamic (the options flow reseeds it), or a monthly entry on
+    flat-rate injection, would trigger the download even though the weights
+    are then discarded."""
+    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
+        return False
+    if _injection_is_spp_indexed(snapshot):
+        return True
     return (
         entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM
         and entry.data.get(CONF_CONTRACT) == CUSTOM_CONTRACT_MONTHLY
         and bool(entry.data.get(CONF_CUSTOM_INJECTION_SPP_WEIGHTED))
-        and entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
         and entry.data.get(CONF_CUSTOM_INJECTION_MODE) == CUSTOM_INJECTION_MODE_FORMULA
     )
 
@@ -226,6 +252,7 @@ def _spp_injection_spot(
     cache: dict[tuple[int, int], float | None],
     hourly_spot: float | None = None,
     hourly: bool = False,
+    strict: bool = False,
 ) -> float | None:
     """The spot value to price mean-indexed injection at.
 
@@ -241,11 +268,16 @@ def _spp_injection_spot(
     a flat month mean systematically over-pays. Deciding it here keeps the
     live tick, the YTD walk and the backfill on one rule.
 
-    Energy bills at the flat month-mean (``spot``); when the entry opted
-    into SPP-weighted injection (a custom monthly contract) and the
-    Synergrid profile is available, the injection credit instead uses the
-    SPP-weighted month-mean, falling back to ``spot`` when the profile is
-    missing for the month. ``cache`` memoises the per-month weighted mean.
+    Energy bills at the flat month-mean (``spot``); when the entry uses
+    SPP-weighted injection and the Synergrid profile is available, the
+    injection credit instead uses the SPP-weighted month-mean.
+
+    What happens when the profile is missing depends on WHY it was wanted.
+    The custom contract opted in as a refinement, so it falls back to
+    ``spot``. A card that INDEXES on Belpex_SPP cannot: that mean is a
+    different number, not a coarser one, so ``strict`` returns ``None`` and
+    the caller credits the card's printed indicative instead.
+    ``cache`` memoises the per-month weighted mean.
 
     Callers that already bucketed the spot cache for the tick pass ``bucket``;
     the rest pass the raw ``historical_spots`` and it is bucketed here on the
@@ -255,13 +287,18 @@ def _spp_injection_spot(
     if hourly:
         return hourly_spot
     if not (monthly_mean and spp_weights is not None):
-        return spot
+        # ``strict`` means the formula indexes on Belpex_SPP and nothing else
+        # will do, so answer "no spot" rather than the energy leg's mean and
+        # let the caller fall back to the card's printed indicative.
+        return None if strict else spot
     key = (year, month)
     if key not in cache:
         if bucket is None:
             if historical_spots is None:
-                return spot
+                return None if strict else spot
             bucket = _bucket_by_local_month(historical_spots)
         cache[key] = _spp_month_mean(bucket, spp_weights, year, month)
     weighted = cache[key]
-    return weighted if weighted is not None else spot
+    if weighted is not None:
+        return weighted
+    return None if strict else spot

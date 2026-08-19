@@ -112,6 +112,7 @@ from .injection import (
     _injection_needs_spot,
 )
 from .spot_stats import (
+    _injection_is_spp_indexed,
     _mean_of_month,
     _spp_injection_spot,
     _spp_weighting_enabled,
@@ -417,7 +418,7 @@ async def _build_context(
     contract = entry.data[CONF_CONTRACT]
     region = entry.data.get(CONF_REGION, "")
     spp_weights = None
-    if _spp_weighting_enabled(entry):
+    if _spp_weighting_enabled(entry, snap):
         await coordinator._ensure_spp_weights()
         spp_weights = coordinator._spp_weights
     return _BackfillContext(
@@ -431,9 +432,10 @@ async def _build_context(
         snap_for=_month_snapshot_cache(
             hass, coordinator._session, extractor, contract, region, snap, entry
         ),
-        # Custom monthly entries that opted into SPP-weighted injection price
-        # the mean-indexed credit off the Synergrid solar profile; mirror the
-        # live YTD credit so the backfill meets it at the seam.
+        # Entries whose injection is SPP-weighted - a card that indexes on
+        # Belpex_SPP, or a custom monthly entry that opted in - price the
+        # mean-indexed credit off the Synergrid solar profile; mirror the live
+        # YTD credit so the backfill meets it at the seam.
         spp_weights=spp_weights,
         month_spp_cache={},
         month_mean_cache={},
@@ -468,6 +470,10 @@ def _injection_rate_for_hour(
     inj_spot = _spp_injection_spot(
         spot,
         monthly_mean=isinstance(snap_h.energy, SpotMonthlyRates),
+        # An SPP-indexed formula may only resolve against the SPP-weighted
+        # mean; without one _historical_injection_rate falls through to the
+        # card's printed indicative rather than the energy leg's mean.
+        strict=_injection_is_spp_indexed(snap_h),
         spp_weights=spp_weights,
         historical_spots=spots,
         year=local.year,

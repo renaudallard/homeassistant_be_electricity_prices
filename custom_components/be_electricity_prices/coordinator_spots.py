@@ -344,10 +344,12 @@ class _SpotsMixin:
     async def _ensure_spp_weights(self) -> None:
         """Refresh the Synergrid SPP profile for the current year if stale.
 
-        Only called for a custom entry that opted into SPP-weighted injection.
-        The ex-ante file is revised in-year, so re-fetch monthly. Soft-fail: on
-        error keep whatever we already have (the caller degrades to the plain
-        arithmetic mean) and back off ``_SPP_RETRY_TTL`` so a persistent failure
+        Only called for an entry whose injection is SPP-weighted (a card
+        indexed on Belpex_SPP, or a custom entry that opted in). The ex-ante
+        file is revised in-year, so re-fetch monthly. Soft-fail: on error keep
+        whatever we already have (the opt-in caller then degrades to the plain
+        arithmetic mean, an SPP-indexed card to its printed indicative) and
+        back off ``_SPP_RETRY_TTL`` so a persistent failure
         doesn't re-download the 52 MB workbook every tick.
         """
         now = dt_util.utcnow()

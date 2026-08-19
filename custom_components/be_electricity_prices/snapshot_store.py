@@ -495,7 +495,15 @@ class _MigratingStore(Store[dict[str, Any]]):
 # Neither supplier's probe key moves on its own here -- the pinned URL's card is
 # unchanged, which is exactly why nothing noticed -- so without this bump an
 # existing entry keeps the stale prices indefinitely.
-_SNAPSHOT_SCHEMA_VERSION = 20
+# v21: InjectionRates gained spp_indexed, and energie.be Variabel now parses
+# its injection FORMULA rather than only the card's printed indicative. Two
+# reasons to move the version with it. A snapshot written before this holds no
+# factor/base for that contract, so the entry keeps crediting the VNR forecast
+# instead of the realized Belpex_SPP month until the 24 h TTL happens to
+# refetch; and every earlier InjectionRates field (per-slot rates, floor_at_zero,
+# vat_applies) bumped for the same reason, since _snapshot_from_dict splats the
+# stored dict straight into the dataclass and an unknown key is a TypeError.
+_SNAPSHOT_SCHEMA_VERSION = 21
 
 
 def _snapshot_to_dict(

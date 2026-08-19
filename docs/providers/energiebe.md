@@ -303,34 +303,44 @@ print, rather than on the body wording, which differs: the dynamic card says
 "injectievergoeding" and the variable one "terugleververgoeding". Neither wording is
 load-bearing (`test_dynamic_body_wording_alone_is_not_the_anchor`).
 
-### Variable injection (`_extract_variable_injection`): `current` only, never factor/base
+### Variable injection (`_extract_variable_injection`): the SPP formula, plus a fallback
 
 The variable card prints an injection formula, `(0,60 x Belpex_SPP - 0,80) c€/kWh`, and the
-extractor deliberately does **not** store it as `factor`/`base`. The reason is the index:
-consumption is priced on Belpex_RLP, injection on the solar-weighted Belpex_SPP, and the
-two diverge sharply - July 2026 settled at 6,34 c€/kWh SPP against 11,42 RLP. A
-`SpotMonthlyRates` energy leg makes the coordinator bake any injection factor/base against
-the *energy* leg's monthly mean (`_bake_monthly_injection`), which in a month like that
-would credit 6,05 c€/kWh where the contract pays 3,00 - roughly double, because PV output
-peaks exactly when the day-ahead price troughs.
+extractor stores all three of: the formula as `factor`/`base`, the printed "Zonnestroom"
+column as `current`, and `spp_indexed=True`.
 
-So only the printed monthly indicative is emitted, read from the "Zonnestroom" column by
-`_INJECTION_CURRENT_RE`, **sign included**: this formula settles negative whenever
-Belpex_SPP drops below 1,33 c€/kWh (energie.be's own published table bottoms out at 1,65),
-and both `InjectionRates` and the live check's `_validate_injection` say a monthly
-indicative is allowed to be negative. A sign-blind column pattern would not mis-credit such
-a card, it would fail to read it and take the whole contract offline
+The flag is the load-bearing part. Consumption is priced on Belpex_RLP, injection on the
+solar-weighted Belpex_SPP, and the two diverge sharply - July 2026 settled at 6,34 c€/kWh
+SPP against 11,42 RLP. A `SpotMonthlyRates` energy leg makes the coordinator bake any
+injection factor/base against the *energy* leg's monthly mean
+(`_bake_monthly_injection`), which in a month like that would credit 6,05 c€/kWh where the
+contract pays 3,00 - roughly double, because PV output peaks exactly when the day-ahead
+price troughs. `spp_indexed` makes the coordinator fetch Synergrid's solar production
+profile for the entry (no user opt-in: it is a property of the card) and resolve the
+formula against the SPP-weighted month mean, which reproduces the contract exactly.
+
+`current` is the fallback, not the answer. It is itself derived from the VNR forecast
+rather than the realized month (2,77 printed against 3,00 realized for July 2026), and it
+is credited only while no weighted mean is available - a cold start, or a Synergrid fetch
+that failed. That fallback is STRICT by design: the plain monthly mean is never substituted,
+because it is a different index rather than a coarser one.
+
+It is read with its **sign**: this formula settles negative whenever Belpex_SPP drops below
+1,33 c€/kWh (energie.be's own published table bottoms out at 1,65), and both
+`InjectionRates` and the live check's `_validate_injection` say a monthly indicative is
+allowed to be negative. A sign-blind column pattern would not mis-credit such a card, it
+would fail to read it and take the whole contract offline
 (`test_negative_injection_indicative_is_read_not_fatal`). It is itself derived from the VNR forecast, but it carries the SPP
 shape and lands within a few tenths of a cent of the realised rate (2,77 printed against
 3,00 realised for July 2026) - unlike the energy leg, where the forecast error is the whole
-problem. The formula string is still parsed and kept for display, and a missing row is
-fatal: "energie.be: injection indicative row not found". `_INJECTION_SHAPE` in
-`scripts/live_check.py` pins the `monthly` shape so a regression that starts emitting
-factor/base fails CI rather than over-crediting in silence.
+problem. A missing row is fatal: "energie.be: injection indicative row not found".
+`_INJECTION_SHAPE` in `scripts/live_check.py` pins the `spp` shape - formula, indicative
+and flag all present - so dropping any one of them fails CI rather than mis-crediting in
+silence.
 
 ## Taxes
 
-`_extract_taxes` (`providers/energiebe.py:418`) parses four levy rows and builds a
+`_extract_taxes` (`providers/energiebe.py:427`) parses four levy rows and builds a
 `TaxOverlay`. All card values are VAT-inclusive (the federal excise and the energy fund are
 VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`).
 
@@ -355,7 +365,7 @@ pins GSC 1,17 + WKK 0,39 = 1,56 c€/kWh. All c€/kWh values are divided by 100
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/energiebe.py:436`) covers all eight Fluvius sub-areas via
+`_extract_dsos` (`providers/energiebe.py:445`) covers all eight Fluvius sub-areas via
 `_DSO_ROWS` (`providers/energiebe.py:137`), which maps each card label prefix to the
 canonical DSO key:
 
@@ -432,9 +442,9 @@ tomorrow prices come from the ENTSO-E day-ahead publication rather than the card
 - **The variable card prints a FORECAST, not the month's rate.** Never read its printed
   energieprijs. The contract is `spot_monthly` precisely so that number has nowhere to go.
 - **The two legs of the variable card index on different parameters.** Consumption on
-  Belpex_RLP, injection on Belpex_SPP; the injection must stay `current`-only or the
-  coordinator bakes it against the wrong mean and roughly doubles the credit in a sunny
-  month.
+  Belpex_RLP, injection on Belpex_SPP. `spp_indexed` is what keeps them apart; drop it and
+  the coordinator resolves the injection formula against the energy leg's mean, roughly
+  doubling the credit in a sunny month, silently.
 - **The injection indicative can print NEGATIVE** (below 1,33 c€/kWh Belpex_SPP). Its
   column pattern captures the sign; dropping that does not mis-credit, it takes the whole
   card offline, because a missing indicative is fatal.
@@ -472,7 +482,8 @@ contribution 0), so the pair covers both sides of that change.
 | Wrong per-kWh price after a card update | the c€/kWh conversion in `_extract_energy` (`:321`) | energie.be switched Belpex units (to EUR/MWh) or the VAT treatment changed |
 | "energie.be: vaste vergoeding row not found" | `_FEE_RE` (`:188`) | the "Vaste vergoeding ... (€/jaar)" label reworded |
 | Solar credit wrong or "injection formula row not found" | `_INJECTION_RE` | the "Terugleveringsvergoeding" section header reworded, or the sign dropped |
-| Solar credit roughly double on the variable contract | `_extract_variable_injection` | it started emitting factor/base, so the credit is baked against the RLP mean instead of the SPP indicative |
+| Solar credit roughly double on the variable contract | `spp_indexed` / `_spp_weighting_enabled` | the flag was dropped, or the Synergrid profile silently stopped being fetched, so the formula resolves against the energy leg's Belpex_RLP mean instead of Belpex_SPP |
+| Solar credit slightly off (a few tenths of a cent) on the variable contract | expected while the Synergrid profile is unavailable | the card's printed indicative is a VNR forecast; it is the deliberate fallback, and the credit firms up once the profile loads |
 | Tax under/over-billing or "tax block"/"GSC/WKK" errors | `_extract_taxes` regexes (`:165`-187) | a levy row label or unit changed; energy fund is the only optional one |
 | Professional rows leaking into the snapshot | `_PROF_MARKER` / `_residential` (`:131`, `:298`) | the professional section header wording changed |
 | A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row regex in `_extract_dsos` (`:137`, `:443`); the "Nettarieven" anchor | a label renamed, a new wrap artifact, or the section header changed |

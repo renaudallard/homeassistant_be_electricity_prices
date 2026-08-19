@@ -290,6 +290,145 @@ def test_spp_weighting_enabled_gating() -> None:
         assert not _spp_weighting_enabled(entry)  # type: ignore[arg-type]
 
 
+def test_spp_weighting_enabled_for_a_card_that_indexes_on_spp() -> None:
+    """A scraped card can require SPP weighting without any user opt-in.
+
+    energie.be Variabel indexes its injection on Belpex_SPP; that is a
+    property of the publication, so the profile has to be fetched for the
+    entry whatever its supplier is and with no flag to set. Still gated on the
+    injection regime - nothing else reads the credit, and the profile is a
+    52 MB download.
+    """
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+    )
+    from tests import make_snapshot
+
+    entry = SimpleNamespace(
+        data={
+            const.CONF_SUPPLIER: "energiebe",
+            const.CONF_CONTRACT: "energiebe_variable",
+            const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+        }
+    )
+    spp = make_snapshot(
+        injection=InjectionRates(
+            current=0.0343, factor=0.60, base=-0.008, spp_indexed=True
+        )
+    )
+    plain = make_snapshot(injection=InjectionRates(current=0.0343))
+    assert _spp_weighting_enabled(entry, spp)  # type: ignore[arg-type]
+    assert not _spp_weighting_enabled(entry, plain)  # type: ignore[arg-type]
+    assert not _spp_weighting_enabled(entry)  # type: ignore[arg-type]
+    off_regime = SimpleNamespace(
+        data={**entry.data, const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE}
+    )
+    assert not _spp_weighting_enabled(off_regime, spp)  # type: ignore[arg-type]
+
+
+def test_spp_injection_spot_is_strict_for_an_spp_indexed_card() -> None:
+    """No profile means NO spot for such a card, not the energy leg's mean.
+
+    The custom contract opted into SPP weighting as a refinement, so it falls
+    back to the flat mean. A card that INDEXES on Belpex_SPP cannot: the flat
+    mean is a different number, not a coarser one (11,42 against 6,34 c€/kWh
+    in July 2026), so returning it would roughly double the credit. Returning
+    None instead routes _historical_injection_rate to the card's own printed
+    indicative.
+    """
+    from custom_components.be_electricity_prices.spot_stats import (
+        _spp_injection_spot,
+    )
+
+    flat_mean = 0.1142
+    loose = _spp_injection_spot(
+        flat_mean,
+        monthly_mean=True,
+        spp_weights=None,
+        year=2026,
+        month=7,
+        cache={},
+        strict=False,
+    )
+    strict = _spp_injection_spot(
+        flat_mean,
+        monthly_mean=True,
+        spp_weights=None,
+        year=2026,
+        month=7,
+        cache={},
+        strict=True,
+    )
+    assert loose == flat_mean
+    assert strict is None
+
+
+def test_a_formula_only_monthly_injection_is_never_priced_per_hour() -> None:
+    """Skipping the month-mean bake must stay limited to SPP-indexed cards.
+
+    A leg with factor/base and NO printed indicative is exactly the shape
+    _injection_is_spot_formula reads as "price this per hour". Leaving it
+    standing when the month mean is unavailable turns a flat monthly credit
+    into an hourly one at whatever the current slot costs - 27,9 c/kWh on a
+    0,30 EUR/kWh hour, against a contract that pays a monthly rate. The bake
+    wipes the leg instead, which reads as "no credit yet".
+    """
+    from datetime import datetime, timezone
+
+    from custom_components.be_electricity_prices.injection import (
+        _bake_monthly_injection,
+        _injection_price_for_slot,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.0),
+        injection=InjectionRates(factor=0.96, base=-0.009),
+    )
+    baked = _bake_monthly_injection(snap, None).injection
+    assert baked is not None
+    assert baked.factor is None and baked.base is None and baked.current is None
+    assert (
+        _injection_price_for_slot(
+            baked,
+            snap.energy,
+            0.30,
+            datetime(2026, 8, 19, 13, 0, tzinfo=timezone.utc),
+        )
+        is None
+    )
+
+
+def test_strict_survives_the_missing_historical_spots_shortcut() -> None:
+    """The early return for "no spots to bucket" must honour strict too.
+
+    It is a second exit from the same function and it was handing back the
+    energy leg's mean, which for an SPP-indexed card is the wrong index.
+    """
+    from custom_components.be_electricity_prices.spot_stats import (
+        _spp_injection_spot,
+    )
+
+    args = dict(
+        monthly_mean=True,
+        spp_weights={},
+        historical_spots=None,
+        year=2026,
+        month=7,
+    )
+    assert (
+        _spp_injection_spot(0.1142, cache={}, strict=False, **args)  # type: ignore[arg-type]
+        == 0.1142
+    )
+    assert (
+        _spp_injection_spot(0.1142, cache={}, strict=True, **args) is None  # type: ignore[arg-type]
+    )
+
+
 # ---- coordinator refresh + persistence --------------------------------------
 
 

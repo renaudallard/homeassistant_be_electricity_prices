@@ -359,18 +359,21 @@ def _extract_variable_energy(text: str) -> SpotMonthlyRates:
 
 
 def _extract_variable_injection(text: str) -> InjectionRates:
-    """The variable card's monthly injection indicative.
+    """The variable card's injection: the SPP formula, with the card's own
+    printed indicative kept as the fallback.
 
-    Only ``current`` is emitted, never factor/base, even though the card
-    prints a formula. The formula indexes on Belpex_SPP - the SOLAR-weighted
-    monthly mean - while the energy leg indexes on Belpex_RLP, and the two
-    part company badly: July 2026 settled at 6,34 c€/kWh SPP against 11,42
-    RLP. Handing the coordinator factor/base would have it bake the credit
-    against the energy leg's mean, paying 6,05 c€/kWh where the contract owes
-    3,00 - roughly double, because PV output peaks exactly when the day-ahead
-    price troughs.
-    The printed indicative carries the SPP shape and stays within a few
-    tenths of a cent of the realized rate, so it is the honest value here.
+    The formula indexes on Belpex_SPP, the SOLAR-weighted monthly mean, while
+    the energy leg indexes on Belpex_RLP. ``spp_indexed`` says so, which makes
+    the coordinator resolve this formula against the SPP-weighted mean and
+    refuse to resolve it against any other: July 2026 settled at 6,34 c€/kWh
+    SPP against 11,42 RLP, so the energy leg's mean would pay 6,05 where the
+    contract owes 3,00.
+
+    ``current`` is the card's printed Zonnestroom column. It is itself derived
+    from the VNR forecast rather than the realized month (2,77 printed against
+    3,00 realized for July 2026), so it is the fallback, not the answer - used
+    only for the cold start and whenever the Synergrid profile is unavailable,
+    where it beats both no credit at all and a wrong-index one.
     """
     formula = _INJECTION_RE.search(text)
     current = _INJECTION_CURRENT_RE.search(text)
@@ -380,11 +383,17 @@ def _extract_variable_injection(text: str) -> InjectionRates:
         # a solar user 0 EUR/kWh.
         raise ExtractorError("energie.be: injection indicative row not found")
     # Injection is VAT-exempt residential, so the printed c€/kWh converts
-    # straight to EUR/kWh. The sign is honoured: at a low enough Belpex_SPP
-    # this formula settles negative and the producer pays to inject.
+    # straight to EUR/kWh, and Belpex is in c€/kWh here too (no * 10). The
+    # sign is honoured on the indicative: at a low enough Belpex_SPP this
+    # formula settles negative and the producer pays to inject.
+    factor_pdf = to_float(formula.group(2))
+    base_cents = parse_sign(formula.group(3)) * to_float(formula.group(4))
     return InjectionRates(
         current=parse_sign(current.group(1)) * to_float(current.group(2)) / 100.0,
+        factor=factor_pdf,
+        base=base_cents / 100.0,
         formula=formula.group(1),
+        spp_indexed=True,
     )
 
 

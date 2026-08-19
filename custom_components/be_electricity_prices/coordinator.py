@@ -68,6 +68,7 @@ from .snapshot_store import (
 )
 from .spot_stats import (
     _energy_is_quarter_hourly,
+    _injection_is_spp_indexed,
     _spp_weighting_enabled,
 )
 from .ytd_cost import (
@@ -586,9 +587,12 @@ class BePricesCoordinator(
                 )
                 spot_prices = dict(self._spot_cache) if self._spot_cache else {}
 
-        # Refresh the Synergrid SPP profile for a custom entry that opted into
-        # SPP-weighted injection (soft-fail; degrades to the plain mean below).
-        spp_weighted = _spp_weighting_enabled(self.entry)
+        # Refresh the Synergrid SPP profile when this entry's injection is
+        # SPP-weighted: a card that indexes on Belpex_SPP, or a custom monthly
+        # entry that opted in. Soft-fail. What a failure degrades TO differs -
+        # the opt-in falls back to the plain mean, an SPP-indexed card must
+        # not and keeps its printed indicative instead (see the bake below).
+        spp_weighted = _spp_weighting_enabled(self.entry, self._snapshot)
         if spp_weighted:
             await self._ensure_spp_weights()
 
@@ -673,17 +677,37 @@ class BePricesCoordinator(
             priced.energy, SpotMonthlyRates
         ) and not _injection_hourly_on_cohort(self._snapshot, self.entry):
             inj_mean = monthly_mean
+            spp_only = _injection_is_spp_indexed(self._snapshot)
             if spp_weighted:
                 # SPP-weight the injection month-mean; keep the flat mean for
-                # energy. Fall back to the flat mean when the profile isn't
-                # available for the month yet.
+                # energy.
                 now = dt_util.now()
                 spp_mean = self._spp_weighted_month_mean(
                     now.year, now.month, spot_prices
                 )
                 if spp_mean is not None:
                     inj_mean = spp_mean
-            injection_snapshot = _bake_monthly_injection(self._snapshot, inj_mean)
+                elif spp_only:
+                    # The card indexes this formula on Belpex_SPP and the
+                    # profile is not available yet. The flat mean is a
+                    # DIFFERENT index, not a coarser one - it would roughly
+                    # double the credit in a sunny month - so leave the
+                    # snapshot alone and credit the card's own indicative.
+                    inj_mean = None
+            elif spp_only:
+                inj_mean = None
+            if spp_only and inj_mean is None:
+                # Leave the snapshot alone so the card's printed indicative is
+                # credited. Only an SPP-indexed card may take this branch: it
+                # is the one shape that HAS an indicative to fall back to.
+                # Skipping the bake for a formula-only leg instead would leave
+                # factor/base standing with no ``current``, which is precisely
+                # the shape _injection_is_spot_formula reads as "price this per
+                # hour" - turning a flat monthly credit into an hourly one at
+                # whatever the current slot costs.
+                pass
+            else:
+                injection_snapshot = _bake_monthly_injection(self._snapshot, inj_mean)
         injection_price = _compute_injection_price(
             injection_snapshot, self.entry, spot_prices
         )

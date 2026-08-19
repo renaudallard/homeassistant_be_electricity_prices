@@ -338,6 +338,21 @@ class InjectionRates:
     peak: float | None = None
     transition: float | None = None
     offpeak: float | None = None
+    # True when this formula indexes on the SOLAR-weighted monthly mean
+    # (Belpex_SPP and friends) rather than on the same index the energy leg
+    # uses. energie.be Variabel is the case: consumption on Belpex_RLP,
+    # injection on Belpex_SPP, and the two part company badly - July 2026
+    # settled at 6,34 c€/kWh SPP against 11,42 RLP, so resolving this formula
+    # against the energy leg's mean would roughly DOUBLE the credit, because PV
+    # output peaks exactly when the day-ahead price troughs.
+    #
+    # It makes the coordinator fetch the Synergrid SPP profile for the entry,
+    # and it makes the fallback strict: with no weighted mean available the
+    # formula is not resolved at all and the card's printed ``current``
+    # indicative is credited instead. Never resolve an SPP-indexed formula
+    # against a plain arithmetic mean - that is the failure this flag exists
+    # to prevent, and it is silent.
+    spp_indexed: bool = False
     # True when the card taxes injection (professional cards do, at 21%).
     # None of these rates passes through the pricing engine's per-component
     # VAT gross-up, so ``apply_vat`` bakes them, like the fixed fees. Left

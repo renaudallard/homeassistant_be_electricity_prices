@@ -63,11 +63,20 @@ def _bake_monthly_injection(
 ) -> SupplierSnapshot:
     """Turn a mean-indexed injection formula into this month's flat indicative.
 
-    A spot-monthly contract's injection is indexed to the same monthly mean as
-    its energy (e.g. the Mega groepsaankoop ``SPP_mean * 0.96 - 0.9``), not the
+    A spot-monthly contract's injection is indexed to a monthly mean, not the
     live hourly spot. Baking the formula into ``current`` routes it through the
     monthly-indicative injection path; the floor (if any) is applied there.
     A flat ``current`` injection or none is returned unchanged.
+
+    WHICH mean is the caller's business, and it is not always the energy leg's:
+    the Mega groepsaankoop indexes both legs on the same one, while energie.be
+    Variabel prices consumption on Belpex_RLP and injection on the
+    solar-weighted Belpex_SPP. Pass the mean the injection formula names.
+
+    ``mean=None`` wipes the leg (no credit yet) rather than leaving factor/base
+    standing, which ``_injection_is_spot_formula`` would then read as "price
+    this per hour". Skip the call entirely only for a card that has a printed
+    ``current`` to fall back to.
     """
     inj = snapshot.injection
     if inj is None or inj.factor is None or inj.base is None:
@@ -116,8 +125,9 @@ def _injection_hourly_on_cohort(snapshot: SupplierSnapshot, entry: ConfigEntry) 
 
     A card that is ITSELF monthly-indexed (the custom monthly contract, the
     Mega groepsaankoop) indexes its injection on the month too, so it must keep
-    the month mean - and the SPP weighting when the entry opted into it. That
-    is why the snapshot's own energy kind, not the effective one, decides.
+    the month mean - and the SPP weighting when the card or the entry calls for
+    it. That is why the snapshot's own energy kind, not the effective one,
+    decides.
     """
     return _injection_needs_spot(snapshot, entry) and not isinstance(
         snapshot.energy, SpotMonthlyRates

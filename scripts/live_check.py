@@ -1865,6 +1865,12 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
       * ``"monthly"`` - a realized monthly indicative; ``current`` set and
         ``factor``/``base`` must be None.
       * ``"spot"``    - a per-hour spot formula; ``factor``/``base`` set.
+      * ``"spp"``     - a formula indexed on the SOLAR-weighted monthly mean,
+        with the card's printed indicative kept as the fallback: ``current``,
+        ``factor``/``base`` AND ``spp_indexed`` all set. The flag is what stops
+        the coordinator resolving the formula against the energy leg's mean,
+        which is a different index and roughly doubles the credit in a sunny
+        month, so losing it is a silent mis-credit rather than a failure.
       * ``"present"`` - present, shape unconstrained (default).
 
     Monthly indicatives can settle slightly negative (a producer pays to
@@ -1901,6 +1907,16 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
             factor is not None and base is not None,
             detail=f"factor={factor}, base={base}",
         )
+    elif shape == "spp":
+        _expect(
+            f"{prefix}: SPP-indexed injection (formula + indicative + flag)",
+            current is not None
+            and factor is not None
+            and base is not None
+            and bool(getattr(injection, "spp_indexed", False)),
+            detail=f"current={current}, factor={factor}, base={base}, "
+            f"spp_indexed={getattr(injection, 'spp_indexed', None)}",
+        )
     if current is not None:
         _expect(
             f"{prefix}: injection credit in [-0.10, 0.20] EUR/kWh",
@@ -1930,14 +1946,14 @@ _INJECTION_SHAPE: dict[str, str] = {
     # while current happens to be None, so a regression that set current
     # would slip the shape check.
     "cociter_variable": "spot",
-    # energie.be Variabel is kind "spot_monthly", whose default shape is
-    # presence-only because a spot-monthly card MAY index its injection to the
-    # same monthly mean as its energy (the groepsaankoop shape). This one may
-    # not: its injection indexes on Belpex_SPP while the energy indexes on
-    # Belpex_RLP, so a factor/base pair would be baked against the wrong mean
-    # and roughly double the credit in a sunny month. Pin the monthly shape so
-    # that regression fails here instead of over-crediting in silence.
-    "energiebe_variable": "monthly",
+    # energie.be Variabel indexes its injection on Belpex_SPP while its energy
+    # indexes on Belpex_RLP, so it carries the formula, the card's printed
+    # indicative as a fallback, AND the flag that keeps the two indices apart.
+    # Dropping any of the three is a silent mis-credit: without the flag the
+    # formula resolves against the energy leg's mean and roughly doubles the
+    # credit in a sunny month, and without the indicative there is nothing to
+    # credit while the Synergrid profile is unavailable.
+    "energiebe_variable": "spp",
 }
 
 # contract id -> Contract, populated in _run once the providers are loaded so
