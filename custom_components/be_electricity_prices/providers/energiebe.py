@@ -152,9 +152,17 @@ _NUM = NUM_NO_THOUSANDS
 # The dynamic card indexes on the bare "Belpex", the variable one on the
 # monthly "Belpex_RLP"; the formula is otherwise printed identically, so one
 # pattern reads both and the caller decides what shape to build from it.
+#
+# The parameter name is CAPTURED, not just tolerated, because it is the only
+# thing in the text that says which product this card is for. Accepting either
+# spelling for either contract means a card served at the wrong URL parses
+# silently into the other product's coefficients - a dynamic entry billing the
+# variable formula against the per-slot spot. This supplier already serves one
+# stale card at a legacy key, so a mixed-up URL is not hypothetical, and the
+# failure is a wrong price rather than a missing one.
 _ENERGY_RE = re.compile(
     rf"formule\s*\(excl\.?\s*BTW\)\s*:?\s*"
-    rf"\(\s*{_NUM}\s*x\s*Belpex(?:_RLP)?\s*([{SIGN_CHARS}])\s*{_NUM}\)",
+    rf"\(\s*{_NUM}\s*x\s*Belpex(?P<rlp>_RLP)?\s*([{SIGN_CHARS}])\s*{_NUM}\)",
     re.IGNORECASE,
 )
 # The unit label "(c€/kWh)" is interleaved between "de formule:" and the
@@ -164,7 +172,7 @@ _ENERGY_RE = re.compile(
 # "terugleververgoeding" on the variable one) and the header does not.
 _INJECTION_RE = re.compile(
     rf"Terugleveringsvergoeding.*?"
-    rf"(\(\s*{_NUM}\s*x\s*Belpex(?:_SPP)?\s*([{SIGN_CHARS}])\s*{_NUM}\))",
+    rf"(\(\s*{_NUM}\s*x\s*Belpex(?P<spp>_SPP)?\s*([{SIGN_CHARS}])\s*{_NUM}\))",
     re.IGNORECASE | re.DOTALL,
 )
 # The printed monthly indicative, left of the formula in its own column. The
@@ -310,8 +318,14 @@ def _extract_energy(text: str) -> DynamicRates:
     m = _ENERGY_RE.search(text)
     if not m:
         raise ExtractorError("could not parse energie.be energy formula")
+    if m.group("rlp"):
+        # This is the variable card. Its coefficients are a MONTHLY index;
+        # applied to the per-slot spot they would mis-price every hour.
+        raise ExtractorError(
+            "energie.be: dynamic contract served a Belpex_RLP (variable) card"
+        )
     factor_pdf = to_float(m.group(1))
-    base_cents = parse_sign(m.group(2)) * to_float(m.group(3))
+    base_cents = parse_sign(m.group(3)) * to_float(m.group(4))
     # energie.be prints Belpex in c€/kWh (not EUR/MWh like Frank / Bolt) and
     # quotes the formula excl. BTW. ENTSO-E spot is EUR/kWh, and
     # Belpex_c€/kWh = spot_EUR/kWh * 100, so:
@@ -347,8 +361,14 @@ def _extract_variable_energy(text: str) -> SpotMonthlyRates:
     m = _ENERGY_RE.search(text)
     if not m:
         raise ExtractorError("could not parse energie.be variable energy formula")
+    if not m.group("rlp"):
+        # The bare "Belpex" is the dynamic card's per-slot index. Resolving it
+        # against a monthly mean would bill this contract on the wrong axis.
+        raise ExtractorError(
+            "energie.be: variable contract served a card without Belpex_RLP"
+        )
     factor_pdf = to_float(m.group(1))
-    base_cents = parse_sign(m.group(2)) * to_float(m.group(3))
+    base_cents = parse_sign(m.group(3)) * to_float(m.group(4))
     # Same c€/kWh basis and VAT treatment as the dynamic leg (see
     # _extract_energy): no * 10 rescale, energy grossed to VAT-inclusive.
     return SpotMonthlyRates(
@@ -377,6 +397,10 @@ def _extract_variable_injection(text: str) -> InjectionRates:
     """
     formula = _INJECTION_RE.search(text)
     current = _INJECTION_CURRENT_RE.search(text)
+    if formula and not formula.group("spp"):
+        raise ExtractorError(
+            "energie.be: variable injection is not indexed on Belpex_SPP"
+        )
     if not formula or not current:
         # Every card prints a terugleveringsvergoeding; a miss is a layout
         # drift, not a fee-free contract. Raise rather than silently credit
@@ -387,7 +411,7 @@ def _extract_variable_injection(text: str) -> InjectionRates:
     # sign is honoured on the indicative: at a low enough Belpex_SPP this
     # formula settles negative and the producer pays to inject.
     factor_pdf = to_float(formula.group(2))
-    base_cents = parse_sign(formula.group(3)) * to_float(formula.group(4))
+    base_cents = parse_sign(formula.group(4)) * to_float(formula.group(5))
     return InjectionRates(
         current=parse_sign(current.group(1)) * to_float(current.group(2)) / 100.0,
         factor=factor_pdf,
@@ -413,8 +437,15 @@ def _extract_injection(text: str) -> InjectionRates:
         # is a layout drift, not a fee-free contract. Raise rather than
         # silently credit a solar user 0 EUR/kWh.
         raise ExtractorError("energie.be: injection formula row not found")
+    # On this card BOTH formulas print the bare "Belpex", so the only thing
+    # separating them is that the injection section sits below the energy one.
+    # That has held on every card seen, but nothing enforced it, and binding
+    # the energy row here would credit a solar user the CONSUMPTION rate.
+    energy_m = _ENERGY_RE.search(text)
+    if energy_m is not None and m.start(1) < energy_m.end():
+        raise ExtractorError("energie.be: injection formula matched the energy row")
     factor_pdf = to_float(m.group(2))
-    base_cents = parse_sign(m.group(3)) * to_float(m.group(4))
+    base_cents = parse_sign(m.group(4)) * to_float(m.group(5))
     # Injection is VAT-exempt. Belpex is in c€/kWh here too, so
     # factor = factor_pdf and base = base_cents / 100 (no * 10, no VAT).
     return InjectionRates(

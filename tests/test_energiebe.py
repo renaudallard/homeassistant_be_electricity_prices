@@ -596,6 +596,51 @@ def test_variable_dot_decimal_render_matches_comma() -> None:
     assert dot.injection.current == pytest.approx(comma.injection.current)
 
 
+def test_a_card_served_for_the_wrong_product_is_rejected() -> None:
+    """The index parameter's name is the only thing in the text that says
+    which product a card belongs to.
+
+    Both cards print the same "formule (excl. btw): (N x Belpex... +/- N)"
+    row; only the parameter differs - bare ``Belpex`` per slot on the dynamic
+    card, monthly ``Belpex_RLP`` on the variable one. Tolerating either
+    spelling for either contract means a card served at the wrong URL parses
+    silently into the other product's coefficients, and a dynamic entry then
+    bills the variable formula against the per-slot spot. This supplier
+    already serves one stale card at a legacy document key, so a mixed-up URL
+    is not hypothetical - and the failure is a wrong price, not a missing one.
+    """
+    with pytest.raises(ExtractorError, match="Belpex_RLP \\(variable\\) card"):
+        parse_snapshot(_var_text(), "test://x", "energiebe_dynamic")
+    with pytest.raises(ExtractorError, match="without Belpex_RLP"):
+        parse_snapshot(_text(), "test://x", "energiebe_variable")
+
+
+def test_variable_injection_must_be_indexed_on_spp() -> None:
+    """The injection half of the same discriminator.
+
+    A variable card whose injection stopped naming Belpex_SPP would be
+    resolved against the SPP-weighted mean anyway, because ``spp_indexed`` is
+    set unconditionally. Better to fail than to weight by a profile the card
+    no longer references.
+    """
+    text = _var_text().replace("Belpex_SPP", "Belpex")
+    with pytest.raises(ExtractorError, match="not indexed on Belpex_SPP"):
+        parse_snapshot(text, "test://x", "energiebe_variable")
+
+
+def test_dynamic_injection_cannot_bind_the_energy_row() -> None:
+    """On the dynamic card both formulas print the bare "Belpex".
+
+    Only their order separates them, and nothing enforced that until now.
+    Deleting the injection section leaves the energy row as the first match
+    after the anchor; binding it would credit a solar user the CONSUMPTION
+    rate instead of failing.
+    """
+    text = _text().replace("(1 x Belpex", "(XXX")
+    with pytest.raises(ExtractorError):
+        parse_snapshot(text, "test://energiebe-jul")
+
+
 def test_an_unknown_contract_is_rejected() -> None:
     """parse_snapshot defaults to the dynamic shape; fetch guards the id."""
     import asyncio
