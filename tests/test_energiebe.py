@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import pytest
 
-from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
+from custom_components.be_electricity_prices.const import FLUVIUS_KEYS, REGION_FLANDERS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
@@ -736,6 +736,75 @@ def test_resolver_selects_by_tariff_type() -> None:
     to pick up the variable document (or vice versa) from the same payload."""
     assert _resolve(_GOOD_BODY, "Variable") == "https://x/var.pdf"
     assert _resolve(_GOOD_BODY, "Fixed") == "https://x/vast.pdf"
+
+
+@pytest.mark.parametrize(
+    ("contract_id", "expected_url"),
+    [
+        ("energiebe_variable", "https://x/var.pdf"),
+        ("energiebe_fixed", "https://x/vast.pdf"),
+    ],
+)
+def test_fetch_asks_the_contracts_api_for_this_contracts_card(
+    contract_id: str, expected_url: str
+) -> None:
+    """The half `_resolve` cannot cover: it takes the tariffType as a literal,
+    so nothing pinned the contract id -> tariffType map or fetch()'s dispatch.
+    Swap the two entries and every unit test still passes while both products
+    silently bill the other card's rates.
+    """
+    import asyncio
+
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    fetched: list[str] = []
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        return _GOOD_BODY
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        fetched.append(url)
+        return _fixed_text() if contract_id == "energiebe_fixed" else _var_text()
+
+    original_text = energiebe.fetch_text
+    original_pdf = energiebe.fetch_pdf_text_layout
+    energiebe.fetch_text = _fake_fetch_text  # type: ignore[assignment]
+    energiebe.fetch_pdf_text_layout = _fake_pdf  # type: ignore[assignment]
+    try:
+        snap = asyncio.run(energiebe.fetch(None, contract_id, REGION_FLANDERS))  # type: ignore[arg-type]
+    finally:
+        energiebe.fetch_text = original_text  # type: ignore[assignment]
+        energiebe.fetch_pdf_text_layout = original_pdf  # type: ignore[assignment]
+    assert fetched == [expected_url]
+    assert snap.contract == contract_id
+
+
+def test_fetch_reads_the_dynamic_card_from_the_document_api() -> None:
+    """The dynamic product is not in the tariffType map at all: its card has
+    its own document key, so fetch must not go through the contracts API."""
+    import asyncio
+
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    fetched: list[str] = []
+
+    async def _boom(session: object, url: str, **kwargs: object) -> str:
+        raise AssertionError("the dynamic card must not use the contracts API")
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        fetched.append(url)
+        return _text()
+
+    original_text = energiebe.fetch_text
+    original_pdf = energiebe.fetch_pdf_text_layout
+    energiebe.fetch_text = _boom  # type: ignore[assignment]
+    energiebe.fetch_pdf_text_layout = _fake_pdf  # type: ignore[assignment]
+    try:
+        asyncio.run(energiebe.fetch(None, "energiebe_dynamic", REGION_FLANDERS))  # type: ignore[arg-type]
+    finally:
+        energiebe.fetch_text = original_text  # type: ignore[assignment]
+        energiebe.fetch_pdf_text_layout = original_pdf  # type: ignore[assignment]
+    assert fetched == [energiebe._CARD_URL]
 
 
 def test_resolver_never_falls_back_to_another_card() -> None:
