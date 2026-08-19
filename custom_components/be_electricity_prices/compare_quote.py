@@ -76,6 +76,7 @@ def _compare_injection_credit(
     entry: Any,
     spot_dict: dict[datetime, float],
     avg_spot: float | None,
+    spp_spot: float | None = None,
 ) -> float | None:
     """Injection credit (EUR/kWh) for the compare flow's annual estimate.
 
@@ -87,8 +88,17 @@ def _compare_injection_credit(
     contract) is priced off the window MEAN spot, consistent with the
     energy term (which also uses ``avg_spot``); pricing it off the live
     current slot would make the solar credit and the energy cost reflect
-    different instants. Monthly-indexed injection is spot-independent (uses
-    the realized monthly value), so delegate that to the live helper.
+    different instants.
+
+    An SPP-INDEXED credit (energie.be Variabel and Vast) resolves against
+    ``spp_spot``, the solar-weighted month mean, because that is the index
+    its card names and the number the live sensor and the YTD walk use;
+    quoting the card's printed indicative here instead made the page
+    contradict the user's own injection_price sensor. Without the Synergrid
+    profile there is no honest resolution -- the plain window mean is a
+    DIFFERENT index, not a coarser one -- so that case falls through to the
+    printed indicative below. Every other monthly-indexed injection is
+    spot-independent and delegates to the live helper too.
     """
     from .injection import _compute_injection_price, _floor_injection
     from .providers.base import DynamicRates, TimeOfUseRates
@@ -106,6 +116,14 @@ def _compare_injection_credit(
         return float(
             (inj.peak * wp + inj.transition * wt + inj.offpeak * wo) / (wp + wt + wo)
         )
+    if (
+        inj is not None
+        and inj.spp_indexed
+        and inj.factor is not None
+        and inj.base is not None
+        and spp_spot is not None
+    ):
+        return _floor_injection(inj.factor * spp_spot + inj.base, inj)
     if (
         inj is not None
         and inj.factor is not None

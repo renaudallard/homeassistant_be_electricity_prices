@@ -2156,6 +2156,64 @@ def test_compare_spot_indexed_injection_uses_mean_spot() -> None:
     assert credit == pytest.approx(0.97 * 0.08 - 0.021)
 
 
+def test_compare_prices_an_spp_indexed_credit_on_the_solar_weighted_mean() -> None:
+    """energie.be Variabel and Vast index the feed-in on Belpex_SPP.
+
+    Quoting the card's printed indicative here made the compare page
+    contradict the user's own injection_price sensor, which resolves the
+    formula against the solar-weighted month mean.
+    """
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.1826),
+        injection=InjectionRates(
+            current=0.0343, factor=0.6, base=-0.008, spp_indexed=True
+        ),
+    )
+    entry = SimpleNamespace(data={"solar_regime": "injection"})
+    spot_dict = {datetime(2026, 4, 29, h, 0, tzinfo=UTC): 0.20 for h in range(24)}
+    credit = _compare_injection_credit(
+        snap, entry, spot_dict, avg_spot=0.20, spp_spot=0.0292
+    )
+    assert credit == pytest.approx(0.6 * 0.0292 - 0.008)
+
+
+def test_compare_keeps_the_indicative_when_the_spp_profile_is_missing() -> None:
+    """The plain window mean is a DIFFERENT index, not a coarser one: pricing
+    an SPP formula off it roughly doubles the credit in a sunny month. With no
+    profile the card's own printed indicative is the honest answer."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.1826),
+        injection=InjectionRates(
+            current=0.0343, factor=0.6, base=-0.008, spp_indexed=True
+        ),
+    )
+    entry = SimpleNamespace(data={"solar_regime": "injection"})
+    credit = _compare_injection_credit(snap, entry, {}, avg_spot=0.20, spp_spot=None)
+    assert credit == pytest.approx(0.0343)
+
+
 def test_compare_tou_injection_uses_weighted_average_across_slots() -> None:
     # A per-slot TOU injection credit (Engie Empower Flextime) must be
     # time-averaged over the published slot durations, not returned as the

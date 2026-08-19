@@ -62,6 +62,7 @@ from homeassistant.helpers.selector import (
 
 from .providers import all_extractors, get as get_extractor
 from .providers.base import SpotMonthlyRates, SupplierSnapshot
+from .spot_stats import _injection_is_spp_indexed
 
 from .const import (
     CONF_API_KEY,
@@ -656,6 +657,35 @@ class _CompareStepsMixin(OptionsFlow):
             month_spot_resolved.append(value)
             return value
 
+        spp_spot_resolved: list[float | None] = []
+
+        async def _spp_month_spot() -> float | None:
+            """The SPP-weighted month mean an SPP-indexed credit bills on.
+
+            One index further than _month_spot: a card that indexes its
+            feed-in on Belpex_SPP may not be resolved against any other mean,
+            so when the Synergrid profile is not loaded this answers None and
+            the caller keeps the card's printed indicative rather than
+            quoting the consumption index. Reuses the profile the coordinator
+            already holds; the dialog never triggers the 52 MB download
+            itself.
+            """
+            if spp_spot_resolved:
+                return spp_spot_resolved[0]
+            await _month_spot()  # fills the month's spots in the cache
+            spp_spot_resolved.append(
+                coord._spp_weighted_month_mean(
+                    today_local.year, today_local.month, spot_dict
+                )
+            )
+            return spp_spot_resolved[0]
+
+        async def _spp_spot_for(snapshot: SupplierSnapshot | None) -> float | None:
+            """The SPP month mean, resolved only for a card indexed on it."""
+            if not _injection_is_spp_indexed(snapshot):
+                return None
+            return await _spp_month_spot()
+
         async def _spot_for(snapshot: SupplierSnapshot | None) -> float | None:
             """The spot this side's energy shape actually bills on."""
             return await _month_spot() if _needs_month_mean(snapshot) else avg_spot
@@ -860,7 +890,11 @@ class _CompareStepsMixin(OptionsFlow):
         if regime == SOLAR_REGIME_INJECTION:
             if current_snapshot is not None:
                 current_inj_price = _compare_injection_credit(
-                    current_snapshot, quote_entry, spot_dict, avg_spot
+                    current_snapshot,
+                    quote_entry,
+                    spot_dict,
+                    avg_spot,
+                    await _spp_spot_for(current_snapshot),
                 )
                 if current_inj_price is None and rolling_inj_kwh > 0:
                     uncredited.append(
@@ -871,7 +905,11 @@ class _CompareStepsMixin(OptionsFlow):
                     )
             if other_snap is not None:
                 compare_inj_price = _compare_injection_credit(
-                    other_snap, quote_entry, spot_dict, avg_spot
+                    other_snap,
+                    quote_entry,
+                    spot_dict,
+                    avg_spot,
+                    await _spp_spot_for(other_snap),
                 )
                 if compare_inj_price is None and rolling_inj_kwh > 0:
                     uncredited.append(
@@ -910,7 +948,11 @@ class _CompareStepsMixin(OptionsFlow):
         if overridden and current_per_kwh is not None and baseline_snapshot is not None:
             baseline_inj_price = (
                 _compare_injection_credit(
-                    baseline_snapshot, self.config_entry, spot_dict, avg_spot
+                    baseline_snapshot,
+                    self.config_entry,
+                    spot_dict,
+                    avg_spot,
+                    await _spp_spot_for(baseline_snapshot),
                 )
                 if stored_regime == SOLAR_REGIME_INJECTION
                 else None
