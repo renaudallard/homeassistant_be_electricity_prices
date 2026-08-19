@@ -1,9 +1,9 @@
 # Provider: energiebe
 
 This document is the maintenance reference for the energie.be extractor
-(`providers/energiebe.py`). It explains how the extractor fetches energie.be's two
-residential tariff cards - a dynamic one from the site's document API and a variable one
-whose URL is named by the site's contracts API - how the energy / injection / tax / DSO
+(`providers/energiebe.py`). It explains how the extractor fetches energie.be's three
+residential tariff cards - a dynamic one from the site's document API, and a variable and
+a fixed one whose URLs are named by the site's contracts API - how the energy / injection / tax / DSO
 fields are parsed out of each, and the land mines a future maintainer must know when
 energie.be changes its cards. The test module `tests/test_energiebe.py` is treated as
 ground truth throughout: it pins the expected parse output against real fixtures.
