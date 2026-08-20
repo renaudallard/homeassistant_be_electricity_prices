@@ -31,6 +31,7 @@ toward a day that has not been billed."""
 
 from __future__ import annotations
 
+from calendar import monthrange
 from datetime import UTC
 from datetime import date
 from datetime import datetime
@@ -105,6 +106,42 @@ def _month_mean(bucket: _SpotMonthBucket, year: int, month: int) -> float | None
     """Arithmetic mean of the (year, month) bucket, or ``None`` if empty."""
     entries = bucket.get((year, month))
     return fmean([value for _, value in entries]) if entries else None
+
+
+# A closed month must be this well covered before its mean is billable. The
+# mean of a sparsely cached month is applied to EVERY hour of it, so a thin
+# sample is not a slightly noisier number -- it is a confident wrong one. The
+# threshold mirrors the day-level rule in _ensure_historical_spots (20 of 24
+# hours present); a month fetched in week-sized chunks is either nearly whole
+# or missing whole weeks, and missing weeks are seasonally biased.
+_MIN_MONTH_COVERAGE = 0.8
+
+
+def _covered_month_mean(
+    bucket: _SpotMonthBucket, year: int, month: int, today: date
+) -> float | None:
+    """Month mean, or ``None`` when a CLOSED month is too sparse to trust.
+
+    ``_month_mean`` averages whatever hours happen to be cached and the caller
+    applies that to every hour of the month. For the running month that is
+    correct: it is partial by definition and the cached hours are the best
+    estimate of it that exists. For a month that has already closed, a thin
+    cache means the average is drawn from an unrepresentative slice -- one
+    cached hour priced a whole January in testing -- and the result is a wrong
+    rate rather than a missing one.
+
+    Returning ``None`` hands the hour to the network-and-taxes path, which
+    bills what is known and forfeits only the commodity.
+    """
+    mean = _month_mean(bucket, year, month)
+    if mean is None:
+        return None
+    if (year, month) >= (today.year, today.month):
+        return mean
+    cached = len(bucket.get((year, month), ()))
+    if cached < _MIN_MONTH_COVERAGE * monthrange(year, month)[1] * 24:
+        return None
+    return mean
 
 
 def _mean_of_month(spots: dict[datetime, float], year: int, month: int) -> float | None:

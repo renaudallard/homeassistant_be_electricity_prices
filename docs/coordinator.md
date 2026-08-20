@@ -213,7 +213,7 @@ cache written before the field existed, so no schema bump was needed.
 
 ### 3.1 Resolution selection (hourly vs quarter-hourly)
 
-`_energy_is_quarter_hourly` (`spot_stats.py:68`) returns True only for `DynamicRates` with `quarter_hourly=True`. Those extractors (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom, Bolt Dynamisch, energie.be, EnergyVision) bill on the native 15-minute Belpex/eSpot_15/Epex/EPEX DA grid; every other contract stays hourly. `_fetch_spot_prices` passes this as `quarter_hourly=` to `client.fetch_day_ahead` (`coordinator_spots.py:240`). The constants are `RESOLUTION_HOURLY = "PT60M"` and `RESOLUTION_QUARTER = "PT15M"` (`const.py:308`), matching ENTSO-E's resolution tokens. YTD billing stays hourly regardless (section 7).
+`_energy_is_quarter_hourly` (`spot_stats.py:69`) returns True only for `DynamicRates` with `quarter_hourly=True`. Those extractors (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom, Bolt Dynamisch, energie.be, EnergyVision) bill on the native 15-minute Belpex/eSpot_15/Epex/EPEX DA grid; every other contract stays hourly. `_fetch_spot_prices` passes this as `quarter_hourly=` to `client.fetch_day_ahead` (`coordinator_spots.py:240`). The constants are `RESOLUTION_HOURLY = "PT60M"` and `RESOLUTION_QUARTER = "PT15M"` (`const.py:308`), matching ENTSO-E's resolution tokens. YTD billing stays hourly regardless (section 7).
 
 ### 3.2 The today/tomorrow spot cache
 
@@ -303,13 +303,15 @@ The same charge is accrued into the running bill by `_ytd_capacity`, which walks
 
 ## 7. Year-to-date / current-year cost
 
-`_compute_current_year_cost` (`ytd_cost.py:521`) computes the running bill from Jan 1 of the local year to today. It bills each past day at the tariff of the month that day belongs to, using an archived snapshot when the supplier exposes `fetch_for_month` (`providers/base.py:788`) and the current snapshot as a proxy otherwise (`_snapshot_for_month`, `snapshot_store.py:288`). When a contract start date is set it routes every past month through `_effective_snapshot_for_month` (`cohort.py:356`) instead, which splices the signing cohort's energy leg onto each delivery month's overlays, and dispatches on that cohort's effective energy kind so a re-priced variable contract takes the monthly-mean path. The whole year is recomputed from scratch each tick by design (`ytd_cost.py:521`): prior days are not immutable (a late ENTSO-E fill or a backfill correction changes a past rate), and the full replay is cheap pure arithmetic.
+`_compute_current_year_cost` (`ytd_cost.py:524`) computes the running bill from Jan 1 of the local year to today. It bills each past day at the tariff of the month that day belongs to, using an archived snapshot when the supplier exposes `fetch_for_month` (`providers/base.py:788`) and the current snapshot as a proxy otherwise (`_snapshot_for_month`, `snapshot_store.py:288`). When a contract start date is set it routes every past month through `_effective_snapshot_for_month` (`cohort.py:356`) instead, which splices the signing cohort's energy leg onto each delivery month's overlays, and dispatches on that cohort's effective energy kind so a re-priced variable contract takes the monthly-mean path. The whole year is recomputed from scratch each tick by design (`ytd_cost.py:524`): prior days are not immutable (a late ENTSO-E fill or a backfill correction changes a past rate), and the full replay is cheap pure arithmetic.
 
 Fees are always summed first and act as the floor: `_ytd_static_fees` (`ytd_cost.py:170`, the supplier yearly fee, energy fund, DSO data-management fee, and Brussels OSP fee, pro-rated per archived month) plus `_ytd_prosumer` (`ytd_cost.py:205`, the Walloon compensation fee). If no meters are wired the function returns fees only, never `unknown` (`ytd_cost.py:205`).
 
 Three energy paths, chosen by contract shape:
 
-1. **Dynamic** (`ytd_cost.py:635`): replay `_historical_spots` through `_ytd_hourly_energy` (`ytd_cost.py:273`), billing each recorded hour at its actual `factor*spot+base`. Empty spot cache -> fees only.
+1. **Dynamic** (`ytd_cost.py:635`): replay `_historical_spots` through `_ytd_hourly_energy` (`ytd_cost.py:273`), billing each recorded hour at its actual `factor*spot+base`. An hour the cache cannot price is not dropped: `compute_network_and_taxes` bills its network and tax legs, which do not depend on the day-ahead price, and only the energy term is forfeited. An empty cache therefore lands on the fees floor plus the grid and tax cost of every metered kWh, not on fees alone. `hours_seen` / `hours_priced` in `ytd_diagnostics` report how much of the window got an energy price.
+
+   On the spot-monthly variant the mean is taken per delivery month, so coverage is gated: `_covered_month_mean` (`spot_stats.py:120`) refuses a CLOSED month cached below `_MIN_MONTH_COVERAGE` (0.8 of its hours), because that mean is applied to every hour of the month and a thin sample yields a confident wrong rate rather than a noisier one. The running month keeps its mean: it is partial by definition.
 2. **Per-hour billing needed** (`ytd_cost.py:685`): TOU or Impact energy, or DSO Impact mode, or an `exclusive_night` meter. These also go through `_ytd_hourly_energy` (without spots), because their energy/distribution rates vary by hour-of-day or use the dedicated exclusive-night column the static per-day branch doesn't carry.
 3. **Static per-day** (`ytd_cost.py:713`): `_resolve_daily_kwh` (`energy_meters.py:417`) gives per-day `(day_cons, night_cons, day_inj, night_inj)`, each day billed against `static_breakdown` for its month.
 
@@ -357,7 +359,7 @@ When the custom monthly entry opts into **SPP-weighted** injection (`_spp_weight
 
 - Live spot fetch, softly (`coordinator.py:574`): a spot failure must only drop the injection, never the energy tick.
 - Historical spot backfill (`coordinator.py:615`): the `or _injection_needs_spot(...)` clause triggers `_ensure_historical_spots` for these contracts too.
-- YTD credit (`_ytd_spot_injection_credit`, `ytd_cost.py:473`): an isolated term that replays hourly spots for the injection side only, subtracted from the bill in both the hourly path (`ytd_cost.py:473`) and the static per-day path (`ytd_cost.py:473`). Its own guard (`ytd_cost.py:473`) fires only for the exact shape (`factor`/`base` set, `current is None`, spots cached, an injection sensor wired).
+- YTD credit (`_ytd_spot_injection_credit`, `ytd_cost.py:476`): an isolated term that replays hourly spots for the injection side only, subtracted from the bill in both the hourly path (`ytd_cost.py:476`) and the static per-day path (`ytd_cost.py:476`). Its own guard (`ytd_cost.py:476`) fires only for the exact shape (`factor`/`base` set, `current is None`, spots cached, an injection sensor wired).
 
 The config-flow consequence: because shape (c) needs a key that the dynamic energy path would otherwise collect, `Contract.spot_indexed_injection` (`providers/base.py:77`) makes the config flow offer the API-key step on the injection regime for these static-energy contracts.
 

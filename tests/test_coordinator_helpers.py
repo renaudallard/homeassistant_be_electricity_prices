@@ -95,6 +95,10 @@ from custom_components.be_electricity_prices.snapshot_store import (
     _snapshot_from_dict,
     _snapshot_to_dict,
 )
+from custom_components.be_electricity_prices.spot_stats import (
+    _bucket_by_local_month,
+    _covered_month_mean,
+)
 from custom_components.be_electricity_prices.ytd_cost import (
     _compute_current_year_cost,
     _days_through,
@@ -2235,6 +2239,12 @@ async def test_year_cost_spot_monthly_bills_overlay_for_an_uncached_month(
             return {jan: 1.0, feb: 1.0}
         return {}
 
+    # February fully cached (the coverage gate must be satisfied for its mean
+    # to be billable); January absent entirely.
+    feb_spots = {
+        datetime(2026, 2, 1, 0, 0, tzinfo=UTC) + timedelta(hours=h): 0.20
+        for h in range(28 * 24)
+    }
     with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
         cost = await _compute_current_year_cost(
             hass,
@@ -2242,7 +2252,7 @@ async def test_year_cost_spot_monthly_bills_overlay_for_an_uncached_month(
             _stub_extractor(),
             snap,
             entry,
-            historical_spots={feb: 0.20},
+            historical_spots=feb_spots,
         )
     overlay = 0.10 + 0.0145 + 0.052
     assert cost == pytest.approx((0.20 + overlay) + overlay)
@@ -2303,6 +2313,76 @@ async def test_year_cost_hourly_path_reports_spot_coverage(
     assert diag["consumption_ytd_kwh"] == pytest.approx(3.0)
     # Reported on this path too, not just the static one.
     assert "fees_ytd_eur" in diag
+
+
+async def test_year_cost_rejects_a_thinly_cached_closed_month(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A closed month cached too thinly must not price its every hour.
+
+    ``_month_mean`` applies the mean of whatever is cached to the whole month,
+    so one cheap January hour used to bill all of January at that rate -- a
+    confident wrong number. Below the coverage floor the month falls through
+    to the network-and-taxes path instead, which bills what is known."""
+
+    freezer.move_to("2026-03-15 12:00:00+01:00")
+    snap = make_snapshot(
+        contract="test_spot_monthly",
+        energy=SpotMonthlyRates(factor=1.0, base=0.0),
+        source_url="test://sm",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test_spot_monthly",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "none",
+            "consumption_kwh": "sensor.cons_total",
+            "dso_tariff_mode": "bi_horaire",
+        },
+    )
+    billed = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.cons_total":
+            return {billed: 1.0}
+        return {}
+
+    # One cached January hour, far below 0.8 * 31 * 24.
+    thin = {datetime(2026, 1, 2, 3, 0, tzinfo=UTC): 0.01}
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots=thin,
+        )
+    overlay = 0.10 + 0.0145 + 0.052
+    # Not 0.01 + overlay: the sparse mean is refused rather than believed.
+    assert cost == pytest.approx(overlay)
+
+
+def test_covered_month_mean_trusts_the_running_month(freezer: Any) -> None:
+    """The current month is partial by definition, so it keeps its mean.
+
+    Gating it on coverage would leave a fresh entry with no energy price at
+    all for the month it is actually living in."""
+
+    freezer.move_to("2026-03-15 12:00:00+01:00")
+    today = dt_util.now().date()
+    bucket = _bucket_by_local_month({datetime(2026, 3, 2, 3, 0, tzinfo=UTC): 0.05})
+    # One hour of March, the running month: trusted.
+    assert _covered_month_mean(bucket, 2026, 3, today) == pytest.approx(0.05)
+    # The same sparseness in closed February: refused.
+    feb = _bucket_by_local_month({datetime(2026, 2, 2, 3, 0, tzinfo=UTC): 0.05})
+    assert _covered_month_mean(feb, 2026, 2, today) is None
 
 
 def test_energy_kind_handles_tou() -> None:

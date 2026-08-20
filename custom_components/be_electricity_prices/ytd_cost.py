@@ -104,7 +104,7 @@ from .providers.base import (
 from .spot_stats import (
     _bucket_by_local_month,
     _injection_is_spp_indexed,
-    _month_mean,
+    _covered_month_mean,
     _injection_on_month_mean,
     _spp_injection_spot,
 )
@@ -400,7 +400,10 @@ async def _ytd_hourly_energy(
         if monthly_mean:
             key = (local.year, local.month)
             if key not in month_means:
-                month_means[key] = _month_mean(month_bucket, *key)
+                # Gated on coverage: a closed month cached too thinly would
+                # otherwise price every one of its hours off an
+                # unrepresentative handful.
+                month_means[key] = _covered_month_mean(month_bucket, *key, today)
             spot = month_means[key]
             spot_missing = spot is None
         elif historical_spots is not None:
