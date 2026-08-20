@@ -42,8 +42,8 @@ knowledge of contracts: the coordinator owns all of that and calls this client.
 
 | Constant | Value | Source |
 | --- | --- | --- |
-| `ENTSOE_BASE_URL` | `https://web-api.tp.entsoe.eu/api` | `const.py:313` |
-| `ENTSOE_BE_DOMAIN` | `10YBE----------2` (BE bidding zone EIC) | `const.py:314` |
+| `ENTSOE_BASE_URL` | `https://web-api.tp.entsoe.eu/api` | `const.py:322` |
+| `ENTSOE_BE_DOMAIN` | `10YBE----------2` (BE bidding zone EIC) | `const.py:323` |
 
 The client is constructed with the user's ENTSO-E API key and Home Assistant's
 shared `aiohttp` session (`api.py:69`). The key is passed on every request as
@@ -152,7 +152,7 @@ from the document's `Reason` block by `_ack_reason` (`api.py:325`).
 ### Resolution handling: PT60M vs PT15M and aggregation
 
 ENTSO-E publishes the Belgian curve at 15-minute granularity since the SDAC
-15-minute MTU go-live (2025-10-01; see the note at `const.py:247`). The parser
+15-minute MTU go-live (2025-10-01; see the note at `const.py:256`). The parser
 handles three resolutions via `_resolution_to_timedelta` (`api.py:364`):
 
 | Token | Step |

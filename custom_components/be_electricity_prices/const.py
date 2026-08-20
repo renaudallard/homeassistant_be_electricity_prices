@@ -190,6 +190,15 @@ DEFAULT_INCLUDE_VAT: Final = True
 CONF_ANNUAL_CONSUMPTION_KWH: Final = "annual_consumption_kwh"
 DEFAULT_ANNUAL_CONSUMPTION_KWH: Final = 3500.0
 
+# Recorder coverage thresholds for turning a metered window into a yearly
+# volume. A window covering a full year is used as it stands. A shorter one is
+# scaled up to a year, which is honest about magnitude but carries whatever
+# season it happened to cover, so it is labelled as scaled and refused below
+# MEASURED_MIN_DAYS: six weeks of winter multiplied by 8,7 is worse than the
+# household default it would replace.
+MEASURED_FULL_YEAR_DAYS: Final = 365
+MEASURED_MIN_DAYS: Final = 90
+
 METER_MONO: Final = "mono"
 METER_BI: Final = "bi"
 METER_DYNAMIC: Final = "dynamic"

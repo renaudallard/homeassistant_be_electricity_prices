@@ -76,7 +76,9 @@ from .const import (
     CONF_SUPPLIER,
     CONF_WHATIF_CONSUMPTION_KWH,
     CONF_WHATIF_INJECTION_KWH,
+    DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DSO_MODE_BI_HORAIRE,
+    MEASURED_FULL_YEAR_DAYS,
     METER_DYNAMIC,
     METER_MONO,
     METER_TYPES,
@@ -90,6 +92,7 @@ from .compare_quote import (
     _annual_bill,
     _compare_injection_credit,
     _populate_charts,
+    _annual_volume,
     _read_total_kwh,
     _solar_note,
     _tou_weighted_per_kwh,
@@ -483,15 +486,13 @@ class _CompareStepsMixin(OptionsFlow):
         """Fetch the picked supplier's snapshot and compute a side-by-side
         annual estimate against the user's current entry.
 
-        Annual = per_kwh_now * DEFAULT_ANNUAL_KWH + yearly fees, where the
+        Annual = per_kwh_now * the resolved yearly volume + yearly fees, where the
         yearly fees are yearly_fixed_fee + 12 * energy_fund + 12 *
         capacity (Flanders) + 12 * prosumer (Wallonia compensation +
         solar). Errors collapse to ``-`` so the page always renders.
         """
 
         from .coordinator import BePricesCoordinator
-
-        DEFAULT_ANNUAL_KWH = 3500.0  # fallback when no consumption sensor is wired
 
         current = self.config_entry.data
         coord = getattr(self.config_entry, "runtime_data", None)
@@ -514,7 +515,7 @@ class _CompareStepsMixin(OptionsFlow):
                 "current_ytd": "-",
                 "compare_ytd": "-",
                 "delta_ytd": "-",
-                "annual_kwh": f"{DEFAULT_ANNUAL_KWH:.0f}",
+                "annual_kwh": f"{DEFAULT_ANNUAL_CONSUMPTION_KWH:.0f}",
                 "ytd_kwh": "-",
                 "ytd_injection_kwh": "-",
                 "solar_note": "",
@@ -556,7 +557,10 @@ class _CompareStepsMixin(OptionsFlow):
         now_utc = dt_util.utcnow()
         today_local = dt_util.now().date()
         jan1 = today_local.replace(month=1, day=1)
-        year_ago = today_local - timedelta(days=365)
+        # 364, not 365: energy_meters._recorder_rows anchors end_dt on the next
+        # local midnight, so the window is end-inclusive and today counts. The
+        # old arithmetic read 366 buckets under a "365 days" label.
+        year_ago = today_local - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1)
         # Inclusive of today: leap years -> 366. Compute via
         # (Jan 1 next year - Jan 1 this year) so today=Feb 29 doesn't
         # raise (year+1 has no Feb 29).
@@ -698,13 +702,19 @@ class _CompareStepsMixin(OptionsFlow):
         # regime, and zeroing the volume there would un-net a compensation
         # baseline (or drop an injection credit) and quote the user's own
         # contract as costing more than it does.
-        rolling_year_kwh = await _read_total_kwh(
-            self.hass, self.config_entry, year_ago, today_local
-        )
         ytd_kwh = await _read_total_kwh(self.hass, self.config_entry, jan1, today_local)
         rolling_inj_kwh = 0.0
         ytd_inj_kwh = 0.0
         if regime != SOLAR_REGIME_NONE or stored_regime != SOLAR_REGIME_NONE:
+            # Injection stays on the raw window sum. Putting it through
+            # _annual_volume looked symmetric and is wrong in both bands: below
+            # the floor it discards a real feed-in measurement, and _solar_note
+            # reads that zero as "no injection sensor wired" while the same page
+            # prints the YTD injected kWh; above it, PV is far more seasonal
+            # than consumption, so a 365/days factor on a spring window can
+            # over-credit enough to drive the compensation net to its zero clamp
+            # and quote both sides at fees only. Annualising this leg needs a
+            # production profile, not a day count.
             r = await _read_total_kwh(
                 self.hass, self.config_entry, year_ago, today_local, side="injection"
             )
@@ -713,14 +723,11 @@ class _CompareStepsMixin(OptionsFlow):
             )
             rolling_inj_kwh = r or 0.0
             ytd_inj_kwh = y or 0.0
-        if rolling_year_kwh is not None:
-            annual_kwh = rolling_year_kwh
-            consumption_source = "measured (last 365 days)"
-        else:
-            annual_kwh = DEFAULT_ANNUAL_KWH
-            consumption_source = (
-                "default 3500 kWh - wire a kWh sensor for a measured estimate"
-            )
+        annual = await _annual_volume(
+            self.hass, self.config_entry, year_ago, today_local
+        )
+        annual_kwh = annual.kwh
+        consumption_source = annual.source
         # Volumes typed on the what-if step replace the measured pair. The
         # step only offers them when no injection sensor is wired, which is
         # the wiring whose consumption register may already be netted, so

@@ -41,6 +41,7 @@ local before: they close what would otherwise be an import cycle.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
@@ -48,8 +49,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_REGION,
     CONF_SOLAR_REGIME,
+    DEFAULT_ANNUAL_CONSUMPTION_KWH,
+    MEASURED_FULL_YEAR_DAYS,
+    MEASURED_MIN_DAYS,
     METER_MONO,
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
@@ -636,22 +641,90 @@ async def _read_total_kwh(
     """Sum of consumption (or injection) kWh between ``start`` and ``end``
     from the entry's configured kWh sensors.
 
-    Prefers the 4-register day/night wiring when both are filled (more
-    accurate when the meter exposes them directly); falls back to the
-    single cumulative sensor. Returns ``None`` when no sensor is wired
-    or the recorder has nothing in the requested window -- the caller
-    falls back to a default consumption assumption in that case so the
-    quote page still renders."""
-    from .energy_meters import _kwh_sensor_ids, _recorder_daily_kwh
+    Thin wrapper over :func:`energy_meters._measured_kwh` so there is one
+    recorder-read shape rather than two that can drift. Returns ``None`` for a
+    total of zero or less, which is what the year-to-date and injection call
+    sites treat as "nothing to bill". That conflates "no sensor wired" with
+    "wired and reads zero"; callers that need to tell those apart go through
+    :func:`_annual_volume` instead, which carries the coverage."""
+    from .energy_meters import _measured_kwh
 
-    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
-    if day_id and night_id:
-        d = await _recorder_daily_kwh(hass, day_id, start, end)
-        n = await _recorder_daily_kwh(hass, night_id, start, end)
-        total = sum(d.values()) + sum(n.values())
-        return total if total > 0 else None
-    if total_id:
-        d = await _recorder_daily_kwh(hass, total_id, start, end)
-        total = sum(d.values())
-        return total if total > 0 else None
-    return None
+    measured = await _measured_kwh(hass, entry, start, end, side=side)
+    return measured.kwh if measured.kwh > 0 else None
+
+
+@dataclass(frozen=True)
+class _AnnualVolume:
+    """A yearly kWh figure with the days of history behind it and a label
+    saying where it came from, for display next to the quote."""
+
+    kwh: float
+    days_with_data: int
+    source: str
+
+
+async def _annual_volume(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    start: date,
+    end: date,
+) -> _AnnualVolume:
+    """Yearly CONSUMPTION kWh, normalised from whatever the recorder covers.
+
+    A quote needs a full year of volume, and the window it is handed rarely is
+    one. Three bands, because the honest answer differs:
+
+    - a window covering a full year is used as it stands;
+    - a shorter one down to ``MEASURED_MIN_DAYS`` is scaled up to a year and
+      SAID to be scaled, since it carries whichever season it covered;
+    - below that the measurement is refused. Six weeks of winter scaled by 8,7
+      is a worse annual figure than the household default, and presenting a
+      six-week sum as a year (which is what this used to do) understates the
+      bill by roughly the same factor.
+
+    Below the floor it falls back to the volume typed on the entry, which only
+    professional entries carry, and finally to the household default.
+
+    Consumption only, deliberately. The injection leg looked like it wanted the
+    same treatment and is harmed by it in both bands: refusing a short window
+    discards a real feed-in measurement (and ``_solar_note`` reads the
+    resulting zero as "no injection sensor wired" while the same page prints
+    the YTD injected kWh), while scaling a longer one by a bare day count
+    ignores that PV output is far more seasonal than consumption, which can
+    over-credit enough to drive the compensation net to its zero clamp. That
+    leg needs a production profile, not a day count, so it stays on the raw
+    window sum through :func:`_read_total_kwh`.
+
+    Reads only ``entry.data``, so it stays usable with the compare flow's
+    ``_QuoteEntry`` proxy.
+    """
+    from .energy_meters import _measured_kwh
+
+    measured = await _measured_kwh(hass, entry, start, end)
+    days = measured.days_with_data
+    if measured.kwh > 0 and days >= MEASURED_FULL_YEAR_DAYS:
+        return _AnnualVolume(measured.kwh, days, f"measured ({days} days)")
+    if measured.kwh > 0 and days >= MEASURED_MIN_DAYS:
+        return _AnnualVolume(
+            measured.kwh * MEASURED_FULL_YEAR_DAYS / days,
+            days,
+            f"scaled from {days} days, not seasonally corrected",
+        )
+    typed = entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH)
+    if typed:
+        return _AnnualVolume(
+            float(typed), days, f"entered on the entry ({float(typed):.0f} kWh/year)"
+        )
+    if days:
+        return _AnnualVolume(
+            DEFAULT_ANNUAL_CONSUMPTION_KWH,
+            days,
+            f"default {DEFAULT_ANNUAL_CONSUMPTION_KWH:.0f} kWh"
+            f" - only {days} days of history",
+        )
+    return _AnnualVolume(
+        DEFAULT_ANNUAL_CONSUMPTION_KWH,
+        0,
+        f"default {DEFAULT_ANNUAL_CONSUMPTION_KWH:.0f} kWh"
+        " - wire a kWh sensor for a measured estimate",
+    )

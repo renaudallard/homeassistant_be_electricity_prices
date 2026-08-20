@@ -33,6 +33,7 @@ paths bill off the same meter."""
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC
 from datetime import date
 from datetime import datetime
@@ -546,6 +547,54 @@ def _default_band_ratio_for(day: date, region: str) -> tuple[float, float]:
     if peak_hours == 0:
         return (0.0, 1.0)
     return (peak_hours / 24.0, (24 - peak_hours) / 24.0)
+
+
+@dataclass(frozen=True)
+class MeasuredKwh:
+    """A metered kWh total together with how much of the window it covers.
+
+    ``days_with_data`` is what separates "no sensor wired" from "wired and it
+    genuinely reads zero", which a bare float cannot express: a net-metered
+    consumption register whose year nets to zero and an entry with no meters
+    at all both sum to 0,0. Callers that turn a window into a yearly volume
+    need the day count to decide whether the total is worth believing.
+    """
+
+    kwh: float
+    days_with_data: int
+
+
+async def _measured_kwh(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    start: date,
+    end: date,
+    *,
+    side: str = "consumption",
+) -> MeasuredKwh:
+    """Metered kWh for ``side`` over ``[start, end]``, with its coverage.
+
+    The day/night register pair wins when both halves are wired, matching
+    :func:`_resolve_daily_kwh`, :func:`_hourly_consumption_sensors` and the
+    rule written down in ``const.py``. A half-wired pair with no totals sensor
+    is refused through :func:`_partial_register_pair` rather than billing the
+    wired band alone; the old totals-first ordering here was incidental (the
+    chain simply fell off its end) and this makes the refusal deliberate.
+
+    Coverage counts distinct local days the recorder returned a bucket for, so
+    a pair contributes a day when either band reports it.
+    """
+    if _partial_register_pair(entry, side):
+        return MeasuredKwh(0.0, 0)
+    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
+    if day_id and night_id:
+        d = await _recorder_daily_kwh(hass, day_id, start, end)
+        n = await _recorder_daily_kwh(hass, night_id, start, end)
+        return MeasuredKwh(sum(d.values()) + sum(n.values()), len(set(d) | set(n)))
+    if total_id:
+        d = await _recorder_daily_kwh(hass, total_id, start, end)
+        return MeasuredKwh(sum(d.values()), len(d))
+    return MeasuredKwh(0.0, 0)
 
 
 def _partial_register_pair(entry: ConfigEntry, side: str) -> bool:

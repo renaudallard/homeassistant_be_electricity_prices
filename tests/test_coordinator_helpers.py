@@ -967,6 +967,112 @@ async def test_recorder_daily_kwh_swallows_recorder_errors(
     assert out == {}
 
 
+# ---- _measured_kwh (metered total plus how much of the window it covers) -----
+
+
+async def test_measured_kwh_counts_days_across_a_register_pair(
+    hass: HomeAssistant,
+) -> None:
+    """A day/night pair contributes a day when EITHER band reports it.
+
+    The pair is two independent recorder series. Counting them separately and
+    adding would double-count a day both bands cover, and taking one band's
+    count alone would undercount a day only the other saw."""
+    from types import SimpleNamespace
+
+    entry = SimpleNamespace(
+        data={
+            "day_consumption_kwh": "sensor.day",
+            "night_consumption_kwh": "sensor.night",
+        }
+    )
+    d0 = date(2026, 1, 1)
+
+    async def _fake(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.day":
+            return {d0: 4.0, d0 + timedelta(days=1): 4.0}
+        # Overlaps the first day, adds a third.
+        return {d0: 1.0, d0 + timedelta(days=2): 1.0}
+
+    with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake):
+        got = await energy_meters._measured_kwh(hass, entry, d0, d0 + timedelta(days=2))  # type: ignore[arg-type]
+    assert got.kwh == pytest.approx(10.0)
+    assert got.days_with_data == 3
+
+
+async def test_measured_kwh_counts_days_for_a_totals_sensor(
+    hass: HomeAssistant,
+) -> None:
+    """The single cumulative wiring reports its own bucket count."""
+    from types import SimpleNamespace
+
+    entry = SimpleNamespace(data={"consumption_kwh": "sensor.total"})
+    d0 = date(2026, 1, 1)
+
+    async def _fake(
+        _hass: object, _entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        return {d0 + timedelta(days=i): 2.0 for i in range(5)}
+
+    with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake):
+        got = await energy_meters._measured_kwh(hass, entry, d0, d0 + timedelta(days=4))  # type: ignore[arg-type]
+    assert got.kwh == pytest.approx(10.0)
+    assert got.days_with_data == 5
+
+
+async def test_measured_kwh_refuses_a_half_wired_register_pair(
+    hass: HomeAssistant,
+) -> None:
+    """One half of a pair with no totals sensor reads nothing.
+
+    Billing the wired band alone silently drops the other band's kWh. The old
+    reader landed on the same answer by falling off the end of its if-chain;
+    going through _partial_register_pair makes the refusal deliberate and keeps
+    it aligned with the daily and hourly paths."""
+    from types import SimpleNamespace
+
+    entry = SimpleNamespace(data={"day_consumption_kwh": "sensor.day"})
+    d0 = date(2026, 1, 1)
+
+    async def _fake(
+        _hass: object, _entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        return {d0: 99.0}
+
+    with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake):
+        got = await energy_meters._measured_kwh(hass, entry, d0, d0)  # type: ignore[arg-type]
+    assert got.kwh == 0.0
+    assert got.days_with_data == 0
+
+
+async def test_measured_kwh_separates_no_wiring_from_a_zero_reading(
+    hass: HomeAssistant,
+) -> None:
+    """Zero kWh and no meter both sum to 0,0, and callers must tell them apart.
+
+    A net-metered consumption register whose window nets to zero is a real
+    reading; an entry with nothing wired is not. The day count is the only
+    thing that separates them."""
+    from types import SimpleNamespace
+
+    d0 = date(2026, 1, 1)
+
+    async def _zeros(
+        _hass: object, _entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        return {d0 + timedelta(days=i): 0.0 for i in range(3)}
+
+    wired_entry = SimpleNamespace(data={"consumption_kwh": "sensor.total"})
+    bare_entry = SimpleNamespace(data={})
+    with patch.object(energy_meters, "_recorder_daily_kwh", new=_zeros):
+        wired = await energy_meters._measured_kwh(hass, wired_entry, d0, d0)  # type: ignore[arg-type]
+        bare = await energy_meters._measured_kwh(hass, bare_entry, d0, d0)  # type: ignore[arg-type]
+    assert wired.kwh == 0.0 and wired.days_with_data == 3
+    assert bare.kwh == 0.0 and bare.days_with_data == 0
+
+
 # ---- _live_today_kwh (running-day read straight off the meter) ---------------
 
 

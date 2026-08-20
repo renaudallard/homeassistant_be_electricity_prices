@@ -30,7 +30,7 @@ from __future__ import annotations
 from custom_components.be_electricity_prices import snapshot_store
 
 from collections.abc import Iterator
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -981,6 +981,20 @@ async def _drive_compare(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+def _spread(total: float, start: Any, end: Any) -> dict[Any, float]:
+    """Spread a period total evenly across every day of ``[start, end]``.
+
+    The compare path judges a window by how many distinct days the recorder
+    returned a bucket for, so the single synthetic day these fakes used to
+    return now reads as one day of history and is refused as too thin to
+    annualise. Spreading keeps every sum identical while giving the window
+    real coverage.
+    """
+    days = (end - start).days + 1
+    per_day = total / days
+    return {start + timedelta(days=i): per_day for i in range(days)}
+
+
 async def test_compare_uses_measured_rolling_year_kwh(
     hass: HomeAssistant,
 ) -> None:
@@ -1018,8 +1032,8 @@ async def test_compare_uses_measured_rolling_year_kwh(
         # (rolling_year_start vs jan1) so we can branch on the gap.
         delta = (end - start).days
         if delta >= 360:
-            return {start: measured_rolling}
-        return {start: measured_ytd}
+            return _spread(measured_rolling, start, end)
+        return _spread(measured_ytd, start, end)
 
     with patch(
         "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
@@ -1040,6 +1054,261 @@ async def test_compare_uses_measured_rolling_year_kwh(
     # actually used the measured value (compare_annual is rate * 7000
     # + fees, which for cociter@0.16 alone is > 1000 EUR).
     assert float(ph["compare_annual"]) > 1000.0
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_rolling_window_is_365_days_not_366(
+    hass: HomeAssistant,
+) -> None:
+    """The rolling window must cover 365 days, not 366.
+
+    ``energy_meters._recorder_rows`` anchors its end on the NEXT local
+    midnight, so the window is end-inclusive. Subtracting a full 365 days from
+    today therefore read 366 buckets under a "365 days" label, quoting one
+    extra day of consumption every year."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.house_total",
+        },
+        title="Eneco - Wallonia",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    seen: list[int] = []
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id != "sensor.house_total":
+            return {}
+        seen.append((end - start).days + 1)
+        return _spread(3500.0, start, end)
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        await _drive_compare(
+            hass, entry, other_snap=_stub_snapshot("cociter", "cociter_variable", 0.16)
+        )
+    assert max(seen) == 365
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_refuses_to_annualise_a_thin_window(
+    hass: HomeAssistant,
+) -> None:
+    """A few weeks of history must not be presented as a year.
+
+    A six-week sum used as the annual volume understates the bill by roughly
+    the ratio of the window to the year, and it looked measured while doing
+    it. Below the floor the quote falls back to the household default and the
+    source line says how little history there actually is."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.house_total",
+        },
+        title="Eneco - Wallonia",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id != "sensor.house_total":
+            return {}
+        # 42 days of history, wherever the window starts.
+        return {end - timedelta(days=i): 10.0 for i in range(42)}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        ph = await _drive_compare(
+            hass, entry, other_snap=_stub_snapshot("cociter", "cociter_variable", 0.16)
+        )
+    # 420 kWh of real history, but the year is not 420 kWh.
+    assert ph["annual_kwh"] == "3500"
+    assert "42 days" in ph["consumption_source"]
+    assert "measured" not in ph["consumption_source"]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_scales_a_partial_window_and_says_so(
+    hass: HomeAssistant,
+) -> None:
+    """Between the floor and a full year the window is scaled up, and the
+    source line says it is scaled rather than measured, because the result
+    carries whichever season the window happened to cover."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.house_total",
+        },
+        title="Eneco - Wallonia",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id != "sensor.house_total":
+            return {}
+        # 200 days at 10 kWh: 2000 measured, 3650 annualised.
+        return {end - timedelta(days=i): 10.0 for i in range(200)}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        ph = await _drive_compare(
+            hass, entry, other_snap=_stub_snapshot("cociter", "cociter_variable", 0.16)
+        )
+    assert ph["annual_kwh"] == "3650"
+    assert "scaled from 200 days" in ph["consumption_source"]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_falls_back_to_the_entry_typed_annual_volume(
+    hass: HomeAssistant,
+) -> None:
+    """A professional entry types its own yearly volume for the excise band.
+    With too little history to annualise, that figure beats the household
+    default, which is a residential assumption."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.house_total",
+            "annual_consumption_kwh": 12000.0,
+        },
+        title="Eneco - Wallonia",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        ph = await _drive_compare(
+            hass, entry, other_snap=_stub_snapshot("cociter", "cociter_variable", 0.16)
+        )
+    assert ph["annual_kwh"] == "12000"
+    assert "entered on the entry" in ph["consumption_source"]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_credits_a_short_injection_window(
+    hass: HomeAssistant,
+) -> None:
+    """A recently commissioned injection sensor must still be credited.
+
+    The consumption leg is annualised from its coverage; the injection leg is
+    deliberately NOT. Routing injection through the same resolver zeroed any
+    window under the floor, which made the page print "no injection sensor
+    wired" for a sensor that was wired and producing, drop the credit from both
+    quoted sides, and contradict the YTD injected figure printed just above it.
+    Scaling it instead is no better: PV is far more seasonal than consumption,
+    so a spring window scaled by a bare day count can over-credit enough to
+    drive the compensation net to its zero clamp."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "solar_kva": 5.0,
+            "consumption_kwh": "sensor.cons",
+            "injection_kwh": "sensor.inj",
+        },
+        title="Eneco - Wallonia",
+    )
+    entry.add_to_hass(hass)
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+    from tests import make_snapshot
+
+    current_snap = _stub_snapshot("eneco", "power_fix", 0.18)
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+    # A fixed target with a monthly indicative credit: a spot-indexed one
+    # would detour through the api-key gate instead of the result page.
+    other_snap = make_snapshot(
+        supplier="mega",
+        contract="mega_online_fixed",
+        energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
+        dsos=current_snap.dsos,
+        taxes=current_snap.taxes,
+        injection=InjectionRates(current=0.10),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return _spread(4000.0, start, end)
+        if entity_id == "sensor.inj":
+            # Wired 60 days ago, well under the annualisation floor.
+            return {end - timedelta(days=i): 15.0 for i in range(60)}
+        return {}
+
+    with patch(
+        "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+        new=_fake_recorder_daily_kwh,
+    ):
+        ph = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+        )
+    # The 900 kWh actually measured is credited, not discarded.
+    assert "900 kWh credited" in ph["solar_note"]
+    assert "no injection sensor wired" not in ph["solar_note"]
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -1080,9 +1349,9 @@ async def test_compare_compensation_regime_nets_consumption(
         _hass: HomeAssistant, entity_id: str, start: Any, end: Any
     ) -> dict[Any, float]:
         if entity_id == "sensor.cons":
-            return {start: cons}
+            return _spread(cons, start, end)
         if entity_id == "sensor.inj":
-            return {start: inj}
+            return _spread(inj, start, end)
         return {}
 
     with patch(
@@ -1159,9 +1428,9 @@ async def test_compare_injection_regime_credits_injection_price(
         _hass: HomeAssistant, entity_id: str, start: Any, end: Any
     ) -> dict[Any, float]:
         if entity_id == "sensor.cons":
-            return {start: cons}
+            return _spread(cons, start, end)
         if entity_id == "sensor.inj":
-            return {start: inj}
+            return _spread(inj, start, end)
         return {}
 
     with patch(
@@ -1234,9 +1503,9 @@ async def test_compare_names_the_side_that_credits_no_injection(
         _hass: HomeAssistant, entity_id: str, start: Any, end: Any
     ) -> dict[Any, float]:
         if entity_id == "sensor.cons":
-            return {start: 5000.0}
+            return _spread(5000.0, start, end)
         if entity_id == "sensor.inj":
-            return {start: 4000.0}
+            return _spread(4000.0, start, end)
         return {}
 
     with patch(
@@ -1339,9 +1608,9 @@ async def test_compare_solar_whatif_reprices_both_sides(
         _hass: HomeAssistant, entity_id: str, start: Any, end: Any
     ) -> dict[Any, float]:
         if entity_id == "sensor.cons":
-            return {start: cons}
+            return _spread(cons, start, end)
         if entity_id == "sensor.inj":
-            return {start: inj}
+            return _spread(inj, start, end)
         return {}
 
     with patch(
@@ -1401,9 +1670,9 @@ async def test_compare_solar_whatif_prints_the_own_contract_baseline(
         _hass: HomeAssistant, entity_id: str, start: Any, end: Any
     ) -> dict[Any, float]:
         if entity_id == "sensor.cons":
-            return {start: 5000.0}
+            return _spread(5000.0, start, end)
         if entity_id == "sensor.inj":
-            return {start: 4000.0}
+            return _spread(4000.0, start, end)
         return {}
 
     with patch(
@@ -1541,7 +1810,7 @@ async def test_compare_solar_typed_volumes_blank_the_year_to_date(
         _hass: HomeAssistant, entity_id: str, start: Any, end: Any
     ) -> dict[Any, float]:
         if entity_id == "sensor.cons":
-            return {start: 3500.0}
+            return _spread(3500.0, start, end)
         return {}
 
     with patch(
@@ -1590,9 +1859,9 @@ async def test_compare_solar_whatif_to_none_keeps_the_baseline_netted(
         _hass: HomeAssistant, entity_id: str, start: Any, end: Any
     ) -> dict[Any, float]:
         if entity_id == "sensor.cons":
-            return {start: 5000.0}
+            return _spread(5000.0, start, end)
         if entity_id == "sensor.inj":
-            return {start: 4000.0}
+            return _spread(4000.0, start, end)
         return {}
 
     with patch(
@@ -1644,7 +1913,7 @@ async def test_compare_solar_typed_volumes_explain_themselves_without_a_flip(
         _hass: HomeAssistant, entity_id: str, start: Any, end: Any
     ) -> dict[Any, float]:
         if entity_id == "sensor.cons":
-            return {start: 3500.0}
+            return _spread(3500.0, start, end)
         return {}
 
     with patch(
@@ -1816,9 +2085,9 @@ async def test_compare_solar_whatif_resolves_the_custom_rebuild(
         _hass: HomeAssistant, entity_id: str, start: Any, end: Any
     ) -> dict[Any, float]:
         if entity_id == "sensor.cons":
-            return {start: 5000.0}
+            return _spread(5000.0, start, end)
         if entity_id == "sensor.inj":
-            return {start: 4000.0}
+            return _spread(4000.0, start, end)
         return {}
 
     with patch(
