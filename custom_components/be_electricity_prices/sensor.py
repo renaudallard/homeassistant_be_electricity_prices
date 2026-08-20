@@ -617,11 +617,13 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
                 "months_counted": data.capacity_peak_months,
             }
         if self.entity_description.key == "current_year_cost":
-            # Diagnostic breakdown (static per-day contracts only): lets a flat
-            # sensor be told apart -- a negative energy_ytd_raw_eur means the
-            # compensation zero-floor is hiding banked injection (working as
-            # designed), while a consumption_today_kwh that never grows points
-            # at a stalled meter input. Empty for hourly-billed contracts.
+            # Diagnostic breakdown: lets a flat or low sensor be told apart.
+            # On the static per-day path a negative energy_ytd_raw_eur means
+            # the compensation zero-floor is hiding banked injection (working
+            # as designed), and a consumption_today_kwh that never grows points
+            # at a stalled meter input. On the hourly path hours_priced below
+            # hours_seen means the spot cache could not price part of the
+            # window, so the bill is missing those hours' energy term.
             diag = data.ytd_diagnostics
             if not diag:
                 return {}

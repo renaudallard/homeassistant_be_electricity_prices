@@ -2248,6 +2248,63 @@ async def test_year_cost_spot_monthly_bills_overlay_for_an_uncached_month(
     assert cost == pytest.approx((0.20 + overlay) + overlay)
 
 
+async def test_year_cost_hourly_path_reports_spot_coverage(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The hourly path must say how much of the window it could price.
+
+    A YTD that is low because the spot cache is thin is indistinguishable
+    from a correct low one, and this path used to publish no diagnostics at
+    all -- so the contracts that CAN under-report were the ones with nothing
+    to inspect."""
+
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    snap = make_snapshot(
+        contract="test_dynamic",
+        energy=DynamicRates(factor=1.0, base=0.0),
+        source_url="test://dyn",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "none",
+            "consumption_kwh": "sensor.cons_total",
+            "dso_tariff_mode": "bi_horaire",
+        },
+    )
+    priced = datetime(2026, 1, 6, 13, 0, tzinfo=UTC)
+    unpriced = datetime(2026, 1, 7, 13, 0, tzinfo=UTC)
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.cons_total":
+            return {priced: 1.0, unpriced: 2.0}
+        return {}
+
+    diag: dict[str, float] = {}
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots={priced: 0.20},
+            breakdown=diag,
+        )
+    assert diag["hours_seen"] == 2.0
+    assert diag["hours_priced"] == 1.0
+    assert diag["consumption_ytd_kwh"] == pytest.approx(3.0)
+    # Reported on this path too, not just the static one.
+    assert "fees_ytd_eur" in diag
+
+
 def test_energy_kind_handles_tou() -> None:
     """Regression for Round-2 Bug 1: TimeOfUseRates was missing from the
     energy-kind classifier so persistence raised TypeError on TOU."""

@@ -283,6 +283,7 @@ async def _ytd_hourly_energy(
     historical_spots: dict[datetime, float] | None = None,
     monthly_mean: bool = False,
     spp_weights: SppWeights | None = None,
+    breakdown: dict[str, float] | None = None,
 ) -> float | None:
     """YTD energy cost for hourly-billed contracts (TOU + dynamic).
 
@@ -381,9 +382,15 @@ async def _ytd_hourly_energy(
     hourly_injection = monthly_mean and _injection_hourly_on_cohort(snapshot, entry)
 
     energy_cost = 0.0
+    # How much of the window actually got an energy price. A YTD that is low
+    # because the spot cache is thin looks identical to a low one that is
+    # correct, so report the coverage instead of leaving the user to guess.
+    hours_seen = 0
+    hours_priced = 0
     # Iterate the union of both sides so an injection-only wiring
     # still contributes its credit (mirroring _resolve_daily_kwh).
     for utc_hour in cons_per_hour.keys() | inj_per_hour.keys():
+        hours_seen += 1
         local = dt_util.as_local(utc_hour)
         spot: float | None = None
         # Distinguishes "this contract needs no spot" (TOU, Impact,
@@ -412,6 +419,7 @@ async def _ytd_hourly_energy(
                 bd = compute_breakdown(
                     snap_h, dso, region, local, spot, meter, dso_mode
                 )
+                hours_priced += 1
         except (KeyError, ValueError):
             # Missing DSO row or non-static rate kind: skip this hour.
             continue
@@ -454,6 +462,11 @@ async def _ytd_hourly_energy(
 
     if regime == SOLAR_REGIME_COMPENSATION:
         energy_cost = max(energy_cost, 0.0)
+    if breakdown is not None:
+        breakdown["hours_seen"] = float(hours_seen)
+        breakdown["hours_priced"] = float(hours_priced)
+        breakdown["consumption_ytd_kwh"] = sum(cons_per_hour.values())
+        breakdown["injection_ytd_kwh"] = sum(inj_per_hour.values())
     return energy_cost
 
 
@@ -648,6 +661,10 @@ async def _compute_current_year_cost(
         contract=contract,
     )
     fees = static_fees + prosumer_ytd + capacity_ytd
+    if breakdown is not None:
+        # Reported on every contract kind, not just the static path: the fees
+        # floor is what a low bill rests on whichever way energy is priced.
+        breakdown["fees_ytd_eur"] = fees
 
     # Dynamic contracts replay historical hourly ENTSO-E spots so each
     # past kWh hits its actual factor*spot+base rate. Caller passes the
@@ -667,6 +684,7 @@ async def _compute_current_year_cost(
             today,
             contract=contract,
             meter=meter,
+            breakdown=breakdown,
             historical_spots=historical_spots or {},
         )
         if dyn_energy is None:
@@ -686,6 +704,7 @@ async def _compute_current_year_cost(
             today,
             contract=contract,
             meter=meter,
+            breakdown=breakdown,
             historical_spots=historical_spots or {},
             monthly_mean=True,
             spp_weights=spp_weights,
@@ -718,6 +737,7 @@ async def _compute_current_year_cost(
             today,
             contract=contract,
             meter=meter,
+            breakdown=breakdown,
         )
         if hourly_energy is None:
             return fees
@@ -860,6 +880,5 @@ async def _compute_current_year_cost(
         breakdown["consumption_today_kwh"] = today_kwh[0] + today_kwh[1]
         breakdown["injection_today_kwh"] = today_kwh[2] + today_kwh[3]
         breakdown["energy_ytd_raw_eur"] = energy_ytd_raw
-        breakdown["fees_ytd_eur"] = fees
 
     return energy_cost + fees
