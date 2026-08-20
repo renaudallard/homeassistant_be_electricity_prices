@@ -57,6 +57,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_CONTRACT_END_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
@@ -82,6 +83,43 @@ _NO_INJECTION_RATE = (
     "measured, but not credited: this card indexes its feed-in on the spot "
     "price, which a projection has no forward value for"
 )
+
+
+def _contract_basis(entry: ConfigEntry, today: date) -> str:
+    """How much of the projected year the current contract actually covers.
+
+    The projection holds today's rate for a full year. When a contract end
+    date falls inside that year, the months after it are priced on a card the
+    user will not be on, at whatever they renew to. The figure stays as it is,
+    because nothing better exists to price those months with, but saying so is
+    the difference between an estimate and a claim.
+
+    The end date is optional and independent of the start date, and it was
+    collected as an inert renewal reminder, so some stored values are
+    approximate. Every path here degrades to "no end date set" rather than
+    refusing to produce a number.
+    """
+    from .cohort import _parse_iso_date
+
+    end = _parse_iso_date(entry.data.get(CONF_CONTRACT_END_DATE))
+    if end is None:
+        return "today's contract, no end date set"
+    if end <= today:
+        # Already expired. The entry is stale rather than wrong, and the card
+        # it still points at is the only rate available, so behave exactly as
+        # if no date were set and say which.
+        return f"today's contract, whose recorded end date ({end}) has passed"
+    horizon = date(today.year, 12, 31)
+    if end >= horizon:
+        return f"today's contract, which runs past this year (ends {end})"
+    covered = (end - today).days
+    total = (horizon - today).days
+    pct = round(100.0 * covered / total) if total else 100
+    return (
+        f"today's contract for {covered} of the {total} days left this year "
+        f"({pct}%), ends {end}; the rest is priced on a contract you have not "
+        "signed yet"
+    )
 
 
 async def _compute_projected_year_cost(
@@ -184,6 +222,7 @@ async def _compute_projected_year_cost(
     )
 
     breakdown["energy_basis"] = "today's published rate, held for a full year"
+    breakdown["contract_basis"] = _contract_basis(entry, today)
     breakdown["fee_basis"] = "today's network tariffs, taxes and fees, held for a year"
     breakdown["volume_basis"] = annual.source
     breakdown["injection_basis"] = injection_basis

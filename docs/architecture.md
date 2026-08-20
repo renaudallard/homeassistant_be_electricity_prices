@@ -126,13 +126,13 @@ region  (flanders | wallonia | brussels)                     const.py:43
         +-- contract  (a Contract with a TariffKind)          providers/base.py:53
         |     fixed | variable | dynamic | tou | tou_impact | spot_monthly
         |
-        +-- meter     (which register split is billed)        const.py:163
+        +-- meter     (which register split is billed)        const.py:166
               mono | bi | dynamic | exclusive_night
 
 orthogonal axes (independent of the above):
 
-  DSO tariff mode   simple | bi_horaire | impact                const.py:174
-  solar regime      none | compensation | injection             const.py:229
+  DSO tariff mode   simple | bi_horaire | impact                const.py:177
+  solar regime      none | compensation | injection             const.py:232
 ```
 
 ### Region and DSO sub-area
@@ -172,7 +172,7 @@ filled in (formula plus all regulated DSO + tax values) via `build_snapshot`.
 
 ### Meter
 
-The meter type (`const.py:163`) selects which register split is billed: `mono` (single register),
+The meter type (`const.py:166`) selects which register split is billed: `mono` (single register),
 `bi` (day/night bi-hourly), `dynamic` (per-slot), or `exclusive_night` (a dedicated night-circuit
 meter for an electric water heater or night-storage heater, configured as a second config entry
 pointing at that circuit's kWh sensor). The pricing engine routes `exclusive_night` through the
@@ -181,13 +181,13 @@ each falling back when the card does not publish a separate value.
 
 ### The two orthogonal axes
 
-The DSO tariff mode (`CONF_DSO_TARIFF_MODE`, `const.py:240`) is a grid-side billing choice
+The DSO tariff mode (`CONF_DSO_TARIFF_MODE`, `const.py:243`) is a grid-side billing choice
 independent of the supplier meter: `simple`, `bi_horaire`, or (Wallonia SMR3 opt-in) `impact`
 (Tarif Impact, three distribution rates by CWaPE hour-of-day band). Outside Wallonia only
 `simple` and `bi_horaire` are meaningful, and the coordinator falls back automatically when the
 DSO does not publish Impact rates.
 
-The solar regime (`CONF_SOLAR_REGIME`, `const.py:290`) is independent again: `none` (no panels),
+The solar regime (`CONF_SOLAR_REGIME`, `const.py:293`) is independent again: `none` (no panels),
 `compensation` (the Walloon "meter runs backwards" regime, valid for pre-2024 installs until
 2030-12-31), or `injection` (feed-in credited at the injection tariff). Belgian residential
 injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
@@ -265,7 +265,7 @@ Numbered walkthrough:
 
 ## Freshness and caching, at a glance
 
-The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:336`). Freshness has
+The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:339`). Freshness has
 three layers; the deep detail is in [coordinator.md](coordinator.md).
 
 - Probe: each tick runs the supplier's cheap `probe()` (a HEAD or listing GET returning a
@@ -275,7 +275,7 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
 - TTL fallback: suppliers with no usable probe (Engie, Luminus, DATS 24, where the only cheap
   response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
   `coordinator.py:224`).
-- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:338`)
+- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:341`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
   `coordinator.py:814`).

@@ -574,6 +574,7 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "injection_basis",
             "annual_kwh",
             "annual_injection_kwh",
+            "contract_basis",
         }
     )
     entity_description: BePriceSensorDescription
@@ -673,9 +674,11 @@ class ContractEndDateSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity
 
     A standalone entity: it can't reuse ``BePriceSensor`` because that
     class's ``value_fn`` is typed float-only and ``native_value`` rounds
-    it. The value is a static config value, so this only exists to let an
-    automation fire a renewal reminder ahead of the end date; it has no
-    effect on pricing. Created only when an end date is configured.
+    it. The value is a static config value, and its main use is letting an
+    automation fire a renewal reminder ahead of the end date. It changes no
+    billed rate, but it is no longer inert: ``projected_year_cost`` reads the
+    same date to say how much of the projected year today's contract actually
+    covers. Created only when an end date is configured.
     """
 
     _attr_has_entity_name = True

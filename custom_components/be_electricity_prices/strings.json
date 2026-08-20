@@ -19,7 +19,7 @@
         },
         "data_description": {
           "contract_start_date": "The date your contract started. For a fixed contract this prices you at the rate you locked in at signing instead of today's rate sheet, where the supplier keeps an archive of past cards. Leave blank to always use the current card.",
-          "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew. Does not affect pricing."
+          "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew, and used by the projected year cost to say how much of the year is still under this contract. It changes no billed rate."
         }
       },
       "signed_rate": {

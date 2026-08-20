@@ -2827,6 +2827,74 @@ async def test_projection_says_when_a_measured_year_earns_no_credit(
     assert "not credited" in diag["injection_basis"]
 
 
+async def test_projection_discloses_a_contract_ending_inside_the_year(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An end date inside the projected year is disclosed, not priced.
+
+    The projection holds today's rate for a full year. When the contract runs
+    out before December the later months are priced on a card the user will
+    not be on. Nothing better exists to price them with, so the figure stands
+    and the basis says how much of it is actually contracted."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    entry = _projection_entry(contract_end_date="2026-09-30")
+    got, diag = await _project(hass, entry, _daily(10.0))
+    assert got is not None  # still produces a number
+    assert "91 of the 183 days" in diag["contract_basis"]
+    assert "not signed yet" in diag["contract_basis"]
+
+
+async def test_projection_says_when_the_contract_outlives_the_year(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An end date past 31 December leaves the whole projection contracted."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    entry = _projection_entry(contract_end_date="2027-06-30")
+    _got, diag = await _project(hass, entry, _daily(10.0))
+    assert "runs past this year" in diag["contract_basis"]
+    assert "not signed yet" not in diag["contract_basis"]
+
+
+async def test_projection_tolerates_a_stale_or_absent_end_date(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """No end date, a past one, and a bad one all still produce a figure.
+
+    The field was collected as an inert renewal reminder, so stored values are
+    approximate and some have already expired. Making it load-bearing must
+    never turn a working sensor into no value."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    for value, expected in (
+        (None, "no end date set"),
+        ("2026-01-15", "has passed"),
+        ("not-a-date", "no end date set"),
+    ):
+        kw = {} if value is None else {"contract_end_date": value}
+        got, diag = await _project(hass, _projection_entry(**kw), _daily(10.0))
+        assert got is not None, value
+        assert expected in diag["contract_basis"], value
+
+
+async def test_projection_takes_an_end_date_without_a_start_date(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The two contract dates are independently optional.
+
+    ``flow_schemas._validate_contract_dates`` only cross-checks them when both
+    are present, so an end date with no start date is a valid stored state and
+    must not need the cohort path to resolve."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    entry = _projection_entry(contract_end_date="2026-10-31")
+    assert "contract_start_date" not in entry.data
+    got, diag = await _project(hass, entry, _daily(10.0))
+    assert got is not None
+    assert "ends 2026-10-31" in diag["contract_basis"]
+
+
 def test_projected_year_cost_sensor_metadata() -> None:
     """The projection is MEASUREMENT with no device class, on purpose.
 

@@ -327,7 +327,7 @@ weighting silently. The weighted mean is exactly the mean over all 24 hours.
 ## Meter routing
 
 `MeterType` is `"mono" | "bi" | "dynamic" | "exclusive_night"`
-(`pricing.py:71`, `const.py:152-163`). A digital (SMR3) meter registers
+(`pricing.py:71`, `const.py:205-214`). A digital (SMR3) meter registers
 peak/offpeak just like a bi-hourly meter, so `bi_capable = meter in ("bi",
 "dynamic")` on both the energy and network sides (`pricing.py:291`,
 `pricing.py:562`). The Belgian meter conventions are documented at
@@ -364,9 +364,9 @@ else falls back to single/current (`pricing.py:264-270`, `pricing.py:281-290`).
    `dso_tariff_mode == "simple"` and mono meters.
 
 `DsoTariffMode` (`"simple" | "bi_horaire" | "impact"`, `pricing.py:491`,
-`const.py:170-174`) is orthogonal to the supplier meter: it is the billing mode
+`const.py:173-177`) is orthogonal to the supplier meter: it is the billing mode
 set on the user's grid connection, and the coordinator falls back automatically
-when the DSO does not publish Impact rates (`const.py:165-169`).
+when the DSO does not publish Impact rates (`const.py:168-172`).
 
 ### is_offpeak schedule, per region
 
@@ -397,7 +397,7 @@ otherwise the standard `yearly_fixed_fee` for every meter type
 re-priced onto a monthly-mean leg for a signing cohort keeps the separate charge
 its card printed. An exclusive-night circuit is configured as a SECOND config
 entry pointing at the night kWh sensor; the primary day meter stays
-mono/bi/dynamic (`const.py:155-161`).
+mono/bi/dynamic (`const.py:158-164`).
 
 ## The static path
 
@@ -593,7 +593,7 @@ HA down throughout), which is not a measured zero and must not drag the mean
 down. The history is persisted alongside the peak and is absent on blobs written
 before it shipped, in which case the window simply starts over.
 
-Two modes (`const.py:313-314`):
+Two modes (`const.py:316-317`):
 
 - `CAPACITY_MODE_FIXED`: use `CONF_CAPACITY_FIXED_KW` directly, bypassing the
   window (the user is stating a peak, not measuring one) and applying only the
@@ -652,7 +652,7 @@ CWaPE) and `None` on Flemish SMR3 connections. The supplier-side forfait lives o
 publishes one. It is already TVAC (VAT-incl) and summed raw, never VAT-scaled
 (`fees.py:120-136`, `providers/base.py:497`).
 
-Regime semantics (`const.py:296-303`): `compensation` ("compteur qui tourne a
+Regime semantics (`const.py:299-306`): `compensation` ("compteur qui tourne a
 l'envers") applies only to installations certified before 2024-01-01 and stays
 valid until 2030-12-31; newer installations use the `injection` tariff (no per-kVA
 fee); Flemish digital meters are SMR3 from the start. The YTD counterpart
@@ -677,6 +677,6 @@ The table lives on `DsoOverlay.brussels_osp_by_tier` and is populated only on th
 Sibelga overlay (`providers/base.py:325-329`). The user picks the tier in the
 config flow; the four residential tiers are `le1_44`, `le6`, `le9_6`, `le13`
 (residential connections are <=13 kVA), default `le6`
-(`const.py:255-265`). Returns `0.0` outside Brussels or when the card omits the
+(`const.py:258-268`). Returns `0.0` outside Brussels or when the card omits the
 OSP table. The fee is added to the Brussels annual cost in `_annual_static_fees`
 (`fees.py:116`), not to the per-kWh all-in.

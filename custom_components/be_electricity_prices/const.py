@@ -148,8 +148,11 @@ CONF_CONTRACT: Final = "contract"
 # Optional contract lifecycle dates, stored as ISO "YYYY-MM-DD" strings (the
 # DateSelector return value). CONF_CONTRACT_START_DATE prices a fixed/dynamic
 # contract at the rate locked in its signing month instead of the current card
-# (see the coordinator cohort-energy path); CONF_CONTRACT_END_DATE is inert for
-# pricing and only surfaced as a renewal-reminder timestamp sensor.
+# (see the coordinator cohort-energy path); CONF_CONTRACT_END_DATE surfaces a
+# renewal-reminder timestamp sensor and bounds how far projected_year_cost may
+# claim today's rate holds. It does not change any billed rate: an end date
+# inside the projected year is disclosed in that sensor's contract_basis
+# attribute, not priced, because the renewal rate does not exist yet.
 CONF_CONTRACT_START_DATE: Final = "contract_start_date"
 CONF_CONTRACT_END_DATE: Final = "contract_end_date"
 

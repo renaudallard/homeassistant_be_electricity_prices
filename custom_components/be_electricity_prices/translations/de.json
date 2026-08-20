@@ -19,7 +19,7 @@
         },
         "data_description": {
           "contract_start_date": "Das Datum, an dem Ihr Vertrag begonnen hat. Bei einem Festpreisvertrag wird damit der bei Vertragsabschluss festgelegte Tarif statt des aktuellen Tarifblatts verwendet, sofern der Anbieter ein Archiv alter Tarifblätter führt. Leer lassen, um immer das aktuelle Tarifblatt zu verwenden.",
-          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann. Hat keinen Einfluss auf die Preisberechnung."
+          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den voraussichtlichen Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif."
         }
       },
       "signed_rate": {
@@ -272,7 +272,7 @@
         },
         "data_description": {
           "contract_start_date": "Das Datum, an dem Ihr Vertrag begonnen hat. Bei einem Festpreisvertrag wird damit der bei Vertragsabschluss festgelegte Tarif statt des aktuellen Tarifblatts verwendet, sofern der Anbieter ein Archiv alter Tarifblätter führt. Leer lassen, um immer das aktuelle Tarifblatt zu verwenden.",
-          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann. Hat keinen Einfluss auf die Preisberechnung."
+          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den voraussichtlichen Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif."
         }
       },
       "signed_rate": {

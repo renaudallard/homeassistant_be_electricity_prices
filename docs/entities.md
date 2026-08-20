@@ -51,7 +51,7 @@ class BePriceSensorDescription(SensorEntityDescription):
     last_reset_fn: Callable[[], datetime] | None = None
 ```
 
-`native_value` (`sensor.py:597`) calls `value_fn(coordinator.data)` and then
+`native_value` (`sensor.py:598`) calls `value_fn(coordinator.data)` and then
 rounds to `suggested_display_precision + 2` decimals (or 6 when no precision is
 set). The extra two decimals beyond what the UI shows exist to strip
 float-representation noise (for example `0.35322099999999995`) that the recorder
@@ -73,7 +73,7 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 | `CAPACITY_SENSORS` (2) | `sensor.py:476` | `CONF_REGION == REGION_FLANDERS` |
 | `PROSUMER_SENSORS` (1) | `sensor.py:397` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
 | `INJECTION_SENSORS` (1) | `sensor.py:408` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
-| `ContractEndDateSensor` (1) | `sensor.py:671` | `CONF_CONTRACT_END_DATE` is set |
+| `ContractEndDateSensor` (1) | `sensor.py:672` | `CONF_CONTRACT_END_DATE` is set |
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
@@ -109,7 +109,7 @@ pulls (all fields defined at `coordinator.py:738`).
 | Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw`, the running month as measured and NOT floored (Flanders only) |
 | Prosumer cost | `prosumer_cost` | - | MEASUREMENT | EUR | `prosumer_cost_eur` (compensation regime) |
 | Injection price | `injection_price` | - | MEASUREMENT | EUR/kWh | current slot of `injection_hourly`, else `injection_price_eur_per_kwh` (injection regime); also `today`/`tomorrow` arrays when the injection varies intra-day |
-| Contract end date | `contract_end_date` | timestamp | - | - | `entry.data[CONF_CONTRACT_END_DATE]` (a config value, not `CoordinatorData`; standalone `ContractEndDateSensor`) |
+| Contract end date | `contract_end_date` | timestamp | - | - | `entry.data[CONF_CONTRACT_END_DATE]` (a config value, not `CoordinatorData`; standalone `ContractEndDateSensor`). The same date is read by `projected_cost._contract_basis` to bound the projection's horizon; it changes no billed rate |
 
 ### Current-slot selection and the nearest-slot guard
 
@@ -258,7 +258,7 @@ statistics setup, documented in its source comment:
 - `state_class=TOTAL` (not `TOTAL_INCREASING`): under the compensation regime a
   heavy-injection day can lower the running total day-over-day, which
   `TOTAL_INCREASING` forbids.
-- `last_reset` (`sensor.py:592`) is pinned to Jan 1 00:00 local via
+- `last_reset` (`sensor.py:593`) is pinned to Jan 1 00:00 local via
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
 The value is always numeric: missing meter inputs collapse to the fees-only

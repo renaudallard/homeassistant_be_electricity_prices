@@ -19,7 +19,7 @@
         },
         "data_description": {
           "contract_start_date": "De datum waarop uw contract is gestart. Voor een vast contract wordt hiermee het tarief gebruikt dat u bij ondertekening hebt vastgelegd in plaats van de huidige tariefkaart, voor zover de leverancier een archief van oude kaarten bijhoudt. Laat leeg om altijd de huidige kaart te gebruiken.",
-          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren. Heeft geen invloed op de prijsberekening."
+          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de verwachte jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief."
         }
       },
       "signed_rate": {
@@ -272,7 +272,7 @@
         },
         "data_description": {
           "contract_start_date": "De datum waarop uw contract is gestart. Voor een vast contract wordt hiermee het tarief gebruikt dat u bij ondertekening hebt vastgelegd in plaats van de huidige tariefkaart, voor zover de leverancier een archief van oude kaarten bijhoudt. Laat leeg om altijd de huidige kaart te gebruiken.",
-          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren. Heeft geen invloed op de prijsberekening."
+          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de verwachte jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief."
         }
       },
       "signed_rate": {

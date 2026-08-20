@@ -180,7 +180,7 @@ Schema `_meter_schema` (`flow_schemas.py:741`). The key rule (`flow_schemas.py:7
 - If contract kind is `dynamic`, `tou`, or `tou_impact`, the only option is
   `METER_DYNAMIC` and the default is `METER_DYNAMIC`.
 - Otherwise the full `METER_TYPES` list applies (`mono`, `bi`, `dynamic`,
-  `exclusive_night`; `const.py:218`) with `METER_MONO` as the fallback.
+  `exclusive_night`; `const.py:221`) with `METER_MONO` as the fallback.
 
 Why: dynamic/TOU/Impact contracts bill energy by quarter-hour or hour-of-day and
 require a smart (SMR3) meter. Picking `bi` on a TOU contract would route
@@ -192,7 +192,7 @@ so a stale OptionsFlow entry still renders the meter step with a sensible defaul
 rather than raising.
 
 The `exclusive_night` meter is not a first-class branch of the wizard: per
-`const.py:155`, a dedicated night circuit (electric water heater, night-storage
+`const.py:158`, a dedicated night circuit (electric water heater, night-storage
 heater) is configured as a *second* config entry pointing at the exclusive-night
 kWh sensor; the primary (day) meter stays mono/bi/dynamic. The night-circuit entry
 gets its own unique id because that one meter type is appended to the key, so it no
@@ -202,14 +202,14 @@ supplier:contract:region:dso tuple; see the unique-id note below.
 ### `dso_tariff_mode`: Wallonia-only DSO billing mode
 
 Schema `_dso_tariff_mode_schema` (`flow_schemas.py:492`), default `DSO_MODE_BI_HORAIRE`.
-Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:244`),
+Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:247`),
 `translation_key="dso_tariff_mode"`.
 
 Reached only when region is Wallonia (`_after_meter`, `config_flow.py:452`). Tarif
 Impact is the CWaPE 3-band hour-of-day distribution tariff (PIC 17-22, MEDIUM 7-11
 + 22-1, ECO 1-7 + 11-17, per `strings.json:52`) and needs a smart meter. Outside
 Wallonia only `simple`/`bi_horaire` are meaningful and the coordinator falls back
-automatically when the DSO does not publish Impact rates (`const.py:165`), so the
+automatically when the DSO does not publish Impact rates (`const.py:168`), so the
 step is skipped entirely (Brussels has only Sibelga, Flanders bills via the
 capacity tariff; `config_flow.py:178` comment).
 
@@ -250,7 +250,7 @@ Fields:
   (`flow_schemas.py:666` comment).
 - `CONF_CAPACITY_FIXED_KW`: a `NumberSelector` box, 0-50 kW step 0.1, default
   `VREG_CAPACITY_FLOOR_KW` (2.5 kW, the regulated minimum monthly peak Fluvius bills
-  against; `const.py:242`).
+  against; `const.py:245`).
 
 Pre-fill: before rendering, `async_step_capacity` copies `self._data` and calls
 `_apply_energy_manager_capacity_default` (`flow_prefill.py:287`), which tries two
@@ -282,14 +282,14 @@ forces a deliberate choice (issue #19 again, `flow_prefill.py:143`).
 ### `connection_power`: Brussels connection-power tier
 
 Schema `_connection_power_schema` (`flow_schemas.py:508`), default
-`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:265`). Options are the four
-residential tiers `CONNECTION_KVA_TIERS` (`const.py:259`): `le1_44`, `le6`,
+`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:268`). Options are the four
+residential tiers `CONNECTION_KVA_TIERS` (`const.py:262`): `le1_44`, `le6`,
 `le9_6`, `le13`, `translation_key="connection_kva_tier"`. Reached from
 `_before_solar` when region is Brussels (`config_flow.py:480`). Brussels bills a
 Brugel OSP (Obligations de Service Public) annual fee scaled by contractual
 connection power, so the tier is asked before solar. Residential connections are
 <=13 kVA, so only the four residential tiers are offered; the key is matched
-against the parsed OSP table (`const.py:180`). Other regions have no such fee and go
+against the parsed OSP table (`const.py:183`). Other regions have no such fee and go
 straight to solar (`config_flow.py:206` comment).
 
 ### `solar`: inverter kVA + regime
@@ -297,9 +297,9 @@ straight to solar (`config_flow.py:206` comment).
 Schema `_solar_schema` (`flow_schemas.py:959`). Fields:
 
 - `CONF_SOLAR_KVA`: `NumberSelector` box 0-50 step 0.1, default 0.0 (0 means no
-  panels, no prosumer cost; `const.py:218`).
+  panels, no prosumer cost; `const.py:221`).
 - `CONF_SOLAR_REGIME`: `translation_key="solar_regime"`, options built from
-  `SOLAR_REGIMES` (`const.py:299`) with a region filter.
+  `SOLAR_REGIMES` (`const.py:302`) with a region filter.
 
 The region filter (`flow_prefill.py:169`): `SOLAR_REGIME_COMPENSATION` is offered
 only when `CONF_REGION == REGION_WALLONIA`. Compensation ("terugdraaiende teller" /
@@ -308,7 +308,7 @@ the prosumer tariff and no capacity tariff, so offering it in Flanders would
 double-count the Flemish capaciteitstarief. Outside Wallonia only `none` and
 `injection` apply. If the stored regime is not in the filtered list (for example a
 compensation entry re-edited after switching region away from Wallonia), the default
-falls back to `SOLAR_REGIME_NONE` (`const.py:296`).
+falls back to `SOLAR_REGIME_NONE` (`const.py:299`).
 
 ### `injection_api_key`: optional ENTSO-E token for spot-indexed injection
 
@@ -344,7 +344,7 @@ wirings per side, both feeding the `current_year_cost` computation:
 | Wiring | Keys | Behaviour |
 | --- | --- | --- |
 | Day/night registers | `CONF_DAY_CONSUMPTION_KWH`, `CONF_NIGHT_CONSUMPTION_KWH`, `CONF_DAY_INJECTION_KWH`, `CONF_NIGHT_INJECTION_KWH` | Used as-is; exact from the start, no warm-up |
-| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`const.py:286` docstring; `const.py:286`) |
+| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`const.py:289` docstring; `const.py:289`) |
 
 When both are filled for the same side, the day/night registers win (more accurate;
 `flow_schemas.py:719`). Each side (consumption, injection) is resolved independently,
@@ -403,7 +403,7 @@ Anything pre-filled stays editable (`strings.json:199`).
 
 Note on partial register-pair wiring: the *config flow* accepts any subset of the
 six kWh fields (all are `vol.Optional`). The "partial register-pair wiring on either
-side is rejected" rule described in `const.py:197` is enforced downstream in the
+side is rejected" rule described in `const.py:200` is enforced downstream in the
 coordinator's `current_year_cost` engine (each side needs *both* day and night, or
 falls back to the single total), not in the flow. The flow's job is only to collect
 entity ids; it does not couple the day and night fields.
@@ -528,7 +528,7 @@ anywhere on the page.
 | --- | --- | --- |
 | `compare` | `compare_flow.py:227` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:111`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
 | `compare_contract` | `compare_flow.py:255` | Contract picker via `_compare_contract_schema` (`compare_flow.py:136`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
-| `compare_meter` | `compare_flow.py:296` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:204`) |
+| `compare_meter` | `compare_flow.py:296` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:207`) |
 | `compare_solar` | `compare_flow.py:338` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:987`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:939`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
 | `compare_api_key` | `compare_flow.py:426` | Shown when `_after_compare_meter` (`compare_flow.py:415`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved |
 | `compare_result` | `compare_flow.py:454` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:485`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |

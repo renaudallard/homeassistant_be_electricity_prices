@@ -19,7 +19,7 @@
         },
         "data_description": {
           "contract_start_date": "La date de début de votre contrat. Pour un contrat fixe, la facturation utilise le tarif bloqué à la signature au lieu de la grille actuelle, lorsque le fournisseur conserve une archive des anciennes cartes tarifaires. Laissez vide pour toujours utiliser la carte actuelle.",
-          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler. N'affecte pas la tarification."
+          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler, et utilisée par le coût annuel projeté pour indiquer quelle part de l'année reste couverte par ce contrat. Elle ne modifie aucun tarif facturé."
         }
       },
       "signed_rate": {
@@ -272,7 +272,7 @@
         },
         "data_description": {
           "contract_start_date": "La date de début de votre contrat. Pour un contrat fixe, la facturation utilise le tarif bloqué à la signature au lieu de la grille actuelle, lorsque le fournisseur conserve une archive des anciennes cartes tarifaires. Laissez vide pour toujours utiliser la carte actuelle.",
-          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler. N'affecte pas la tarification."
+          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler, et utilisée par le coût annuel projeté pour indiquer quelle part de l'année reste couverte par ce contrat. Elle ne modifie aucun tarif facturé."
         }
       },
       "signed_rate": {

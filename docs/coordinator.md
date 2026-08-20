@@ -40,7 +40,7 @@ entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 ```
 
-`BePricesCoordinator.__init__` (`coordinator.py:839`) chains to `DataUpdateCoordinator.__init__` with `update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES)` (`coordinator.py:861`). `UPDATE_INTERVAL_MINUTES` is `60` (`const.py:336`): the coordinator ticks hourly for every contract kind, and the dynamic branch piggybacks the ENTSO-E refresh onto the same tick rather than running a second timer.
+`BePricesCoordinator.__init__` (`coordinator.py:839`) chains to `DataUpdateCoordinator.__init__` with `update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES)` (`coordinator.py:861`). `UPDATE_INTERVAL_MINUTES` is `60` (`const.py:339`): the coordinator ticks hourly for every contract kind, and the dynamic branch piggybacks the ENTSO-E refresh onto the same tick rather than running a second timer.
 
 ### 1.2 The runtime_data ordering trap
 
@@ -151,7 +151,7 @@ Two config entries on the same `(supplier, contract, region)` share one fetched 
 
 ### 2.3 The on-disk Store and cache invalidation
 
-The Store is `_MigratingStore` (`snapshot_store.py:409`), a `Store[dict]` subclass whose `_async_migrate_func` returns `{}` for any blob written under an older `STORAGE_VERSION` (`snapshot_store.py:420`). Every persisted field is re-derivable from a fresh fetch, so dropping the cache on a major-version mismatch is safe and avoids HA's "missing migration function" warning. `STORAGE_VERSION` is `2` (`const.py:338`).
+The Store is `_MigratingStore` (`snapshot_store.py:409`), a `Store[dict]` subclass whose `_async_migrate_func` returns `{}` for any blob written under an older `STORAGE_VERSION` (`snapshot_store.py:420`). Every persisted field is re-derivable from a fresh fetch, so dropping the cache on a major-version mismatch is safe and avoids HA's "missing migration function" warning. `STORAGE_VERSION` is `2` (`const.py:341`).
 
 There is a **second**, finer version inside the serialized snapshot: `_SNAPSHOT_SCHEMA_VERSION`, currently `22` (`snapshot_store.py:511`). `_snapshot_to_dict` stamps it (`snapshot_store.py:514`); `_snapshot_from_dict` raises `ValueError` when a loaded blob's `_schema_version` is below it (`snapshot_store.py:549`), which `async_load_persistent` catches and treats as "discard and re-fetch".
 
@@ -213,7 +213,7 @@ cache written before the field existed, so no schema bump was needed.
 
 ### 3.1 Resolution selection (hourly vs quarter-hourly)
 
-`_energy_is_quarter_hourly` (`spot_stats.py:69`) returns True only for `DynamicRates` with `quarter_hourly=True`. Those extractors (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom, Bolt Dynamisch, energie.be, EnergyVision) bill on the native 15-minute Belpex/eSpot_15/Epex/EPEX DA grid; every other contract stays hourly. `_fetch_spot_prices` passes this as `quarter_hourly=` to `client.fetch_day_ahead` (`coordinator_spots.py:240`). The constants are `RESOLUTION_HOURLY = "PT60M"` and `RESOLUTION_QUARTER = "PT15M"` (`const.py:308`), matching ENTSO-E's resolution tokens. YTD billing stays hourly regardless (section 7).
+`_energy_is_quarter_hourly` (`spot_stats.py:69`) returns True only for `DynamicRates` with `quarter_hourly=True`. Those extractors (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom, Bolt Dynamisch, energie.be, EnergyVision) bill on the native 15-minute Belpex/eSpot_15/Epex/EPEX DA grid; every other contract stays hourly. `_fetch_spot_prices` passes this as `quarter_hourly=` to `client.fetch_day_ahead` (`coordinator_spots.py:240`). The constants are `RESOLUTION_HOURLY = "PT60M"` and `RESOLUTION_QUARTER = "PT15M"` (`const.py:311`), matching ENTSO-E's resolution tokens. YTD billing stays hourly regardless (section 7).
 
 ### 3.2 The today/tomorrow spot cache
 
@@ -236,11 +236,11 @@ cache written before the field existed, so no schema bump was needed.
 |-----|------|---------|---------|
 | `hourly` | `dict[datetime, PriceBreakdown]` | UTC-keyed price table (48-ish slots covering today+tomorrow); keys are hour or quarter-hour boundaries per `resolution` | current/next/today/tomorrow price sensors and window services; `tomorrow_prices_available` binary sensor (`sensor.py:262`, `binary_sensor.py:67`) |
 | `resolution` | `str` | `RESOLUTION_HOURLY` or `RESOLUTION_QUARTER`; slot width of `hourly` keys | slot truncation in `sensor.py:262`; window sizing in `__init__.py:547` |
-| `snapshot_publication` | `str` | supplier's publication label for the current card | `current_price` sensor attribute (`sensor.py:592`) |
-| `snapshot_age_hours` | `float` | hours since `_snapshot_fetched_at` (`inf` if never) | `current_price` sensor attribute (`sensor.py:593`) |
-| `snapshot_stale` | `bool` | True when age > 7 days | `current_price` sensor attribute (`sensor.py:594`) |
+| `snapshot_publication` | `str` | supplier's publication label for the current card | `current_price` sensor attribute (`sensor.py:593`) |
+| `snapshot_age_hours` | `float` | hours since `_snapshot_fetched_at` (`inf` if never) | `current_price` sensor attribute (`sensor.py:594`) |
+| `snapshot_stale` | `bool` | True when age > 7 days | `current_price` sensor attribute (`sensor.py:595`) |
 | `snapshot_valid_until` | `date \| None` | last calendar day the rates apply; `None` = unknown | `tomorrow_prices_available` binary sensor (`binary_sensor.py:65`) |
-| `last_error` | `str` | last human-readable failure reason | `current_price` sensor attribute (`sensor.py:595`) |
+| `last_error` | `str` | last human-readable failure reason | `current_price` sensor attribute (`sensor.py:596`) |
 | `monthly_peak_kw` | `float` | Flanders running monthly peak in kW, as measured (NOT floored) | `monthly_peak_kw` sensor (`sensor.py:486`) |
 | `capacity_billed_peak_kw` / `capacity_peak_months` | `float` / `int` | the twelve-month mean the tariff is charged on, and how many months it covers. Both read `_peak_terms()`, which leaves the in-progress month out until it has a reading; deriving the count separately as `len(_peak_history) + 1` claimed a month the mean had not taken | `capacity_cost` sensor attributes |
 | `monthly_peak_month` | `date \| None` | month the peak belongs to | diagnostics (`diagnostics.py:173`) |
@@ -253,7 +253,7 @@ cache written before the field existed, so no schema bump was needed.
 | `current_year_cost_eur` | `float \| None` | running YTD bill since Jan 1; fees-only floor when no meters wired | `current_year_cost` sensor (`sensor.py:449`) |
 | `ytd_diagnostics` | `dict[str, float] \| None` | optional breakdown behind the bill. Static path: YTD + today consumption/injection kWh, `energy_ytd_raw_eur` (pre-clamp energy term). Hourly path (TOU / dynamic / spot-monthly): `hours_seen` + `hours_priced`, which say how much of the window the spot cache could price, plus YTD consumption/injection kWh. `fees_ytd_eur` on both; static per-day contracts only, `None` for hourly-billed contracts and when no meter is wired | `current_year_cost` sensor attributes (`sensor.py`) |
 | `projected_year_cost_eur` | `float \| None` | a full year priced at today's tariffs against the entry's own metered yearly volume, computed in one pass rather than as elapsed plus remainder. `None` for a dynamic or spot-monthly leg, whose future months have no knowable rate | `projected_year_cost` sensor |
-| `projection_diagnostics` | `dict[str, Any] \| None` | the basis behind that number: `energy_basis`, `fee_basis`, `volume_basis`, `injection_basis` as strings plus `annual_kwh` and `annual_injection_kwh` | attributes of the same sensor |
+| `projection_diagnostics` | `dict[str, Any] \| None` | the basis behind that number: `energy_basis`, `fee_basis`, `volume_basis`, `injection_basis` and `contract_basis` as strings, plus `annual_kwh` and `annual_injection_kwh` | attributes of the same sensor |
 
 The current-slot sensors (`current_price`, `energy_component`, `network_component`, `taxes_component`, and the today/tomorrow min/avg/max) do not read a top-level field: they index `hourly` at the current slot and read a `PriceBreakdown` attribute (`all_in`, `energy`, `network`, `taxes`). `resolution` populated as `RESOLUTION_QUARTER` only when `_energy_is_quarter_hourly(self._snapshot.energy)` (`coordinator.py:181`); everything else is hourly.
 
@@ -294,7 +294,7 @@ The window computation is *not* owned by the coordinator. `_find_window` (`__ini
 
 - Outside Flanders it resets both to 0/`None` (`coordinator_peak.py:112`) so a stale peak from a former Flanders config doesn't linger.
 - It rolls over on the local 1st of the month (`coordinator_peak.py:127`); UTC would lag CET/CEST users at the boundary.
-- `CAPACITY_MODE_FIXED` uses the configured value directly (`const.py:314`); `CAPACITY_MODE_SENSOR` takes a rolling max of the peak-power sensor (`const.py:313`), scaling W/VA to kW (`const.py:313`, issue #19: an unscaled 4481 W stored as 4481 kW inflated capacity cost 1000x).
+- `CAPACITY_MODE_FIXED` uses the configured value directly (`const.py:317`); `CAPACITY_MODE_SENSOR` takes a rolling max of the peak-power sensor (`const.py:316`), scaling W/VA to kW (`const.py:316`, issue #19: an unscaled 4481 W stored as 4481 kW inflated capacity cost 1000x).
 - On rollover the closing month is banked into `_peak_history` and the window is pruned to the eleven most recent completed months, so with the running one the mean covers twelve. A month still at `0.0` is not banked: no reading was ever collected, which is not a measured zero.
 
 `_billed_peak_kw` turns that window into the quantity Fluvius actually charges on, the "gemiddelde maandpiek". Its methodology gives the formula outright: `Rekenkundig gemiddelde van de Max (Maandpiek (m), 2.5) voor elke maand (m)`, i.e. the floor lands on each month BEFORE the mean, not on the mean. Every term is then at least the floor, so the mean is too and no outer clamp is needed. `CAPACITY_MODE_FIXED` bypasses the window and floors the configured value directly. `_peak_kw` itself is left raw, so `monthly_peak_kw` reports a measurement rather than a billing figure. The in-progress month only joins the mean once it HAS a reading: it is reset to 0 on the local 1st, and a zero floored to 2,5 kW is not a measured peak, so counting it stepped the mean (and with it `capacity_cost` and `current_year_cost`) down at every rollover and back up as the month accrued. This is the same estimate-the-gap rule already applied to a month that was never measured.
@@ -319,7 +319,7 @@ Three energy paths, chosen by contract shape:
 
 ### 7.1 Day/night register vs single-total reconstruction
 
-`_resolve_daily_kwh` resolves the consumption and injection sides independently from one of three wirings (`const.py:267-286`):
+`_resolve_daily_kwh` resolves the consumption and injection sides independently from one of three wirings (`const.py:270-289`):
 
 - **Day + night register pair** (`CONF_DAY_*_KWH` + `CONF_NIGHT_*_KWH`): one recorder delta per day per register, fanned into band slots.
 - **Single totals sensor** (`CONF_CONSUMPTION_KWH` / `CONF_INJECTION_KWH`): for mono meters the total goes to the day slot and the math sums it; for bi/dynamic meters `_recorder_daily_band_ratio` (`energy_meters.py:385`) recovers the day/night split from hourly recorder statistics binned on `is_offpeak`, defaulting to a time-weighted `_default_band_ratio_for` (`energy_meters.py:521`) for days with no accumulation so a flat Sunday isn't billed all-peak.
