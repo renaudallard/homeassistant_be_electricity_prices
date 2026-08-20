@@ -301,7 +301,7 @@ anyway bills 19,36 - a 6% overcharge that looks entirely plausible on a bill, wh
 exactly why it is worth a test of its own
 (`test_fixed_energy_is_a_flat_vat_inclusive_rate`).
 
-The card prints no peak / offpeak or exclusive-night column, so `FixedRates` carries only
+The FIXED card prints no peak / offpeak or exclusive-night column, so `FixedRates` carries only
 `single` and the pricing engine's fallback routes every meter type through it. That is
 correct here rather than an approximation: there is no bi-hourly rate to miss.
 
@@ -310,6 +310,14 @@ say which card this is. The guard is twofold: the fixed parser refuses a card th
 an indexation formula at all (`_ENERGY_RE`), and requires the card's own "de energieprijs
 is een vaste prijs" wording. Without it, a fixed entry served the variable card would bill
 that month's 15,98 c€/kWh as though it were locked for a year.
+
+None of the three prints a dag / nacht column either, so a bi-hourly meter meets the same
+energy rate on both registers whichever product is configured. The `FixedRates` note under
+*Fixed energy* above says the same thing for one card only; do not read it as the supplier-wide
+statement, because a Variabel entry's price table is flat for a different reason - its monthly
+index (see "Why the variable product is `spot_monthly`"). On the network side the Nettarieven
+table's `excl. nacht` column is the dedicated night circuit, not the night half of a tweevoudig
+meter, so there is no day/night split to apply on either leg.
 
 ## Injection
 
