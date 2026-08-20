@@ -2143,6 +2143,111 @@ async def test_year_cost_dynamic_falls_back_to_fees_when_no_spots(
     assert cost == pytest.approx(120.0 * _year_fraction(today), abs=0.01)
 
 
+async def test_year_cost_bills_network_and_taxes_for_an_hour_with_no_spot(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An hour the spot cache cannot price keeps its network and tax legs.
+
+    Those two are known from the month's snapshot and do not depend on the
+    day-ahead price, so dropping the hour whole understated the bill by far
+    more than the energy it could not resolve: on the stub overlay the
+    non-energy legs are 0,1665 of a 0,3665 EUR/kWh all-in rate."""
+
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    snap = make_snapshot(
+        contract="test_dynamic",
+        energy=DynamicRates(factor=1.0, base=0.0),
+        source_url="test://dyn",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "none",
+            "consumption_kwh": "sensor.cons_total",
+            "dso_tariff_mode": "bi_horaire",
+        },
+    )
+    priced = datetime(2026, 1, 6, 13, 0, tzinfo=UTC)
+    unpriced = datetime(2026, 1, 7, 13, 0, tzinfo=UTC)
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.cons_total":
+            return {priced: 1.0, unpriced: 1.0}
+        return {}
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots={priced: 0.20},
+        )
+    overlay = 0.10 + 0.0145 + 0.052  # distribution + transport + taxes
+    # The priced hour bills energy + overlay; the unpriced one bills the
+    # overlay alone rather than nothing at all.
+    assert cost == pytest.approx((0.20 + overlay) + overlay)
+
+
+async def test_year_cost_spot_monthly_bills_overlay_for_an_uncached_month(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Same rule on the spot-monthly path, where a whole month goes at once.
+
+    ``_month_mean`` returns None for a month with no cached hours, which used
+    to discard every hour of it. energie.be Variabel and the Mega groepsaankoop
+    both bill this way, and a fresh entry fetching a year of ENTSO-E hits it."""
+
+    freezer.move_to("2026-03-15 12:00:00+01:00")
+    snap = make_snapshot(
+        contract="test_spot_monthly",
+        energy=SpotMonthlyRates(factor=1.0, base=0.0),
+        source_url="test://sm",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test_spot_monthly",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "none",
+            "consumption_kwh": "sensor.cons_total",
+            "dso_tariff_mode": "bi_horaire",
+        },
+    )
+    jan = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
+    feb = datetime(2026, 2, 15, 12, 0, tzinfo=UTC)
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.cons_total":
+            return {jan: 1.0, feb: 1.0}
+        return {}
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots={feb: 0.20},
+        )
+    overlay = 0.10 + 0.0145 + 0.052
+    assert cost == pytest.approx((0.20 + overlay) + overlay)
+
+
 def test_energy_kind_handles_tou() -> None:
     """Regression for Round-2 Bug 1: TimeOfUseRates was missing from the
     energy-kind classifier so persistence raised TypeError on TOU."""

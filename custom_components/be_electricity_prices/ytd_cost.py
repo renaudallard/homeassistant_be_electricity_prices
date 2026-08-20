@@ -90,6 +90,7 @@ from .injection import (
 from .pricing import (
     MeterType,
     compute_breakdown,
+    compute_network_and_taxes,
     static_breakdown,
 )
 from .providers.base import (
@@ -297,10 +298,12 @@ async def _ytd_hourly_energy(
     consumption sensor) still gets the injection credit recognised.
 
     ``historical_spots`` is required for dynamic contracts (factor*spot+
-    base needs a spot per hour); hours missing from the cache are
-    skipped so a partial backfill still produces a meaningful YTD
-    instead of falling all the way back to the fees-only floor. TOU
-    callers pass ``None`` and every hour gets billed at the slot rate.
+    base needs a spot per hour). An hour the cache cannot price is NOT
+    dropped: its network and tax legs are known from the month's snapshot
+    regardless of the day-ahead price, so it bills those and loses the
+    energy term alone. A partial backfill therefore understates the YTD
+    by the commodity it could not price, rather than by the whole hour.
+    TOU callers pass ``None`` and every hour gets billed at the slot rate.
 
     Quarter-hourly dynamic contracts (Engie, Cociter, EBEM, Ecofix,
     OCTA+, Ecopower DBS) bill the live price on 15-minute slots, but the
@@ -383,20 +386,32 @@ async def _ytd_hourly_energy(
     for utc_hour in cons_per_hour.keys() | inj_per_hour.keys():
         local = dt_util.as_local(utc_hour)
         spot: float | None = None
+        # Distinguishes "this contract needs no spot" (TOU, Impact,
+        # exclusive-night: neither branch below runs) from "it needs one and
+        # the cache has none", which are billed differently.
+        spot_missing = False
         if monthly_mean:
             key = (local.year, local.month)
             if key not in month_means:
                 month_means[key] = _month_mean(month_bucket, *key)
             spot = month_means[key]
-            if spot is None:
-                continue
+            spot_missing = spot is None
         elif historical_spots is not None:
             spot = historical_spots.get(utc_hour)
-            if spot is None:
-                continue
+            spot_missing = spot is None
         snap_h = await _snap_for(date(local.year, local.month, 1))
         try:
-            bd = compute_breakdown(snap_h, dso, region, local, spot, meter, dso_mode)
+            if spot_missing:
+                # No spot for this hour. Bill the two legs that do not depend
+                # on one instead of dropping the hour whole; the energy term is
+                # the only part actually unknown.
+                bd = compute_network_and_taxes(
+                    snap_h, dso, region, local, meter, dso_mode
+                )
+            else:
+                bd = compute_breakdown(
+                    snap_h, dso, region, local, spot, meter, dso_mode
+                )
         except (KeyError, ValueError):
             # Missing DSO row or non-static rate kind: skip this hour.
             continue
@@ -562,9 +577,10 @@ async def _compute_current_year_cost(
     its actual ``factor*spot+base`` rate via ``compute_breakdown``,
     same code path as the live current_price. Hours with no spot in
     the cache (cold start before the backfill, or a gap left by an
-    ENTSO-E publication outage) are skipped rather than zeroed; the
-    caller still gets the fees-only floor when the cache is entirely
-    empty.
+    ENTSO-E publication outage) still bill their network and tax legs
+    and forfeit only the energy term, so an entirely empty cache lands
+    on the fees floor plus the grid and tax cost of every metered kWh
+    rather than on fees alone.
 
     Returns ``None`` only when there is no meter input wired at all
     AND no snapshot to show fees against. In every other case the
@@ -635,11 +651,13 @@ async def _compute_current_year_cost(
 
     # Dynamic contracts replay historical hourly ENTSO-E spots so each
     # past kWh hits its actual factor*spot+base rate. Caller passes the
-    # spot cache (the coordinator persists it between runs); when
-    # absent or empty we fall back to the fees-only floor.
+    # spot cache (the coordinator persists it between runs); an hour the
+    # cache cannot price still gets its network and tax legs.
     if isinstance(eff_energy, DynamicRates):
-        if not historical_spots:
-            return fees
+        # An empty spot cache is not a reason to bill nothing. Every hour still
+        # carries a network and a tax leg, so pass {} rather than bailing to the
+        # fees floor and let the replay price those and drop the energy term
+        # alone (same rule the per-hour gap follows).
         dyn_energy = await _ytd_hourly_energy(
             hass,
             session,
@@ -649,7 +667,7 @@ async def _compute_current_year_cost(
             today,
             contract=contract,
             meter=meter,
-            historical_spots=historical_spots,
+            historical_spots=historical_spots or {},
         )
         if dyn_energy is None:
             return fees
@@ -659,8 +677,6 @@ async def _compute_current_year_cost(
     # spot (a flat rate within the month); the hourly replay threads that mean
     # in place of the live spot and credits mean-indexed injection the same way.
     if isinstance(eff_energy, SpotMonthlyRates):
-        if not historical_spots:
-            return fees
         monthly_energy = await _ytd_hourly_energy(
             hass,
             session,
@@ -670,7 +686,7 @@ async def _compute_current_year_cost(
             today,
             contract=contract,
             meter=meter,
-            historical_spots=historical_spots,
+            historical_spots=historical_spots or {},
             monthly_mean=True,
             spp_weights=spp_weights,
         )

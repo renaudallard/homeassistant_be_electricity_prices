@@ -673,3 +673,38 @@ def compute_breakdown(
         snapshot.taxes.vat_rate,
         taxes_vat_exempt_eur_per_kwh(snapshot.taxes, region),
     )
+
+
+def compute_network_and_taxes(
+    snapshot: SupplierSnapshot,
+    dso_key: str,
+    region: str,
+    when: datetime,
+    meter: MeterType = "mono",
+    dso_tariff_mode: DsoTariffMode = "bi_horaire",
+) -> PriceBreakdown:
+    """:func:`compute_breakdown` for an hour with no spot, energy leg zeroed.
+
+    An hour missing from the spot cache still has a network leg and a tax leg,
+    both known with certainty from that month's snapshot and neither depending
+    on the day-ahead price. Dropping the hour whole because one of its three
+    components is unavailable discards more than it protects: on a Belgian
+    residential card the network and tax legs together are the larger half of
+    the all-in rate, so a gap in the cache silently understated the running
+    bill by far more than the energy it could not price.
+
+    The YTD replay uses this in place of skipping, so a cache gap costs the
+    energy term only. ``energy`` is 0.0 rather than an estimate on purpose:
+    guessing a spot would be a wrong number where this is an honest partial
+    one.
+    """
+    overlay = _require_overlay(snapshot, dso_key)
+    network = network_eur_per_kwh(overlay, when, meter, dso_tariff_mode, region)
+    taxes = taxes_eur_per_kwh(snapshot.taxes, region)
+    return _finalize_breakdown(
+        0.0,
+        network,
+        taxes,
+        snapshot.taxes.vat_rate,
+        taxes_vat_exempt_eur_per_kwh(snapshot.taxes, region),
+    )
