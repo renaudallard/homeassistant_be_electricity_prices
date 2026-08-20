@@ -72,6 +72,9 @@ from .spot_stats import (
     _injection_is_spp_indexed,
     _spp_weighting_enabled,
 )
+from .projected_cost import (
+    _compute_projected_year_cost,
+)
 from .ytd_cost import (
     _compute_current_year_cost,
 )
@@ -240,6 +243,16 @@ class CoordinatorData:
     # attributes so a flat sensor can be told apart (negative raw energy = the
     # compensation clamp; a today kWh that never moves = stalled meter input).
     ytd_diagnostics: dict[str, float] | None = None
+    # What the whole calendar year is on track to cost: the running bill above
+    # plus the remaining days priced at today's tariffs against the user's own
+    # metered volume. None for a contract whose future months settle on a spot
+    # index, since no forward price exists to put there.
+    projected_year_cost_eur: float | None = None
+    # The basis behind that number, as strings plus a few figures: which legs
+    # are measured, which are held flat, and how many days are still ahead. A
+    # projection carries more assumptions than the running bill does, so it
+    # ships the means to audit it.
+    projection_diagnostics: dict[str, Any] | None = None
 
 
 def local_year_start(when: datetime | None = None) -> datetime:
@@ -734,6 +747,16 @@ class BePricesCoordinator(
             breakdown=ytd_breakdown,
             billed_peak_kw=billed_peak,
         )
+        projection_breakdown: dict[str, Any] = {}
+        projected_year_cost = await _compute_projected_year_cost(
+            self.hass,
+            self.entry,
+            self._snapshot,
+            priced,
+            billed_peak_kw=billed_peak,
+            today=dt_util.now().date(),
+            breakdown=projection_breakdown,
+        )
 
         await self._save_persistent()
 
@@ -772,6 +795,8 @@ class BePricesCoordinator(
             energy_fund_eur_per_month=self._snapshot.taxes.energy_fund_eur_per_month,
             current_year_cost_eur=current_year_cost,
             ytd_diagnostics=ytd_breakdown or None,
+            projected_year_cost_eur=projected_year_cost,
+            projection_diagnostics=projection_breakdown or None,
         )
 
     async def async_force_refresh(self) -> None:

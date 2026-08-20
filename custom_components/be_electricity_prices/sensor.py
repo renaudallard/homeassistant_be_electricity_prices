@@ -452,6 +452,24 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         value_fn=lambda d: d.current_year_cost_eur,
         last_reset_fn=local_year_start,
     ),
+    BePriceSensorDescription(
+        key="projected_year_cost",
+        translation_key="projected_year_cost",
+        # What the whole calendar year is on track to cost: the running
+        # bill plus the remaining days at today's tariffs and the user's
+        # own metered volume. No device class on purpose. ``MONETARY``
+        # admits only ``TOTAL``, which compiles a cumulative sum from
+        # state deltas, and this figure is revised both up and down as
+        # the year goes on, so that sum would record the drift of the
+        # projection rather than money. Plain MEASUREMENT with the EUR
+        # unit is the honest fit, the same call ``capacity_cost`` makes.
+        # The cost of it is that the Energy dashboard will not auto-
+        # suggest this entity, which is correct for an estimate.
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR",
+        suggested_display_precision=2,
+        value_fn=lambda d: d.projected_year_cost_eur,
+    ),
 )
 
 
@@ -548,6 +566,14 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "injection_today_kwh",
             "energy_ytd_raw_eur",
             "fees_ytd_eur",
+            "hours_seen",
+            "hours_priced",
+            "energy_basis",
+            "fee_basis",
+            "volume_basis",
+            "injection_basis",
+            "annual_kwh",
+            "annual_injection_kwh",
         }
     )
     entity_description: BePriceSensorDescription
@@ -628,6 +654,17 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             if not diag:
                 return {}
             return {k: round(v, 4) for k, v in diag.items()}
+        if self.entity_description.key == "projected_year_cost":
+            # Its own branch rather than sharing the one above: these
+            # attributes are a mix of strings and floats, and round() raises
+            # TypeError on a string. The strings are the point of them, since
+            # a projection is only as trustworthy as the basis it names.
+            proj = data.projection_diagnostics
+            if not proj:
+                return {}
+            return {
+                k: round(v, 4) if isinstance(v, float) else v for k, v in proj.items()
+            }
         return {}
 
 

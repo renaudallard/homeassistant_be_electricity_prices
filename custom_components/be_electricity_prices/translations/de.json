@@ -680,6 +680,9 @@
       "current_year_cost": {
         "name": "Kosten dieses Jahr"
       },
+      "projected_year_cost": {
+        "name": "Voraussichtliche Jahreskosten"
+      },
       "contract_end_date": {
         "name": "Vertragsende"
       }

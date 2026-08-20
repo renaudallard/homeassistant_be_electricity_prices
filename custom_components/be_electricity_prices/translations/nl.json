@@ -680,6 +680,9 @@
       "current_year_cost": {
         "name": "Kost dit jaar"
       },
+      "projected_year_cost": {
+        "name": "Verwachte jaarkost"
+      },
       "contract_end_date": {
         "name": "Einddatum van het contract"
       }

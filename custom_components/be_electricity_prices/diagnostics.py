@@ -186,6 +186,7 @@ async def async_get_config_entry_diagnostics(
             "injection_price_eur_per_kwh": data.injection_price_eur_per_kwh,
             "injection_price_current_slot": _current_injection(data),
             "current_year_cost_eur": data.current_year_cost_eur,
+            "projected_year_cost_eur": data.projected_year_cost_eur,
             "hourly": [breakdown_row(dt_util.as_local(h), bd) for h, bd in hourly],
         },
         "consumption": {

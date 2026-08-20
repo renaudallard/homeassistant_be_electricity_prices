@@ -680,6 +680,9 @@
       "current_year_cost": {
         "name": "Cout de l annee"
       },
+      "projected_year_cost": {
+        "name": "Cout annuel projete"
+      },
       "contract_end_date": {
         "name": "Date de fin du contrat"
       }

@@ -40,7 +40,7 @@ see [Services](#services).
 
 ### How a sensor is defined
 
-Every sensor is one `BePriceSensor` (`sensor.py:523`) instance driven by a
+Every sensor is one `BePriceSensor` (`sensor.py:541`) instance driven by a
 frozen `BePriceSensorDescription` (`sensor.py:75`), which extends HA's
 `SensorEntityDescription` with two pure callables:
 
@@ -51,7 +51,7 @@ class BePriceSensorDescription(SensorEntityDescription):
     last_reset_fn: Callable[[], datetime] | None = None
 ```
 
-`native_value` (`sensor.py:571`) calls `value_fn(coordinator.data)` and then
+`native_value` (`sensor.py:597`) calls `value_fn(coordinator.data)` and then
 rounds to `suggested_display_precision + 2` decimals (or 6 when no precision is
 set). The extra two decimals beyond what the UI shows exist to strip
 float-representation noise (for example `0.35322099999999995`) that the recorder
@@ -64,16 +64,16 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 
 ### Which sensors exist for a given entry
 
-`async_setup_entry` (`sensor.py:492`) assembles the entity list conditionally:
+`async_setup_entry` (`sensor.py:510`) assembles the entity list conditionally:
 
 | Group | Source | Created when |
 | --- | --- | --- |
 | `SENSORS` (11 core price sensors) | `sensor.py:380` | always |
-| `FEE_SENSORS` (3 fee/cost sensors) | `sensor.py:412` | always |
-| `CAPACITY_SENSORS` (2) | `sensor.py:458` | `CONF_REGION == REGION_FLANDERS` |
+| `FEE_SENSORS` (4 fee/cost sensors) | `sensor.py:412` | always |
+| `CAPACITY_SENSORS` (2) | `sensor.py:476` | `CONF_REGION == REGION_FLANDERS` |
 | `PROSUMER_SENSORS` (1) | `sensor.py:397` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
 | `INJECTION_SENSORS` (1) | `sensor.py:408` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
-| `ContractEndDateSensor` (1) | `sensor.py:634` | `CONF_CONTRACT_END_DATE` is set |
+| `ContractEndDateSensor` (1) | `sensor.py:671` | `CONF_CONTRACT_END_DATE` is set |
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
@@ -224,10 +224,29 @@ scalar while the array had moved on (issue #44).
 
 ### Unrecorded attributes
 
-`BePriceSensor._unrecorded_attributes` (`sensor.py:536`) excludes `today`,
-`tomorrow`, `cheapest_4h_today` and `most_expensive_4h_today` from the recorder.
-They change every hour and are live display helpers, not history, so keeping
-them out of state-attribute storage stops long-term-database bloat.
+`BePriceSensor._unrecorded_attributes` (`sensor.py:554`) is a class-level
+frozenset shared by every key the class produces. It excludes the live display
+helpers (`today`, `tomorrow`, `cheapest_4h_today`, `most_expensive_4h_today`),
+the diagnostic fields behind `current_year_cost`, and every attribute the
+projection publishes. All of them are re-emitted on each tick and none is
+queried as history, so keeping them out of state-attribute storage stops
+long-term-database bloat. Add new attribute names here as they are added to a
+sensor: the set is the only thing preventing them being recorded.
+
+### `projected_year_cost`: why no device class
+
+`projected_year_cost` deliberately carries no `device_class` and
+`state_class=MEASUREMENT`, the same call `capacity_cost` makes. `MONETARY`
+admits only `TOTAL` (`DEVICE_CLASS_STATE_CLASSES[MONETARY] == {TOTAL}`), and
+`TOTAL` compiles a cumulative `sum` from state deltas. The projection is
+revised both up and down as the year runs and as history accumulates, so that
+sum would record the drift of the estimate rather than money. The trade is that
+the Energy dashboard will not auto-suggest the entity in its Cost picker, which
+is the correct outcome for a figure that is explicitly not a forecast.
+
+Its `key` is permanent from first release: `unique_id` is
+`f"{entry.entry_id}_{description.key}"`, so renaming it later orphans the
+entity, drops its recorded history and breaks dashboard references.
 
 ### `current_year_cost`: state class and last_reset
 
@@ -239,7 +258,7 @@ statistics setup, documented in its source comment:
 - `state_class=TOTAL` (not `TOTAL_INCREASING`): under the compensation regime a
   heavy-injection day can lower the running total day-over-day, which
   `TOTAL_INCREASING` forbids.
-- `last_reset` (`sensor.py:566`) is pinned to Jan 1 00:00 local via
+- `last_reset` (`sensor.py:592`) is pinned to Jan 1 00:00 local via
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
 The value is always numeric: missing meter inputs collapse to the fees-only
@@ -516,5 +535,5 @@ Top-level keys in `strings.json`:
 Entity names are resolved by `translation_key`, which each description sets equal
 to its `key`, so a new sensor `key` must have a matching entry under
 `entity.sensor.<key>.name` (`strings.json:564`) or HA falls back to the raw key.
-The `entity.sensor` block lists all eighteen possible sensors even though a given
+The `entity.sensor` block lists all twenty possible sensors even though a given
 entry only instantiates the subset its region and solar regime allow.
