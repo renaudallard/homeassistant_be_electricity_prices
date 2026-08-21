@@ -154,7 +154,7 @@ pricing engine:
   `base.apply_vat` (`providers/base.py:594`) bakes them once instead.
 
 `apply_vat` is called per config entry, from `_resolve_snapshot`
-(`coordinator.py:550`), never before the shared snapshot cache: that cache is
+(`coordinator.py:551`), never before the shared snapshot cache: that cache is
 keyed on `(supplier, contract, region)` and shared between entries that may
 answer the VAT question differently. It is identity on a `vat_rate == 0.0`
 snapshot, so it costs nothing for a residential entry. `CONF_INCLUDE_VAT`
@@ -327,7 +327,7 @@ weighting silently. The weighted mean is exactly the mean over all 24 hours.
 ## Meter routing
 
 `MeterType` is `"mono" | "bi" | "dynamic" | "exclusive_night"`
-(`pricing.py:71`, `const.py:205-214`). A digital (SMR3) meter registers
+(`pricing.py:71`, `const.py:214-223`). A digital (SMR3) meter registers
 peak/offpeak just like a bi-hourly meter, so `bi_capable = meter in ("bi",
 "dynamic")` on both the energy and network sides (`pricing.py:291`,
 `pricing.py:562`). The Belgian meter conventions are documented at
@@ -470,7 +470,7 @@ def _injection_needs_spot(snapshot, entry) -> bool:   # injection.py:91
 
 The coordinator uses this to fetch spots for a static-energy card too (soft fetch:
 falls back to cached curve, then to no injection price) so the credit does not go
-unavailable (`coordinator.py:574-587`, `coordinator.py:615`). This is the
+unavailable (`coordinator.py:575-588`, `coordinator.py:616`). This is the
 spot-indexed injection invariant: shape (c) must be gated on `_injection_needs_spot`
 in the live, backfill and compare paths, or the credit drifts.
 
@@ -593,7 +593,7 @@ HA down throughout), which is not a measured zero and must not drag the mean
 down. The history is persisted alongside the peak and is absent on blobs written
 before it shipped, in which case the window simply starts over.
 
-Two modes (`const.py:316-317`):
+Two modes (`const.py:325-326`):
 
 - `CAPACITY_MODE_FIXED`: use `CONF_CAPACITY_FIXED_KW` directly, bypassing the
   window (the user is stating a peak, not measuring one) and applying only the
@@ -652,7 +652,7 @@ CWaPE) and `None` on Flemish SMR3 connections. The supplier-side forfait lives o
 publishes one. It is already TVAC (VAT-incl) and summed raw, never VAT-scaled
 (`fees.py:120-136`, `providers/base.py:497`).
 
-Regime semantics (`const.py:299-306`): `compensation` ("compteur qui tourne a
+Regime semantics (`const.py:308-315`): `compensation` ("compteur qui tourne a
 l'envers") applies only to installations certified before 2024-01-01 and stays
 valid until 2030-12-31; newer installations use the `injection` tariff (no per-kVA
 fee); Flemish digital meters are SMR3 from the start. The YTD counterpart
@@ -677,6 +677,6 @@ The table lives on `DsoOverlay.brussels_osp_by_tier` and is populated only on th
 Sibelga overlay (`providers/base.py:325-329`). The user picks the tier in the
 config flow; the four residential tiers are `le1_44`, `le6`, `le9_6`, `le13`
 (residential connections are <=13 kVA), default `le6`
-(`const.py:258-268`). Returns `0.0` outside Brussels or when the card omits the
+(`const.py:267-277`). Returns `0.0` outside Brussels or when the card omits the
 OSP table. The fee is added to the Brussels annual cost in `_annual_static_fees`
 (`fees.py:116`), not to the per-kWh all-in.

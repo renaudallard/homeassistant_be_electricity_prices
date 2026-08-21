@@ -78,6 +78,7 @@ relative to that package directory.
 | `injection.py` | The injection taxonomy: which shape a card is, the per-slot rate shared by the live scalar and the YTD walk, and the historical rate. |
 | `fees.py` | Standing charges: capacity tariff, Brussels OSP, prosumer forfait, and the annual static-fee sum the three cost paths share. |
 | `ytd_cost.py` | The year-to-date cost walk: per-month fees, the hourly and per-day energy paths, and the spot-injection credit. |
+| `projected_cost.py` | The full-calendar-year projection behind `projected_year_cost`: one pass at today's tariffs over the entry's own metered yearly volume, plus the basis strings that say what was measured and what was assumed. |
 | `energy_meters.py` | Reads the configured kWh entities out of the recorder and the live state machine, and fans register pairs into band slots. |
 | `spot_stats.py` | Spot aggregates: the current billing slot's spot, monthly means, and the SPP-weighted variants. |
 | `pricing.py` | Pure pricing engine. `compute_breakdown` fuses a `SupplierSnapshot`, the chosen `DsoOverlay`, the taxes, meter type, DSO tariff mode, and (for dynamic) the slot spot into a `PriceBreakdown`. Also the slot-grid helpers (`slot_start`, `slot_delta`, `slots_per_hour`), `is_offpeak`, and `tou_slot`. No I/O, no HA imports where avoidable, so it is trivially unit-testable. |
@@ -132,7 +133,7 @@ region  (flanders | wallonia | brussels)                     const.py:43
 orthogonal axes (independent of the above):
 
   DSO tariff mode   simple | bi_horaire | impact                const.py:177
-  solar regime      none | compensation | injection             const.py:232
+  solar regime      none | compensation | injection             const.py:241
 ```
 
 ### Region and DSO sub-area
@@ -181,13 +182,13 @@ each falling back when the card does not publish a separate value.
 
 ### The two orthogonal axes
 
-The DSO tariff mode (`CONF_DSO_TARIFF_MODE`, `const.py:243`) is a grid-side billing choice
+The DSO tariff mode (`CONF_DSO_TARIFF_MODE`, `const.py:252`) is a grid-side billing choice
 independent of the supplier meter: `simple`, `bi_horaire`, or (Wallonia SMR3 opt-in) `impact`
 (Tarif Impact, three distribution rates by CWaPE hour-of-day band). Outside Wallonia only
 `simple` and `bi_horaire` are meaningful, and the coordinator falls back automatically when the
 DSO does not publish Impact rates.
 
-The solar regime (`CONF_SOLAR_REGIME`, `const.py:293`) is independent again: `none` (no panels),
+The solar regime (`CONF_SOLAR_REGIME`, `const.py:302`) is independent again: `none` (no panels),
 `compensation` (the Walloon "meter runs backwards" regime, valid for pre-2024 installs until
 2030-12-31), or `injection` (feed-in credited at the injection tariff). Belgian residential
 injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
@@ -206,7 +207,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |  await coordinator.async_config_entry_first_refresh()
    |        |
    |        v
-   |   _async_update_data                            coordinator.py:476
+   |   _async_update_data                            coordinator.py:477
    |     |  probe() -> fresh?  yes: reuse cached snapshot
    |     |                     no : EXTRACTOR.fetch(session, contract, region)
    |     |        |
@@ -218,7 +219,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |     |   for each slot: compute_breakdown(snapshot, dso_overlay,
    |     |                    taxes, meter, dso_mode, spot)  ->  PriceBreakdown   pricing.py
    |     |     v
-   |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:711
+   |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:712
    |
    entry.runtime_data = coordinator                  __init__.py:172
    async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor, button
@@ -234,11 +235,11 @@ Numbered walkthrough:
 1. The user completes the config flow; HA stores the selections in `entry.data` and calls
    `async_setup_entry` (`__init__.py:166`).
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
-   tuple (`coordinator.py:845`) so a later options edit that mutates `entry.data` can still evict
+   tuple (`coordinator.py:846`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
-3. `async_load_persistent` (`coordinator.py:375`) loads the last snapshot from `.storage` so an
+3. `async_load_persistent` (`coordinator.py:376`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
-4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:476`). It runs
+4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:477`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:172`),
@@ -253,7 +254,7 @@ Numbered walkthrough:
    into a `PriceBreakdown`. See [pricing-model.md](pricing-model.md).
 8. The result is packed into `CoordinatorData` (`coordinator.py:172`): the `hourly` table keyed by
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
-   suppliers, `coordinator.py:714`), plus snapshot metadata, the injection price, fees, and the
+   suppliers, `coordinator.py:715`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
 9. `entry.runtime_data` is set to the coordinator, the three platforms are forwarded, and a
    slot-boundary push is registered (`__init__.py:194`). Because `current_price` and
@@ -265,7 +266,7 @@ Numbered walkthrough:
 
 ## Freshness and caching, at a glance
 
-The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:339`). Freshness has
+The coordinator ticks hourly (`UPDATE_INTERVAL_MINUTES` = 60, `const.py:348`). Freshness has
 three layers; the deep detail is in [coordinator.md](coordinator.md).
 
 - Probe: each tick runs the supplier's cheap `probe()` (a HEAD or listing GET returning a
@@ -275,14 +276,14 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
 - TTL fallback: suppliers with no usable probe (Engie, Luminus, DATS 24, where the only cheap
   response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
   `coordinator.py:224`).
-- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:341`)
+- On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:350`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
-  `coordinator.py:814`).
+  `coordinator.py:815`).
 
 Two further caching behaviors are worth knowing at the architecture level. First, snapshots are
 shared process-wide across config entries keyed by `(supplier, contract, region)`
-(`coordinator.py:298`), so two entries on the same product never poll the same card twice; the
+(`coordinator.py:299`), so two entries on the same product never poll the same card twice; the
 shared rows are evicted on unload only when no sibling entry still references the tuple
 (`__init__.py:286`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
 (`coordinator.py:242`) and the user-facing "extractor failed" repair issue is raised only after
@@ -315,7 +316,7 @@ per-contract `regions` set for products that are not sold everywhere, and, if th
 ex-VAT numbers, sets `TaxOverlay.vat_rate` explicitly (the default `0.0` means "already
 VAT-inclusive", `providers/base.py:482`). An ex-VAT snapshot is left exactly as the card prints
 it; `base.apply_vat` resolves it per config entry at the point the coordinator adopts it
-(`coordinator.py:550`), because the snapshot caches above that point are shared between entries.
+(`coordinator.py:551`), because the snapshot caches above that point are shared between entries.
 
 ## Where to go next
 

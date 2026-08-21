@@ -180,7 +180,7 @@ Schema `_meter_schema` (`flow_schemas.py:741`). The key rule (`flow_schemas.py:7
 - If contract kind is `dynamic`, `tou`, or `tou_impact`, the only option is
   `METER_DYNAMIC` and the default is `METER_DYNAMIC`.
 - Otherwise the full `METER_TYPES` list applies (`mono`, `bi`, `dynamic`,
-  `exclusive_night`; `const.py:221`) with `METER_MONO` as the fallback.
+  `exclusive_night`; `const.py:230`) with `METER_MONO` as the fallback.
 
 Why: dynamic/TOU/Impact contracts bill energy by quarter-hour or hour-of-day and
 require a smart (SMR3) meter. Picking `bi` on a TOU contract would route
@@ -202,7 +202,7 @@ supplier:contract:region:dso tuple; see the unique-id note below.
 ### `dso_tariff_mode`: Wallonia-only DSO billing mode
 
 Schema `_dso_tariff_mode_schema` (`flow_schemas.py:492`), default `DSO_MODE_BI_HORAIRE`.
-Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:247`),
+Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:256`),
 `translation_key="dso_tariff_mode"`.
 
 Reached only when region is Wallonia (`_after_meter`, `config_flow.py:452`). Tarif
@@ -250,7 +250,7 @@ Fields:
   (`flow_schemas.py:666` comment).
 - `CONF_CAPACITY_FIXED_KW`: a `NumberSelector` box, 0-50 kW step 0.1, default
   `VREG_CAPACITY_FLOOR_KW` (2.5 kW, the regulated minimum monthly peak Fluvius bills
-  against; `const.py:245`).
+  against; `const.py:254`).
 
 Pre-fill: before rendering, `async_step_capacity` copies `self._data` and calls
 `_apply_energy_manager_capacity_default` (`flow_prefill.py:287`), which tries two
@@ -282,8 +282,8 @@ forces a deliberate choice (issue #19 again, `flow_prefill.py:143`).
 ### `connection_power`: Brussels connection-power tier
 
 Schema `_connection_power_schema` (`flow_schemas.py:508`), default
-`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:268`). Options are the four
-residential tiers `CONNECTION_KVA_TIERS` (`const.py:262`): `le1_44`, `le6`,
+`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:277`). Options are the four
+residential tiers `CONNECTION_KVA_TIERS` (`const.py:271`): `le1_44`, `le6`,
 `le9_6`, `le13`, `translation_key="connection_kva_tier"`. Reached from
 `_before_solar` when region is Brussels (`config_flow.py:480`). Brussels bills a
 Brugel OSP (Obligations de Service Public) annual fee scaled by contractual
@@ -297,9 +297,9 @@ straight to solar (`config_flow.py:206` comment).
 Schema `_solar_schema` (`flow_schemas.py:959`). Fields:
 
 - `CONF_SOLAR_KVA`: `NumberSelector` box 0-50 step 0.1, default 0.0 (0 means no
-  panels, no prosumer cost; `const.py:221`).
+  panels, no prosumer cost; `const.py:230`).
 - `CONF_SOLAR_REGIME`: `translation_key="solar_regime"`, options built from
-  `SOLAR_REGIMES` (`const.py:302`) with a region filter.
+  `SOLAR_REGIMES` (`const.py:311`) with a region filter.
 
 The region filter (`flow_prefill.py:169`): `SOLAR_REGIME_COMPENSATION` is offered
 only when `CONF_REGION == REGION_WALLONIA`. Compensation ("terugdraaiende teller" /
@@ -308,7 +308,7 @@ the prosumer tariff and no capacity tariff, so offering it in Flanders would
 double-count the Flemish capaciteitstarief. Outside Wallonia only `none` and
 `injection` apply. If the stored regime is not in the filtered list (for example a
 compensation entry re-edited after switching region away from Wallonia), the default
-falls back to `SOLAR_REGIME_NONE` (`const.py:299`).
+falls back to `SOLAR_REGIME_NONE` (`const.py:308`).
 
 ### `injection_api_key`: optional ENTSO-E token for spot-indexed injection
 
@@ -344,7 +344,7 @@ wirings per side, both feeding the `current_year_cost` computation:
 | Wiring | Keys | Behaviour |
 | --- | --- | --- |
 | Day/night registers | `CONF_DAY_CONSUMPTION_KWH`, `CONF_NIGHT_CONSUMPTION_KWH`, `CONF_DAY_INJECTION_KWH`, `CONF_NIGHT_INJECTION_KWH` | Used as-is; exact from the start, no warm-up |
-| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`const.py:289` docstring; `const.py:289`) |
+| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`const.py:298` docstring; `const.py:298`) |
 
 When both are filled for the same side, the day/night registers win (more accurate;
 `flow_schemas.py:719`). Each side (consumption, injection) is resolved independently,
@@ -463,7 +463,7 @@ stale stored value never renders as an invalid pre-selection:
 | Menu option | Step | Effect |
 | --- | --- | --- |
 | `edit` | `async_step_edit` (`config_flow.py:653`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
-| `compare` | `async_step_compare` (`compare_flow.py:244`) | One-off quote against another supplier; nothing saved |
+| `compare` | `async_step_compare` (`compare_flow.py:247`) | One-off quote against another supplier; nothing saved |
 
 Menu labels live in `options.step.init.menu_options` (`strings.json:193`).
 
@@ -508,7 +508,7 @@ user to edit the existing entry instead (`strings.json:166`).
 
 ### Compare path (one-off quote, nothing saved)
 
-The compare branch (`compare_flow.py:228` onward) walks `compare -> compare_contract
+The compare branch (`compare_flow.py:231` onward) walks `compare -> compare_contract
 -> compare_meter -> compare_solar -> (compare_api_key) -> compare_result` and exits
 via `async_abort`, so it creates no entry and writes no options. Region, DSO, peak
 and DSO mode stay fixed to the current entry so the quote is apples-to-apples;
@@ -520,18 +520,18 @@ because the regime belongs to the grid connection rather than to the supplier, s
 two suppliers at one address are necessarily on the same one. That symmetry is
 also why it barely moves `delta_annual`, and why the result page prints the user's
 own contract priced both ways inside `{solar_note}`: the compare branch excludes
-the user's own contract from the picker (`compare_flow.py:267`), so without that
+the user's own contract from the picker (`compare_flow.py:270`), so without that
 clause the question "what does leaving compensation cost me" has no answer
 anywhere on the page.
 
 | Step | Method | Notes |
 | --- | --- | --- |
-| `compare` | `compare_flow.py:227` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:111`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
-| `compare_contract` | `compare_flow.py:255` | Contract picker via `_compare_contract_schema` (`compare_flow.py:136`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
-| `compare_meter` | `compare_flow.py:296` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:207`) |
-| `compare_solar` | `compare_flow.py:338` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:987`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:939`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
-| `compare_api_key` | `compare_flow.py:426` | Shown when `_after_compare_meter` (`compare_flow.py:415`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved |
-| `compare_result` | `compare_flow.py:454` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:485`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
+| `compare` | `compare_flow.py:230` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:114`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
+| `compare_contract` | `compare_flow.py:258` | Contract picker via `_compare_contract_schema` (`compare_flow.py:139`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
+| `compare_meter` | `compare_flow.py:299` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:216`) |
+| `compare_solar` | `compare_flow.py:341` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:987`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:939`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
+| `compare_api_key` | `compare_flow.py:429` | Shown when `_after_compare_meter` (`compare_flow.py:418`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved |
+| `compare_result` | `compare_flow.py:457` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:488`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
 
 The quoted supplier's freshly fetched card is resolved through
 `snapshot_store._resolve_snapshot`, the same helper the live path uses, so it gets
@@ -547,11 +547,11 @@ The compare-meter narrowing mirrors the install `_meter_schema` exactly (dynamic
 tou/tou_impact all require a smart meter; `config_flow.py:500` comment). The
 compare result never mutates coordinator state: when it must borrow the historical
 spot cache for a spot-indexed injection it saves and restores
-`coord._historical_spots` around the fetch (`compare_flow.py:969`). Placeholder
+`coord._historical_spots` around the fetch (`compare_flow.py:998`). Placeholder
 tokens map to `options.step.compare_result.description` (`strings.json:236`), which
 references `{meter_used}`, `{current_annual}`, `{delta_ytd}`, the ASCII bar charts
 `{annual_chart}`/`{ytd_chart}`, and so on; `_build_compare_placeholders` always
-populates every token (even the reloading-entry fallback at `compare_flow.py:488`)
+populates every token (even the reloading-entry fallback at `compare_flow.py:491`)
 so HA never renders a raw `{token}`.
 
 ## strings.json and translations

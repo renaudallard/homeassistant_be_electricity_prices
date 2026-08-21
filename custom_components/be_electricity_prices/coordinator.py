@@ -243,10 +243,11 @@ class CoordinatorData:
     # attributes so a flat sensor can be told apart (negative raw energy = the
     # compensation clamp; a today kWh that never moves = stalled meter input).
     ytd_diagnostics: dict[str, float] | None = None
-    # What the whole calendar year is on track to cost: the running bill above
-    # plus the remaining days priced at today's tariffs against the user's own
-    # metered volume. None for a contract whose future months settle on a spot
-    # index, since no forward price exists to put there.
+    # Roughly what a year on this contract costs: a full year priced at today's
+    # tariffs against the entry's own metered yearly volume, computed in one
+    # pass rather than as elapsed plus remainder. None for a contract whose
+    # rate is a formula over an index that does not exist yet, and for a netted
+    # meter with too little feed-in history to net a year against.
     projected_year_cost_eur: float | None = None
     # The basis behind that number, as strings plus a few figures: which legs
     # are measured, which are held flat, and how many days are still ahead. A

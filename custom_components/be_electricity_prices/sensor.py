@@ -455,9 +455,10 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
     BePriceSensorDescription(
         key="projected_year_cost",
         translation_key="projected_year_cost",
-        # What the whole calendar year is on track to cost: the running
-        # bill plus the remaining days at today's tariffs and the user's
-        # own metered volume. No device class on purpose. ``MONETARY``
+        # Roughly what a year on this contract costs, priced in one pass at
+        # today's tariffs against the entry's own metered volume rather than
+        # as a running bill plus a remainder. No device class on purpose.
+        # ``MONETARY``
         # admits only ``TOTAL``, which compiles a cumulative sum from
         # state deltas, and this figure is revised both up and down as
         # the year goes on, so that sum would record the drift of the

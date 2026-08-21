@@ -42,8 +42,8 @@ knowledge of contracts: the coordinator owns all of that and calls this client.
 
 | Constant | Value | Source |
 | --- | --- | --- |
-| `ENTSOE_BASE_URL` | `https://web-api.tp.entsoe.eu/api` | `const.py:325` |
-| `ENTSOE_BE_DOMAIN` | `10YBE----------2` (BE bidding zone EIC) | `const.py:326` |
+| `ENTSOE_BASE_URL` | `https://web-api.tp.entsoe.eu/api` | `const.py:334` |
+| `ENTSOE_BE_DOMAIN` | `10YBE----------2` (BE bidding zone EIC) | `const.py:335` |
 
 The client is constructed with the user's ENTSO-E API key and Home Assistant's
 shared `aiohttp` session (`api.py:69`). The key is passed on every request as
@@ -152,7 +152,7 @@ from the document's `Reason` block by `_ack_reason` (`api.py:325`).
 ### Resolution handling: PT60M vs PT15M and aggregation
 
 ENTSO-E publishes the Belgian curve at 15-minute granularity since the SDAC
-15-minute MTU go-live (2025-10-01; see the note at `const.py:259`). The parser
+15-minute MTU go-live (2025-10-01; see the note at `const.py:268`). The parser
 handles three resolutions via `_resolution_to_timedelta` (`api.py:364`):
 
 | Token | Step |
@@ -290,11 +290,11 @@ constructs a fresh `EntsoeClient` per call (`api.py:66`,
   (`coordinator_spots.py:234`); today and yesterday are always re-fetched.
 
 `_historical_spots` is persisted to HA storage (`STORAGE_VERSION = 2`,
-`const.py:263`) and reloaded on restart (`coordinator.py:438`). The reload is
+`const.py:272`) and reloaded on restart (`coordinator.py:439`). The reload is
 gated on a "tuple" match (supplier / contract / region): spots collected while
 the entry was dynamic are dropped after an options-flow swap to a static supplier
-rather than being re-saved indefinitely (`coordinator.py:439`). Persisted keys
-are ISO strings; a naive one is treated as UTC on load (`coordinator.py:447`).
+rather than being re-saved indefinitely (`coordinator.py:440`). Persisted keys
+are ISO strings; a naive one is treated as UTC on load (`coordinator.py:448`).
 
 ## Part 2: recorder backfill (`backfill.py`)
 

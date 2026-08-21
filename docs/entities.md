@@ -40,7 +40,7 @@ see [Services](#services).
 
 ### How a sensor is defined
 
-Every sensor is one `BePriceSensor` (`sensor.py:541`) instance driven by a
+Every sensor is one `BePriceSensor` (`sensor.py:542`) instance driven by a
 frozen `BePriceSensorDescription` (`sensor.py:75`), which extends HA's
 `SensorEntityDescription` with two pure callables:
 
@@ -51,7 +51,7 @@ class BePriceSensorDescription(SensorEntityDescription):
     last_reset_fn: Callable[[], datetime] | None = None
 ```
 
-`native_value` (`sensor.py:598`) calls `value_fn(coordinator.data)` and then
+`native_value` (`sensor.py:599`) calls `value_fn(coordinator.data)` and then
 rounds to `suggested_display_precision + 2` decimals (or 6 when no precision is
 set). The extra two decimals beyond what the UI shows exist to strip
 float-representation noise (for example `0.35322099999999995`) that the recorder
@@ -64,16 +64,16 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 
 ### Which sensors exist for a given entry
 
-`async_setup_entry` (`sensor.py:510`) assembles the entity list conditionally:
+`async_setup_entry` (`sensor.py:511`) assembles the entity list conditionally:
 
 | Group | Source | Created when |
 | --- | --- | --- |
 | `SENSORS` (11 core price sensors) | `sensor.py:380` | always |
 | `FEE_SENSORS` (4 fee/cost sensors) | `sensor.py:412` | always |
-| `CAPACITY_SENSORS` (2) | `sensor.py:476` | `CONF_REGION == REGION_FLANDERS` |
+| `CAPACITY_SENSORS` (2) | `sensor.py:477` | `CONF_REGION == REGION_FLANDERS` |
 | `PROSUMER_SENSORS` (1) | `sensor.py:397` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
 | `INJECTION_SENSORS` (1) | `sensor.py:408` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
-| `ContractEndDateSensor` (1) | `sensor.py:672` | `CONF_CONTRACT_END_DATE` is set |
+| `ContractEndDateSensor` (1) | `sensor.py:673` | `CONF_CONTRACT_END_DATE` is set |
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
@@ -87,7 +87,7 @@ post-2024 injection tariff yields a per-kWh injection credit sensor.
 `unique_id suffix` is the description `key`; the full unique id is
 `{entry_id}_{key}`. `device_class` is blank where none is set. Unit is
 `EUR/kWh` unless noted. "Reads" is the `CoordinatorData` field the `value_fn`
-pulls (all fields defined at `coordinator.py:738`).
+pulls (all fields defined at `coordinator.py:739`).
 
 | Name | key / suffix | device_class | state_class | unit | Reads (`CoordinatorData` field) |
 | --- | --- | --- | --- | --- | --- |
@@ -105,6 +105,7 @@ pulls (all fields defined at `coordinator.py:738`).
 | Fixed fee per year | `fixed_fee_eur_per_year` | - | MEASUREMENT | EUR | `yearly_fixed_fee_eur` |
 | Energy fund per month | `energy_fund_eur_per_month` | - | MEASUREMENT | EUR | `energy_fund_eur_per_month` |
 | Current year cost | `current_year_cost` | MONETARY | TOTAL | EUR | `current_year_cost_eur` |
+| Projected year cost | `projected_year_cost` | - | MEASUREMENT | EUR | `projected_year_cost_eur` |
 | Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only); also `billed_peak_kw` / `months_counted` attributes |
 | Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw`, the running month as measured and NOT floored (Flanders only) |
 | Prosumer cost | `prosumer_cost` | - | MEASUREMENT | EUR | `prosumer_cost_eur` (compensation regime) |
@@ -224,7 +225,7 @@ scalar while the array had moved on (issue #44).
 
 ### Unrecorded attributes
 
-`BePriceSensor._unrecorded_attributes` (`sensor.py:554`) is a class-level
+`BePriceSensor._unrecorded_attributes` (`sensor.py:555`) is a class-level
 frozenset shared by every key the class produces. It excludes the live display
 helpers (`today`, `tomorrow`, `cheapest_4h_today`, `most_expensive_4h_today`),
 the diagnostic fields behind `current_year_cost`, and every attribute the
@@ -258,7 +259,7 @@ statistics setup, documented in its source comment:
 - `state_class=TOTAL` (not `TOTAL_INCREASING`): under the compensation regime a
   heavy-injection day can lower the running total day-over-day, which
   `TOTAL_INCREASING` forbids.
-- `last_reset` (`sensor.py:593`) is pinned to Jan 1 00:00 local via
+- `last_reset` (`sensor.py:594`) is pinned to Jan 1 00:00 local via
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
 The value is always numeric: missing meter inputs collapse to the fees-only
@@ -266,7 +267,7 @@ floor, so the sensor never goes `unknown`.
 
 ### `monthly_peak_kw`: why MEASUREMENT
 
-`monthly_peak_kw` (`sensor.py:471`) must use `state_class=MEASUREMENT` because
+`monthly_peak_kw` (`sensor.py:472`) must use `state_class=MEASUREMENT` because
 that is the only class HA accepts under the `POWER` device class
 (`DEVICE_CLASS_STATE_CLASSES[POWER] == {MEASUREMENT}`); `TOTAL` would log a
 "state class is impossible" warning on setup. The statistics graph defaults to
@@ -474,7 +475,7 @@ attributes plus every scalar `CoordinatorData` field:
 `snapshot_valid_until`, `last_error`, `monthly_peak_kw`, `monthly_peak_month`,
 `capacity_cost_eur`, `prosumer_cost_eur`, `yearly_fixed_fee_eur`,
 `energy_fund_eur_per_month`, `injection_price_eur_per_kwh`,
-`current_year_cost_eur`, and `hourly` (every slot as
+`current_year_cost_eur`, `projected_year_cost_eur`, and `hourly` (every slot as
 `{start, energy, network, taxes, all_in}` rounded to 6 dp).
 
 It also carries `injection_price_current_slot`, which is not a `CoordinatorData`
