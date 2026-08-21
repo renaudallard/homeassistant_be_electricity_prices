@@ -75,6 +75,7 @@ from .spot_stats import (
 from .projected_cost import (
     _compute_projected_year_cost,
 )
+from .coordinator_spots import _spot_is_sane
 from .ytd_cost import (
     _compute_current_year_cost,
 )
@@ -452,6 +453,7 @@ class BePricesCoordinator(
         # re-saved indefinitely (pruned only at year-end), wasting
         # ~140KB of disk/memory until the next Jan 1.
         hist = stored.get("historical_spots")
+        dropped_spots = 0
         if isinstance(hist, dict) and not tuple_mismatch:
             for k, v in hist.items():
                 if not isinstance(k, str) or not isinstance(v, (int, float)):
@@ -462,7 +464,22 @@ class BePricesCoordinator(
                     continue
                 if when.tzinfo is None:
                     when = when.replace(tzinfo=UTC)
+                if not _spot_is_sane(float(v)):
+                    # Dropped rather than kept: leaving it makes the day look
+                    # complete, and a complete day is never refetched, so the
+                    # bad value would price that hour for the life of the
+                    # entry. Dropping it takes the day under the refetch
+                    # threshold and the next tick replaces it from ENTSO-E.
+                    dropped_spots += 1
+                    continue
                 self._historical_spots[when] = float(v)
+        if dropped_spots:
+            _LOGGER.warning(
+                "Discarded %d cached day-ahead price(s) outside the publishable "
+                "range for %s; they will be re-fetched from ENTSO-E",
+                dropped_spots,
+                self.entry.title,
+            )
         # The SPP profile is the same national curve regardless of supplier, so
         # it is restored irrespective of the entry-tuple gate above.
         spp = stored.get("spp_weights")

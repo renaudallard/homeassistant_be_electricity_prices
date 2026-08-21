@@ -2066,6 +2066,60 @@ async def test_load_persistent_drops_historical_spots_on_tuple_mismatch(
     )
 
 
+async def test_load_persistent_drops_an_impossible_cached_spot(
+    hass: HomeAssistant,
+) -> None:
+    """A cached price that could not have been published is discarded.
+
+    A persisted spot used to be trusted forever: _ensure_historical_spots only
+    fetches a day holding fewer than 20 of its 24 hours, so a day that is
+    COMPLETE but wrong was never revisited, and nothing else clears the cache
+    before the year-end prune. One value on the wrong scale therefore skewed a
+    dynamic contract's whole year-to-date bill for the life of the entry, with
+    no way for the user to correct it short of deleting the entry.
+
+    Dropping it is what repairs the cache: the day falls under the refetch
+    threshold and the next tick replaces it from ENTSO-E."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "none",
+            "api_key": "k",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    payload: dict[str, object] = {
+        "entry_supplier": "cociter",
+        "entry_contract": "cociter_dynamic",
+        "entry_region": "wallonia",
+        "historical_spots": {
+            # Ordinary hour, and a negative one: Belgian day-ahead goes
+            # negative routinely and must survive.
+            "2026-01-01T00:00:00+00:00": 0.123,
+            "2026-01-01T01:00:00+00:00": -0.04,
+            # EUR/MWh left unscaled among EUR/kWh neighbours, three orders out.
+            "2026-01-01T02:00:00+00:00": 62.5,
+        },
+    }
+
+    async def _fake_load() -> dict[str, object]:
+        return payload
+
+    with patch.object(coord._store, "async_load", new=_fake_load):
+        await coord.async_load_persistent()
+
+    assert coord._historical_spots == {
+        datetime(2026, 1, 1, 0, 0, tzinfo=UTC): 0.123,
+        datetime(2026, 1, 1, 1, 0, tzinfo=UTC): -0.04,
+    }
+
+
 async def test_load_persistent_keeps_historical_spots_on_tuple_match(
     hass: HomeAssistant,
 ) -> None:

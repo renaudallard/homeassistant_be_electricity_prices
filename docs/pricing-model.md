@@ -154,7 +154,7 @@ pricing engine:
   `base.apply_vat` (`providers/base.py:594`) bakes them once instead.
 
 `apply_vat` is called per config entry, from `_resolve_snapshot`
-(`coordinator.py:551`), never before the shared snapshot cache: that cache is
+(`coordinator.py:568`), never before the shared snapshot cache: that cache is
 keyed on `(supplier, contract, region)` and shared between entries that may
 answer the VAT question differently. It is identity on a `vat_rate == 0.0`
 snapshot, so it costs nothing for a residential entry. `CONF_INCLUDE_VAT`
@@ -470,7 +470,7 @@ def _injection_needs_spot(snapshot, entry) -> bool:   # injection.py:91
 
 The coordinator uses this to fetch spots for a static-energy card too (soft fetch:
 falls back to cached curve, then to no injection price) so the credit does not go
-unavailable (`coordinator.py:575-588`, `coordinator.py:616`). This is the
+unavailable (`coordinator.py:592-605`, `coordinator.py:633`). This is the
 spot-indexed injection invariant: shape (c) must be gated on `_injection_needs_spot`
 in the live, backfill and compare paths, or the credit drifts.
 

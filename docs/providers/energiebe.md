@@ -123,7 +123,7 @@ realised Belpex_RLP of 11,42 - a true rate of 14,41 c€/kWh, nearly 10% higher.
 would ship a knowingly wrong rate that no later tick corrects, the 0.6.7 mispricing class.
 
 `spot_monthly` instead stores the coefficients and lets the coordinator resolve
-`factor x mean(this month's spot) + base` from its ENTSO-E cache (`coordinator.py:623`),
+`factor x mean(this month's spot) + base` from its ENTSO-E cache (`coordinator.py:640`),
 which firms up as the month fills in. The arithmetic monthly mean is a close (few-percent)
 approximation of the RLP weighting, the same approximation EBEM / Eneco / Mega cohorts use.
 The kind is also what makes the config flow collect an ENTSO-E key

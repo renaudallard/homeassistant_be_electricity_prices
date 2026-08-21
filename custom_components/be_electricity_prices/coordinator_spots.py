@@ -77,6 +77,33 @@ _SHORT_SPOT_DAY_TTL = timedelta(hours=12)
 
 # The Synergrid ex-ante SPP profile is revised within the year, so re-fetch the
 # 52 MB workbook at most this often (weights survive restarts via the Store).
+# A day-ahead price that could not have come from ENTSO-E, in EUR/kWh. The
+# harmonised EU clearing limits are -500 to +4000 EUR/MWh, so anything outside
+# this band did not come off the wire as published: the usual cause is a value
+# stored in EUR/MWh where the rest of the cache is EUR/kWh, which lands three
+# orders of magnitude out.
+#
+# This exists because a persisted spot was trusted forever. _ensure_historical_spots
+# only fetches a day holding fewer than 20 of its 24 hours, so a day that is
+# COMPLETE but wrong was never revisited, and nothing else clears the cache
+# before the year-end prune. One bad value therefore skewed a dynamic
+# contract's whole year-to-date bill for as long as the entry existed, with no
+# way for the user to correct it short of deleting the entry.
+_SPOT_SANE_MIN = -1.0
+_SPOT_SANE_MAX = 5.0
+
+
+def _spot_is_sane(value: float) -> bool:
+    """Whether a cached day-ahead price could have been published.
+
+    Deliberately wide. The point is to catch a value on the wrong scale, not to
+    second-guess the market: negative prices are ordinary in Belgium and
+    scarcity hours run into thousands of EUR/MWh, and rejecting a real price
+    would silently drop a genuinely expensive hour from the bill.
+    """
+    return _SPOT_SANE_MIN <= value <= _SPOT_SANE_MAX
+
+
 _SPP_REFRESH_DAYS = 30
 # Back off this long after a failed SPP fetch so a persistent problem (e.g. the
 # new-year file not yet published) doesn't re-download 52 MB every hourly tick.
