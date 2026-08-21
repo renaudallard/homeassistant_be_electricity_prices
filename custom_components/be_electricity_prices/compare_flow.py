@@ -83,16 +83,19 @@ from .const import (
     METER_MONO,
     METER_TYPES,
     SMART_METER_CONTRACT_KINDS,
+    SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
     SPOT_PRICED_CONTRACT_KINDS,
     SUPPLIER_CUSTOM,
 )
+from .energy_meters import _measured_kwh
 from .compare_quote import (
     _annual_bill,
     _compare_injection_credit,
     _populate_charts,
     _annual_volume,
+    _covers_a_year,
     _read_total_kwh,
     _solar_note,
     _tou_weighted_per_kwh,
@@ -705,6 +708,7 @@ class _CompareStepsMixin(OptionsFlow):
         ytd_kwh = await _read_total_kwh(self.hass, self.config_entry, jan1, today_local)
         rolling_inj_kwh = 0.0
         ytd_inj_kwh = 0.0
+        inj_full_year = False
         if regime != SOLAR_REGIME_NONE or stored_regime != SOLAR_REGIME_NONE:
             # Injection stays on the raw window sum. Putting it through
             # _annual_volume looked symmetric and is wrong in both bands: below
@@ -715,19 +719,44 @@ class _CompareStepsMixin(OptionsFlow):
             # over-credit enough to drive the compensation net to its zero clamp
             # and quote both sides at fees only. Annualising this leg needs a
             # production profile, not a day count.
-            r = await _read_total_kwh(
+            measured_inj = await _measured_kwh(
                 self.hass, self.config_entry, year_ago, today_local, side="injection"
             )
             y = await _read_total_kwh(
                 self.hass, self.config_entry, jan1, today_local, side="injection"
             )
-            rolling_inj_kwh = r or 0.0
+            rolling_inj_kwh = measured_inj.kwh if measured_inj.kwh > 0 else 0.0
+            inj_full_year = _covers_a_year(measured_inj.days_with_data)
             ytd_inj_kwh = y or 0.0
         annual = await _annual_volume(
             self.hass, self.config_entry, year_ago, today_local
         )
         annual_kwh = annual.kwh
         consumption_source = annual.source
+        # Under the netting regime the two legs are SUBTRACTED, so they have to
+        # be on one basis. Annualising consumption while injection stays on the
+        # raw window nets a whole year of draw against a fraction of a year of
+        # feed-in: measured on a seasonal prosumer with 300 days of history that
+        # quoted 434 EUR against a true 186, and the page printed its own
+        # contradiction ("annual_kwh 3706" beside "netted, consumption -= 2625").
+        # Scaling the feed-in leg to match is not the answer either, since PV is
+        # seasonal enough that a summer window over-credits into the zero clamp.
+        # So when the feed-in side cannot be annualised honestly, neither side
+        # is, and the quote is the measured window on both legs, which is what
+        # this page did before the volume resolver existed.
+        if (
+            regime == SOLAR_REGIME_COMPENSATION
+            or stored_regime == SOLAR_REGIME_COMPENSATION
+        ) and not inj_full_year:
+            raw = await _read_total_kwh(
+                self.hass, self.config_entry, year_ago, today_local
+            )
+            if raw is not None:
+                annual_kwh = raw
+                consumption_source = (
+                    f"{annual.days_with_data} days measured, netted against the same "
+                    "window's injection rather than annualised"
+                )
         # Volumes typed on the what-if step replace the measured pair. The
         # step only offers them when no injection sensor is wired, which is
         # the wiring whose consumption register may already be netted, so

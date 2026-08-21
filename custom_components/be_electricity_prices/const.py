@@ -201,6 +201,15 @@ DEFAULT_ANNUAL_CONSUMPTION_KWH: Final = 3500.0
 # household default it would replace.
 MEASURED_FULL_YEAR_DAYS: Final = 365
 MEASURED_MIN_DAYS: Final = 90
+# How many of those 365 days may be missing and the window still count as a
+# full year. Demanding all 365 made the test binary on a quantity that is
+# routinely one short: an HA restart, an inverter that goes unavailable
+# overnight, or simply the hours before today's statistics compile. On the
+# feed-in leg that flipped a netted compensation bill to a gross one, a
+# measured 10x jump on one absent bucket. Fifteen days is under 5% of a year,
+# so the 365/days correction applied across the gap stays inside the noise the
+# figure already carries.
+MEASURED_YEAR_GAP_DAYS: Final = 15
 
 METER_MONO: Final = "mono"
 METER_BI: Final = "bi"

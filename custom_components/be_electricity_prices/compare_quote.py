@@ -55,6 +55,7 @@ from .const import (
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     MEASURED_FULL_YEAR_DAYS,
     MEASURED_MIN_DAYS,
+    MEASURED_YEAR_GAP_DAYS,
     METER_MONO,
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
@@ -653,6 +654,17 @@ async def _read_total_kwh(
     return measured.kwh if measured.kwh > 0 else None
 
 
+def _covers_a_year(days_with_data: int) -> bool:
+    """Whether a metered window counts as a full year.
+
+    Not an equality test against 365. Recorder coverage is routinely a day or
+    two short for reasons that say nothing about the meter, and every consumer
+    of this predicate treats "a full year" as a mode switch, so an exact test
+    turns a missing bucket into a cliff rather than a rounding error.
+    """
+    return days_with_data >= MEASURED_FULL_YEAR_DAYS - MEASURED_YEAR_GAP_DAYS
+
+
 @dataclass(frozen=True)
 class _AnnualVolume:
     """A yearly kWh figure with the days of history behind it and a label
@@ -702,8 +714,11 @@ async def _annual_volume(
 
     measured = await _measured_kwh(hass, entry, start, end)
     days = measured.days_with_data
-    if measured.kwh > 0 and days >= MEASURED_FULL_YEAR_DAYS:
-        return _AnnualVolume(measured.kwh, days, f"measured ({days} days)")
+    if measured.kwh > 0 and _covers_a_year(days):
+        # Scaled across whatever few days are missing. At this coverage the
+        # correction is under 5% and carries no seasonal bias worth the name.
+        kwh = measured.kwh * MEASURED_FULL_YEAR_DAYS / days
+        return _AnnualVolume(kwh, days, f"measured ({days} days)")
     if measured.kwh > 0 and days >= MEASURED_MIN_DAYS:
         return _AnnualVolume(
             measured.kwh * MEASURED_FULL_YEAR_DAYS / days,
@@ -720,7 +735,7 @@ async def _annual_volume(
             DEFAULT_ANNUAL_CONSUMPTION_KWH,
             days,
             f"default {DEFAULT_ANNUAL_CONSUMPTION_KWH:.0f} kWh"
-            f" - only {days} days of history",
+            f" - only {days} day{'' if days == 1 else 's'} of history",
         )
     return _AnnualVolume(
         DEFAULT_ANNUAL_CONSUMPTION_KWH,

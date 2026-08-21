@@ -41,10 +41,18 @@ of tariffs, and the compensation net clamped exactly once. It also makes the
 standing charge consistent, since a sensor that says "at today's tariffs" and
 then bills half the year off an archived card would contradict itself.
 
-Only contracts whose rate is knowable produce a value. A dynamic or
-monthly-indexed leg settles on a Belpex index that does not exist yet, ENTSO-E
-publishes day-ahead only, and there is no free forward curve, so those report
-no value and say why rather than extrapolating one.
+What is refused is a leg carried as a FORMULA over an index nobody has yet:
+DynamicRates and SpotMonthlyRates. ENTSO-E publishes day-ahead only and there
+is no free forward curve, so those report no value and say why.
+
+The test is the shape the rate is stored in, not whether the product is called
+indexed. A Variable or Impact card is monthly-indexed in the market sense, but
+its extractor has already RESOLVED this month's rate, and holding a resolved
+rate flat is the same assumption the whole sensor rests on. A contract start
+date can move a card across that line: the signing-cohort splice rewrites a
+Variable card with parsed coefficients into SpotMonthlyRates, which genuinely
+is a formula over a future index, so such an entry reports no value and the
+basis says the cohort re-price is why.
 """
 
 from __future__ import annotations
@@ -66,6 +74,7 @@ from .const import (
     DSO_MODE_BI_HORAIRE,
     MEASURED_FULL_YEAR_DAYS,
     METER_MONO,
+    SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
 )
@@ -79,9 +88,18 @@ _NO_INJECTION_YEAR = (
     "not folded in: needs a full year of feed-in history, and a partial one "
     "cannot be scaled without a production profile"
 )
+_UNNETTABLE = (
+    "not projected: this meter is netted against its own feed-in, and there is "
+    "not enough feed-in history to net a full year against"
+)
 _NO_INJECTION_RATE = (
     "measured, but not credited: this card indexes its feed-in on the spot "
     "price, which a projection has no forward value for"
+)
+_NO_INJECTION_CARD = "measured, but not credited: this card publishes no feed-in tariff"
+_COHORT_SPOT_BASIS = (
+    "not projected: the contract start date re-prices this card to its signing "
+    "cohort, which settles on a monthly Belpex index that does not exist yet"
 )
 
 
@@ -149,6 +167,7 @@ async def _compute_projected_year_cost(
         _annual_bill,
         _annual_volume,
         _compare_injection_credit,
+        _covers_a_year,
         _tou_weighted_per_kwh,
     )
     from .energy_meters import _measured_kwh
@@ -157,7 +176,13 @@ async def _compute_projected_year_cost(
         breakdown = {}
 
     if isinstance(priced.energy, (DynamicRates, SpotMonthlyRates)):
-        breakdown["energy_basis"] = _SPOT_BASIS
+        # A card the user's own contract does not settle on: blaming a Belpex
+        # index reads as wrong to someone holding a Variable card, so say when
+        # the signing-cohort splice is what put them on that axis.
+        spliced = isinstance(priced.energy, SpotMonthlyRates) and not isinstance(
+            snapshot.energy, SpotMonthlyRates
+        )
+        breakdown["energy_basis"] = _COHORT_SPOT_BASIS if spliced else _SPOT_BASIS
         return None
 
     dso = entry.data[CONF_DSO]
@@ -197,16 +222,36 @@ async def _compute_projected_year_cost(
         # ticks. Passing no spot leaves a spot-indexed credit unresolved, which
         # is the honest outcome for a figure carrying no forward price.
         inj_rate = _compare_injection_credit(priced, entry, {}, None)
-        if measured_inj.days_with_data >= MEASURED_FULL_YEAR_DAYS and (
-            measured_inj.kwh > 0
-        ):
-            annual_inj = measured_inj.kwh
-            injection_basis = "measured (the last 365 days)"
+        if _covers_a_year(measured_inj.days_with_data) and measured_inj.kwh > 0:
+            # Scaled across any missing days, the same way the consumption leg
+            # is. Demanding all 365 made one absent bucket drop the whole leg,
+            # which under the netting regime stopped the meter being netted at
+            # all and multiplied the bill by ten.
+            annual_inj = (
+                measured_inj.kwh * MEASURED_FULL_YEAR_DAYS / measured_inj.days_with_data
+            )
+            injection_basis = f"measured ({measured_inj.days_with_data} days)"
             if regime == SOLAR_REGIME_INJECTION and inj_rate is None:
                 # _annual_bill's injection branch needs a rate; without one it
                 # bills gross. Say that, rather than claiming a credit that
-                # was never applied.
-                injection_basis = _NO_INJECTION_RATE
+                # was never applied, and say WHICH: a card with no feed-in
+                # tariff at all is a different fact from one whose feed-in is
+                # spot-indexed and therefore unpriceable here.
+                injection_basis = (
+                    _NO_INJECTION_CARD
+                    if getattr(priced, "injection", None) is None
+                    else _NO_INJECTION_RATE
+                )
+        elif regime == SOLAR_REGIME_COMPENSATION:
+            # Under netting there is no small error available. Billing the year
+            # gross because the feed-in window is short is not a missing credit,
+            # it is the wrong bill: measured at ten times the netted figure. A
+            # partial window cannot be scaled either, because PV is seasonal
+            # enough that a summer sample nets the year to the zero clamp. So
+            # refuse, the way a spot-priced contract does.
+            breakdown["injection_basis"] = _UNNETTABLE
+            breakdown["energy_basis"] = _UNNETTABLE
+            return None
         else:
             injection_basis = _NO_INJECTION_YEAR
 
