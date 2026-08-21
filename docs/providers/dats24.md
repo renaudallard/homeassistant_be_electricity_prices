@@ -62,7 +62,7 @@ indicative values rather than a spot formula (see Injection below).
 ### Source URL
 
 Each month's card has its own CDN URL, built by `_card_url`
-(`dats24.py:142-153`) from `_CDN_BASE` (`dats24.py:103`):
+(`dats24.py:103-103`) from `_CDN_BASE` (`dats24.py:103`):
 
 ```
 https://api.colruytgroup.com/api/static/dats24/parameters/site
@@ -102,7 +102,7 @@ Two deliberate choices:
   the coordinator classifies it transient and keeps serving its cached
   current-month snapshot. Falling back on any error would silently re-price
   every user at last month's rates, which is worse than a deferred refresh. This
-  is stricter than `bolt.py:231-254`, which falls back on any `ExtractorError`
+  is stricter than `bolt.py:389-433`, which falls back on any `ExtractorError`
   because Bolt's cards expose no parseable `valid_until` to signal the swap.
 
 ## Contracts
@@ -119,7 +119,7 @@ monthly indicative (not a per-hour spot formula), so no ENTSO-E key is needed fo
 this contract. See [../provider-framework.md](../provider-framework.md) for what
 `spot_indexed_injection` gates in the config flow.
 
-`fetch` rejects any other contract id with `ExtractorError` (`dats24.py:207-208`)
+`fetch` rejects any other contract id with `ExtractorError` (`dats24.py:187-199`)
 and rejects Brussels or any non-FL/WA region (`dats24.py:209-212`): DATS 24 does
 not sell residential electricity outside Flanders and Wallonia.
 
@@ -140,7 +140,7 @@ because the card lays out DSO and tax data as multi-column tables; the plain tex
 extractor would collapse the columns. `fetch_pdf_text_layout` also guards against
 CDNs that return HTTP 200 `text/html` for a missing PDF and rejects a
 pages-present-but-no-text document as a hard error (`_pdf.py:337-344`,
-`extract_pdf_text_layout` at `_pdf.py:244-251`).
+`extract_pdf_text_layout` at `_pdf.py:311-332`).
 
 ### Probe
 
@@ -149,9 +149,9 @@ There is no `probe`. `EXTRACTOR` (`dats24.py:507-524`) sets only `id`, `label`,
 month-keyed URL is not a freshness signal either: within a month the file is
 replaced in place, so a HEAD tells us nothing a cheap diff could use, and the
 coordinator's time-based TTL governs refresh. This is the "DATS 24 single-PDF"
-case called out in the `SnapshotProbe` contract comment in `base.py:513-516`.
+case called out in the `SnapshotProbe` contract comment in `base.py:758-758`.
 
-Note the module does define a `discover` coroutine (`dats24.py:217-230`), but it
+Note the module does define a `discover` coroutine (`dats24.py:202-215`), but it
 is a catalog-drift check for the live-check harness, not a coordinator probe. It
 HEADs both candidate months and returns `{_CONTRACT_ID}` on the first status
 below 400, `set()` otherwise. Accepting either month matters on the 1st of a
@@ -167,32 +167,32 @@ There is no `fetch_for_month`, so past months fall back to the current snapshot
 as a proxy in the yearly-cost backfill flow. Note that the CDN *does* retain
 per-month cards back to 2023, so unlike the old overwrite-in-place API URL an
 archive fetcher is now technically possible (DATS 24 is listed as API-only in the
-`ArchivedSnapshotFetcher` comment `base.py:519-524`, which that change would need
+`ArchivedSnapshotFetcher` comment `base.py:766-768`, which that change would need
 to correct). It is deliberately not implemented: the product ends on 2026-08-31,
 so the payoff would be one month of more accurate YTD backfill.
 
 ## Parsing
 
-`parse_snapshot` (`dats24.py:233-245`) is a pure function exposed for unit tests
+`parse_snapshot` (`dats24.py:218-230`) is a pure function exposed for unit tests
 (the test harness feeds it fixture text directly, never the network). It builds a
 `SupplierSnapshot` from five sub-parsers plus two shared helpers:
 
 | Snapshot field | Parser | Source |
 |---|---|---|
-| `energy` | `_extract_energy` | `dats24.py:251-292` |
-| `dsos` | `_extract_dsos` (dispatches per region) | `dats24.py:298-380` |
-| `taxes` | `_extract_taxes` | `dats24.py:386-457` |
+| `energy` | `_extract_energy` | `dats24.py:236-277` |
+| `dsos` | `_extract_dsos` (dispatches per region) | `dats24.py:283-288` |
+| `taxes` | `_extract_taxes` | `dats24.py:371-442` |
 | `injection` | `_extract_injection` | `dats24.py:463-506` |
-| `publication_label` | `_extract_publication` | `dats24.py:512-514` |
+| `publication_label` | `_extract_publication` | `dats24.py:497-499` |
 | `valid_until` | `parse_valid_until` (shared) | `_pdf.py:922` |
-| `supplier` / `contract` | literals | `dats24.py:236-237` |
+| `supplier` / `contract` | literals | `dats24.py:221-222` |
 
-Every numeric value is parsed with `to_float` (`_pdf.py:507-518`), which strips
+Every numeric value is parsed with `to_float` (`_pdf.py:615-626`), which strips
 Unicode thousands separators and accepts both the Belgian comma decimal and a dot
 decimal. This dot tolerance is not cosmetic: the May 2026 card switched its
 separator from `,` to `.` (see Quirks).
 
-### Energy (`_extract_energy`, `dats24.py:251-292`)
+### Energy (`_extract_energy`, `dats24.py:236-277`)
 
 The card prints four indicative TVAC c€/kWh values on one row under `Afname1`
 (single/mono, bi-hourly day, bi-hourly night, exclusive-night), plus a yearly
@@ -223,13 +223,13 @@ All four include 6% VAT. Illustrative parse from the April fixture
 
 ### DSO overlay
 
-`_extract_dsos` dispatches on region (`dats24.py:298-303`). It returns `{}` for
+`_extract_dsos` dispatches on region (`dats24.py:283-288`). It returns `{}` for
 any region other than Flanders or Wallonia (defensive; `fetch` already rejects
 those).
 
-#### Flanders (`_extract_flanders_dsos`, `dats24.py:306-341`)
+#### Flanders (`_extract_flanders_dsos`, `dats24.py:291-326`)
 
-Iterates the eight Fluvius sub-areas in `_FLANDERS_DSOS` (`dats24.py:115-124`),
+Iterates the eight Fluvius sub-areas in `_FLANDERS_DSOS` (`dats24.py:109-109`),
 which maps the card's Dutch labels to the integration's canonical keys:
 
 | Card label | Canonical key |
@@ -257,18 +257,18 @@ meteropname_kwartier | meteropname_jaarlijks
 
 The extractor models only the digital-meter path (post-2024 Fluvius rollout
 target); the four classical/analog numbers are ignored. It fills `DsoOverlay` with
-(`dats24.py:330-340`): `distribution_single` = col 2 /100, `distribution_exclusive_night`
+(`dats24.py:315-325`): `distribution_single` = col 2 /100, `distribution_exclusive_night`
 = col 3 /100, `transport` = 0.0 (rolled into Fluvius distribution on this card),
 `capacity_eur_per_kw_year` = col 1 (the digital capacity term, EUR/kW/yr, NOT
 divided by 100), `data_management_per_year` = col 10 (jaarlijks meteropname). A
-row that does not match is skipped (`continue`, `dats24.py:328-329`), not fatal, so
+row that does not match is skipped (`continue`, `dats24.py:313-314`), not fatal, so
 a partial card still yields the DSOs it could parse. Illustrative Antwerpen values
 (`test_dats24.py:209-214`): capacity 52.37 EUR/kW/yr, distribution 5.35 c€/kWh,
 data-management 18.92 EUR/yr.
 
-#### Wallonia (`_extract_wallonia_dsos`, `dats24.py:344-380`)
+#### Wallonia (`_extract_wallonia_dsos`, `dats24.py:329-365`)
 
-Iterates `_WALLONIA_DSOS` (`dats24.py:130-136`), an ordered tuple:
+Iterates `_WALLONIA_DSOS` (`dats24.py:115-121`), an ordered tuple:
 
 | Card label | Canonical key |
 |---|---|
@@ -291,7 +291,7 @@ single | day | night | PIC | MEDIUM | ECO | excl_nacht
 transport | data-beheer (€/yr) | prosumer (€/kVA/yr)
 ```
 
-Mapped to `DsoOverlay` (`dats24.py:368-379`): `distribution_single` (col1/100),
+Mapped to `DsoOverlay` (`dats24.py:353-364`): `distribution_single` (col1/100),
 `distribution_peak` (col2/100), `distribution_offpeak` (col3/100),
 `distribution_pic` (col4/100), `distribution_medium` (col5/100),
 `distribution_eco` (col6/100), `distribution_exclusive_night` (col7/100),
@@ -308,7 +308,7 @@ night 7.39, PIC 16.57, medium 10.83, eco 5.09 c€/kWh, transport 2.74 c€/kWh,
 11.06, prosumer 84.22, `test_dats24.py:239-246`), which guards against a regex that
 would silently align all Walloon DSOs to one row.
 
-### Taxes (`_extract_taxes`, `dats24.py:386-457`)
+### Taxes (`_extract_taxes`, `dats24.py:371-442`)
 
 Federal levies are region-agnostic; regional renewables and fees are gated by
 `region` so a Flanders user never accrues the Walloon connection fee and a
@@ -350,7 +350,7 @@ in without conversion (`dats24.py:389-394`). Illustrative April values: Flanders
 renewables 0.01561, Wallonia renewables 0.03032, connection fee 0.00075 EUR/kWh
 (`test_dats24.py:124`, `138-139`).
 
-### Injection (`_extract_injection`, `dats24.py:463-506`)
+### Injection (`_extract_injection`, `dats24.py:448-491`)
 
 Injection shape: **monthly-indicative-only** (shape (a) of the three-shape
 taxonomy). DATS 24 settles teruglevering on `BE_spotSPP`, a monthly synthetic
@@ -363,11 +363,11 @@ indicative: Teruglevering2 (c€/kWh) 3,26
 ```
 
 The extractor surfaces ONLY the indicative as `InjectionRates.current`, leaving
-`factor` and `base` as `None` (`dats24.py:503-506`). Emitting factor/base would make
+`factor` and `base` as `None` (`dats24.py:488-491`). Emitting factor/base would make
 the pricing engine apply the monthly coefficient to the hourly spot, mispricing the
 credit; this mirrors EBEM Groen Variabel / B@sic+ and Ecofix Flexy's BELPEX-SPP-M
-handling (`dats24.py:472-475`). The `formula` string is retained verbatim for
-diagnostics only (`dats24.py:499-505`, and `test_injection_formula_text_retained_for_any_operator`
+handling (`dats24.py:484-487`). The `formula` string is retained verbatim for
+diagnostics only (`dats24.py:484-490`, and `test_injection_formula_text_retained_for_any_operator`
 `test_dats24.py:157-170` proves any operator, including `+`, is captured as text
 without affecting the price).
 
@@ -395,7 +395,7 @@ There is no supplier-side prosumer/PV forfait on DATS 24 (`supplier_prosumer_eur
 is left unset). The Walloon DSO prosumer term (`prosumer_eur_per_kva_year`) is the
 only prosumer charge, and it lives on the DSO overlay, not the supplier snapshot.
 
-### Publication label (`_extract_publication`, `dats24.py:512-514`)
+### Publication label (`_extract_publication`, `dats24.py:497-499`)
 
 `TARIEFKAART\s+(\w+\s+20\d{2})` case-insensitive, lowercased. Illustrative:
 `april 2026` (`test_dats24.py:91`), `mei 2026` (`test_dats24.py:257`). Empty string
@@ -474,13 +474,13 @@ pure parsers are the unit under test.
 | Symptom | Likely function | Why |
 |---|---|---|
 | `could not parse DATS 24 indicative afname row` | `_extract_energy` (`dats24.py:269-274`) | the `Afname1 (c€/kWh)` label, column count, or separator changed |
-| `could not parse DATS 24 yearly fixed fee` | `_extract_energy` (`dats24.py:279-284`) | `VASTE VERGOEDING (€/jaar)` label moved |
-| A Flanders DSO silently missing from `snapshot.dsos` | `_extract_flanders_dsos` / `_FLANDERS_DSOS` (`dats24.py:306-341`, `115-124`) | a Fluvius label was renamed (row skipped on no-match) or the 10-column layout changed |
-| A Walloon DSO missing, or all sharing one row | `_extract_wallonia_dsos` / `_WALLONIA_DSOS` (`dats24.py:344-380`, `130-136`) | `ORES (Brabant Wallon)` / `RÉGIE DE WAVRE` label drift, or column reorder |
+| `could not parse DATS 24 yearly fixed fee` | `_extract_energy` (`dats24.py:236-277`) | `VASTE VERGOEDING (€/jaar)` label moved |
+| A Flanders DSO silently missing from `snapshot.dsos` | `_extract_flanders_dsos` / `_FLANDERS_DSOS` (`dats24.py:291-326`, `115-124`) | a Fluvius label was renamed (row skipped on no-match) or the 10-column layout changed |
+| A Walloon DSO missing, or all sharing one row | `_extract_wallonia_dsos` / `_WALLONIA_DSOS` (`dats24.py:329-365`, `130-136`) | `ORES (Brabant Wallon)` / `RÉGIE DE WAVRE` label drift, or column reorder |
 | `DATS 24: Flanders GSC/WKC renewables not found` | `_extract_taxes` (`dats24.py:416-425`) | the fragile `Vlaams Gewest: GSC` / `WKC` prefixes changed |
-| `DATS 24: Wallonia CV / connection fee not found` | `_extract_taxes` (`dats24.py:434-445`) | `Waals Gewest: CV` or the `Aansluitingsvergoeding Wallonië` footnote changed |
+| `DATS 24: Wallonia CV / connection fee not found` | `_extract_taxes` (`dats24.py:371-442`) | `Waals Gewest: CV` or the `Aansluitingsvergoeding Wallonië` footnote changed |
 | `could not parse DATS 24 federal tax block` | `_extract_taxes` (`dats24.py:403-408`) | `Energiebijdrage` or `Verbruik tussen 0 kWh en 3.000 kWh` moved |
-| `DATS 24 injection: monthly indicative missing` | `_extract_injection` (`dats24.py:491-498`) | the `Teruglevering2 (c€/kWh)` label changed, or the card went spot-formula |
-| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:512-514`), `parse_valid_until` (`_pdf.py:922`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
+| `DATS 24 injection: monthly indicative missing` | `_extract_injection` (`dats24.py:448-491`) | the `Teruglevering2 (c€/kWh)` label changed, or the card went spot-formula |
+| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:497-499`), `parse_valid_until` (`_pdf.py:922`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
 | Values off by 100x | the per-column `/100.0` divisions in the DSO/energy/tax parsers | a c€/kWh column became EUR/kWh (or a EUR/yr column got divided) |
 | `PDF layout parse error` / html-not-pdf | `_pdf.py:244-251`, `334-344` | the CDN returned HTML (file moved) or an undecodable PDF |

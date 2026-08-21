@@ -52,12 +52,12 @@ listing page; there is no JSON or CMS API. The listing is HTML with plain
 
 | id | label | TariffKind | regions | spot_indexed_injection | quarter_hourly | notes |
 |----|-------|------------|---------|------------------------|----------------|-------|
-| `cociter_variable` | Cociter Tarif Variable | `variable` | Wallonia | `True` | n/a | BELIX-indexed monthly variable energy. Publishes per-meter indicative rates (mono, bi-hourly, exclusive-night). Injection is an hourly `factor*spot+base` BELPEX formula with no printed monthly indicative, so it needs an ENTSO-E spot: hence `spot_indexed_injection=True` (`cociter.py:546-548`). |
+| `cociter_variable` | Cociter Tarif Variable | `variable` | Wallonia | `True` | n/a | BELIX-indexed monthly variable energy. Publishes per-meter indicative rates (mono, bi-hourly, exclusive-night). Injection is an hourly `factor*spot+base` BELPEX formula with no printed monthly indicative, so it needs an ENTSO-E spot: hence `spot_indexed_injection=True` (`cociter.py:611-613`). |
 | `cociter_dynamic` | Cociter Tarif Dynamique | `dynamic` | Wallonia | `False` (default) | `True` | SMR3 quarter-hourly BELPEX dynamic contract. Bills on the native 15-minute Belpex grid, so `DynamicRates.quarter_hourly=True` (`cociter.py:400`). Dynamic contracts already collect the ENTSO-E key via the energy formula, so `spot_indexed_injection` stays `False`. |
 
 Neither product is retired. Both are Wallonia-only by design, not by
 regression. Contract ids are canonical throughout the integration; the
-`_CONTRACT_PATTERNS` map (`cociter.py:114-117`) binds each id to the filename
+`_CONTRACT_PATTERNS` map (`cociter.py:121-124`) binds each id to the filename
 regex used for discovery, fetch, and probe.
 
 The `spot_indexed_injection=True` flag on the variable contract is load-bearing
@@ -74,11 +74,11 @@ injection cannot be priced and would silently zero the solar credit (see the
 `fetch` (`cociter.py:120-132`) looks up the filename pattern for the requested
 `contract_id`, calls `_find_latest` to pick the newest matching PDF, downloads
 it with `fetch_pdf_text`, and hands the extracted text to `parse_snapshot`. An
-unknown `contract_id` raises `ExtractorError` (`cociter.py:127-128`), covered
+unknown `contract_id` raises `ExtractorError` (`cociter.py:134-135`), covered
 by `test_unknown_contract_raises`.
 
-`_find_latest` (`cociter.py:515-525`) fetches the listing HTML once, runs the
-contract's regex (`_VAR_RE` / `_DYN_RE`, `cociter.py:89-94`) to collect every
+`_find_latest` (`cociter.py:574-590`) fetches the listing HTML once, runs the
+contract's regex (`_VAR_RE` / `_DYN_RE`, `cociter.py:96-101`) to collect every
 `(url, yymm)` pair, sorts by the `YYMM` string, and returns the last (newest).
 Because `YYMM` is fixed-width and zero-padded, lexical sort equals
 chronological sort within a century. It raises `ExtractorError` when the
@@ -86,7 +86,7 @@ listing links no matching card (`cociter.py:520-521`).
 
 ### Freshness probe: `probe`
 
-`probe` (`cociter.py:172-190`) is the cheap freshness key the coordinator
+`probe` (`cociter.py:203-221`) is the cheap freshness key the coordinator
 calls hourly. Cociter's listing returns no `Last-Modified` or `ETag`, so the
 probe GETs the listing and returns the latest matching PDF URL. The URL embeds
 `YYMM`, so any monthly rotation flips the probe key and triggers a refetch. On
@@ -114,7 +114,7 @@ proxy) in every soft-failure case:
 - `archive_validity_check` rejects the card as not covering the month
   (`cociter.py:169`).
 
-`archive_validity_check` (`_pdf.py:755-791`) is two-tier: if the parsed
+`archive_validity_check` (`_pdf.py:883-919`) is two-tier: if the parsed
 `valid_until` is present it must fall in the requested month; if it is missing
 it falls back to a textual month-name mention via `text_mentions_month`, using
 the French month names `_FR_MONTHS` (`cociter.py:82-85`). This guards against a
@@ -129,16 +129,16 @@ is inline HTML with three `RCVar_YMR_Coop-YYMM-fr.pdf` links.
 
 ### Product discovery: `discover`
 
-`discover` (`cociter.py:200-216`) is the new-product tripwire. It fetches the
+`discover` (`cociter.py:231-247`) is the new-product tripwire. It fetches the
 listing and regexes every `RC<family>_<suffix>_Coop-<digits>-(fr|nl).pdf`
 filename, mapping known families (`RCVar_YMR`, `RCDyn_SM3`) back to contract ids
-via `_DISCOVER_FAMILIES` (`cociter.py:194-197`) and surfacing any unknown
+via `_DISCOVER_FAMILIES` (`cociter.py:225-228`) and surfacing any unknown
 family verbatim. An unrecognised family in the output means Cociter has added a
 product the integration does not yet model.
 
 ## Parsing
 
-`parse_snapshot` (`cociter.py:219-237`) is the pure, test-exposed parser. It
+`parse_snapshot` (`cociter.py:250-268`) is the pure, test-exposed parser. It
 assembles a `SupplierSnapshot` from six sub-parsers. The mapping of snapshot
 field to helper:
 
@@ -146,14 +146,14 @@ field to helper:
 |----------------|--------|--------|
 | `energy` | `_extract_energy` | `cociter.py:316-401` |
 | `dsos` | `_extract_dsos` (+ `_extract_transport`) | `cociter.py:404-463` |
-| `taxes` | `_extract_taxes` | `cociter.py:466-512` |
+| `taxes` | `_extract_taxes` | `cociter.py:513-559` |
 | `injection` | `_extract_injection` | `cociter.py:263-313` |
-| `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` | `cociter.py:240-260` |
+| `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` | `cociter.py:271-291` |
 | `valid_until` | `parse_valid_until` (shared) | `_pdf.py:922` |
 
-Shared numeric helpers: `to_float` (`_pdf.py:507-518`) parses Belgian decimals
+Shared numeric helpers: `to_float` (`_pdf.py:615-626`) parses Belgian decimals
 (`15,93`) and strips every Unicode space variant used as a thousands separator;
-`parse_sign` (`_pdf.py:532-539`) turns any hyphen/dash/Unicode-minus into
+`parse_sign` (`_pdf.py:660-667`) turns any hyphen/dash/Unicode-minus into
 `-1.0`; `SIGN_CHARS` (`_pdf.py:656`) is the character class of accepted sign
 glyphs. `fetch_pdf_text` (`_pdf.py:179-186`) downloads the PDF and extracts
 text with pypdf off the event loop.
@@ -184,7 +184,7 @@ accepts any `SIGN_CHARS` sign between BELIX and the base and captures the VAT
 percentage the card prints. The variable test pins the four rates as
 illustrative TVAC values (`test_cociter.py:66-71`).
 
-For `cociter_dynamic` (`cociter.py:376-401`) the SMR3 formula
+For `cociter_dynamic` (`cociter.py:427-432`) the SMR3 formula
 `(factor x QUARTER HOURLY BELPEX sign base) + N% TVA` is parsed. Note the
 regex tolerates the pypdf-split spelling `QUARTER HOURL Y` (the space inside
 "HOURLY") via `QUARTER\s*HOURL\s*Y`. The unit conversion (`cociter.py:388-398`)
@@ -206,7 +206,7 @@ at a spot of 100 EUR/MWh so a unit-conversion swap cannot cancel out. The
 ### DSO overlay: `_extract_dsos`
 
 `_extract_dsos` (`cociter.py:404-452`) parses one row per Wallonian DSO. The
-DSO label to canonical registry key map is `_DSO_KEY` (`cociter.py:102-108`):
+DSO label to canonical registry key map is `_DSO_KEY` (`cociter.py:109-115`):
 
 | PDF row label | Registry key |
 |---------------|--------------|
@@ -244,13 +244,13 @@ number, while distribution rates still parse. The variable DSO test
 0.1087`, `distribution_peak 0.1205`, `distribution_offpeak 0.0666`, `transport
 0.0274252`, `data_management_per_year 19.49`, `prosumer_eur_per_kva_year 81.03`.
 
-Each row produces a `DsoOverlay` (`base.py:310-347`) with the four distribution
+Each row produces a `DsoOverlay` (`base.py:364-401`) with the four distribution
 rates, the shared transport rate, `data_management_per_year` (column 1, not
 divided), the optional prosumer forfait, and the optional Impact triplet.
 
 ### Transport: `_extract_transport`
 
-`_extract_transport` (`cociter.py:455-463`) parses the single ELIA transport
+`_extract_transport` (`cociter.py:502-510`) parses the single ELIA transport
 rate from the `Tarifs de transport TVAC` row, shared across all DSO rows and
 divided by 100 to EUR/kWh. The comment flags it as ~2.7-3.2 c€/kWh, roughly
 20% of the all-in (illustrative). A miss is fatal (`cociter.py:462`);
@@ -260,7 +260,7 @@ confirms both this and the abonnement raise.
 
 ### Taxes: `_extract_taxes`
 
-`_extract_taxes` (`cociter.py:466-512`) pulls three things:
+`_extract_taxes` (`cociter.py:513-559`) pulls three things:
 
 1. The Walloon renewables contribution, anchored on the quoted heading
    `"énergies renouvelables"` (accepting straight or curly quote glyphs) with
@@ -271,7 +271,7 @@ confirms both this and the abonnement raise.
    Redevance de raccordement` (`cociter.py:483-490`). A miss is fatal
    (`cociter.py:491-492`).
 
-Mapping into `TaxOverlay` (`cociter.py:506-512`): `energy_contribution`
+Mapping into `TaxOverlay` (`cociter.py:553-559`): `energy_contribution`
 (cotisation énergie), `federal_excise` (droit d'accises spécial),
 `region_connection_fee` (redevance de raccordement), and `wallonia_renewables`
 (the quoted renewables value). Because Cociter is Wallonia-only,
@@ -279,7 +279,7 @@ Mapping into `TaxOverlay` (`cociter.py:506-512`): `energy_contribution`
 
 Critically `vat_rate=0.0` (`cociter.py:511`): the whole card is TVAC, so the
 snapshot's prices are already VAT-inclusive and the pricing engine must not
-re-apply VAT (see `TaxOverlay` comment, `base.py:471-474`). The tax test
+re-apply VAT (see `TaxOverlay` comment, `base.py:517-564`). The tax test
 (`test_cociter.py:161-174`) pins illustrative Wallonian values and asserts
 `vat_rate == 0.0` and `flanders_renewables == 0.0`.
 
@@ -289,9 +289,9 @@ See the dedicated [Injection](#injection) section below.
 
 ### Supplier prosumer forfait: `_extract_supplier_prosumer`
 
-`_extract_supplier_prosumer` (`cociter.py:240-260`) parses the variable card's
+`_extract_supplier_prosumer` (`cociter.py:271-291`) parses the variable card's
 supplier-side PV forfait, billed on top of the DSO prosumer column. It is
-returned only for `cociter_variable` (`cociter.py:255-256`); the dynamic SMR3
+returned only for `cociter_variable` (`cociter.py:286-287`); the dynamic SMR3
 card dispenses with the compensation regime and returns `None`.
 
 The value comes from footnote (6), matched on the unique wording
@@ -300,7 +300,7 @@ TVAC (illustrative, pinned by `test_variable_extracts_supplier_prosumer_forfait`
 `test_cociter.py:97-106`). The anchor is deliberately the "EUR/kVA/an TVAC"
 footnote wording, not the bare "(EUR/kVA/an)" DSO prosumer column header, so the
 two do not collide. The value is already TVAC and must NOT be VAT-scaled
-(`SupplierSnapshot` comment, `base.py:493-498`). A miss on the variable card is
+(`SupplierSnapshot` comment, `base.py:568-598`). A miss on the variable card is
 fatal (`cociter.py:258-259`): every variable card prints it, so absence is a
 layout drift, not a fee-free contract.
 
@@ -326,7 +326,7 @@ the shared ELIA transport rate, `data_management_per_year`, and either the
 compensation-regime prosumer forfait (variable) or the three Tarif Impact
 distribution bands PIC/MEDIUM/ECO (dynamic SMR3). The Impact bands feed the
 CWaPE 3-band pricing when a customer opts into the DSO Impact tariff (see
-`DsoOverlay` and `ImpactRates`, `base.py:310-347`, `base.py:232-254`).
+`DsoOverlay` and `ImpactRates`, `base.py:364-401`, `base.py:232-254`).
 
 ## Tax overlay
 
@@ -346,7 +346,7 @@ and compare paths, all gated on the contract's `spot_indexed_injection` flag
 credit.
 
 Injection is VAT-exempt for residential, so `factor`/`base` are never VAT-scaled
-(`InjectionRates` comment, `base.py:269-289`). Unit handling mirrors the dynamic
+(`InjectionRates` comment, `base.py:298-360`). Unit handling mirrors the dynamic
 consumption side: the PDF factor (against BELPEX in EUR/MWh) is multiplied by 10
 to work against a EUR/kWh spot, and the base (c€/kWh) is divided by 100
 (`cociter.py:306-311`). From the printed `(0,097 x BELPEX - 2,1)` the tests pin
@@ -405,16 +405,16 @@ comment:
   `base.py:140-159`). YTD statistics still aggregate to hourly.
 - **Split-glyph spellings.** pypdf can split "HOURLY" into `HOURL Y` and emit
   several apostrophe/quote/dash glyphs; the regexes tolerate all of these
-  (`cociter.py:288-294`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:656`).
+  (`cociter.py:319-331`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:656`).
 - **Injection has no indicative fallback.** `current=None` always; the credit
-  is spot-only, gated on `spot_indexed_injection` (`cociter.py:546-548`).
+  is spot-only, gated on `spot_indexed_injection` (`cociter.py:611-613`).
   Losing the gate zeros or drifts the solar credit.
 - **Archive validity cross-check.** `fetch_for_month` runs
   `archive_validity_check` with the French month names so a CDN-substituted
   current card served under an archived URL is rejected rather than mis-billed
   (`cociter.py:169`, `_pdf.py:755-791`).
 - **DSO map / const lockstep assertion.** `_DSO_KEY` must equal
-  `WALLONIA_DSO_KEYS` or import fails (`cociter.py:110-112`).
+  `WALLONIA_DSO_KEYS` or import fails (`cociter.py:117-119`).
 
 ## Test fixtures
 
@@ -435,7 +435,7 @@ The `_LISTING_HTML` fixture is inline in the test module
 Ordered by likelihood of breaking when Cociter re-renders its cards:
 
 1. **Filename or listing URL change** -> `_VAR_RE` / `_DYN_RE`
-   (`cociter.py:89-94`), `_INDEX_URL` (`cociter.py:80`), and the `discover`
+   (`cociter.py:96-101`), `_INDEX_URL` (`cociter.py:80`), and the `discover`
    family regex (`cociter.py:212-214`). Everything (fetch, probe,
    fetch_for_month, discover) keys off these.
 2. **Energy row labels or formula wording** -> `_extract_energy`
@@ -445,14 +445,14 @@ Ordered by likelihood of breaking when Cociter re-renders its cards:
 3. **DSO table layout / column order / new column** -> `_extract_dsos`
    (`cociter.py:404-452`) and the `"Tarif prosumer"` header discriminator
    (`cociter.py:421`). A new DSO also needs `_DSO_KEY` and
-   `const.WALLONIA_DSO_KEYS` updated together (`cociter.py:110-112`).
+   `const.WALLONIA_DSO_KEYS` updated together (`cociter.py:117-119`).
 4. **Injection formula relocation or wording** -> `_extract_injection`
    (`cociter.py:263-313`): the `Le prix de l'injection` anchor and the
    `Tout compteur` fallback.
-5. **Tax block relabeling** -> `_extract_taxes` (`cociter.py:466-512`): the
+5. **Tax block relabeling** -> `_extract_taxes` (`cociter.py:513-559`): the
    `énergies renouvelables` and `Cotisation énergie / Droit d'accises spécial /
    Redevance de raccordement` anchors.
-6. **Transport row rename** -> `_extract_transport` (`cociter.py:455-463`).
+6. **Transport row rename** -> `_extract_transport` (`cociter.py:502-510`).
 7. **PV forfait footnote rewording** -> `_extract_supplier_prosumer`
    (`cociter.py:240-260`): the `EUR/kVA/an TVAC` anchor.
 8. **Validity-header format change** -> shared `parse_valid_until`

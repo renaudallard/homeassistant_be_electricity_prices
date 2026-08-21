@@ -39,7 +39,7 @@ energy + network + taxes == all_in
 This holds because VAT is applied to each component separately and then summed,
 never as `(e + n + t) * vat`, which would diverge by sub-femto-euro rounding once
 `vat_rate` is non-zero (`pricing.py:422-431`, same reasoning at
-`pricing.py:422-431` for `static_breakdown`).
+`pricing.py:445-488` for `static_breakdown`).
 
 ## Public surface
 
@@ -98,7 +98,7 @@ Note what is deliberately absent from the per-kWh formula:
   table, and `taxes.energy_fund_eur_per_month` are per-year or per-month EUR
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
-  levies (`pricing.py:576-585`); `energy_fund_eur_per_month` is defined on the
+  levies (`pricing.py:614-629`); `energy_fund_eur_per_month` is defined on the
   `TaxOverlay` (`providers/base.py:517`) but is not touched here.
 - The Wallonia `region_connection_fee` is a per-kWh term and IS billed, but
   through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:632`), not
@@ -226,7 +226,7 @@ Fixed and Variable share the meter-routing helper `_routed_rate`
 
 `FixedRates` fields: `single`, optional `peak`/`offpeak`/`exclusive_night`, plus
 `yearly_fixed_fee` and `yearly_fixed_fee_exclusive_night`
-(`providers/base.py:80-99`). `VariableRates` mirrors it with `current` in place
+(`providers/base.py:112-145`). `VariableRates` mirrors it with `current` in place
 of `single` and an optional `formula` string (`providers/base.py:102-126`).
 Suppliers that publish only a mono rate (e.g. Eneco Power Flex) leave
 `peak`/`offpeak` `None`, and routing falls through to the single rate for every
@@ -302,8 +302,8 @@ discount and is out of scope (`pricing.py:214-219`).
 `ImpactRates` (`tou_impact` kind) is Wallonia's Tarif Impact, distinct from TOU
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
-(`providers/base.py:235-238`). Fields: `pic`, `medium`, `eco`
-(`providers/base.py:250-252`). `dso_impact_band` (`pricing.py:478-494`):
+(`providers/base.py:244-247`). Fields: `pic`, `medium`, `eco`
+(`providers/base.py:259-261`). `dso_impact_band` (`pricing.py:495-511`):
 
 | Band | Hours (every day) |
 | --- | --- |
@@ -348,7 +348,7 @@ else falls back to single/current (`pricing.py:264-270`, `pricing.py:281-290`).
 1. **Exclusive night** (`pricing.py:520-535`), resolved BEFORE the Impact band so
    a dedicated night circuit bills its own rate even under Impact mode. Fallback
    chain: `distribution_exclusive_night` -> `distribution_offpeak` ->
-   `distribution_single` (`pricing.py:529-534`). Each step is closer to the real
+   `distribution_single` (`pricing.py:567-572`). Each step is closer to the real
    bill than the day rate.
 2. **Impact** (`pricing.py:536-559`), only when `dso_tariff_mode == "impact"` AND
    all three of `distribution_pic`/`medium`/`eco` are non-`None`. The all-three
@@ -392,7 +392,7 @@ path (`pricing.py:108-113`).
 on an exclusive-night config entry when the card prints one (EBEM Groen Variabel),
 otherwise the standard `yearly_fixed_fee` for every meter type
 (`pricing.py:368-382`). Three rate shapes carry the dedicated field: `FixedRates`
-(`providers/base.py:94-99`), `VariableRates` (`providers/base.py:121-125`) and
+(`providers/base.py:112-145`), `VariableRates` (`providers/base.py:121-125`) and
 `SpotMonthlyRates` (`providers/base.py:182-187`), the last because a variable card
 re-priced onto a monthly-mean leg for a signing cohort keeps the separate charge
 its card printed. An exclusive-night circuit is configured as a SECOND config
@@ -413,14 +413,14 @@ schema does not map onto the bi-hourly convention) and `ImpactRates` (per-band
 rates vary by hour, caller must use the hourly path) (`pricing.py:346-351`).
 
 `static_breakdown` assembles the all-in for one band with the same VAT-per-component
-rule as `compute_breakdown` (`pricing.py:422-431`). It returns `None` when the
+rule as `compute_breakdown` (`pricing.py:644-675`). It returns `None` when the
 energy has no stable rate, and also when `dso_tariff_mode == "impact"` and the DSO
 publishes Impact distribution: Impact distribution cannot collapse to
 single/peak/offpeak, so the YTD path must read hourly statistics instead
 (`pricing.py:456-460`). Distribution selection here mirrors the network side:
 `simple` -> single, `peak`/`offpeak` band when published, else single
 (`pricing.py:461-468`). A missing `dso_key` raises `KeyError` with the available
-keys (`pricing.py:402-407`, same guard in `compute_breakdown` at
+keys (`pricing.py:644-675`, same guard in `compute_breakdown` at
 `pricing.py:401-570`).
 
 ## Injection (feed-in) math
@@ -428,16 +428,16 @@ keys (`pricing.py:402-407`, same guard in `compute_breakdown` at
 Injection is computed in `coordinator.py`, not `pricing.py`, but it consumes the
 same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 `current`, an hourly formula `factor`/`base`, an optional per-slot TOU triplet
-`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:267-306`).
+`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:325-340`).
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption
-snapshot's `vat_rate` (`providers/base.py:271-272`). None of the injection code
+snapshot's `vat_rate` (`providers/base.py:553-553`). None of the injection code
 paths multiply by `1.0 + vat_rate`.
 
 Injection formulas can go negative at low spot (the producer pays to inject) and
 the engine respects that: no clamping in `_compute_injection_price` or
-`_historical_injection_rate` (`providers/base.py:280-282`).
+`_historical_injection_rate` (`providers/base.py:312-316`).
 
 ### The three injection shapes
 
@@ -480,7 +480,7 @@ in the live, backfill and compare paths, or the credit drifts.
 EUR/kWh price only on the injection regime and only when the snapshot has injection
 data (`injection.py:223-236`). Priority:
 
-1. **Per-slot TOU** via `_tou_injection_rate` (`injection.py:137-146`).
+1. **Per-slot TOU** via `_tou_injection_rate` (`injection.py:168-187`).
 2. **Spot formula** `factor * spot + base` when either the energy is
    `DynamicRates` (shape b) OR `inj.current is None` (shape c). If no spot is
    available it returns `None` rather than fabricate a value
@@ -549,7 +549,7 @@ context):
 - `compensation`: per-hour `(cons - inj) * all_in`, netting injection against
   consumption (per band when bi) and clamping at zero.
 - `injection`: per-hour `cons * all_in - inj * inj_rate`, where `inj_rate` comes
-  from `_historical_injection_rate` (`injection.py:261-282`).
+  from `_historical_injection_rate` (`injection.py:292-323`).
 
 Shape (c) has a dedicated YTD helper `_ytd_spot_injection_credit`
 (`ytd_cost.py:444`) that credits a static-energy contract whose injection is a

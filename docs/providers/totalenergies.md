@@ -27,7 +27,7 @@ only, see the contracts table).
 TotalEnergies publishes one PDF card per (product, region) at a stable,
 predictable URL. The `/latest/` path segment auto rolls each month, so the
 current card is always reachable without scraping a listing page
-(`totalenergies.py:26-42`). The URL pattern (`_document_url`, `totalenergies.py:185`):
+(`totalenergies.py:185-187`). The URL pattern (`_document_url`, `totalenergies.py:185`):
 
 ```
 https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest/
@@ -83,7 +83,7 @@ Notes on the kind mapping:
 
 The per contract `regions` override exists because TotalEnergies's listing page
 advertises every product in V/W/B, but some only have a Wallonia PDF; the rest
-return a "200 OK" HTML 404 page (`totalenergies.py:116-119`). `fetch` and `probe`
+return a "200 OK" HTML 404 page (`totalenergies.py:113-116`). `fetch` and `probe`
 both reject a (contract, region) pair that is not in the contract's `regions`
 (`totalenergies.py:251`, `totalenergies.py:208`).
 
@@ -160,7 +160,7 @@ Notable parsing hurdles:
   realized monthly indicative ("prix mensuels calcules sur base de la derniere
   valeur connue du BELPEX_M_RLP"). The billed price is the realized block, so the
   extractor prefers it and only falls back to the table estimate when the block is
-  absent (`totalenergies.py:393-405`, `_realized_monthly_consumption`,
+  absent (`totalenergies.py:478-509`, `_realized_monthly_consumption`,
   `totalenergies.py:485`). The test pins realized (13,53 / 14,65 / 12,55 / 12,39)
   over estimate (15,62 / ...) values as illustrative
   (`tests/test_totalenergies.py:153-168`).
@@ -239,7 +239,7 @@ Region specifics:
 
 ### Tax overlay
 
-`TaxOverlay` is built in `parse_snapshot` (`totalenergies.py:305-314`):
+`TaxOverlay` is built in `parse_snapshot` (`totalenergies.py:255-312`):
 
 - `federal_excise`: first excise tier (0-3000 kWh), mandatory, raises on a miss
   (`totalenergies.py:590`). Illustrative pinned value 0.0503 EUR/kWh across all

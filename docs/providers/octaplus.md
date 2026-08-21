@@ -95,7 +95,7 @@ The `x_join_threshold=1.0` is load-bearing. OCTA+'s tax block renders each glyph
 as its own pdfplumber word with sub-point gaps (`"5 ,0 3 2 9 0 ,2 0 4 2"`); a
 1.0pt merge threshold reassembles them into `"5,0329 0,2042"` while keeping real
 inter-word spacing intact (`octaplus.py:185-188`,
-`extract_pdf_text_aligned` at `_pdf.py:268-318`, exercised by
+`extract_pdf_text_aligned` at `_pdf.py:335-384`, exercised by
 `test_federal_taxes_use_first_tier`). The aligned extractor also exists because
 pdfplumber's default text extractor returns OCTA+'s DSO block in column-major
 order (one number per line); bucketing words by y coordinate reassembles each
@@ -115,7 +115,7 @@ preferred headers.
 ### `fetch_for_month`
 
 OCTA+ declares no `fetch_for_month` (the `SupplierExtractor` is built with only
-`fetch` and `probe`, `octaplus.py:684-685`). There is no accessible archive:
+`fetch` and `probe`, `octaplus.py:674-688`). There is no accessible archive:
 cards are overwrite-in-place, so past months fall back to the current snapshot
 as a proxy. This is the documented behaviour for overwrite-in-place suppliers in
 `base.py:519-524`.
@@ -130,7 +130,7 @@ returns an empty set on fetch failure.
 
 ## Parsing
 
-`parse_snapshot` (`octaplus.py:192-236`) is a pure function (no I/O) exposed for
+`parse_snapshot` (`octaplus.py:191-233`) is a pure function (no I/O) exposed for
 unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 
 | snapshot field | source function | notes |
@@ -146,7 +146,7 @@ unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 | `valid_until` | `parse_valid_until` (`_pdf.py:922`) | shared helper |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` (`:239`) | PV forfait, annualised |
 
-### Energy block (`_extract_energy`, `octaplus.py:321-389`)
+### Energy block (`_extract_energy`, `octaplus.py:318-386`)
 
 `_extract_yearly_fee` (`:267-279`) always runs first and matches `Redevance
 fixe (€/an) <value>` (illustrative ~65 EUR/year per the comment and
@@ -182,7 +182,7 @@ By kind:
   stays nullable (separate optional circuit). `fixed` returns `FixedRates`,
   `variable` returns `VariableRates`.
 
-### Publication month (`_extract_publication_month`, `octaplus.py:407-428`)
+### Publication month (`_extract_publication_month`, `octaplus.py:404-425`)
 
 Two layouts are handled. Pre-2026 cards print `Clients résidentiels en <region>
 - MM/YYYY - Tarifs N% TVAC`; the regex anchors on that prose so a footer
@@ -209,7 +209,7 @@ non-matching separator to force the raise). Wallonia adds
 
 The `TaxOverlay` sets `vat_rate=0.0` (`octaplus.py:228`): OCTA+ snapshots ship
 VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
-`vat_rate` convention in `base.py:471-474`.
+`vat_rate` convention in `base.py:553-553`.
 
 ### Regional renewables
 
@@ -224,7 +224,7 @@ VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
 
 Both raises are covered by `test_missing_regional_renewables_raises`.
 
-### Injection (`_extract_injection`, `octaplus.py:431-458`)
+### Injection (`_extract_injection`, `octaplus.py:428-455`)
 
 Injection taxonomy: **flat monthly indicative** on fixed/variable, **hourly
 factor*spot+base** on dynamic. `current` is the second number on the `Compteur
@@ -242,7 +242,7 @@ votre injection` or the 2026 rewording `les prix de l'électricité injectée so
 indexés`, with the curly apostrophe the card uses.
 `test_dynamic_injection_survives_reworded_lead_in` guards this.
 
-### Supplier PV forfait (`_extract_supplier_prosumer`, `octaplus.py:239-261`)
+### Supplier PV forfait (`_extract_supplier_prosumer`, `octaplus.py:236-258`)
 
 Fixed and variable cards print `+ <value> €/kVA par mois` ("Forfait panneaux
 solaires", applicable only under the compensation regime). It is TVAC and must
