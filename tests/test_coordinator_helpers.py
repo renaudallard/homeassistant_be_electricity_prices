@@ -37,7 +37,7 @@ import calendar
 from datetime import UTC, date, datetime, timedelta
 from dataclasses import replace
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -2709,6 +2709,20 @@ async def test_projection_does_not_decay_across_the_year(
     assert seen[1] == pytest.approx(seen[0], abs=0.01)
     assert seen[2] == pytest.approx(seen[0], abs=0.01)
 
+    # And on the METERED path, which the earlier version of this test never
+    # exercised. A blended implementation decays here too, just less sharply,
+    # because the elapsed leg is real while the remainder is annualised.
+    metered = _projection_entry()
+    seen_m = []
+    for when in ("2026-02-01", "2026-07-01", "2026-12-20"):
+        freezer.move_to(f"{when} 12:00:00+01:00")
+        got, diag = await _project(hass, metered, _daily(10.0))
+        seen_m.append(got)
+        assert "measured" in diag["volume_basis"]
+    assert seen_m[0] is not None
+    assert seen_m[1] == pytest.approx(seen_m[0], abs=0.01)
+    assert seen_m[2] == pytest.approx(seen_m[0], abs=0.01)
+
 
 async def test_projection_uses_the_default_volume_without_a_meter(
     hass: HomeAssistant, freezer: Any
@@ -2730,17 +2744,56 @@ async def test_projection_uses_the_default_volume_without_a_meter(
 async def test_projection_refuses_a_spot_priced_contract(
     hass: HomeAssistant, freezer: Any, energy: Any
 ) -> None:
-    """A leg settling on an index nobody has yet reports no value plus a why."""
+    """A leg carried as a formula over an index nobody has yet reports no value.
+
+    Both snapshots carry the same energy here, so this is a genuinely
+    spot-priced card rather than a signing-cohort re-price."""
 
     freezer.move_to("2026-07-01 12:00:00+02:00")
+    snap = replace(_yearly_snapshot(), energy=energy)
     got, diag = await _project(
-        hass,
-        _projection_entry(),
-        _daily(10.0),
-        priced=replace(_yearly_snapshot(), energy=energy),
+        hass, _projection_entry(), _daily(10.0), snapshot=snap, priced=snap
     )
     assert got is None
     assert "no forward price exists" in diag["energy_basis"]
+
+
+async def test_projection_blames_the_cohort_splice_when_that_is_the_cause(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A start date can move a Variable card onto a spot axis, and the reason
+    the sensor went quiet has to name that.
+
+    ``cohort._cohort_energy_from_archived`` rewrites a Variable card with
+    parsed coefficients into SpotMonthlyRates, so filling in an optional
+    renewal-reminder field turns the sensor off. Telling that user their card
+    settles on a Belpex index reads as simply wrong: their card does not."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    card = replace(_yearly_snapshot(), energy=VariableRates(current=0.18))
+    spliced = replace(_yearly_snapshot(), energy=SpotMonthlyRates(factor=1.0, base=0.0))
+    got, diag = await _project(
+        hass, _projection_entry(), _daily(10.0), snapshot=card, priced=spliced
+    )
+    assert got is None
+    assert "contract start date" in diag["energy_basis"]
+
+
+async def test_projection_prices_a_resolved_monthly_indexed_card(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A Variable or Impact card is monthly-indexed in the market sense, but
+    its extractor has already resolved this month's rate, and holding a
+    resolved rate flat is the assumption the whole sensor rests on. The gate
+    tests the shape the rate is stored in, not the product's marketing."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    card = replace(_yearly_snapshot(), energy=VariableRates(current=0.18))
+    got, diag = await _project(
+        hass, _projection_entry(), _daily(10.0), snapshot=card, priced=card
+    )
+    assert got is not None
+    assert "today's published rate" in diag["energy_basis"]
 
 
 async def test_projection_scales_a_short_history_and_says_so(
@@ -2791,20 +2844,104 @@ async def test_projection_never_folds_in_a_partial_injection_year(
 async def test_projection_clamps_the_compensation_net_once(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """A year that nets to surplus rests on the fees floor, whatever the date.
+    """One clamp over the whole year, not one per half of it.
 
-    Clamping an elapsed leg and a remainder leg separately forfeited a banked
-    summer surplus against the remaining months, so the projection could never
-    fall below the running bill's energy term. One pass over the whole year
-    clamps exactly once."""
+    This has to use a SEASONAL profile. Under a flat one the elapsed span and
+    the remaining span net the same sign, so clamping each separately lands on
+    the same number as clamping once and the test cannot see the difference:
+    an implementation that split the year in two and clamped both halves passed
+    the earlier version of this test while diverging by 75% on real data.
 
+    Here the year nets positive overall (a bill is owed) while the summer half
+    alone nets negative, so a per-half clamp would discard the banked surplus
+    and quote materially more."""
+
+    freezer.move_to("2026-10-01 12:00:00+02:00")
     entry = _projection_entry(solar_regime="compensation", injection_kwh="sensor.inj")
-    for when in ("2026-04-01", "2026-10-01"):
-        freezer.move_to(f"{when} 12:00:00+02:00")
-        got, _diag = await _project(hass, entry, _daily(5.0, inj_per_day=20.0))
-        # Injection exceeds consumption over the year: energy term clamps to
-        # zero and only the (zero, on this stub) fees remain.
-        assert got == pytest.approx(0.0, abs=0.01)
+
+    async def _seasonal(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        days = (end - start).days + 1
+        out: dict[date, float] = {}
+        for i in range(days):
+            day = start + timedelta(days=i)
+            summer = 4 <= day.month <= 9
+            if entity_id == "sensor.cons":
+                out[day] = 10.0
+            elif entity_id == "sensor.inj":
+                out[day] = 18.0 if summer else 0.0
+        return out
+
+    got, diag = await _project(hass, entry, _seasonal)
+    assert got is not None
+    # 3650 kWh drawn, 3294 injected over the summer half: the year nets 356 kWh
+    # billable. Clamping each half separately would forfeit the summer surplus
+    # and bill the winter half gross, several times this.
+    billable = diag["annual_kwh"] - diag["annual_injection_kwh"]
+    assert billable > 0.0
+    assert got == pytest.approx(billable * 0.3765, rel=0.02)
+
+
+async def test_projection_tolerates_a_gap_in_the_feed_in_year(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A few missing recorder days must not move the figure.
+
+    Requiring all 365 made the feed-in leg binary on a quantity that is
+    routinely a day short (a restart, an inverter unavailable overnight, the
+    hours before today's statistics compile). Under the netting regime that
+    flipped a netted bill to a gross one: measured at ten times the correct
+    figure on a single absent bucket."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    entry = _projection_entry(solar_regime="compensation", injection_kwh="sensor.inj")
+    seen = []
+    for gap in (0, 1, 3, 14):
+
+        async def _gapped(
+            _hass: object, entity_id: str, start: date, end: date, gap: int = gap
+        ) -> dict[date, float]:
+            days = (end - start).days + 1
+            if entity_id == "sensor.cons":
+                return {start + timedelta(days=i): 10.0 for i in range(days)}
+            if entity_id == "sensor.inj":
+                return {start + timedelta(days=i): 9.0 for i in range(days - gap)}
+            return {}
+
+        got, _diag = await _project(hass, entry, _gapped)
+        seen.append(got)
+    assert all(v is not None for v in seen)
+    for v in seen[1:]:
+        assert v == pytest.approx(seen[0], abs=0.01)
+
+
+async def test_projection_refuses_an_unnettable_compensation_year(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Past the tolerance a netted meter reports nothing, not a gross bill.
+
+    Zeroing the feed-in leg under compensation is not a missing credit, it is
+    the wrong bill by an order of magnitude, and a partial window cannot be
+    scaled because PV is seasonal enough that a summer sample nets the year to
+    the zero clamp. So it refuses, the way a spot-priced contract does."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    entry = _projection_entry(solar_regime="compensation", injection_kwh="sensor.inj")
+
+    async def _short_inj(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        days = (end - start).days + 1
+        if entity_id == "sensor.cons":
+            return {start + timedelta(days=i): 10.0 for i in range(days)}
+        if entity_id == "sensor.inj":
+            return {end - timedelta(days=i): 9.0 for i in range(60)}
+        return {}
+
+    got, diag = await _project(hass, entry, _short_inj)
+    assert got is None
+    assert "netted against its own feed-in" in diag["injection_basis"]
 
 
 async def test_projection_says_when_a_measured_year_earns_no_credit(
@@ -2933,6 +3070,7 @@ def test_projection_attributes_are_not_recorded() -> None:
         "injection_basis",
         "annual_kwh",
         "annual_injection_kwh",
+        "contract_basis",
     ):
         assert name in BePriceSensor._unrecorded_attributes, name
 
@@ -2951,6 +3089,24 @@ def test_every_sensor_name_exists_in_all_translations() -> None:
     base = pathlib.Path("custom_components/be_electricity_prices")
     ref = set(json.loads(base.joinpath("strings.json").read_text())["entity"]["sensor"])
     assert ref, "strings.json declares no sensor names"
+    # Every description actually created must have a name. Comparing the four
+    # translation files against strings.json alone would pass a sensor that is
+    # missing from all five.
+    from custom_components.be_electricity_prices import sensor as sensor_mod
+
+    declared = {
+        d.translation_key
+        for group in (
+            sensor_mod.SENSORS,
+            sensor_mod.FEE_SENSORS,
+            sensor_mod.CAPACITY_SENSORS,
+            sensor_mod.PROSUMER_SENSORS,
+            sensor_mod.INJECTION_SENSORS,
+        )
+        for d in group
+        if d.translation_key
+    }
+    assert declared - ref == set(), f"no name for {sorted(declared - ref)}"
     for path in sorted(base.joinpath("translations").glob("*.json")):
         got = set(json.loads(path.read_text())["entity"]["sensor"])
         assert ref - got == set(), f"{path.name} is missing {sorted(ref - got)}"
@@ -2966,7 +3122,6 @@ def test_the_compare_quote_helpers_read_only_entry_data() -> None:
     breaks the compare page from a distance, and nothing guarded it. The
     projection reuses the same helpers, which is what makes it worth pinning
     now rather than after the next AttributeError."""
-    from types import SimpleNamespace
 
     from custom_components.be_electricity_prices import compare_quote
 
@@ -2999,8 +3154,36 @@ def test_the_compare_quote_helpers_read_only_entry_data() -> None:
         )
         is not None
     )
-    # And the resolver the projection adds, whose fallback reads entry.data.
-    assert isinstance(SimpleNamespace(data=entry.data).data, dict)
+    # And the async resolvers, which the earlier version of this test never
+    # reached: _annual_volume reads entry.data for its typed-volume fallback,
+    # and _measured_kwh reads it for every sensor id.
+    import asyncio
+
+    from homeassistant.config_entries import ConfigEntry
+
+    from custom_components.be_electricity_prices import energy_meters
+
+    async def _no_rows(
+        _hass: object, _entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        return {}
+
+    async def _drive() -> None:
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_no_rows):
+            # cast rather than a per-line ignore: the stand-in deliberately is
+            # not a ConfigEntry, which is the whole point of the guard.
+            proxy = cast("ConfigEntry[Any]", entry)
+            no_hass = cast("HomeAssistant", None)
+            vol = await compare_quote._annual_volume(
+                no_hass, proxy, date(2026, 1, 1), date(2026, 7, 1)
+            )
+            # The typed volume was read off entry.data, not defaulted.
+            assert vol.kwh == pytest.approx(4200.0)
+            await energy_meters._measured_kwh(
+                no_hass, proxy, date(2026, 1, 1), date(2026, 7, 1)
+            )
+
+    asyncio.run(_drive())
 
 
 # ---- contract start-date cohort pricing (discussion #38) ---------------------
