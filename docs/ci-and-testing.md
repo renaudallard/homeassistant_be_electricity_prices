@@ -185,6 +185,7 @@ legitimate form the checker cannot distinguish:
 | `markdown BROKEN` | yes | the pin lands on a blank line, a bare fence, or a table rule, so it points at nothing whatever the prose claims |
 | `anchored+rewritable` | only above the baseline | the anchor heuristic takes the nearest preceding backticked identifier, which on a dense sentence is often not the subject. Read the list before running `--write` |
 | `markdown unanchored` | only above the baseline | a markdown target has no symbol to resolve, so the word score is a smoke test rather than a proof; a claim can also have no good passage to point at |
+| `range pins unanchored` | only above the baseline | the span holds none of the identifiers its sentence names, which is usually rot but is also how a deliberate cross-file or sub-region pin looks |
 | `moved-symbol suspects` | no | the same shape is also a correct reference to a USE site (`CONF_CONTRACT` (`config_flow.py:163`) is where the flow reads it, not where `const` defines it). ~63 of these are expected; `--verbose` lists them |
 
 No single rewritable reference is provably stale, so none can gate on its own: four of the five
@@ -206,19 +207,29 @@ and continuations are never auto-rewritten: the end of a span is not derivable f
 symbol, and inventing one is worse than leaving a visible stale pin.
 
 Markdown pins are the fifth form, and they need a different anchor: `README.md` has no symbols
-to index, so `MDREF` (`scripts/doc_ref_check.py:77`) scores each pin on the DISTINCTIVE words its
+to index, so `MDREF` (`scripts/doc_ref_check.py:81`) scores each pin on the DISTINCTIVE words its
 claim shares with the passage it lands on. A word is distinctive when it appears on at most 3% of
 the target file's lines, which drops "the" and "energy" and keeps "energiefonds" and "picker";
 the passage is the paragraph or list item around the pinned line
-(`_md_passage` (`scripts/doc_ref_check.py:183`)), because README prose is hard-wrapped and the
+(`_md_passage` (`scripts/doc_ref_check.py:228`)), because README prose is hard-wrapped and the
 claim rarely fits on one line. Fewer than
-`_MD_MIN_SHARED` (`scripts/doc_ref_check.py:96`) shared words is reported, never rewritten: there
+`_MD_MIN_SHARED` (`scripts/doc_ref_check.py:100`) shared words is reported, never rewritten: there
 is no AST truth to rewrite to. The threshold was measured against the pins as they stood before
 the 2026-08-17 repin, where all 12 stale ones scored 3 or less and the three that still resolved
 scored 4, 7 and 14.
-`_MD_UNANCHORED_BASELINE` (`scripts/doc_ref_check.py:103`) tolerates the one pin on `main` with no
+`_MD_UNANCHORED_BASELINE` (`scripts/doc_ref_check.py:107`) tolerates the one pin on `main` with no
 better target: the glossary's TSO row defines Elia and the transmission charge, which README never
 states.
+
+`_RANGE_UNANCHORED_BASELINE` covers the 36 range pins whose span legitimately holds none of
+the identifiers around them. Two shapes account for all of them: a pin that crosses files on
+purpose (the prose names a function in one module and points the reader at the constants it
+reads in another, as `_resolve_daily_kwh` does with the wiring block in `const.py`), and a pin
+that targets part of a block rather than the whole definition. Until the 2026-08 sweep the only
+thing checked about a range was that neither end ran past EOF, so a span could sit on entirely
+unrelated code and pass: 154 of 676 did, including five of the eight into `const.py`. The sweep
+repinned 154 of them, 113 mechanically where the sentence's symbol had exactly one definition
+and 41 by hand.
 
 A table row whose reference is a bare number in a "Line" column (`| `_store` | ... | 859 |`)
 is invisible to all of this. Those are checked by hand when the file they point into changes.

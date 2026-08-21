@@ -67,6 +67,10 @@ CONT = re.compile(r"`([A-Za-z0-9_./]+\.py):\d+(?:-\d+)?`|`:(\d+)(?:-(\d+))?`")
 # Backtick-quoted identifiers on the same line, longest first so
 # `_extract_energy_fund` wins over `_extract_energy`.
 IDENT = re.compile(r"`([A-Za-z_][A-Za-z0-9_.]*)`")
+# Backticked words that are prose, not symbols, and so cannot anchor a range.
+_RANGE_LITERALS = frozenset(
+    {"True", "False", "None", "int", "str", "float", "bool", "dict", "list"}
+)
 # Pins into a MARKDOWN file ("README.md:214"), which none of the three
 # regexes above can see: they all require a .py name inside backticks. The
 # glossary pins README passages this way, and 12 of its 15 pins had rotted --
@@ -101,6 +105,15 @@ _MD_MIN_SHARED = 3
 # shares only "distribution" and "transport". Raise this only for a pin with
 # no better target in the file, and say which in the commit message.
 _MD_UNANCHORED_BASELINE = 1
+# Range pins whose span holds none of the identifiers its sentence names. Not
+# all of these are wrong: a pin may deliberately cross files (the prose names a
+# function in one module while pointing the reader at the constants it reads in
+# another), or target a sub-region of a block. Those legitimately trip the
+# test, so this is a ratchet like the two above rather than a zero. Until the
+# 2026-08 sweep the only thing checked about a range was that neither end ran
+# past EOF, so a span could sit on entirely unrelated code and pass: five of
+# the eight const.py ranges did exactly that.
+_RANGE_UNANCHORED_BASELINE = 36
 
 
 def _source_for(rel: str) -> Path | None:
@@ -139,6 +152,38 @@ def _symbol_lines(path: Path) -> dict[str, int]:
                     out.setdefault(t.id, node.lineno)
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             out.setdefault(node.target.id, node.lineno)
+    return out
+
+
+def _symbol_blocks(path: Path) -> dict[str, list[tuple[int, int]]]:
+    """Every named definition -> the line spans it occupies.
+
+    ``_symbol_lines`` gives only the first line, which cannot answer the
+    question a range pin poses: is this span INSIDE the thing the sentence
+    names? A pin at the fields of a dataclass holds the class name nowhere in
+    its own text, so a substring search reports a false alarm.
+
+    ``ast.alias`` carries a ``.name``, so an unfiltered walk indexes every
+    IMPORTED symbol as though this module defined it, and a pin then "resolves"
+    onto an import line. Hence the explicit skip.
+    """
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return {}
+    out: dict[str, list[tuple[int, int]]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.alias, ast.Import, ast.ImportFrom)):
+            continue
+        name = getattr(node, "name", None)
+        if name is None and isinstance(node, ast.Assign):
+            tgt = node.targets[0] if node.targets else None
+            name = getattr(tgt, "id", None)
+        if name is None and isinstance(node, ast.AnnAssign):
+            name = getattr(node.target, "id", None)
+        if name and hasattr(node, "lineno"):
+            end = getattr(node, "end_lineno", None) or node.lineno
+            out.setdefault(name, []).append((node.lineno, end))
     return out
 
 
@@ -221,6 +266,7 @@ def main() -> int:
     fixed = stale_unresolved = ok = md_ok = 0
     unresolved: list[str] = []
     stale_ranges: list[str] = []
+    range_unanchored: list[str] = []
     suspect: list[str] = []
     samples: list[str] = []
     md_dead: list[str] = []
@@ -254,10 +300,50 @@ def main() -> int:
                 src = _source_for(r.group(1))
                 if src is None:
                     continue
-                total = len(src.read_text(encoding="utf-8").splitlines())
-                if int(r.group(2)) > total or int(r.group(3)) > total:
+                body = src.read_text(encoding="utf-8").splitlines()
+                total = len(body)
+                lo, hi = int(r.group(2)), int(r.group(3))
+                if lo > total or hi > total:
                     stale_ranges.append(
                         f"{doc.name}:{i + 1} {r.group(0).strip('`')} (file has {total})"
+                    )
+                    continue
+                if hi < lo:
+                    # A rewrite pass that matches the START of a range shifts
+                    # it and leaves the end behind, which no check saw: one
+                    # such pin read 244-236 for a week.
+                    stale_ranges.append(
+                        f"{doc.name}:{i + 1} {r.group(0).strip('`')} (inverted)"
+                    )
+                    continue
+                # Does the span hold anything the sentence names? Every
+                # backticked identifier on the line is a candidate, because
+                # taking only the nearest one mistakes prose (`None`, a field
+                # named descriptively) for the symbol the pin is about.
+                range_names = {
+                    ident.split(".")[-1]
+                    for ident in IDENT.findall(line)
+                    if not ident.endswith(".py")
+                    and ident not in _RANGE_LITERALS
+                    and len(ident) > 2
+                }
+                if not range_names:
+                    continue
+                blocks = _symbol_blocks(src)
+                span = "\n".join(body[lo - 1 : hi])
+                inside = any(
+                    b_lo <= lo and hi <= b_hi
+                    for c in range_names
+                    for b_lo, b_hi in blocks.get(c, ())
+                )
+                if inside:
+                    continue
+                if not any(
+                    re.search(rf"\b{re.escape(c)}\b", span) for c in range_names
+                ):
+                    range_unanchored.append(
+                        f"{doc.name}:{i + 1} {r.group(0).strip('`')} -> holds none of "
+                        f"{sorted(range_names)[:4]}"
                     )
             for md in MDREF.finditer(line):
                 target = _source_for(md.group(1))
@@ -398,6 +484,12 @@ def main() -> int:
     for u in unresolved:
         print("   ", u)
     print(f"BROKEN ranges/conts: {len(stale_ranges)}")
+    print(
+        f"range pins unanchored: {len(range_unanchored)} "
+        f"(baseline {_RANGE_UNANCHORED_BASELINE})"
+    )
+    for entry in range_unanchored:
+        print(f"    {entry}")
     for broken_range in stale_ranges:
         print("   ", broken_range)
     # Listed only on demand. Nearly all are legitimate use-site references,
@@ -455,6 +547,23 @@ def main() -> int:
     # resolve, so nothing here is auto-rewritten and no single miss proves rot;
     # a RISE does, because a section inserted into README shifts every pin
     # below it and most land on prose about something else.
+    if len(range_unanchored) > _RANGE_UNANCHORED_BASELINE and not write:
+        print(
+            f"\nFAIL: {len(range_unanchored)} range pin(s) whose span holds none of "
+            f"the identifiers their sentence names, baseline "
+            f"{_RANGE_UNANCHORED_BASELINE}. Open the span and the sentence: a range "
+            f"that landed on unrelated code is repinned to the block the sentence "
+            f"actually describes, never by shifting the numbers. A pin that crosses "
+            f"files on purpose, or targets a sub-region, is allowed -- raise the "
+            f"baseline and say which in the commit message."
+        )
+        return 1
+    if len(range_unanchored) < _RANGE_UNANCHORED_BASELINE and not write:
+        print(
+            f"\nNote: unanchored range pins ({len(range_unanchored)}) are below the "
+            f"baseline ({_RANGE_UNANCHORED_BASELINE}); lower "
+            f"_RANGE_UNANCHORED_BASELINE to keep the ratchet tight."
+        )
     if len(md_unanchored) > _MD_UNANCHORED_BASELINE and not write:
         print(
             f"\nFAIL: {len(md_unanchored)} markdown pin(s) share fewer than "
