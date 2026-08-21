@@ -115,6 +115,14 @@
           "night_injection_kwh": "Einspeisung Nacht (kWh)",
           "consumption_kwh": "Gesamtverbrauch (kWh)",
           "injection_kwh": "Gesamteinspeisung (kWh)"
+        },
+        "data_description": {
+          "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
+          "night_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
+          "day_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
+          "night_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
+          "consumption_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
+          "injection_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen."
         }
       },
       "custom_energy": {
@@ -368,6 +376,14 @@
           "night_injection_kwh": "Einspeisung Nacht (kWh)",
           "consumption_kwh": "Gesamtverbrauch (kWh)",
           "injection_kwh": "Gesamteinspeisung (kWh)"
+        },
+        "data_description": {
+          "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
+          "night_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
+          "day_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
+          "night_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
+          "consumption_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
+          "injection_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen."
         }
       },
       "custom_energy": {

@@ -115,6 +115,14 @@
           "night_injection_kwh": "Injection nuit (kWh)",
           "consumption_kwh": "Consommation totale (kWh)",
           "injection_kwh": "Injection totale (kWh)"
+        },
+        "data_description": {
+          "day_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
+          "night_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
+          "day_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
+          "night_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
+          "consumption_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
+          "injection_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter."
         }
       },
       "custom_energy": {
@@ -368,6 +376,14 @@
           "night_injection_kwh": "Injection nuit (kWh)",
           "consumption_kwh": "Consommation totale (kWh)",
           "injection_kwh": "Injection totale (kWh)"
+        },
+        "data_description": {
+          "day_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
+          "night_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
+          "day_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
+          "night_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
+          "consumption_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
+          "injection_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter."
         }
       },
       "custom_energy": {

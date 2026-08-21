@@ -3075,6 +3075,64 @@ def test_projection_attributes_are_not_recorded() -> None:
         assert name in BePriceSensor._unrecorded_attributes, name
 
 
+def test_config_flow_steps_are_fully_translated() -> None:
+    """Every config-flow field label and help string exists in all four files.
+
+    The translations carry RESOLVED literals where strings.json may carry a
+    ``[%key:...%]`` reference, so a field added to one path in strings.json can
+    reach users untranslated, or stale, on the other. That has happened: the
+    contract end date's options-flow copy kept telling users the date did not
+    affect pricing for a commit after it started to.
+    """
+    import json
+    import pathlib
+
+    base = pathlib.Path("custom_components/be_electricity_prices")
+    src = json.loads(base.joinpath("strings.json").read_text(encoding="utf-8"))
+    langs = {
+        f.name: json.loads(f.read_text(encoding="utf-8"))
+        for f in sorted(base.joinpath("translations").glob("*.json"))
+    }
+    for section in ("config", "options"):
+        for step, body in src.get(section, {}).get("step", {}).items():
+            for kind in ("data", "data_description"):
+                want = set(body.get(kind, {}))
+                if not want:
+                    continue
+                for name, doc in langs.items():
+                    got = set(
+                        doc.get(section, {}).get("step", {}).get(step, {}).get(kind, {})
+                    )
+                    missing = want - got
+                    assert not missing, (
+                        f"{name} {section}.{step}.{kind}: {sorted(missing)}"
+                    )
+
+
+def test_the_meters_step_explains_every_field() -> None:
+    """The meters step must carry per-field help, not just labels.
+
+    It is the step users get wrong. Six entity pickers with bare labels and one
+    long paragraph above them led a user to wire a "this year" total, which
+    resets every 1 January, into a field that bills the day-to-day change in
+    the reading, and to fill the two totals fields that the four registers
+    already override.
+    """
+    import json
+    import pathlib
+
+    base = pathlib.Path("custom_components/be_electricity_prices")
+    src = json.loads(base.joinpath("strings.json").read_text(encoding="utf-8"))
+    meters = src["config"]["step"]["meters"]
+    fields = set(meters["data"])
+    described = set(meters.get("data_description", {}))
+    assert fields - described == set(), f"no help for {sorted(fields - described)}"
+    # The two facts that were missing and cost a user an evening.
+    joined = " ".join(meters["data_description"].values()).lower()
+    assert "climb" in joined, "the cumulative requirement is not stated"
+    assert "registers above are empty" in joined, "the precedence is not stated"
+
+
 def test_every_sensor_name_exists_in_all_translations() -> None:
     """strings.json's entity names must exist in all four translation files.
 

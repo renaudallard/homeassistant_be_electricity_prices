@@ -334,7 +334,13 @@ supplier's tariff card.
    - **Injection tariff** — post-2024 Walloon installations and Flemish smart
      meters. Creates `injection_price`, ready for HA Energy.
 10. **Energy meters** *(optional, all four / two fields are skippable)* —
-   feeds the `current_year_cost` sensor. Two ways to wire it:
+   feeds the `current_year_cost` sensor. Whichever way you wire it, every
+   field wants a **cumulative** kWh reading, one that only ever climbs.
+   A sensor that resets, such as a "this year" or "this month" total,
+   will not work: the integration bills the day-to-day *change* in the
+   reading, and a reset reads as a large negative day. If you fill both
+   wirings for the same side, the day/night registers win and the totals
+   field on that side is ignored. Two ways to wire it:
    - **Day/night register sensors** (4 fields): point at the cumulative
      kWh registers from your meter. The integration reads each day's
      delta from HA's long-term statistics, so the sensor reflects

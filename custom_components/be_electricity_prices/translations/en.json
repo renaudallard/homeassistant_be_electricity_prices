@@ -115,6 +115,14 @@
           "night_injection_kwh": "Night injection (kWh)",
           "consumption_kwh": "Total consumption (kWh)",
           "injection_kwh": "Total injection (kWh)"
+        },
+        "data_description": {
+          "day_consumption_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
+          "night_consumption_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
+          "day_injection_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
+          "night_injection_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
+          "consumption_kwh": "Only used when the four registers above are empty: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb.",
+          "injection_kwh": "Only used when the four registers above are empty: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb."
         }
       },
       "custom_energy": {
@@ -368,6 +376,14 @@
           "night_injection_kwh": "Night injection (kWh)",
           "consumption_kwh": "Total consumption (kWh)",
           "injection_kwh": "Total injection (kWh)"
+        },
+        "data_description": {
+          "day_consumption_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
+          "night_consumption_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
+          "day_injection_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
+          "night_injection_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
+          "consumption_kwh": "Only used when the four registers above are empty: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb.",
+          "injection_kwh": "Only used when the four registers above are empty: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb."
         }
       },
       "custom_energy": {

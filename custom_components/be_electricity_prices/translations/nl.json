@@ -115,6 +115,14 @@
           "night_injection_kwh": "Injectie nacht (kWh)",
           "consumption_kwh": "Totaal verbruik (kWh)",
           "injection_kwh": "Totale injectie (kWh)"
+        },
+        "data_description": {
+          "day_consumption_kwh": "Cumulatieve meterstand in kWh, die alleen maar oploopt. Een sensor die terugvalt naar nul, zoals een totaal 'huidig jaar', werkt niet.",
+          "night_consumption_kwh": "Cumulatieve meterstand in kWh, die alleen maar oploopt. Een sensor die terugvalt naar nul, zoals een totaal 'huidig jaar', werkt niet.",
+          "day_injection_kwh": "Cumulatieve meterstand in kWh, die alleen maar oploopt. Een sensor die terugvalt naar nul, zoals een totaal 'huidig jaar', werkt niet.",
+          "night_injection_kwh": "Cumulatieve meterstand in kWh, die alleen maar oploopt. Een sensor die terugvalt naar nul, zoals een totaal 'huidig jaar', werkt niet.",
+          "consumption_kwh": "Wordt alleen gebruikt als de vier registers hierboven leeg zijn: een meter zonder dag/nacht-onderscheid, een klemmeter, of een omvormer die maar één totaal geeft. Zelfde regel, hij mag alleen oplopen.",
+          "injection_kwh": "Wordt alleen gebruikt als de vier registers hierboven leeg zijn: een meter zonder dag/nacht-onderscheid, een klemmeter, of een omvormer die maar één totaal geeft. Zelfde regel, hij mag alleen oplopen."
         }
       },
       "custom_energy": {
@@ -368,6 +376,14 @@
           "night_injection_kwh": "Injectie nacht (kWh)",
           "consumption_kwh": "Totaal verbruik (kWh)",
           "injection_kwh": "Totale injectie (kWh)"
+        },
+        "data_description": {
+          "day_consumption_kwh": "Cumulatieve meterstand in kWh, die alleen maar oploopt. Een sensor die terugvalt naar nul, zoals een totaal 'huidig jaar', werkt niet.",
+          "night_consumption_kwh": "Cumulatieve meterstand in kWh, die alleen maar oploopt. Een sensor die terugvalt naar nul, zoals een totaal 'huidig jaar', werkt niet.",
+          "day_injection_kwh": "Cumulatieve meterstand in kWh, die alleen maar oploopt. Een sensor die terugvalt naar nul, zoals een totaal 'huidig jaar', werkt niet.",
+          "night_injection_kwh": "Cumulatieve meterstand in kWh, die alleen maar oploopt. Een sensor die terugvalt naar nul, zoals een totaal 'huidig jaar', werkt niet.",
+          "consumption_kwh": "Wordt alleen gebruikt als de vier registers hierboven leeg zijn: een meter zonder dag/nacht-onderscheid, een klemmeter, of een omvormer die maar één totaal geeft. Zelfde regel, hij mag alleen oplopen.",
+          "injection_kwh": "Wordt alleen gebruikt als de vier registers hierboven leeg zijn: een meter zonder dag/nacht-onderscheid, een klemmeter, of een omvormer die maar één totaal geeft. Zelfde regel, hij mag alleen oplopen."
         }
       },
       "custom_energy": {
