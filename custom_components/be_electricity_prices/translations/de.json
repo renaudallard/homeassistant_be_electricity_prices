@@ -498,7 +498,13 @@
   "services": {
     "refresh": {
       "name": "Aktualisieren",
-      "description": "Erzwingt fuer jeden Belgian Electricity Prices Eintrag das sofortige erneute Abrufen des Lieferanten-Snapshots und der ENTSO-E Spotpreise, ohne auf den naechsten Aktualisierungszyklus zu warten."
+      "description": "Lässt jeden Eintrag von Belgian Electricity Prices sofort die Tarifkarte des Anbieters und die heutigen ENTSO-E-Preise neu laden, statt auf den nächsten Durchlauf zu warten. Der Zwischenspeicher der VERGANGENEN Stundenpreise hinter den Jahreskosten bleibt unberührt; dafür ist Preisverlauf löschen da.",
+      "fields": {
+        "clear_history": {
+          "name": "Preisverlauf löschen",
+          "description": "Verwirft zusätzlich die zwischengespeicherten vergangenen Stundenpreise, die den Jahreskosten zugrunde liegen, und lädt sie neu. Standardmäßig aus: es lädt jeden Tag seit dem 1. Januar neu von einem Dienst mit Ratenbegrenzung. Zu verwenden, wenn ein Jahreskostenwert falsch aussieht und eine normale Aktualisierung nichts ändert."
+        }
+      }
     },
     "cheapest_window": {
       "name": "Guenstigstes Zeitfenster",

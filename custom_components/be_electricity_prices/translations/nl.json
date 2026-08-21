@@ -498,7 +498,13 @@
   "services": {
     "refresh": {
       "name": "Vernieuwen",
-      "description": "Forceer elke Belgian Electricity Prices invoer om de leveranciersmomentopname en ENTSO-E spotprijzen onmiddellijk opnieuw op te halen, in plaats van te wachten op de volgende verversingscyclus."
+      "description": "Laat elke Belgian Electricity Prices-invoer meteen de tariefkaart van de leverancier en de ENTSO-E-prijzen van vandaag opnieuw ophalen, in plaats van te wachten op de volgende ronde. Dit raakt de cache met VROEGERE uurprijzen achter de jaarkost niet aan; gebruik daarvoor Prijsgeschiedenis wissen.",
+      "fields": {
+        "clear_history": {
+          "name": "Prijsgeschiedenis wissen",
+          "description": "Verwijdert ook de opgeslagen historische uurprijzen die de jaarkost opnieuw afspeelt, en haalt ze opnieuw op. Standaard uit: het haalt elke dag sinds 1 januari opnieuw op bij een dienst met snelheidslimiet. Gebruik dit wanneer een jaarkost verkeerd lijkt en een gewone vernieuwing dat niet oplost."
+        }
+      }
     },
     "cheapest_window": {
       "name": "Goedkoopste tijdvak",

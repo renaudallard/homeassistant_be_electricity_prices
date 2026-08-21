@@ -498,7 +498,13 @@
   "services": {
     "refresh": {
       "name": "Rafraichir",
-      "description": "Force chaque entree Belgian Electricity Prices a re-recuperer son releve fournisseur et les prix spot ENTSO-E immediatement, sans attendre le prochain cycle de rafraichissement."
+      "description": "Force chaque entrée Belgian Electricity Prices à récupérer immédiatement la fiche tarifaire de son fournisseur et les prix ENTSO-E du jour, sans attendre le prochain cycle. Cela ne touche pas au cache des prix horaires PASSÉS utilisé par le coût annuel en cours ; pour cela, utilisez Effacer l'historique des prix.",
+      "fields": {
+        "clear_history": {
+          "name": "Effacer l'historique des prix",
+          "description": "Supprime aussi les prix horaires passés mis en cache que rejoue le coût annuel en cours, puis les récupère à nouveau. Désactivé par défaut : cela relance une récupération de chaque jour depuis le 1er janvier sur un service à débit limité. À utiliser quand un coût annuel semble faux et qu'un rafraîchissement ordinaire n'y change rien."
+        }
+      }
     },
     "cheapest_window": {
       "name": "Plage la moins chere",

@@ -200,7 +200,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
  config entry (region, dso, supplier, contract, meter, solar, api key)
         |
         v
- async_setup_entry            __init__.py:165
+ async_setup_entry            __init__.py:170
    |  _migrate_current_year_cost_unique_id(hass, entry)  # 0.5.2 key rename carry-over
    |  BePricesCoordinator(hass, entry)
    |  await coordinator.async_load_persistent()      # warm cache from .storage
@@ -221,9 +221,9 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |     |     v
    |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:729
    |
-   entry.runtime_data = coordinator                  __init__.py:172
+   entry.runtime_data = coordinator                  __init__.py:177
    async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor, button
-   async_track_time_change(...) -> push at slot boundaries   __init__.py:194
+   async_track_time_change(...) -> push at slot boundaries   __init__.py:199
    async_create_background_task(backfill_if_missing) # one-shot recorder backfill
         |
         v
@@ -233,16 +233,16 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
 Numbered walkthrough:
 
 1. The user completes the config flow; HA stores the selections in `entry.data` and calls
-   `async_setup_entry` (`__init__.py:166`).
+   `async_setup_entry` (`__init__.py:171`).
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
-   tuple (`coordinator.py:863`) so a later options edit that mutates `entry.data` can still evict
+   tuple (`coordinator.py:881`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
 3. `async_load_persistent` (`coordinator.py:377`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
 4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:494`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
-   `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:172`),
+   `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:177`),
    so the coordinator must not read `runtime_data` during first refresh.
 5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:568`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
@@ -257,11 +257,11 @@ Numbered walkthrough:
    suppliers, `coordinator.py:732`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
 9. `entry.runtime_data` is set to the coordinator, the three platforms are forwarded, and a
-   slot-boundary push is registered (`__init__.py:194`). Because `current_price` and
+   slot-boundary push is registered (`__init__.py:199`). Because `current_price` and
    `next_hour_price` read the wall clock live, the push at each `:00` (and `:15/:30/:45` for a
    quarter-hourly supplier) re-evaluates the sensors without a re-fetch, keeping them aligned to
    the slot the user is actually billed for.
-10. A one-shot backfill background task (`__init__.py:233`) populates the recorder only if it has
+10. A one-shot backfill background task (`__init__.py:238`) populates the recorder only if it has
     no statistics at the Jan 1 anchor, so a normal restart adds no work.
 
 ## Freshness and caching, at a glance
@@ -285,7 +285,7 @@ Two further caching behaviors are worth knowing at the architecture level. First
 shared process-wide across config entries keyed by `(supplier, contract, region)`
 (`coordinator.py:300`), so two entries on the same product never poll the same card twice; the
 shared rows are evicted on unload only when no sibling entry still references the tuple
-(`__init__.py:286`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
+(`__init__.py:291`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
 (`coordinator.py:243`) and the user-facing "extractor failed" repair issue is raised only after
 the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator_snapshot.py:81`), so
 a single transient CDN timeout does not false-alarm.

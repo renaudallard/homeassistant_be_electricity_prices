@@ -498,7 +498,13 @@
   "services": {
     "refresh": {
       "name": "Refresh",
-      "description": "Force every Belgian Electricity Prices entry to re-fetch its supplier snapshot and ENTSO-E spot prices immediately, instead of waiting for the next refresh tick."
+      "description": "Force every Belgian Electricity Prices entry to re-fetch its supplier snapshot and today's ENTSO-E prices immediately, instead of waiting for the next refresh tick. This does not touch the cache of PAST hourly prices behind the year-to-date cost; use Clear price history for that.",
+      "fields": {
+        "clear_history": {
+          "name": "Clear price history",
+          "description": "Also discard the cached past hourly prices that the year-to-date cost replays, and re-fetch them. Off by default: it re-fetches every day since 1 January against a rate-limited endpoint. Use it when a year-to-date figure looks wrong in a way an ordinary refresh does not fix."
+        }
+      }
     },
     "cheapest_window": {
       "name": "Cheapest window",

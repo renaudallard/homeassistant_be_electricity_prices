@@ -2066,6 +2066,58 @@ async def test_load_persistent_drops_historical_spots_on_tuple_mismatch(
     )
 
 
+async def test_force_refresh_keeps_the_price_history_by_default(
+    hass: HomeAssistant,
+) -> None:
+    """An ordinary refresh must not throw away the year's spot cache.
+
+    Refilling it re-fetches every day since 1 January in week-sized chunks
+    against a rate-limited endpoint, which is far too much to spend on a
+    service users call to pick up a new tariff card."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hour = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    coord._historical_spots = {hour: 0.11}
+    coord._complete_spot_days = {date(2026, 3, 1)}
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+
+    await coord.async_force_refresh()
+
+    assert coord._historical_spots == {hour: 0.11}
+    assert coord._complete_spot_days == {date(2026, 3, 1)}
+    # The live today/tomorrow cache still goes, as it always did.
+    assert coord._spot_cache == {}
+
+
+async def test_force_refresh_clears_the_price_history_on_request(
+    hass: HomeAssistant,
+) -> None:
+    """clear_history is the only thing that can repair that cache.
+
+    _ensure_historical_spots re-fetches a day holding fewer than 20 of its 24
+    hours, so a day that is complete but WRONG is never revisited, and nothing
+    else empties the dict before the year-end prune. Without this the only
+    escape from one bad cached price was deleting and re-adding the entry.
+
+    The day-completeness markers have to go with it: leaving them would tell
+    the next fill that every day is already covered, and the cache would come
+    back empty rather than refreshed."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._historical_spots = {datetime(2026, 3, 1, 10, 0, tzinfo=UTC): 62.5}
+    coord._complete_spot_days = {date(2026, 3, 1)}
+    coord._short_spot_days = {date(2026, 2, 2): datetime(2026, 2, 2, tzinfo=UTC)}
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+
+    await coord.async_force_refresh(clear_history=True)
+
+    assert coord._historical_spots == {}
+    assert coord._complete_spot_days == set()
+    assert coord._short_spot_days == {}
+
+
 async def test_load_persistent_drops_an_impossible_cached_spot(
     hass: HomeAssistant,
 ) -> None:

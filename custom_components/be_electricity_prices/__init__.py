@@ -87,6 +87,9 @@ WINDOW_SCHEMA = vol.Schema(
     }
 )
 
+REFRESH_SCHEMA = vol.Schema({vol.Optional("clear_history", default=False): cv.boolean})
+
+
 BACKFILL_SCHEMA = vol.Schema(
     {
         vol.Optional("entry_id"): cv.string,
@@ -110,7 +113,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa:
     automation firing in that window used to fail with "service not
     found" until setup completed again.
     """
-    hass.services.async_register(DOMAIN, SERVICE_REFRESH, _async_refresh_service)
+    hass.services.async_register(
+        DOMAIN, SERVICE_REFRESH, _async_refresh_service, schema=REFRESH_SCHEMA
+    )
     hass.services.async_register(
         DOMAIN,
         SERVICE_CHEAPEST_WINDOW,
@@ -355,7 +360,14 @@ async def _async_options_updated(
 
 
 async def _async_refresh_service(call: ServiceCall) -> None:
-    """Force every loaded entry to re-fetch its supplier snapshot now."""
+    """Force every loaded entry to re-fetch its supplier snapshot now.
+
+    ``clear_history`` also drops the cache of past hourly spot prices that the
+    year-to-date walk replays, which nothing else can repair: a cached day that
+    looks complete is never re-fetched. Off by default because refilling it
+    re-fetches every day since 1 January.
+    """
+    clear_history = bool(call.data.get("clear_history", False))
     for entry in call.hass.config_entries.async_loaded_entries(DOMAIN):
         # async_loaded_entries returns entries that have begun setup, but
         # a reload race can leave runtime_data as the UNDEFINED sentinel
@@ -364,7 +376,7 @@ async def _async_refresh_service(call: ServiceCall) -> None:
         coordinator = getattr(entry, "runtime_data", None)
         if not isinstance(coordinator, BePricesCoordinator):
             continue
-        await coordinator.async_force_refresh()
+        await coordinator.async_force_refresh(clear_history=clear_history)
 
 
 def _find_window(

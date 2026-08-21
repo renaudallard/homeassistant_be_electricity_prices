@@ -546,10 +546,20 @@ successful refresh:
 
 ### `be_electricity_prices.refresh` service
 
-Drops the cached supplier snapshot **and** the ENTSO-E spot cache for every
+Drops the cached supplier snapshot **and today's** ENTSO-E prices for every
 loaded entry, then re-fetches both immediately. Handy after a tariff card
 update or to clear a transient fetch error without waiting for the next
-hourly tick. No fields.
+hourly tick.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `clear_history` | `false` | Also discard the cached **past** hourly prices that `current_year_cost` replays, and re-fetch them. Off by default because it re-fetches every day since 1 January against a rate-limited endpoint. |
+
+Without `clear_history` the past-price cache is left alone, which is worth
+knowing when a year-to-date figure looks wrong: an ordinary refresh will not
+change it. Nothing else repairs that cache either, since a cached day holding
+all its hours is never re-fetched however wrong the values are, so this flag is
+the only way to correct one short of deleting and re-adding the entry.
 
 ### `be_electricity_prices.cheapest_window` / `most_expensive_window` services
 

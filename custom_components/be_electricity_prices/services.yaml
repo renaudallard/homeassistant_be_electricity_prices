@@ -2,9 +2,23 @@ refresh:
   name: Refresh
   description: >-
     Force-refresh every Belgian Electricity Prices entry: drops the cached
-    supplier snapshot and the ENTSO-E spot cache, then re-fetches both
+    supplier snapshot and TODAY's ENTSO-E prices, then re-fetches both
     immediately. Useful after a tariff card update or to clear a temporary
-    fetch error without waiting for the next refresh tick.
+    fetch error without waiting for the next refresh tick. It does NOT touch
+    the cache of past hourly prices that the year-to-date cost replays; that
+    needs clear_history below.
+  fields:
+    clear_history:
+      name: Clear price history
+      description: >-
+        Also discard the cached past hourly prices behind the year-to-date
+        cost and re-fetch them. Off by default because it re-fetches every day
+        since 1 January against a rate-limited endpoint. Nothing else can
+        repair a wrong value in there: a cached day that looks complete is
+        never re-fetched on its own.
+      default: false
+      selector:
+        boolean:
 
 cheapest_window:
   name: Cheapest window

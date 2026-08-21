@@ -817,7 +817,7 @@ class BePricesCoordinator(
             projection_diagnostics=projection_breakdown or None,
         )
 
-    async def async_force_refresh(self) -> None:
+    async def async_force_refresh(self, clear_history: bool = False) -> None:
         """Force the next coordinator tick to re-fetch the supplier.
 
         Invoked by the be_electricity_prices.refresh service when the user
@@ -832,8 +832,26 @@ class BePricesCoordinator(
         doesn't blank the entry, and ``_save_persistent`` keeps writing
         the cached snapshot so an HA restart between the forced
         refresh and the next successful tick recovers from disk.
+
+        ``clear_history`` additionally drops ``_historical_spots``, the cache of
+        past hourly prices that the year-to-date walk replays. That one is NOT
+        cleared by default and deliberately so: refilling it costs a fetch of
+        every day since 1 January, in week-sized chunks against a rate-limited
+        endpoint, which is far too much to spend on an ordinary refresh.
+
+        It exists because nothing else can repair a bad value in there.
+        ``_ensure_historical_spots`` only fetches a day holding fewer than 20 of
+        its 24 hours, so a day that is complete but wrong is never revisited,
+        and the only other thing that touches the dict is the year-end prune. A
+        wrong price therefore skewed its hour of the running bill for the life
+        of the entry, and the only escape was deleting and re-adding the entry,
+        losing every setting with it.
         """
         self._force_refresh = True
+        if clear_history:
+            self._historical_spots.clear()
+            self._complete_spot_days.clear()
+            self._short_spot_days.clear()
         self._spot_cache = {}
         self._spot_cache_day = None
         self._spot_cache_includes_tomorrow = False
