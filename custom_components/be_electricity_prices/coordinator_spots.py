@@ -339,9 +339,17 @@ class _SpotsMixin:
         freshly fetched curve is exactly where tomorrow's prices come from, and
         letting them into a month mean pulls the flat monthly rate toward a day
         that has not been billed. Both month means spelled this out.
+
+        ``extra_spots`` is collapsed onto the hour first, because the two
+        halves need not be on the same grid: the persisted cache is hourly by
+        construction, while today's curve is whatever the contract settles on,
+        and for a quarter-hourly one that is four keys an hour. Averaging the
+        union unweighted then counts today four times over against every other
+        day in the month. Measured from the compare page on a realistic curve,
+        that pulled a month mean 5,2% toward whatever today happened to be.
         """
         merged = dict(self._historical_spots)
-        merged.update(extra_spots)
+        merged.update(_bucket_spots_by_hour(extra_spots))
         return _drop_future_spots(merged, dt_util.now().date())
 
     def _monthly_spot_mean(

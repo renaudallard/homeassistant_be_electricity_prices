@@ -107,6 +107,58 @@ async def test_ensure_historical_spots_anchors_on_local_day(
     assert captured[0][0] == datetime(2025, 12, 31, 23, 0, tzinfo=UTC)
 
 
+async def test_month_mean_does_not_overweight_a_quarter_hourly_today(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The two halves of a month mean need not be on the same grid.
+
+    The persisted cache is hourly by construction; today's freshly fetched
+    curve is whatever the contract settles on, which for a quarter-hourly one
+    is four keys an hour. Averaging the union unweighted counted today four
+    times over against every other day of the month, so the flat monthly rate
+    was dragged toward whichever day the dialog happened to be opened on."""
+
+    freezer.move_to("2026-08-15 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    # Fourteen earlier days of the month cached hourly at 0.10.
+    for day in range(1, 15):
+        base = datetime(2026, 8, day, 0, 0, tzinfo=UTC)
+        for h in range(24):
+            coord._historical_spots[base + timedelta(hours=h)] = 0.10
+
+    # Today, quarter-hourly, at a very different level.
+    today_q: dict[datetime, float] = {}
+    base = datetime(2026, 8, 15, 0, 0, tzinfo=UTC)
+    for slot in range(24 * 4):
+        today_q[base + timedelta(minutes=15 * slot)] = 0.30
+
+    # The same day handed over as 24 hourly keys is the control: which grid
+    # the curve arrives on must not change what the month averaged to.
+    today_h = {base + timedelta(hours=h): 0.30 for h in range(24)}
+
+    as_quarters = coord._monthly_spot_mean(2026, 8, today_q)
+    as_hours = coord._monthly_spot_mean(2026, 8, today_h)
+    assert as_quarters is not None and as_hours is not None
+    assert as_quarters == pytest.approx(as_hours)
+    # And the answer is the hourly one, not today counted four times over:
+    # 336 h at 0.10 plus today's 22 in-month hours at 0.30 is 0.1123, while
+    # weighting today's 88 in-month slots against them gives 0.1415.
+    assert as_quarters == pytest.approx(0.1123, abs=1e-4)
+
+
 async def test_ensure_historical_spots_requests_the_contract_grid(
     hass: HomeAssistant, freezer: Any
 ) -> None:
