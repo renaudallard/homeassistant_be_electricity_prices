@@ -446,6 +446,7 @@ async def _ytd_hourly_energy(
                 bucket=month_bucket,
                 year=local.year,
                 month=local.month,
+                today=today,
                 cache=month_spp,
                 hourly=hourly_injection,
                 hourly_spot=(
@@ -848,6 +849,7 @@ async def _compute_current_year_cost(
                     bucket=day_bucket,
                     year=day.year,
                     month=day.month,
+                    today=today,
                     cache=day_spp,
                 ),
             )

@@ -347,6 +347,7 @@ def test_spp_injection_spot_is_strict_for_an_spp_indexed_card() -> None:
         spp_weights=None,
         year=2026,
         month=7,
+        today=date(2026, 8, 22),
         cache={},
         strict=False,
     )
@@ -356,6 +357,7 @@ def test_spp_injection_spot_is_strict_for_an_spp_indexed_card() -> None:
         spp_weights=None,
         year=2026,
         month=7,
+        today=date(2026, 8, 22),
         cache={},
         strict=True,
     )
@@ -419,6 +421,7 @@ def test_strict_survives_the_missing_historical_spots_shortcut() -> None:
         historical_spots=None,
         year=2026,
         month=7,
+        today=date(2026, 8, 22),
     )
     assert (
         _spp_injection_spot(0.1142, cache={}, strict=False, **args)  # type: ignore[arg-type]
@@ -667,9 +670,12 @@ async def test_ytd_injection_uses_spp_not_flat_mean(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """Year-to-date injection credit must use the SPP-weighted month mean
-    while energy stays on the flat mean."""
+    while energy stays on the flat mean.
 
-    freezer.move_to("2026-07-15 12:00:00+02:00")
+    Anchored inside the delivery month so the mean is the RUNNING one, which
+    is exempt from the closed-month coverage gate the two legs now share."""
+
+    freezer.move_to("2026-06-20 12:00:00+02:00")
     snap = make_snapshot(
         supplier="custom",
         contract=const.CUSTOM_CONTRACT_MONTHLY,

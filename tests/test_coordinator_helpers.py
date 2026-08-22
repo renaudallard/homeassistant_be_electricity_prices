@@ -2810,9 +2810,7 @@ async def test_projection_bills_the_cohort_yearly_fee_not_todays(
     )
     todays = replace(
         _yearly_snapshot(),
-        energy=FixedRates(
-            single=0.18, peak=0.20, offpeak=0.16, yearly_fixed_fee=100.0
-        ),
+        energy=FixedRates(single=0.18, peak=0.20, offpeak=0.16, yearly_fixed_fee=100.0),
     )
     got, _ = await _project(
         hass,

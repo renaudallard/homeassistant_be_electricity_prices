@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import pytest
 
+from datetime import date
+
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS, REGION_FLANDERS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers.base import (
@@ -474,6 +476,7 @@ def test_variable_injection_falls_back_to_the_card_without_a_profile(
         historical_spots={},
         year=2026,
         month=7,
+        today=date(2026, 8, 22),
         cache={},
         strict=_injection_is_spp_indexed(snap),
     )

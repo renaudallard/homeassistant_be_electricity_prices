@@ -85,13 +85,24 @@ def _bucket_spots_by_hour(spots: dict[datetime, float]) -> dict[datetime, float]
     its replay has to be priced off. The recorder only keeps hourly
     consumption, though, so the replay can only ever ask what a whole hour
     cost. The mean of that hour's quarters is the exact answer to that question
-    rather than an approximation: every energy and injection formula here is
-    linear in the spot, so pricing the hour's mean is identical to replaying
-    each quarter against a quarter of the hour's kWh.
+    for a formula that is LINEAR in the spot, which every energy formula and
+    every unfloored injection formula is: pricing the hour's mean is then
+    identical to replaying each quarter against a quarter of the hour's kWh.
 
     Collapsing at the fetch keeps the historical cache hourly, which is what
     its 20-of-24 completeness test, its persisted form and every reader in the
     year-to-date walk and the backfill already assume.
+
+    One case is an approximation rather than an identity. ``floor_at_zero``
+    makes the injection rate convex, so the mean of the floored quarters is at
+    least the floored mean and a replay that floors once, at the hour, credits
+    slightly less than the live per-slot array whenever the spot crosses the
+    floor inside the hour. It is reachable only on a custom expert entry that
+    both enables quarter-hourly billing and floors its feed-in formula, and
+    recovering it exactly would mean persisting four times the cache for that
+    one permutation. Measured on quarters of -0,060 / -0,020 / 0,010 / 0,050
+    with factor 1 and no base, a 3 kWh hour credits 0,0450 EUR live against
+    0,0000 here.
     """
     out: dict[datetime, list[float]] = {}
     for when, value in spots.items():
@@ -159,12 +170,25 @@ def _covered_month_mean(
     mean = _month_mean(bucket, year, month)
     if mean is None:
         return None
+    return None if _month_is_thinly_cached(bucket, year, month, today) else mean
+
+
+def _month_is_thinly_cached(
+    bucket: _SpotMonthBucket, year: int, month: int, today: date
+) -> bool:
+    """Whether a CLOSED month holds too few hours to average honestly.
+
+    The running month is partial by definition and never counts as thin: the
+    hours cached so far are the best estimate of it that exists. Shared by the
+    energy leg's gate and the SPP-weighted injection one, which were applied
+    to the same bucket in the same loop iteration and disagreed, so an hour
+    could bill no commodity and still credit feed-in off the unrepresentative
+    sample the gate exists to refuse.
+    """
     if (year, month) >= (today.year, today.month):
-        return mean
+        return False
     cached = len(bucket.get((year, month), ()))
-    if cached < _MIN_MONTH_COVERAGE * monthrange(year, month)[1] * 24:
-        return None
-    return mean
+    return cached < _MIN_MONTH_COVERAGE * monthrange(year, month)[1] * 24
 
 
 def _mean_of_month(spots: dict[datetime, float], year: int, month: int) -> float | None:
@@ -324,6 +348,7 @@ def _spp_injection_spot(
     bucket: _SpotMonthBucket | None = None,
     year: int,
     month: int,
+    today: date,
     cache: dict[tuple[int, int], float | None],
     hourly_spot: float | None = None,
     hourly: bool = False,
@@ -372,7 +397,11 @@ def _spp_injection_spot(
             if historical_spots is None:
                 return None if strict else spot
             bucket = _bucket_by_local_month(historical_spots)
-        cache[key] = _spp_month_mean(bucket, spp_weights, year, month)
+        cache[key] = (
+            None
+            if _month_is_thinly_cached(bucket, year, month, today)
+            else _spp_month_mean(bucket, spp_weights, year, month)
+        )
     weighted = cache[key]
     if weighted is not None:
         return weighted

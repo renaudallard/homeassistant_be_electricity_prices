@@ -479,6 +479,7 @@ def _injection_rate_for_hour(
     spp_weights: SppWeights | None,
     month_spp_cache: dict[tuple[int, int], float | None],
     hourly_injection: bool,
+    today: date,
 ) -> float | None:
     """The feed-in rate for one backfilled hour, or None when it has none.
 
@@ -500,6 +501,7 @@ def _injection_rate_for_hour(
         historical_spots=spots,
         year=local.year,
         month=local.month,
+        today=today,
         cache=month_spp_cache,
         hourly=hourly_injection,
         hourly_spot=spots.get(utc_hour),
@@ -603,6 +605,7 @@ async def _backfill_price_sensors(
                     spp_weights=spp_weights,
                     month_spp_cache=month_spp_cache,
                     hourly_injection=hourly_injection,
+                    today=today,
                 )
                 if inj_rate is None:
                     continue
@@ -784,6 +787,7 @@ async def _backfill_cost_sensor(
                     spp_weights=spp_weights,
                     month_spp_cache=month_spp_cache,
                     hourly_injection=hourly_injection,
+                    today=today,
                 )
                 if inj_rate is not None:
                     running_energy -= inj * inj_rate

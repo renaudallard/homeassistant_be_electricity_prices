@@ -160,6 +160,43 @@ def test_hour_spot_refuses_a_thinly_cached_closed_month() -> None:
     ) == pytest.approx(0.07)
 
 
+def test_energy_and_injection_gates_agree_on_a_thin_closed_month() -> None:
+    """One bucket, one loop iteration, one answer.
+
+    The energy leg refuses a closed month too thinly cached to average, and
+    the SPP-weighted injection mean was averaging the identical bucket
+    happily. That produced an hour billing no commodity while still crediting
+    feed-in off the unrepresentative sample the gate exists to refuse."""
+    from custom_components.be_electricity_prices.spot_stats import (
+        _bucket_by_local_month,
+        _covered_month_mean,
+        _spp_injection_spot,
+    )
+
+    today = date(2026, 8, 22)
+    # Three cached hours of July's 744, and a flat solar profile over them.
+    thin = {datetime(2026, 7, 5, h, tzinfo=UTC): 0.02 for h in (10, 11, 12)}
+    bucket = _bucket_by_local_month(thin)
+    weights = {(7, 5, h): 1.0 for h in (10, 11, 12)}
+
+    assert _covered_month_mean(bucket, 2026, 7, today) is None
+    assert (
+        _spp_injection_spot(
+            None,
+            monthly_mean=True,
+            strict=True,
+            spp_weights=weights,
+            bucket=bucket,
+            year=2026,
+            month=7,
+            today=today,
+            cache={},
+            hourly=False,
+        )
+        is None
+    )
+
+
 def test_normalize_window_defaults_to_jan1_through_now() -> None:
     fixed_now = datetime(2026, 5, 4, 13, 30, tzinfo=BRUSSELS)
     with patch.object(dt_util, "now", return_value=fixed_now):
@@ -682,14 +719,19 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
 ) -> None:
     """A custom monthly entry that opted into SPP-weighted injection must
     have its backfilled cost credit injection at the SPP-weighted month
-    mean, matching the live YTD credit, not the plain flat mean."""
+    mean, matching the live YTD credit, not the plain flat mean.
+
+    Anchored inside the delivery month so the mean is the RUNNING one. A
+    closed month cached this thinly is refused by the coverage gate, which
+    test_hour_spot_refuses_a_thinly_cached_closed_month pins for the energy
+    leg and which the injection leg now shares."""
     from custom_components.be_electricity_prices import const
     from custom_components.be_electricity_prices.providers.base import (
         InjectionRates,
         SpotMonthlyRates,
     )
 
-    freezer.move_to("2026-07-15 12:00:00+02:00")
+    freezer.move_to("2026-06-20 12:00:00+02:00")
     snap = make_snapshot(
         supplier="custom",
         contract=const.CUSTOM_CONTRACT_MONTHLY,
@@ -1186,5 +1228,6 @@ def test_backfill_credits_the_card_indicative_for_an_spp_card_without_a_profile(
         spp_weights=None,  # no Synergrid profile
         month_spp_cache={},
         hourly_injection=False,
+        today=date(2026, 6, 20),
     )
     assert rate == pytest.approx(0.03)
