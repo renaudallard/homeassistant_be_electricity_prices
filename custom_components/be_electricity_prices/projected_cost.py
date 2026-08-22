@@ -225,7 +225,15 @@ async def _compute_projected_year_cost(
         # which made this sensor step by hundreds of euro between consecutive
         # ticks. Passing no spot leaves a spot-indexed credit unresolved, which
         # is the honest outcome for a figure carrying no forward price.
-        inj_rate = _compare_injection_credit(priced, entry, {}, None)
+        # Weighted by the household's own export shape, not by slot duration:
+        # the overnight off-peak block is a third of the clock and produces
+        # nothing, so a duration mean always under-credits a per-slot card.
+        inj_hour_weights = await _measured_hour_weights(
+            hass, entry, trailing_start, today, side="injection"
+        )
+        inj_rate = _compare_injection_credit(
+            priced, entry, {}, None, None, inj_hour_weights
+        )
         if _covers_a_year(measured_inj.days_with_data) and measured_inj.kwh > 0:
             # Scaled across any missing days, the same way the consumption leg
             # is. Demanding all 365 made one absent bucket drop the whole leg,

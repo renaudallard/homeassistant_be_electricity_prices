@@ -2253,6 +2253,68 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     assert abs((avg - constants) - expected_energy) < 0.001
 
 
+def test_compare_injection_credit_weights_slots_by_export_shape() -> None:
+    """A per-slot feed-in credit must be weighted by what the panels export.
+
+    Slot duration is the right weighting for a quantity that flows evenly
+    through the day and the wrong one for solar. The 01:00-07:00 off-peak
+    block is about a third of the clock and exports nothing, so averaging the
+    triplet by hours always credits less than the year-to-date walk pays,
+    which resolves each hour's own slot and multiplies by that hour's exported
+    kWh. Measured over a year of modelled Brussels export on this card the gap
+    was 11,22 EUR on 3500 kWh, and always in the same direction."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        TimeOfUseRates,
+    )
+    from tests import make_entry, make_snapshot
+
+    # The Engie Empower Flextime triplet tests/test_engie.py asserts.
+    snap = make_snapshot(
+        supplier="engie",
+        contract="engie_empower_flextime",
+        energy=TimeOfUseRates(
+            peak=0.30, transition=0.20, offpeak=0.10, weekend_rule="weekend_no_peak"
+        ),
+        injection=InjectionRates(peak=0.08417, transition=0.04834, offpeak=0.01465),
+    )
+    entry = make_entry(solar_regime="injection", injection_kwh="sensor.inj")
+
+    by_duration = _compare_injection_credit(snap, entry, {}, None)
+    # A daylight export shape: nothing overnight, concentrated around midday.
+    daylight = {
+        h: w
+        for h, w in {
+            7: 0.02,
+            8: 0.05,
+            9: 0.08,
+            10: 0.11,
+            11: 0.13,
+            12: 0.14,
+            13: 0.13,
+            14: 0.11,
+            15: 0.08,
+            16: 0.06,
+            17: 0.05,
+            18: 0.03,
+            19: 0.01,
+        }.items()
+    }
+    by_export = _compare_injection_credit(snap, entry, {}, None, None, daylight)
+
+    assert by_duration is not None and by_export is not None
+    # The duration mean is dragged down by an off-peak block that exports
+    # nothing, so it must credit strictly less.
+    assert by_export > by_duration
+    # An empty profile is refused rather than dividing by zero.
+    assert _compare_injection_credit(snap, entry, {}, None, None, {}) == pytest.approx(
+        by_duration
+    )
+
+
 def test_compare_tou_weights_by_measured_consumption_not_clock_hours() -> None:
     """A time-of-use estimate must weight the slots by the kWh they bill.
 

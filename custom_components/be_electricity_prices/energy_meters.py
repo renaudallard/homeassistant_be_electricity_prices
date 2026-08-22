@@ -602,8 +602,10 @@ async def _measured_hour_weights(
     entry: ConfigEntry,
     start: date,
     end: date,
+    *,
+    side: str = "consumption",
 ) -> dict[int, float] | None:
-    """Share of metered consumption falling in each hour of the local day.
+    """Share of ``side``'s metered kWh falling in each hour of the local day.
 
     An annual estimate that averages time-of-use slot rates by CLOCK hours
     assumes the household consumes uniformly around the clock. It does not: on
@@ -613,13 +615,18 @@ async def _measured_hour_weights(
     year-to-date has always weighted each hour by the kWh recorded in it; this
     is what lets the estimate beside it do the same.
 
+    On the injection side the same argument is sharper still. Solar export is
+    zero through the whole 01:00-07:00 off-peak block, which carries about a
+    third of the clock weight, so a per-slot feed-in credit averaged by slot
+    duration always under-credits.
+
     Returns ``None`` when nothing is wired, the pair is half-wired, or the
     window recorded nothing. The caller then stays on the clock-hour weighting
     rather than inventing a profile.
     """
-    if _partial_register_pair(entry, "consumption"):
+    if _partial_register_pair(entry, side):
         return None
-    day_id, night_id, total_id = _kwh_sensor_ids(entry, "consumption")
+    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
     ids = [i for i in ((day_id, night_id) if day_id and night_id else (total_id,)) if i]
     if not ids:
         return None

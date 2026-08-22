@@ -43,6 +43,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
+
+from homeassistant.util import dt as dt_util
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -64,17 +66,52 @@ from .const import (
 )
 
 
-def _tou_slot_weights(weekend_rule: str) -> tuple[float, float, float]:
-    """Hours-per-week each CWaPE TOU slot (peak, transition, offpeak) is
-    active, from the published rules and a 5-weekday / 2-weekend split.
+def _tou_slot_weights(
+    weekend_rule: str, hour_weights: dict[int, float] | None = None
+) -> tuple[float, float, float]:
+    """Weight of each CWaPE TOU slot (peak, transition, offpeak).
 
-    Engie Empower Flextime keeps the weekday transition/offpeak windows on
-    weekends (``weekend_no_peak``); Luminus SmartFlex makes weekends fully
-    off-peak (``weekend_offpeak``, the default).
+    Without ``hour_weights``, hours-per-week each slot is active, from the
+    published rules and a 5-weekday / 2-weekend split. Engie Empower Flextime
+    keeps the weekday transition/offpeak windows on weekends
+    (``weekend_no_peak``); Luminus SmartFlex makes weekends fully off-peak
+    (``weekend_offpeak``, the default).
+
+    Duration is the right weighting for a quantity that flows evenly through
+    the day and the wrong one for solar export, which is zero for the whole
+    01:00-07:00 off-peak block. That block carries about a third of the clock
+    weight, so a per-slot feed-in credit averaged this way always under-credits
+    against what the year-to-date walk pays, which resolves each hour's own
+    slot and multiplies by that hour's exported kWh. Measured over a year of
+    modelled Brussels export on an Engie Empower Flextime card, the gap was
+    11,22 EUR on 3500 kWh, one-directional.
+
+    ``hour_weights`` is the household's own measured export shape per hour of
+    the day, which replaces the duration mean with the same basis the live
+    credit uses.
     """
-    if weekend_rule == "weekend_no_peak":
-        return 45.0, 69.0, 54.0
-    return 45.0, 45.0, 78.0
+    if hour_weights is None:
+        if weekend_rule == "weekend_no_peak":
+            return 45.0, 69.0, 54.0
+        return 45.0, 45.0, 78.0
+    from .pricing import tou_slot
+
+    # Walk one representative week so each hour lands in the slot the weekday
+    # and weekend rules actually put it in, then carry that hour's share of
+    # the household's export.
+    monday = datetime.combine(
+        date(2026, 1, 5), time(), tzinfo=dt_util.DEFAULT_TIME_ZONE
+    )
+    acc = {"peak": 0.0, "transition": 0.0, "offpeak": 0.0}
+    for hour in range(7 * 24):
+        when = monday + timedelta(hours=hour)
+        acc[tou_slot(when, weekend_rule)] += hour_weights.get(when.hour, 0.0)
+    total = sum(acc.values())
+    if total <= 0:
+        # A wired meter that exported nothing: fall back rather than divide by
+        # zero or return a credit built from an empty profile.
+        return _tou_slot_weights(weekend_rule)
+    return acc["peak"], acc["transition"], acc["offpeak"]
 
 
 def _compare_injection_credit(
@@ -83,13 +120,16 @@ def _compare_injection_credit(
     spot_dict: dict[datetime, float],
     avg_spot: float | None,
     spp_spot: float | None = None,
+    inj_hour_weights: dict[int, float] | None = None,
 ) -> float | None:
     """Injection credit (EUR/kWh) for the compare flow's annual estimate.
 
-    A per-slot TOU injection (Engie Empower Flextime) is time-averaged over
-    the published slot durations, mirroring how the consumption side is
-    weighted in ``_tou_weighted_per_kwh``; delegating to the live helper
-    would return the dialog-open slot rate and bias the credit. A
+    A per-slot TOU injection (Engie Empower Flextime) is averaged over the
+    slots by the household's own measured export shape, which is the basis the
+    live credit uses; delegating to the live helper would instead return the
+    dialog-open slot rate and bias the credit. Without a measurement it falls
+    back to the published slot durations, which under-credit because the
+    overnight off-peak block occupies a third of the clock and exports nothing. A
     spot-indexed injection (Cociter Variable, or any dynamic-energy
     contract) is priced off the window MEAN spot, consistent with the
     energy term (which also uses ``avg_spot``); pricing it off the live
@@ -118,7 +158,7 @@ def _compare_injection_credit(
         and inj.transition is not None
         and inj.offpeak is not None
     ):
-        wp, wt, wo = _tou_slot_weights(energy.weekend_rule)
+        wp, wt, wo = _tou_slot_weights(energy.weekend_rule, inj_hour_weights)
         return float(
             (inj.peak * wp + inj.transition * wt + inj.offpeak * wo) / (wp + wt + wo)
         )

@@ -862,6 +862,12 @@ class _CompareStepsMixin(OptionsFlow):
         hour_weights = await _measured_hour_weights(
             self.hass, self.config_entry, year_ago, today_local
         )
+        # And the export shape, for a per-slot feed-in credit. Averaging those
+        # slots by duration credits the overnight block, which is a third of
+        # the clock and produces nothing.
+        inj_hour_weights = await _measured_hour_weights(
+            self.hass, self.config_entry, year_ago, today_local, side="injection"
+        )
         current_per_kwh: float | None = None
         if current_snapshot is not None:
             current_per_kwh = _tou_weighted_per_kwh(
@@ -939,6 +945,7 @@ class _CompareStepsMixin(OptionsFlow):
                     spot_dict,
                     avg_spot,
                     await _spp_spot_for(current_snapshot),
+                    inj_hour_weights,
                 )
                 if current_inj_price is None and rolling_inj_kwh > 0:
                     uncredited.append(
@@ -954,6 +961,7 @@ class _CompareStepsMixin(OptionsFlow):
                     spot_dict,
                     avg_spot,
                     await _spp_spot_for(other_snap),
+                    inj_hour_weights,
                 )
                 if compare_inj_price is None and rolling_inj_kwh > 0:
                     uncredited.append(
@@ -997,6 +1005,7 @@ class _CompareStepsMixin(OptionsFlow):
                     spot_dict,
                     avg_spot,
                     await _spp_spot_for(baseline_snapshot),
+                    inj_hour_weights,
                 )
                 if stored_regime == SOLAR_REGIME_INJECTION
                 else None
