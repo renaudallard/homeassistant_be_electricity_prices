@@ -2253,6 +2253,51 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     assert abs((avg - constants) - expected_energy) < 0.001
 
 
+def test_compare_ytd_prorates_capacity_per_month_like_the_live_sensor() -> None:
+    """The Flanders capacity leg accrues per month, not by day-of-year.
+
+    _ytd_capacity sums each month's charge prorated by its OWN days, so at a
+    month end the accrual is a whole number of monthly charges. The what-if
+    scaled the entire fee block by days_elapsed / days_in_year instead, which
+    drifts inside the year against the very sensor it is meant to sit beside.
+    The prosumer term already had this override; capacity was left behind."""
+    from custom_components.be_electricity_prices.compare_quote import _annual_bill
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from tests import make_entry, make_snapshot
+
+    snap = make_snapshot(
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                capacity_eur_per_kw_year=50.0,
+            )
+        },
+    )
+    entry = make_entry(region="flanders", dso="fluvius_antwerpen", solar_regime="none")
+
+    def _bill(fee_proration: float, capacity_proration: float | None) -> float:
+        return _annual_bill(
+            snap,
+            entry,
+            4.5,  # billed peak kW
+            0.0,  # per-kWh isolated away
+            0.0,
+            capacity_proration=capacity_proration,
+            fee_proration=fee_proration,
+        )
+
+    # End of February: two whole monthly charges, 2 * 50 * 4.5 / 12 = 37.50.
+    days_elapsed, days_in_year = 59, 365
+    uniform = _bill(days_elapsed / days_in_year, None)
+    per_month = _bill(days_elapsed / days_in_year, 2.0)
+    assert per_month - uniform == pytest.approx(
+        225.0 * (2.0 / 12.0 - days_elapsed / days_in_year)
+    )
+    # And the corrected figure is the live sensor's whole-month accrual.
+    assert per_month == pytest.approx(37.50, abs=0.01)
+
+
 def test_compare_injection_credit_weights_slots_by_export_shape() -> None:
     """A per-slot feed-in credit must be weighted by what the panels export.
 

@@ -570,17 +570,19 @@ class _CompareStepsMixin(OptionsFlow):
         days_in_year = (date(today_local.year + 1, 1, 1) - jan1).days
         days_elapsed = (today_local - jan1).days + 1
         fee_proration = days_elapsed / days_in_year
-        # The prosumer fee is billed per-month (each month's fee prorated by
-        # its own days) in the live sensor and backfill, not by the uniform
-        # days_in_year fraction, so mirror that: every completed month counts
-        # as 1 plus the elapsed fraction of the current month.
+        # The prosumer fee and the Flanders capacity tariff are both billed
+        # per-month in the live sensor and backfill (each month's charge
+        # prorated by its OWN days), not by the uniform days_in_year fraction,
+        # so mirror that: every completed month counts as 1 plus the elapsed
+        # fraction of the current one. _ytd_prosumer and _ytd_capacity sum
+        # exactly this, which is why one number serves both.
         first_of_month = today_local.replace(day=1)
         next_month = date(
             today_local.year + today_local.month // 12,
             today_local.month % 12 + 1,
             1,
         )
-        prosumer_proration = (today_local.month - 1) + today_local.day / (
+        month_proration = (today_local.month - 1) + today_local.day / (
             next_month - first_of_month
         ).days
         spot_dict: dict[datetime, float] = (
@@ -1180,10 +1182,9 @@ class _CompareStepsMixin(OptionsFlow):
             and current_snapshot is not None
         ):
             # The YTD what-if mirrors the live current_year_cost sensor and
-            # the archive YTD path, both of which bill the Flanders capacity
-            # tariff as a separate sensor, so exclude it here to keep the
-            # three figures consistent (the full annual estimate above keeps
-            # it).
+            # the archive YTD path, both of which DO accrue the Flanders
+            # capacity tariff, so it is kept here too and prorated the same
+            # per-month way rather than by the uniform year fraction.
             current_ytd = _annual_bill(
                 current_snapshot,
                 quote_entry,
@@ -1193,7 +1194,8 @@ class _CompareStepsMixin(OptionsFlow):
                 ytd_inj_kwh,
                 current_inj_price,
                 fee_proration=fee_proration,
-                prosumer_proration=prosumer_proration,
+                prosumer_proration=month_proration,
+                capacity_proration=month_proration,
                 meter=current_meter,
             )
             compare_ytd = _annual_bill(
@@ -1205,7 +1207,8 @@ class _CompareStepsMixin(OptionsFlow):
                 ytd_inj_kwh,
                 compare_inj_price,
                 fee_proration=fee_proration,
-                prosumer_proration=prosumer_proration,
+                prosumer_proration=month_proration,
+                capacity_proration=month_proration,
                 meter=meter,
             )
             placeholders["current_ytd"] = f"{current_ytd:.2f}"

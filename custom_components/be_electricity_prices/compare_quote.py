@@ -612,6 +612,7 @@ def _annual_bill(
     injection_price: float | None = None,
     fee_proration: float = 1.0,
     prosumer_proration: float | None = None,
+    capacity_proration: float | None = None,
     meter: Any = METER_MONO,
     include_capacity: bool = True,
 ) -> float:
@@ -624,6 +625,9 @@ def _annual_bill(
     backfill prorate the prosumer fee per-month (each month's fee by its own
     days), so the YTD what-if passes the same per-month factor there to keep
     its absolute figure equal to the live ``current_year_cost`` sensor.
+    ``capacity_proration`` does the same for the Flanders capacity tariff,
+    which the live sensor also accrues per month rather than uniformly.
+
     ``include_capacity`` is forwarded to :func:`_annual_fees`; it exists for
     callers that want the per-kWh and fee terms without the Flanders capacity
     charge, and both the annual estimate and the YTD what-if keep it on so
@@ -660,6 +664,19 @@ def _annual_bill(
 
         prosumer_annual = 12.0 * _compute_prosumer(snapshot, entry)
         fees += prosumer_annual * (prosumer_proration / 12.0 - fee_proration)
+    if capacity_proration is not None and include_capacity:
+        # Same correction for the Flanders capacity tariff, and for the same
+        # reason: _ytd_capacity accrues each month by its OWN length
+        # (days_in_ytd / days_in_full_month), while fee_proration is a uniform
+        # days_elapsed / days_in_year. The two drift inside the year -- a
+        # February close measured 36,37 against the live sensor's 37,50 -- and
+        # the what-if is meant to be comparable to that sensor to the cent.
+        # Counted in MONTHS (0..12), like prosumer_proration.
+        from .fees import _compute_capacity
+
+        if entry.data.get(CONF_REGION) == REGION_FLANDERS:
+            capacity_annual = 12.0 * _compute_capacity(snapshot, entry, peak_kw)
+            fees += capacity_annual * (capacity_proration / 12.0 - fee_proration)
     regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     if regime == "compensation":
         billable = max(consumption_kwh - injection_kwh, 0.0)
