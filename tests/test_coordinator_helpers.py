@@ -91,6 +91,7 @@ from custom_components.be_electricity_prices.injection import (
 from custom_components.be_electricity_prices.snapshot_store import (
     _SNAPSHOT_SCHEMA_VERSION,
     _energy_kind,
+    _monthly_fetched_at,
     _monthly_snapshots,
     _snapshot_for_month,
     _snapshot_from_dict,
@@ -1440,6 +1441,77 @@ async def test_snapshot_for_month_uses_archive_when_available(
     )
     assert snap is archived
     assert fetch_calls == 1
+
+
+async def test_snapshot_for_month_reasks_a_row_that_can_still_move(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A cached month that is not yet a historical fact must expire.
+
+    Two rows can still change after they are cached. The running month's card
+    can be republished or corrected mid-month, which this repo treats as
+    normal. And a cached "no archive here" only means the card was not out at
+    the moment it was asked: a supplier publishing in arrears turns that into
+    a real card days later. Neither had a TTL, so the live price moved within
+    a day while the year-to-date and every backfilled row kept billing the
+    vintage first cached at startup, for the life of the HA process.
+
+    A parsed card for a month that has CLOSED is a historical fact and must
+    stay cached, which is what the archive cache exists for."""
+
+    current = _archive_snapshot("current")
+    published: list[SupplierSnapshot | None] = [None]
+    fetch_calls = 0
+
+    async def _fake_fetch(*_a: object, **_kw: object) -> SupplierSnapshot | None:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return published[0]
+
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_fake_fetch,
+    )
+
+    async def _ask(month: date) -> SupplierSnapshot:
+        return await _snapshot_for_month(
+            hass, MagicMock(), extractor, "test", "wallonia", month, current
+        )
+
+    # 1. Not published yet -> falls back to the current card and caches that.
+    freezer.move_to("2026-06-02 09:00:00+02:00")
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    assert await _ask(date(2026, 5, 1)) is current
+    assert await _ask(date(2026, 5, 1)) is current
+    assert fetch_calls == 1  # held inside the TTL
+
+    # The definitive card lands a few days later, as Ecopower's do.
+    published[0] = _archive_snapshot("2026-05")
+    freezer.move_to("2026-06-04 09:00:00+02:00")
+    assert await _ask(date(2026, 5, 1)) is published[0]
+    assert fetch_calls == 2
+
+    # 2. And once that month is closed and parsed, it never moves again.
+    freezer.move_to("2026-06-20 09:00:00+02:00")
+    assert await _ask(date(2026, 5, 1)) is published[0]
+    assert fetch_calls == 2
+
+    # 3. The RUNNING month is re-asked, because its card can be corrected.
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    fetch_calls = 0
+    published[0] = _archive_snapshot("2026-06-draft")
+    freezer.move_to("2026-06-20 09:00:00+02:00")
+    assert await _ask(date(2026, 6, 1)) is published[0]
+    corrected = _archive_snapshot("2026-06-corrected")
+    published[0] = corrected
+    freezer.move_to("2026-06-22 09:00:00+02:00")
+    assert await _ask(date(2026, 6, 1)) is corrected
+    assert fetch_calls == 2
 
 
 async def test_snapshot_for_month_falls_back_to_current_when_no_archive(

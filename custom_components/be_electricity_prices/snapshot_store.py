@@ -114,7 +114,16 @@ _MONTHLY_SNAPSHOTS_KEY = "monthly_snapshot_cache"
 # TTL: long enough to dedupe one hour of update ticks, short enough
 # that a real recovery is picked up promptly.
 _MONTHLY_FAILED_FETCHES_KEY = "monthly_snapshot_failed_fetches"
+_MONTHLY_FETCHED_AT_KEY = "monthly_snapshot_fetched_at"
 _MONTHLY_FAILURE_TTL = timedelta(minutes=30)
+# How long a per-month archive row that can still MOVE is trusted. A card for
+# a closed month is immutable once parsed and is cached for the process life;
+# everything else is provisional and re-asked on the same clock the live card
+# uses. Two rows are provisional: the running month, whose card a supplier can
+# republish or correct mid-month, and a cached "no archive here", which for a
+# supplier publishing in arrears (Ecopower) only means "not out yet" and turns
+# into a real card days later.
+_MONTHLY_PROVISIONAL_TTL = timedelta(hours=SNAPSHOT_REFRESH_HOURS)
 
 
 @dataclass
@@ -203,13 +212,15 @@ def _drop_monthly_rows(
 ) -> list[tuple[str, str, str, str]]:
     """Drop every per-month archive row pinned to one supplier tuple.
 
-    Returns the keys removed so a caller can clean up alongside them. The
-    rows have no TTL, so whoever wants a re-fetch has to say so: on unload
-    that is eviction, on the refresh service it is the user asking for the
-    current card again.
+    Returns the keys removed so a caller can clean up alongside them. A closed
+    month's parsed card has no TTL, so whoever wants that re-fetched has to say
+    so: on unload that is eviction, on the refresh service it is the user
+    asking for the current card again. Rows that can still move expire on
+    their own (``_MONTHLY_PROVISIONAL_TTL``).
     """
     monthly = _monthly_snapshots(hass)
     monthly_failed = _monthly_failed_fetches(hass)
+    monthly_stamped = _monthly_fetched_at(hass)
     _, contract, region = key
     stale = [
         k
@@ -219,6 +230,7 @@ def _drop_monthly_rows(
     for k in stale:
         monthly.pop(k, None)
         monthly_failed.pop(k, None)
+        monthly_stamped.pop(k, None)
     return stale
 
 
@@ -237,6 +249,36 @@ def _monthly_snapshots(
 ) -> dict[tuple[str, str, str, str], "SupplierSnapshot | None"]:
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     return bucket.setdefault(_MONTHLY_SNAPSHOTS_KEY, {})  # type: ignore[no-any-return]
+
+
+def _monthly_fetched_at(
+    hass: HomeAssistant,
+) -> dict[tuple[str, str, str, str], datetime]:
+    """Per-(supplier, contract, region, YYYY-MM) time the row was cached.
+
+    Only read for a provisional row; a closed month's card never expires, so
+    its timestamp is written and then ignored.
+    """
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_MONTHLY_FETCHED_AT_KEY, {})  # type: ignore[no-any-return]
+
+
+def _month_row_is_provisional(
+    snap: "SupplierSnapshot | None", year_month: date, today: date
+) -> bool:
+    """Whether a cached row for ``year_month`` can still change.
+
+    A parsed card for a month that has closed is a historical fact and stays
+    cached. A row for the running month is not: the supplier can republish or
+    correct it, and this repo already treats that as normal. A cached ``None``
+    is not either, whatever the month: it means the archive had nothing at the
+    moment it was asked, which for a supplier publishing in arrears is a
+    statement about the calendar rather than about the month.
+    """
+    return snap is None or (year_month.year, year_month.month) >= (
+        today.year,
+        today.month,
+    )
 
 
 def _monthly_failed_fetches(
@@ -323,11 +365,30 @@ async def _snapshot_for_month(
         region,
         f"{year_month.year:04d}-{year_month.month:02d}",
     )
+    fetched_at = _monthly_fetched_at(hass)
+    today = dt_util.now().date()
     if cache_key in cache:
-        return resolved(cache[cache_key])
+        row = cache[cache_key]
+        stamped = fetched_at.get(cache_key)
+        if not _month_row_is_provisional(row, year_month, today) or (
+            stamped is not None
+            and dt_util.utcnow() - stamped < _MONTHLY_PROVISIONAL_TTL
+        ):
+            return resolved(row)
+        # Provisional and past its TTL: drop the row and re-ask. Without this
+        # a supplier correcting the running month's card moved current_price
+        # within a day while the year-to-date and every backfilled row kept
+        # billing the vintage first cached at startup, and a month whose card
+        # had not published yet stayed "no archive" for the life of the HA
+        # process even after the card appeared.
+        cache.pop(cache_key, None)
+        fetched_at.pop(cache_key, None)
     fetch_archived = extractor.fetch_for_month
     if fetch_archived is None:
+        # Not an archive supplier at all, which is a property of the extractor
+        # rather than of the month, so this row is never provisional.
         cache[cache_key] = None
+        fetched_at[cache_key] = dt_util.utcnow()
         return current_snapshot
     # Negative cache: a transient fetch_for_month failure is intentionally
     # NOT written to ``cache`` (a cached None means "no archive for
@@ -344,6 +405,7 @@ async def _snapshot_for_month(
         # what the first just did.
         if cache_key in cache:
             return resolved(cache[cache_key])
+
         last_fail = failed.get(cache_key)
         if (
             last_fail is not None
@@ -375,6 +437,7 @@ async def _snapshot_for_month(
         # stale "uncredited" output until the entry reloads.
         if not fetch_failed and _tuple_generation(hass, cache_key) == gen_at_entry:
             cache[cache_key] = snap
+            fetched_at[cache_key] = dt_util.utcnow()
     return resolved(snap)
 
 
