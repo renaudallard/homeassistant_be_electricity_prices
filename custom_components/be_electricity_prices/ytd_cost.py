@@ -509,6 +509,14 @@ async def _ytd_spot_injection_credit(
         return 0.0
     jan1 = date(today.year, 1, 1)
     per_hour = await _sum_hourly_kwh(hass, inj_ids, jan1, today)
+    # Topped up from the live meter, exactly as both sibling paths do: the
+    # daily branch through _recorder_daily_kwh and the hourly branch through
+    # its own two _top_up_today_hourly calls. Without it the consumption leg
+    # of one bill was live to the minute while its offsetting feed-in credit
+    # trailed the last COMPILED hour, so current_year_cost over-stated the
+    # bill by whatever of today's injection statistics had not booked yet, and
+    # did not heal at all while compilation was stalled.
+    await _top_up_today_hourly(hass, inj_ids, per_hour, today)
     credit = 0.0
     for utc_hour, kwh in per_hour.items():
         spot = historical_spots.get(utc_hour)

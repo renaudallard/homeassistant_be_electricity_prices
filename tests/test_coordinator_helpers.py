@@ -779,6 +779,52 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
         )
 
 
+async def test_ytd_spot_injection_credit_tops_up_today_from_the_meter(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Today's feed-in credit must read the same source today's charge does.
+
+    The consumption leg has read the live meter for today since 0.11.9, and
+    the hourly branch tops both of its sides up. This isolated credit stopped
+    at compiled statistics, so within one current_year_cost the charge was
+    live to the minute while the offsetting credit trailed the last compiled
+    hour. That over-states the bill by the uncompiled part of today's
+    injection, and does not heal while compilation is stalled, which is the
+    failure the live read was added for."""
+
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    today = dt_util.now().date()
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=VariableRates(current=0.16),
+        injection=InjectionRates(factor=1.0, base=0.0, current=None),
+    )
+    entry = _entry(solar_regime="injection", injection_kwh="sensor.inj_total")
+    # Statistics have compiled the first two hours of today; the meter says
+    # 4 kWh more has been injected since.
+    hour = dt_util.start_of_local_day(today).astimezone(UTC) + timedelta(hours=10)
+    spots = {hour + timedelta(hours=h): 0.10 for h in range(4)}
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return {hour: 4.0, hour + timedelta(hours=1): 4.0} if entity_id else {}
+
+    hass.states.async_set("sensor.inj_total", "112.0", _meter_attrs("kWh"))
+    inst = _midnight_instance(
+        {"sensor.inj_total": [State("sensor.inj_total", "100.0")]}
+    )
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+        patch("homeassistant.components.recorder.get_instance", return_value=inst),
+    ):
+        credit = await _ytd_spot_injection_credit(hass, snap, entry, today, spots)
+    # The meter reports 12 kWh injected today, statistics carry 8. All 12 are
+    # credited at 0.10; stopping at the compiled 8 would credit 0.80.
+    assert credit == pytest.approx(1.20)
+
+
 def test_brussels_sibelga_charges_no_prosumer_or_capacity() -> None:
     # Sibelga has no per-kVA prosumer fee and no per-kW capacity fee.
     # A Brussels prosumer (smart meter on injection regime) must therefore
