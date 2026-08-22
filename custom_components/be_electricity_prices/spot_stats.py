@@ -31,7 +31,6 @@ toward a day that has not been billed."""
 
 from __future__ import annotations
 
-from calendar import monthrange
 from datetime import UTC
 from datetime import date
 from datetime import datetime
@@ -148,7 +147,27 @@ def _month_mean(bucket: _SpotMonthBucket, year: int, month: int) -> float | None
 # threshold mirrors the day-level rule in _ensure_historical_spots (20 of 24
 # hours present); a month fetched in week-sized chunks is either nearly whole
 # or missing whole weeks, and missing weeks are seasonally biased.
-_MIN_MONTH_COVERAGE = 0.8
+# Fewest cached hours a CLOSED month needs before its mean is billed. This is
+# an absolute count, not a fraction of the month, because the question is not
+# "how complete is the cache" but "is this sample big enough to average".
+#
+# Refusing costs the WHOLE commodity leg for that month, about 40% of the
+# all-in rate, so the mean only has to beat a 100% error to be worth billing.
+# Measured against real Belgian day-ahead prices (Jan, Feb, Apr and Jul 2026,
+# via energy-charts.info), sampling the shape the fetch actually produces:
+#
+#   whole days missing   21 of 28 days  p95 6,6%   worst 14,3%
+#                         7 of 28 days  p95 19,8%  worst 43,1%
+#                         1 of 28 days  p95 53,8%  worst 93,9%
+#   scattered hours              24 h   p95 22,8%  worst 61,7%
+#                                12 h   p95 32,1%  worst 109,7%
+#                                 1 h   p95 100,9% worst 612,1%
+#
+# So the mean beats dropping the leg everywhere down to about a day's worth of
+# hours, and only the handful-of-hours tail can exceed what refusing costs.
+# The previous rule required 80% of the month, which refused where the error
+# was around 5% and forfeited 40% of the bill instead.
+_MIN_MONTH_HOURS = 24
 
 
 def _covered_month_mean(
@@ -187,8 +206,7 @@ def _month_is_thinly_cached(
     """
     if (year, month) >= (today.year, today.month):
         return False
-    cached = len(bucket.get((year, month), ()))
-    return cached < _MIN_MONTH_COVERAGE * monthrange(year, month)[1] * 24
+    return len(bucket.get((year, month), ())) < _MIN_MONTH_HOURS
 
 
 def _mean_of_month(spots: dict[datetime, float], year: int, month: int) -> float | None:

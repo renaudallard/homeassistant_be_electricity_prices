@@ -160,6 +160,36 @@ def test_hour_spot_refuses_a_thinly_cached_closed_month() -> None:
     ) == pytest.approx(0.07)
 
 
+def test_closed_month_gate_bills_a_partial_but_usable_month() -> None:
+    """The gate must only refuse a sample too small to average.
+
+    Refusing forfeits the whole commodity leg for that month, roughly 40% of
+    the all-in rate, so the sampled mean only has to beat a 100% error to be
+    the better answer. Measured against real Belgian day-ahead prices it beats
+    that everywhere down to about a day's worth of hours: with three weeks of
+    a month cached the mean is within a few percent, while the old rule -- 80%
+    of the month's hours -- refused exactly there and billed no energy at all.
+    """
+    from custom_components.be_electricity_prices.spot_stats import (
+        _bucket_by_local_month,
+        _covered_month_mean,
+    )
+
+    today = date(2026, 8, 22)
+    base = datetime(2026, 7, 1, tzinfo=UTC)
+
+    def _mean(hours: int) -> float | None:
+        spots = {base + timedelta(hours=i): 0.10 for i in range(hours)}
+        return _covered_month_mean(_bucket_by_local_month(spots), 2026, 7, today)
+
+    # Three weeks of July: 68% of the month, refused by the old 80% rule.
+    assert _mean(21 * 24) == pytest.approx(0.10)
+    # A single day's worth is still enough to average.
+    assert _mean(24) == pytest.approx(0.10)
+    # A scattered handful is not: that tail runs past what refusing costs.
+    assert _mean(6) is None
+
+
 def test_energy_and_injection_gates_agree_on_a_thin_closed_month() -> None:
     """One bucket, one loop iteration, one answer.
 
