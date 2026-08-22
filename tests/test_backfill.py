@@ -110,6 +110,56 @@ def test_compensation_kva_invalid_inputs_clamp_to_zero() -> None:
         assert _compensation_kva(entry) == 0.0, override  # type: ignore[arg-type]
 
 
+def test_hour_spot_refuses_a_thinly_cached_closed_month() -> None:
+    """A closed month with a handful of cached hours must not price all of it.
+
+    The live walk gates this same quantity through _covered_month_mean:
+    averaging an unrepresentative slice and applying it to every hour of a
+    finished month yields a wrong rate rather than a missing one. The backfill
+    computed it with the ungated mean, and unlike the year-to-date -- which is
+    recomputed from scratch every tick and heals itself -- these rows are
+    written into the recorder and stay until someone re-runs the service."""
+    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+    from custom_components.be_electricity_prices.spot_stats import (
+        _bucket_by_local_month,
+    )
+
+    energy = SpotMonthlyRates(factor=1.0, base=0.0)
+    today = date(2026, 8, 22)
+    utc_hour = datetime(2026, 7, 5, 10, tzinfo=UTC)
+    local = dt_util.as_local(utc_hour)
+
+    def _spot(spots: dict[datetime, float]) -> float | None:
+        return bf._hour_spot(
+            energy, local, utc_hour, spots, _bucket_by_local_month(spots), {}, today
+        )
+
+    # Three cached hours of July's 744, all drawn from the cheap end.
+    thin = {datetime(2026, 7, 5, h, tzinfo=UTC): 0.02 for h in (10, 11, 12)}
+    assert _spot(thin) is None
+
+    # Fully covered, so the mean is representative and does get billed.
+    full = {
+        datetime(2026, 7, 1, tzinfo=UTC) + timedelta(hours=i): 0.10
+        for i in range(31 * 24)
+    }
+    assert _spot(full) == pytest.approx(0.10)
+
+    # The RUNNING month is partial by definition and stays exempt: the hours
+    # cached so far are the best estimate of it that exists.
+    aug_hour = datetime(2026, 8, 3, 10, tzinfo=UTC)
+    aug = {aug_hour: 0.07}
+    assert bf._hour_spot(
+        energy,
+        dt_util.as_local(aug_hour),
+        aug_hour,
+        aug,
+        _bucket_by_local_month(aug),
+        {},
+        today,
+    ) == pytest.approx(0.07)
+
+
 def test_normalize_window_defaults_to_jan1_through_now() -> None:
     fixed_now = datetime(2026, 5, 4, 13, 30, tzinfo=BRUSSELS)
     with patch.object(dt_util, "now", return_value=fixed_now):
@@ -707,6 +757,76 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
     assert cost_rows[-1]["state"] == pytest.approx(-(0.5 * 0.15))
 
 
+async def test_cost_backfill_bills_grid_and_taxes_for_an_unpriced_hour(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An hour the spot cache cannot price still costs grid and taxes.
+
+    The live walk bills those two legs through compute_network_and_taxes and
+    forfeits only the commodity, because neither depends on the day-ahead
+    price and together they are the larger half of a Belgian residential
+    rate. This pass dropped the hour whole instead, so every metered kWh
+    inside an ENTSO-E gap cost the persisted series nothing at all and the
+    imported rows disagreed with the compiled ones at the seam."""
+    from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices.providers.base import DynamicRates
+
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    snap = make_snapshot(energy=DynamicRates(factor=1.0, base=0.0))
+    entry = make_entry(
+        region=const.REGION_WALLONIA,
+        dso=const.DSO_ORES,
+        meter=const.METER_MONO,
+        title="Dynamic gap",
+        solar_regime="none",
+        consumption_kwh="sensor.cons_total",
+    )
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_year_cost"])
+
+    hour = datetime(2026, 7, 10, 10, tzinfo=UTC)
+
+    async def _snap_for(_month_first: object) -> Any:
+        return snap
+
+    def _fake_cache(*_a: object, **_k: object) -> Any:
+        return _snap_for
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return {hour: 10.0} if entity_id == "sensor.cons_total" else {}
+
+    captured: list[tuple[str, list[Any]]] = []
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        captured.append((metadata["statistic_id"], list(statistics)))
+
+    coord = SimpleNamespace(_snapshot=snap, _session=None, _spp_weights=None)
+
+    async def _ensure() -> None:
+        return None
+
+    coord._ensure_spp_weights = _ensure
+    with (
+        patch.object(bf, "_month_snapshot_cache", _fake_cache),
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_fake_import,
+        ),
+    ):
+        # Empty spot cache: the energy leg is the only unknown part.
+        await bf._backfill_cost_sensor(hass, entry, coord, [hour], {})  # type: ignore[arg-type]
+
+    cost_rows = next(rows for sid, rows in captured if sid == ids["current_year_cost"])
+    # 10 kWh under the ORES overlay make_snapshot builds: distribution 0.10 +
+    # transport 0.0145 + excise 0.05 + contribution 0.002 = 0.1665 EUR/kWh, so
+    # 1.665 EUR of grid and tax that the old behaviour dropped on the floor.
+    # This snapshot carries no yearly fee, so that leg is the whole row.
+    assert cost_rows[-1]["state"] == pytest.approx(1.665, abs=1e-6)
+
+
 async def test_backfill_range_without_runtime_data_raises(
     hass: HomeAssistant,
 ) -> None:
@@ -825,34 +945,46 @@ async def test_ensure_dynamic_spots_empty_for_static_non_spot_contract() -> None
 
 def test_hour_spot_uses_month_mean_for_spot_monthly() -> None:
     """A SpotMonthlyRates leg (a re-priced variable cohort) prices at the
-    delivery-month arithmetic mean; every other kind uses the per-hour spot."""
+    delivery-month arithmetic mean; every other kind uses the per-hour spot.
+
+    Anchored inside the delivery month so the mean is the RUNNING one, which
+    is partial by definition and exempt from the closed-month coverage gate.
+    A closed month this thinly cached is refused instead, which
+    test_hour_spot_refuses_a_thinly_cached_closed_month pins."""
     from custom_components.be_electricity_prices.providers.base import (
         DynamicRates,
         FixedRates,
         SpotMonthlyRates,
+    )
+    from custom_components.be_electricity_prices.spot_stats import (
+        _bucket_by_local_month,
     )
 
     spots = {
         datetime(2026, 3, 10, 9, tzinfo=UTC): 0.10,
         datetime(2026, 3, 10, 10, tzinfo=UTC): 0.20,
     }
+    bucket = _bucket_by_local_month(spots)
     hour = datetime(2026, 3, 10, 9, tzinfo=UTC)
     local = dt_util.as_local(hour)
+    today = date(2026, 3, 15)
     cache: dict[tuple[int, int], float | None] = {}
     # SpotMonthly -> month mean (0.15), NOT the per-hour 0.10.
     assert bf._hour_spot(
-        SpotMonthlyRates(factor=1.0, base=0.0), local, hour, spots, cache
+        SpotMonthlyRates(factor=1.0, base=0.0), local, hour, spots, bucket, cache, today
     ) == pytest.approx(0.15)
     # Dynamic / fixed -> per-hour spot.
     assert bf._hour_spot(
-        DynamicRates(factor=1.0, base=0.0), local, hour, spots, cache
+        DynamicRates(factor=1.0, base=0.0), local, hour, spots, bucket, cache, today
     ) == pytest.approx(0.10)
     assert bf._hour_spot(
-        FixedRates(single=0.2), local, hour, spots, cache
+        FixedRates(single=0.2), local, hour, spots, bucket, cache, today
     ) == pytest.approx(0.10)
     # No cached spots for the month -> None (the hour is then skipped).
     assert (
-        bf._hour_spot(SpotMonthlyRates(factor=1.0, base=0.0), local, hour, {}, {})
+        bf._hour_spot(
+            SpotMonthlyRates(factor=1.0, base=0.0), local, hour, {}, {}, {}, today
+        )
         is None
     )
 

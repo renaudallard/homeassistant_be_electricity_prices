@@ -113,13 +113,20 @@ from .injection import (
     _injection_needs_spot,
 )
 from .spot_stats import (
+    _SpotMonthBucket,
+    _bucket_by_local_month,
+    _covered_month_mean,
     _injection_is_spp_indexed,
     _injection_on_month_mean,
-    _mean_of_month,
     _spp_injection_spot,
     _spp_weighting_enabled,
 )
-from .pricing import DsoTariffMode, MeterType, compute_breakdown
+from .pricing import (
+    DsoTariffMode,
+    MeterType,
+    compute_breakdown,
+    compute_network_and_taxes,
+)
 from .providers import DynamicRates, SpotMonthlyRates, get as get_extractor
 
 _LOGGER = logging.getLogger(__name__)
@@ -347,7 +354,9 @@ def _hour_spot(
     local: datetime,
     utc_hour: datetime,
     spots: dict[datetime, float],
+    bucket: _SpotMonthBucket,
     mean_cache: dict[tuple[int, int], float | None],
+    today: date,
 ) -> float | None:
     """The spot value to price ``energy`` at for one hour.
 
@@ -357,11 +366,20 @@ def _hour_spot(
     (``_ytd_hourly_energy`` with ``monthly_mean=True``); every other kind uses
     the per-hour spot. The month mean is memoised so a 365-day window computes
     at most 12 means.
+
+    The mean goes through ``_covered_month_mean`` for the same reason the live
+    walk does: a CLOSED month with only a handful of cached hours averages an
+    unrepresentative slice, and applying that to all 744 of them is a wrong
+    rate rather than a missing one. It matters more here than there, because
+    the year-to-date is recomputed every tick and heals itself while these rows
+    are written into the recorder and stay until someone re-runs the service.
     """
     if isinstance(energy, SpotMonthlyRates):
         key = (local.year, local.month)
         if key not in mean_cache:
-            mean_cache[key] = _mean_of_month(spots, *key) if spots else None
+            mean_cache[key] = (
+                _covered_month_mean(bucket, *key, today) if spots else None
+            )
         return mean_cache[key]
     return spots.get(utc_hour) if spots else None
 
@@ -542,11 +560,17 @@ async def _backfill_price_sensors(
     month_spp_cache = ctx.month_spp_cache
     month_mean_cache = ctx.month_mean_cache
     hourly_injection = ctx.hourly_injection
+    # Bucketed once, like the live walk: the closed-month coverage gate needs
+    # to know how much of a month is actually cached, not just its mean.
+    month_bucket = _bucket_by_local_month(spots) if spots else {}
+    today = dt_util.now().date()
     rows_per_key: dict[str, list[Any]] = {key: [] for key in stat_ids}
     for utc_hour in hours:
         local = dt_util.as_local(utc_hour)
         snap_h = await _snap_for(date(local.year, local.month, 1))
-        spot = _hour_spot(snap_h.energy, local, utc_hour, spots, month_mean_cache)
+        spot = _hour_spot(
+            snap_h.energy, local, utc_hour, spots, month_bucket, month_mean_cache, today
+        )
         # Dynamic / spot-monthly without a spot for this hour: nothing to
         # write, the formula factor*spot+base (or factor*mean+base) needs both.
         # Fixed / variable pass spot=None and ignore it in compute_breakdown.
@@ -698,6 +722,10 @@ async def _backfill_cost_sensor(
     month_spp_cache = ctx.month_spp_cache
     month_mean_cache = ctx.month_mean_cache
     hourly_injection = ctx.hourly_injection
+    # Bucketed once, like the live walk: the closed-month coverage gate needs
+    # to know how much of a month is actually cached, not just its mean.
+    month_bucket = _bucket_by_local_month(spots) if spots else {}
+    today = dt_util.now().date()
 
     # UTC-hour count per local day so the static fee accrues smoothly per
     # hour yet each local day sums to exactly annual/days_in_year, even on
@@ -714,41 +742,53 @@ async def _backfill_cost_sensor(
         local = dt_util.as_local(utc_hour)
         month_first = date(local.year, local.month, 1)
         snap_h = await _snap_for(month_first)
-        spot = _hour_spot(snap_h.energy, local, utc_hour, spots, month_mean_cache)
+        spot = _hour_spot(
+            snap_h.energy, local, utc_hour, spots, month_bucket, month_mean_cache, today
+        )
 
-        # Energy term: skipped when the supplier is dynamic / spot-monthly and
-        # we have no spot (or month mean) for this hour (the formula needs it),
-        # or when compute_breakdown can't evaluate the hour.
-        if not (
+        # Energy term: an hour the spot cache cannot price is NOT dropped.
+        # It still has a network leg and a tax leg, both known from that
+        # month's snapshot and neither depending on the day-ahead price, and on
+        # a Belgian residential card those two are the larger half of the
+        # all-in rate. The live walk bills them through compute_network_and_taxes
+        # for exactly this reason; skipping the hour whole here instead made the
+        # persisted cost series drop grid and taxes on every metered kWh in an
+        # ENTSO-E gap, so the imported rows and the compiled ones disagreed at
+        # the seam by more than the energy nobody could price.
+        no_spot = (
             isinstance(snap_h.energy, (DynamicRates, SpotMonthlyRates)) and spot is None
-        ):
-            try:
-                bd = compute_breakdown(
+        )
+        try:
+            bd = (
+                compute_network_and_taxes(snap_h, dso, region, local, meter, dso_mode)
+                if no_spot
+                else compute_breakdown(
                     snap_h, dso, region, local, spot, meter, dso_mode
                 )
-            except (KeyError, ValueError):
-                bd = None
-            if bd is not None:
-                cons = cons_per_hour.get(utc_hour, 0.0)
-                inj = inj_per_hour.get(utc_hour, 0.0)
-                if is_compensation:
-                    running_energy += (cons - inj) * bd.all_in
-                elif regime == SOLAR_REGIME_INJECTION:
-                    running_energy += cons * bd.all_in
-                    inj_rate = _injection_rate_for_hour(
-                        snap_h,
-                        spot=spot,
-                        spots=spots,
-                        utc_hour=utc_hour,
-                        local=local,
-                        spp_weights=spp_weights,
-                        month_spp_cache=month_spp_cache,
-                        hourly_injection=hourly_injection,
-                    )
-                    if inj_rate is not None:
-                        running_energy -= inj * inj_rate
-                else:
-                    running_energy += cons * bd.all_in
+            )
+        except (KeyError, ValueError):
+            bd = None
+        if bd is not None:
+            cons = cons_per_hour.get(utc_hour, 0.0)
+            inj = inj_per_hour.get(utc_hour, 0.0)
+            if is_compensation:
+                running_energy += (cons - inj) * bd.all_in
+            elif regime == SOLAR_REGIME_INJECTION:
+                running_energy += cons * bd.all_in
+                inj_rate = _injection_rate_for_hour(
+                    snap_h,
+                    spot=spot,
+                    spots=spots,
+                    utc_hour=utc_hour,
+                    local=local,
+                    spp_weights=spp_weights,
+                    month_spp_cache=month_spp_cache,
+                    hourly_injection=hourly_injection,
+                )
+                if inj_rate is not None:
+                    running_energy -= inj * inj_rate
+            else:
+                running_energy += cons * bd.all_in
 
         # Fee accrual: spread each local day's annual/days_in_year share
         # evenly over that day's actual UTC hours, so the YTD line grows
