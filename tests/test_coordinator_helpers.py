@@ -2790,6 +2790,50 @@ async def _project(hass: HomeAssistant, entry: Any, fake: Any, **kw: Any) -> Any
     return got, diag
 
 
+async def test_projection_bills_the_cohort_yearly_fee_not_todays(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A signing-cohort entry must be projected entirely on its own card.
+
+    The supplier's yearly fixed fee rides on the energy leg, which is exactly
+    what the cohort splice replaces, so taking the per-kWh rate from the
+    spliced card and the fee from today's put this figure half on one vintage
+    and half on the other. It was the only full-year path doing that: the
+    year-to-date walk and the compare page both bill the cohort fee, so the
+    same entry showed two full-year numbers that disagreed by the difference
+    between what the user signed and what a new customer is offered."""
+
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    signed = replace(
+        _yearly_snapshot(),
+        energy=FixedRates(single=0.18, peak=0.20, offpeak=0.16, yearly_fixed_fee=0.0),
+    )
+    todays = replace(
+        _yearly_snapshot(),
+        energy=FixedRates(
+            single=0.18, peak=0.20, offpeak=0.16, yearly_fixed_fee=100.0
+        ),
+    )
+    got, _ = await _project(
+        hass,
+        _projection_entry(),
+        _daily(10.0),
+        snapshot=todays,
+        priced=signed,
+    )
+    control, _ = await _project(
+        hass,
+        _projection_entry(),
+        _daily(10.0),
+        snapshot=signed,
+        priced=signed,
+    )
+    assert got is not None and control is not None
+    # Both bill the signed 0 EUR fee. Reading it off today's card instead
+    # added its 100 EUR to a contract the user is not on.
+    assert got == pytest.approx(control)
+
+
 async def test_projection_prices_a_full_year_at_todays_tariffs(
     hass: HomeAssistant, freezer: Any
 ) -> None:

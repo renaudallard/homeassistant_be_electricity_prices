@@ -152,11 +152,12 @@ async def _compute_projected_year_cost(
 ) -> float | None:
     """Cost of a full year on this contract at today's tariffs, or ``None``.
 
-    Two snapshots, and swapping them is a real bug rather than a style choice.
-    ``snapshot`` is the card as resolved, which is what the fee helpers read.
-    ``priced`` is the cohort-spliced one, whose energy leg is what the live
-    sensors actually bill, so a signing-cohort entry takes its per-kWh rate
-    from there and not from the card a new customer would get today.
+    Two snapshots. ``priced`` is the cohort-spliced one, whose energy leg is
+    what the live sensors actually bill, so a signing-cohort entry takes both
+    its per-kWh rate and its yearly fixed fee from there rather than from the
+    card a new customer would get today. ``snapshot`` is the card as resolved,
+    and is read only to tell a contract that is natively spot-indexed from one
+    the splice moved onto that axis, which the basis string reports.
 
     Returns ``None`` when the contract cannot be projected or the rate cannot
     be resolved. It never raises: the caller runs inside the coordinator tick,
@@ -258,8 +259,17 @@ async def _compute_projected_year_cost(
         else:
             injection_basis = _NO_INJECTION_YEAR
 
+    # The COHORT card, not today's. The supplier's yearly fixed fee rides on
+    # the energy leg (fees._annual_static_fees reads it off snapshot.energy),
+    # and the splice is what replaces that leg, so billing the fee off
+    # `snapshot` put this figure half on the signing vintage and half on the
+    # card a new customer would get today. Every other full-year path bills
+    # the cohort: the year-to-date walk through _effective_snapshot_for_month,
+    # and the compare page by re-pointing its own snapshot at the spliced one.
+    # The overlays are untouched by the splice, so the network, tax, prosumer
+    # and capacity legs are the same either way.
     projected = _annual_bill(
-        snapshot,
+        priced,
         entry,
         billed_peak_kw,
         per_kwh,
