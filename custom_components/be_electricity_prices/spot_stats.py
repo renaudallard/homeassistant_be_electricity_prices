@@ -78,6 +78,29 @@ def _energy_is_quarter_hourly(energy: EnergyRates) -> bool:
     return isinstance(energy, DynamicRates) and energy.quarter_hourly
 
 
+def _bucket_spots_by_hour(spots: dict[datetime, float]) -> dict[datetime, float]:
+    """Collapse a fetched spot curve onto one price per clock hour, by mean.
+
+    A quarter-hourly contract settles on the 15-minute series, so that is what
+    its replay has to be priced off. The recorder only keeps hourly
+    consumption, though, so the replay can only ever ask what a whole hour
+    cost. The mean of that hour's quarters is the exact answer to that question
+    rather than an approximation: every energy and injection formula here is
+    linear in the spot, so pricing the hour's mean is identical to replaying
+    each quarter against a quarter of the hour's kWh.
+
+    Collapsing at the fetch keeps the historical cache hourly, which is what
+    its 20-of-24 completeness test, its persisted form and every reader in the
+    year-to-date walk and the backfill already assume.
+    """
+    out: dict[datetime, list[float]] = {}
+    for when, value in spots.items():
+        out.setdefault(when.replace(minute=0, second=0, microsecond=0), []).append(
+            value
+        )
+    return {hour: fmean(values) for hour, values in out.items()}
+
+
 # A spot cache grouped by local (year, month) so several months' means can be
 # read without rescanning the whole year (and re-localising every hour) once
 # per month. Each bucket keeps (utc_ts, value) pairs so the SPP-weighted mean

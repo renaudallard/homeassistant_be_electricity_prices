@@ -47,6 +47,7 @@ from .const import (
     CONF_API_KEY,
 )
 from .spot_stats import (
+    _bucket_spots_by_hour,
     _drop_future_spots,
     _energy_is_quarter_hourly,
     _mean_of_month,
@@ -223,6 +224,14 @@ class _SpotsMixin:
         if not missing_ranges:
             return
         client = EntsoeClient(api_key, self._session)
+        # Ask for the same grid the contract settles on, exactly as the live
+        # fetch does. ENTSO-E publishes Belgium as two products, a PT60M and a
+        # PT15M series for the same delivery period, and parse_day_ahead_xml
+        # deliberately refuses to blend them: omitting the flag here silently
+        # took the hourly product, so a quarter-hourly contract's whole replay
+        # was priced off a different auction than its live bill.
+        snap = self._snapshot
+        quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
         for r_start, r_end in missing_ranges:
             chunk_start = r_start
             while chunk_start < r_end:
@@ -235,7 +244,9 @@ class _SpotsMixin:
                 start_utc = dt_util.start_of_local_day(chunk_start).astimezone(UTC)
                 end_utc = dt_util.start_of_local_day(chunk_end).astimezone(UTC)
                 try:
-                    prices = await client.fetch_day_ahead(start_utc, end_utc)
+                    prices = await client.fetch_day_ahead(
+                        start_utc, end_utc, quarter_hourly=quarter_hourly
+                    )
                 except (EntsoeError, EntsoeAuthError) as err:
                     _LOGGER.warning(
                         "ENTSO-E historical fetch failed for %s..%s: %s",
@@ -245,7 +256,10 @@ class _SpotsMixin:
                     )
                     chunk_start = chunk_end
                     continue
-                self._historical_spots.update(prices)
+                # Stored by clock hour whichever grid came back: the
+                # recorder only keeps hourly consumption, so an hour is the
+                # finest thing the replay can ever price.
+                self._historical_spots.update(_bucket_spots_by_hour(prices))
                 # Mark stable past days that are STILL short after this
                 # fetch so the next ticks skip them until the TTL expires;
                 # clear the marker for any day that is now complete.

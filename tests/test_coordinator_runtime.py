@@ -107,6 +107,109 @@ async def test_ensure_historical_spots_anchors_on_local_day(
     assert captured[0][0] == datetime(2025, 12, 31, 23, 0, tzinfo=UTC)
 
 
+async def test_ensure_historical_spots_requests_the_contract_grid(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The replay must be priced off the series the contract settles on.
+
+    ENTSO-E publishes Belgium as two products, a PT60M and a PT15M series for
+    the same delivery period, and parse_day_ahead_xml refuses to blend them:
+    hourly mode takes the hourly product, quarter mode the 15-minute one. This
+    fetch omitted the flag, so a quarter-hourly contract replayed its whole
+    year off a different auction than the one its live price came from, while
+    the live fetch asked for the right grid all along."""
+
+    freezer.move_to("2026-01-10 12:00:00+01:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    async def _ask(quarter: bool) -> list[bool]:
+        coord = BePricesCoordinator(hass, entry)
+        coord._snapshot = make_snapshot(
+            energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=quarter)
+        )
+        seen: list[bool] = []
+
+        async def _fake_fetch(
+            start: datetime, end: datetime, *, quarter_hourly: bool = False
+        ) -> dict[datetime, float]:
+            seen.append(quarter_hourly)
+            return {}
+
+        with patch(
+            "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
+        ) as cls:
+            cls.return_value.fetch_day_ahead = _fake_fetch
+            await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
+        return seen
+
+    assert await _ask(True) == [True]
+    # And an hourly-billed dynamic contract still gets the hourly product.
+    assert await _ask(False) == [False]
+
+
+async def test_ensure_historical_spots_stores_quarters_by_hour(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A 15-minute response is cached as one price per clock hour, on the mean.
+
+    The recorder only keeps hourly consumption, so an hour is the finest thing
+    a replay can price, and every reader of this cache (the year-to-date walk,
+    the backfill, the 20-of-24 completeness test, the persisted form) assumes
+    one key per hour. The mean is exact rather than approximate: the energy
+    formula is linear in the spot, so pricing the hour's mean equals replaying
+    each quarter against a quarter of that hour's kWh."""
+
+    freezer.move_to("2026-01-10 12:00:00+01:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True)
+    )
+    hour = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    ramp = {
+        hour: 0.05,
+        hour + timedelta(minutes=15): 0.15,
+        hour + timedelta(minutes=30): 0.25,
+        hour + timedelta(minutes=45): 0.35,
+    }
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        return dict(ramp)
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
+    ) as cls:
+        cls.return_value.fetch_day_ahead = _fake_fetch
+        await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
+
+    assert [k for k in coord._historical_spots if k.minute or k.second] == []
+    assert coord._historical_spots[hour] == pytest.approx(0.20)
+
+
 async def test_ensure_historical_spots_skips_permanently_short_day(
     hass: HomeAssistant, freezer: Any
 ) -> None:

@@ -543,7 +543,7 @@ explicitly rather than left to fall through.
 
 ### YTD injection paths
 
-Past-month YTD billing routes injection per regime (`ytd_cost.py:272-468`,
+Past-month YTD billing routes injection per regime (`ytd_cost.py:271-437`,
 context):
 
 - `compensation`: per-hour `(cons - inj) * all_in`, netting injection against
@@ -552,10 +552,10 @@ context):
   from `_historical_injection_rate` (`injection.py:292-323`).
 
 Shape (c) has a dedicated YTD helper `_ytd_spot_injection_credit`
-(`ytd_cost.py:475`) that credits a static-energy contract whose injection is a
+(`ytd_cost.py:444`) that credits a static-energy contract whose injection is a
 pure BELPEX formula with no fixed credit; it is a no-op unless the injection is
 exactly that shape and an injection sensor is wired, and it skips hours with no
-cached spot (`ytd_cost.py:507-509`).
+cached spot (`ytd_cost.py:478-480`).
 
 ## Capacity tariff
 
@@ -657,7 +657,7 @@ l'envers") applies only to installations certified before 2024-01-01 and stays
 valid until 2030-12-31; newer installations use the `injection` tariff (no per-kVA
 fee); Flemish digital meters are SMR3 from the start. The YTD counterpart
 `_ytd_prosumer` sums the monthly fee across the year using each month's archived
-overlay, gated the same Walloon-only way (`ytd_cost.py:204-230`).
+overlay, gated the same Walloon-only way (`ytd_cost.py:203-229`).
 
 ## Brussels OSP tier
 
