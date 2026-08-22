@@ -156,35 +156,35 @@ def _period_avg_all_in(
     spot: float | None,
     meter: Any,
     dso_mode: Any,
+    hour_weights: dict[int, float] | None = None,
 ) -> float | None:
-    """Mean all-in EUR/kWh over ``num_days`` from ``start`` under uniform
-    hourly consumption.
+    """Mean all-in EUR/kWh over ``num_days`` from ``start``.
 
     Sampling every hour lets each hour carry its true energy slot AND network
     band, so the TOU energy windows and the bi-horaire network bands - which
     don't align, and both differ on weekends - are each weighted correctly.
     A three-sample-per-slot weighting instead assigns one network band to a
     whole energy slot and mis-prices it. Returns None on any compute failure.
+
+    ``hour_weights`` is the household's measured share of consumption per hour
+    of the day. With it, each hour carries the kWh actually recorded in it,
+    which is how the bill beside this figure is computed. Without it the hours
+    weigh equally, which assumes a household that consumes uniformly around
+    the clock.
     """
     from .pricing import compute_breakdown
 
     total = 0.0
-    count = 0
+    count = 0.0
     for hour in range(num_days * 24):
+        when = start + timedelta(hours=hour)
         try:
-            bd = compute_breakdown(
-                snapshot,
-                dso,
-                region,
-                start + timedelta(hours=hour),
-                spot,
-                meter,
-                dso_mode,
-            )
+            bd = compute_breakdown(snapshot, dso, region, when, spot, meter, dso_mode)
         except Exception:  # noqa: BLE001
             return None
-        total += bd.all_in
-        count += 1
+        weight = 1.0 if hour_weights is None else hour_weights.get(when.hour, 0.0)
+        total += bd.all_in * weight
+        count += weight
     return total / count if count else None
 
 
@@ -196,10 +196,21 @@ def _tou_weighted_per_kwh(
     spot: float | None,
     meter: Any,
     dso_mode: Any,
+    hour_weights: dict[int, float] | None = None,
 ) -> float | None:
     """Per-kWh EUR/kWh for the compare flow's annual estimate, with a
-    TOU-aware time-weighted average when the snapshot's energy rate
-    splits by hour-of-day.
+    TOU-aware weighted average when the snapshot's energy rate splits by
+    hour-of-day.
+
+    ``hour_weights`` is the household's measured share of consumption per hour
+    of the day (:func:`energy_meters._measured_hour_weights`). Weighting the
+    slot rates by CLOCK hours instead assumes a household that consumes
+    uniformly around the clock, which none does: measured on a residential
+    profile the peak band carried 0,56 of the kWh against the 0,38 of the week
+    its hours occupy, so a peak-expensive card was quoted well under what that
+    same household is billed by the sensor sitting next to this figure. Absent
+    a measurement the hours weigh equally, which is the old behaviour and the
+    only honest fallback.
 
     For Fixed / Variable the breakdown is spot-independent. For Dynamic
     the breakdown is linear in ``spot``, so the caller passes the MEAN
@@ -270,7 +281,7 @@ def _tou_weighted_per_kwh(
         bands = impact_band_hours()
         try:
             weighted = 0.0
-            hours = 0
+            hours = 0.0
             for band_hours in bands.values():
                 if not band_hours:
                     continue
@@ -283,8 +294,13 @@ def _tou_weighted_per_kwh(
                     meter,
                     dso_mode,
                 )
-                weighted += band_bd.all_in * len(band_hours)
-                hours += len(band_hours)
+                weight = (
+                    float(len(band_hours))
+                    if hour_weights is None
+                    else sum(hour_weights.get(h, 0.0) for h in band_hours)
+                )
+                weighted += band_bd.all_in * weight
+                hours += weight
         except Exception:  # noqa: BLE001
             return bd.all_in
         if not hours:
@@ -299,15 +315,18 @@ def _tou_weighted_per_kwh(
         # sample since the rate is constant within each band.
         peak_when: datetime | None = None
         off_when: datetime | None = None
-        peak_hours = 0
+        peak_weight = 0.0
+        off_weight = 0.0
         for day_offset in range(7):
             for hour in range(24):
                 when = base + timedelta(days=day_offset, hours=hour)
+                w = 1.0 if hour_weights is None else hour_weights.get(hour, 0.0)
                 if is_offpeak(when, region):
                     off_when = off_when or when
+                    off_weight += w
                 else:
-                    peak_hours += 1
                     peak_when = peak_when or when
+                    peak_weight += w
         if peak_when is None or off_when is None:
             return bd.all_in
         try:
@@ -319,9 +338,12 @@ def _tou_weighted_per_kwh(
             )
         except Exception:  # noqa: BLE001
             return bd.all_in
+        total_weight = peak_weight + off_weight
+        if total_weight <= 0:
+            return bd.all_in
         return (
-            bd_peak.all_in * peak_hours + bd_off.all_in * (168 - peak_hours)
-        ) / 168.0
+            bd_peak.all_in * peak_weight + bd_off.all_in * off_weight
+        ) / total_weight
 
     # Weekday holidays bill under the weekend rule, so a single week that
     # happens to contain one would skew the slot mix. Walk back to a
@@ -349,7 +371,15 @@ def _tou_weighted_per_kwh(
                 _holiday_free_week(probe), time(), tzinfo=when_now.tzinfo
             )
             avg = _period_avg_all_in(
-                snapshot, dso, region, season_monday, 7, spot, meter, dso_mode
+                snapshot,
+                dso,
+                region,
+                season_monday,
+                7,
+                spot,
+                meter,
+                dso_mode,
+                hour_weights,
             )
             if avg is None:
                 return bd.all_in
@@ -365,7 +395,7 @@ def _tou_weighted_per_kwh(
         _holiday_free_week(when_now.date()), time(), tzinfo=when_now.tzinfo
     )
     week_avg = _period_avg_all_in(
-        snapshot, dso, region, week_start, 7, spot, meter, dso_mode
+        snapshot, dso, region, week_start, 7, spot, meter, dso_mode, hour_weights
     )
     return week_avg if week_avg is not None else bd.all_in
 

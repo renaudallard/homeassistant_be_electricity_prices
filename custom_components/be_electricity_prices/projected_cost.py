@@ -170,7 +170,7 @@ async def _compute_projected_year_cost(
         _covers_a_year,
         _tou_weighted_per_kwh,
     )
-    from .energy_meters import _measured_kwh
+    from .energy_meters import _measured_hour_weights, _measured_kwh
 
     if breakdown is None:
         breakdown = {}
@@ -193,13 +193,16 @@ async def _compute_projected_year_cost(
     # Fixed, Variable, TOU and Impact all ignore the spot argument, so the
     # projection needs no spot data at all and cannot perturb the live price
     # table or the spot cache.
+    trailing_start = today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1)
+    # Weighted by the household's own hour-of-day shape rather than by clock
+    # hours, so a time-of-use card is projected on the kWh it actually bills.
+    hour_weights = await _measured_hour_weights(hass, entry, trailing_start, today)
     per_kwh = _tou_weighted_per_kwh(
-        priced, dso, region, dt_util.now(), None, meter, dso_mode
+        priced, dso, region, dt_util.now(), None, meter, dso_mode, hour_weights
     )
     if per_kwh is None:
         return None
 
-    trailing_start = today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1)
     annual = await _annual_volume(hass, entry, trailing_start, today)
 
     # Feed-in counts only against a full trailing year of it, gated on the

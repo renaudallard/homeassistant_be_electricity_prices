@@ -2253,6 +2253,56 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     assert abs((avg - constants) - expected_energy) < 0.001
 
 
+def test_compare_tou_weights_by_measured_consumption_not_clock_hours() -> None:
+    """A time-of-use estimate must weight the slots by the kWh they bill.
+
+    Averaging the slot rates over clock hours assumes a household that
+    consumes uniformly around the clock. None does: an evening-heavy
+    residential profile puts far more of its kWh in the peak band than the
+    share of the week those hours occupy, so a peak-expensive card was quoted
+    well under what the sensor beside it bills. The live year-to-date has
+    always weighted each hour by its own kWh."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _tou_weighted_per_kwh,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        TimeOfUseRates,
+    )
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        supplier="engie",
+        contract="engie_empower_flextime",
+        energy=TimeOfUseRates(
+            peak=0.30, transition=0.20, offpeak=0.10, weekend_rule="weekend_no_peak"
+        ),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.14,
+                distribution_offpeak=0.06,
+                transport=0.0145,
+            )
+        },
+    )
+    when = datetime(2026, 4, 29, 12, 0, tzinfo=UTC)
+    args = (snap, "ores", "wallonia", when, None, "dynamic", "bi_horaire")
+
+    flat = _tou_weighted_per_kwh(*args)
+    # All consumption in the evening peak block.
+    evening = _tou_weighted_per_kwh(*args, {h: 0.25 for h in (18, 19, 20, 21)})
+    # All consumption overnight.
+    night = _tou_weighted_per_kwh(*args, {h: 0.25 for h in (1, 2, 3, 4)})
+
+    assert flat is not None and evening is not None and night is not None
+    # The profile has to move the number, and in the right direction.
+    assert night < flat < evening
+    # A uniform profile is the clock-hour weighting, so it must not move it.
+    uniform = _tou_weighted_per_kwh(*args, {h: 1.0 / 24 for h in range(24)})
+    assert uniform == pytest.approx(flat)
+
+
 def test_compare_tou_weights_bihoraire_network_over_full_week() -> None:
     # For a TOU contract on a bi-horaire DSO network, the annual estimate
     # must stay independent of the dialog-open hour and blend the network

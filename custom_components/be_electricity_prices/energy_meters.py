@@ -597,6 +597,43 @@ async def _measured_kwh(
     return MeasuredKwh(0.0, 0)
 
 
+async def _measured_hour_weights(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    start: date,
+    end: date,
+) -> dict[int, float] | None:
+    """Share of metered consumption falling in each hour of the local day.
+
+    An annual estimate that averages time-of-use slot rates by CLOCK hours
+    assumes the household consumes uniformly around the clock. It does not: on
+    a residential profile the peak band carried 0,56 of the kWh against the
+    0,38 of the week its hours occupy, so a card that is expensive at peak was
+    quoted well under what that same household is actually billed. The live
+    year-to-date has always weighted each hour by the kWh recorded in it; this
+    is what lets the estimate beside it do the same.
+
+    Returns ``None`` when nothing is wired, the pair is half-wired, or the
+    window recorded nothing. The caller then stays on the clock-hour weighting
+    rather than inventing a profile.
+    """
+    if _partial_register_pair(entry, "consumption"):
+        return None
+    day_id, night_id, total_id = _kwh_sensor_ids(entry, "consumption")
+    ids = [i for i in ((day_id, night_id) if day_id and night_id else (total_id,)) if i]
+    if not ids:
+        return None
+    per_hour: dict[int, float] = {}
+    for entity_id in ids:
+        for when, delta in await _recorder_deltas(hass, entity_id, start, end, "hour"):
+            hour = dt_util.as_local(when).hour
+            per_hour[hour] = per_hour.get(hour, 0.0) + delta
+    total = sum(per_hour.values())
+    if total <= 0:
+        return None
+    return {hour: kwh / total for hour, kwh in per_hour.items()}
+
+
 def _partial_register_pair(entry: ConfigEntry, side: str) -> bool:
     """True when exactly one half of ``side``'s day/night register pair is wired.
 

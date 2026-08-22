@@ -89,7 +89,7 @@ from .const import (
     SPOT_PRICED_CONTRACT_KINDS,
     SUPPLIER_CUSTOM,
 )
-from .energy_meters import _measured_kwh
+from .energy_meters import _measured_hour_weights, _measured_kwh
 from .compare_quote import (
     _annual_bill,
     _compare_injection_credit,
@@ -856,6 +856,12 @@ class _CompareStepsMixin(OptionsFlow):
                     baseline_snapshot = spliced
                 current_snapshot = spliced
 
+        # The household's own hour-of-day consumption shape, so a time-of-use
+        # card is quoted on the kWh it actually bills rather than on clock
+        # hours. Reads only entry.data, so the _QuoteEntry proxy is safe here.
+        hour_weights = await _measured_hour_weights(
+            self.hass, self.config_entry, year_ago, today_local
+        )
         current_per_kwh: float | None = None
         if current_snapshot is not None:
             current_per_kwh = _tou_weighted_per_kwh(
@@ -866,6 +872,7 @@ class _CompareStepsMixin(OptionsFlow):
                 await _spot_for(current_snapshot),
                 current_meter,
                 dso_mode,
+                hour_weights,
             )
 
         # Other supplier: fetch + compute.
@@ -905,6 +912,7 @@ class _CompareStepsMixin(OptionsFlow):
                     await _spot_for(other_snap),
                     meter,
                     dso_mode,
+                    hour_weights,
                 )
                 if other_per_kwh is None:
                     placeholders["error"] = "compute failed"
