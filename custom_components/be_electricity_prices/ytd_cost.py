@@ -40,6 +40,7 @@ import logging
 
 from collections.abc import AsyncIterator
 from datetime import date
+from statistics import fmean
 from datetime import datetime
 from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
@@ -270,6 +271,35 @@ async def _ytd_capacity(
     return total
 
 
+def _bucket_spots_by_hour(
+    spots: dict[datetime, float] | None,
+) -> dict[datetime, float]:
+    """Collapse a spot cache onto one price per clock hour, by mean.
+
+    ENTSO-E publishes Belgium on a 15-minute grid, so the cache can hold four
+    slots per hour, and nine providers sell contracts that bill on that grid.
+    A plain ``spots.get(hour)`` then reads the :00 quarter and bills the whole
+    hour at it, throwing the other three away. That is not a rounding error:
+    measured against an intra-hour ramp the :00 slots averaged half the hour's
+    true mean, and the direction follows whatever shape the day has, so a
+    dynamic contract's year-to-date drifts high or low with no way to tell.
+
+    The mean is the exact answer rather than an approximation. Every energy and
+    injection formula here is linear in the spot, and consumption is only known
+    per hour, so pricing the hour's mean is identical to replaying each quarter
+    against a quarter of the hour's kWh.
+
+    A cache that is already hourly collapses to itself, so this is a no-op
+    there and needs no flag to decide which contract is on which grid.
+    """
+    out: dict[datetime, list[float]] = {}
+    for when, value in (spots or {}).items():
+        out.setdefault(when.replace(minute=0, second=0, microsecond=0), []).append(
+            value
+        )
+    return {hour: fmean(values) for hour, values in out.items()}
+
+
 async def _ytd_hourly_energy(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -370,6 +400,7 @@ async def _ytd_hourly_energy(
     # lookup rather than a full-year rescan (the loop reads up to twelve
     # distinct months). Only the spot-monthly path reads it; a dynamic
     # contract prices per hour, so skip the bucketing there entirely.
+    hourly_spots = _bucket_spots_by_hour(historical_spots)
     month_bucket = (
         _bucket_by_local_month(historical_spots)
         if monthly_mean and historical_spots
@@ -407,7 +438,7 @@ async def _ytd_hourly_energy(
             spot = month_means[key]
             spot_missing = spot is None
         elif historical_spots is not None:
-            spot = historical_spots.get(utc_hour)
+            spot = hourly_spots.get(utc_hour)
             spot_missing = spot is None
         snap_h = await _snap_for(date(local.year, local.month, 1))
         try:
@@ -449,9 +480,7 @@ async def _ytd_hourly_energy(
                 cache=month_spp,
                 hourly=hourly_injection,
                 hourly_spot=(
-                    historical_spots.get(utc_hour)
-                    if historical_spots is not None
-                    else None
+                    hourly_spots.get(utc_hour) if historical_spots is not None else None
                 ),
             )
             inj_rate = _historical_injection_rate(
@@ -495,6 +524,7 @@ async def _ytd_spot_injection_credit(
     (``factor``/``base`` set, ``current is None``), spots are cached, and
     an injection sensor is wired. Hours with no cached spot are skipped.
     """
+    hourly_spots = _bucket_spots_by_hour(historical_spots)
     inj = snapshot.injection
     if (
         inj is None
@@ -511,7 +541,7 @@ async def _ytd_spot_injection_credit(
     per_hour = await _sum_hourly_kwh(hass, inj_ids, jan1, today)
     credit = 0.0
     for utc_hour, kwh in per_hour.items():
-        spot = historical_spots.get(utc_hour)
+        spot = hourly_spots.get(utc_hour)
         if spot is None:
             continue
         # Route through the shared helper so the floor_at_zero clamp the live

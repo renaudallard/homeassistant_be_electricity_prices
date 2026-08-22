@@ -2620,6 +2620,88 @@ def test_brussels_osp_fee_selects_configured_tier() -> None:
     assert _brussels_osp_fee(plain, _entry("le13")) == 0.0
 
 
+# ---- quarter-hourly spot caches in the YTD replay ---------------------------
+
+
+async def _ytd_with_spots(
+    hass: HomeAssistant, spots: dict[datetime, float], hour: datetime
+) -> float | None:
+    """Run the YTD replay over one metered hour against ``spots``."""
+    snap = replace(
+        _yearly_snapshot(),
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True),
+    )
+
+    async def _fake(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return {hour: 1.0} if entity_id == "sensor.cons" else {}
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake):
+        return await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            _projection_entry(meter="dynamic"),
+            historical_spots=spots,
+        )
+
+
+async def test_ytd_prices_an_hour_on_the_mean_of_its_quarters(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A quarter-hourly cache must not be read as one price per hour.
+
+    ENTSO-E publishes Belgium on a 15-minute grid and nine providers sell
+    contracts that bill on it, so the cache holds four slots an hour. Reading
+    spots[hour] takes the :00 quarter and bills the whole hour at it, throwing
+    the other three away. Against an intra-hour ramp the :00 slots averaged
+    HALF the hour's true mean, and the direction follows the shape of the day,
+    so a dynamic contract's year-to-date drifted with no way to tell.
+
+    The mean is exact rather than an approximation: the energy formula is
+    linear in the spot and consumption is only known per hour, so pricing the
+    hour's mean equals replaying each quarter against a quarter of its kWh.
+
+    Asserted as a property against the hourly equivalent rather than a literal,
+    since the overlay depends on which distribution band the hour falls in."""
+
+    freezer.move_to("2026-01-03 12:00:00+01:00")
+    hour = datetime(2026, 1, 2, 10, 0, tzinfo=UTC)
+    quarters = {
+        hour: 0.05,  # the :00 slot, far below the hour's mean
+        hour + timedelta(minutes=15): 0.15,
+        hour + timedelta(minutes=30): 0.25,
+        hour + timedelta(minutes=45): 0.35,
+    }
+    got = await _ytd_with_spots(hass, quarters, hour)
+    as_mean = await _ytd_with_spots(hass, {hour: 0.20}, hour)
+    as_first_slot = await _ytd_with_spots(hass, {hour: 0.05}, hour)
+
+    assert got == pytest.approx(as_mean, abs=0.001)
+    # And emphatically not the old behaviour, which is 0,15 EUR/kWh adrift on
+    # this one hour alone.
+    assert got != pytest.approx(as_first_slot, abs=0.001)
+
+
+async def test_ytd_leaves_an_hourly_cache_untouched(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Collapsing by hour is a no-op on a cache that is already hourly.
+
+    The mean of one value is that value, which is why the fix needs no flag to
+    decide which contract sits on which grid, and why no existing behaviour
+    moves."""
+
+    freezer.move_to("2026-01-03 12:00:00+01:00")
+    hour = datetime(2026, 1, 2, 10, 0, tzinfo=UTC)
+    got = await _ytd_with_spots(hass, {hour: 0.20}, hour)
+    assert got is not None
+    # 1.0 kWh at factor 1.0 on a 0,20 spot, plus this hour's overlay.
+    assert got > 0.20
+
+
 # ---- _compute_projected_year_cost (full-calendar-year projection) ------------
 
 
