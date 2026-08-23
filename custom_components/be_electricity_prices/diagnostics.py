@@ -153,6 +153,29 @@ async def async_get_config_entry_diagnostics(
                 "consecutive": count,
             }
 
+    # Per-month summary of the replayed day-ahead cache. current_year_cost is
+    # priced off this and nothing else surfaced it, so a replay billing off
+    # wrong stored prices could not be told apart from a wrong tariff or wrong
+    # kWh without asking the user for another round of screenshots. Counts and
+    # extremes rather than the hours themselves: a year is ~8760 values and the
+    # question being asked is only "do these look like the market".
+    spots: dict[str, dict[str, float | int]] = {}
+    for when, value in sorted(coordinator._historical_spots.items()):
+        local = dt_util.as_local(when)
+        row = spots.setdefault(
+            f"{local.year:04d}-{local.month:02d}",
+            {"hours": 0, "mean": 0.0, "min": value, "max": value},
+        )
+        row["hours"] = int(row["hours"]) + 1
+        row["mean"] = float(row["mean"]) + value
+        row["min"] = min(float(row["min"]), value)
+        row["max"] = max(float(row["max"]), value)
+    for row in spots.values():
+        hours = int(row["hours"])
+        row["mean"] = round(float(row["mean"]) / hours, 5) if hours else 0.0
+        row["min"] = round(float(row["min"]), 5)
+        row["max"] = round(float(row["max"]), 5)
+
     return {
         "entry": {
             "title": entry.title,
@@ -198,5 +221,8 @@ async def async_get_config_entry_diagnostics(
             "ytd_kwh": inj_ytd,
         },
         "monthly_snapshot_labels": monthly_labels,
+        # EUR/kWh. A month whose mean is far off the Belgian day-ahead average
+        # is the cache, not the card.
+        "spot_cache_by_month": spots,
         "shared_failure": failed_marker,
     }

@@ -78,7 +78,7 @@ def _coordinator_data() -> CoordinatorData:
 async def test_diagnostics_redacts_api_key(hass: HomeAssistant) -> None:
     entry = _entry_with_data(api_key="THIS-IS-A-SECRET")
     entry.add_to_hass(hass)
-    entry.runtime_data = SimpleNamespace(data=_coordinator_data())
+    entry.runtime_data = SimpleNamespace(_historical_spots={}, data=_coordinator_data())
 
     dump = await async_get_config_entry_diagnostics(hass, entry)
     assert dump["entry"]["data"]["api_key"] != "THIS-IS-A-SECRET"
@@ -98,7 +98,7 @@ async def test_diagnostics_keeps_contract_dates(hass: HomeAssistant) -> None:
             "contract_end_date": "2027-11-14",
         },
     )
-    entry.runtime_data = SimpleNamespace(data=_coordinator_data())
+    entry.runtime_data = SimpleNamespace(_historical_spots={}, data=_coordinator_data())
 
     dump = await async_get_config_entry_diagnostics(hass, entry)
     assert dump["entry"]["data"]["contract_start_date"] == "2025-11-15"
@@ -112,7 +112,7 @@ async def test_diagnostics_scrubs_api_key_from_last_error(hass: HomeAssistant) -
     entry = _entry_with_data(api_key=secret)
     entry.add_to_hass(hass)
     data = replace(_coordinator_data(), last_error=f"ENTSO-E error url=...{secret}...")
-    entry.runtime_data = SimpleNamespace(data=data)
+    entry.runtime_data = SimpleNamespace(_historical_spots={}, data=data)
 
     dump = await async_get_config_entry_diagnostics(hass, entry)
     assert secret not in str(dump)
@@ -122,7 +122,7 @@ async def test_diagnostics_scrubs_api_key_from_last_error(hass: HomeAssistant) -
 async def test_diagnostics_includes_snapshot_and_hourly(hass: HomeAssistant) -> None:
     entry = _entry_with_data()
     entry.add_to_hass(hass)
-    entry.runtime_data = SimpleNamespace(data=_coordinator_data())
+    entry.runtime_data = SimpleNamespace(_historical_spots={}, data=_coordinator_data())
 
     dump = await async_get_config_entry_diagnostics(hass, entry)
     coord = dump["coordinator"]
@@ -156,7 +156,7 @@ async def test_diagnostics_reports_the_injection_price_the_entity_shows(
     data = replace(
         _coordinator_data(), injection_hourly=inj, injection_price_eur_per_kwh=0.045
     )
-    entry.runtime_data = SimpleNamespace(data=data)
+    entry.runtime_data = SimpleNamespace(_historical_spots={}, data=data)
 
     freezer.move_to("2026-07-22T09:30:00+00:00")
     coord = (await async_get_config_entry_diagnostics(hass, entry))["coordinator"]
@@ -182,7 +182,7 @@ async def test_diagnostics_includes_consumption_and_monthly_labels(
 
     entry = _entry_with_data()
     entry.add_to_hass(hass)
-    entry.runtime_data = SimpleNamespace(data=_coordinator_data())
+    entry.runtime_data = SimpleNamespace(_historical_spots={}, data=_coordinator_data())
 
     # Seed the per-month archive cache for this entry's tuple so the
     # diagnostics dump should surface its publication label.
@@ -239,7 +239,7 @@ async def test_diagnostics_wired_zero_kwh_reports_zero_not_missing(
 
     entry = _entry_with_data()
     entry.add_to_hass(hass)
-    entry.runtime_data = SimpleNamespace(data=_coordinator_data())
+    entry.runtime_data = SimpleNamespace(_historical_spots={}, data=_coordinator_data())
     hass.config_entries.async_update_entry(
         entry, data={**entry.data, "consumption_kwh": "sensor.meter"}
     )
@@ -260,6 +260,51 @@ async def test_diagnostics_wired_zero_kwh_reports_zero_not_missing(
     assert dump["consumption"]["ytd_kwh"] == 0.0
     # No injection sensor wired -> still None.
     assert dump["injection"]["rolling_year_kwh"] is None
+
+
+async def test_diagnostics_summarises_the_spot_cache_by_month(
+    hass: HomeAssistant,
+) -> None:
+    """The replayed day-ahead cache has to be visible somewhere.
+
+    current_year_cost is priced off this cache and nothing surfaced it, so a
+    replay billing off wrong stored prices could not be told apart from a wrong
+    tariff or wrong kWh without another round of screenshots. Counts and
+    extremes rather than the hours themselves: a year is about 8760 values and
+    the only question being asked is whether they look like the market."""
+    entry = _entry_with_data()
+    entry.add_to_hass(hass)
+    spots = {
+        datetime(2026, 3, 1, 0, tzinfo=UTC) + timedelta(hours=i): 0.10 + i * 0.01
+        for i in range(3)
+    }
+    spots[datetime(2026, 4, 2, 10, tzinfo=UTC)] = 0.40
+    entry.runtime_data = SimpleNamespace(
+        _historical_spots=spots, data=_coordinator_data()
+    )
+
+    dump = await async_get_config_entry_diagnostics(hass, entry)
+    by_month = dump["spot_cache_by_month"]
+    assert set(by_month) == {"2026-03", "2026-04"}
+    assert by_month["2026-03"] == {
+        "hours": 3,
+        "mean": 0.11,
+        "min": 0.10,
+        "max": 0.12,
+    }
+    # One outlying month stands out at a glance, which is the whole point.
+    assert by_month["2026-04"]["mean"] == 0.40
+
+
+async def test_diagnostics_spot_cache_empty_when_nothing_cached(
+    hass: HomeAssistant,
+) -> None:
+    """A static contract caches no spots and must not grow a bogus row."""
+    entry = _entry_with_data()
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(_historical_spots={}, data=_coordinator_data())
+    dump = await async_get_config_entry_diagnostics(hass, entry)
+    assert dump["spot_cache_by_month"] == {}
 
 
 async def test_diagnostics_returns_placeholder_when_runtime_data_undefined(
