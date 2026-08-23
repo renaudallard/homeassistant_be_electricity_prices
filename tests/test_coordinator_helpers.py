@@ -779,6 +779,72 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
         )
 
 
+async def test_ytd_breakdown_splits_the_capacity_leg_out_of_fees(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The fee lump hid the leg most able to move the bill.
+
+    The Flanders capacity tariff is charged per kW of monthly peak per year,
+    52 to 60 EUR/kW across the Fluvius areas, so two entries reading the same
+    meter and the same card still differ by hundreds of euro when they resolve
+    different peaks. None of that appears on the price graph, which is per kWh,
+    so a user comparing two entries had no way to see where the money went."""
+
+    freezer.move_to("2026-08-22 12:00:00+02:00")
+    snap = replace(
+        _yearly_snapshot(),
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                capacity_eur_per_kw_year=52.37,
+            )
+        },
+    )
+    entry = _entry(
+        region="flanders",
+        dso="fluvius_antwerpen",
+        solar_regime="none",
+        supplier="test",
+        contract="test",
+    )
+
+    async def _run(peak: float) -> dict[str, float]:
+        diag: dict[str, float] = {}
+        await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            billed_peak_kw=peak,
+            breakdown=diag,
+        )
+        return diag
+
+    floor = await _run(2.5)
+    high = await _run(12.0)
+
+    # The capacity leg is reported on its own, and the peak it was billed on
+    # alongside it, so the two can be compared without a diagnostics download.
+    assert floor["billed_peak_kw"] == 2.5
+    assert high["billed_peak_kw"] == 12.0
+    assert high["capacity_ytd_eur"] > floor["capacity_ytd_eur"]
+    # 9.5 kW at 52.37 EUR/kW/year, prorated over the elapsed year.
+    elapsed = (date(2026, 8, 22) - date(2026, 1, 1)).days + 1
+    expected = 9.5 * 52.37 * elapsed / 365
+    assert high["capacity_ytd_eur"] - floor["capacity_ytd_eur"] == pytest.approx(
+        expected, rel=0.02
+    )
+    # And the legs still add up to the lump they were split out of.
+    for diag in (floor, high):
+        assert diag["fees_ytd_eur"] == pytest.approx(
+            diag["capacity_ytd_eur"]
+            + diag["prosumer_ytd_eur"]
+            + diag["standing_charges_ytd_eur"]
+        )
+
+
 async def test_ytd_spot_injection_credit_tops_up_today_from_the_meter(
     hass: HomeAssistant, freezer: Any
 ) -> None:

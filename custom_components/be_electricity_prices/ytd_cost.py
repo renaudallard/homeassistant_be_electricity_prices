@@ -677,6 +677,18 @@ async def _compute_current_year_cost(
         # Reported on every contract kind, not just the static path: the fees
         # floor is what a low bill rests on whichever way energy is priced.
         breakdown["fees_ytd_eur"] = fees
+        # And split, because the lump hid the leg most able to move it. The
+        # Flanders capacity tariff is billed per kW of monthly peak per year
+        # (52 to 60 EUR/kW across the Fluvius areas), so two entries reading
+        # the same meter and the same card still differ by hundreds of euro
+        # when they resolve different peaks. None of that shows on the price
+        # graph, which is per kWh, so the only way a user could see it was to
+        # download diagnostics. One comparison of this attribute now answers
+        # "why do my two entries disagree".
+        breakdown["capacity_ytd_eur"] = capacity_ytd
+        breakdown["prosumer_ytd_eur"] = prosumer_ytd
+        breakdown["standing_charges_ytd_eur"] = static_fees
+        breakdown["billed_peak_kw"] = billed_peak_kw
 
     # Dynamic contracts replay historical hourly ENTSO-E spots so each
     # past kWh hits its actual factor*spot+base rate. Caller passes the
