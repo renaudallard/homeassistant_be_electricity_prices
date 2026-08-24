@@ -779,6 +779,121 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
         )
 
 
+async def test_measured_kwh_refuses_a_dead_half_of_a_register_pair(
+    hass: HomeAssistant, caplog: Any
+) -> None:
+    """A wired register that produces nothing is a broken pair, not a zero band.
+
+    Coverage is the union of the pair's days, so the surviving half alone kept
+    days_with_data at a full year and a half-total came back labelled
+    "measured (365 days)". Every caller believed it: measured at 30 to 37% of
+    the real bill. A register can be wired, valid and silent, because
+    device_class=energy with no state_class compiles no statistics at all and
+    nothing upstream rejects it."""
+    entry = SimpleNamespace(
+        data={
+            "day_consumption_kwh": "sensor.day",
+            "night_consumption_kwh": "sensor.night",
+        }
+    )
+    d0 = date(2026, 1, 1)
+
+    async def _dead_night(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.day":
+            return {d0 + timedelta(days=i): 4.0 for i in range(60)}
+        return {}
+
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_dead_night),
+        caplog.at_level("WARNING"),
+    ):
+        got = await energy_meters._measured_kwh(  # type: ignore[arg-type]
+            hass, entry, d0, d0 + timedelta(days=59)
+        )
+    # Refused outright rather than billed at half, and said out loud.
+    assert got == energy_meters.MeasuredKwh(0.0, 0)
+    assert "sensor.night" in caplog.text
+
+
+async def test_measured_kwh_falls_back_to_the_overlap_when_a_half_stops(
+    hass: HomeAssistant, caplog: Any
+) -> None:
+    """One register stopping mid-window needs no misconfiguration at all.
+
+    A rename, an integration swap or a meter replacement is enough. Both halves
+    still report, so the dead-half check above does not fire, and the union
+    would carry the survivor's coverage and present a partial total as a whole
+    one. Billing the overlap makes the figure short enough to be labelled
+    scaled, which the user is told, rather than silently wrong."""
+    entry = SimpleNamespace(
+        data={
+            "day_consumption_kwh": "sensor.day",
+            "night_consumption_kwh": "sensor.night",
+        }
+    )
+    d0 = date(2026, 1, 1)
+
+    async def _night_stops(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.day":
+            return {d0 + timedelta(days=i): 4.0 for i in range(60)}
+        return {d0 + timedelta(days=i): 1.0 for i in range(10)}
+
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_night_stops),
+        caplog.at_level("WARNING"),
+    ):
+        got = await energy_meters._measured_kwh(  # type: ignore[arg-type]
+            hass, entry, d0, d0 + timedelta(days=59)
+        )
+    # The union would have said 60 days and called a partial total measured.
+    assert got.days_with_data == 10
+    assert got.kwh == pytest.approx(60 * 4.0 + 10 * 1.0)
+    assert "diverged" in caplog.text
+
+
+async def test_recorder_deltas_drops_a_negative_change(
+    hass: HomeAssistant, caplog: Any
+) -> None:
+    """A meter cannot run backwards, so a negative bucket is an artefact.
+
+    Home Assistant restarts its cumulative sum chain when the short-term
+    anchor is purged, which happens after an outage longer than
+    purge_keep_days. The restart lands as one large negative bucket that
+    cancels real energy elsewhere in the window: measured on a real chain
+    restart, the window billed 57% of what the meter actually moved, with
+    nothing anywhere to distinguish it from genuinely low consumption."""
+    from custom_components.be_electricity_prices.energy_meters import (
+        _recorder_deltas,
+    )
+
+    base = datetime(2026, 3, 1, tzinfo=UTC)
+    rows = [
+        {"start": (base + timedelta(hours=h)).timestamp(), "change": v}
+        for h, v in ((0, 4.0), (1, 5.0), (2, -297.5), (3, 6.0))
+    ]
+
+    async def _fake_rows(*_a: object, **_k: object) -> list[Any]:
+        return rows
+
+    with (
+        patch.object(energy_meters, "_recorder_rows", new=_fake_rows),
+        caplog.at_level("WARNING"),
+    ):
+        got = await _recorder_deltas(
+            hass, "sensor.meter", date(2026, 3, 1), date(2026, 3, 2), "hour"
+        )
+
+    # The three real buckets survive; the impossible one is not billed.
+    assert [v for _, v in got] == [4.0, 5.0, 6.0]
+    # And it is said out loud rather than rendered as a small bill.
+    assert "negative change" in caplog.text
+    assert "sensor.meter" in caplog.text
+
+
 async def test_ytd_breakdown_splits_the_capacity_leg_out_of_fees(
     hass: HomeAssistant, freezer: Any
 ) -> None:

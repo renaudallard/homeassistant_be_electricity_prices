@@ -32,6 +32,8 @@ paths bill off the same meter."""
 
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC
@@ -70,6 +72,9 @@ from .pricing import (
 )
 
 
+_LOGGER = logging.getLogger(__name__)
+
+
 async def _recorder_deltas(
     hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
 ) -> list[tuple[datetime, float]]:
@@ -85,22 +90,44 @@ async def _recorder_deltas(
     hour, one the local hour so it can split on the off-peak schedule.
     """
     out: list[tuple[datetime, float]] = []
+    negative = 0.0
     for row in await _recorder_rows(hass, entity_id, start, end, period):
         ts = row.get("start")
         delta = row.get("change")
         if ts is None or delta is None:
             continue
-        out.append((datetime.fromtimestamp(ts, tz=UTC), float(delta)))
+        value = float(delta)
+        if value < 0.0:
+            # A consumption or injection meter cannot run backwards over a
+            # bucket, so this is an artefact rather than a measurement. Home
+            # Assistant restarts its cumulative sum chain when the short-term
+            # anchor is purged (an outage longer than purge_keep_days), and the
+            # restart lands as one large negative bucket that cancels real
+            # energy elsewhere in the window and drags the whole bill down.
+            # Measured on a real chain restart: 57% of what the meter moved.
+            # Dropping it bills the rest honestly; billing it bills a fiction.
+            negative += value
+            continue
+        out.append((datetime.fromtimestamp(ts, tz=UTC), value))
+    if negative:
+        # Said out loud, because every path downstream of here would otherwise
+        # render this as an ordinary small bill with nothing to distinguish it
+        # from genuinely low consumption.
+        _LOGGER.warning(
+            "%s reported %.1f kWh of negative change between %s and %s, which a "
+            "meter cannot do; those buckets are ignored. This usually means the "
+            "recorder restarted its running total after an outage, and the "
+            "affected period will read low until the statistics are rebuilt",
+            entity_id,
+            negative,
+            start,
+            end,
+        )
     return out
 
 
 async def _recorder_rows(
-    hass: HomeAssistant,
-    entity_id: str,
-    start: date,
-    end: date,
-    period: str,
-    fields: set[str] | None = None,
+    hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
 ) -> list[Any]:
     """Fetch HA recorder ``change`` rows for ``entity_id`` over ``[start, end]``.
 
@@ -159,41 +186,12 @@ async def _recorder_rows(
             {entity_id},
             period,
             {"energy": "kWh"},
-            fields or {"change"},
+            {"change"},
         )
     except Exception:  # noqa: BLE001 - recorder may surface anything
         return []
     rows: list[Any] = list(stats.get(entity_id, []))
     return rows
-
-
-async def _recorder_span_delta(
-    hass: HomeAssistant, entity_id: str, start: date, end: date
-) -> float | None:
-    """How far the meter itself moved over ``[start, end]`` in kWh, or ``None``.
-
-    Reads the cumulative ``sum`` at both ends of the window instead of adding
-    up the per-bucket ``change``. The two agree only when the statistics are
-    complete: ``sum`` carries across a gap and ``change`` does not, so a window
-    with missing rows bills less than the meter actually moved and nothing in
-    the integration notices. A user seeing a low bill has no way to tell that
-    apart from a wrong tariff, and the only way to check it has been to query
-    the recorder database by hand.
-
-    Returns ``None`` when the recorder has nothing, rather than 0.0, so an
-    absent measurement is not read as agreement.
-    """
-    rows = await _recorder_rows(hass, entity_id, start, end, "day", {"sum", "change"})
-    if not rows:
-        return None
-    first, last = rows[0], rows[-1]
-    first_sum = first.get("sum")
-    last_sum = last.get("sum")
-    if first_sum is None or last_sum is None:
-        return None
-    # first["sum"] is the cumulative total at the END of the first bucket, so
-    # its own change has to be added back or the window loses its first day.
-    return float(last_sum) - float(first_sum) + float(first.get("change") or 0.0)
 
 
 def _reset_since(state: State, midnight: datetime) -> bool:
@@ -615,8 +613,20 @@ async def _measured_kwh(
     wired band alone; the old totals-first ordering here was incidental (the
     chain simply fell off its end) and this makes the refusal deliberate.
 
-    Coverage counts distinct local days the recorder returned a bucket for, so
-    a pair contributes a day when either band reports it.
+    Coverage counts local days EITHER band of a wired pair reported, because a
+    band that genuinely used nothing that day still leaves the day covered.
+    That union is only safe while both halves are alive. A register producing
+    no statistics contributes 0.0 kWh while the surviving half holds coverage
+    at a full year, so a half-total came back labelled "measured (365 days)"
+    and every caller believed it, at 30 to 37% of the real bill. The same shape
+    at lower amplitude when one register merely stops mid-year, which needs no
+    misconfiguration at all: a rename, an integration swap or a meter
+    replacement is enough. So the two halves are compared before they are
+    trusted.
+
+    A register can be wired, valid, and silent: device_class=energy with no
+    state_class compiles no long-term statistics at all, and neither does
+    state_class=measurement. Nothing upstream of here rejects either.
     """
     if _partial_register_pair(entry, side):
         return MeasuredKwh(0.0, 0)
@@ -624,7 +634,44 @@ async def _measured_kwh(
     if day_id and night_id:
         d = await _recorder_daily_kwh(hass, day_id, start, end)
         n = await _recorder_daily_kwh(hass, night_id, start, end)
-        return MeasuredKwh(sum(d.values()) + sum(n.values()), len(set(d) | set(n)))
+        if bool(d) != bool(n):
+            # One half of the pair is wired but produced nothing whatsoever.
+            # That is a broken pair rather than a band that used no energy, and
+            # billing the surviving half alone is a wrong bill, not a partial
+            # one, so refuse it the way a half-wired pair is already refused.
+            _LOGGER.warning(
+                "%s returned no statistics between %s and %s while %s did, so "
+                "the %s pair cannot be billed. Check that sensor has a "
+                "state_class of total_increasing and still exists",
+                night_id if d else day_id,
+                start,
+                end,
+                day_id if d else night_id,
+                side,
+            )
+            return MeasuredKwh(0.0, 0)
+        days = set(d) | set(n)
+        if min(len(d), len(n)) * 2 < max(len(d), len(n)):
+            # Both halves report, but one covers less than half the span of the
+            # other, so they have diverged: one stopped, or started late. The
+            # union would carry the survivor's coverage and present a partial
+            # total as a whole one. Fall back to the days both halves actually
+            # cover, which is the only part that can be billed honestly. The
+            # figure is then short enough to be labelled scaled rather than
+            # measured, which is disclosed to the user instead of silent.
+            _LOGGER.warning(
+                "%s covers %d days between %s and %s while %s covers %d, so "
+                "the %s pair has diverged; only the overlap is billed",
+                day_id,
+                len(d),
+                start,
+                end,
+                night_id,
+                len(n),
+                side,
+            )
+            days = set(d) & set(n)
+        return MeasuredKwh(sum(d.values()) + sum(n.values()), len(days))
     if total_id:
         d = await _recorder_daily_kwh(hass, total_id, start, end)
         return MeasuredKwh(sum(d.values()), len(d))
