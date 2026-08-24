@@ -95,7 +95,12 @@ async def _recorder_deltas(
 
 
 async def _recorder_rows(
-    hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
+    hass: HomeAssistant,
+    entity_id: str,
+    start: date,
+    end: date,
+    period: str,
+    fields: set[str] | None = None,
 ) -> list[Any]:
     """Fetch HA recorder ``change`` rows for ``entity_id`` over ``[start, end]``.
 
@@ -154,12 +159,41 @@ async def _recorder_rows(
             {entity_id},
             period,
             {"energy": "kWh"},
-            {"change"},
+            fields or {"change"},
         )
     except Exception:  # noqa: BLE001 - recorder may surface anything
         return []
     rows: list[Any] = list(stats.get(entity_id, []))
     return rows
+
+
+async def _recorder_span_delta(
+    hass: HomeAssistant, entity_id: str, start: date, end: date
+) -> float | None:
+    """How far the meter itself moved over ``[start, end]`` in kWh, or ``None``.
+
+    Reads the cumulative ``sum`` at both ends of the window instead of adding
+    up the per-bucket ``change``. The two agree only when the statistics are
+    complete: ``sum`` carries across a gap and ``change`` does not, so a window
+    with missing rows bills less than the meter actually moved and nothing in
+    the integration notices. A user seeing a low bill has no way to tell that
+    apart from a wrong tariff, and the only way to check it has been to query
+    the recorder database by hand.
+
+    Returns ``None`` when the recorder has nothing, rather than 0.0, so an
+    absent measurement is not read as agreement.
+    """
+    rows = await _recorder_rows(hass, entity_id, start, end, "day", {"sum", "change"})
+    if not rows:
+        return None
+    first, last = rows[0], rows[-1]
+    first_sum = first.get("sum")
+    last_sum = last.get("sum")
+    if first_sum is None or last_sum is None:
+        return None
+    # first["sum"] is the cumulative total at the END of the first bucket, so
+    # its own change has to be added back or the window loses its first day.
+    return float(last_sum) - float(first_sum) + float(first.get("change") or 0.0)
 
 
 def _reset_since(state: State, midnight: datetime) -> bool:

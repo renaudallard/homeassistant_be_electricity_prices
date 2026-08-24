@@ -47,6 +47,7 @@ from .coordinator import (
 from .energy_meters import (
     _kwh_sensor_ids,
     _recorder_daily_kwh,
+    _recorder_span_delta,
 )
 from .snapshot_store import (
     _monthly_snapshots,
@@ -96,6 +97,29 @@ async def _kwh_window(
     return None
 
 
+async def _meter_delta(
+    hass: HomeAssistant, entry: ConfigEntry, days: int, *, side: str
+) -> float | None:
+    """How far ``side``'s meters moved over the window, read off the meter.
+
+    The companion to :func:`_kwh_window`, and the point is that the two must
+    agree. ``_kwh_window`` adds up the per-bucket ``change``, which is what the
+    bill is built from; this reads the cumulative total at each end, which
+    survives a gap in the statistics. When they disagree, the recorder is
+    missing rows and every figure derived from it is short by the difference,
+    with nothing else in the integration able to notice.
+    """
+    day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
+    today = dt_util.now().date()
+    start = today - timedelta(days=days)
+    ids = [i for i in ((day_id, night_id) if day_id and night_id else (total_id,)) if i]
+    if not ids:
+        return None
+    parts = [await _recorder_span_delta(hass, i, start, today) for i in ids]
+    known = [p for p in parts if p is not None]
+    return sum(known) if known else None
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
@@ -118,10 +142,15 @@ async def async_get_config_entry_diagnostics(
     # up and feeding the recorder; mirrors what current_year_cost reads.
     today = dt_util.now().date()
     jan1 = today.replace(month=1, day=1)
+    ytd_days = (today - jan1).days
     cons_year = await _kwh_window(hass, entry, 365, side="consumption")
-    cons_ytd = await _kwh_window(hass, entry, (today - jan1).days, side="consumption")
+    cons_ytd = await _kwh_window(hass, entry, ytd_days, side="consumption")
     inj_year = await _kwh_window(hass, entry, 365, side="injection")
-    inj_ytd = await _kwh_window(hass, entry, (today - jan1).days, side="injection")
+    inj_ytd = await _kwh_window(hass, entry, ytd_days, side="injection")
+    # What the meters themselves moved over the same year-to-date window. It
+    # must match ytd_kwh; a gap between them is statistics the bill never saw.
+    cons_ytd_meter = await _meter_delta(hass, entry, ytd_days, side="consumption")
+    inj_ytd_meter = await _meter_delta(hass, entry, ytd_days, side="injection")
 
     # Per-month archived snapshot publication labels: the YTD path
     # caches one snapshot per (supplier, contract, region, YYYY-MM).
@@ -215,10 +244,12 @@ async def async_get_config_entry_diagnostics(
         "consumption": {
             "rolling_year_kwh": cons_year,
             "ytd_kwh": cons_ytd,
+            "ytd_meter_delta_kwh": cons_ytd_meter,
         },
         "injection": {
             "rolling_year_kwh": inj_year,
             "ytd_kwh": inj_ytd,
+            "ytd_meter_delta_kwh": inj_ytd_meter,
         },
         "monthly_snapshot_labels": monthly_labels,
         # EUR/kWh. A month whose mean is far off the Belgian day-ahead average

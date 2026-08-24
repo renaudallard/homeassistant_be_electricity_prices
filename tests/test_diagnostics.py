@@ -30,11 +30,13 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.be_electricity_prices import energy_meters
 from custom_components.be_electricity_prices.coordinator import CoordinatorData
 from custom_components.be_electricity_prices.diagnostics import (
     async_get_config_entry_diagnostics,
@@ -260,6 +262,73 @@ async def test_diagnostics_wired_zero_kwh_reports_zero_not_missing(
     assert dump["consumption"]["ytd_kwh"] == 0.0
     # No injection sensor wired -> still None.
     assert dump["injection"]["rolling_year_kwh"] is None
+
+
+async def test_diagnostics_reports_the_meter_delta_beside_the_billed_kwh(
+    hass: HomeAssistant,
+) -> None:
+    """The billed kWh and the meter's own movement must be shown together.
+
+    ytd_kwh adds up the per-bucket change, which is what the bill is built
+    from. The cumulative sum survives a gap in the statistics where change does
+    not, so a window with missing rows bills less than the meter moved and
+    nothing else in the integration notices. Reporting both makes the shortfall
+    self-evident instead of something a user has to find by querying the
+    recorder database by hand."""
+    entry = make_entry(
+        contract="power_dynamic",
+        meter="dynamic",
+        title="Meter delta",
+        api_key="k",
+        consumption_kwh="sensor.total_cons",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(_historical_spots={}, data=_coordinator_data())
+
+    # change adds to 40, but the meter moved 100: 60 kWh the bill never saw.
+    rows = [
+        {"start": 0, "sum": 1000.0, "change": 10.0},
+        {"start": 1, "sum": 1040.0, "change": 30.0},
+        {"start": 2, "sum": 1090.0, "change": 0.0},
+    ]
+
+    async def _fake_rows(
+        _hass: object,
+        entity_id: str,
+        _start: date,
+        _end: date,
+        _period: str,
+        fields: set[str] | None = None,
+    ) -> list[Any]:
+        return rows if fields and "sum" in fields else []
+
+    with patch.object(energy_meters, "_recorder_rows", new=_fake_rows):
+        dump = await async_get_config_entry_diagnostics(hass, entry)
+
+    # 1090 - 1000 + the first bucket's own 10.
+    assert dump["consumption"]["ytd_meter_delta_kwh"] == pytest.approx(100.0)
+
+
+async def test_diagnostics_meter_delta_is_none_when_nothing_recorded(
+    hass: HomeAssistant,
+) -> None:
+    """Absent is not the same as agreeing, so it must not read as 0.0."""
+    entry = make_entry(
+        contract="power_dynamic",
+        meter="dynamic",
+        title="No rows",
+        api_key="k",
+        consumption_kwh="sensor.total_cons",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(_historical_spots={}, data=_coordinator_data())
+
+    async def _no_rows(*_a: object, **_k: object) -> list[Any]:
+        return []
+
+    with patch.object(energy_meters, "_recorder_rows", new=_no_rows):
+        dump = await async_get_config_entry_diagnostics(hass, entry)
+    assert dump["consumption"]["ytd_meter_delta_kwh"] is None
 
 
 async def test_diagnostics_summarises_the_spot_cache_by_month(

@@ -451,7 +451,7 @@ All handlers raise localized `ServiceValidationError`s keyed under
 
 ## Diagnostics (`diagnostics.py`)
 
-`async_get_config_entry_diagnostics` (`diagnostics.py:99`) returns a single
+`async_get_config_entry_diagnostics` (`diagnostics.py:123`) returns a single
 dict a contributor downloads via "Download diagnostics" on the entry. If the
 entry is mid-reload (`runtime_data` is HA's `UNDEFINED` singleton, detected by
 type name to avoid importing a HA-private symbol) it returns
@@ -469,7 +469,7 @@ Top-level dump keys:
 | `monthly_snapshot_labels` | `{ "YYYY-MM": publication_label or null }` for this (supplier, contract, region) |
 | `shared_failure` | sibling-coordinator negative-fetch marker, or null |
 
-The `coordinator` block (`diagnostics.py:111`) mirrors the current-price
+The `coordinator` block (`diagnostics.py:135`) mirrors the current-price
 attributes plus every scalar `CoordinatorData` field:
 `snapshot_publication`, `snapshot_age_hours`, `snapshot_stale`,
 `snapshot_valid_until`, `last_error`, `monthly_peak_kw`, `monthly_peak_month`,
@@ -506,7 +506,7 @@ can, in narrow cases, embed the request URL and thus the `securityToken`.
    months (relevant to the YTD `current_year_cost` path).
 5. `consumption` / `injection` roll-ups show whether the user's kWh sensors are
    wired: `null` means no sensor configured for that side, `0.0` means a wired
-   sensor that genuinely reads zero (`_kwh_window`, `diagnostics.py:75`), which
+   sensor that genuinely reads zero (`_kwh_window`, `diagnostics.py:76`), which
    tells apart an unconfigured sensor from a zero-reading one.
 6. `shared_failure` (`diagnostics.py:141`) shows whether sibling coordinators
    for the same (supplier, contract, region) backed off, with the scrubbed error
