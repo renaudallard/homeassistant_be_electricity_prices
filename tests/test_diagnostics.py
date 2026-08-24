@@ -293,11 +293,21 @@ async def test_diagnostics_summarises_the_spot_cache_by_month(
         for i in range(3)
     }
     spots[datetime(2026, 4, 2, 10, tzinfo=UTC)] = 0.40
+    # Only the two March hours carry their 15-minute slots, which is what a
+    # partly refilled floored entry looks like and the one thing the hourly
+    # summary beside it cannot show.
+    quarters = {
+        datetime(2026, 3, 1, 0, tzinfo=UTC): [0.09, 0.10, 0.11, 0.10],
+        datetime(2026, 3, 1, 1, tzinfo=UTC): [0.10, 0.11, 0.12, 0.11],
+    }
     entry.runtime_data = SimpleNamespace(
-        _historical_spots=spots, _historical_spot_quarters={}, data=_coordinator_data()
+        _historical_spots=spots,
+        _historical_spot_quarters=quarters,
+        data=_coordinator_data(),
     )
 
     dump = await async_get_config_entry_diagnostics(hass, entry)
+    assert dump["spot_quarter_hours_by_month"] == {"2026-03": 2}
     by_month = dump["spot_cache_by_month"]
     assert set(by_month) == {"2026-03", "2026-04"}
     assert by_month["2026-03"] == {

@@ -765,8 +765,16 @@ async def test_compare_does_not_mutate_live_historical_spots(
     )
 
     async def _fake_ensure(start: Any, end: Any, api_key: Any = None) -> None:
-        # Simulate a fetch populating the (temporary) cache.
+        # Simulate a fetch populating the (temporary) caches. Both of them: a
+        # fetch fills whichever the borrowing entry replays from, and an
+        # assertion against a dict the fake never touches proves nothing.
         coord._historical_spots[datetime(2026, 1, 1, tzinfo=UTC)] = 0.05
+        coord._historical_spot_quarters[datetime(2026, 1, 1, tzinfo=UTC)] = [
+            0.04,
+            0.05,
+            0.05,
+            0.06,
+        ]
 
     fake = replace(EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap))
     with (

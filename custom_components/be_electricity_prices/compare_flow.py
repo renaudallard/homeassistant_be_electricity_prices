@@ -1111,6 +1111,13 @@ class _CompareStepsMixin(OptionsFlow):
             # Belgian day-ahead, supplier-independent, so the same cache
             # prices both sides. A no-op for monthly-indicative contracts.
             hist_spots = coord._historical_spots
+            # The slots go with them, or a floored feed-in formula would be
+            # replayed here off the hour mean while the annual row printed
+            # right above it credits each slot. Unreachable today, this
+            # block needs an archive-capable pair and the only supplier
+            # that floors exposes no archive, and threaded so it stays
+            # unreachable rather than latent.
+            hist_quarters = coord._historical_spot_quarters
             if compare_spot_injection and not hist_spots:
                 # The user's own entry isn't spot-needing, so the live
                 # coordinator never backfilled its cache. Fetch into a
@@ -1135,6 +1142,7 @@ class _CompareStepsMixin(OptionsFlow):
                             jan1, today_local, borrowed
                         )
                         hist_spots = coord._historical_spots
+                        hist_quarters = coord._historical_spot_quarters
                     finally:
                         coord._historical_spots = saved
                         coord._historical_spot_quarters = saved_quarters
@@ -1150,6 +1158,7 @@ class _CompareStepsMixin(OptionsFlow):
                     current_snapshot,
                     quote_entry,
                     historical_spots=hist_spots,
+                    spot_quarters=hist_quarters,
                     billed_peak_kw=peak_kw,
                 )
                 compare_ytd_val = await _compute_current_year_cost(
@@ -1161,6 +1170,7 @@ class _CompareStepsMixin(OptionsFlow):
                     contract_override=self._compare[CONF_CONTRACT],
                     meter_override=meter,
                     historical_spots=hist_spots,
+                    spot_quarters=hist_quarters,
                     billed_peak_kw=peak_kw,
                 )
             except Exception:  # noqa: BLE001 - degrade to '-'

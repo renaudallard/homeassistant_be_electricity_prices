@@ -1000,6 +1000,51 @@ async def test_ensure_dynamic_spots_fetches_for_spot_indexed_injection() -> None
     assert spots == cache
 
 
+async def test_ensure_dynamic_spots_hands_back_the_quarter_cache() -> None:
+    """The backfill prices its hours from what this returns, so returning the
+    hourly cache alone would leave a floored feed-in formula replayed off the
+    hour mean while the live sensor floors each slot."""
+    from custom_components.be_electricity_prices.providers.base import (
+        DynamicRates,
+        InjectionRates,
+    )
+
+    snap = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True),
+        injection=InjectionRates(
+            factor=1.0, base=0.0, current=None, floor_at_zero=True
+        ),
+    )
+    hour = datetime(2026, 1, 1, tzinfo=UTC)
+    quarters = {hour: [-0.060, -0.020, 0.010, 0.050]}
+    coordinator = SimpleNamespace(
+        _snapshot=snap,
+        _historical_spots={hour: -0.005},
+        _historical_spot_quarters=quarters,
+        _ensure_historical_spots=AsyncMock(),
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "custom",
+            "contract": "custom_dynamic",
+            "region": "flanders",
+            "dso": "fluvius",
+            "meter": "dynamic",
+            "solar_regime": "injection",
+        },
+        title="Custom floored",
+    )
+    spots, got = await bf._ensure_dynamic_spots(
+        coordinator,  # type: ignore[arg-type]
+        entry,
+        hour,
+        hour + timedelta(hours=1),
+    )
+    assert spots == {hour: -0.005}
+    assert got is quarters
+
+
 async def test_ensure_dynamic_spots_empty_for_static_non_spot_contract() -> None:
     """Static energy with no spot-indexed injection needs no spot fetch."""
     coordinator = SimpleNamespace(

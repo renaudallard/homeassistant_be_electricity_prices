@@ -334,6 +334,55 @@ async def test_ensure_historical_spots_caches_quarters_for_a_floored_entry(
     assert coord._historical_spots[hour] == pytest.approx(0.20)
 
 
+async def test_the_tick_hands_the_quarter_cache_to_the_year_cost(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The one line that carries the whole fix to the number the user reads.
+
+    Everything under it can be right and current_year_cost still credit the
+    hour mean, because the year-to-date walk only sees the slots if the tick
+    passes them."""
+    freezer.move_to("2026-07-01 10:30:00+00:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "custom",
+            "contract": "custom_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "injection",
+            "api_key": "TESTKEY",
+        },
+        title="Custom floored quarter-hourly",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = _floored_quarter_snapshot()
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(  # type: ignore[method-assign]
+        return_value={datetime(2026, 7, 1, h, tzinfo=UTC): 0.30 for h in range(24)}
+    )
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    coord._historical_spot_quarters = {
+        datetime(2026, 1, 6, 13, tzinfo=UTC): [-0.060, -0.020, 0.010, 0.050]
+    }
+    spy = AsyncMock(return_value=0.0)
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator."
+            "_compute_current_year_cost",
+            spy,
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        await coord._update_body()
+
+    assert spy.await_args is not None
+    assert spy.await_args.kwargs["spot_quarters"] is coord._historical_spot_quarters
+
+
 async def test_quarters_are_dropped_when_the_entry_stops_needing_them(
     hass: HomeAssistant, freezer: Any
 ) -> None:
