@@ -216,9 +216,6 @@ class _SpotsMixin:
         fetches are logged and skipped; the caller treats absent hours as
         "no data" rather than tearing the YTD computation down.
         """
-        api_key = api_key or self.entry.data.get(CONF_API_KEY)
-        if not api_key:
-            return
         snap = self._snapshot
         # Both decisions are read here, before the day walk, because the walk
         # measures coverage against whichever cache this entry replays from.
@@ -226,6 +223,19 @@ class _SpotsMixin:
         want_quarters = snap is not None and _injection_needs_spot_quarters(
             snap, self.entry
         )
+        if snap is not None and not want_quarters:
+            # The entry stopped needing the slots. Unticking the quarter-hourly
+            # box or the never-negative one, or leaving the injection regime,
+            # changes none of the (supplier, contract, region) tuple the reload
+            # is gated on, so a cached year would be restored and re-persisted
+            # for as long as the entry lived, and the replay would keep
+            # crediting those hours per slot while the sensor beside it
+            # credits the hour. Cleared here, above the key check, because an
+            # entry with no key still replays whatever is already cached.
+            self._historical_spot_quarters.clear()
+        api_key = api_key or self.entry.data.get(CONF_API_KEY)
+        if not api_key:
+            return
         now = dt_util.utcnow()
         # Days older than this are stable enough that a short fetch means
         # a genuine source gap, not data still being published; only those

@@ -334,6 +334,50 @@ async def test_ensure_historical_spots_caches_quarters_for_a_floored_entry(
     assert coord._historical_spots[hour] == pytest.approx(0.20)
 
 
+async def test_quarters_are_dropped_when_the_entry_stops_needing_them(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Unticking the quarter-hourly box or the floor leaves the supplier,
+    contract and region alone, which is all the reload gate looks at.
+
+    So a cached year would be restored and re-persisted for the life of the
+    entry, and the replay would go on crediting those hours per slot while the
+    injection_price sensor beside it credits the hour: the very divergence the
+    cache was added to remove, pointing the other way."""
+    freezer.move_to("2026-06-29 12:00:00+02:00")
+    entry = _floored_quarter_entry()
+    entry.add_to_hass(hass)
+    hour = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+
+    async def _after(snapshot: Any, api_key: str | None) -> dict[datetime, list[float]]:
+        coord = BePricesCoordinator(hass, entry)
+        coord._snapshot = snapshot
+        coord._historical_spot_quarters = {hour: [0.05, 0.15, 0.25, 0.35]}
+        coord._historical_spots = {hour: 0.20}
+        coord._complete_spot_days = {date(2026, 1, 1)}
+        with patch(
+            "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
+        ) as cls:
+            cls.return_value.fetch_day_ahead = AsyncMock(return_value={})
+            await coord._ensure_historical_spots(
+                date(2026, 1, 1), date(2026, 1, 1), api_key
+            )
+        return coord._historical_spot_quarters
+
+    hourly_billed = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.0),
+        injection=InjectionRates(
+            factor=1.0, base=0.0, current=None, floor_at_zero=True
+        ),
+    )
+    assert await _after(hourly_billed, "test-token") == {}
+    # An entry with no key still replays what is cached, so the drop cannot
+    # sit below the key check.
+    assert await _after(hourly_billed, None) == {}
+    # And an entry that still needs them keeps them.
+    assert await _after(_floored_quarter_snapshot(), "test-token") != {}
+
+
 async def test_a_complete_hourly_day_is_refetched_when_its_quarters_are_missing(
     hass: HomeAssistant, freezer: Any
 ) -> None:

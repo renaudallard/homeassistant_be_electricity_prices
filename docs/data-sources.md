@@ -267,7 +267,7 @@ A malformed `price.amount` or `position` raises `EntsoeError`
 constructs a fresh `EntsoeClient` per call (`api.py:66`,
 `coordinator_spots.py:225`). Two paths use it:
 
-- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:343`). Windows the request
+- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:353`). Windows the request
   on the local (Europe/Brussels) day so a 00:00 to 02:00 local query does not
   drop yesterday's UTC tail; anchors both endpoints on local midnight converted
   to UTC so the fetched window matches the actual local-day hour count, which
