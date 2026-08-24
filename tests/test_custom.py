@@ -186,6 +186,42 @@ def test_bake_monthly_injection_and_floor() -> None:
     assert cold.injection.current is None
 
 
+def test_the_zero_floor_can_never_meet_a_tou_injection() -> None:
+    """The floor is applied on the formula and indicative branches, never on
+    the per-slot TOU triplet.
+
+    That asymmetry is only safe while the two cannot meet. The custom expert
+    supplier is the one thing that sets ``floor_at_zero``, and it has no TOU
+    shape on either leg; the one card that publishes a triplet (Engie Empower
+    Flextime) sets no floor. Pinned here rather than guarded in the pricing
+    code, which would be a dead branch in the most shape-sensitive module in
+    the package."""
+    from custom_components.be_electricity_prices.providers.base import TimeOfUseRates
+
+    for contract in const.CUSTOM_CONTRACTS:
+        for mode in (
+            const.CUSTOM_INJECTION_MODE_FORMULA,
+            const.CUSTOM_INJECTION_MODE_CURRENT,
+        ):
+            snap = build_snapshot(
+                {
+                    const.CONF_CONTRACT: contract,
+                    const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+                    const.CONF_CUSTOM_INJECTION_MODE: mode,
+                    const.CONF_CUSTOM_INJECTION_FLOOR: True,
+                    const.CONF_CUSTOM_INJECTION_FACTOR: 0.96,
+                    const.CONF_CUSTOM_INJECTION_BASE: -0.009,
+                    const.CONF_CUSTOM_INJECTION_CURRENT: 0.04,
+                },
+                const.REGION_FLANDERS,
+                const.DSO_FLUVIUS_ANTWERPEN,
+            )
+            assert snap.injection is not None
+            assert snap.injection.floor_at_zero is True
+            assert snap.injection.peak is None
+            assert not isinstance(snap.energy, TimeOfUseRates)
+
+
 def test_floor_injection_passthrough_without_flag() -> None:
     inj = InjectionRates(current=-0.001, floor_at_zero=False)
     assert _floor_injection(-0.001, inj) == -0.001

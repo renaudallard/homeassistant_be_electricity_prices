@@ -436,8 +436,28 @@ snapshot's `vat_rate` (`providers/base.py:553-553`). None of the injection code
 paths multiply by `1.0 + vat_rate`.
 
 Injection formulas can go negative at low spot (the producer pays to inject) and
-the engine respects that: no clamping in `_compute_injection_price` or
-`_historical_injection_rate` (`providers/base.py:312-316`).
+the engine respects that by default. A contract carrying a never-negative
+guarantee sets `floor_at_zero` instead, and `_floor_injection`
+(`injection.py:193`) then clamps the resolved rate at 0 in
+`_compute_injection_price`, in `_historical_injection_rate` and in the compare
+estimate. Only the expert custom supplier sets it (`providers/custom.py:237`);
+every scraped card leaves it False.
+
+WHERE the clamp lands is a pricing decision, not a detail, because `max()` is
+convex and the two orders give different money:
+
+- a PER-SLOT formula floors each slot, because that is what the contract bills.
+  The live array, the year-to-date replay (off the hour's own quarters) and the
+  compare estimate (`_compare_injection_credit`, `compare_quote.py:117`, off the
+  window's slots) all credit the mean of the floored rates.
+- a MONTH-MEAN formula floors once, on the delivery month's tariff, because such
+  a card publishes one number a month and the guarantee is written against that
+  number. `_bake_monthly_injection` (`injection.py:64`) produces it and the floor
+  lands on the flat `current` path.
+
+The per-slot TOU triplet is never clamped. No card ships both a triplet and a
+floor, and `tests/test_custom.py` pins that rather than the pricing code
+carrying a branch that cannot run.
 
 ### The three injection shapes
 

@@ -2585,6 +2585,73 @@ def test_compare_spot_indexed_injection_uses_mean_spot() -> None:
     assert credit == pytest.approx(0.97 * 0.08 - 0.021)
 
 
+def test_compare_floored_injection_averages_the_slot_rates() -> None:
+    """A never-negative feed-in formula is convex, so the window mean does not
+    price it.
+
+    Flooring once at the mean pays nothing for a day whose spot only went
+    under the floor around midday, which is when the panels export, while the
+    entry's own injection_price sensor and its year-to-date credit both floor
+    per slot. The page has to quote the number the entry bills."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DynamicRates,
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+    from tests import make_snapshot
+
+    inj = InjectionRates(
+        current=None, factor=0.96, base=-0.009, formula="x", floor_at_zero=True
+    )
+    entry = SimpleNamespace(data={"solar_regime": "injection"})
+    # A plain spring day: a negative midday block, positive shoulders.
+    curve = [
+        0.078, 0.070, 0.065, 0.062, 0.065, 0.072, 0.085, 0.095,
+        0.080, 0.040, 0.005, -0.010, -0.025, -0.030, -0.028, -0.015,
+        0.002, 0.025, 0.060, 0.095, 0.120, 0.135, 0.110, 0.090,
+    ]  # fmt: skip
+    spot_dict = {
+        datetime(2026, 4, 29, h, 0, tzinfo=UTC): v for h, v in enumerate(curve)
+    }
+    avg_spot = sum(curve) / len(curve)
+    per_slot = sum(max(0.96 * v - 0.009, 0.0) for v in curve) / len(curve)
+
+    snap = make_snapshot(energy=DynamicRates(factor=1.0, base=0.0), injection=inj)
+    credit = _compare_injection_credit(snap, entry, spot_dict, avg_spot=avg_spot)
+    assert credit is not None
+    assert credit == pytest.approx(per_slot)
+    # Strictly better than flooring the mean, which is the bug being fixed.
+    assert credit > max(0.96 * avg_spot - 0.009, 0.0)
+
+    # A month-mean contract keeps the other order: its card publishes ONE
+    # tariff for the delivery month and the guarantee is written against that
+    # number, so flooring after the mean is what it actually bills.
+    monthly = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.0), injection=inj
+    )
+    assert _compare_injection_credit(
+        monthly, entry, spot_dict, avg_spot=avg_spot
+    ) == pytest.approx(max(0.96 * avg_spot - 0.009, 0.0))
+
+    # Without the floor the formula is affine and both orders agree, so every
+    # existing quote is unchanged.
+    unfloored = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.0),
+        injection=InjectionRates(current=None, factor=0.96, base=-0.009, formula="x"),
+    )
+    assert _compare_injection_credit(
+        unfloored, entry, spot_dict, avg_spot=avg_spot
+    ) == pytest.approx(0.96 * avg_spot - 0.009)
+
+    # No curve and no mean: the credit stays unresolved rather than guessed.
+    assert _compare_injection_credit(snap, entry, {}, avg_spot=None) is None
+
+
 def test_compare_prices_an_spp_indexed_credit_on_the_solar_weighted_mean() -> None:
     """energie.be Variabel and Vast index the feed-in on Belpex_SPP.
 

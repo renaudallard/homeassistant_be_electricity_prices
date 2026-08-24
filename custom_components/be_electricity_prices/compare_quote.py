@@ -134,7 +134,9 @@ def _compare_injection_credit(
     contract) is priced off the window MEAN spot, consistent with the
     energy term (which also uses ``avg_spot``); pricing it off the live
     current slot would make the solar credit and the energy cost reflect
-    different instants.
+    different instants. A formula clamped at zero is the exception, because
+    it is not linear in the spot: the mean of the slots' floored rates is
+    what the entry actually bills, and it is what the live sensor shows.
 
     An SPP-INDEXED credit (energie.be Variabel and Vast) resolves against
     ``spp_spot``, the solar-weighted month mean, because that is the index
@@ -146,8 +148,13 @@ def _compare_injection_credit(
     printed indicative below. Every other monthly-indexed injection is
     spot-independent and delegates to the live helper too.
     """
-    from .injection import _compute_injection_price, _floor_injection
+    from .injection import (
+        _compute_injection_price,
+        _floor_injection,
+        _historical_injection_rate,
+    )
     from .providers.base import DynamicRates, TimeOfUseRates
+    from .spot_stats import _injection_on_month_mean
 
     inj = getattr(snapshot, "injection", None)
     energy = getattr(snapshot, "energy", None)
@@ -176,14 +183,24 @@ def _compare_injection_credit(
         and inj.base is not None
         and (isinstance(energy, DynamicRates) or inj.current is None)
     ):
-        # Floor the formula result like the live and historical paths so the
-        # compare estimate doesn't count a negative feed-in as extra cost when
-        # the contract clamps injection at zero.
-        return (
-            _floor_injection(inj.factor * avg_spot + inj.base, inj)
-            if avg_spot is not None
-            else None
-        )
+        if avg_spot is None:
+            return None
+        if inj.floor_at_zero and spot_dict and not _injection_on_month_mean(snapshot):
+            # A clamped formula is convex, so the credit is the mean of the
+            # slots' floored rates and not the rate of their mean. Flooring
+            # once at the window mean pays nothing for a day whose spot only
+            # went under the floor around midday, which is exactly when the
+            # panels export, and both the live sensor and the year-to-date
+            # walk floor per slot: quoting the other order made the page
+            # contradict the user's own injection_price. Routed through the
+            # same helper the replay uses so the two cannot drift.
+            return _historical_injection_rate(
+                inj, avg_spot, quarters=list(spot_dict.values())
+            )
+        # A month-mean index keeps the other order on purpose: such a contract
+        # publishes ONE tariff for the delivery month and the never-negative
+        # guarantee is written against that number, not against each hour.
+        return _floor_injection(inj.factor * avg_spot + inj.base, inj)
     return _compute_injection_price(snapshot, entry, spot_dict)
 
 
