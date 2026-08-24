@@ -39,6 +39,10 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.be_electricity_prices.api import (
+    EntsoeAuthError,
+    EntsoeError,
+)
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
@@ -303,6 +307,58 @@ async def test_ensure_historical_spots_skips_permanently_short_day(
         assert len(calls) == first
         # A permanently short day is never recorded as complete.
         assert date(2026, 1, 1) not in coord._complete_spot_days
+
+
+async def test_ensure_historical_spots_backs_off_after_a_rejected_key(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A refused key must not re-pull the whole year on every tick.
+
+    A failed fetch leaves each day exactly as short as it was, and the
+    short-day marker was only written after a SUCCESSFUL fetch, so a revoked
+    token or an exhausted daily quota re-requested every week-chunk of the
+    year on every hourly tick and logged a warning for each. A transient
+    failure keeps retrying promptly: it is the auth class that will still be
+    refusing an hour from now."""
+    freezer.move_to("2026-06-29 12:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    async def _refuse(exc: Exception) -> int:
+        coord = BePricesCoordinator(hass, entry)
+        calls = 0
+
+        async def _fake_fetch(
+            start: datetime, end: datetime, *, quarter_hourly: bool = False
+        ) -> dict[datetime, float]:
+            nonlocal calls
+            calls += 1
+            raise exc
+
+        with patch(
+            "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
+        ) as mock_client_cls:
+            mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+            await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
+            first = calls
+            assert first > 0
+            await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
+        return calls - first
+
+    assert await _refuse(EntsoeAuthError("rejected")) == 0
+    # A timeout or a 5xx may well be gone by the next tick, so those days are
+    # left unmarked and the year is retried rather than left unpriced for 12 h.
+    assert await _refuse(EntsoeError("timeout")) > 0
 
 
 async def test_ensure_historical_spots_records_and_skips_complete_days(
