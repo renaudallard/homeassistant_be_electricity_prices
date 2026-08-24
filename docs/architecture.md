@@ -239,7 +239,7 @@ Numbered walkthrough:
    the previous tuple's cache.
 3. `async_load_persistent` (`coordinator.py:383`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
-4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:522`). It runs
+4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:529`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:177`),

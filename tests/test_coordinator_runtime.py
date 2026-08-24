@@ -2566,12 +2566,12 @@ async def test_load_persistent_drops_an_impossible_cached_spot(
 async def test_load_persistent_drops_an_hour_whose_quarter_is_impossible(
     hass: HomeAssistant,
 ) -> None:
-    """The whole hour goes, not the offending slot.
+    """The whole list goes, not the offending slot.
 
-    A short quarter list would silently re-weight the hour's mean, and the
-    hourly value has to go with it: leaving it behind keeps the day at 24 of
-    24, and a day that reads complete is never re-fetched, so the hour would
-    replay off a value the market never published for the life of the entry.
+    A short quarter list would silently re-weight the hour's mean. The hourly
+    value stays, because it passed its own check: the hour then prices energy
+    as it always did and credits feed-in off that mean, which is the answer
+    the slots refine rather than the one they replace.
     """
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -2610,7 +2610,14 @@ async def test_load_persistent_drops_an_hour_whose_quarter_is_impossible(
 
     when = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
     assert coord._historical_spot_quarters == {when: [-0.06, -0.02, 0.01, 0.05]}
-    assert coord._historical_spots == {when: 0.1}
+    # The bad hour keeps its own hourly price, which passed its own check: it
+    # prices that hour's energy as it always did and credits feed-in off the
+    # mean, and a day one hour short is not re-fetched anyway, so taking the
+    # hourly value out too would forfeit a sane energy price for good.
+    assert coord._historical_spots == {
+        when: 0.1,
+        datetime(2026, 1, 1, 1, 0, tzinfo=UTC): 0.1,
+    }
 
 
 async def test_save_persistent_round_trips_the_quarter_cache(

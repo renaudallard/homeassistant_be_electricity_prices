@@ -474,8 +474,10 @@ class BePricesCoordinator(
                     # Dropped rather than kept: leaving it makes the day look
                     # complete, and a complete day is never refetched, so the
                     # bad value would price that hour for the life of the
-                    # entry. Dropping it takes the day under the refetch
-                    # threshold and the next tick replaces it from ENTSO-E.
+                    # entry. Dropping it costs the hour its energy leg, which
+                    # is the cheaper mistake; a day that loses five of its
+                    # hours falls under the refetch threshold and is replaced
+                    # from ENTSO-E, a day that loses one does not.
                     dropped_spots += 1
                     continue
                 self._historical_spots[when] = float(v)
@@ -493,18 +495,23 @@ class BePricesCoordinator(
                 if not all(
                     isinstance(q, (int, float)) and _spot_is_sane(float(q)) for q in v
                 ):
-                    # The whole hour goes, not the offending slot: a short
-                    # list would silently re-weight the hour's mean, and
-                    # dropping the hour takes its day under the refetch
-                    # threshold so the next tick replaces it from ENTSO-E.
+                    # The whole list goes, not the offending slot, because a
+                    # short list would silently re-weight the hour's mean. The
+                    # hourly value stays if it passed its own check above: the
+                    # hour then prices its energy as it always did and credits
+                    # feed-in off the mean, which is the answer this cache
+                    # refines rather than the one it replaces. Taking it out
+                    # too would forfeit a sane energy price over a feed-in
+                    # refinement, and a day short of one hour is not re-fetched
+                    # anyway.
                     dropped_spots += 1
-                    self._historical_spots.pop(when, None)
                     continue
                 self._historical_spot_quarters[when] = [float(q) for q in v]
         if dropped_spots:
             _LOGGER.warning(
                 "Discarded %d cached day-ahead price(s) outside the publishable "
-                "range for %s; they will be re-fetched from ENTSO-E",
+                "range for %s; a day missing several of them is re-fetched from "
+                "ENTSO-E",
                 dropped_spots,
                 self.entry.title,
             )
