@@ -2772,7 +2772,11 @@ async def test_billed_peak_floors_each_month_before_averaging(
     entry = _flanders_sensor_entry(entity_id)
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
-    coord._peak_history = {f"2025-{m:02d}-01": 1.0 for m in range(1, 12)}
+    # Eleven months that are actually inside the twelve-month window ending in
+    # May 2026. Seeding Jan-Nov 2025 instead would leave five of them older
+    # than the window, which the age-based prune correctly drops.
+    coord._peak_history = {f"2025-{m:02d}-01": 1.0 for m in range(6, 13)}
+    coord._peak_history.update({f"2026-{m:02d}-01": 1.0 for m in range(1, 5)})
     hass.states.async_set(entity_id, "20.0", {"unit_of_measurement": "kW"})
 
     await coord._track_monthly_peak()

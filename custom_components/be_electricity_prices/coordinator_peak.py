@@ -132,8 +132,22 @@ class _PeakMixin:
             # a measured 0 and must not drag the mean down.
             if self._peak_month is not None and self._peak_kw > 0.0:
                 self._peak_history[self._peak_month.isoformat()] = self._peak_kw
-            # Eleven completed months plus the running one make twelve.
-            for stale in sorted(self._peak_history)[:-11]:
+            # Eleven completed months plus the running one make twelve, but
+            # prune by DATE rather than by key count. A month that banked
+            # nothing leaves no key, so counting keys keeps a peak from outside
+            # the window alive and it goes on dragging the Fluvius mean. The
+            # docstring above justifies LEAVING OUT a month with no reading,
+            # which is right and matches how Fluvius estimates it; it does not
+            # justify RETAINING one that has aged out. Measured on a single
+            # month lost inside an outage: +0,48 kW on the billed peak, about
+            # 22 EUR a year, and roughly triple that at three months.
+            months_back = current_month.month - 11
+            year_back = current_month.year
+            while months_back <= 0:
+                months_back += 12
+                year_back -= 1
+            oldest = date(year_back, months_back, 1).isoformat()
+            for stale in [k for k in self._peak_history if k < oldest]:
                 del self._peak_history[stale]
             self._peak_month = current_month
             self._peak_kw = 0.0

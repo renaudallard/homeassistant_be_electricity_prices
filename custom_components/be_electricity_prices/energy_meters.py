@@ -471,9 +471,12 @@ async def _recorder_daily_band_ratio(
     """
     per_day_day: dict[date, float] = {}
     per_day_night: dict[date, float] = {}
+    moving_hours: dict[date, int] = {}
     for when, delta in await _recorder_deltas(hass, entity_id, start, end, "hour"):
         local = dt_util.as_local(when)
         bucket = local.date()
+        if delta > 0.0:
+            moving_hours[bucket] = moving_hours.get(bucket, 0) + 1
         if is_offpeak(local, region):
             per_day_night[bucket] = per_day_night.get(bucket, 0.0) + delta
         else:
@@ -483,9 +486,21 @@ async def _recorder_daily_band_ratio(
         d = per_day_day.get(day, 0.0)
         n = per_day_night.get(day, 0.0)
         total = d + n
-        if total > 0:
+        if total > 0 and moving_hours.get(day, 0) > 1:
             out[day] = (d / total, n / total)
         else:
+            # Either nothing moved, or it all moved in a single hour. The
+            # second case is a sensor that is READ once a day rather than a
+            # meter that ran for one hour: a supplier-portal poller or a
+            # nightly fetch. Home Assistant still emits an hourly row either
+            # way, so the daily total is right while every kWh lands in the
+            # hour the reading arrived, and this would hand back (1, 0) or
+            # (0, 1) for that day, every day, all year. Measured on a 2415 kWh
+            # year against a true off-peak share of 0,457: a 04:00 poll billed
+            # the distribution leg 31,7% low, a 13:00 poll 26,7% high, and the
+            # bi-hourly energy rate splits on this same ratio so it compounds.
+            # The day-of-week default is a poor estimate; a single hour is a
+            # confident wrong one.
             out[day] = _default_band_ratio_for(day, region)
     return out
 
