@@ -832,7 +832,6 @@ async def test_ytd_reports_coverage_against_elapsed_not_against_priced(
     elapsed since 1 January makes that visible."""
 
     freezer.move_to("2026-03-01 12:00:00+01:00")
-    today = dt_util.now().date()
     snap = replace(_yearly_snapshot(), energy=DynamicRates(factor=1.0, base=0.0))
     # ORES, matching the overlay _yearly_snapshot carries; a DSO the snapshot
     # does not publish makes compute_breakdown raise and the hour is skipped.
@@ -956,8 +955,11 @@ async def test_measured_kwh_refuses_a_dead_half_of_a_register_pair(
         patch.object(energy_meters, "_recorder_daily_kwh", new=_dead_night),
         caplog.at_level("WARNING"),
     ):
-        got = await energy_meters._measured_kwh(  # type: ignore[arg-type]
-            hass, entry, d0, d0 + timedelta(days=59)
+        got = await energy_meters._measured_kwh(
+            hass,
+            entry,  # type: ignore[arg-type]
+            d0,
+            d0 + timedelta(days=59),
         )
     # Refused outright rather than billed at half, and said out loud.
     assert got == energy_meters.MeasuredKwh(0.0, 0)
@@ -993,8 +995,11 @@ async def test_measured_kwh_falls_back_to_the_overlap_when_a_half_stops(
         patch.object(energy_meters, "_recorder_daily_kwh", new=_night_stops),
         caplog.at_level("WARNING"),
     ):
-        got = await energy_meters._measured_kwh(  # type: ignore[arg-type]
-            hass, entry, d0, d0 + timedelta(days=59)
+        got = await energy_meters._measured_kwh(
+            hass,
+            entry,  # type: ignore[arg-type]
+            d0,
+            d0 + timedelta(days=59),
         )
     # The union would have said 60 days and called a partial total measured.
     assert got.days_with_data == 10
