@@ -779,6 +779,63 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
         )
 
 
+async def test_recorder_deltas_drops_a_first_bucket_that_reaches_back(
+    hass: HomeAssistant, caplog: Any
+) -> None:
+    """The 1 January bucket must not carry last year's energy.
+
+    Home Assistant seeds the first bucket's change from the last statistic
+    strictly EARLIER than the window, with no lookback limit. When the run-up
+    to the window is missing, that bucket absorbs everything consumed during
+    the gap: measured at 536 kWh charged to a day that used 24. It over-bills,
+    unlike every misattribution fault it never self-corrects, and hours_seen
+    reads full coverage while it happens."""
+    from custom_components.be_electricity_prices.energy_meters import (
+        _recorder_deltas,
+    )
+
+    jan1 = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    contaminated = [
+        # No bucket before the window, and a running total far above this
+        # bucket's own change: a cumulative figure already existed.
+        {"start": jan1.timestamp(), "sum": 50_536.0, "change": 536.0},
+        {
+            "start": (jan1 + timedelta(days=1)).timestamp(),
+            "sum": 50_560.0,
+            "change": 24.0,
+        },
+    ]
+
+    async def _fake(*_a: object, **_k: object) -> list[Any]:
+        return contaminated
+
+    with (
+        patch.object(energy_meters, "_recorder_rows", new=_fake),
+        caplog.at_level("WARNING"),
+    ):
+        got = await _recorder_deltas(
+            hass, "sensor.meter", date(2026, 1, 1), date(2026, 1, 2), "day"
+        )
+    assert [v for _, v in got] == [24.0]
+    assert "accumulated before the window" in caplog.text
+
+    # A sensor whose history BEGINS inside the window is seeded from zero, so
+    # its first change is genuinely its own energy and must be kept.
+    fresh = [
+        {"start": jan1.timestamp(), "sum": 30.0, "change": 30.0},
+        {"start": (jan1 + timedelta(days=1)).timestamp(), "sum": 54.0, "change": 24.0},
+    ]
+
+    async def _fake_fresh(*_a: object, **_k: object) -> list[Any]:
+        return fresh
+
+    with patch.object(energy_meters, "_recorder_rows", new=_fake_fresh):
+        got = await _recorder_deltas(
+            hass, "sensor.meter", date(2026, 1, 1), date(2026, 1, 2), "day"
+        )
+    assert [v for _, v in got] == [30.0, 24.0]
+
+
 async def test_measured_kwh_refuses_a_dead_half_of_a_register_pair(
     hass: HomeAssistant, caplog: Any
 ) -> None:
@@ -1095,7 +1152,10 @@ async def test_recorder_requests_change_normalised_to_kwh(
     # statistics_during_period is positional: (..., period, units, types).
     call = instance.async_add_executor_job.call_args
     assert call.args[-2] == {"energy": "kWh"}
-    assert call.args[-1] == {"change"}
+    # ``sum`` rides along so the first bucket's provenance can be checked: a
+    # change smaller than the running total means a cumulative figure already
+    # existed before the window.
+    assert call.args[-1] == {"change", "sum"}
 
 
 async def test_recorder_daily_kwh_uses_change_not_sum(
@@ -1107,6 +1167,16 @@ async def test_recorder_daily_kwh_uses_change_not_sum(
     only read ``change`` (the within-period delta)."""
     fake_stats = {
         "sensor.day_cons": [
+            {
+                # The day before the window. A meter carrying 50 MWh of history
+                # always has one, and without it the first in-window bucket is
+                # indistinguishable from one that absorbed a gap.
+                "start": dt_util.start_of_local_day(datetime(2025, 12, 31))
+                .astimezone(UTC)
+                .timestamp(),
+                "sum": 49_988.0,
+                "change": 9.0,
+            },
             {
                 "start": dt_util.start_of_local_day(datetime(2026, 1, 1))
                 .astimezone(UTC)

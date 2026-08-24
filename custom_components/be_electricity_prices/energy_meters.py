@@ -89,10 +89,48 @@ async def _recorder_deltas(
     Callers keep their own bucketing: one wants the local DAY, one the UTC
     hour, one the local hour so it can split on the off-peak schedule.
     """
+    # Fetched from a day earlier than asked so the bucket immediately before
+    # the window is visible. Home Assistant seeds the first bucket's change
+    # from the last statistic strictly EARLIER than the window, with no
+    # lookback limit (_statistics_at_time), so when the run-up to the window is
+    # missing that first bucket absorbs everything consumed during the gap. On
+    # a year-to-date window anchored at 1 January that means last year's energy
+    # billed to this year: measured at 536 kWh charged to a day that used 24.
+    # It over-bills, it never self-corrects, and hours_seen reads full coverage
+    # while it happens.
+    window_start = dt_util.start_of_local_day(start).astimezone(UTC)
+    rows = await _recorder_rows(
+        hass, entity_id, start - timedelta(days=1), end, period, {"change", "sum"}
+    )
+    before = [r for r in rows if (r.get("start") or 0) < window_start.timestamp()]
     out: list[tuple[datetime, float]] = []
     negative = 0.0
-    for row in await _recorder_rows(hass, entity_id, start, end, period):
+    skip_first = not before
+    for row in rows:
         ts = row.get("start")
+        if ts is None or ts < window_start.timestamp():
+            continue
+        if skip_first:
+            skip_first = False
+            # Only suspect when a cumulative total already existed: a sensor
+            # whose statistics begin inside the window is seeded from zero, so
+            # its first change is genuinely its own energy.
+            total = row.get("sum")
+            change = row.get("change")
+            if (
+                total is not None
+                and change is not None
+                and float(change) < float(total)
+            ):
+                _LOGGER.warning(
+                    "%s has no statistics immediately before %s, so its first "
+                    "bucket carries %.1f kWh accumulated before the window; "
+                    "that bucket is ignored rather than billed to this period",
+                    entity_id,
+                    start,
+                    float(change),
+                )
+                continue
         delta = row.get("change")
         if ts is None or delta is None:
             continue
@@ -127,7 +165,12 @@ async def _recorder_deltas(
 
 
 async def _recorder_rows(
-    hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
+    hass: HomeAssistant,
+    entity_id: str,
+    start: date,
+    end: date,
+    period: str,
+    fields: set[str] | None = None,
 ) -> list[Any]:
     """Fetch HA recorder ``change`` rows for ``entity_id`` over ``[start, end]``.
 
@@ -186,7 +229,7 @@ async def _recorder_rows(
             {entity_id},
             period,
             {"energy": "kWh"},
-            {"change"},
+            fields or {"change"},
         )
     except Exception:  # noqa: BLE001 - recorder may surface anything
         return []
