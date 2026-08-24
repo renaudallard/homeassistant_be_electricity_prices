@@ -799,8 +799,11 @@ async def test_compare_does_not_mutate_live_historical_spots(
 
     # The throwaway quote borrowed spots into a local dict; the live
     # coordinator cache must be left empty so the next tick won't persist
-    # them into the user's store.
+    # them into the user's store. Both caches: the fetch fills whichever the
+    # borrowing entry needs, and leaving one behind persists a year of slots
+    # onto an entry whose hourly cache is back to empty.
     assert coord._historical_spots == {}
+    assert coord._historical_spot_quarters == {}
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

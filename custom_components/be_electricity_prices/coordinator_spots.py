@@ -46,10 +46,14 @@ from .api import (
 from .const import (
     CONF_API_KEY,
 )
+from .injection import (
+    _injection_needs_spot_quarters,
+)
 from .spot_stats import (
     _bucket_spots_by_hour,
     _drop_future_spots,
     _energy_is_quarter_hourly,
+    _group_spot_quarters_by_hour,
     _mean_of_month,
     _spp_weighted_month_mean,
 )
@@ -58,8 +62,9 @@ from .synergrid import (
     fetch_spp_weights,
 )
 
+from collections.abc import Mapping
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -94,6 +99,22 @@ _SPOT_SANE_MIN = -1.0
 _SPOT_SANE_MAX = 5.0
 
 
+_CacheValue = TypeVar("_CacheValue")
+
+
+def _drop_hours_before(cache: dict[datetime, _CacheValue], cutoff: datetime) -> None:
+    """Delete every hour older than ``cutoff`` from ``cache``, in place.
+
+    In place rather than by rebuilding and rebinding: _ensure_historical_spots
+    merges each fetched chunk into the attribute and re-resolves it after every
+    await, so a prune landing between two chunks (the tick calls it from
+    _save_persistent while a backfill is mid-fetch) would discard everything
+    the earlier chunks had already merged into the old dict.
+    """
+    for stale_hour in [h for h in cache if h < cutoff]:
+        del cache[stale_hour]
+
+
 def _spot_is_sane(value: float) -> bool:
     """Whether a cached day-ahead price could have been published.
 
@@ -123,6 +144,7 @@ class _SpotsMixin:
     entry: ConfigEntry
     _session: aiohttp.ClientSession
     _historical_spots: dict[datetime, float]
+    _historical_spot_quarters: dict[datetime, list[float]]
     _spot_cache: dict[datetime, float]
     _spot_cache_day: date | None
     _spot_cache_includes_tomorrow: bool
@@ -147,6 +169,25 @@ class _SpotsMixin:
         # which lives in coordinator.py and is imported from there by sensor,
         # binary_sensor and diagnostics -- a cycle.
         hass: HomeAssistant
+
+    def _cached_spot_hours(self, day_start_utc: datetime, want_quarters: bool) -> int:
+        """How many of a local day's 24 UTC hours the replay can actually price.
+
+        A floored feed-in formula replays off the hour's individual quarters,
+        so for that entry a day is covered only once the quarter cache holds
+        it: the hourly mean alone cannot say what the four quarters were. The
+        quarter cache is only ever written beside the hourly one, so this is a
+        subset test, never a wider one.
+
+        Both the pre-fetch scan and the post-fetch recount call this. If the
+        two ever measured different things a day could read short before a
+        fetch and complete after it, and it would be re-fetched every tick
+        forever.
+        """
+        cache: Mapping[datetime, object] = (
+            self._historical_spot_quarters if want_quarters else self._historical_spots
+        )
+        return sum(1 for h in range(24) if day_start_utc + timedelta(hours=h) in cache)
 
     async def _ensure_historical_spots(
         self, start: date, end: date, api_key: str | None = None
@@ -178,6 +219,13 @@ class _SpotsMixin:
         api_key = api_key or self.entry.data.get(CONF_API_KEY)
         if not api_key:
             return
+        snap = self._snapshot
+        # Both decisions are read here, before the day walk, because the walk
+        # measures coverage against whichever cache this entry replays from.
+        quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
+        want_quarters = snap is not None and _injection_needs_spot_quarters(
+            snap, self.entry
+        )
         now = dt_util.utcnow()
         # Days older than this are stable enough that a short fetch means
         # a genuine source gap, not data still being published; only those
@@ -196,11 +244,7 @@ class _SpotsMixin:
                 present = 24
             else:
                 day_start_utc = dt_util.start_of_local_day(cur).astimezone(UTC)
-                present = sum(
-                    1
-                    for h in range(24)
-                    if (day_start_utc + timedelta(hours=h)) in self._historical_spots
-                )
+                present = self._cached_spot_hours(day_start_utc, want_quarters)
                 # >= 20 is the same threshold the fetch decision below uses, so
                 # a day recorded here is one that would never be re-fetched
                 # anyway; caching it just skips the scan next tick.
@@ -224,14 +268,13 @@ class _SpotsMixin:
         if not missing_ranges:
             return
         client = EntsoeClient(api_key, self._session)
-        # Ask for the same grid the contract settles on, exactly as the live
-        # fetch does. ENTSO-E publishes Belgium as two products, a PT60M and a
-        # PT15M series for the same delivery period, and parse_day_ahead_xml
-        # deliberately refuses to blend them: omitting the flag here silently
-        # took the hourly product, so a quarter-hourly contract's whole replay
-        # was priced off a different auction than its live bill.
-        snap = self._snapshot
-        quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
+        # ``quarter_hourly`` asks for the same grid the contract settles on,
+        # exactly as the live fetch does. ENTSO-E publishes Belgium as two
+        # products, a PT60M and a PT15M series for the same delivery period,
+        # and parse_day_ahead_xml deliberately refuses to blend them: omitting
+        # the flag here silently took the hourly product, so a quarter-hourly
+        # contract's whole replay was priced off a different auction than its
+        # live bill.
         for r_start, r_end in missing_ranges:
             chunk_start = r_start
             while chunk_start < r_end:
@@ -274,19 +317,22 @@ class _SpotsMixin:
                     continue
                 # Stored by clock hour whichever grid came back: the
                 # recorder only keeps hourly consumption, so an hour is the
-                # finest thing the replay can ever price.
+                # finest thing the replay can ever price. An entry whose
+                # feed-in formula is floored keeps the hour's own slots too,
+                # because that formula is not linear and its mean does not
+                # price it.
                 self._historical_spots.update(_bucket_spots_by_hour(prices))
+                if want_quarters:
+                    self._historical_spot_quarters.update(
+                        _group_spot_quarters_by_hour(prices)
+                    )
                 # Mark stable past days that are STILL short after this
                 # fetch so the next ticks skip them until the TTL expires;
                 # clear the marker for any day that is now complete.
                 day = chunk_start
                 while day < chunk_end:
                     ds_utc = dt_util.start_of_local_day(day).astimezone(UTC)
-                    got = sum(
-                        1
-                        for h in range(24)
-                        if (ds_utc + timedelta(hours=h)) in self._historical_spots
-                    )
+                    got = self._cached_spot_hours(ds_utc, want_quarters)
                     if got < 20 and day < stable_before:
                         self._short_spot_days[day] = now
                     else:
@@ -478,14 +524,11 @@ class _SpotsMixin:
         # reallocation on each of the other 364 days.
         if min(self._historical_spots) >= keep_after:
             return
-        # Mutate in place rather than rebinding. _ensure_historical_spots
-        # merges each fetched chunk into this attribute and re-resolves it
-        # after every await, so a prune landing between two chunks (the tick
-        # calls it from _save_persistent while a backfill is mid-fetch) would
-        # rebind the attribute and silently discard everything the earlier
-        # chunks had already merged into the old dict.
-        for stale_hour in [h for h in self._historical_spots if h < keep_after]:
-            del self._historical_spots[stale_hour]
+        _drop_hours_before(self._historical_spots, keep_after)
+        # The quarter cache is only ever written beside the hourly one, so it
+        # holds no hour the hourly cache does not and the two early returns
+        # above answer for it too.
+        _drop_hours_before(self._historical_spot_quarters, keep_after)
         # Drop prior year days from the completeness set alongside their spots
         # so it doesn't grow without bound across years.
         self._complete_spot_days = {

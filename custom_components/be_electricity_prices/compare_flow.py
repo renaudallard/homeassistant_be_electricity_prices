@@ -1123,7 +1123,13 @@ class _CompareStepsMixin(OptionsFlow):
                 borrowed = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
                 if borrowed:
                     saved = coord._historical_spots
+                    # The quarter cache is swapped with it, or the throwaway
+                    # fetch would leave a year of slots behind on a live
+                    # coordinator whose hourly cache is back to empty, and the
+                    # next tick would persist them.
+                    saved_quarters = coord._historical_spot_quarters
                     coord._historical_spots = {}
+                    coord._historical_spot_quarters = {}
                     try:
                         await coord._ensure_historical_spots(
                             jan1, today_local, borrowed
@@ -1131,6 +1137,7 @@ class _CompareStepsMixin(OptionsFlow):
                         hist_spots = coord._historical_spots
                     finally:
                         coord._historical_spots = saved
+                        coord._historical_spot_quarters = saved_quarters
             try:
                 current_ytd_val = await _compute_current_year_cost(
                     self.hass,

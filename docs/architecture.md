@@ -80,7 +80,7 @@ relative to that package directory.
 | `ytd_cost.py` | The year-to-date cost walk: per-month fees, the hourly and per-day energy paths, and the spot-injection credit. |
 | `projected_cost.py` | The full-calendar-year projection behind `projected_year_cost`: one pass at today's tariffs over the entry's own metered yearly volume, plus the basis strings that say what was measured and what was assumed. |
 | `energy_meters.py` | Reads the configured kWh entities out of the recorder and the live state machine, and fans register pairs into band slots. |
-| `spot_stats.py` | Spot aggregates: the current billing slot's spot, monthly means, and the SPP-weighted variants. |
+| `spot_stats.py` | Spot aggregates: the current billing slot's spot, monthly means, the SPP-weighted variants, and the per-hour grouping of a quarter-hourly curve. |
 | `pricing.py` | Pure pricing engine. `compute_breakdown` fuses a `SupplierSnapshot`, the chosen `DsoOverlay`, the taxes, meter type, DSO tariff mode, and (for dynamic) the slot spot into a `PriceBreakdown`. Also the slot-grid helpers (`slot_start`, `slot_delta`, `slots_per_hour`), `is_offpeak`, and `tou_slot`. No I/O, no HA imports where avoidable, so it is trivially unit-testable. |
 | `config_flow.py` | The config wizard's step handlers (supplier and region, contract, DSO sub-area, meter, DSO billing mode, ENTSO-E key, capacity, connection power, solar, energy meters) and the options flow. |
 | `flow_schemas.py` | The voluptuous schema builders and validators each step calls, including the ENTSO-E key check against the live endpoint. |
@@ -237,9 +237,9 @@ Numbered walkthrough:
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
    tuple (`coordinator.py:881`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
-3. `async_load_persistent` (`coordinator.py:377`) loads the last snapshot from `.storage` so an
+3. `async_load_persistent` (`coordinator.py:383`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
-4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:494`). It runs
+4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:522`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:177`),

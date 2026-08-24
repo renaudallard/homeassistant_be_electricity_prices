@@ -33,10 +33,12 @@ varies at all."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.util import dt as dt_util
+from statistics import fmean
 
 from .const import (
     CONF_SOLAR_REGIME,
@@ -54,6 +56,7 @@ from .providers.base import (
     TimeOfUseRates,
 )
 from .spot_stats import (
+    _energy_is_quarter_hourly,
     _now_slot_spot,
 )
 
@@ -211,6 +214,42 @@ def _injection_is_spot_formula(inj: InjectionRates, energy: EnergyRates) -> bool
     )
 
 
+def _injection_needs_spot_quarters(
+    snapshot: SupplierSnapshot, entry: ConfigEntry
+) -> bool:
+    """True when replaying this entry's feed-in credit needs the hour's own
+    quarter spots rather than their mean.
+
+    Every pricing formula in the package is linear in the spot, and the mean
+    of an hour's quarters prices a linear formula exactly. ``floor_at_zero``
+    is the exception: ``max(0, factor * spot + base)`` is convex, so the mean
+    of the floored quarters is at least the floored mean and an hour whose
+    spot crossed the floor inside it is worth more than flooring its mean
+    says. The live array already floors per slot, which is what the contract
+    bills, so without the quarters the year-to-date credit and the backfilled
+    rows sit below the injection_price sensor the user is watching, always in
+    the same direction.
+
+    Only an expert custom entry reaches it: nothing else sets
+    ``floor_at_zero``, and the 15-minute grid needs ``quarter_hourly`` energy.
+    Quarter-hourly energy is always DynamicRates, so the formula branch is the
+    one that fires and neither the TOU triplet nor a month mean can be in
+    play. Callers do not have to re-ask those questions.
+
+    Deliberately NOT folded into ``_injection_needs_spot``, which means "this
+    injection carries a per-hour index" and is read that way elsewhere.
+    """
+    if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
+        return False
+    inj = snapshot.injection
+    return (
+        inj is not None
+        and inj.floor_at_zero
+        and _energy_is_quarter_hourly(snapshot.energy)
+        and _injection_is_spot_formula(inj, snapshot.energy)
+    )
+
+
 def _injection_price_for_slot(
     inj: InjectionRates,
     energy: EnergyRates,
@@ -293,6 +332,7 @@ def _historical_injection_rate(
     injection: InjectionRates | None,
     spot: float | None = None,
     *,
+    quarters: Sequence[float] | None = None,
     energy: EnergyRates | None = None,
     when: datetime | None = None,
 ) -> float | None:
@@ -309,9 +349,31 @@ def _historical_injection_rate(
     injection-price sensor used the spot formula, so the two user-facing
     numbers diverged. Static contracts have no spot, so they fall through
     to ``current``.
+
+    ``quarters`` are the hour's own slot spots and win over ``spot`` when
+    given. Pass them only for an hour that is priced off its own spot, never
+    for one billed at a month mean, and only when
+    ``_injection_needs_spot_quarters`` holds: for every other entry they are
+    absent and this function answers exactly what it always did.
     """
     if injection is None:
         return None
+    if quarters:
+        # The hour's rate is the mean of its quarters' rates, not the rate of
+        # their mean. The two agree for a formula that is linear in the spot
+        # and part company for a floored one, which is convex: flooring once,
+        # at the hour mean, credits nothing for an hour whose spot crossed the
+        # floor inside it. Recursing keeps one description of the priority
+        # chain above.
+        rates = [
+            rate
+            for rate in (
+                _historical_injection_rate(injection, q, energy=energy, when=when)
+                for q in quarters
+            )
+            if rate is not None
+        ]
+        return fmean(rates) if rates else None
     if energy is not None and when is not None:
         tou_rate = _tou_injection_rate(injection, energy, when)
         if tou_rate is not None:

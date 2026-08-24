@@ -77,6 +77,35 @@ def _energy_is_quarter_hourly(energy: EnergyRates) -> bool:
     return isinstance(energy, DynamicRates) and energy.quarter_hourly
 
 
+def _group_spot_quarters_by_hour(
+    spots: dict[datetime, float],
+) -> dict[datetime, list[float]]:
+    """Group a fetched spot curve by clock hour, keeping each slot's own price.
+
+    The hour is the key because that is what every reader asks for: the
+    recorder keeps hourly consumption, so a replay can only ever ask what a
+    whole hour cost. Keying the slots by hour rather than by slot is also what
+    makes the quarter cache affordable to persist, since the ISO timestamp
+    costs more than the four numbers it carries.
+
+    An hour holds between one and four values. ENTSO-E answers a PT15M request
+    with the PT60M series where no 15-minute one was published (``api.py:159``),
+    a week-chunk can stop mid-hour, and the carry-forward rule can leave a slot
+    unspecified. Nothing here requires four: the mean of whatever the hour
+    holds is still the best answer about that hour, and a single value
+    degenerates to the plain hourly price.
+
+    Iteration follows ``spots`` rather than sorting it, so the grouped means
+    are bit-identical to the ones this package has always computed.
+    """
+    out: dict[datetime, list[float]] = {}
+    for when, value in spots.items():
+        out.setdefault(when.replace(minute=0, second=0, microsecond=0), []).append(
+            value
+        )
+    return out
+
+
 def _bucket_spots_by_hour(spots: dict[datetime, float]) -> dict[datetime, float]:
     """Collapse a fetched spot curve onto one price per clock hour, by mean.
 
@@ -92,23 +121,18 @@ def _bucket_spots_by_hour(spots: dict[datetime, float]) -> dict[datetime, float]
     its 20-of-24 completeness test, its persisted form and every reader in the
     year-to-date walk and the backfill already assume.
 
-    One case is an approximation rather than an identity. ``floor_at_zero``
-    makes the injection rate convex, so the mean of the floored quarters is at
-    least the floored mean and a replay that floors once, at the hour, credits
-    slightly less than the live per-slot array whenever the spot crosses the
-    floor inside the hour. It is reachable only on a custom expert entry that
-    both enables quarter-hourly billing and floors its feed-in formula, and
-    recovering it exactly would mean persisting four times the cache for that
-    one permutation. Measured on quarters of -0,060 / -0,020 / 0,010 / 0,050
-    with factor 1 and no base, a 3 kWh hour credits 0,0450 EUR live against
-    0,0000 here.
+    One formula is not linear. ``floor_at_zero`` makes the injection rate
+    convex, so the mean of the floored quarters is at least the floored mean,
+    and flooring once at the hour credits less than the live per-slot array
+    whenever the spot crosses the floor inside the hour. That entry keeps the
+    hour's own quarters alongside this mean, in
+    ``coordinator._historical_spot_quarters``, and replays the credit off them;
+    see :func:`~.injection._injection_needs_spot_quarters`.
     """
-    out: dict[datetime, list[float]] = {}
-    for when, value in spots.items():
-        out.setdefault(when.replace(minute=0, second=0, microsecond=0), []).append(
-            value
-        )
-    return {hour: fmean(values) for hour, values in out.items()}
+    return {
+        hour: fmean(values)
+        for hour, values in _group_spot_quarters_by_hour(spots).items()
+    }
 
 
 # A spot cache grouped by local (year, month) so several months' means can be

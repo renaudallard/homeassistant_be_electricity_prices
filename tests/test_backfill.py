@@ -367,6 +367,7 @@ async def _make_coordinator(entry: MockConfigEntry) -> Any:
         _snapshot=_fixed_snapshot(),
         _session=None,
         _historical_spots={},
+        _historical_spot_quarters={},
         _ensure_historical_spots=AsyncMock(),
     )
 
@@ -820,7 +821,7 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
             new=_fake_import,
         ),
     ):
-        await bf._backfill_cost_sensor(hass, entry, coord, [hour10, hour11], spots)  # type: ignore[arg-type]
+        await bf._backfill_cost_sensor(hass, entry, coord, [hour10, hour11], spots, {})  # type: ignore[arg-type]
 
     cost_rows = next(rows for sid, rows in captured if sid == ids["current_year_cost"])
     # 1 kWh injected, no consumption, no static fees on this snapshot: the
@@ -889,7 +890,7 @@ async def test_cost_backfill_bills_grid_and_taxes_for_an_unpriced_hour(
         ),
     ):
         # Empty spot cache: the energy leg is the only unknown part.
-        await bf._backfill_cost_sensor(hass, entry, coord, [hour], {})  # type: ignore[arg-type]
+        await bf._backfill_cost_sensor(hass, entry, coord, [hour], {}, {})  # type: ignore[arg-type]
 
     cost_rows = next(rows for sid, rows in captured if sid == ids["current_year_cost"])
     # 10 kWh under the ORES overlay make_snapshot builds: distribution 0.10 +
@@ -966,6 +967,7 @@ async def test_ensure_dynamic_spots_fetches_for_spot_indexed_injection() -> None
     coordinator = SimpleNamespace(
         _snapshot=snap,
         _historical_spots=cache,
+        _historical_spot_quarters={},
         _ensure_historical_spots=AsyncMock(),
     )
     entry = MockConfigEntry(
@@ -984,7 +986,7 @@ async def test_ensure_dynamic_spots_fetches_for_spot_indexed_injection() -> None
     # 2026-04-01 01:00 in Brussels (CEST). The spot fetch must use the
     # LOCAL date (2026-04-01) so the final UTC hour is covered, not the
     # UTC date (2026-03-31) which would leave it unfetched.
-    spots = await bf._ensure_dynamic_spots(
+    spots, _ = await bf._ensure_dynamic_spots(
         coordinator,  # type: ignore[arg-type]
         entry,
         datetime(2026, 1, 1, tzinfo=UTC),
@@ -1003,9 +1005,10 @@ async def test_ensure_dynamic_spots_empty_for_static_non_spot_contract() -> None
     coordinator = SimpleNamespace(
         _snapshot=_fixed_snapshot(),
         _historical_spots={},
+        _historical_spot_quarters={},
         _ensure_historical_spots=AsyncMock(),
     )
-    spots = await bf._ensure_dynamic_spots(
+    spots, _ = await bf._ensure_dynamic_spots(
         coordinator,  # type: ignore[arg-type]
         _entry(),
         datetime(2026, 1, 1, tzinfo=UTC),
@@ -1079,6 +1082,7 @@ async def test_ensure_dynamic_spots_fetches_for_variable_cohort() -> None:
         _session=MagicMock(),
         _snapshot=snap,
         _historical_spots=cache,
+        _historical_spot_quarters={},
         _ensure_historical_spots=AsyncMock(),
     )
     entry = MockConfigEntry(
@@ -1098,7 +1102,7 @@ async def test_ensure_dynamic_spots_fetches_for_variable_cohort() -> None:
         return SpotMonthlyRates(factor=1.05, base=0.01)
 
     with patch.object(bf, "_cohort_energy_leg", new=_fake_cohort):
-        spots = await bf._ensure_dynamic_spots(
+        spots, _ = await bf._ensure_dynamic_spots(
             coordinator,  # type: ignore[arg-type]
             entry,
             datetime(2026, 1, 1, tzinfo=UTC),
@@ -1120,6 +1124,7 @@ async def test_ensure_dynamic_spots_empty_for_variable_without_start_date() -> N
         _session=MagicMock(),
         _snapshot=snap,
         _historical_spots={},
+        _historical_spot_quarters={},
         _ensure_historical_spots=AsyncMock(),
     )
     entry = MockConfigEntry(
@@ -1133,7 +1138,7 @@ async def test_ensure_dynamic_spots_empty_for_variable_without_start_date() -> N
         },
         title="Eneco Flex no start date",
     )
-    spots = await bf._ensure_dynamic_spots(
+    spots, _ = await bf._ensure_dynamic_spots(
         coordinator,  # type: ignore[arg-type]
         entry,
         datetime(2026, 1, 1, tzinfo=UTC),
@@ -1253,6 +1258,7 @@ def test_backfill_credits_the_card_indicative_for_an_spp_card_without_a_profile(
         snap,
         spot=0.20,  # the ENERGY leg's flat month mean - the wrong index here
         spots={utc_hour: 0.20},
+        quarters={},
         utc_hour=utc_hour,
         local=dt_util.as_local(utc_hour),
         spp_weights=None,  # no Synergrid profile
@@ -1261,3 +1267,47 @@ def test_backfill_credits_the_card_indicative_for_an_spp_card_without_a_profile(
         today=date(2026, 6, 20),
     )
     assert rate == pytest.approx(0.03)
+
+
+async def test_backfill_injection_replays_floored_quarters() -> None:
+    """The imported injection_price row must meet the live series at the seam.
+
+    HA compiles the live hourly statistic as the time-weighted mean of the
+    sensor state, which on a quarter-hourly contract is the mean of the four
+    already floored slot rates. Pricing the backfilled hour off the mean spot
+    instead puts a step in the series exactly where the backfill hands over.
+    """
+    from custom_components.be_electricity_prices.backfill import (
+        _injection_rate_for_hour,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DynamicRates,
+        InjectionRates,
+    )
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True),
+        injection=InjectionRates(
+            factor=1.0, base=0.0, current=None, floor_at_zero=True
+        ),
+    )
+    utc_hour = datetime(2026, 6, 15, 10, tzinfo=UTC)
+    quarters = [-0.060, -0.020, 0.010, 0.050]
+
+    def _rate(cached: dict[datetime, list[float]]) -> float | None:
+        return _injection_rate_for_hour(
+            snap,
+            spot=sum(quarters) / 4,
+            spots={utc_hour: sum(quarters) / 4},
+            quarters=cached,
+            utc_hour=utc_hour,
+            local=dt_util.as_local(utc_hour),
+            spp_weights=None,
+            month_spp_cache={},
+            hourly_injection=False,
+            today=date(2026, 6, 20),
+        )
+
+    assert _rate({utc_hour: quarters}) == pytest.approx(0.015)
+    assert _rate({}) == 0.0

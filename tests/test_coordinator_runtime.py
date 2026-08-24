@@ -60,6 +60,7 @@ from custom_components.be_electricity_prices.snapshot_store import (
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
+    InjectionRates,
     SupplierSnapshot,
 )
 from tests import make_entry, make_snapshot, make_stub_extractor
@@ -222,9 +223,11 @@ async def test_ensure_historical_spots_stores_quarters_by_hour(
     The recorder only keeps hourly consumption, so an hour is the finest thing
     a replay can price, and every reader of this cache (the year-to-date walk,
     the backfill, the 20-of-24 completeness test, the persisted form) assumes
-    one key per hour. The mean is exact rather than approximate: the energy
-    formula is linear in the spot, so pricing the hour's mean equals replaying
-    each quarter against a quarter of that hour's kWh."""
+    one key per hour. The mean is exact for every formula that is linear in
+    the spot, so pricing the hour's mean equals replaying each quarter against
+    a quarter of that hour's kWh. A floored feed-in formula is the one that is
+    not, and it keeps a sibling cache; this contract has no floor, so it must
+    grow nothing."""
 
     freezer.move_to("2026-01-10 12:00:00+01:00")
     entry = MockConfigEntry(
@@ -264,6 +267,125 @@ async def test_ensure_historical_spots_stores_quarters_by_hour(
 
     assert [k for k in coord._historical_spots if k.minute or k.second] == []
     assert coord._historical_spots[hour] == pytest.approx(0.20)
+    assert coord._historical_spot_quarters == {}
+
+
+def _floored_quarter_entry() -> MockConfigEntry:
+    """An expert custom entry that bills per quarter-hour and floors its
+    feed-in formula, the one shape whose hour is not priced by its mean."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "custom",
+            "contract": "custom_dynamic",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "dynamic",
+            "solar_regime": "injection",
+            "api_key": "test-token",
+        },
+    )
+
+
+def _floored_quarter_snapshot() -> Any:
+    return make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True),
+        injection=InjectionRates(
+            factor=1.0, base=0.0, current=None, floor_at_zero=True
+        ),
+    )
+
+
+async def test_ensure_historical_spots_caches_quarters_for_a_floored_entry(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """max() is convex, so the hour mean does not price a floored feed-in
+    formula: the hour is worth the mean of its quarters' floored rates, which
+    only the quarters themselves can answer.
+
+    Kept beside the hourly mean rather than instead of it, so every other
+    reader of the cache is untouched."""
+    freezer.move_to("2026-01-10 12:00:00+01:00")
+    entry = _floored_quarter_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = _floored_quarter_snapshot()
+    hour = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    ramp = {
+        hour: 0.05,
+        hour + timedelta(minutes=15): 0.15,
+        hour + timedelta(minutes=30): 0.25,
+        hour + timedelta(minutes=45): 0.35,
+    }
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        return dict(ramp)
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
+    ) as cls:
+        cls.return_value.fetch_day_ahead = _fake_fetch
+        await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
+
+    assert coord._historical_spot_quarters[hour] == [0.05, 0.15, 0.25, 0.35]
+    # The hourly mean is still there and still the mean of those slots.
+    assert coord._historical_spots[hour] == pytest.approx(0.20)
+
+
+async def test_a_complete_hourly_day_is_refetched_when_its_quarters_are_missing(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The upgrade path. An affected entry already holds 24 hourly spots a
+    day, and a day holding 20 of 24 is never re-fetched, so without measuring
+    coverage against the cache the entry actually replays from, the quarters
+    would stay empty for the rest of the year."""
+    freezer.move_to("2026-06-29 12:00:00+02:00")
+    entry = _floored_quarter_entry()
+    entry.add_to_hass(hass)
+    day_start = datetime(2025, 12, 31, 23, 0, tzinfo=UTC)
+    seeded = {day_start + timedelta(hours=h): 0.05 for h in range(24)}
+
+    async def _fetches(snapshot: Any) -> int:
+        coord = BePricesCoordinator(hass, entry)
+        coord._snapshot = snapshot
+        coord._historical_spots = dict(seeded)
+        calls = 0
+
+        async def _fake_fetch(
+            start: datetime, end: datetime, *, quarter_hourly: bool = False
+        ) -> dict[datetime, float]:
+            nonlocal calls
+            calls += 1
+            return {
+                start + timedelta(hours=h, minutes=15 * q): 0.05
+                for h in range(24)
+                for q in range(4)
+            }
+
+        with patch(
+            "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
+        ) as cls:
+            cls.return_value.fetch_day_ahead = _fake_fetch
+            await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
+            after_fill = calls
+            # Now that the quarters are cached the day is covered again.
+            await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
+            assert calls == after_fill
+        return calls
+
+    assert await _fetches(_floored_quarter_snapshot()) == 1
+    # An entry that replays off the hourly mean sees the seeded day as
+    # complete and fetches nothing, exactly as it always did.
+    assert (
+        await _fetches(
+            make_snapshot(
+                energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True)
+            )
+        )
+        == 0
+    )
 
 
 async def test_ensure_historical_spots_skips_permanently_short_day(
@@ -782,12 +904,20 @@ async def test_pruning_spots_keeps_the_same_dict_object(
     before = coord._historical_spots
     before[datetime(2025, 6, 1, 10, tzinfo=UTC)] = 0.05  # prior year, prunable
     before[datetime(2026, 1, 1, 10, tzinfo=UTC)] = 0.06  # current year, kept
+    before_quarters = coord._historical_spot_quarters
+    before_quarters[datetime(2025, 6, 1, 10, tzinfo=UTC)] = [0.05] * 4
+    before_quarters[datetime(2026, 1, 1, 10, tzinfo=UTC)] = [0.06] * 4
 
     coord._prune_historical_spots()
 
     assert coord._historical_spots is before, "prune rebound the dict"
     assert datetime(2025, 6, 1, 10, tzinfo=UTC) not in before
     assert before[datetime(2026, 1, 1, 10, tzinfo=UTC)] == 0.06
+    # The sibling cache is pruned the same way, and in place for the same
+    # reason: a fetch mid-flight holds a reference to it too.
+    assert coord._historical_spot_quarters is before_quarters
+    assert datetime(2025, 6, 1, 10, tzinfo=UTC) not in before_quarters
+    assert before_quarters[datetime(2026, 1, 1, 10, tzinfo=UTC)] == [0.06] * 4
 
 
 async def test_probe_match_through_the_shared_cache_refreshes_fetched_at(
@@ -2318,6 +2448,9 @@ async def test_force_refresh_clears_the_price_history_on_request(
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     coord._historical_spots = {datetime(2026, 3, 1, 10, 0, tzinfo=UTC): 62.5}
+    coord._historical_spot_quarters = {
+        datetime(2026, 3, 1, 10, 0, tzinfo=UTC): [62.5] * 4
+    }
     coord._complete_spot_days = {date(2026, 3, 1)}
     coord._short_spot_days = {date(2026, 2, 2): datetime(2026, 2, 2, tzinfo=UTC)}
     coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
@@ -2325,6 +2458,9 @@ async def test_force_refresh_clears_the_price_history_on_request(
     await coord.async_force_refresh(clear_history=True)
 
     assert coord._historical_spots == {}
+    # Both caches come off the same fetch, so the repair has to take both or
+    # it leaves half the bad hour behind.
+    assert coord._historical_spot_quarters == {}
     assert coord._complete_spot_days == set()
     assert coord._short_spot_days == {}
 
@@ -2381,6 +2517,90 @@ async def test_load_persistent_drops_an_impossible_cached_spot(
         datetime(2026, 1, 1, 0, 0, tzinfo=UTC): 0.123,
         datetime(2026, 1, 1, 1, 0, tzinfo=UTC): -0.04,
     }
+
+
+async def test_load_persistent_drops_an_hour_whose_quarter_is_impossible(
+    hass: HomeAssistant,
+) -> None:
+    """The whole hour goes, not the offending slot.
+
+    A short quarter list would silently re-weight the hour's mean, and the
+    hourly value has to go with it: leaving it behind keeps the day at 24 of
+    24, and a day that reads complete is never re-fetched, so the hour would
+    replay off a value the market never published for the life of the entry.
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "custom",
+            "contract": "custom_dynamic",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "dynamic",
+            "solar_regime": "injection",
+            "api_key": "k",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    good = "2026-01-01T00:00:00+00:00"
+    bad = "2026-01-01T01:00:00+00:00"
+    payload: dict[str, object] = {
+        "entry_supplier": "custom",
+        "entry_contract": "custom_dynamic",
+        "entry_region": "flanders",
+        "historical_spots": {good: 0.1, bad: 0.1},
+        "historical_spot_quarters": {
+            # Negative slots are routine on the Belgian day-ahead and survive.
+            good: [-0.06, -0.02, 0.01, 0.05],
+            # EUR/MWh left unscaled among EUR/kWh neighbours.
+            bad: [0.1, 0.1, 62.5, 0.1],
+        },
+    }
+
+    async def _fake_load() -> dict[str, object]:
+        return payload
+
+    with patch.object(coord._store, "async_load", new=_fake_load):
+        await coord.async_load_persistent()
+
+    when = datetime(2026, 1, 1, 0, 0, tzinfo=UTC)
+    assert coord._historical_spot_quarters == {when: [-0.06, -0.02, 0.01, 0.05]}
+    assert coord._historical_spots == {when: 0.1}
+
+
+async def test_save_persistent_round_trips_the_quarter_cache(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A restart must not cost the entry its one-time year of 15-minute slots."""
+    freezer.move_to("2026-06-29 12:00:00+02:00")
+    entry = _floored_quarter_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hour = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    coord._historical_spots = {hour: 0.20}
+    coord._historical_spot_quarters = {hour: [0.05, 0.15, 0.25, 0.35]}
+    saved: dict[str, object] = {}
+
+    async def _fake_save(payload: dict[str, object]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+
+    assert saved["historical_spot_quarters"] == {
+        "2026-01-01T10:00:00+00:00": [0.05, 0.15, 0.25, 0.35]
+    }
+
+    restored = BePricesCoordinator(hass, entry)
+
+    async def _fake_load() -> dict[str, object]:
+        return saved
+
+    with patch.object(restored._store, "async_load", new=_fake_load):
+        await restored.async_load_persistent()
+
+    assert restored._historical_spot_quarters == {hour: [0.05, 0.15, 0.25, 0.35]}
 
 
 async def test_load_persistent_keeps_historical_spots_on_tuple_match(

@@ -534,7 +534,7 @@ EnergyVision 3 jaar vast / 1 an fixe) must
 emit only the realized monthly `current`, never an hourly `factor*spot+base`,
 because the indicative is the actual credit. The guard that keeps shape (b)/(c)
 from swallowing these cards is the `inj.current is None` clause in both
-`_injection_needs_spot` (`injection.py:91`) and `_compute_injection_price`
+`_injection_needs_spot` (`injection.py:94`) and `_compute_injection_price`
 (`injection.py:169`): when a card prints a monthly `current`, the spot branch
 is skipped and the realized rate is used, keeping the live sensor consistent with
 the YTD credit for the same hour (`injection.py:167-170`). A latent mis-price
@@ -549,7 +549,7 @@ context):
 - `compensation`: per-hour `(cons - inj) * all_in`, netting injection against
   consumption (per band when bi) and clamping at zero.
 - `injection`: per-hour `cons * all_in - inj * inj_rate`, where `inj_rate` comes
-  from `_historical_injection_rate` (`injection.py:292-323`).
+  from `_historical_injection_rate` (`injection.py:331-385`).
 
 Shape (c) has a dedicated YTD helper `_ytd_spot_injection_credit`
 (`ytd_cost.py:444`) that credits a static-energy contract whose injection is a

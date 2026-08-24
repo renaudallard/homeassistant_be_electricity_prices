@@ -281,6 +281,7 @@ async def _ytd_hourly_energy(
     contract: str | None = None,
     meter: MeterType | None = None,
     historical_spots: dict[datetime, float] | None = None,
+    spot_quarters: dict[datetime, list[float]] | None = None,
     monthly_mean: bool = False,
     spp_weights: SppWeights | None = None,
     breakdown: dict[str, float] | None = None,
@@ -380,6 +381,15 @@ async def _ytd_hourly_energy(
     # monthly-mean path, which it reaches only via a signing-cohort re-price of
     # the ENERGY leg. Same gate the live tick applies before baking.
     hourly_injection = monthly_mean and _injection_hourly_on_cohort(snapshot, entry)
+    # The hour's own 15-minute spots, for the one feed-in formula that is not
+    # linear in the spot and so is not priced by their mean (see
+    # _injection_needs_spot_quarters). Empty for every other entry, which is
+    # what makes reading them a no-op there. A credit that settles on a month
+    # mean is deliberately excluded: a mean of means says nothing about what
+    # one hour's quarters did.
+    quarters: dict[datetime, list[float]] = (
+        spot_quarters or {} if hourly_injection or not monthly_mean else {}
+    )
 
     energy_cost = 0.0
     # How much of the window actually got an energy price. A YTD that is low
@@ -456,7 +466,11 @@ async def _ytd_hourly_energy(
                 ),
             )
             inj_rate = _historical_injection_rate(
-                snap_h.injection, inj_spot, energy=snap_h.energy, when=local
+                snap_h.injection,
+                inj_spot,
+                quarters=quarters.get(utc_hour),
+                energy=snap_h.energy,
+                when=local,
             )
             if inj_rate is not None:
                 d_cost -= kwh_inj * inj_rate
@@ -533,6 +547,10 @@ async def _ytd_spot_injection_credit(
         # Route through the shared helper so the floor_at_zero clamp the live
         # scalar and array apply is honoured here too, rather than summing the
         # raw factor*spot+base and diverging on a negative-spot hour.
+        #
+        # No quarters here, and none can exist: this term serves a card whose
+        # ENERGY leg is static, and only DynamicRates carries quarter_hourly,
+        # so the hour's spot IS the hour's price.
         credit += kwh * (_historical_injection_rate(inj, spot) or 0.0)
     return credit
 
@@ -547,6 +565,7 @@ async def _compute_current_year_cost(
     contract_override: str | None = None,
     meter_override: MeterType | None = None,
     historical_spots: dict[datetime, float] | None = None,
+    spot_quarters: dict[datetime, list[float]] | None = None,
     spp_weights: SppWeights | None = None,
     breakdown: dict[str, float] | None = None,
     billed_peak_kw: float = 0.0,
@@ -717,6 +736,7 @@ async def _compute_current_year_cost(
             meter=meter,
             breakdown=breakdown,
             historical_spots=historical_spots or {},
+            spot_quarters=spot_quarters,
         )
         if dyn_energy is None:
             return fees
@@ -737,6 +757,7 @@ async def _compute_current_year_cost(
             meter=meter,
             breakdown=breakdown,
             historical_spots=historical_spots or {},
+            spot_quarters=spot_quarters,
             monthly_mean=True,
             spp_weights=spp_weights,
         )

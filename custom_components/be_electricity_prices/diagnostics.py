@@ -176,6 +176,17 @@ async def async_get_config_entry_diagnostics(
         row["min"] = round(float(row["min"]), 5)
         row["max"] = round(float(row["max"]), 5)
 
+    # A sibling map rather than a column in the rows above, which are the same
+    # shape for every entry. Empty unless the entry's feed-in formula is
+    # floored, and then it answers the one question the hourly summary cannot:
+    # how far the one-time refill of the 15-minute slots has got, since an hour
+    # missing from here is replayed off its mean and under-credits.
+    quarter_hours: dict[str, int] = {}
+    for when in coordinator._historical_spot_quarters:
+        local = dt_util.as_local(when)
+        month_key = f"{local.year:04d}-{local.month:02d}"
+        quarter_hours[month_key] = quarter_hours.get(month_key, 0) + 1
+
     return {
         "entry": {
             "title": entry.title,
@@ -224,5 +235,6 @@ async def async_get_config_entry_diagnostics(
         # EUR/kWh. A month whose mean is far off the Belgian day-ahead average
         # is the cache, not the card.
         "spot_cache_by_month": spots,
+        "spot_quarter_hours_by_month": quarter_hours,
         "shared_failure": failed_marker,
     }

@@ -267,7 +267,7 @@ A malformed `price.amount` or `position` raises `EntsoeError`
 constructs a fresh `EntsoeClient` per call (`api.py:66`,
 `coordinator_spots.py:225`). Two paths use it:
 
-- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:297`). Windows the request
+- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:343`). Windows the request
   on the local (Europe/Brussels) day so a 00:00 to 02:00 local query does not
   drop yesterday's UTC tail; anchors both endpoints on local midnight converted
   to UTC so the fetched window matches the actual local-day hour count, which
@@ -279,7 +279,7 @@ constructs a fresh `EntsoeClient` per call (`api.py:66`,
   back with today only will retry tomorrow on the next hourly tick
   (`coordinator_spots.py:280`, `coordinator_spots.py:313`). `quarter_hourly` is derived from
   the loaded snapshot's energy kind (`coordinator_spots.py:301`).
-- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:151`).
+- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:192`).
   Ensures `self._historical_spots` covers every hour of the local days in a range,
   fetching only the missing spans. It considers a day "present" when at least 20
   of its 24 hours are cached (`coordinator_spots.py:206`), tolerating both the
@@ -316,8 +316,8 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
-| `backfill_range` (`backfill.py:931`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py:1090`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
+| `backfill_range` (`backfill.py:954`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
+| `backfill_if_missing` (`backfill.py:1121`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py:41`). Backfill is reached either automatically
@@ -362,7 +362,7 @@ intra-hour spread to record.
 
 Only the price (`mean`) sensors are pure functions of the tariff and spot. The
 `current_year_cost` sensor also needs how many kWh the household consumed and
-injected each past hour. `_backfill_cost_sensor` (`backfill.py:638`) recovers
+injected each past hour. `_backfill_cost_sensor` (`backfill.py:659`) recovers
 that from the recorder: it reads hourly kWh for every configured consumption
 sensor (`_hourly_consumption_sensors`) and injection sensor
 (`_hourly_injection_sensors`) through `_recorder_hourly_kwh`, binned into
@@ -387,7 +387,7 @@ hour is skipped, because `factor * spot + base` needs both terms
 month, or a non-static rate kind reaching the static path) skips just that hour
 rather than tearing the whole backfill down (`backfill.py:441`).
 
-The injection credit reuses `_historical_injection_rate` (`injection.py:292`,
+The injection credit reuses `_historical_injection_rate` (`injection.py:331`,
 called at `backfill.py:479`), the same coordinator helper the live YTD path uses, so a
 monthly-indexed, spot-indexed, or fixed injection rate is resolved identically in
 both places.
@@ -441,7 +441,7 @@ or 0.0`), a table `async_import_statistics` never writes. Left alone, the live
 chain restarts at zero directly after a backfilled row carrying the whole year, so
 the first compiled hour reports `change = 0 - <year to date>` and the Energy
 dashboard's Cost card shows roughly **minus one annual bill** for that day.
-`_seed_short_term_sum` (`backfill.py:880`) writes one short-term row at the last
+`_seed_short_term_sum` (`backfill.py:903`) writes one short-term row at the last
 backfilled instant to hand the platform its resume point. That row must carry
 `last_reset` as well as `state` and `sum`: the compiler reads all three, and a row
 missing `last_reset` looks like a fresh cycle against the sensor's Jan-1
@@ -451,7 +451,7 @@ effort and swallows recorder errors, since failing to seed is no worse than not
 trying. `tests/recorder/test_backfill_seam.py` pins all three states against a
 real recorder.
 
-`_backfill_cost_sensor` runs one running total per hour (`backfill.py:638`)
+`_backfill_cost_sensor` runs one running total per hour (`backfill.py:659`)
 rather than one end-of-day number, so the recorder draws a smoothly growing YTD
 line. Fixed fees (the supplier's yearly fixed fee, the energy-fund monthly charge
 times 12, the DSO data-management annual charge, and the Brussels Brugel OSP fee)

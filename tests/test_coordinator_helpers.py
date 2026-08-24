@@ -60,6 +60,7 @@ from custom_components.be_electricity_prices.const import (
     CONF_REGION,
     CONF_SUPPLIER,
     DOMAIN,
+    RESOLUTION_QUARTER,
 )
 from custom_components.be_electricity_prices.cohort import (
     _cohort_energy_from_archived,
@@ -85,6 +86,7 @@ from custom_components.be_electricity_prices.injection import (
     _injection_hourly_on_cohort,
     _injection_needs_month_spot,
     _injection_needs_spot,
+    _injection_needs_spot_quarters,
     _injection_price_for_slot,
     _injection_varies_intraday,
 )
@@ -547,6 +549,97 @@ def test_injection_price_for_slot_floors_negative() -> None:
     energy = DynamicRates(factor=0.1, base=0.0)
     # 0.9 * 0.10 - 0.5 = -0.41 -> clamped to 0.
     assert _injection_price_for_slot(inj, energy, 0.10, _slot(12)) == 0.0
+
+
+def test_historical_injection_rate_averages_floored_quarters() -> None:
+    """A floored feed-in formula is convex, so the hour is worth the mean of
+    its quarters' rates, not the rate of their mean.
+
+    The numbers are the ones measured when this was written down as a known
+    approximation: quarters of -0,060 / -0,020 / 0,010 / 0,050 mean -0,005, so
+    flooring once at the hour credits nothing, while the live per-slot array
+    credits the two positive quarters."""
+    inj = InjectionRates(factor=1.0, base=0.0, current=None, floor_at_zero=True)
+    quarters = [-0.060, -0.020, 0.010, 0.050]
+    assert _historical_injection_rate(inj, -0.005) == 0.0
+    assert _historical_injection_rate(inj, -0.005, quarters=quarters) == pytest.approx(
+        0.015
+    )
+    # A 3 kWh hour is 4,5 cents of credit, not zero.
+    assert 3.0 * 0.015 == pytest.approx(0.045)
+
+
+def test_historical_injection_rate_quarters_are_a_no_op_when_linear() -> None:
+    """Without the floor the formula is affine, so both orders agree, and an
+    entry with nothing cached must answer exactly what it always did."""
+    inj = InjectionRates(factor=1.0, base=0.0, current=None)
+    quarters = [-0.060, -0.020, 0.010, 0.050]
+    assert _historical_injection_rate(inj, -0.005, quarters=quarters) == pytest.approx(
+        _historical_injection_rate(inj, -0.005)
+    )
+    assert _historical_injection_rate(inj, 0.08, quarters=None) == pytest.approx(0.08)
+    assert _historical_injection_rate(inj, 0.08, quarters=[]) == pytest.approx(0.08)
+    # One slot is all an hour holds when ENTSO-E answered PT15M with PT60M.
+    assert _historical_injection_rate(inj, 0.08, quarters=[0.08]) == pytest.approx(0.08)
+
+
+def test_injection_needs_spot_quarters_truth_table() -> None:
+    """Only a floored per-slot formula on quarter-hourly energy needs them."""
+    inj_regime = _entry(solar_regime="injection")
+    floored = InjectionRates(factor=1.0, base=0.0, current=None, floor_at_zero=True)
+    quarter_energy = DynamicRates(factor=1.0, base=0.0, quarter_hourly=True)
+
+    def _snap(energy: Any, injection: InjectionRates | None) -> Any:
+        return _snapshot(
+            prosumer=None, capacity=None, energy=energy, injection=injection
+        )
+
+    assert _injection_needs_spot_quarters(_snap(quarter_energy, floored), inj_regime)
+    # Not on the injection regime: nothing reads the credit.
+    assert not _injection_needs_spot_quarters(
+        _snap(quarter_energy, floored), _entry(solar_regime="none")
+    )
+    # Unfloored: the formula is linear and the hour's mean prices it exactly.
+    assert not _injection_needs_spot_quarters(
+        _snap(quarter_energy, InjectionRates(factor=1.0, base=0.0, current=None)),
+        inj_regime,
+    )
+    # Hourly-billed energy: the hour's spot IS the hour's price.
+    assert not _injection_needs_spot_quarters(
+        _snap(DynamicRates(factor=1.0, base=0.0), floored), inj_regime
+    )
+    # A printed monthly indicative with no formula: no spot in play at all.
+    assert not _injection_needs_spot_quarters(
+        _snap(quarter_energy, InjectionRates(current=0.04, floor_at_zero=True)),
+        inj_regime,
+    )
+    assert not _injection_needs_spot_quarters(_snap(quarter_energy, None), inj_regime)
+
+
+def test_replayed_hour_rate_equals_the_live_hourly_view() -> None:
+    """The whole point of caching the quarters: the replayed hour must equal
+    what the injection_price sensor puts on its own hourly row.
+
+    The sensor averages the already floored per-slot rates to fit the 16 KB
+    attribute limit, so a replay that floors the hour mean instead put the
+    year-to-date credit below the number the user is looking at."""
+    from custom_components.be_electricity_prices.coordinator import CoordinatorData
+    from custom_components.be_electricity_prices.sensor import _injection_hourly_view
+
+    inj = InjectionRates(factor=1.0, base=0.0, current=None, floor_at_zero=True)
+    energy = DynamicRates(factor=1.0, base=0.0, quarter_hourly=True)
+    hour = datetime(2026, 6, 15, 10, tzinfo=UTC)
+    quarters = [-0.060, -0.020, 0.010, 0.050]
+    slots = {hour + timedelta(minutes=15 * i): q for i, q in enumerate(quarters)}
+    live = {
+        slot: rate
+        for slot, spot in slots.items()
+        if (rate := _injection_price_for_slot(inj, energy, spot, slot)) is not None
+    }
+    data = CoordinatorData(injection_hourly=live, resolution=RESOLUTION_QUARTER)
+    assert _injection_hourly_view(data)[hour] == pytest.approx(
+        _historical_injection_rate(inj, sum(quarters) / 4, quarters=quarters)
+    )
 
 
 def test_injection_varies_intraday_true_for_spot_and_tou() -> None:
@@ -2611,6 +2704,66 @@ async def test_year_cost_dynamic_replays_historical_spots(
     # + 0.10 distribution + 0.0145 transport + 0.05 + 0.002 taxes
     # = 0.3665 EUR/kWh on 1 kWh; no fees on the stub snapshot.
     assert cost == pytest.approx(0.20 + 0.10 + 0.0145 + 0.052)
+
+
+async def test_year_cost_credits_the_mean_of_floored_quarters(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """End to end: the running bill must credit the hour the way the contract
+    settles it.
+
+    The hour's four quarters mean -0,005, so flooring the formula once at that
+    mean credits nothing, while the two positive quarters are worth 0,015
+    EUR/kWh, which is what the live injection_price array already pays. On the
+    3 kWh hour measured when this was written down that is 4,5 cents the
+    year-to-date used to keep."""
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    snap = make_snapshot(
+        contract="test_dynamic",
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True),
+        injection=InjectionRates(
+            factor=1.0, base=0.0, current=None, floor_at_zero=True
+        ),
+        source_url="test://dyn",
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "test",
+            "contract": "test_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "injection",
+            "injection_kwh": "sensor.inj_total",
+            "dso_tariff_mode": "bi_horaire",
+        },
+    )
+    hour = datetime(2026, 1, 6, 13, 0, tzinfo=UTC)
+    quarters = [-0.060, -0.020, 0.010, 0.050]
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.inj_total":
+            return {hour: 3.0}
+        return {}
+
+    async def _cost(spot_quarters: dict[datetime, list[float]] | None) -> float | None:
+        with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+            return await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                _stub_extractor(),
+                snap,
+                entry,
+                historical_spots={hour: sum(quarters) / 4},
+                spot_quarters=spot_quarters,
+            )
+
+    # No consumption, so the bill IS the negated credit.
+    assert await _cost({hour: quarters}) == pytest.approx(-3.0 * 0.015)
+    assert await _cost(None) == pytest.approx(0.0)
 
 
 async def test_year_cost_spot_injection_credited_on_needs_hourly_path(

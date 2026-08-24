@@ -341,6 +341,12 @@ class BePricesCoordinator(
         # replay dynamic energy costs in current_year_cost. Persisted
         # to Store so a fresh restart doesn't lose the YTD window.
         self._historical_spots: dict[datetime, float] = {}
+        # The same hours' individual 15-minute slots, kept only for an entry
+        # whose feed-in formula is floored: that formula is convex, so its
+        # hour is not priced by the mean above. See
+        # _injection_needs_spot_quarters. Empty for every other entry, which
+        # is what keeps the persisted blob the size it always was.
+        self._historical_spot_quarters: dict[datetime, list[float]] = {}
         # Synergrid solar production profile: hourly weights keyed by UTC
         # (month, day, hour), for SPP-weighted custom injection. Persisted so a
         # restart doesn't force a fresh 52 MB download; refreshed monthly (the
@@ -473,6 +479,28 @@ class BePricesCoordinator(
                     dropped_spots += 1
                     continue
                 self._historical_spots[when] = float(v)
+        quarters = stored.get("historical_spot_quarters")
+        if isinstance(quarters, dict) and not tuple_mismatch:
+            for k, v in quarters.items():
+                if not isinstance(k, str) or not isinstance(v, list) or not v:
+                    continue
+                try:
+                    when = datetime.fromisoformat(k)
+                except ValueError:
+                    continue
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=UTC)
+                if not all(
+                    isinstance(q, (int, float)) and _spot_is_sane(float(q)) for q in v
+                ):
+                    # The whole hour goes, not the offending slot: a short
+                    # list would silently re-weight the hour's mean, and
+                    # dropping the hour takes its day under the refetch
+                    # threshold so the next tick replaces it from ENTSO-E.
+                    dropped_spots += 1
+                    self._historical_spots.pop(when, None)
+                    continue
+                self._historical_spot_quarters[when] = [float(q) for q in v]
         if dropped_spots:
             _LOGGER.warning(
                 "Discarded %d cached day-ahead price(s) outside the publishable "
@@ -761,6 +789,7 @@ class BePricesCoordinator(
             self._snapshot,
             self.entry,
             historical_spots=self._historical_spots,
+            spot_quarters=self._historical_spot_quarters,
             spp_weights=self._spp_weights if spp_weighted else None,
             breakdown=ytd_breakdown,
             billed_peak_kw=billed_peak,
@@ -850,6 +879,10 @@ class BePricesCoordinator(
         self._force_refresh = True
         if clear_history:
             self._historical_spots.clear()
+            # Both caches come off the same fetch, so a service that exists to
+            # repair a bad cached price has to drop both or it leaves half the
+            # bad hour behind.
+            self._historical_spot_quarters.clear()
             self._complete_spot_days.clear()
             self._short_spot_days.clear()
         self._spot_cache = {}
@@ -1067,6 +1100,10 @@ class BePricesCoordinator(
         if self._historical_spots:
             payload["historical_spots"] = {
                 h.isoformat(): v for h, v in self._historical_spots.items()
+            }
+        if self._historical_spot_quarters:
+            payload["historical_spot_quarters"] = {
+                h.isoformat(): v for h, v in self._historical_spot_quarters.items()
             }
         if self._spp_weights and self._spp_weights_year is not None:
             payload["spp_weights"] = {

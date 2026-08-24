@@ -293,9 +293,16 @@ async def _ensure_dynamic_spots(
     entry: ConfigEntry,
     start: datetime,
     end: datetime,
-) -> dict[datetime, float]:
+) -> tuple[dict[datetime, float], dict[datetime, list[float]]]:
     """Make sure ``coordinator._historical_spots`` covers [start, end] for a
-    dynamic supplier, then return the spot dict.
+    dynamic supplier, then return the hourly spots and the hour's own
+    15-minute slots.
+
+    The second dict is populated only for an entry whose feed-in formula is
+    floored, whose hour its mean does not price (see
+    ``_injection_needs_spot_quarters``); it is empty for everyone else. Both
+    are returned together so the question "are spots wanted at all" is
+    answered in exactly one place.
 
     Reuses the coordinator's existing ENTSO-E backfill helper so the
     bulk-fetch logic (week-sized chunks, partial-day tolerance, negative
@@ -310,7 +317,7 @@ async def _ensure_dynamic_spots(
     """
     snap = coordinator._snapshot
     if snap is None:
-        return {}
+        return {}, {}
     # A variable contract with a contract start date re-prices to a
     # SpotMonthlyRates cohort, which needs spots for its monthly mean just like
     # a dynamic contract. Resolve the effective (cohort) energy only when a
@@ -336,7 +343,7 @@ async def _ensure_dynamic_spots(
         and not _injection_needs_spot(snap, entry)
         and not _injection_needs_month_spot(snap, entry)
     ):
-        return {}
+        return {}, {}
     # _ensure_historical_spots anchors each fetched day on LOCAL midnight,
     # so feed it LOCAL dates: passing the UTC date of end (which lands on
     # the previous local day when the backfill runs in the 00:00-01:59
@@ -346,7 +353,7 @@ async def _ensure_dynamic_spots(
     await coordinator._ensure_historical_spots(
         dt_util.as_local(start).date(), dt_util.as_local(end).date()
     )
-    return coordinator._historical_spots
+    return coordinator._historical_spots, coordinator._historical_spot_quarters
 
 
 def _hour_spot(
@@ -474,6 +481,7 @@ def _injection_rate_for_hour(
     *,
     spot: float | None,
     spots: dict[datetime, float],
+    quarters: dict[datetime, list[float]],
     utc_hour: datetime,
     local: datetime,
     spp_weights: SppWeights | None,
@@ -489,10 +497,15 @@ def _injection_rate_for_hour(
     ``monthly_mean`` stays derived here from THIS hour's snapshot rather than
     being hoisted by the caller: an archived month can carry a different
     energy kind from the cohort leg, so the flag is per-hour, not per-run.
+    That is also why the hour's own 15-minute slots are only handed on when
+    this hour is priced off its own spot: a credit settling on a month mean is
+    not priced by what one hour's quarters did. ``quarters`` is empty except
+    on an entry whose feed-in formula is floored.
     """
+    monthly_mean = _injection_on_month_mean(snap_h)
     inj_spot = _spp_injection_spot(
         spot,
-        monthly_mean=_injection_on_month_mean(snap_h),
+        monthly_mean=monthly_mean,
         # An SPP-indexed formula may only resolve against the SPP-weighted
         # mean; without one _historical_injection_rate falls through to the
         # card's printed indicative rather than the energy leg's mean.
@@ -507,7 +520,13 @@ def _injection_rate_for_hour(
         hourly_spot=spots.get(utc_hour),
     )
     return _historical_injection_rate(
-        snap_h.injection, inj_spot, energy=snap_h.energy, when=local
+        snap_h.injection,
+        inj_spot,
+        quarters=(
+            quarters.get(utc_hour) if hourly_injection or not monthly_mean else None
+        ),
+        energy=snap_h.energy,
+        when=local,
     )
 
 
@@ -517,6 +536,7 @@ async def _backfill_price_sensors(
     coordinator: BePricesCoordinator,
     hours: list[datetime],
     spots: dict[datetime, float],
+    quarters: dict[datetime, list[float]],
 ) -> dict[str, int]:
     """Write ``mean`` rows for every price sensor across ``hours``.
 
@@ -600,6 +620,7 @@ async def _backfill_price_sensors(
                     snap_h,
                     spot=spot,
                     spots=spots,
+                    quarters=quarters,
                     utc_hour=utc_hour,
                     local=local,
                     spp_weights=spp_weights,
@@ -641,6 +662,7 @@ async def _backfill_cost_sensor(
     coordinator: BePricesCoordinator,
     hours: list[datetime],
     spots: dict[datetime, float],
+    quarters: dict[datetime, list[float]],
     emit_from: datetime | None = None,
 ) -> dict[str, int]:
     """Write cumulative state/sum rows for ``current_year_cost`` over ``hours``.
@@ -782,6 +804,7 @@ async def _backfill_cost_sensor(
                     snap_h,
                     spot=spot,
                     spots=spots,
+                    quarters=quarters,
                     utc_hour=utc_hour,
                     local=local,
                     spp_weights=spp_weights,
@@ -1027,7 +1050,7 @@ async def backfill_range(
     # Fetch spots over the union of the price window and the cost window
     # so the dynamic price rows AND the cost sensor's pre-start
     # accumulation both have spots (a no-op for non-dynamic suppliers).
-    spots = await _ensure_dynamic_spots(
+    spots, quarters = await _ensure_dynamic_spots(
         coordinator, entry, min(start_utc, cost_anchor_utc), end_utc
     )
     hours = _hour_iter(start_utc, end_utc)
@@ -1058,11 +1081,19 @@ async def backfill_range(
         if ids:
             await _clear_all(hass, ids)
 
-    counts = await _backfill_price_sensors(hass, entry, coordinator, hours, spots)
+    counts = await _backfill_price_sensors(
+        hass, entry, coordinator, hours, spots, quarters
+    )
     if not skip_cost:
         counts.update(
             await _backfill_cost_sensor(
-                hass, entry, coordinator, cost_hours, spots, emit_from=cost_emit_from
+                hass,
+                entry,
+                coordinator,
+                cost_hours,
+                spots,
+                quarters,
+                emit_from=cost_emit_from,
             )
         )
     total = sum(counts.values())
