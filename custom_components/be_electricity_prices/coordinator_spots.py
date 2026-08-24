@@ -308,16 +308,19 @@ class _SpotsMixin:
                         err,
                     )
                     if isinstance(err, EntsoeAuthError):
-                        # A rejected key or an exhausted quota refuses every
-                        # chunk, and a failed fetch leaves each day exactly as
-                        # short as it was, so with no marker the whole year is
-                        # re-pulled on every hourly tick and logs a warning per
-                        # chunk for as long as the entry exists. Mark this
-                        # chunk's stable past days so the TTL backs that off to
-                        # twice a day. Today and yesterday stay unmarked, their
-                        # data is still landing. A plain EntsoeError is a
-                        # timeout or a 5xx, which the next tick should retry
-                        # promptly rather than sit out the TTL.
+                        # This class covers a rejected key, an exhausted daily
+                        # quota, and a window ENTSO-E acknowledges with no
+                        # matching data, which for a PAST chunk can simply mean
+                        # the data does not exist. None of the three is fixed
+                        # by asking again in an hour, and a failed fetch leaves
+                        # each day exactly as short as it was, so with no marker
+                        # the whole year is re-pulled on every hourly tick and
+                        # logs a warning per chunk for as long as the entry
+                        # exists. Mark this chunk's stable past days so the TTL
+                        # backs that off to twice a day. Today and yesterday
+                        # stay unmarked, their data is still landing. A plain
+                        # EntsoeError is a timeout or a 5xx, which the next tick
+                        # should retry promptly rather than sit out the TTL.
                         day = chunk_start
                         while day < chunk_end:
                             if day < stable_before:

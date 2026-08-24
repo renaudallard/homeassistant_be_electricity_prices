@@ -62,15 +62,15 @@ Other important instance fields set in `__init__`:
 
 | Field | Purpose | Line |
 |-------|---------|------|
-| `_store` | `_MigratingStore` on-disk cache, keyed `be_electricity_prices_cache_<entry_id>` | 859 |
-| `_snapshot`, `_snapshot_fetched_at`, `_snapshot_probe_key` | current in-memory snapshot and its provenance | 862-864 |
-| `_force_refresh` | one-shot flag set by the refresh service to bypass freshness checks | 871 |
-| `_spot_cache`, `_spot_cache_day`, `_spot_cache_includes_tomorrow` | today/tomorrow ENTSO-E curve cache | 872-874 |
-| `_historical_spots` | UTC-hour -> EUR/kWh for past hours, replayed for YTD; persisted | 878 |
-| `_historical_spot_quarters` | the same hours -> their individual 15-minute slots, for a floored feed-in formula only; persisted | 878 |
-| `_short_spot_days` | past days whose last spot fetch came back short of 20 h | 890 |
-| `_peak_kw`, `_peak_month` | Flanders monthly capacity peak (rolling max) | 897-898 |
-| `_last_error` | last human-readable failure, surfaced in `last_error` and Repairs | 903 |
+| `_store` | `_MigratingStore` on-disk cache, keyed `be_electricity_prices_cache_<entry_id>` | 319 |
+| `_snapshot`, `_snapshot_fetched_at`, `_snapshot_probe_key` | current in-memory snapshot and its provenance | 326-329 |
+| `_force_refresh` | one-shot flag set by the refresh service to bypass freshness checks | 336 |
+| `_spot_cache`, `_spot_cache_day`, `_spot_cache_includes_tomorrow` | today/tomorrow ENTSO-E curve cache | 337-339 |
+| `_historical_spots` | UTC-hour -> EUR/kWh for past hours, replayed for YTD; persisted | 343 |
+| `_historical_spot_quarters` | the same hours -> their individual 15-minute slots, for a floored feed-in formula only; persisted | 349 |
+| `_short_spot_days` | past days whose last spot fetch came back short of 20 h | 361 |
+| `_peak_kw`, `_peak_month` | Flanders monthly capacity peak (rolling max) | 368-369 |
+| `_last_error` | last human-readable failure, surfaced in `last_error` and Repairs | 374 |
 
 ### 1.4 Restoring from disk
 
@@ -86,7 +86,7 @@ Loading an offline boot from disk lets the entry serve last-known prices before 
 The base class calls `_async_update_data` (`coordinator.py:529`) every tick. It wraps `_update_body` (`coordinator.py:566`) and, on `UpdateFailed`, refreshes the stale-snapshot Repairs placeholder with the current `_last_error` before re-raising (`coordinator.py:566`). The body runs these steps in order.
 
 ```
-_update_body (coordinator.py:531)
+_update_body (coordinator.py:566)
  ├─ _maybe_refresh_snapshot()            probe / TTL / fetch, may adopt sibling cache
  ├─ _track_monthly_peak()                Flanders capacity peak (rolling max)
  ├─ if self._snapshot is None: raise UpdateFailed("no supplier snapshot ...")
@@ -228,21 +228,21 @@ cache written before the field existed, so no schema bump was needed.
 
 ### 3.1 Resolution selection (hourly vs quarter-hourly)
 
-`_energy_is_quarter_hourly` (`spot_stats.py:68`) returns True only for `DynamicRates` with `quarter_hourly=True`. Those extractors (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom, Bolt Dynamisch, energie.be, EnergyVision) bill on the native 15-minute Belpex/eSpot_15/Epex/EPEX DA grid; every other contract stays hourly. `_fetch_spot_prices` passes this as `quarter_hourly=` to `client.fetch_day_ahead` (`coordinator_spots.py:353`). The constants are `RESOLUTION_HOURLY = "PT60M"` and `RESOLUTION_QUARTER = "PT15M"` (`const.py:320`), matching ENTSO-E's resolution tokens. YTD billing stays hourly regardless (section 7).
+`_energy_is_quarter_hourly` (`spot_stats.py:68`) returns True only for `DynamicRates` with `quarter_hourly=True`. Those extractors (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom, Bolt Dynamisch, energie.be, EnergyVision) bill on the native 15-minute Belpex/eSpot_15/Epex/EPEX DA grid; every other contract stays hourly. `_fetch_spot_prices` passes this as `quarter_hourly=` to `client.fetch_day_ahead` (`coordinator_spots.py:356`). The constants are `RESOLUTION_HOURLY = "PT60M"` and `RESOLUTION_QUARTER = "PT15M"` (`const.py:320`), matching ENTSO-E's resolution tokens. YTD billing stays hourly regardless (section 7).
 
 ### 3.2 The today/tomorrow spot cache
 
-`_fetch_spot_prices` (`coordinator_spots.py:353`) windows the request on the *local* (Europe/Brussels) day, anchored on local midnight converted to UTC, so a 00:00-02:00 local query doesn't drop yesterday's UTC tail and the fall-back Sunday's 25th local hour is not lost (`coordinator_spots.py:353`). It requests tomorrow only when `now_local.hour >= 11` (`coordinator_spots.py:353`), because ENTSO-E publishes the day-ahead curve around 12-13 CET. The cache is keyed on `_spot_cache_day` and `_spot_cache_includes_tomorrow`; the latter records what the response *actually* carried, not what was asked for (`coordinator_spots.py:150`), so a pre-publication request for tomorrow doesn't lock the flag and block the next tick from retrying.
+`_fetch_spot_prices` (`coordinator_spots.py:356`) windows the request on the *local* (Europe/Brussels) day, anchored on local midnight converted to UTC, so a 00:00-02:00 local query doesn't drop yesterday's UTC tail and the fall-back Sunday's 25th local hour is not lost (`coordinator_spots.py:356`). It requests tomorrow only when `now_local.hour >= 11` (`coordinator_spots.py:356`), because ENTSO-E publishes the day-ahead curve around 12-13 CET. The cache is keyed on `_spot_cache_day` and `_spot_cache_includes_tomorrow`; the latter records what the response *actually* carried, not what was asked for (`coordinator_spots.py:150`), so a pre-publication request for tomorrow doesn't lock the flag and block the next tick from retrying.
 
 ### 3.3 Historical spots for YTD
 
 `_ensure_historical_spots` (`coordinator_spots.py:192`) fills `self._historical_spots` for every local hour in `[Jan 1, today]`, fetching missing week-sized chunks from ENTSO-E. It runs only for dynamic or spot-indexed-injection contracts (`coordinator_spots.py:192`) and needs the entry's API key (`coordinator_spots.py:192`), returning early if there is none. Details:
 
-- A day counts as "present" when at least 20 of its 24 hours are cached (`coordinator_spots.py:206`), tolerating ENTSO-E source gaps and DST seams (23/25-hour days).
+- A day counts as "present" when at least 20 of its 24 hours are cached (`coordinator_spots.py:261`), tolerating ENTSO-E source gaps and DST seams (23/25-hour days).
 - Stable past days that stay short after a fetch get a `_short_spot_days` marker with the attempt time; `_SHORT_SPOT_DAY_TTL` is 12 hours (`coordinator_spots.py:82`), so a genuinely-gappy past day is retried twice a day rather than every tick.
-- Day boundaries anchor on local midnight in UTC, matching the recorder window and the persistence cut-off (`coordinator_spots.py:197`); a UTC anchor would leave the first hour or two of the local year unfetched.
-- Fetch failures are logged and skipped; absent hours are treated as "no data" for the YTD, never a tick failure. A failure leaves the day as short as it was, so an auth-class refusal (a rejected key, an exhausted daily quota) marks the chunk's stable past days too: without that, a revoked token re-pulled every week-chunk of the year on every hourly tick. A plain `EntsoeError` (timeout, 5xx) is left unmarked so the next tick retries promptly.
-- The fetch asks for the same grid the contract settles on, via the same `_energy_is_quarter_hourly` test the live fetch uses (`coordinator_spots.py:229`). ENTSO-E publishes Belgium as two products, a PT60M and a PT15M series covering the same delivery period, and `parse_day_ahead_xml` deliberately refuses to blend them (`api.py:146`): requesting without the flag silently takes the hourly product, so a quarter-hourly contract's whole replay was priced off a different auction than its live bill.
+- Day boundaries anchor on local midnight in UTC, matching the recorder window and the persistence cut-off (`coordinator_spots.py:256`); a UTC anchor would leave the first hour or two of the local year unfetched.
+- Fetch failures are logged and skipped; absent hours are treated as "no data" for the YTD, never a tick failure. A failure leaves the day as short as it was, so an `EntsoeAuthError` marks the chunk's stable past days too: without that, a revoked token re-pulled every week-chunk of the year on every hourly tick. That class covers a rejected key, an exhausted daily quota, and an acknowledgement carrying no matching data, which for a past chunk can simply mean the data does not exist; none of the three is fixed by asking again in an hour, and the cost is that a transient one holds its days for the TTL. A plain `EntsoeError` (timeout, 5xx) is left unmarked so the next tick retries promptly.
+- The fetch asks for the same grid the contract settles on, via the same `_energy_is_quarter_hourly` test the live fetch uses (`coordinator_spots.py:222`). ENTSO-E publishes Belgium as two products, a PT60M and a PT15M series covering the same delivery period, and `parse_day_ahead_xml` deliberately refuses to blend them (`api.py:146`): requesting without the flag silently takes the hourly product, so a quarter-hourly contract's whole replay was priced off a different auction than its live bill.
 - Whatever grid comes back is stored by clock hour, collapsed on the mean of the slots inside it (`_bucket_spots_by_hour`, `spot_stats.py:109`). The recorder only keeps hourly consumption, so an hour is the finest thing a replay can price, and the mean is exact for every formula that is LINEAR in the spot: pricing the hour's mean equals replaying each quarter against a quarter of that hour's kWh. Keeping the cache hourly is also what its 20-of-24 completeness test, its persisted form and every reader already assume.
 - One formula is not linear. `floor_at_zero` makes the feed-in rate `max(0, factor*spot + base)` convex, so the mean of the floored quarters is at least the floored mean, and flooring once at the hour credits less than the live per-slot array whenever the spot crosses the floor inside the hour. Such an entry keeps that hour's own slots beside the mean, in `_historical_spot_quarters`, grouped by hour (`_group_spot_quarters_by_hour`, `spot_stats.py:80`) and gated on `_injection_needs_spot_quarters` (`injection.py:217`): injection regime, floored formula, quarter-hourly energy. Only the expert custom supplier sets `floor_at_zero`, so every other entry grows nothing. An hour holds one to four values (ENTSO-E answers a PT15M request with the PT60M series where no 15-minute one exists), and the replay averages whatever it holds.
 - The same gate CLEARS the cache when the entry stops needing it. Unticking the quarter-hourly box or the never-negative one, or leaving the injection regime, changes none of the (supplier, contract, region) tuple the reload is gated on, so the cached year would otherwise be restored and re-persisted for the life of the entry while the replay went on crediting those hours per slot and the sensor beside it credited the hour.
@@ -407,7 +407,7 @@ Repairs issues, all keyed by `entry_id`:
 The first four are failure states and clear on a successful refresh, as does
 `connection_fee_missing` once the supplier prints the row again.
 `supplier_deprecated` is not: it is a lifecycle notice, evaluated first on every
-tick (`coordinator.py:531`) straight off the registry flag, and it clears only
+tick (`coordinator.py:566`) straight off the registry flag, and it clears only
 when the entry is re-pointed at a supplier that has not
 announced its exit. All four variants share one issue id, so an entry only ever
 carries one of them; `_successor_for` decides whether a successor can be named

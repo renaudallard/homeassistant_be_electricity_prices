@@ -472,10 +472,10 @@ energy) but the injection prices off the hourly BELPEX with no printed monthly
 indicative, so pricing the credit still needs an ENTSO-E spot. `Contract`
 advertises this with `spot_indexed_injection` so the config flow offers the API-key
 step on the injection regime (`providers/base.py:71-77`). At runtime,
-`_injection_needs_spot` detects it (`injection.py:91-104`):
+`_injection_needs_spot` detects it (`injection.py:94-107`):
 
 ```python
-def _injection_needs_spot(snapshot, entry) -> bool:   # injection.py:91
+def _injection_needs_spot(snapshot, entry) -> bool:   # injection.py:94
     if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
         return False
     inj = snapshot.injection
@@ -500,7 +500,7 @@ in the live, backfill and compare paths, or the credit drifts.
 EUR/kWh price only on the injection regime and only when the snapshot has injection
 data (`injection.py:223-236`). Priority:
 
-1. **Per-slot TOU** via `_tou_injection_rate` (`injection.py:168-187`).
+1. **Per-slot TOU** via `_tou_injection_rate` (`injection.py:171-190`).
 2. **Spot formula** `factor * spot + base` when either the energy is
    `DynamicRates` (shape b) OR `inj.current is None` (shape c). If no spot is
    available it returns `None` rather than fabricate a value
