@@ -469,6 +469,13 @@ async def _ytd_hourly_energy(
     if breakdown is not None:
         breakdown["hours_seen"] = float(hours_seen)
         breakdown["hours_priced"] = float(hours_priced)
+        # And what the window SHOULD hold. hours_seen counts only the buckets
+        # the recorder returned, so it shrinks with a gap and hours_priced
+        # shrinks with it: the pair reads a confident 100% while hundreds of
+        # hours are missing entirely. Comparing against elapsed is the only
+        # way that failure is visible from the sensor.
+        elapsed = dt_util.now() - dt_util.start_of_local_day(date(today.year, 1, 1))
+        breakdown["hours_elapsed"] = float(int(elapsed.total_seconds() // 3600))
         breakdown["consumption_ytd_kwh"] = sum(cons_per_hour.values())
         breakdown["injection_ytd_kwh"] = sum(inj_per_hour.values())
     return energy_cost
@@ -900,6 +907,11 @@ async def _compute_current_year_cost(
 
     if breakdown is not None:
         breakdown["consumption_ytd_kwh"] = sum(r[0] + r[1] for r in daily_kwh.values())
+        # The per-day counterpart of hours_seen / hours_elapsed above: the
+        # static branch reported no coverage at all, so a gap here was
+        # invisible even in principle.
+        breakdown["days_seen"] = float(len(daily_kwh))
+        breakdown["days_elapsed"] = float((today - date(today.year, 1, 1)).days + 1)
         breakdown["injection_ytd_kwh"] = sum(r[2] + r[3] for r in daily_kwh.values())
         today_kwh = daily_kwh.get(today, (0.0, 0.0, 0.0, 0.0))
         breakdown["consumption_today_kwh"] = today_kwh[0] + today_kwh[1]

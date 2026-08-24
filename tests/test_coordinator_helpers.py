@@ -779,6 +779,96 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
         )
 
 
+async def test_band_ratio_refuses_a_once_a_day_sensor(hass: HomeAssistant) -> None:
+    """All of a day's energy in one hour is a reading, not a load profile.
+
+    A totals sensor READ once a day (supplier-portal poller, nightly fetch)
+    still gets an hourly row every hour from Home Assistant, so the daily
+    total is right while every kWh lands in the hour the reading arrived.
+    Splitting on that gives (1, 0) or (0, 1) for that day, every day, all
+    year. Measured on a 2415 kWh year against a true off-peak share of 0,457:
+    a 04:00 poll billed the distribution leg 31,7% low and a 13:00 poll 26,7%
+    high, and the bi-hourly energy rate splits on the same ratio."""
+    from custom_components.be_electricity_prices.energy_meters import (
+        _recorder_daily_band_ratio,
+    )
+
+    day = date(2026, 3, 10)
+    midnight = dt_util.start_of_local_day(day).astimezone(UTC)
+
+    async def _one_hour(*_a: object, **_k: object) -> list[tuple[datetime, float]]:
+        # 20 kWh, all of it deposited at 04:00 local, which is off-peak.
+        return [
+            (midnight + timedelta(hours=h), 20.0 if h == 3 else 0.0) for h in range(24)
+        ]
+
+    async def _spread(*_a: object, **_k: object) -> list[tuple[datetime, float]]:
+        return [(midnight + timedelta(hours=h), 1.0) for h in range(24)]
+
+    with patch.object(energy_meters, "_recorder_deltas", new=_one_hour):
+        once = await _recorder_daily_band_ratio(
+            hass, "sensor.total", day, day, "wallonia"
+        )
+    with patch.object(energy_meters, "_recorder_deltas", new=_spread):
+        spread = await _recorder_daily_band_ratio(
+            hass, "sensor.total", day, day, "wallonia"
+        )
+
+    # A real profile is measured and splits somewhere in between.
+    assert 0.0 < spread[day][1] < 1.0
+    # The once-a-day reading must NOT come back as 100% off-peak.
+    assert once[day] != (0.0, 1.0)
+    assert once[day] == energy_meters._default_band_ratio_for(day, "wallonia")
+
+
+async def test_ytd_reports_coverage_against_elapsed_not_against_priced(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """hours_priced over hours_seen cannot see a missing bucket.
+
+    hours_seen counts only what the recorder returned, so a gap shrinks it and
+    hours_priced shrinks with it: the ratio reads a confident 100% while
+    hundreds of hours are absent. Only comparing against the hours actually
+    elapsed since 1 January makes that visible."""
+
+    freezer.move_to("2026-03-01 12:00:00+01:00")
+    today = dt_util.now().date()
+    snap = replace(_yearly_snapshot(), energy=DynamicRates(factor=1.0, base=0.0))
+    # ORES, matching the overlay _yearly_snapshot carries; a DSO the snapshot
+    # does not publish makes compute_breakdown raise and the hour is skipped.
+    entry = _entry(
+        region="wallonia",
+        dso="ores",
+        solar_regime="none",
+        supplier="test",
+        contract="test",
+        consumption_kwh="sensor.cons",
+    )
+    # Two hours of data in a window that has run for weeks.
+    h = dt_util.start_of_local_day(date(2026, 2, 1)).astimezone(UTC)
+    per_hour = {h: 1.0, h + timedelta(hours=1): 1.0}
+
+    async def _fake(_h: object, eid: str, _s: date, _e: date) -> dict[datetime, float]:
+        return dict(per_hour) if eid == "sensor.cons" else {}
+
+    diag: dict[str, float] = {}
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake):
+        await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots={h: 0.10, h + timedelta(hours=1): 0.10},
+            breakdown=diag,
+        )
+
+    # The old pair says everything is fine.
+    assert diag["hours_priced"] == diag["hours_seen"] == 2.0
+    # The window has actually run for the best part of two months.
+    assert diag["hours_elapsed"] > 1400
+
+
 async def test_recorder_deltas_drops_a_first_bucket_that_reaches_back(
     hass: HomeAssistant, caplog: Any
 ) -> None:
