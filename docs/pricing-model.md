@@ -447,9 +447,12 @@ WHERE the clamp lands is a pricing decision, not a detail, because `max()` is
 convex and the two orders give different money:
 
 - a PER-SLOT formula floors each slot, because that is what the contract bills.
-  The live array, the year-to-date replay (off the hour's own quarters) and the
-  compare estimate (`_compare_injection_credit`, `compare_quote.py:117`, off the
-  window's slots) all credit the mean of the floored rates.
+  The live array and the year-to-date replay (off the hour's own quarters) credit
+  each slot at its own rate; the compare estimate (`_compare_injection_credit`,
+  `compare_quote.py:171`) has to collapse the window to one number, so it takes
+  the mean of the floored rates weighted by the household's own export shape
+  (`_export_weighted_credit`, `compare_quote.py:117`), which is the basis the
+  year-to-date walk bills on.
 - a MONTH-MEAN formula floors once, on the delivery month's tariff, because such
   a card publishes one number a month and the guarantee is written against that
   number. `_bake_monthly_injection` (`injection.py:64`) produces it and the floor

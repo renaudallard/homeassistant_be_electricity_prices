@@ -2567,9 +2567,15 @@ def test_solar_schema_offers_compensation_only_in_wallonia() -> None:
     assert "compensation" not in _regimes("brussels")
 
 
-def test_compare_spot_indexed_injection_uses_mean_spot() -> None:
-    # A spot-indexed injection credit must be priced off the window mean
-    # (consistent with the energy term), not the live current slot.
+def test_compare_spot_indexed_injection_weights_the_window_by_export() -> None:
+    """A spot-indexed credit is priced over the whole window, never at the slot
+    the dialog happened to open in, and averaged by when the panels export.
+
+    The annual bill multiplies one rate by the year's exported kWh, and export
+    is not spread evenly around the clock: it is nothing all night and peaks
+    at midday, which on a day-ahead curve is the trough. Weighting by the
+    household's own measured shape is the basis the TOU branch beside it uses
+    and the one current_year_cost bills on."""
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices.compare_quote import (
@@ -2586,11 +2592,37 @@ def test_compare_spot_indexed_injection_uses_mean_spot() -> None:
         injection=InjectionRates(current=None, factor=0.97, base=-0.021, formula="x"),
     )
     entry = SimpleNamespace(data={"solar_regime": "injection"})
-    # The live helper would pick a current-slot spot from spot_dict (0.20);
-    # the compare must use avg_spot (0.08) instead.
-    spot_dict = {datetime(2026, 4, 29, h, 0, tzinfo=UTC): 0.20 for h in range(24)}
-    credit = _compare_injection_credit(snap, entry, spot_dict, avg_spot=0.08)
-    assert credit == pytest.approx(0.97 * 0.08 - 0.021)
+    curve = [
+        0.078, 0.070, 0.065, 0.062, 0.065, 0.072, 0.085, 0.095,
+        0.080, 0.040, 0.020, 0.010, 0.008, 0.006, 0.010, 0.020,
+        0.035, 0.050, 0.070, 0.095, 0.120, 0.135, 0.110, 0.090,
+    ]  # fmt: skip
+    spot_dict = {
+        datetime(2026, 4, 29, h, 0, tzinfo=UTC): v for h, v in enumerate(curve)
+    }
+    avg_spot = sum(curve) / len(curve)
+
+    # No measured export shape: every slot weighs the same, which for this
+    # affine formula is exactly the formula at the window mean, so an entry
+    # with no injection history is quoted what it always was.
+    assert _compare_injection_credit(
+        snap, entry, spot_dict, avg_spot=avg_spot
+    ) == pytest.approx(0.97 * avg_spot - 0.021)
+
+    # A daylight export shape, keyed by LOCAL hour (April is CEST, so local
+    # hour h reads UTC h-2).
+    shape = {8: 0.1, 10: 0.2, 12: 0.4, 14: 0.2, 16: 0.1}
+    weighted = sum(w * (0.97 * curve[h - 2] - 0.021) for h, w in shape.items())
+    credit = _compare_injection_credit(
+        snap, entry, spot_dict, avg_spot=avg_spot, inj_hour_weights=shape
+    )
+    assert credit is not None
+    assert credit == pytest.approx(weighted)
+    # Midday is the cheap end of the curve, so the shape has to pull the
+    # credit below the clock mean rather than leave it alone.
+    assert credit < 0.97 * avg_spot - 0.021
+    # And never the slot the dialog opened in.
+    assert credit != pytest.approx(0.97 * curve[0] - 0.021)
 
 
 def test_compare_floored_injection_averages_the_slot_rates() -> None:
@@ -2658,6 +2690,15 @@ def test_compare_floored_injection_averages_the_slot_rates() -> None:
 
     # No curve and no mean: the credit stays unresolved rather than guessed.
     assert _compare_injection_credit(snap, entry, {}, avg_spot=None) is None
+
+    # And the export shape applies to the clamped rates too, which is where it
+    # matters most: the clamp bites in the midday hours the panels export into.
+    shape = {8: 0.1, 10: 0.2, 12: 0.4, 14: 0.2, 16: 0.1}
+    weighted = sum(w * max(0.96 * curve[h - 2] - 0.009, 0.0) for h, w in shape.items())
+    assert _compare_injection_credit(
+        snap, entry, spot_dict, avg_spot=avg_spot, inj_hour_weights=shape
+    ) == pytest.approx(weighted)
+    assert weighted < per_slot
 
 
 def test_compare_prices_an_spp_indexed_credit_on_the_solar_weighted_mean() -> None:

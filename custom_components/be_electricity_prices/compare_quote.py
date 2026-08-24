@@ -114,6 +114,60 @@ def _tou_slot_weights(
     return acc["peak"], acc["transition"], acc["offpeak"]
 
 
+def _export_weighted_credit(
+    inj: Any,
+    spot_dict: dict[datetime, float],
+    hour_weights: dict[int, float] | None,
+) -> float | None:
+    """Spot-indexed feed-in credit averaged over the window's slots by the
+    household's own export shape.
+
+    ``_annual_bill`` multiplies ONE rate by the whole year's exported kWh, so
+    the rate that stands for the bill is the export-weighted mean of the slot
+    rates. Solar exports nothing through the night and peaks at midday, which
+    on a day-ahead curve is where the price troughs and where a never-negative
+    clamp bites, so the clock mean and the export mean are far apart: on a
+    spring curve with a negative midday block, 4,75 c/kWh against 1,73. It is
+    the argument the TOU branch below already makes, applied to the shape that
+    the rate varies on here.
+
+    It is also the basis ``current_year_cost`` bills on, since that multiplies
+    each hour's own kWh by that hour's own rate, so the estimate and the
+    sensor printed beside it stop answering different questions.
+
+    Without a measured shape every slot weighs the same, and for an unclamped
+    formula that is exactly ``factor * the window mean + base``, so an entry
+    with no injection history is quoted what it always was. Returns ``None``
+    when there is nothing to average.
+    """
+    from .injection import _floor_injection
+
+    if inj.factor is None or inj.base is None:
+        return None
+    num = 0.0
+    den = 0.0
+    for when, spot in spot_dict.items():
+        weight = (
+            1.0
+            if hour_weights is None
+            else hour_weights.get(dt_util.as_local(when).hour, 0.0)
+        )
+        if weight <= 0.0:
+            continue
+        rate = _floor_injection(inj.factor * spot + inj.base, inj)
+        if rate is None:
+            continue
+        num += weight * rate
+        den += weight
+    if den > 0.0:
+        return num / den
+    if hour_weights is None:
+        return None
+    # A measured shape that exports in none of the hours this window covers.
+    # Fall back to the clock mean rather than to no credit at all.
+    return _export_weighted_credit(inj, spot_dict, None)
+
+
 def _compare_injection_credit(
     snapshot: Any,
     entry: Any,
@@ -131,12 +185,13 @@ def _compare_injection_credit(
     back to the published slot durations, which under-credit because the
     overnight off-peak block occupies a third of the clock and exports nothing. A
     spot-indexed injection (Cociter Variable, or any dynamic-energy
-    contract) is priced off the window MEAN spot, consistent with the
-    energy term (which also uses ``avg_spot``); pricing it off the live
-    current slot would make the solar credit and the energy cost reflect
-    different instants. A formula clamped at zero is the exception, because
-    it is not linear in the spot: the mean of the slots' floored rates is
-    what the entry actually bills, and it is what the live sensor shows.
+    contract) is priced per slot over the window and averaged by the
+    household's export shape, the same basis as the TOU branch and the same
+    one ``current_year_cost`` bills on. It deliberately does NOT follow the
+    energy term onto the plain window mean: the credit multiplies exported
+    kWh, and export is not spread evenly around the clock. Pricing it off the
+    live current slot would be worse still, since the credit and the energy
+    cost would reflect different instants.
 
     An SPP-INDEXED credit (energie.be Variabel and Vast) resolves against
     ``spp_spot``, the solar-weighted month mean, because that is the index
@@ -148,11 +203,7 @@ def _compare_injection_credit(
     printed indicative below. Every other monthly-indexed injection is
     spot-independent and delegates to the live helper too.
     """
-    from .injection import (
-        _compute_injection_price,
-        _floor_injection,
-        _historical_injection_rate,
-    )
+    from .injection import _compute_injection_price, _floor_injection
     from .providers.base import DynamicRates, TimeOfUseRates
     from .spot_stats import _injection_on_month_mean
 
@@ -185,21 +236,20 @@ def _compare_injection_credit(
     ):
         if avg_spot is None:
             return None
-        if inj.floor_at_zero and spot_dict and not _injection_on_month_mean(snapshot):
-            # A clamped formula is convex, so the credit is the mean of the
-            # slots' floored rates and not the rate of their mean. Flooring
-            # once at the window mean pays nothing for a day whose spot only
-            # went under the floor around midday, which is exactly when the
-            # panels export, and both the live sensor and the year-to-date
-            # walk floor per slot: quoting the other order made the page
-            # contradict the user's own injection_price. Routed through the
-            # same helper the replay uses so the two cannot drift.
-            return _historical_injection_rate(
-                inj, avg_spot, quarters=list(spot_dict.values())
-            )
-        # A month-mean index keeps the other order on purpose: such a contract
-        # publishes ONE tariff for the delivery month and the never-negative
-        # guarantee is written against that number, not against each hour.
+        if spot_dict and not _injection_on_month_mean(snapshot):
+            # Priced per slot and averaged by when the panels export, because
+            # that is what the year's exported kWh is billed at. Evaluating
+            # the formula once at the window mean instead answers a different
+            # question twice over: it weighs every hour of the clock alike,
+            # and for a clamped formula, which is convex, the rate of the mean
+            # is not even the mean of the rates.
+            credit = _export_weighted_credit(inj, spot_dict, inj_hour_weights)
+            if credit is not None:
+                return credit
+        # A month-mean index keeps the single evaluation on purpose: such a
+        # contract publishes ONE tariff for the delivery month and the
+        # never-negative guarantee is written against that number, not against
+        # each hour, so there is no per-slot rate to average.
         return _floor_injection(inj.factor * avg_spot + inj.base, inj)
     return _compute_injection_price(snapshot, entry, spot_dict)
 
