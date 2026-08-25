@@ -136,6 +136,43 @@ async def test_edit_branch_offers_a_withdrawn_supplier_it_already_has(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_an_impact_product_is_not_asked_which_tariff_mode(
+    hass: HomeAssistant,
+) -> None:
+    """An Impact card bands its ENERGY on the CWaPE incitative schedule, which
+    exists only under that tariff configuration. Offering the standard mode
+    pre-selected let a user bill the two legs off different structures: the
+    energy routed by Impact band while the network took the standard jour and
+    nuit columns, and the Walloon fixed term charged on top of both."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "octaplus", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "octaplus_fixed_impact"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    # An Impact card requires a smart meter, so the meter step offers one.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "dynamic"}
+    )
+    # Straight past the question to the solar step, with the mode decided.
+    assert result["step_id"] == "solar"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert entry.data["dso_tariff_mode"] == "impact"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
     entry = _make_entry()
     entry.add_to_hass(hass)

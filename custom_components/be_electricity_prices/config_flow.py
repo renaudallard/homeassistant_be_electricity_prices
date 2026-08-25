@@ -105,6 +105,7 @@ from .const import (
     CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
+    DSO_MODE_IMPACT,
     CONF_INCLUDE_VAT,
     CONF_METER,
     CONF_REGION,
@@ -454,6 +455,18 @@ class _WizardStepsMixin:
         # distribution mode question doesn't apply (Brussels has only
         # Sibelga, Flanders bills via the capacity tariff).
         if self._data[CONF_REGION] == REGION_WALLONIA:
+            if (
+                _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
+                == "tou_impact"
+            ):
+                # Not a question for these products. An Impact card bands its
+                # ENERGY on the CWaPE incitative schedule, which exists only
+                # under that configuration, so offering the standard mode
+                # pre-selected let a user bill the two legs off different
+                # tariff structures: the energy routed by Impact band while
+                # the network took the standard jour/nuit columns.
+                self._data[CONF_DSO_TARIFF_MODE] = DSO_MODE_IMPACT
+                return await self._after_dso_tariff_mode()
             return await self.async_step_dso_tariff_mode()
         # Drop a mode carried over from a Walloon edit. Nothing else pops it
         # and the options flow writes self._data verbatim, so an entry moved
