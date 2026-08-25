@@ -258,6 +258,51 @@ def test_fetch_for_month_rejects_mismatched_month() -> None:
     asyncio.run(_run())
 
 
+def test_fetch_for_month_covers_the_whole_fix_folder() -> None:
+    """The month archive is keyed on the FOLDER, not on the slug.
+
+    Bolt's fix folder addresses every card in it by month, residential and
+    professional, ``fix`` and ``plenty_fix`` alike; only the variable folder
+    uses a stable version-number suffix. Requiring the slug to be ``fix`` too
+    locked the two plenty_fix contracts out of an archive that exists, so a
+    one-year fixed contract signed in January was priced all year at the
+    current card, which is the whole point of a fixed product."""
+    from custom_components.be_electricity_prices.providers import bolt
+
+    april_text = fixture_text("bolt_fix.pdf", layout=True)
+
+    async def _run() -> None:
+        with patch.object(
+            bolt, "fetch_pdf_text_layout", new=AsyncMock(return_value=april_text)
+        ):
+            for contract_id in (
+                "bolt_fix",
+                "bolt_plenty_fix",
+                "bolt_pro_fix",
+                "bolt_pro_plenty_fix",
+            ):
+                got = await bolt.fetch_for_month(
+                    None,  # type: ignore[arg-type]
+                    contract_id,
+                    "wallonia",
+                    date(2026, 4, 1),
+                )
+                assert got is not None, contract_id
+            # The variable folder still has no month-addressable card.
+            for contract_id in ("bolt_variable", "bolt_plenty", "bolt_dynamic"):
+                assert (
+                    await bolt.fetch_for_month(
+                        None,  # type: ignore[arg-type]
+                        contract_id,
+                        "wallonia",
+                        date(2026, 4, 1),
+                    )
+                    is None
+                ), contract_id
+
+    asyncio.run(_run())
+
+
 def test_dynamic_extracts_belpex_formula() -> None:
     """Bolt Dynamic reads the same variable card but applies the printed
     formula to the quarter-hourly Belpex spot. The card prints EUR/MWh HTVA:
