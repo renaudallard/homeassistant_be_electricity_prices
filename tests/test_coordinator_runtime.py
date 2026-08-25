@@ -3652,6 +3652,84 @@ async def test_spot_monthly_mean_waits_for_the_historical_spot_fill(
     )
 
 
+async def test_a_month_indexed_card_keeps_its_indicative_when_the_mean_is_missing(
+    hass: HomeAssistant,
+) -> None:
+    """Eneco Power Fix and Flex index the credit on the plain arithmetic
+    Belpex-injectie and print the last known value of it. With no spots there
+    is no mean, and the printed figure has to be credited.
+
+    The skip used to be gated on spp_indexed, on the belief that an SPP card
+    was the only shape carrying an indicative. A month_indexed card carries
+    one too, and fell through to the bake, which sets current, factor and base
+    all to None: the feed-in credit disappears off the sensor rather than
+    degrading by a month's lag. These contracts cannot be handed an ENTSO-E
+    key from any flow step, so that was every entry on them.
+    """
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+
+    entry = make_entry(solar_regime="injection")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        energy=FixedRates(single=0.1234),
+        injection=InjectionRates(
+            current=0.0638, factor=0.84, base=-0.028, month_indexed=True
+        ),
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    # No key, so no spots anywhere: the shape every such entry is in.
+    coord._historical_spots = {}
+    coord._spot_cache = {}
+    coord._spp_weights = {}
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_spp_weights = AsyncMock()  # type: ignore[method-assign]
+
+    data = await coord._async_update_data()
+
+    assert data.injection_price_eur_per_kwh == pytest.approx(0.0638)
+
+
+async def test_a_formula_only_leg_still_bakes_to_none_without_a_mean(
+    hass: HomeAssistant,
+) -> None:
+    """The other half of the same guard, and the reason it cannot simply skip
+    the bake whenever the mean is missing. A card with coefficients and NO
+    printed indicative has nothing to fall back to, and leaving factor/base
+    standing is the shape _injection_is_spot_formula reads as "price this per
+    hour" - turning a flat monthly credit into the current slot's spot.
+    """
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+
+    entry = make_entry(solar_regime="injection")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.0),
+        injection=InjectionRates(current=None, factor=0.9, base=-0.01),
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._historical_spots = {}
+    coord._spot_cache = {}
+    coord._spp_weights = {}
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_spp_weights = AsyncMock()  # type: ignore[method-assign]
+
+    data = await coord._async_update_data()
+
+    assert data.injection_price_eur_per_kwh is None
+
+
 async def test_live_tick_never_bakes_an_spp_formula_against_the_energy_mean(
     hass: HomeAssistant,
 ) -> None:

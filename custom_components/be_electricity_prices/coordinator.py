@@ -760,6 +760,12 @@ class BePricesCoordinator(
         ) and not _injection_hourly_on_cohort(self._snapshot, self.entry):
             inj_mean = monthly_mean
             spp_only = _injection_is_spp_indexed(self._snapshot)
+            # A card that prints an indicative has something to fall back to
+            # when the mean is missing; a formula-only leg does not. That, not
+            # which index the formula names, is what decides whether the bake
+            # can be skipped.
+            inj = self._snapshot.injection
+            has_indicative = inj is not None and inj.current is not None
             if spp_weighted:
                 # SPP-weight the injection month-mean; keep the flat mean for
                 # energy.
@@ -778,14 +784,20 @@ class BePricesCoordinator(
                     inj_mean = None
             elif spp_only:
                 inj_mean = None
-            if spp_only and inj_mean is None:
+            if inj_mean is None and has_indicative:
                 # Leave the snapshot alone so the card's printed indicative is
-                # credited. Only an SPP-indexed card may take this branch: it
-                # is the one shape that HAS an indicative to fall back to.
-                # Skipping the bake for a formula-only leg instead would leave
-                # factor/base standing with no ``current``, which is precisely
-                # the shape _injection_is_spot_formula reads as "price this per
-                # hour" - turning a flat monthly credit into an hourly one at
+                # credited. This used to test spp_only, on the belief that an
+                # SPP-indexed card was the only shape carrying an indicative.
+                # It is not: Eneco Power Fix and Flex are month_indexed and
+                # print one too, so they fell through to the bake and had
+                # current, factor and base all wiped, which drops the feed-in
+                # credit off the sensor entirely rather than degrading it to
+                # the printed figure.
+                #
+                # A formula-only leg still bakes to None deliberately. Leaving
+                # factor/base standing with no ``current`` is precisely the
+                # shape _injection_is_spot_formula reads as "price this per
+                # hour", turning a flat monthly credit into an hourly one at
                 # whatever the current slot costs.
                 pass
             else:
