@@ -137,6 +137,54 @@ def test_every_non_dynamic_kind_gets_the_spp_formula() -> None:
     assert dyn.injection.spp_indexed is False
 
 
+def test_august_redesign_formula_is_parsed() -> None:
+    """OCTA+ reissued every card in August 2026 renaming the parameter to
+    "Epex SPP M" and swapping the x for a star. The regex required a literal
+    x, so the credit silently fell back to the printed V-test estimate on
+    every live card while the April fixtures kept the tests green."""
+    snap = parse_snapshot(
+        "octaplus_fixed", _text("octaplus_fixed_w_aug.pdf"), "wallonia"
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert snap.publication_label == "08/2026"
+    assert inj.factor == pytest.approx(0.856)
+    assert inj.base == pytest.approx(-16.20 / 1000.0)
+    assert inj.spp_indexed is True
+    assert inj.formula == "Epex SPP M * 0,8560 – 16,20"
+
+
+def test_august_card_still_parses_everything_else() -> None:
+    """The redesign moved more than the formula. Pin the rest of the card so a
+    later reissue cannot quietly drop a DSO or a levy."""
+    snap = parse_snapshot(
+        "octaplus_fixed", _text("octaplus_fixed_w_aug.pdf"), "wallonia"
+    )
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(0.1680)
+    assert snap.energy.peak == pytest.approx(0.1978)
+    assert snap.energy.offpeak == pytest.approx(0.1459)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+    assert {"ores", "resa", "aieg", "aiesh"} <= set(snap.dsos)
+    assert snap.taxes.wallonia_renewables > 0.0
+    assert snap.taxes.federal_excise > 0.0
+
+
+def test_the_parameter_name_alone_is_not_a_formula() -> None:
+    """The August prose names the parameter before stating the formula:
+    "sur base du paramètre « Epex SPP M » dont les dernières valeurs". The
+    optional M has to be followed by the operator or that sentence binds as a
+    formula with whatever digits happen to follow it."""
+    from custom_components.be_electricity_prices.providers.octaplus import (
+        _SPP_FORMULA_RE,
+    )
+
+    assert _SPP_FORMULA_RE.findall("le paramètre « Epex SPP M » dont 0,85 - 2,2") == []
+    assert _SPP_FORMULA_RE.findall("Epex SPP M * 0,8560 – 16,20") == [
+        ("0,8560", "–", "16,20")
+    ]
+
+
 def test_disagreeing_meter_formulas_keep_the_estimate() -> None:
     """The card states one formula per meter configuration and they are equal
     today. InjectionRates holds a single pair, so a card that splits them must

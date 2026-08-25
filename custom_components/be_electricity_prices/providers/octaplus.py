@@ -287,12 +287,18 @@ _EPEX_FORMULA = (
 # The 2026 template reworded the injection lead-in from "Le prix de votre
 # injection est indexé ..." to "les prix de l'électricité injectée sont
 # indexés ..."; accept either (with the curly apostrophe the card uses).
-# The monthly index the non-dynamic cards settle their feed-in credit on:
-# "monohoraire : Epex SPP x 0,852 - 13,39", stated in EUR/MWh. The value part
-# is anchored rather than left as a character class, or the sentence-final
-# period is swallowed into the number.
+# The monthly index the non-dynamic cards settle their feed-in credit on. The
+# August 2026 redesign renamed the parameter and changed the operator, so both
+# spellings have to be accepted:
+#   April  "monohoraire : Epex SPP x 0,852 - 13,39"     (one row per meter)
+#   August "en EUR/MWh HTVA : Epex SPP M * 0,8560 - 16,20"  (one row)
+# Stated in EUR/MWh either way. The value part is anchored rather than left as
+# a character class, or the sentence-final period is swallowed into the number.
+# The optional M must be followed by the operator, so the prose mention of the
+# parameter name on its own ("le parametre << Epex SPP M >>") cannot match.
 _SPP_FORMULA_RE = re.compile(
-    rf"Epex\s*SPP\s*x\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)",
+    rf"Epex\s*SPP\s*M?\s*[x*]\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*"
+    rf"(\d+(?:[.,]\d+)?)",
     re.IGNORECASE,
 )
 _INJECTION_LEAD = (

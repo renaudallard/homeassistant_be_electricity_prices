@@ -117,7 +117,7 @@ preferred headers.
 ### `fetch_for_month`
 
 OCTA+ declares no `fetch_for_month` (the `SupplierExtractor` is built with only
-`fetch` and `probe`, `octaplus.py:715-729`). There is no accessible archive:
+`fetch` and `probe`, `octaplus.py:721-735`). There is no accessible archive:
 cards are overwrite-in-place, so past months fall back to the current snapshot
 as a proxy. This is the documented behaviour for overwrite-in-place suppliers in
 `base.py:519-524`.
@@ -236,7 +236,7 @@ divided by 100, pinned illustrative `0.0472`
 sits under the card's own **Prix estimés** heading and is not the rate: *"Le prix
 de votre injection est indexé mensuellement sur base du paramètre d'indexation de
 la Epex SPP ... La valeur de la Epex du mois en cours ne sera connue qu'en fin de
-mois"*. `_SPP_FORMULA_RE` parses the stated `Epex SPP x 0,852 - 13,39` (EUR/MWh,
+mois"*. `_SPP_FORMULA_RE` parses the stated formula (EUR/MWh,
 so `base = b_eur_mwh / 1000`) and the leg is marked `spp_indexed`, which resolves
 it against the delivery month's own solar-weighted mean and keeps the month
 coefficients off the hourly spot. The estimate stays as `current`, the fallback
@@ -353,6 +353,17 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
   the sentence, so a `[\d.,]+` value class swallows the period and turns
   `13,39.` into a different number. The value is anchored as
   `\d+(?:[.,]\d+)?`.
+- **Two card generations, two spellings of the same formula.** OCTA+ reissued
+  every card in August 2026: `Epex SPP x 0,852 - 13,39` became
+  `Epex SPP M * 0,8560 - 16,20`, and the three per-meter rows collapsed to one.
+  `_SPP_FORMULA_RE` accepts both. The optional `M` must be followed by the
+  operator, because the same prose names the parameter on its own first
+  (*"sur base du paramètre « Epex SPP M » dont les dernières valeurs connues"*)
+  and that sentence would otherwise bind as a formula. This is also why the
+  fixtures now carry an August card beside the April ones: the first version
+  of this parser was written against April cards only and matched nothing on
+  anything live, while the suite stayed green
+  (`test_august_redesign_formula_is_parsed`).
 - **Consumption vs injection formula collision**: both dynamic formulas share the
   `Epex 15'` shape; `_dynamic_consumption_formula` must skip the injection one by
   offset, robust to paragraph reordering (`:304-324`).
@@ -389,6 +400,7 @@ cards):
 | `octaplus_fixed_w.pdf` | OCTA+ Fixed, Wallonia (`WL`). Also parsed as the Impact comptage variant. |
 | `octaplus_fixed_v.pdf` | OCTA+ Fixed, Flanders (`VL`). Flanders tax + DSO branch. |
 | `octaplus_smartvariable_w.pdf` | OCTA+ Smart Variable, Wallonia. Variable-kind path. |
+| `octaplus_fixed_w_aug.pdf` | OCTA+ Fixed, Wallonia, **August 2026 redesign**. `Epex SPP M * 0,8560 - 16,20` in place of April's three `Epex SPP x` rows. Kept as served, not re-rendered: ghostscript reorders the DSO and tax column headers. |
 | `octaplus_dynamic_w.pdf` | OCTA+ Dynamic, Wallonia. `Epex 15'` consumption + injection formulas, spaced DSO labels. |
 
 Fixture text is read through `extract_pdf_text_aligned(..., x_join_threshold=1.0)`

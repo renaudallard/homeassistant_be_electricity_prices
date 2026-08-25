@@ -614,7 +614,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # 13,39" coefficients with spp_indexed. Their printed c/kWh sits in the card's
 # "Prix estimes" column and the card says the month's Epex is only known at
 # month-end, so a snapshot written earlier carries the estimate and no formula.
-_SNAPSHOT_SCHEMA_VERSION = 32
+# v33: the OCTA+ SPP injection regex now accepts the August 2026 card, which
+# renamed the parameter to "Epex SPP M" and swapped the x for a star. v32 was
+# written against April cards only, so every live card fell back to the printed
+# V-test estimate and a cached v32 snapshot carries no coefficients at all.
+_SNAPSHOT_SCHEMA_VERSION = 33
 
 
 def _snapshot_to_dict(
