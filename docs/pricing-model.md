@@ -38,7 +38,7 @@ energy + network + taxes == all_in
 
 This holds because VAT is applied to each component separately and then summed,
 never as `(e + n + t) * vat`, which would diverge by sub-femto-euro rounding once
-`vat_rate` is non-zero (`pricing.py:448-457`, same reasoning at
+`vat_rate` is non-zero (`pricing.py:453-462`, same reasoning at
 `pricing.py:445-488` for `static_breakdown`).
 
 ## Public surface
@@ -98,7 +98,7 @@ Note what is deliberately absent from the per-kWh formula:
   table, and `taxes.energy_fund_eur_per_month` are per-year or per-month EUR
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
-  levies (`pricing.py:614-629`); `energy_fund_eur_per_month` is defined on the
+  levies (`pricing.py:619-634`); `energy_fund_eur_per_month` is defined on the
   `TaxOverlay` (`providers/base.py:526`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
@@ -109,7 +109,7 @@ Note what is deliberately absent from the per-kWh formula:
   `databeheer` and the Brussels `mesure` plus fixed-term pair are billed
   whatever the mode says.
 - The Wallonia `region_connection_fee` is a per-kWh term and IS billed, but
-  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:658`), not
+  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:663`), not
   `taxes_eur_per_kwh`. Engie's Walloon card prints `Redevance raccordement(8)`
   and footnote (8) reads *"Vous ne payez pas de TVA sur ces couts"* — the same
   footnote that exempts the Flemish energy fund on its Flanders edition.
@@ -339,7 +339,7 @@ discount and is out of scope (`pricing.py:214-219`).
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
 (`providers/base.py:253-256`). Fields: `pic`, `medium`, `eco`
-(`providers/base.py:268-270`). `dso_impact_band` (`pricing.py:521-537`):
+(`providers/base.py:268-270`). `dso_impact_band` (`pricing.py:526-542`):
 
 | Band | Hours (every day) |
 | --- | --- |
@@ -384,7 +384,7 @@ else falls back to single/current (`pricing.py:264-270`, `pricing.py:281-290`).
 1. **Exclusive night** (`pricing.py:520-535`), resolved BEFORE the Impact band so
    a dedicated night circuit bills its own rate even under Impact mode. Fallback
    chain: `distribution_exclusive_night` -> `distribution_offpeak` ->
-   `distribution_single` (`pricing.py:593-598`). Each step is closer to the real
+   `distribution_single` (`pricing.py:598-603`). Each step is closer to the real
    bill than the day rate.
 2. **Impact** (`pricing.py:536-559`), only when `dso_tariff_mode == "impact"` AND
    all three of `distribution_pic`/`medium`/`eco` are non-`None`. The all-three
@@ -399,7 +399,7 @@ else falls back to single/current (`pricing.py:264-270`, `pricing.py:281-290`).
 4. **Single** (`pricing.py:571-572`), the fallback for everything else, including
    `dso_tariff_mode == "simple"` and mono meters.
 
-`DsoTariffMode` (`"simple" | "bi_horaire" | "impact"`, `pricing.py:517`,
+`DsoTariffMode` (`"simple" | "bi_horaire" | "impact"`, `pricing.py:522`,
 `const.py:173-177`) is orthogonal to the supplier meter: it is the billing mode
 set on the user's grid connection, and the coordinator falls back automatically
 when the DSO does not publish Impact rates (`const.py:168-172`).
@@ -443,7 +443,12 @@ rate for the current-year-cost / YTD sensor when the contract has one
 
 `static_energy_eur_per_kwh(energy, band)` returns a rate for `band in
 ("single","peak","offpeak")` for Fixed and Variable, falling back to
-single/current when the requested band is unpublished (`pricing.py:342-365`). It
+single/current when the card publishes no split (`pricing.py:342-365`). A
+HALF-published pair counts as no split, the same rule `_routed_rate` applies on
+the hourly path: filling the missing half from the single rate reads a rate the
+card never printed for that band, and it made the two walks disagree about one
+entry, the hourly engine billing the single rate around the clock while the
+per-day walk billed the peak rate for peak hours. It
 returns `None` for `DynamicRates` (no constant rate), `TimeOfUseRates` (3-band
 schema does not map onto the bi-hourly convention) and `ImpactRates` (per-band
 rates vary by hour, caller must use the hourly path) (`pricing.py:346-351`).
@@ -455,7 +460,7 @@ publishes Impact distribution: Impact distribution cannot collapse to
 single/peak/offpeak, so the YTD path must read hourly statistics instead
 (`pricing.py:456-460`). Distribution selection here mirrors the network side:
 `simple` -> single, `peak`/`offpeak` band when published, else single
-(`pricing.py:487-494`). A missing `dso_key` raises `KeyError` with the available
+(`pricing.py:492-499`). A missing `dso_key` raises `KeyError` with the available
 keys (`pricing.py:644-675`, same guard in `compute_breakdown` at
 `pricing.py:401-570`).
 

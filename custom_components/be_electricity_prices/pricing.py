@@ -373,21 +373,26 @@ def static_energy_eur_per_kwh(energy: EnergyRates, band: StaticBand) -> float | 
     constant rate exists), TimeOfUseRates (3-band schema doesn't map
     onto the bi-hourly meter convention), and ImpactRates (per-band
     rates vary by hour-of-day; caller must go through the hourly path).
-    Falls back to the single rate when the requested peak/offpeak band
-    has no published value (mono-only rate sheet).
+    Falls back to the single rate when the card publishes no peak/offpeak
+    split (mono-only rate sheet).
+
+    A HALF-published pair counts as no split, which is the same rule
+    ``_routed_rate`` applies on the hourly path. Taking the published half and
+    filling the other from the single rate reads a rate the card never printed
+    for that band, and it made the two walks disagree about one entry: the
+    hourly engine billed the single rate around the clock while this one
+    billed the peak rate for peak hours. A card in that state is malformed
+    rather than mono-only, and the conservative reading is the one that does
+    not invent the missing half.
     """
     if isinstance(energy, FixedRates):
-        if band == "single":
+        if band == "single" or energy.peak is None or energy.offpeak is None:
             return energy.single
-        if band == "peak":
-            return energy.peak if energy.peak is not None else energy.single
-        return energy.offpeak if energy.offpeak is not None else energy.single
+        return energy.offpeak if band == "offpeak" else energy.peak
     if isinstance(energy, VariableRates):
-        if band == "single":
+        if band == "single" or energy.peak is None or energy.offpeak is None:
             return energy.current
-        if band == "peak":
-            return energy.peak if energy.peak is not None else energy.current
-        return energy.offpeak if energy.offpeak is not None else energy.current
+        return energy.offpeak if band == "offpeak" else energy.peak
     return None
 
 

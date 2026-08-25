@@ -28,7 +28,7 @@
 from __future__ import annotations
 
 from typing import Any
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -786,3 +786,44 @@ def test_wallonia_midday_offpeak_only_applies_from_2026() -> None:
     for year in (2025, 2026):
         assert is_offpeak(datetime(year, 6, 18, 3, 0), "wallonia")
         assert is_offpeak(datetime(year, 6, 21, 12, 0), "wallonia")
+
+
+def test_a_half_published_band_pair_is_not_a_split() -> None:
+    """A card publishing a peak rate but no off-peak one is malformed, not
+    mono-only, and the two costing walks used to read it differently.
+
+    _routed_rate needs both halves before it bills a bi-hourly split, so the
+    hourly engine billed the single rate around the clock. The per-day walk
+    filled the missing half from the single rate and billed the peak rate for
+    peak hours, so the same entry cost two different amounts depending on
+    which path priced it. Neither invents the missing half now."""
+    from custom_components.be_electricity_prices.pricing import (
+        energy_eur_per_kwh,
+        static_energy_eur_per_kwh,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        VariableRates,
+    )
+
+    half = FixedRates(single=0.18, peak=0.25, offpeak=None)
+    assert static_energy_eur_per_kwh(half, "peak") == pytest.approx(0.18)
+    assert static_energy_eur_per_kwh(half, "offpeak") == pytest.approx(0.18)
+    assert static_energy_eur_per_kwh(half, "single") == pytest.approx(0.18)
+    # And that is what the hourly engine says for every hour of the day.
+    for hour in (3, 10, 19, 23):
+        when = datetime(2026, 3, 5, hour, tzinfo=UTC)
+        assert energy_eur_per_kwh(
+            half, when, None, meter="bi", region="wallonia"
+        ) == pytest.approx(0.18)
+
+    # A complete pair still splits, on both paths.
+    whole = FixedRates(single=0.18, peak=0.25, offpeak=0.15)
+    assert static_energy_eur_per_kwh(whole, "peak") == pytest.approx(0.25)
+    assert static_energy_eur_per_kwh(whole, "offpeak") == pytest.approx(0.15)
+
+    # Same rule for a variable card, whose base rate is `current`.
+    half_var = VariableRates(current=0.20, peak=0.28, offpeak=None)
+    assert static_energy_eur_per_kwh(half_var, "peak") == pytest.approx(0.20)
+    whole_var = VariableRates(current=0.20, peak=0.28, offpeak=0.16)
+    assert static_energy_eur_per_kwh(whole_var, "offpeak") == pytest.approx(0.16)
