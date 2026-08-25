@@ -571,7 +571,12 @@ class _MigratingStore(Store[dict[str, Any]]):
 # earlier carries no factor/base for that contract, so the entry would keep
 # crediting the VNR forecast (measured 3,6x the contractual credit in April
 # 2026) until the 24 h TTL happened to refetch.
-_SNAPSHOT_SCHEMA_VERSION = 22
+# v23: Mega Cap now parses the contractual ceiling on the energy component
+# ("vous payez le minimum entre les prix variables mensuels et ce plafond").
+# A snapshot written earlier carries no ceiling, so the entry would price
+# straight through the cap the customer is protected by until the card
+# happened to refetch, which is exactly when the cap matters.
+_SNAPSHOT_SCHEMA_VERSION = 23
 
 
 def _snapshot_to_dict(

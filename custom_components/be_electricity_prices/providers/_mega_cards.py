@@ -252,6 +252,7 @@ def _extract_energy(
             yearly_fixed_fee=yearly_fee,
         )
     f_factor, f_base = _variable_cohort_coefficients(text, professional=professional)
+    ceiling = _energy_price_ceiling(text)
     return VariableRates(
         current=realized.get("mono", mono),
         peak=realized.get("peak", peak),
@@ -260,7 +261,43 @@ def _extract_energy(
         yearly_fixed_fee=yearly_fee,
         formula_factor=f_factor,
         formula_base=f_base,
+        ceiling_single=ceiling.get("mono"),
+        ceiling_peak=ceiling.get("peak"),
+        ceiling_offpeak=ceiling.get("offpeak"),
+        ceiling_exclusive_night=ceiling.get("exclusive_night"),
     )
+
+
+_CEILING_RE = re.compile(
+    r"limit\w+\s+[\u00e0a]\s+un plafond de\s*:?\s*\([^)]*\)\s*"
+    r"Compteur\s+mono-horaire\s*:\s*(?P<mono>\d+[.,]\d+)\s*;\s*"
+    r"Jour\s*:\s*(?P<peak>\d+[.,]\d+)\s*;\s*"
+    r"Nuit\s*:\s*(?P<offpeak>\d+[.,]\d+)\s*;\s*"
+    r"Exclusif\s+nuit\s*:\s*(?P<exclusive_night>\d+[.,]\d+)",
+    re.IGNORECASE,
+)
+
+
+def _energy_price_ceiling(text: str) -> dict[str, float]:
+    """Per-meter ceiling on the energy component, in EUR/kWh.
+
+    Mega Cap is the one product that caps what the commodity can cost: "la
+    composante energie facturee est limitee a un plafond de ... vous payez le
+    minimum entre les prix variables mensuels et ce plafond", guaranteed a
+    year from the start of supply. The card prints the four meter columns on
+    the same basis as its rates, TVAC on the residential edition and HTVA on
+    the professional one, so nothing here has to know which it is reading.
+
+    Empty for every other card, which prints no such sentence.
+    """
+    match = _CEILING_RE.search(" ".join(text.split()))
+    if match is None:
+        return {}
+    return {
+        name: to_float(value) / 100.0
+        for name, value in match.groupdict().items()
+        if value is not None
+    }
 
 
 def _realized_rates(text: str) -> dict[str, float]:

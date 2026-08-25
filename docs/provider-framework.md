@@ -24,7 +24,7 @@ Related docs:
 
 Each supplier is a self-contained module (for example `providers/bolt.py`) that
 exposes exactly one top-level name, `EXTRACTOR`, of type `SupplierExtractor`
-(`providers/base.py:568`, `SupplierProtocol`). The module's job is to turn the
+(`providers/base.py:577`, `SupplierProtocol`). The module's job is to turn the
 supplier's live publication (a PDF card, an HTML listing, or a small API) into a
 `SupplierSnapshot`: the energy formula plus a network/tax/capacity overlay for
 every DSO sub-area the supplier operates in. The coordinator then picks the one
@@ -122,7 +122,7 @@ SnapshotProbe = Callable[
 ]
 ```
 
-Defined at `providers/base.py:517`. A cheap freshness key. The coordinator calls
+Defined at `providers/base.py:526`. A cheap freshness key. The coordinator calls
 it hourly and only re-runs `fetch` when the returned key changes from the cached
 one. Semantics of the return value:
 
@@ -252,7 +252,7 @@ transition : 11:00-17:00 + 22:00-01:00
 offpeak    : 01:00-07:00
 ```
 
-`weekend_rule` (`WeekendRule`, `providers/base.py:199`) selects the weekend
+`weekend_rule` (`WeekendRule`, `providers/base.py:208`) selects the weekend
 schedule:
 
 - `weekend_offpeak` (generic CWaPE default): Saturday, Sunday and public holidays are entirely off-peak.

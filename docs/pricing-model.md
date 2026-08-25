@@ -38,7 +38,7 @@ energy + network + taxes == all_in
 
 This holds because VAT is applied to each component separately and then summed,
 never as `(e + n + t) * vat`, which would diverge by sub-femto-euro rounding once
-`vat_rate` is non-zero (`pricing.py:422-431`, same reasoning at
+`vat_rate` is non-zero (`pricing.py:448-457`, same reasoning at
 `pricing.py:445-488` for `static_breakdown`).
 
 ## Public surface
@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:614-629`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:517`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:526`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -109,7 +109,7 @@ Note what is deliberately absent from the per-kWh formula:
   `databeheer` and the Brussels `mesure` plus fixed-term pair are billed
   whatever the mode says.
 - The Wallonia `region_connection_fee` is a per-kWh term and IS billed, but
-  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:632`), not
+  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:658`), not
   `taxes_eur_per_kwh`. Engie's Walloon card prints `Redevance raccordement(8)`
   and footnote (8) reads *"Vous ne payez pas de TVA sur ces couts"* — the same
   footnote that exempts the Flemish energy fund on its Flanders edition.
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:759`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:768`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -208,6 +208,21 @@ per-kWh figure, and the annual bill is exact whenever the volume estimate is.
 A volume past the last band is billed at the last band's rate for the
 remainder. Residential cards leave `federal_excise_bands` at `None`, where the
 resolver is identity.
+
+### Contractual price ceilings
+
+Mega Cap is the one product that caps what the commodity can cost: *"la
+composante energie facturee est limitee a un plafond de ... vous payez le
+minimum entre les prix variables mensuels et ce plafond"*, per meter, and
+guaranteed a year from the start of supply. `VariableRates` carries the four
+`ceiling_*` columns and `energy_eur_per_kwh` takes the `min()` of the routed
+rate and the routed ceiling.
+
+Per SLOT, not on a mean: a ceiling is a `min()`, so clamping a monthly or
+annual average would let an expensive month shelter under a cheap one, which is
+the opposite of what the guarantee sells. The ceiling covers the energy
+component only; network, taxes and surcharges stay due in full. Cards that cap
+nothing leave the columns `None` and price exactly as before.
 
 ## Energy rate by contract kind
 
@@ -323,8 +338,8 @@ discount and is out of scope (`pricing.py:214-219`).
 `ImpactRates` (`tou_impact` kind) is Wallonia's Tarif Impact, distinct from TOU
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
-(`providers/base.py:244-247`). Fields: `pic`, `medium`, `eco`
-(`providers/base.py:259-261`). `dso_impact_band` (`pricing.py:495-511`):
+(`providers/base.py:253-256`). Fields: `pic`, `medium`, `eco`
+(`providers/base.py:268-270`). `dso_impact_band` (`pricing.py:521-537`):
 
 | Band | Hours (every day) |
 | --- | --- |
@@ -369,7 +384,7 @@ else falls back to single/current (`pricing.py:264-270`, `pricing.py:281-290`).
 1. **Exclusive night** (`pricing.py:520-535`), resolved BEFORE the Impact band so
    a dedicated night circuit bills its own rate even under Impact mode. Fallback
    chain: `distribution_exclusive_night` -> `distribution_offpeak` ->
-   `distribution_single` (`pricing.py:567-572`). Each step is closer to the real
+   `distribution_single` (`pricing.py:593-598`). Each step is closer to the real
    bill than the day rate.
 2. **Impact** (`pricing.py:536-559`), only when `dso_tariff_mode == "impact"` AND
    all three of `distribution_pic`/`medium`/`eco` are non-`None`. The all-three
@@ -384,7 +399,7 @@ else falls back to single/current (`pricing.py:264-270`, `pricing.py:281-290`).
 4. **Single** (`pricing.py:571-572`), the fallback for everything else, including
    `dso_tariff_mode == "simple"` and mono meters.
 
-`DsoTariffMode` (`"simple" | "bi_horaire" | "impact"`, `pricing.py:491`,
+`DsoTariffMode` (`"simple" | "bi_horaire" | "impact"`, `pricing.py:517`,
 `const.py:173-177`) is orthogonal to the supplier meter: it is the billing mode
 set on the user's grid connection, and the coordinator falls back automatically
 when the DSO does not publish Impact rates (`const.py:168-172`).
@@ -412,9 +427,9 @@ path (`pricing.py:108-113`).
 `yearly_fixed_fee_for_meter` bills the dedicated `yearly_fixed_fee_exclusive_night`
 on an exclusive-night config entry when the card prints one (EBEM Groen Variabel),
 otherwise the standard `yearly_fixed_fee` for every meter type
-(`pricing.py:368-382`). Three rate shapes carry the dedicated field: `FixedRates`
+(`pricing.py:394-408`). Three rate shapes carry the dedicated field: `FixedRates`
 (`providers/base.py:112-145`), `VariableRates` (`providers/base.py:121-125`) and
-`SpotMonthlyRates` (`providers/base.py:182-187`), the last because a variable card
+`SpotMonthlyRates` (`providers/base.py:191-196`), the last because a variable card
 re-priced onto a monthly-mean leg for a signing cohort keeps the separate charge
 its card printed. An exclusive-night circuit is configured as a SECOND config
 entry pointing at the night kWh sensor; the primary day meter stays
@@ -440,7 +455,7 @@ publishes Impact distribution: Impact distribution cannot collapse to
 single/peak/offpeak, so the YTD path must read hourly statistics instead
 (`pricing.py:456-460`). Distribution selection here mirrors the network side:
 `simple` -> single, `peak`/`offpeak` band when published, else single
-(`pricing.py:461-468`). A missing `dso_key` raises `KeyError` with the available
+(`pricing.py:487-494`). A missing `dso_key` raises `KeyError` with the available
 keys (`pricing.py:644-675`, same guard in `compute_breakdown` at
 `pricing.py:401-570`).
 
@@ -453,7 +468,7 @@ same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption
-snapshot's `vat_rate` (`providers/base.py:553-553`). None of the injection code
+snapshot's `vat_rate` (`providers/base.py:562-562`). None of the injection code
 paths multiply by `1.0 + vat_rate`.
 
 Injection formulas can go negative at low spot (the producer pays to inject) and

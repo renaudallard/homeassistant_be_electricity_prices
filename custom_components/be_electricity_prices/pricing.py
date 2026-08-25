@@ -300,7 +300,7 @@ def energy_eur_per_kwh(
             dso_tariff_mode=dso_tariff_mode,
         )
     if isinstance(energy, VariableRates):
-        return _routed_rate(
+        rate = _routed_rate(
             energy.current,
             energy,
             when,
@@ -308,6 +308,32 @@ def energy_eur_per_kwh(
             region,
             bi_capable=bi_capable,
             dso_tariff_mode=dso_tariff_mode,
+        )
+        if energy.ceiling_single is None:
+            return rate
+        # "Vous payez le minimum entre les prix variables mensuels et ce
+        # plafond." Applied here, per slot and per meter, because it is a
+        # min() and not a mean: clamping an average instead would let an
+        # expensive month shelter under a cheap one. The ceiling covers the
+        # energy component only; network, taxes and surcharges stay due in
+        # full, and they are added by the caller.
+        ceiling = FixedRates(
+            single=energy.ceiling_single,
+            peak=energy.ceiling_peak,
+            offpeak=energy.ceiling_offpeak,
+            exclusive_night=energy.ceiling_exclusive_night,
+        )
+        return min(
+            rate,
+            _routed_rate(
+                ceiling.single,
+                ceiling,
+                when,
+                meter,
+                region,
+                bi_capable=bi_capable,
+                dso_tariff_mode=dso_tariff_mode,
+            ),
         )
     if isinstance(energy, DynamicRates):
         if spot_eur_per_kwh is None:

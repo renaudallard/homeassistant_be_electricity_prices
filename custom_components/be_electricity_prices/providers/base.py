@@ -143,6 +143,15 @@ class VariableRates:
     # (few-percent) approximation of the true residential-load-profile weighting.
     formula_factor: float | None = None
     formula_base: float | None = None
+    # Contractual ceiling on the ENERGY component, per meter type, on the same
+    # basis as the rates above (TVAC on a residential card, HTVA on a
+    # professional one). Mega Cap is the product: "vous payez le minimum entre
+    # les prix variables mensuels et ce plafond", guaranteed a year from the
+    # start of supply. None on every card that caps nothing.
+    ceiling_single: float | None = None
+    ceiling_peak: float | None = None
+    ceiling_offpeak: float | None = None
+    ceiling_exclusive_night: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

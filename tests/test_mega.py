@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from datetime import date
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -1159,3 +1159,71 @@ async def test_pro_textless_card_is_not_rolled_back_to_last_month() -> None:
             )
     # It must not have reached for the previous month's card.
     assert len(served) == 1
+
+
+def test_cap_parses_the_energy_price_ceiling() -> None:
+    """Mega Cap is the one product that caps what the commodity can cost:
+    "la composante energie facturee est limitee a un plafond de ... vous payez
+    le minimum entre les prix variables mensuels et ce plafond", guaranteed a
+    year from the start of supply. Nothing parsed it, so the integration
+    priced straight through the cap the customer chose the product for."""
+    from custom_components.be_electricity_prices.providers._mega_cards import (
+        _energy_price_ceiling,
+    )
+
+    residential = (
+        "La composante energie facturee est limitee a un plafond de : "
+        "(c\u20ac/kWh TVAC) Compteur mono-horaire : 49,84; Jour : 55,48; "
+        "Nuit : 46,02; Exclusif nuit : 46,02. Vous payez le minimum entre les "
+        "prix variables mensuels et ce plafond applique a votre consommation."
+    )
+    assert _energy_price_ceiling(residential) == {
+        "mono": pytest.approx(0.4984),
+        "peak": pytest.approx(0.5548),
+        "offpeak": pytest.approx(0.4602),
+        "exclusive_night": pytest.approx(0.4602),
+    }
+
+    # The professional edition prints the same sentence on its own basis.
+    professional = residential.replace("TVAC", "HTVA").replace("49,84", "47,02")
+    assert _energy_price_ceiling(professional)["mono"] == pytest.approx(0.4702)
+
+    # Every other card prints no such sentence.
+    assert _energy_price_ceiling("Carte tarifaire, prix variables mensuels") == {}
+
+
+def test_the_energy_ceiling_is_applied_per_slot_and_per_meter() -> None:
+    """A ceiling is a min(), so it belongs on each slot's own rate. Clamping a
+    monthly or annual average instead would let an expensive month shelter
+    under a cheap one, which is the opposite of what the guarantee sells."""
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    when = datetime(2026, 8, 20, 12, 0, tzinfo=UTC)
+    capped = VariableRates(
+        current=0.60,
+        peak=0.62,
+        offpeak=0.55,
+        ceiling_single=0.4984,
+        ceiling_peak=0.5548,
+        ceiling_offpeak=0.4602,
+        ceiling_exclusive_night=0.4602,
+    )
+    assert energy_eur_per_kwh(
+        capped, when, None, meter="mono", region="wallonia"
+    ) == pytest.approx(0.4984)
+    # The bi-hourly meter takes its own band's ceiling, not the mono one.
+    assert energy_eur_per_kwh(
+        capped, when, None, meter="bi", region="wallonia"
+    ) == pytest.approx(0.4602)
+
+    # Below the cap nothing changes, which is the normal case.
+    cheap = VariableRates(current=0.12, ceiling_single=0.4984)
+    assert energy_eur_per_kwh(
+        cheap, when, None, meter="mono", region="wallonia"
+    ) == pytest.approx(0.12)
+    # And a card with no ceiling prices exactly as it always did.
+    plain = VariableRates(current=0.60)
+    assert energy_eur_per_kwh(
+        plain, when, None, meter="mono", region="wallonia"
+    ) == pytest.approx(0.60)
