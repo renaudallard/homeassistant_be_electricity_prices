@@ -1249,12 +1249,16 @@ def test_variable_cohort_carries_a_formula_per_meter() -> None:
     from custom_components.be_electricity_prices.cohort import (
         _cohort_energy_from_archived,
     )
-    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.pricing import (
+        MeterType,
+        energy_eur_per_kwh,
+    )
 
     snap = parse_snapshot(
         "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"
     )
     energy = snap.energy
+    assert isinstance(energy, VariableRates)
     # Parsed on the card's TVAC basis, so each factor carries the 1,06.
     assert energy.formula_factor == pytest.approx(1.1095 * 1.06)
     assert energy.formula_factor_peak == pytest.approx(1.3275 * 1.06)
@@ -1262,9 +1266,11 @@ def test_variable_cohort_carries_a_formula_per_meter() -> None:
 
     leg = _cohort_energy_from_archived(snap)
     assert leg is not None
+    base = energy.formula_base
+    assert base is not None
     spot = 0.10
 
-    def rate(hour: int, meter: str) -> float:
+    def rate(hour: int, meter: MeterType) -> float:
         when = datetime(2026, 3, 5, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
         return energy_eur_per_kwh(leg, when, spot, meter=meter, region="wallonia")
 
@@ -1273,5 +1279,5 @@ def test_variable_cohort_carries_a_formula_per_meter() -> None:
     # A bi-hourly one takes its band's own: dearer at peak, cheaper off-peak.
     assert rate(20, "bi") > rate(20, "mono")
     assert rate(3, "bi") < rate(3, "mono")
-    assert rate(20, "bi") == pytest.approx(1.3275 * 1.06 * spot + energy.formula_base)
-    assert rate(3, "bi") == pytest.approx(0.94 * 1.06 * spot + energy.formula_base)
+    assert rate(20, "bi") == pytest.approx(1.3275 * 1.06 * spot + base)
+    assert rate(3, "bi") == pytest.approx(0.94 * 1.06 * spot + base)

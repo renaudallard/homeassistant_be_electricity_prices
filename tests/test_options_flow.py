@@ -3775,10 +3775,16 @@ def test_compensation_prices_each_side_of_the_netting_on_its_own_shape() -> None
     cons, inj = 3500.0, 2500.0
 
     split = _annual_bill(
-        snap, entry, 0.0, per_kwh, cons, inj, export_per_kwh=export_per_kwh
+        snap,
+        entry,  # type: ignore[arg-type]
+        0.0,
+        per_kwh,
+        cons,
+        inj,
+        export_per_kwh=export_per_kwh,
     )
-    lumped = _annual_bill(snap, entry, 0.0, per_kwh, cons, inj)
-    fees = _annual_bill(snap, entry, 0.0, per_kwh, 0.0, 0.0)
+    lumped = _annual_bill(snap, entry, 0.0, per_kwh, cons, inj)  # type: ignore[arg-type]
+    fees = _annual_bill(snap, entry, 0.0, per_kwh, 0.0, 0.0)  # type: ignore[arg-type]
 
     # Each side on its own rate: 3500 x 0,36 - 2500 x 0,30.
     assert split - fees == pytest.approx(3500 * 0.36 - 2500 * 0.30)
@@ -3789,9 +3795,22 @@ def test_compensation_prices_each_side_of_the_netting_on_its_own_shape() -> None
 
     # Surplus export is still forfeited, never paid out.
     surplus = _annual_bill(
-        snap, entry, 0.0, per_kwh, 1000.0, 9000.0, export_per_kwh=export_per_kwh
+        snap,
+        entry,  # type: ignore[arg-type]
+        0.0,
+        per_kwh,
+        1000.0,
+        9000.0,
+        export_per_kwh=export_per_kwh,
     )
     assert surplus == pytest.approx(fees)
 
     # Without a measured export shape the quote is exactly what it was.
-    assert _annual_bill(snap, entry, 0.0, per_kwh, cons, inj) == pytest.approx(lumped)
+    assert _annual_bill(
+        snap,
+        entry,  # type: ignore[arg-type]
+        0.0,
+        per_kwh,
+        cons,
+        inj,
+    ) == pytest.approx(lumped)

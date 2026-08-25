@@ -520,10 +520,12 @@ def test_variable_bills_the_delivery_month_not_the_printed_indicative() -> None:
         "test://var",
         "2026-04",
     )
-    assert snap.energy.month_indexed is True
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is True
 
     entry = SimpleNamespace(data={"contract": "cociter_variable", "api_key": "k"})
-    leg = _month_indexed_leg(snap, entry)
+    leg = _month_indexed_leg(snap, entry)  # type: ignore[arg-type]
     assert leg is not None
     when = datetime(2026, 4, 15, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 
@@ -534,7 +536,7 @@ def test_variable_bills_the_delivery_month_not_the_printed_indicative() -> None:
 
     # The printed indicative IS the formula at March's index, which is what the
     # card says and what made this a defect rather than a rounding difference.
-    assert at(0.09261) == pytest.approx(snap.energy.current)
+    assert at(0.09261) == pytest.approx(energy.current)
     # April's own index is what April is billed at.
     assert at(0.07893) == pytest.approx(0.115749, abs=1e-6)
     # And May's, printed on the June card, matches too.
@@ -543,6 +545,9 @@ def test_variable_bills_the_delivery_month_not_the_printed_indicative() -> None:
     # An entry with no ENTSO-E key keeps the printed rate rather than losing
     # its energy leg: the variable kind never prompts for one.
     assert (
-        _month_indexed_leg(snap, SimpleNamespace(data={"contract": "cociter_variable"}))
+        _month_indexed_leg(
+            snap,
+            SimpleNamespace(data={"contract": "cociter_variable"}),  # type: ignore[arg-type]
+        )
         is None
     )
