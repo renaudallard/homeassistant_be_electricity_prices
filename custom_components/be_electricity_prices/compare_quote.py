@@ -717,6 +717,7 @@ def _annual_bill(
     consumption_kwh: float,
     injection_kwh: float = 0.0,
     injection_price: float | None = None,
+    export_per_kwh: float | None = None,
     fee_proration: float = 1.0,
     prosumer_proration: float | None = None,
     capacity_proration: float | None = None,
@@ -744,9 +745,12 @@ def _annual_bill(
 
     - ``"none"``: ``cost = consumption_kwh * per_kwh + fees``
     - ``"compensation"``: meter is netted 1:1 (Walloon pre-2024
-      installations until 2030). The billable kWh is
-      ``max(consumption - injection, 0)``; surplus injection is
-      forfeited, never paid out. Fees include the prosumer charge.
+      installations until 2030); surplus injection is forfeited, never paid
+      out, so the year is clamped at zero. With ``export_per_kwh``, the all-in
+      rate weighted by the EXPORT shape, each side is priced on its own shape
+      and the netting matches the live sensor's per-hour one; without it the
+      annual totals are netted first and the residue takes ``per_kwh``, which
+      is what every quote did before. Fees include the prosumer charge.
     - ``"injection"``: consumption is billed at ``per_kwh`` AND
       injection is credited at ``injection_price``; the credit is
       subtracted from the cost and can drive the bill negative when
@@ -786,8 +790,19 @@ def _annual_bill(
             fees += capacity_annual * (capacity_proration / 12.0 - fee_proration)
     regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     if regime == "compensation":
-        billable = max(consumption_kwh - injection_kwh, 0.0)
-        return fees + per_kwh * billable
+        if export_per_kwh is None:
+            billable = max(consumption_kwh - injection_kwh, 0.0)
+            return fees + per_kwh * billable
+        # A reversing meter nets against the rate in force at the time, which
+        # is what the live sensor bills: it nets each hour and clamps the year
+        # once. Netting the two annual totals first and pricing the residue at
+        # the CONSUMPTION-weighted rate prices exported kWh at hours they were
+        # never produced in, and the two shapes are opposites, evening-heavy
+        # against a midday bell. Splitting the term is the same sum written
+        # per side: consumption at its own weighted rate, export credited at
+        # its own, with the single annual clamp the live path also applies.
+        netted = consumption_kwh * per_kwh - injection_kwh * export_per_kwh
+        return fees + max(netted, 0.0)
     if regime == "injection" and injection_price is not None:
         return fees + per_kwh * consumption_kwh - injection_price * injection_kwh
     return fees + per_kwh * consumption_kwh

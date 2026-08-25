@@ -3751,3 +3751,47 @@ async def test_compare_branch_static_to_spot_monthly_prompts_for_api_key(
         ).all_in
         assert float(ph["compare_per_kwh"]) == pytest.approx(at_month_mean, abs=2e-3)
         assert float(ph["compare_per_kwh"]) != pytest.approx(at_day_mean, abs=2e-3)
+
+
+def test_compensation_prices_each_side_of_the_netting_on_its_own_shape() -> None:
+    """A reversing meter nets against the rate in force at the time, which is
+    what the live sensor bills: it nets each hour and clamps the year once.
+
+    Netting the two annual totals first and pricing the residue at the
+    CONSUMPTION-weighted rate prices exported kWh at hours they were never
+    produced in, and the two shapes are opposites: evening-heavy consumption
+    against a midday export bell."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_quote import _annual_bill
+    from tests import make_snapshot
+
+    snap = make_snapshot()
+    entry = SimpleNamespace(
+        data={"solar_regime": "compensation", "dso": "ores", "region": "wallonia"}
+    )
+    # Evening-heavy draw is dearer than the midday export it nets against.
+    per_kwh, export_per_kwh = 0.36, 0.30
+    cons, inj = 3500.0, 2500.0
+
+    split = _annual_bill(
+        snap, entry, 0.0, per_kwh, cons, inj, export_per_kwh=export_per_kwh
+    )
+    lumped = _annual_bill(snap, entry, 0.0, per_kwh, cons, inj)
+    fees = _annual_bill(snap, entry, 0.0, per_kwh, 0.0, 0.0)
+
+    # Each side on its own rate: 3500 x 0,36 - 2500 x 0,30.
+    assert split - fees == pytest.approx(3500 * 0.36 - 2500 * 0.30)
+    # Netting first and pricing the residue at the consumption rate is a
+    # different, lower number: 1000 x 0,36.
+    assert lumped - fees == pytest.approx(1000 * 0.36)
+    assert split > lumped
+
+    # Surplus export is still forfeited, never paid out.
+    surplus = _annual_bill(
+        snap, entry, 0.0, per_kwh, 1000.0, 9000.0, export_per_kwh=export_per_kwh
+    )
+    assert surplus == pytest.approx(fees)
+
+    # Without a measured export shape the quote is exactly what it was.
+    assert _annual_bill(snap, entry, 0.0, per_kwh, cons, inj) == pytest.approx(lumped)

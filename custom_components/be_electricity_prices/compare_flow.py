@@ -881,6 +881,34 @@ class _CompareStepsMixin(OptionsFlow):
             self.hass, self.config_entry, year_ago, today_local, side="injection"
         )
         current_per_kwh: float | None = None
+        current_export_per_kwh: float | None = None
+        other_export_per_kwh: float | None = None
+
+        async def _export_rate_for(
+            snapshot: SupplierSnapshot | None, meter_type: Any
+        ) -> float | None:
+            """All-in EUR/kWh weighted by when the panels EXPORT.
+
+            Only a compensation meter needs it: it nets against the rate in
+            force at the time, so the exported side has to be priced on its
+            own shape rather than on the consumption one. Every other regime
+            never reads it, so it is not worth the second pass.
+            """
+            if regime != SOLAR_REGIME_COMPENSATION or snapshot is None:
+                return None
+            if inj_hour_weights is None:
+                return None
+            return _tou_weighted_per_kwh(
+                snapshot,
+                dso,
+                region,
+                dt_util.as_local(now_utc),
+                await _spot_for(snapshot),
+                meter_type,
+                dso_mode,
+                inj_hour_weights,
+            )
+
         if current_snapshot is not None:
             current_per_kwh = _tou_weighted_per_kwh(
                 current_snapshot,
@@ -891,6 +919,9 @@ class _CompareStepsMixin(OptionsFlow):
                 current_meter,
                 dso_mode,
                 hour_weights,
+            )
+            current_export_per_kwh = await _export_rate_for(
+                current_snapshot, current_meter
             )
 
         # Other supplier: fetch + compute.
@@ -932,6 +963,7 @@ class _CompareStepsMixin(OptionsFlow):
                     dso_mode,
                     hour_weights,
                 )
+                other_export_per_kwh = await _export_rate_for(other_snap, meter)
                 if other_per_kwh is None:
                     placeholders["error"] = "compute failed"
 
@@ -993,6 +1025,7 @@ class _CompareStepsMixin(OptionsFlow):
                 annual_kwh,
                 rolling_inj_kwh,
                 current_inj_price,
+                export_per_kwh=current_export_per_kwh,
                 meter=current_meter,
             )
             placeholders["current_per_kwh"] = f"{current_per_kwh:.4f}"
@@ -1000,7 +1033,7 @@ class _CompareStepsMixin(OptionsFlow):
         if other_per_kwh is not None and other_snap is not None:
             placeholders["compare_per_kwh"] = f"{other_per_kwh:.4f}"
             placeholders["compare_annual"] = (
-                f"{_annual_bill(other_snap, quote_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, meter=meter):.2f}"
+                f"{_annual_bill(other_snap, quote_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, export_per_kwh=other_export_per_kwh, meter=meter):.2f}"
             )
 
         # The compare branch cannot quote the user against their own
@@ -1030,6 +1063,7 @@ class _CompareStepsMixin(OptionsFlow):
                 annual_kwh,
                 rolling_inj_kwh,
                 baseline_inj_price,
+                export_per_kwh=current_export_per_kwh,
                 meter=current_meter,
             )
         placeholders["solar_note"] = _whatif_note(
@@ -1055,6 +1089,7 @@ class _CompareStepsMixin(OptionsFlow):
                 annual_kwh,
                 rolling_inj_kwh,
                 compare_inj_price,
+                export_per_kwh=other_export_per_kwh,
                 meter=meter,
             ) - _annual_bill(
                 current_snapshot,
@@ -1064,6 +1099,7 @@ class _CompareStepsMixin(OptionsFlow):
                 annual_kwh,
                 rolling_inj_kwh,
                 current_inj_price,
+                export_per_kwh=current_export_per_kwh,
                 meter=current_meter,
             )
             placeholders["delta_annual"] = f"{'+' if delta >= 0 else ''}{delta:.2f}"
@@ -1220,6 +1256,7 @@ class _CompareStepsMixin(OptionsFlow):
                 ytd_kwh,
                 ytd_inj_kwh,
                 current_inj_price,
+                export_per_kwh=current_export_per_kwh,
                 fee_proration=fee_proration,
                 prosumer_proration=month_proration,
                 capacity_proration=month_proration,
@@ -1233,6 +1270,7 @@ class _CompareStepsMixin(OptionsFlow):
                 ytd_kwh,
                 ytd_inj_kwh,
                 compare_inj_price,
+                export_per_kwh=other_export_per_kwh,
                 fee_proration=fee_proration,
                 prosumer_proration=month_proration,
                 capacity_proration=month_proration,
