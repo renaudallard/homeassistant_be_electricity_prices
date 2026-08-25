@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:619-634`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:533`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:541`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -159,7 +159,7 @@ pricing engine:
 - **Fixed and annual fees** - the yearly fee, data management, capacity, the DSO
   and supplier prosumer forfaits, the Brussels OSP table - never reach that path:
   the live, YTD, backfill and compare paths each sum them raw.
-  `base.apply_vat` (`providers/base.py:594`) bakes them once instead.
+  `base.apply_vat` (`providers/base.py:602`) bakes them once instead.
 
 `apply_vat` is called per config entry, from `_resolve_snapshot`
 (`coordinator.py:568`), never before the shared snapshot cache: that cache is
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:780`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:793`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -208,6 +208,23 @@ per-kWh figure, and the annual bill is exact whenever the volume estimate is.
 A volume past the last band is billed at the last band's rate for the
 remainder. Residential cards leave `federal_excise_bands` at `None`, where the
 resolver is identity.
+
+### The Flemish network ceiling
+
+The Flemish cards print a `maximumtarief` per kWh, and Ecopower states what it
+does: *"zou u met het capaciteitstarief en het nettarief per kWh meer
+nettarieven betalen dan met het maximumtarief? Dan betaalt u het
+maximumtarief."* So the capacity charge plus the per-kWh network term may not
+exceed the ceiling times the volume, and `_capped_capacity_annual`
+(`fees.py:90`) takes the excess off the capacity term, which is the leg that
+produced it.
+
+It cannot be applied without a volume, so it lands in `_annual_fees`
+(`compare_quote.py:813`), where the year's kWh is in hand. The live
+`current_year_cost` sensor accrues capacity month by month before its
+consumption total is known and is NOT capped there; at the 2026 rates and the
+regulated 2,5 kW floor the ceiling binds under about 470 kWh a year, so the two
+agree for any household and part company only on a garage box or a second home.
 
 ### Contractual price ceilings
 
@@ -473,7 +490,7 @@ same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption
-snapshot's `vat_rate` (`providers/base.py:569-569`). None of the injection code
+snapshot's `vat_rate` (`providers/base.py:577-577`). None of the injection code
 paths multiply by `1.0 + vat_rate`.
 
 Injection formulas can go negative at low spot (the producer pays to inject) and
@@ -492,7 +509,7 @@ convex and the two orders give different money:
   each slot at its own rate; the compare estimate (`_compare_injection_credit`,
   `compare_quote.py:171`) has to collapse the window to one number, so it takes
   the mean of the floored rates weighted by the household's own export shape
-  (`_export_weighted_credit`, `compare_quote.py:168`), which is the basis the
+  (`_export_weighted_credit`, `compare_quote.py:169`), which is the basis the
   year-to-date walk bills on.
 - a MONTH-MEAN formula floors once, on the delivery month's tariff, because such
   a card publishes one number a month and the guarantee is written against that
@@ -693,7 +710,7 @@ full year of history has accumulated.
 ## Prosumer term
 
 The prosumer (compensation-regime) fee is Walloon-only and monthly
-(`_compute_prosumer`, `fees.py:220-235`):
+(`_compute_prosumer`, `fees.py:252-267`):
 
 ```
 prosumer_cost_eur = kva * (dso_rate + supplier_rate) / 12.0
@@ -727,7 +744,7 @@ overlay, gated the same Walloon-only way (`ytd_cost.py:203-229`).
 
 The Brussels Brugel OSP (Obligations de Service Public) fee is a flat annual
 Sibelga charge scaled by contractual connection power
-(`_brussels_osp_fee`, `fees.py:87-96`):
+(`_brussels_osp_fee`, `fees.py:122-131`):
 
 ```python
 def _brussels_osp_fee(overlay, entry) -> float:      # fees.py:87

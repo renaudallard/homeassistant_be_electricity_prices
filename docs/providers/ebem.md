@@ -125,7 +125,7 @@ be billed at their own rates instead of the current-snapshot proxy.
    not published.
 4. Resolve the URL, set `label = "YYYY-MM"`, download + parse; return `None` on
    `ExtractorError`.
-5. Pass the result through `archive_validity_check` (`_pdf.py:906`).
+5. Pass the result through `archive_validity_check` (`_pdf.py:908`).
 
 `archive_validity_check` is called with `month_names=None`. When
 `snap.valid_until` parsed, it rejects the snapshot if that date does not fall in

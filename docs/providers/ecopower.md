@@ -138,7 +138,7 @@ possible.
 - **gbs** (`ecopower.py:202`): scrape `_PRICE_PAGE`, find the `_CARD_RE` matches whose month
   equals the requested one and whose URL is not an `inschatting` preview, take the highest stamp
   among them (a month can carry both a bare and a dated card), download and
-  `parse_snapshot`. Then `archive_validity_check` (`_pdf.py:906`) cross-checks that the parsed card
+  `parse_snapshot`. Then `archive_validity_check` (`_pdf.py:908`) cross-checks that the parsed card
   actually covers the requested month, using Dutch month names (`_NL_MONTHS`, `ecopower.py:107-107`)
   for the textual fallback when `valid_until` is absent. This guards against the CDN serving the
   current card under a historical URL and mis-billing past consumption at current rates. Returns
@@ -183,7 +183,7 @@ same layout text through `fixture_text(name, layout=True)` (`test_ecopower.py:55
 | `dsos` | `_extract_dsos` (`ecopower.py:470`) | `_extract_dbs_dsos` (`ecopower.py:547`) |
 | `taxes` | `_extract_taxes` (`ecopower.py:613`) | same helper reused |
 | `injection` | `_extract_injection` (`ecopower.py:730`) | `_extract_dbs_injection` (`ecopower.py:776`) |
-| `valid_until` | `parse_valid_until` (`_pdf.py:945`) | same |
+| `valid_until` | `parse_valid_until` (`_pdf.py:947`) | same |
 | `publication_label` | passed in (`YYYY-MM`) | passed in |
 
 ### Energy parsing
@@ -365,7 +365,7 @@ VAT-exempt). Sets `current=None`, `factor`, `base`, and a diagnostic `formula` s
 
 There is no supplier-side PV/prosumer forfait: `supplier_prosumer_eur_per_kva_year` stays `None`.
 Flanders digital meters (post-2024 SMR3) do not carry the compensation-regime prosumer tariff
-(`DsoOverlay.prosumer_eur_per_kva_year` docstring, `base.py:404-404`), so the extractor never sets
+(`DsoOverlay.prosumer_eur_per_kva_year` docstring, `base.py:412-412`), so the extractor never sets
 it. No Wallonia Tarif Impact or Brussels OSP applies (Flanders-only).
 
 ### VAT scaling: the recurring Ecopower gotcha
@@ -376,7 +376,7 @@ Because Ecopower publishes HTVA, **every** value is stored exactly as the card p
 | value | grossed by | where |
 | --- | --- | --- |
 | per-kWh energy, distribution, levies | `compute_breakdown` via `vat_rate=0.06` | `pricing._finalize_breakdown` |
-| flat annual euro fees (yearly fee, data management, capacity, prosumer forfaits) | `base.apply_vat`, once per entry | `base.py:594` |
+| flat annual euro fees (yearly fee, data management, capacity, prosumer forfaits) | `base.apply_vat`, once per entry | `base.py:602` |
 
 The worked example: the same Fluvius databeheer prints `17,85` HTVA on Ecopower's card versus
 `18,92` TVAC on other suppliers' cards, and `apply_vat` is what turns one into the other

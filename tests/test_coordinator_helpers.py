@@ -317,6 +317,57 @@ def test_walloon_fixed_term_is_not_billed_on_the_impact_tariff() -> None:
         )
 
 
+def test_the_flemish_network_ceiling_caps_the_capacity_charge() -> None:
+    """Ecopower states the rule on its card: "zou u met het capaciteitstarief
+    en het nettarief per kWh meer nettarieven betalen dan met het
+    maximumtarief? Dan betaalt u het maximumtarief."
+
+    The cards print the ceiling and nothing read it, so a connection whose
+    capacity term dominates was billed straight through the cap. It binds
+    under about 470 kWh a year at the 2026 rates and the regulated 2,5 kW
+    floor: a garage box or a second home, not a household."""
+    from custom_components.be_electricity_prices.fees import _capped_capacity_annual
+
+    overlay = DsoOverlay(
+        distribution_single=0.0535329,
+        transport=0.0,
+        capacity_eur_per_kw_year=52.3679,
+        network_ceiling_eur_per_kwh=0.3472738,
+    )
+    capacity = 2.5 * 52.3679  # the regulated floor, 130,92 EUR/year
+
+    # A 600 kWh connection is over the ceiling, so the excess comes off the
+    # capacity term: 600 x (0,3472738 - 0,0535329) = 176,24 headroom... which
+    # is above the charge, so nothing is capped yet.
+    assert _capped_capacity_annual(overlay, capacity, 600.0, "mono") == pytest.approx(
+        capacity
+    )
+    # At 400 kWh the headroom is 117,50 and the charge does get capped.
+    assert _capped_capacity_annual(overlay, capacity, 400.0, "mono") == pytest.approx(
+        400.0 * (0.3472738 - 0.0535329)
+    )
+    # A household is nowhere near it.
+    assert _capped_capacity_annual(overlay, capacity, 3500.0, "mono") == pytest.approx(
+        capacity
+    )
+    # Never negative, however small the volume.
+    assert _capped_capacity_annual(overlay, capacity, 1.0, "mono") >= 0.0
+
+    # A card printing no ceiling, or an unknown volume, changes nothing.
+    plain = DsoOverlay(
+        distribution_single=0.0535329, transport=0.0, capacity_eur_per_kw_year=52.3679
+    )
+    assert _capped_capacity_annual(plain, capacity, 400.0, "mono") == pytest.approx(
+        capacity
+    )
+    assert _capped_capacity_annual(overlay, capacity, 0.0, "mono") == pytest.approx(
+        capacity
+    )
+    assert _capped_capacity_annual(None, capacity, 400.0, "mono") == pytest.approx(
+        capacity
+    )
+
+
 def test_a_brussels_connection_above_13_kva_is_billed_its_own_band() -> None:
     """Sibelga bands both the power term and the Brugel OSP fee on connection
     power, and only the bands at or below 13 kVA were reachable.

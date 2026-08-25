@@ -214,7 +214,7 @@ for example, uses another day). The rewrite:
    The rewrite cannot anchor on `.pdf` because the suffix can sit mid-token before a
    `-Fixed` / `-Green` / `-Fix` variant.
 4. Download, parse, then cross-check the parsed card against the requested month
-   with `archive_validity_check` (`_pdf.py:906`), passing `_FR_MONTH_NAMES`
+   with `archive_validity_check` (`_pdf.py:908`), passing `_FR_MONTH_NAMES`
    (`mega.py:419`). If validity or the month text does not match, return `None` so
    the YTD walk falls back to the proxy snapshot rather than mis-billing.
 
@@ -250,7 +250,7 @@ the listing minus `_KNOWN_UNSUPPORTED_PRODUCTS`. It is best-effort catalog signa
 for the daily live-check: diffing against `{c.product_name for c in _CONTRACTS}`
 flags any new Mega product to add to the registry. Filtering out the prepaid
 products keeps them from re-opening the same catalog issue every day (regression
-2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:612`).
+2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:619`).
 On a listing fetch failure it returns an empty set rather than raising.
 
 ## Parsing
@@ -274,7 +274,7 @@ Fields pulled and their helpers:
 | Energy rates (per kind) | `_extract_energy` | `_mega_cards.py:190` |
 | Injection | `_extract_injection` | `_mega_cards.py:469` |
 | Publication label | `_extract_publication_month` | `_mega_cards.py:438` |
-| Valid until | `parse_valid_until` then `_extract_valid_until` | `_pdf.py:945`, `_mega_cards.py:457` |
+| Valid until | `parse_valid_until` then `_extract_valid_until` | `_pdf.py:947`, `_mega_cards.py:457` |
 | Federal excise | `_extract_federal_excise` | `_mega_overlays.py:149` |
 | Energy contribution | `_extract_energy_contribution` | `_mega_overlays.py:180` |
 | Wallonia connection fee | `_extract_connection_fee` (Wallonia only) | `_mega_overlays.py:198` |
@@ -288,7 +288,7 @@ Fields pulled and their helpers:
 (`_extract_yearly_fee`, `_mega_cards.py:423`), which accepts both the split dynamic layout
 (`Redevance fixe\n(€/an)\n42.4`) and the joined fixed layout
 (`Redevance fixe (€/an)\n111.3`). A missing standing charge raises (it is on every
-card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:404`) enforces it.
+card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:411`) enforces it.
 
 - `dynamic`: parse the consumption formula (see next section) into `DynamicRates`.
 - `tou_impact`: parse three CWaPE bands (`_extract_impact_tier` for `PIC`,
@@ -420,7 +420,7 @@ PIC, MEDIUM, ECO, transport. The Impact triplet (`distribution_pic` / `_medium` 
 `_eco`) is always populated here because every Wallonia card prints the three CWaPE
 bands. Prosumer rates come from a separate small `Tarif Prosumer (€/kW/an)` table
 further down and are cross-referenced onto each overlay
-(`test_wallonia_dso_carries_prosumer_rate_from_separate_table`, `test_mega.py:279`).
+(`test_wallonia_dso_carries_prosumer_rate_from_separate_table`, `test_mega.py:286`).
 
 Brussels (`_extract_brussels_dsos`, `_mega_overlays.py:381`) maps the single Sibelga row, an
 8-number block: mono, jour, nuit, excl_nuit, transport, mesure_comptage (€/an),
@@ -428,7 +428,7 @@ terme_fixe <=13kVA (€/an), terme_fixe >13kVA (€/an). Brussels has no capacit
 (capacity is Flanders-only), so both flat annual euros (the metering fee and the
 Sibelga <=13kVA fixed term) are folded into `data_management_per_year`; the >13kVA
 term (group 8) is not billed here. The Brugel OSP annual fee table is parsed by the
-shared `parse_brussels_osp` (`_pdf.py:688`) and keyed by connection-power tier. The
+shared `parse_brussels_osp` (`_pdf.py:690`) and keyed by connection-power tier. The
 test `test_smart_fixed_brussels_extracts_sibelga_row` (`test_mega.py:258`) pins the
 folded fee to 14.73 + 50.0744 and the OSP tiers to
 `{le1_44: 0.0, le6: 13.36, le9_6: 21.37, le13: 26.71}` (illustrative).
@@ -437,7 +437,7 @@ folded fee to 14.73 + 50.0744 and the OSP tiers to
 
 `_extract_publication_month` (`_mega_cards.py:438`) first tries the versioned Smart Fixed
 prefix `V<n> <month> <year>` (the token class includes `é` and `û` so `août` keeps
-its version, `test_publication_month_keeps_version_for_august`, `test_mega.py:397`),
+its version, `test_publication_month_keeps_version_for_august`, `test_mega.py:404`),
 then falls back to `Prix du mois MM/YYYY` rendered as `<month-name> YYYY` from
 `_FR_MONTH_NAMES` (`_mega_cards.py:435`). `valid_until` prefers the shared
 `parse_valid_until` keyword scan and falls back to `_extract_valid_until`
@@ -481,7 +481,7 @@ month (Mega cards are valid for the printed month).
   This is the same convention as Eneco and Cociter; do not add a VAT multiplier when
   parsing.
 
-The test `test_taxes_split_correctly_per_region` (`test_mega.py:372`) pins the
+The test `test_taxes_split_correctly_per_region` (`test_mega.py:379`) pins the
 cross-region excise (0.0503288) and the per-region renewables split.
 
 ## Injection

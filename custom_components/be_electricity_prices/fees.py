@@ -87,6 +87,38 @@ def _compute_capacity(
     return _capacity_monthly_eur(snapshot.dsos.get(dso), peak_kw)
 
 
+def _capped_capacity_annual(
+    overlay: DsoOverlay | None,
+    capacity_annual: float,
+    annual_kwh: float,
+    meter: MeterType,
+) -> float:
+    """The Flemish capacity charge after the VREG ceiling, in EUR/year.
+
+    Ecopower's card states the rule: "zou u met het capaciteitstarief en het
+    nettarief per kWh meer nettarieven betalen dan met het maximumtarief? Dan
+    betaalt u het maximumtarief. U betaalt dus nooit meer dan dat." So the
+    capacity term plus the per-kWh network term may not exceed the ceiling
+    times the volume, and the excess comes off the capacity term, which is the
+    leg that produced it.
+
+    It binds only where capacity dominates: at the 2026 rates and the
+    regulated 2,5 kW floor that is under about 470 kWh a year, which is a
+    garage box or a second home rather than a household. Returns
+    ``capacity_annual`` unchanged when the card prints no ceiling, when the
+    volume is unknown, or when the total is already under it.
+    """
+    if overlay is None or overlay.network_ceiling_eur_per_kwh is None:
+        return capacity_annual
+    if annual_kwh <= 0.0:
+        return capacity_annual
+    per_kwh = overlay.distribution_single + overlay.transport
+    if meter == "exclusive_night" and overlay.distribution_exclusive_night is not None:
+        per_kwh = overlay.distribution_exclusive_night + overlay.transport
+    headroom = (overlay.network_ceiling_eur_per_kwh - per_kwh) * annual_kwh
+    return min(capacity_annual, max(headroom, 0.0))
+
+
 def _brussels_osp_fee(overlay: DsoOverlay | None, entry: ConfigEntry) -> float:
     """Brussels Brugel OSP annual fee (EUR/year) for the configured tier.
 

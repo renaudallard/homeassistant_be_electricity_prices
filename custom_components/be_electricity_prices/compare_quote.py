@@ -52,6 +52,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_DSO,
     CONF_REGION,
     CONF_SOLAR_REGIME,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
@@ -757,7 +758,8 @@ def _annual_bill(
       injection income exceeds consumption + fees.
     """
     fees = (
-        _annual_fees(snapshot, entry, peak_kw, meter, include_capacity) * fee_proration
+        _annual_fees(snapshot, entry, peak_kw, meter, include_capacity, consumption_kwh)
+        * fee_proration
     )
     if prosumer_proration is not None:
         # _annual_fees prorated the prosumer term uniformly by fee_proration;
@@ -814,6 +816,7 @@ def _annual_fees(
     peak_kw: float,
     meter: Any,
     include_capacity: bool = True,
+    annual_kwh: float = 0.0,
 ) -> float:
     """Just the EUR/year fee components (no per-kWh term).
 
@@ -825,9 +828,14 @@ def _annual_fees(
     ``include_capacity`` can exclude the Flanders capacity tariff. It is on
     everywhere today: the live ``current_year_cost`` sensor accrues capacity
     through ``_ytd_capacity``, so a what-if that dropped it would quote a
-    lower bill than the sensor it sits next to."""
+    lower bill than the sensor it sits next to.
+
+    ``annual_kwh`` lets the Flemish capacity charge be held under the VREG
+    ceiling the cards print as "maximumtarief", which caps capacity plus the
+    per-kWh network term together and so cannot be applied without a volume."""
     from .fees import (
         _annual_static_fees,
+        _capped_capacity_annual,
         _compute_capacity,
         _compute_prosumer,
     )
@@ -836,6 +844,12 @@ def _annual_fees(
     capacity = 0.0
     if include_capacity and entry.data.get(CONF_REGION) == REGION_FLANDERS:
         capacity = 12.0 * _compute_capacity(snapshot, entry, peak_kw)
+        capacity = _capped_capacity_annual(
+            snapshot.dsos.get(entry.data.get(CONF_DSO, "")),
+            capacity,
+            annual_kwh,
+            meter,
+        )
     prosumer = 12.0 * _compute_prosumer(snapshot, entry)
     return static + capacity + prosumer
 

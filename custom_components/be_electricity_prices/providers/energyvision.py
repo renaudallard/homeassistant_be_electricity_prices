@@ -286,7 +286,8 @@ _DSO_ROWS_FR: tuple[tuple[str, str], ...] = (
 # The Flanders DSO table prints two blocks (digital + analog meter). Only the
 # digital-meter block is billed (modern smart meters); its five columns are
 # capaciteitstarief (EUR/kW/yr) | kWh-tarief (c€/kWh) | kWh excl. nacht
-# (c€/kWh) | databeheer (EUR/yr) | maximumtarief (c€/kWh, unused ceiling).
+# (c€/kWh) | databeheer (EUR/yr) | maximumtarief (c€/kWh), the VREG ceiling on
+# capacity plus the per-kWh network term.
 _DIGITAL_MARKER = "Digitale Meter"
 _ANALOG_MARKER = "Analoge Meter"
 
@@ -530,6 +531,7 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             transport=0.0,
             capacity_eur_per_kw_year=to_float(row.group(1)),
             data_management_per_year=to_float(row.group(4)),
+            network_ceiling_eur_per_kwh=to_float(row.group(5)) / 100.0,
         )
     return out
 

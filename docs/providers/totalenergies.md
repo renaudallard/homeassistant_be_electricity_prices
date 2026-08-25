@@ -151,7 +151,7 @@ Fields pulled and their helpers:
 | DSO overlay (Flanders) | `_extract_flanders_dsos` | `totalenergies.py:680` |
 | DSO overlay (Wallonia) | `_extract_wallonia_dsos` | `totalenergies.py:724` |
 | DSO overlay (Brussels) | `_extract_brussels_dsos` | `totalenergies.py:768` |
-| Validity date | `parse_valid_until` (shared) | `_pdf.py:945` |
+| Validity date | `parse_valid_until` (shared) | `_pdf.py:947` |
 
 Notable parsing hurdles:
 
@@ -295,7 +295,7 @@ other product. Shape (c) spot-indexed-variable is not used; no contract sets
 `spot_indexed_injection`.
 
 There is **no supplier-side prosumer/PV forfait**: `supplier_prosumer_eur_per_kva_year`
-is left `None` (`SupplierSnapshot` default, `providers/base.py:584`). The only
+is left `None` (`SupplierSnapshot` default, `providers/base.py:592`). The only
 prosumer charge is the DSO tariff (`DsoOverlay.prosumer_eur_per_kva_year`), surfaced
 for both the Flanders and Wallonia rows where the card publishes it.
 
@@ -396,7 +396,7 @@ Ordered by how likely a card change is to break them:
    new DSO name, a renamed sub-area, or a changed column order needs the label map
    and the fixed group indices updated together.
 8. **Publication label + validity**: `_extract_publication_month`
-   (`totalenergies.py:470`) and the shared `parse_valid_until` (`_pdf.py:945`) drive
+   (`totalenergies.py:470`) and the shared `parse_valid_until` (`_pdf.py:947`) drive
    the `publication_label` and `valid_until` diagnostics.
 9. **Discovery (CI)**: `discover` (`totalenergies.py:211`). If the listing markup or
    the `tariff-card/latest/<SLUG>_ELECTRICITY_<REGION>_FR` link format changes,

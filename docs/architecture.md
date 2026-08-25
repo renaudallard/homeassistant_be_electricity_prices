@@ -149,7 +149,7 @@ onto these canonical keys.
 
 ### Supplier and contract
 
-A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:825`). It declares
+A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:838`). It declares
 the `Contract`s it sells (`providers/base.py:64`), each carrying a `TariffKind`
 (`providers/base.py:53`):
 
@@ -244,7 +244,7 @@ Numbered walkthrough:
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:177`),
    so the coordinator must not read `runtime_data` during first refresh.
-5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:584`):
+5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:592`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
    `InjectionRates`.
 6. For a dynamic contract (or a spot-indexed-injection one) the coordinator fetches the ENTSO-E
@@ -300,7 +300,7 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:862`). It declares the
+   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:875`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.

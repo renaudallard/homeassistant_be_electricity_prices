@@ -24,7 +24,7 @@ Related docs:
 
 Each supplier is a self-contained module (for example `providers/bolt.py`) that
 exposes exactly one top-level name, `EXTRACTOR`, of type `SupplierExtractor`
-(`providers/base.py:584`, `SupplierProtocol`). The module's job is to turn the
+(`providers/base.py:592`, `SupplierProtocol`). The module's job is to turn the
 supplier's live publication (a PDF card, an HTML listing, or a small API) into a
 `SupplierSnapshot`: the energy formula plus a network/tax/capacity overlay for
 every DSO sub-area the supplier operates in. The coordinator then picks the one
@@ -122,7 +122,7 @@ SnapshotProbe = Callable[
 ]
 ```
 
-Defined at `providers/base.py:533`. A cheap freshness key. The coordinator calls
+Defined at `providers/base.py:541`. A cheap freshness key. The coordinator calls
 it hourly and only re-runs `fetch` when the returned key changes from the cached
 one. Semantics of the return value:
 
@@ -577,14 +577,14 @@ downstream regex would miss silently.
 
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
-| `parse_brussels_osp` | `parse_brussels_osp(text: str) -> dict[str, float] \| None` | Parse the Brussels Brugel OSP annual-fee table off a Sibelga card. Anchors on the `Obligations de Service` block (case-insensitive: Bolt lowercases `s`) and each `<bound> kVA <value>` row, returning every band the card prints (`le1_44` through `gt56`) or `None` when absent. The open-ended top row is told apart by the `>` in front of its bound, since `> 36 et <= 56 kVA` and `> 56 kVA` both end in `56 kVA`. Populates `DsoOverlay.brussels_osp_by_tier` (`_pdf.py:688`). |
-| `parse_valid_until` | `parse_valid_until(text: str) -> date \| None` | Best-effort parse of the card's validity date, anchored within ~200 chars after a validity keyword (`geldig`/`valable`/`validit`/`valid `). Tries spelled-out `<day> <month> <year>`, numeric `DD/MM/YYYY` (or `DD/MM/YY`), then bare `<month> <year>` (last day of month). Clamps candidates to a symmetric 5-year horizon around Brussels-local today so a corrupted footer date does not produce a bogus year. Returns the latest match or `None`. Populates `SupplierSnapshot.valid_until` (`_pdf.py:945`). |
+| `parse_brussels_osp` | `parse_brussels_osp(text: str) -> dict[str, float] \| None` | Parse the Brussels Brugel OSP annual-fee table off a Sibelga card. Anchors on the `Obligations de Service` block (case-insensitive: Bolt lowercases `s`) and each `<bound> kVA <value>` row, returning every band the card prints (`le1_44` through `gt56`) or `None` when absent. The open-ended top row is told apart by the `>` in front of its bound, since `> 36 et <= 56 kVA` and `> 56 kVA` both end in `56 kVA`. Populates `DsoOverlay.brussels_osp_by_tier` (`_pdf.py:690`). |
+| `parse_valid_until` | `parse_valid_until(text: str) -> date \| None` | Best-effort parse of the card's validity date, anchored within ~200 chars after a validity keyword (`geldig`/`valable`/`validit`/`valid `). Tries spelled-out `<day> <month> <year>`, numeric `DD/MM/YYYY` (or `DD/MM/YY`), then bare `<month> <year>` (last day of month). Clamps candidates to a symmetric 5-year horizon around Brussels-local today so a corrupted footer date does not produce a bogus year. Returns the latest match or `None`. Populates `SupplierSnapshot.valid_until` (`_pdf.py:947`). |
 | `text_mentions_month` | `text_mentions_month(text, year_month: date, month_names: tuple[str, ...]) -> bool` | Heuristic that `text` references the requested month+year inside an anchored window (first 1000 chars where the card title prints, plus validity-keyword windows). Accent-folds both sides and collapses whitespace so `mei\n2026` matches (`_pdf.py:273`). |
-| `archive_validity_check` | `archive_validity_check(snap, text, year_month, *, month_names=None) -> SupplierSnapshot \| None` | Confirm an archived snapshot actually covers `year_month`. Returns `snap` on pass, `None` otherwise, so a provider's `fetch_for_month` can fall back to the proxy rather than mis-bill. Two tiers: authoritative `snap.valid_until` month check when present; otherwise require a textual month mention (when `month_names` given, as eneco/cociter do) or accept on the URL resolver alone (when `None`, as ebem does) (`_pdf.py:906`). |
+| `archive_validity_check` | `archive_validity_check(snap, text, year_month, *, month_names=None) -> SupplierSnapshot \| None` | Confirm an archived snapshot actually covers `year_month`. Returns `snap` on pass, `None` otherwise, so a provider's `fetch_for_month` can fall back to the proxy rather than mis-bill. Two tiers: authoritative `snap.valid_until` month check when present; otherwise require a textual month mention (when `month_names` given, as eneco/cociter do) or accept on the URL resolver alone (when `None`, as ebem does) (`_pdf.py:908`). |
 
-Two supporting internals back these date parsers: `_MONTH_NAMES` (`_pdf.py:769`)
+Two supporting internals back these date parsers: `_MONTH_NAMES` (`_pdf.py:771`)
 maps Dutch, French (with and without accents) and English month names to their
-1-12 index, and `_validity_windows` (`_pdf.py:844`) returns the ~200-char
+1-12 index, and `_validity_windows` (`_pdf.py:846`) returns the ~200-char
 context after each validity keyword so a retrospective month mention elsewhere
 in the PDF does not masquerade as a validity statement. `_OSP_BOUND_TO_TIER`
 (`_pdf.py:545`) maps kVA upper bounds to the shared tier keys and is kept as

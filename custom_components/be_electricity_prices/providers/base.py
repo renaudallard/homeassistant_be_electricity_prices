@@ -390,6 +390,14 @@ class DsoOverlay:
     # Only the Sibelga overlay carries it; the user's configured tier selects
     # the billed value. None outside Brussels or when the card omits the table.
     brussels_osp_by_tier: dict[str, float] | None = None
+    # VREG ceiling on the periodic network cost, in EUR/kWh, printed as
+    # "maximumtarief" on the Flemish cards. Ecopower states the rule on its
+    # card: "zou u met het capaciteitstarief en het nettarief per kWh meer
+    # nettarieven betalen dan met het maximumtarief? Dan betaalt u het
+    # maximumtarief". So the capacity term plus the per-kWh network term may
+    # not exceed this times the volume. None outside Flanders or on a card
+    # that omits the column.
+    network_ceiling_eur_per_kwh: float | None = None
     # Sibelga's power term for a connection ABOVE 13 kVA, in EUR/year. The
     # card prints two columns and ``data_management_per_year`` holds the one
     # at or below 13 kVA; a 3x400 V / 25 A house is 17,3 kVA and belongs in
@@ -652,6 +660,11 @@ def _vat_dso(dso: DsoOverlay, factor: float) -> DsoOverlay:
             None
             if dso.brussels_power_term_above_13kva is None
             else dso.brussels_power_term_above_13kva * factor
+        ),
+        network_ceiling_eur_per_kwh=(
+            None
+            if dso.network_ceiling_eur_per_kwh is None
+            else dso.network_ceiling_eur_per_kwh * factor
         ),
     )
 

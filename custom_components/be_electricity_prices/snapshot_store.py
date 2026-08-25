@@ -581,7 +581,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # prints rather than the four at or below 13 kVA. A snapshot written earlier
 # has neither, so a connection above the line would keep being billed the
 # smaller term and an OSP fee its tier does not have.
-_SNAPSHOT_SCHEMA_VERSION = 24
+# v25: EnergyVision now parses the "maximumtarief" column, the VREG ceiling on
+# capacity plus the per-kWh network term, which the card printed and nothing
+# read. A snapshot written earlier carries no ceiling.
+_SNAPSHOT_SCHEMA_VERSION = 25
 
 
 def _snapshot_to_dict(

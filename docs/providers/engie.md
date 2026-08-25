@@ -208,7 +208,7 @@ Fields pulled from the card:
 | Flanders DSOs | `_extract_flanders_dsos` (`engie.py:878`) | Digital-meter Fluvius table. |
 | Wallonia DSOs | `_extract_wallonia_dsos` (`engie.py:927`) | 9/10-number rows, ORES divergence guard. |
 | Brussels DSO | `_extract_brussels_dsos` (`engie.py:997`) | Sibelga row + Brugel OSP table. |
-| `valid_until` | `parse_valid_until` (`_pdf.py:945`) | Best-effort validity date. |
+| `valid_until` | `parse_valid_until` (`_pdf.py:947`) | Best-effort validity date. |
 
 ### The yearly-fee two-layout problem
 
@@ -363,7 +363,7 @@ the metering fee (`Activité de mesure`, column 5) and the Sibelga <=13kVA power
 term (column 6), into `data_management_per_year` (`engie.py:1024`, test
 `test_dynamic_brussels_extracts_sibelga` `tests/test_engie.py:214`, illustrative
 `14.73 + 50.07`). It also parses the Brugel OSP annual-fee table via the shared
-`parse_brussels_osp` (`_pdf.py:688`) into `brussels_osp_by_tier`.
+`parse_brussels_osp` (`_pdf.py:690`) into `brussels_osp_by_tier`.
 
 ## Tax overlay
 
