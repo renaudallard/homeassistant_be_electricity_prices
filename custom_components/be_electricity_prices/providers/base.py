@@ -529,10 +529,10 @@ class TaxOverlay:
     # Degressive excise bands as ((upper_kwh, eur_per_kwh), ...) ascending,
     # for a card that prints the special excise as a tariff schedule by
     # annual consumption instead of one rate. Professional cards do; every
-    # residential card prints a single rate and leaves this None. The band
-    # the entry's annual volume falls in is resolved into ``federal_excise``
-    # by :func:`resolve_excise_band`, so the pricing engine keeps reading
-    # one rate and knows nothing about bands.
+    # residential card prints a single rate and leaves this None. The
+    # schedule is billed PER TRANCHE, so :func:`resolve_excise_band` blends
+    # it over the entry's annual volume into ``federal_excise`` and the
+    # pricing engine keeps reading one rate, knowing nothing about bands.
     federal_excise_bands: tuple[tuple[float, float], ...] | None = None
     flanders_renewables: float = 0.0
     wallonia_renewables: float = 0.0
@@ -716,32 +716,64 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
     )
 
 
+def blended_excise_rate(
+    bands: tuple[tuple[float, float], ...], annual_kwh: float
+) -> float:
+    """Average EUR/kWh of a degressive excise schedule over ``annual_kwh``.
+
+    The cards say what the schedule is: "un tarif degressif PAR TRANCHE de
+    consommation, calcule sur une base annuelle". Each slice of the year's
+    volume is billed at its own band's rate, so a site drawing 30 000 kWh
+    pays the first 20 000 at the first band and only the remaining 10 000 at
+    the second. Billing the whole volume at the band the total lands in is a
+    different, always cheaper number, because the schedule decreases.
+
+    The engine prices per hour and cannot know where in the year's cumulative
+    volume an hour sits, but it does not have to: the charge is defined on an
+    annual basis, so the honest per-kWh figure is the year's total divided by
+    the year's volume. That is what this returns, and it makes the annual
+    bill exact whenever the volume estimate is.
+
+    A volume past the last band is billed at the last band's rate for the
+    remainder: the schedule stops at the ceiling the card covers (1.000.000
+    kWh/year on the current professional cards), and above that the
+    connection is out of what these cards price at all, so extending the last
+    rate keeps a plausible number rather than inventing one.
+    """
+    if annual_kwh <= 0.0:
+        return bands[0][1]
+    total = 0.0
+    floor = 0.0
+    for upper, rate in bands:
+        slice_kwh = min(annual_kwh, upper) - floor
+        if slice_kwh > 0.0:
+            total += slice_kwh * rate
+        floor = upper
+        if annual_kwh <= upper:
+            break
+    if annual_kwh > floor:
+        total += (annual_kwh - floor) * bands[-1][1]
+    return total / annual_kwh
+
+
 def resolve_excise_band(
     snapshot: SupplierSnapshot, annual_kwh: float
 ) -> SupplierSnapshot:
-    """Pick the excise band ``annual_kwh`` falls in, or leave the card alone.
+    """Resolve a degressive excise schedule to one rate, or leave the card alone.
 
     A card without ``federal_excise_bands`` prints one rate and is returned
     unchanged (identity), which is every residential card.
 
-    The Belgian special excise is set annually on a schedule that decreases
-    by consumption band, so which rate applies is a fact about the site, not
-    about the card. The entry's estimated annual consumption selects it once
-    here and the pricing engine goes on reading a single ``federal_excise``.
-
-    A volume past the last band clamps to it: the schedule stops at the
-    ceiling the card covers (1.000.000 kWh/year on the current professional
-    cards), and above that the connection is out of what these cards price
-    at all - clamping keeps a plausible rate rather than inventing one.
+    A card that prints a schedule bills it per tranche, so the rate the engine
+    reads is the blend over the entry's estimated annual volume rather than
+    the band that volume lands in; see :func:`blended_excise_rate`. Resolving
+    it once here keeps the pricing engine reading a single ``federal_excise``
+    and knowing nothing about bands.
     """
     bands = snapshot.taxes.federal_excise_bands
     if not bands:
         return snapshot
-    rate = bands[-1][1]
-    for upper, band_rate in bands:
-        if annual_kwh <= upper:
-            rate = band_rate
-            break
+    rate = blended_excise_rate(bands, annual_kwh)
     if rate == snapshot.taxes.federal_excise:
         return snapshot
     return replace(snapshot, taxes=replace(snapshot.taxes, federal_excise=rate))

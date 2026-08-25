@@ -837,18 +837,32 @@ async def test_fetch_spp_weights_still_never_raises_on_a_hostile_payload() -> No
 @pytest.mark.parametrize(
     ("annual_kwh", "expected"),
     [
-        (0.0, 0.01421),  # a fresh connection still sits in the first band
-        (3500.0, 0.01421),
-        (20_000.0, 0.01421),  # the boundary belongs to the band it closes
-        (20_000.1, 0.01209),
-        (50_000.0, 0.01209),
-        (750_000.0, 0.01139),
-        (5_000_000.0, 0.01139),  # past the card's ceiling: clamp, don't invent
+        (0.0, 0.01421),  # a fresh connection is priced at the first band
+        (3500.0, 0.01421),  # wholly inside the first tranche
+        (20_000.0, 0.01421),  # exactly fills it
+        # Past the first tranche the rate is a blend, not the next band:
+        # 20 000 at 1,421 + 10 000 at 1,209, over 30 000 kWh.
+        (30_000.0, (20_000 * 0.01421 + 10_000 * 0.01209) / 30_000),
+        (50_000.0, (20_000 * 0.01421 + 30_000 * 0.01209) / 50_000),
+        (
+            750_000.0,
+            (20_000 * 0.01421 + 30_000 * 0.01209 + 700_000 * 0.01139) / 750_000,
+        ),
+        # Past the card's ceiling the last rate extends; it never invents one.
+        (
+            5_000_000.0,
+            (20_000 * 0.01421 + 30_000 * 0.01209 + 4_950_000 * 0.01139) / 5_000_000,
+        ),
     ],
 )
-def test_resolve_excise_band_picks_the_band_for_the_volume(
+def test_resolve_excise_blends_the_schedule_over_the_volume(
     annual_kwh: float, expected: float
 ) -> None:
+    """The cards call it "un tarif degressif PAR TRANCHE de consommation,
+    calcule sur une base annuelle", so each slice of the year is billed at its
+    own band. Billing the whole volume at the band the total lands in is a
+    different and always cheaper number: 30 000 kWh was billed 362,70 EUR
+    where the schedule charges 405,10."""
     # The bands are Engie's August 2026 professional schedule, in EUR/kWh.
     snap = make_snapshot(
         taxes=TaxOverlay(
@@ -864,6 +878,18 @@ def test_resolve_excise_band_picks_the_band_for_the_volume(
     assert resolve_excise_band(snap, annual_kwh).taxes.federal_excise == pytest.approx(
         expected
     )
+
+
+def test_resolve_excise_bills_each_tranche_at_its_own_rate() -> None:
+    """The annual total, spelled out in euros rather than in a blended rate."""
+    from custom_components.be_electricity_prices.providers.base import (
+        blended_excise_rate,
+    )
+
+    bands = ((20_000.0, 0.01421), (50_000.0, 0.01209), (1_000_000.0, 0.01139))
+    assert blended_excise_rate(bands, 30_000.0) * 30_000 == pytest.approx(405.10)
+    # What it used to bill, for the record: the whole volume at one band.
+    assert 30_000 * 0.01209 == pytest.approx(362.70)
 
 
 def test_resolve_excise_band_is_identity_without_bands() -> None:
@@ -887,7 +913,9 @@ def test_resolve_excise_band_leaves_the_rest_of_the_card_alone() -> None:
         )
     )
     out = resolve_excise_band(snap, 30_000.0)
-    assert out.taxes.federal_excise == pytest.approx(0.01209)
+    assert out.taxes.federal_excise == pytest.approx(
+        (20_000 * 0.01421 + 10_000 * 0.01209) / 30_000
+    )
     assert out.taxes.energy_contribution == pytest.approx(0.0019261)
     assert out.taxes.flanders_renewables == pytest.approx(0.01466)
     assert out.taxes.energy_fund_eur_per_month == pytest.approx(10.07)

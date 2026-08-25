@@ -149,7 +149,7 @@ onto these canonical keys.
 
 ### Supplier and contract
 
-A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:772`). It declares
+A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:804`). It declares
 the `Contract`s it sells (`providers/base.py:64`), each carrying a `TariffKind`
 (`providers/base.py:53`):
 
@@ -300,7 +300,7 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:809`). It declares the
+   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:841`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.

@@ -190,11 +190,24 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:719`)
-picks the band the entry's `CONF_ANNUAL_CONSUMPTION_KWH` falls in and writes it
-to `federal_excise`. The pricing engine never sees a band - it goes on reading a
-single rate. A volume past the last band clamps to it. Residential cards leave
-`federal_excise_bands` at `None`, where the resolver is identity.
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:759`)
+resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
+rate to `federal_excise`. The pricing engine never sees a band.
+
+The schedule is billed PER TRANCHE, which the cards state outright: *"un tarif
+degressif par tranche de consommation, calcule sur une base annuelle"*. So the
+resolved figure is the BLEND over the year's volume (`blended_excise_rate`,
+`providers/base.py:719`), not the rate of the band the total lands in. At the
+2026 professional schedule a 30.000 kWh site pays the first 20.000 at 1,421 and
+the rest at 1,209, which is 405,10 EUR/year and a 1,3503 c/kWh blend; billing
+all 30.000 at 1,209 gives 362,70. The engine prices per hour and cannot know
+where in the year an hour sits, but it does not need to: the charge is defined
+on an annual basis, so the year's total over the year's volume is the honest
+per-kWh figure, and the annual bill is exact whenever the volume estimate is.
+
+A volume past the last band is billed at the last band's rate for the
+remainder. Residential cards leave `federal_excise_bands` at `None`, where the
+resolver is identity.
 
 ## Energy rate by contract kind
 
