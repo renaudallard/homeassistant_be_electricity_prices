@@ -163,15 +163,16 @@ def test_variable_extracts_injection_formula() -> None:
     snap = parse_snapshot("ebem_variable", _layout(_VARIABLE), "test://v", "2026-05")
     inj = snap.injection
     assert inj is not None
-    # The SPP0 index is MONTHLY: the card prints the realized monthly
-    # indicative (0,0925 * last-month SPP0 27,95 - 1,25 = 1,3354 c/kWh),
-    # which EBEM settles injection at -- surfaced as `current`. The
-    # factor/base are NOT spot coefficients (they weight the monthly SPP0
-    # average), so they must stay None or the engine would apply them to
-    # the hourly spot.
+    # The SPP0 index is MONTHLY, and the printed figure is computed from LAST
+    # month's value of it (0,0925 x SPP0(April) 27,95 - 1,25 = 1,3354 c/kWh).
+    # It is surfaced as `current`, the fallback for an entry with no Synergrid
+    # profile, alongside the coefficients. spp_indexed is what keeps those
+    # coefficients away from the hourly spot and routes them to the delivery
+    # month's own solar-weighted mean.
     assert inj.current == pytest.approx(0.013354, rel=1e-4)
-    assert inj.factor is None
-    assert inj.base is None
+    assert inj.spp_indexed is True
+    assert inj.factor == pytest.approx(0.925)
+    assert inj.base == pytest.approx(-0.0125)
     assert inj.formula is not None
     assert "BelpexSPP0" in inj.formula
 
@@ -392,3 +393,38 @@ def test_discover_drops_non_electricity_kinds() -> None:
     assert "gas" not in out
     assert "aardgas" not in out
     assert {"ebem_variable", "ebem_basic_plus"} <= out
+
+
+def test_injection_resolves_the_delivery_month_not_last_month() -> None:
+    """The card indexes the credit on BelpexSPP0, the solar-weighted monthly
+    mean, and prints a figure computed from LAST month's value of it: "de SPP0
+    vorige maand bedroeg 27,95" on the May card.
+
+    That printed 1,3354 c/kWh is exactly 0,0925 x 27,95 - 1,25, i.e. April's
+    index. May settled at SPP0 42,37 and 2,6692 c/kWh, so crediting the printed
+    figure paid half of what the contract owed."""
+    from custom_components.be_electricity_prices.injection import (
+        _historical_injection_rate,
+        _injection_is_spot_formula,
+    )
+
+    for contract in ("ebem_variable", "ebem_basic_plus"):
+        snap = parse_snapshot(contract, _layout(_VARIABLE), "test://v", "2026-05")
+        inj = snap.injection
+        assert inj is not None, contract
+        assert inj.spp_indexed is True
+        assert inj.factor == pytest.approx(0.925)
+        assert inj.base == pytest.approx(-0.0125)
+
+        # An SPP formula must never be resolved against an hourly spot.
+        assert _injection_is_spot_formula(inj, snap.energy) is False
+
+        # The printed indicative IS April's index, which is the defect.
+        assert inj.current == pytest.approx(0.013354)
+        assert _historical_injection_rate(inj, 0.02795) == pytest.approx(
+            0.013354, abs=1e-6
+        )
+        # May's own index is what May is credited at: twice as much.
+        assert _historical_injection_rate(inj, 0.04237) == pytest.approx(
+            0.026692, abs=1e-6
+        )

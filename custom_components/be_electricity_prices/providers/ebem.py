@@ -568,13 +568,23 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | No
             "EBEM variable injection: 'Injectie alle uren' row not found"
         )
     if not match.group(4):
-        # The monthly indicative is the only value we can price; a card
-        # that stops printing it is a layout drift, not a fee-free
-        # contract. Fail loud rather than emit a spot-shaped credit the
-        # pipeline cannot price for this non-dynamic contract.
+        # The printed indicative is the fallback when the Synergrid profile is
+        # unavailable, so a card that stops printing it is a layout drift, not
+        # a fee-free contract. Fail loud rather than leave the credit resting
+        # on a formula that cannot always be resolved.
         raise ExtractorError("EBEM variable injection: monthly indicative missing")
+    # The card indexes the credit on BelpexSPP0, the SOLAR-weighted monthly
+    # mean, and prints a figure computed from LAST month's value of it ("de
+    # SPP0 vorige maand bedroeg 27,95"). Surfacing the coefficients with
+    # spp_indexed lets the engine resolve the DELIVERY month's own SPP-weighted
+    # mean instead, and keeps the printed figure as the fallback for an entry
+    # with no Synergrid profile. The formula yields c/kWh from SPP0 in EUR/MWh,
+    # so the factor scales by 10 to meet a spot in EUR/kWh and the base by 100.
     return InjectionRates(
         current=to_float(match.group(4)) / 100.0,
+        factor=to_float(match.group(1)) * 10.0,
+        base=parse_sign(match.group(2)) * to_float(match.group(3)) / 100.0,
+        spp_indexed=True,
         formula=(
             f"({to_float(match.group(1))} BelpexSPP0 {match.group(2)} "
             f"{match.group(3)}) c€/kWh ex-VAT"

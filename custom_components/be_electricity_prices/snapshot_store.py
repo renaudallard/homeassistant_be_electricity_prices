@@ -596,7 +596,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # month's Belpex-injectie instead of the printed indicative, which the card
 # computes from the last known (previous) month's. A snapshot written earlier
 # carries neither the coefficients nor the flag.
-_SNAPSHOT_SCHEMA_VERSION = 28
+# v29: EBEM Groen Variabel and B@sic+ now surface their BelpexSPP0 injection
+# coefficients with spp_indexed, so the credit resolves against the DELIVERY
+# month's solar-weighted mean instead of the printed figure, which the card
+# computes from "de SPP0 vorige maand". A snapshot written earlier has neither.
+_SNAPSHOT_SCHEMA_VERSION = 29
 
 
 def _snapshot_to_dict(
