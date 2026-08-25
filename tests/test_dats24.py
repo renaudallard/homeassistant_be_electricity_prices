@@ -140,17 +140,18 @@ def test_april_card_taxes_are_tvac() -> None:
     assert wa.energy_fund_eur_per_month == 0.0
 
 
-def test_april_card_injection_surfaces_monthly_indicative_only() -> None:
-    """BE_spotSPP is a MONTHLY index, so the card's realized monthly
-    indicative is surfaced as ``current``; factor / base stay None so the
-    pricing engine never applies the monthly coefficient to the hourly
-    spot. The formula text is retained for diagnostics."""
+def test_april_card_injection_carries_the_spp_formula() -> None:
+    """BE_spotSPP is a MONTHLY index, so the coefficients are surfaced with
+    spp_indexed: the engine resolves them against the delivery month's own
+    solar-weighted mean and never hands them the hourly spot. The printed
+    figure stays as ``current``, the fallback without a Synergrid profile."""
     snap = _snap("flanders")
     inj = snap.injection
     assert inj is not None
     assert inj.current == pytest.approx(0.0326)
-    assert inj.factor is None
-    assert inj.base is None
+    assert inj.spp_indexed is True
+    assert inj.factor == pytest.approx(0.766)
+    assert inj.base == pytest.approx(-0.0111)
     assert "BE_spotSPP" in (inj.formula or "")
 
 
@@ -165,8 +166,9 @@ def test_injection_formula_text_retained_for_any_operator() -> None:
     inj = _extract_injection(text, "flanders")
     assert inj is not None
     assert inj.current == pytest.approx(0.0326)
-    assert inj.factor is None
-    assert inj.base is None
+    # A plus operator parses into a positive base, and the text is kept too.
+    assert inj.factor == pytest.approx(0.766)
+    assert inj.base == pytest.approx(0.005)
     assert "+ 0,5" in (inj.formula or "")
 
 
@@ -434,3 +436,43 @@ def test_discover_reports_nothing_once_publication_stops() -> None:
     session = _card_session({})
     with patch.object(dt_util, "now", return_value=_IN_MAY):
         assert asyncio.run(discover(cast(aiohttp.ClientSession, session))) == set()
+
+
+def test_injection_resolves_the_delivery_month_not_the_most_recent_value() -> None:
+    """The card fills its printed credit in from "de MEEST RECENTE waarde van
+    BE_spotSPP (maart 2026: 57,11 EUR/MWh)", which on an April card is March's
+    index, while the contract settles April on April's.
+
+    The printed 3,26 c/kWh is exactly (57,11 x 0,0766 - 1,11). April's own
+    BE_spotSPP was 27,95, worth 1,0310 c/kWh, so the printed figure credited
+    more than three times what April owed."""
+    from custom_components.be_electricity_prices.injection import (
+        _historical_injection_rate,
+        _injection_is_spot_formula,
+    )
+
+    snap = parse_snapshot(
+        fixture_text("dats24_groen_variabel_apr.pdf", layout=True),
+        "test://dats24",
+        "flanders",
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert inj.spp_indexed is True
+    assert inj.factor == pytest.approx(0.766)
+    assert inj.base == pytest.approx(-0.0111)
+
+    # An SPP formula must never be resolved against an hourly spot.
+    assert _injection_is_spot_formula(inj, snap.energy) is False
+
+    assert inj.current == pytest.approx(0.0326)
+    assert _historical_injection_rate(inj, 0.05711) == pytest.approx(0.0326, abs=1e-4)
+    assert _historical_injection_rate(inj, 0.02795) == pytest.approx(0.010310, abs=1e-6)
+
+    # Wallonia is paid no feed-in credit at all, and still is not.
+    walloon = parse_snapshot(
+        fixture_text("dats24_groen_variabel_apr.pdf", layout=True),
+        "test://dats24",
+        "wallonia",
+    )
+    assert walloon.injection is None

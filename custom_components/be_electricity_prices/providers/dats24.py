@@ -449,15 +449,20 @@ def _extract_injection(text: str, region: str) -> InjectionRates | None:
     """Parse the teruglevering monthly indicative (formula kept for diagnostics).
 
     DATS 24 "Groen Variabel" settles injection on BE_spotSPP, a MONTHLY
-    synthetic-profile index, not the hourly day-ahead spot. The card prints
-    the realized monthly indicative right after the formula:
+    synthetic-profile index, not the hourly day-ahead spot. The card prints a
+    figure right after the formula and says which month it came from: "de
+    terugleveringsvergoeding wordt verkregen door de MEEST RECENTE waarde van
+    BE_spotSPP (maart 2026: 57,11 EUR/MWh) in te vullen in de tariefformule",
+    on the April card.
       formula:    (BE_spotSPP x 0,0766 - 1,11)   c€/kWh, VAT-exempt
-      indicative: Teruglevering2 (c€/kWh) 3,26
+      indicative: Teruglevering2 (c€/kWh) 3,26   <- from MARCH's index
 
-    Surface only the indicative as ``current``. Emitting factor/base would
-    make the pricing engine apply the monthly coefficient to the hourly
-    spot; mirrors EBEM Groen Variabel / B@sic+ and Ecofix Flexy's
-    BELPEX-SPP-M, which surface the realized monthly rate only.
+    So crediting the printed figure credits last month's index. The
+    coefficients are surfaced with ``spp_indexed`` instead, which routes them
+    to the DELIVERY month's own solar-weighted mean and keeps them away from
+    the hourly spot; the card's own SPP is Synergrid's, the same profile the
+    coordinator downloads. ``current`` remains the fallback for an entry
+    without that profile.
 
     Returns ``None`` in Wallonia: the card footnote reserves the
     teruglevering tariff to Flemish customers with a digital meter, so a
@@ -482,11 +487,22 @@ def _extract_injection(text: str, region: str) -> InjectionRates | None:
         # spot-shaped credit the pipeline cannot price for this variable card.
         raise ExtractorError("DATS 24 injection: monthly indicative missing")
     formula = re.search(
-        rf"\(BE_spotSPP\s*x\s*[\d,.]+\s*[{SIGN_CHARS}]\s*[\d,.]+\)",
+        rf"\(BE_spotSPP\s*x\s*([\d,.]+)\s*([{SIGN_CHARS}])\s*([\d,.]+)\)",
         text,
     )
+    factor: float | None = None
+    base: float | None = None
+    if formula:
+        # c/kWh from BE_spotSPP in EUR/MWh: the factor scales by 10 to meet a
+        # spot in EUR/kWh, the base by 100. Injection is VAT-exempt, so both
+        # stay on the card's basis.
+        factor = to_float(formula.group(1)) * 10.0
+        base = parse_sign(formula.group(2)) * to_float(formula.group(3)) / 100.0
     return InjectionRates(
         current=parse_sign(indicative.group(1)) * to_float(indicative.group(2)) / 100.0,
+        factor=factor,
+        base=base,
+        spp_indexed=factor is not None,
         formula=formula.group(0) if formula else "",
     )
 

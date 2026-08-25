@@ -600,7 +600,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # coefficients with spp_indexed, so the credit resolves against the DELIVERY
 # month's solar-weighted mean instead of the printed figure, which the card
 # computes from "de SPP0 vorige maand". A snapshot written earlier has neither.
-_SNAPSHOT_SCHEMA_VERSION = 29
+# v30: DATS 24 Groen Variabel now surfaces its BE_spotSPP injection
+# coefficients with spp_indexed, for the same reason as v29: the card's printed
+# figure is filled in from "de meest recente waarde" of that index, which is the
+# previous month's. A snapshot written earlier has neither.
+_SNAPSHOT_SCHEMA_VERSION = 30
 
 
 def _snapshot_to_dict(

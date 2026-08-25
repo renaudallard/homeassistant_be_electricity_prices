@@ -111,12 +111,13 @@ Two deliberate choices:
 |---|---|---|---|---|
 | `dats24_groen_variabel` | `DATS 24 Elektriciteit Groen Variabel` | `variable` | Flanders, Wallonia | False (default) |
 
-Only one `Contract` is declared (`dats24.py:510-517`). There is no fixed, TOU, or
+Only one `Contract` is declared (`dats24.py:521-528`). There is no fixed, TOU, or
 dynamic product, so `quarter_hourly` does not apply (that flag lives on
 `DynamicRates`, not on a variable contract). `spot_indexed_injection` is left at
-its default `False`: even though the energy is variable, the injection is a
-monthly indicative (not a per-hour spot formula), so no ENTSO-E key is needed for
-this contract. See [../provider-framework.md](../provider-framework.md) for what
+its default `False`: that flag means a PER-HOUR spot formula, and this injection
+is month-indexed. An ENTSO-E key still improves it, since the delivery month's
+SPP-weighted mean is resolved from the spot cache, but the contract prices
+without one by falling back to the card's printed figure. See [../provider-framework.md](../provider-framework.md) for what
 `spot_indexed_injection` gates in the config flow.
 
 `fetch` rejects any other contract id with `ExtractorError` (`dats24.py:187-199`)
@@ -183,7 +184,7 @@ so the payoff would be one month of more accurate YTD backfill.
 | `dsos` | `_extract_dsos` (dispatches per region) | `dats24.py:283-288` |
 | `taxes` | `_extract_taxes` | `dats24.py:371-442` |
 | `injection` | `_extract_injection` | `dats24.py:463-506` |
-| `publication_label` | `_extract_publication` | `dats24.py:497-499` |
+| `publication_label` | `_extract_publication` | `dats24.py:513-515` |
 | `valid_until` | `parse_valid_until` (shared) | `_pdf.py:947` |
 | `supplier` / `contract` | literals | `dats24.py:221-222` |
 
@@ -291,7 +292,7 @@ single | day | night | PIC | MEDIUM | ECO | excl_nacht
 transport | data-beheer (€/yr) | prosumer (€/kVA/yr)
 ```
 
-Mapped to `DsoOverlay` (`dats24.py:353-364`): `distribution_single` (col1/100),
+Mapped to `DsoOverlay` (`dats24.py:310-320`): `distribution_single` (col1/100),
 `distribution_peak` (col2/100), `distribution_offpeak` (col3/100),
 `distribution_pic` (col4/100), `distribution_medium` (col5/100),
 `distribution_eco` (col6/100), `distribution_exclusive_night` (col7/100),
@@ -352,24 +353,30 @@ renewables 0.01561, Wallonia renewables 0.03032, connection fee 0.00075 EUR/kWh
 
 ### Injection (`_extract_injection`, `dats24.py:448-491`)
 
-Injection shape: **monthly-indicative-only** (shape (a) of the three-shape
-taxonomy). DATS 24 settles teruglevering on `BE_spotSPP`, a monthly synthetic
-index, not the hourly day-ahead spot. The card prints the realized monthly
-indicative right after the formula (`dats24.py:466-470`):
+Injection shape: **month-indexed on Belpex-SPP**. DATS 24 settles teruglevering
+on `BE_spotSPP`, a monthly synthetic index, not the hourly day-ahead spot. The
+card prints a figure right after the formula and says which month it came from:
+*"de terugleveringsvergoeding wordt verkregen door de MEEST RECENTE waarde van
+BE_spotSPP (maart 2026: 57,11 EUR/MWh) in te vullen in de tariefformule"* on the
+April card (`dats24.py:466-470`):
 
 ```
 formula:    (BE_spotSPP x 0,0766 - 1,11)   c€/kWh, VAT-exempt
 indicative: Teruglevering2 (c€/kWh) 3,26
 ```
 
-The extractor surfaces ONLY the indicative as `InjectionRates.current`, leaving
-`factor` and `base` as `None` (`dats24.py:488-491`). Emitting factor/base would make
-the pricing engine apply the monthly coefficient to the hourly spot, mispricing the
-credit; this mirrors EBEM Groen Variabel / B@sic+ and Ecofix Flexy's BELPEX-SPP-M
-handling (`dats24.py:484-487`). The `formula` string is retained verbatim for
-diagnostics only (`dats24.py:484-490`, and `test_injection_formula_text_retained_for_any_operator`
-`test_dats24.py:157-170` proves any operator, including `+`, is captured as text
-without affecting the price).
+So the printed `3,26` is MARCH's index, and crediting it credits last month's.
+April's own `BE_spotSPP` was 27,95, worth 1,0310 c/kWh, so the printed figure
+paid more than three times what April owed.
+
+The extractor surfaces the coefficients with `spp_indexed=True`
+(`dats24.py:488-491`), which routes them to the delivery month's own
+solar-weighted mean, the same one the coordinator computes from the Synergrid
+profile, and keeps them off the per-hour path. The card's SPP is Synergrid's, so
+the two are the same index. `current` remains as the fallback for an entry with
+no profile, and the `formula` string is still retained verbatim for diagnostics
+(`test_injection_formula_text_retained_for_any_operator`, `test_dats24.py:158`,
+proves a `+` operator parses into a positive base and is kept as text too).
 
 Two hard invariants encoded in tests:
 
@@ -395,7 +402,7 @@ There is no supplier-side prosumer/PV forfait on DATS 24 (`supplier_prosumer_eur
 is left unset). The Walloon DSO prosumer term (`prosumer_eur_per_kva_year`) is the
 only prosumer charge, and it lives on the DSO overlay, not the supplier snapshot.
 
-### Publication label (`_extract_publication`, `dats24.py:497-499`)
+### Publication label (`_extract_publication`, `dats24.py:513-515`)
 
 `TARIEFKAART\s+(\w+\s+20\d{2})` case-insensitive, lowercased. Illustrative:
 `april 2026` (`test_dats24.py:91`), `mei 2026` (`test_dats24.py:257`). Empty string
@@ -481,6 +488,6 @@ pure parsers are the unit under test.
 | `DATS 24: Wallonia CV / connection fee not found` | `_extract_taxes` (`dats24.py:371-442`) | `Waals Gewest: CV` or the `Aansluitingsvergoeding Wallonië` footnote changed |
 | `could not parse DATS 24 federal tax block` | `_extract_taxes` (`dats24.py:403-408`) | `Energiebijdrage` or `Verbruik tussen 0 kWh en 3.000 kWh` moved |
 | `DATS 24 injection: monthly indicative missing` | `_extract_injection` (`dats24.py:448-491`) | the `Teruglevering2 (c€/kWh)` label changed, or the card went spot-formula |
-| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:497-499`), `parse_valid_until` (`_pdf.py:947`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
+| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:513-515`), `parse_valid_until` (`_pdf.py:947`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
 | Values off by 100x | the per-column `/100.0` divisions in the DSO/energy/tax parsers | a c€/kWh column became EUR/kWh (or a EUR/yr column got divided) |
 | `PDF layout parse error` / html-not-pdf | `_pdf.py:244-251`, `334-344` | the CDN returned HTML (file moved) or an undecodable PDF |
