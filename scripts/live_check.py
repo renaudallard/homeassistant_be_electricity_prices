@@ -738,7 +738,9 @@ async def _check_dats24(
             prefix,
             cid,
             snap,
-            injection_shape="monthly" if region == "flanders" else "none",
+            # Flanders carries the BE_spotSPP formula plus the printed
+            # figure; Wallonia pays no feed-in at all.
+            injection_shape="spp" if region == "flanders" else "none",
         )
 
 
@@ -1871,6 +1873,10 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         the coordinator resolving the formula against the energy leg's mean,
         which is a different index and roughly doubles the credit in a sunny
         month, so losing it is a silent mis-credit rather than a failure.
+      * ``"month"``   - the same, on the PLAIN arithmetic monthly mean
+        (``month_indexed``). Eneco's Belpex-injectie is the case. The flag
+        carries the same weight: without it the coefficients read as a
+        per-hour formula and the credit follows the current slot's spot.
       * ``"present"`` - present, shape unconstrained (default).
 
     Monthly indicatives can settle slightly negative (a producer pays to
@@ -1907,15 +1913,20 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
             factor is not None and base is not None,
             detail=f"factor={factor}, base={base}",
         )
-    elif shape == "spp":
+    elif shape in ("spp", "month"):
+        # Both shapes are month coefficients plus the card's printed
+        # indicative; they differ only in WHICH monthly mean they name, and
+        # the flag that says so is the part that must not go missing.
+        flag = "spp_indexed" if shape == "spp" else "month_indexed"
+        index = "SPP" if shape == "spp" else "month"
         _expect(
-            f"{prefix}: SPP-indexed injection (formula + indicative + flag)",
+            f"{prefix}: {index}-indexed injection (formula + indicative + flag)",
             current is not None
             and factor is not None
             and base is not None
-            and bool(getattr(injection, "spp_indexed", False)),
+            and bool(getattr(injection, flag, False)),
             detail=f"current={current}, factor={factor}, base={base}, "
-            f"spp_indexed={getattr(injection, 'spp_indexed', None)}",
+            f"{flag}={getattr(injection, flag, None)}",
         )
         # Presence alone would ship a coefficient drift green. The old
         # "monthly" pin at least guaranteed structurally that no coefficient
@@ -1924,13 +1935,13 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         # below 1, and the offset is a small deduction in EUR/kWh.
         if factor is not None:
             _expect(
-                f"{prefix}: SPP injection factor in (0, 1]",
+                f"{prefix}: {index} injection factor in (0, 1]",
                 0.0 < factor <= 1.0,
                 detail=f"factor={factor}",
             )
         if base is not None:
             _expect(
-                f"{prefix}: SPP injection base in [-0.05, 0.05] EUR/kWh",
+                f"{prefix}: {index} injection base in [-0.05, 0.05] EUR/kWh",
                 -0.05 <= base <= 0.05,
                 detail=f"base={base}",
             )
@@ -1966,10 +1977,15 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
 # Anything not listed is derived from contract metadata by
 # _expected_injection_shape, so a new card is covered without editing this map.
 _INJECTION_SHAPE: dict[str, str] = {
-    "power_fix": "monthly",
-    "power_flex": "monthly",
-    "ebem_variable": "monthly",
-    "ebem_basic_plus": "monthly",
+    # Eneco Power Fix and Flex index their credit on Belpex-injectie, the
+    # plain arithmetic monthly mean, and print the LAST KNOWN value of it as
+    # an estimate. Both the coefficients and the flag have to survive: the
+    # printed figure alone is the previous month's rate.
+    "power_fix": "month",
+    "power_flex": "month",
+    # EBEM indexes on SPP0, the solar-weighted mean, same reasoning.
+    "ebem_variable": "spp",
+    "ebem_basic_plus": "spp",
     "ecofix_flexy": "monthly",
     # Cociter Variable's injection is itself spot-indexed (factor x BELPEX
     # + base, current None at parse time). Pinning it to "spot" asserts

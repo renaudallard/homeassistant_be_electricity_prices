@@ -987,6 +987,54 @@ def test_injection_shape_is_asserted_even_when_the_card_prints_an_indicative() -
     assert shape_rows and shape_rows[0].ok
 
 
+def test_a_month_indexed_card_losing_its_flag_fails() -> None:
+    """The five cards that credit a monthly index carry coefficients AND the
+    flag that names which mean they resolve against. Dropping the flag leaves
+    the coefficients looking like a per-hour formula, so the credit would
+    follow the current slot's spot without any check going red."""
+    assert lc._expected_injection_shape("power_fix") == "month"
+    assert lc._expected_injection_shape("ebem_variable") == "spp"
+
+    inj = SimpleNamespace(
+        current=0.0476,
+        factor=0.8,
+        base=-0.0265,
+        spp_indexed=False,
+        month_indexed=False,
+        peak=None,
+        transition=None,
+        offpeak=None,
+    )
+    lc._validate_injection("x", SimpleNamespace(injection=inj), "month")
+    rows = [c for c in lc.CHECKS if "month-indexed injection" in c.label]
+    assert rows and not rows[0].ok
+
+    lc.CHECKS.clear()
+    inj.month_indexed = True
+    lc._validate_injection("x", SimpleNamespace(injection=inj), "month")
+    rows = [c for c in lc.CHECKS if "month-indexed injection" in c.label]
+    assert rows and rows[0].ok
+
+
+def test_a_month_indexed_card_losing_its_coefficients_fails() -> None:
+    """The printed indicative alone is the PREVIOUS month's rate, so a card
+    that keeps it and loses the formula must not pass. That is exactly what
+    the old "monthly" pin asserted, in reverse."""
+    inj = SimpleNamespace(
+        current=0.013354,
+        factor=None,
+        base=None,
+        spp_indexed=True,
+        month_indexed=False,
+        peak=None,
+        transition=None,
+        offpeak=None,
+    )
+    lc._validate_injection("x", SimpleNamespace(injection=inj), "spp")
+    rows = [c for c in lc.CHECKS if "SPP-indexed injection" in c.label]
+    assert rows and not rows[0].ok
+
+
 def test_a_tou_card_losing_its_injection_triplet_fails() -> None:
     """Empower Flextime is the one card whose feed-in tariff varies by slot.
     Its kind is neither fixed nor variable, so the shape derived to "present",

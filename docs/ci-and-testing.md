@@ -274,13 +274,13 @@ main()                       scripts/live_check.py:1760  asyncio.run(_run()); rc
 
 ### Card freshness
 
-`_check_card_freshness` (`scripts/live_check.py:1590`) asks a question no other check here asks:
+`_check_card_freshness` (`scripts/live_check.py:1592`) asks a question no other check here asks:
 not "did the fetch work" but "is this the card the supplier is currently advertising". A superseded
 card downloads, parses and validates exactly like a current one, so a stale URL reads as a green
 run -- Bolt billed June's variable formula for ten weeks behind a passing board, and Ecopower served
 January's tax block for eleven days after renaming its dynamic card to `YYYYMMDD`.
 
-The mechanism is a deliberate asymmetry: `_expect_newest_card` (`scripts/live_check.py:1241`) scans
+The mechanism is a deliberate asymmetry: `_expect_newest_card` (`scripts/live_check.py:1243`) scans
 the same listing page the extractor does, but with a **looser** pattern. When a supplier changes the
 filename shape, the extractor's strict pattern stops seeing the new file and keeps resolving the old
 one; the loose pattern still sees it, and the mismatch fails the run.
@@ -418,26 +418,35 @@ on 2026-08-01: EBEM's August card failed CI three times over for reporting the z
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py:2226`) runs two gates:
+`_validate_snapshot` (`scripts/live_check.py:2242`) runs two gates:
 
-- `_validate_energy` (`scripts/live_check.py:2287`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:2303`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
   additionally assert band ordering (peak >= transition >= offpeak; pic >= medium >= eco). An
   unrecognised energy class is a failure.
-- `_validate_injection` (`scripts/live_check.py:1853`) gates that the feed-in credit parsed and
+- `_validate_injection` (`scripts/live_check.py:1855`) gates that the feed-in credit parsed and
   kept the right shape. This exists because the coordinator drops the credit entirely when
   `injection` is None, so a relabelled injection row silently zeroes a solar user's credit and
   used to pass CI green (issues #31, F53). The `shape` argument pins expectations: `"none"`
   (region pays no feed-in, injection must be absent), `"monthly"` (`current` set, `factor`/`base`
   None), `"spot"` (`factor`/`base` set), `"spp"` (a formula indexed on the solar-weighted monthly
   mean: `current`, `factor`/`base` AND `spp_indexed` all set, with the coefficients bounds-checked),
+  `"month"` (the same on the plain arithmetic monthly mean, flagged `month_indexed`),
   `"triplet"` (a per-slot peak/transition/offpeak feed-in tariff, which only Empower Flextime has),
   or `"present"` (`factor`/`base` set). Per-contract
-  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1968`); the DATS 24 check passes
-  `injection_shape` explicitly because its Wallonia card pays no feed-in while its Flanders card is
-  monthly-indexed.
+  expectations live in `_INJECTION_SHAPE`; the DATS 24 check passes
+  `injection_shape` explicitly because its Wallonia card pays no feed-in while its Flanders card
+  carries the BE_spotSPP formula.
+
+  `"monthly"` and its two indexed siblings pull in opposite directions, so which one a card gets
+  is a statement about the contract, not a formality. `"monthly"` says the card's printed figure
+  IS the rate and no coefficient may ever reach the pricing engine. `"spp"` / `"month"` say the
+  printed figure is last month's estimate and the coefficients are what settles the bill, so
+  losing them is the mis-credit. Five cards moved from the first to the second over this batch
+  (Eneco Power Fix / Flex, EBEM Variabel / B@sic+, DATS 24 Groen Variabel), and the two
+  EnergyVision fixed cards followed.
 
   The shape assertion runs whatever else the card prints. It used to hang off the `else` of the
   indicative's range check, so on the several dynamic cards that publish BOTH a formula and an
@@ -485,10 +494,10 @@ under that cap, or the supplier is killed before it can report the drift the bud
 The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2153`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:2719`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:2735`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1672`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2606`) for the known-large catalogues (Bolt,
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2622`) for the known-large catalogues (Bolt,
 TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
 (`scripts/live_check.py:1720`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
 which are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request
@@ -500,7 +509,7 @@ budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see 
 false-firing drift alert means adjusting the override, not the code.
 
 A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:2370`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2706`). The
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2722`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever
