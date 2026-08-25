@@ -728,6 +728,36 @@ def _assert_card_region(text: str, region: str) -> None:
         raise ExtractorError(f"Mega: card is not the {region} edition")
 
 
+_INJECTION_VAT_EXEMPT = re.compile(
+    r"prix d[\u2019']injection sont exempt", re.IGNORECASE
+)
+_INJECTION_VAT_DUE = re.compile(
+    r"prix d[\u2019']injection sont [\u00e0a] majorer de la TVA", re.IGNORECASE
+)
+
+
+def _injection_vat_applies(text: str, professional: bool) -> bool:
+    """Whether this card's feed-in prices are quoted excluding VAT.
+
+    Read off the card rather than assumed from the edition. Every Mega card
+    prints one of two sentences, in French even on the Flemish ones, and they
+    do not split the way the edition does: the residential cards are all
+    exempt, the professional FIXED and SMART cards are "a majorer de la TVA,
+    sauf si vous etes soumis au regime d'exoneration", and the professional
+    DYNAMIC card is exempt like its residential twin. Keying on
+    ``professional`` grossed that one card's credit by 21%.
+
+    Falls back to the edition when a card prints neither sentence, which is
+    what this did for every card before, so a redesign that drops the wording
+    degrades to the old assumption rather than to a silent zero.
+    """
+    if _INJECTION_VAT_EXEMPT.search(text):
+        return False
+    if _INJECTION_VAT_DUE.search(text):
+        return True
+    return professional
+
+
 def parse_snapshot(
     contract_id: str, text: str, region: str, source_url: str = _LISTING_URL
 ) -> SupplierSnapshot:
@@ -739,10 +769,10 @@ def parse_snapshot(
     professional = contract.professional
     energy = _extract_energy(text, contract.kind, professional=professional)
     injection = _extract_injection(text, contract.kind)
-    if professional and injection is not None:
-        # "les prix d'injection sont a majorer de la TVA, sauf si vous
-        # etes soumis au regime d'exoneration".
-        injection = replace(injection, vat_applies=True)
+    if injection is not None:
+        injection = replace(
+            injection, vat_applies=_injection_vat_applies(text, professional)
+        )
     publication_label = _extract_publication_month(text)
     excise_bands: tuple[tuple[float, float], ...] | None = None
     if professional:

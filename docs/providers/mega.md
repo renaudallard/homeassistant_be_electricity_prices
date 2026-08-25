@@ -144,10 +144,17 @@ Card differences, all handled in `parse_snapshot` on the contract's
 | VAT basis | TVAC, `vat_rate=0.0` | HTVA, `vat_rate=0.21` |
 | Federal excise | one `Accise spéciale` rate since August 2026 | three tranches (0-20.000 / 20.000-50.000 / 50.000-1.000.000 kWh) into `federal_excise_bands` |
 | Energy contribution | folded into the excise, row gone | still printed, one column per tranche |
-| Injection | not taxed | *"les prix d'injection sont à majorer de la TVA"*, so `vat_applies=True` |
+| Injection | not taxed | fixed and smart cards say *"les prix d'injection sont à majorer de la TVA"*; the DYNAMIC card says *"exemptés de TVA"* like its residential twin |
 
 The region header check accepts either wording but still pins the region, since
 a wrong-region card mis-prices silently.
+
+`vat_applies` is read off the card's own sentence rather than off the edition
+(`_injection_vat_applies`, `providers/mega.py:739`), because the two sentences
+do not split the way the editions do: the professional dynamic card is exempt.
+Keying on the edition grossed that one card's feed-in credit by 21%. A card
+printing neither sentence falls back to the edition, which is what every card
+did before.
 
 ## Fetch strategy
 
@@ -389,7 +396,7 @@ EUR (`test_mega.py:164`).
 
 ### DSO overlays
 
-The region dispatch in `parse_snapshot` (`mega.py:731`) selects exactly one DSO
+The region dispatch in `parse_snapshot` (`mega.py:761`) selects exactly one DSO
 parser and one renewables levy per snapshot.
 
 Flanders (`_extract_flanders_dsos`, `_mega_overlays.py:250`, `_FLANDERS_LABELS` `_mega_overlays.py:247`)

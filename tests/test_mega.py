@@ -723,15 +723,40 @@ def test_pro_card_is_parsed_ex_vat_with_the_excise_schedule() -> None:
     assert {"aieg", "aiesh", "ores", "resa", "rew"} <= set(snap.dsos)
 
 
-def test_pro_injection_is_taxed() -> None:
-    snap = parse_snapshot(
+def test_injection_vat_is_read_off_the_card_not_the_edition() -> None:
+    """The two sentences Mega prints do not split the way the edition does.
+
+    Professional FIXED and SMART cards say the feed-in prices are "a majorer
+    de la TVA, sauf si vous etes soumis au regime d'exoneration". The
+    professional DYNAMIC card says the opposite, "les prix d'injection sont
+    exemptes de TVA", exactly like its residential twin, so keying the flag on
+    the edition grossed that one card's credit by 21%."""
+    pro_dynamic = parse_snapshot(
         "mega_pro_dynamic", fixture_text("mega_pro_dynamic_w.pdf"), "wallonia"
     )
-    assert snap.injection is not None
-    assert snap.injection.vat_applies is True
+    assert pro_dynamic.injection is not None
+    assert pro_dynamic.injection.vat_applies is False
+
+    pro_fixed = parse_snapshot(
+        "mega_pro_smart_fixed", fixture_text("mega_pro_smart_fixed_w.pdf"), "wallonia"
+    )
+    assert pro_fixed.injection is not None
+    assert pro_fixed.injection.vat_applies is True
+
     res = parse_snapshot("mega_dynamic", fixture_text("mega_dynamic_w.pdf"), "wallonia")
     assert res.injection is not None
     assert res.injection.vat_applies is False
+
+
+def test_injection_vat_falls_back_to_the_edition_without_the_sentence() -> None:
+    """A card that prints neither sentence keeps the old assumption rather
+    than silently dropping to exempt."""
+    from custom_components.be_electricity_prices.providers.mega import (
+        _injection_vat_applies,
+    )
+
+    assert _injection_vat_applies("no wording here", professional=True) is True
+    assert _injection_vat_applies("no wording here", professional=False) is False
 
 
 def test_pro_regulated_values_are_the_residential_ones_ex_vat() -> None:
