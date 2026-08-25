@@ -287,6 +287,14 @@ _EPEX_FORMULA = (
 # The 2026 template reworded the injection lead-in from "Le prix de votre
 # injection est indexé ..." to "les prix de l'électricité injectée sont
 # indexés ..."; accept either (with the curly apostrophe the card uses).
+# The monthly index the non-dynamic cards settle their feed-in credit on:
+# "monohoraire : Epex SPP x 0,852 - 13,39", stated in EUR/MWh. The value part
+# is anchored rather than left as a character class, or the sentence-final
+# period is swallowed into the number.
+_SPP_FORMULA_RE = re.compile(
+    rf"Epex\s*SPP\s*x\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)",
+    re.IGNORECASE,
+)
 _INJECTION_LEAD = (
     r"(?:Le\s+prix\s+de\s+votre\s+injection"
     r"|prix\s+de\s+l['’]électricité\s+injectée\s+sont\s+indexés)"
@@ -434,6 +442,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     factor: float | None = None
     base: float | None = None
     formula: str | None = None
+    spp_indexed = False
     if kind == "dynamic":
         # Injection formula appears after the prose
         # "Le prix de votre injection est indexé ..."
@@ -449,10 +458,42 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
             factor = f_pdf  # injection is VAT-exempt
             base = b_eur_mwh / 1000.0
             formula = inj.group(0)
+    else:
+        # Every other card settles the credit on a MONTHLY index: "Le prix de
+        # votre injection est indexé mensuellement sur base du paramètre
+        # d'indexation de la Epex SPP ... La valeur de la Epex du mois en cours
+        # ne sera connue qu'en fin de mois". The c/kWh figure read off the
+        # meter line above sits in the card's "Prix estimés" column and is an
+        # estimate, not the rate, so it is kept only as the fallback.
+        #
+        # The card states one formula per meter configuration. They are
+        # identical today and InjectionRates carries a single pair, so the
+        # coefficients are surfaced only while all of them agree: a card that
+        # splits them keeps the estimate rather than billing two meter types
+        # on a third one's formula.
+        rows = _SPP_FORMULA_RE.findall(text)
+        distinct = {
+            (to_float(f), parse_sign(sign) * to_float(b) / 1000.0)
+            for f, sign, b in rows
+        }
+        if len(distinct) == 1:
+            factor, base = distinct.pop()
+            match = _SPP_FORMULA_RE.search(text)
+            formula = match.group(0) if match else None
+            # Epex SPP is the solar-weighted mean. The flag routes the
+            # coefficients to the delivery month's own weighted mean and keeps
+            # them off the hourly spot, which they are not coefficients for.
+            spp_indexed = True
 
     if current is None and factor is None:
         return None
-    return InjectionRates(current=current, factor=factor, base=base, formula=formula)
+    return InjectionRates(
+        current=current,
+        factor=factor,
+        base=base,
+        formula=formula,
+        spp_indexed=spp_indexed,
+    )
 
 
 # ---- taxes --------------------------------------------------------------------

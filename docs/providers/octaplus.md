@@ -75,9 +75,11 @@ Notes:
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
   long-term statistics). See `DynamicRates` docs in `base.py:167-180`.
-- No product carries `spot_indexed_injection=True`. Non-dynamic OCTA+ cards
-  print a flat monthly indicative injection rate, so no ENTSO-E spot is needed
-  for the injection regime (contrast Cociter Variable).
+- No product carries `spot_indexed_injection=True`. That flag means a PER-HOUR
+  spot index, and no OCTA+ card has one on a static-energy product: the
+  non-dynamic cards index their credit on the monthly Epex SPP, which the
+  coordinator reaches through `_injection_needs_month_spot` instead (contrast
+  Cociter Variable, whose card says the injection price varies every hour).
 
 ## Fetch strategy
 
@@ -115,7 +117,7 @@ preferred headers.
 ### `fetch_for_month`
 
 OCTA+ declares no `fetch_for_month` (the `SupplierExtractor` is built with only
-`fetch` and `probe`, `octaplus.py:674-688`). There is no accessible archive:
+`fetch` and `probe`, `octaplus.py:715-729`). There is no accessible archive:
 cards are overwrite-in-place, so past months fall back to the current snapshot
 as a proxy. This is the documented behaviour for overwrite-in-place suppliers in
 `base.py:519-524`.
@@ -136,7 +138,7 @@ unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 | snapshot field | source function | notes |
 | --- | --- | --- |
 | `energy` | `_extract_energy` (`:321`) | shape depends on kind (see below) |
-| `injection` | `_extract_injection` (`:431`) | flat current on non-dynamic, factor/base on dynamic |
+| `injection` | `_extract_injection` (`:439`) | flat current on non-dynamic, factor/base on dynamic |
 | `publication_label` | `_extract_publication_month` (`:407`) | MM/YYYY |
 | `taxes.federal_excise`, `taxes.energy_contribution` | `_extract_taxes` (`:464`) | first federal tier (0-3.000 kWh) |
 | `taxes.region_connection_fee` | `_extract_taxes` | Wallonia only |
@@ -157,7 +159,7 @@ By kind:
 
 - **`dynamic`**: parses the prose formula `Epex 15' * <factor> <sign> <base>`
   (`_EPEX_FORMULA`, `:287-289`). The consumption formula is picked by
-  `_dynamic_consumption_formula` (`:299-318`), which first locates the injection
+  `_dynamic_consumption_formula` (`:304-324`), which first locates the injection
   formula (the one after the `Le prix de votre injection` lead-in) and skips it,
   so reordering the two paragraphs cannot bind the injection formula as the
   consumption rate (`test_dynamic_consumption_formula_skips_injection_on_reorder`).
@@ -192,7 +194,7 @@ month spelled out and accented; the fallback maps the folded month name through
 `_FRENCH_MONTHS` (`:402-404`). `test_publication_month_reads_fiche_tarifaire_banner`
 exercises both, including accented `FÉVRIER` and `AOÛT`.
 
-### Taxes (`_extract_taxes`, `octaplus.py:464-498`)
+### Taxes (`_extract_taxes`, `octaplus.py:505-539`)
 
 OCTA+ prints four federal-tier rows on page 2; the residential tier is the first
 (`0 & 3.000 kWh`). The regex `0\s*&\s*3\.000\s*kWh\s+<a>\s+<b>` anchors on the
@@ -224,20 +226,40 @@ VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
 
 Both raises are covered by `test_missing_regional_renewables_raises`.
 
-### Injection (`_extract_injection`, `octaplus.py:428-455`)
+### Injection (`_extract_injection`, `octaplus.py:436-490`)
 
-Injection taxonomy: **flat monthly indicative** on fixed/variable, **hourly
-factor*spot+base** on dynamic. `current` is the second number on the `Compteur
-monohoraire` line (the injection column next to the consumption rate), divided by
-100. Pinned illustrative `0.0472` with `factor`/`base` `None`
-(`test_fixed_wallonia_extracts_meter_rates`). For `dynamic`, the injection
+Injection taxonomy: **month-indexed formula** on fixed/variable/Impact,
+**hourly factor*spot+base** on dynamic. `current` is the second number on the
+`Compteur monohoraire` line (the injection column next to the consumption rate),
+divided by 100, pinned illustrative `0.0472`
+(`test_fixed_wallonia_extracts_meter_rates`). On a non-dynamic card that number
+sits under the card's own **Prix estimés** heading and is not the rate: *"Le prix
+de votre injection est indexé mensuellement sur base du paramètre d'indexation de
+la Epex SPP ... La valeur de la Epex du mois en cours ne sera connue qu'en fin de
+mois"*. `_SPP_FORMULA_RE` parses the stated `Epex SPP x 0,852 - 13,39` (EUR/MWh,
+so `base = b_eur_mwh / 1000`) and the leg is marked `spp_indexed`, which resolves
+it against the delivery month's own solar-weighted mean and keeps the month
+coefficients off the hourly spot. The estimate stays as `current`, the fallback
+while that mean is unpublished
+(`test_fixed_injection_carries_the_monthly_spp_formula`,
+`test_fixed_injection_is_never_priced_per_hour`,
+`test_every_non_dynamic_kind_gets_the_spp_formula`).
+
+The card states the formula three times, once per meter configuration
+(`monohoraire`, `bihoraire heures pleines`, `bihoraire heures creuses`). They are
+identical today and `InjectionRates` carries a single coefficient pair, so the
+coefficients are surfaced only while all three agree; a card that splits them
+falls back to the printed estimate rather than billing two meter types on a
+third one's formula (`test_disagreeing_meter_formulas_keep_the_estimate`).
+
+For `dynamic`, the injection
 formula is found after the `_INJECTION_LEAD` prose and yields `factor` and `base`
 that are NOT VAT-adjusted (injection is VAT-exempt, `base.py:269-289`);
 `base = b_eur_mwh / 1000`. Pinned illustrative `factor 1.0`, `base -0.01389` for
 `Epex 15' * 1 - 13,89 €/MWh` (`test_dynamic_extracts_injection_formula`). Returns
 `None` only when both `current` and `factor` are absent.
 
-`_INJECTION_LEAD` (`:293-296`) accepts either the pre-2026 lead-in `Le prix de
+`_INJECTION_LEAD` (`:298-301`) accepts either the pre-2026 lead-in `Le prix de
 votre injection` or the 2026 rewording `les prix de l'électricité injectée sont
 indexés`, with the curly apostrophe the card uses.
 `test_dynamic_injection_survives_reworded_lead_in` guards this.
@@ -318,16 +340,24 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
   card and is scaled by the parsed VAT multiplier before storage
   (`:335-342`).
 - **Injection is VAT-exempt**: dynamic injection factor/base are stored
-  un-scaled (`:452-453`); a regression that VAT-scaled them would mis-credit
+  un-scaled (`:458-459`); a regression that VAT-scaled them would mis-credit
   feed-in.
 - **Fixed-card injection column index**: `current` is the *second* number on the
   `Compteur monohoraire` line; a column-index slip that grabbed the consumption
   rate would over-credit feed-in ~3.4x (`test_fixed_wallonia_extracts_meter_rates`).
+- **That column is an ESTIMATE, not the rate**: it sits under `Prix estimés` and
+  the card says the delivery month's Epex is only known at month-end. Billing it
+  flat is a month-lag mis-credit, which is what `_SPP_FORMULA_RE` and
+  `spp_indexed` exist to stop.
+- **The trailing period after the last formula**: the third meter variant ends
+  the sentence, so a `[\d.,]+` value class swallows the period and turns
+  `13,39.` into a different number. The value is anchored as
+  `\d+(?:[.,]\d+)?`.
 - **Consumption vs injection formula collision**: both dynamic formulas share the
   `Epex 15'` shape; `_dynamic_consumption_formula` must skip the injection one by
-  offset, robust to paragraph reordering (`:299-318`).
+  offset, robust to paragraph reordering (`:304-324`).
 - **Reworded 2026 injection lead-in and curly apostrophe**: `_INJECTION_LEAD`
-  accepts both phrasings (`:293-296`).
+  accepts both phrasings (`:298-301`).
 - **Wallonia column swap (2026)**: prosumer and transport columns swapped order;
   disambiguated by magnitude, not position (`:583-590`).
 - **Wallonia label recasing/renaming (2026)**: case-insensitive match,
@@ -373,8 +403,8 @@ fetch path.
 - Meter-rate rows renamed or reordered: `_meter_value` label patterns in
   `_extract_energy` (`:369-372`).
 - Dynamic formula wording / unit change: `_EPEX_FORMULA` (`:287-289`),
-  `_dynamic_consumption_formula` (`:299-318`), the VAT/unit conversion
-  (`:335-342`), and `_INJECTION_LEAD` (`:293-296`).
+  `_dynamic_consumption_formula` (`:304-324`), the VAT/unit conversion
+  (`:335-342`), and `_INJECTION_LEAD` (`:298-301`).
 - Impact bands relabelled: `_extract_energy` Impact branch (`:352-361`).
 - Tax tier / connection fee moved: `_extract_taxes` (`:464-498`); if the glyph
   spacing changes, revisit `x_join_threshold` in `fetch` (`:188`).

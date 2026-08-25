@@ -2018,6 +2018,16 @@ _INJECTION_SHAPE: dict[str, str] = {
     # the contract.
     "energyvision_fixed_3y": "spp",
     "energyvision_fixed_1y": "spp",
+    # Every non-dynamic OCTA+ card prints "Le prix de votre injection est
+    # indexe mensuellement sur base du parametre d'indexation de la Epex SPP"
+    # and puts its c/kWh figure under a "Prix estimes" heading. The formula is
+    # the contract; the figure is the fallback.
+    "octaplus_fixed": "spp",
+    "octaplus_fixed_impact": "spp",
+    "octaplus_ecofixed": "spp",
+    "octaplus_smartvariable": "spp",
+    "octaplus_flux": "spp",
+    "octaplus_ecoflux": "spp",
 }
 
 # contract id -> Contract, populated in _run once the providers are loaded so

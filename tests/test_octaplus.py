@@ -83,12 +83,74 @@ def test_fixed_wallonia_extracts_meter_rates() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
     # Injection is the second number on the 'Compteur monohoraire' line; a
     # column-index regression that grabbed the consumption rate instead
-    # would over-credit feed-in ~3.4x. Pin it as a flat current rate (no
-    # spot factor on a fixed card).
+    # would over-credit feed-in ~3.4x. It sits under the card's "Prix
+    # estimés" heading, so it is the fallback and not the rate.
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(0.0472)
+
+
+def test_fixed_injection_carries_the_monthly_spp_formula() -> None:
+    """ "Le prix de votre injection est indexé mensuellement sur base du
+    paramètre d'indexation de la Epex SPP ... monohoraire : Epex SPP x 0,852
+    - 13,39". The printed 4,72 c€/kWh is in the "Prix estimés" column and the
+    card says the month's Epex "ne sera connue qu'en fin de mois", so the
+    formula is the contract and the figure is the fallback."""
+    snap = parse_snapshot("octaplus_fixed", _text("octaplus_fixed_w.pdf"), "wallonia")
+    inj = snap.injection
+    assert inj is not None
+    assert inj.factor == pytest.approx(0.852)
+    assert inj.base == pytest.approx(-13.39 / 1000.0)
+    assert inj.spp_indexed is True
+    assert inj.formula == "Epex SPP x 0,852 - 13,39"
+
+
+def test_fixed_injection_is_never_priced_per_hour() -> None:
+    """Epex SPP is a monthly mean. Reading its coefficients as an hourly
+    formula would credit whatever the current slot costs, which on a fixed
+    card is not even an index the contract names."""
+    from custom_components.be_electricity_prices.injection import (
+        _injection_is_spot_formula,
+    )
+
+    snap = parse_snapshot("octaplus_fixed", _text("octaplus_fixed_w.pdf"), "wallonia")
+    assert snap.injection is not None
+    assert _injection_is_spot_formula(snap.injection, snap.energy) is False
+
+
+def test_every_non_dynamic_kind_gets_the_spp_formula() -> None:
+    """Fixed, Impact and Variable all print the same paragraph, so all three
+    settle on it. Only the dynamic cards index per quarter-hour."""
+    for cid, fixture in (
+        ("octaplus_fixed", "octaplus_fixed_w.pdf"),
+        ("octaplus_fixed_impact", "octaplus_fixed_w.pdf"),
+        ("octaplus_smartvariable", "octaplus_smartvariable_w.pdf"),
+    ):
+        snap = parse_snapshot(cid, _text(fixture), "wallonia")
+        assert snap.injection is not None, cid
+        assert snap.injection.spp_indexed is True, cid
+        assert snap.injection.factor == pytest.approx(0.852), cid
+
+    dyn = parse_snapshot(
+        "octaplus_dynamic", _text("octaplus_dynamic_w.pdf"), "wallonia"
+    )
+    assert dyn.injection is not None
+    assert dyn.injection.spp_indexed is False
+
+
+def test_disagreeing_meter_formulas_keep_the_estimate() -> None:
+    """The card states one formula per meter configuration and they are equal
+    today. InjectionRates holds a single pair, so a card that splits them must
+    fall back to the printed estimate rather than bill two of the three meter
+    types on the wrong formula."""
+    text = _text("octaplus_fixed_w.pdf").replace(
+        "bihoraire heures creuses : Epex SPP x 0,852",
+        "bihoraire heures creuses : Epex SPP x 0,900",
+    )
+    snap = parse_snapshot("octaplus_fixed", text, "wallonia")
     assert snap.injection is not None
     assert snap.injection.current == pytest.approx(0.0472)
     assert snap.injection.factor is None
-    assert snap.injection.base is None
+    assert snap.injection.spp_indexed is False
 
 
 def test_fixed_impact_extracts_three_cwape_bands() -> None:

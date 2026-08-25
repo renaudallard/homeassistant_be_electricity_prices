@@ -610,7 +610,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # the credit resolves against the delivery month's solar-weighted mean instead
 # of a printed figure the card says is not that month's. A snapshot written
 # earlier has none of the three.
-_SNAPSHOT_SCHEMA_VERSION = 31
+# v32: the six non-dynamic OCTA+ cards now surface their "Epex SPP x 0,852 -
+# 13,39" coefficients with spp_indexed. Their printed c/kWh sits in the card's
+# "Prix estimes" column and the card says the month's Epex is only known at
+# month-end, so a snapshot written earlier carries the estimate and no formula.
+_SNAPSHOT_SCHEMA_VERSION = 32
 
 
 def _snapshot_to_dict(
