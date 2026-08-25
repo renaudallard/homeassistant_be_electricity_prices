@@ -245,6 +245,36 @@ def _cohort_energy_from_archived(
     return None
 
 
+def _month_indexed_leg(
+    snapshot: "SupplierSnapshot", entry: ConfigEntry
+) -> EnergyRates | None:
+    """The monthly-mean leg for a card whose rate IS the delivery month's index.
+
+    Such a card prints a rate computed from the PREVIOUS month's index and says
+    so. Cociter Tarif Variable is the shape: the footnote reads "le prix
+    indique est calcule avec l'indice BELIX du mois precedent ... renseigne a
+    titre indicatif", while note (7) indexes the contract on "la moyenne
+    arithmetique des cotations journalieres Day Ahead EPEX SPOT Belgium durant
+    le mois de fourniture" and settles the volume retroactively. Billing the
+    printed indicative therefore bills last month's index: measured on the 2026
+    cards, 8,1% under in May and 15,4% over in February on the energy leg.
+
+    BELIX is exactly the arithmetic monthly mean the coordinator already
+    computes, so the coefficients resolve against it without approximation.
+
+    Returns ``None`` without an ENTSO-E key, which keeps the printed
+    indicative: the variable kind never prompts for one, and an entry that has
+    none is better served by a rate a month stale than by no energy leg at all.
+    Same reasoning, and the same guard, as the variable cohort below.
+    """
+    energy = snapshot.energy
+    if not isinstance(energy, VariableRates) or not energy.month_indexed:
+        return None
+    if not entry.data.get(CONF_API_KEY):
+        return None
+    return _cohort_energy_from_archived(snapshot)
+
+
 async def _cohort_energy_leg(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -280,7 +310,7 @@ async def _cohort_energy_leg(
         return None
     start = _contract_start_month(entry)
     if start is None:
-        return None
+        return _month_indexed_leg(current_snapshot, entry)
     now = dt_util.now()
     # Resolve the archived signing-month card first, as the base the typed
     # rate overlays onto. Fixed / dynamic re-price from its leg directly (the

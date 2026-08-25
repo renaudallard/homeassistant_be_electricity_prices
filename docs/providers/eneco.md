@@ -32,7 +32,7 @@ Related reading:
 | Probe | listing scrape returning the resolved PDF URL | `eneco.py:210-228` |
 | Archive | per-month issues kept on the CDN, resolved by volume walk | `eneco.py:164-207` |
 
-`EXTRACTOR.regions()` (the union over its contracts, `base.py:578`) is
+`EXTRACTOR.regions()` (the union over its contracts, `base.py:584`) is
 `{flanders, wallonia}`. Power Fix and Power Flex cover both regions; Power Dynamic
 is Flanders-only (see the contracts table). Brussels (Sibelga) is never served, so
 `TaxOverlay.brussels_renewables` stays 0 and no Sibelga overlay is emitted.

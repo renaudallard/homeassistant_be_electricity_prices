@@ -143,6 +143,12 @@ class VariableRates:
     # (few-percent) approximation of the true residential-load-profile weighting.
     formula_factor: float | None = None
     formula_base: float | None = None
+    # True when the card says its rate IS the delivery month's index and the
+    # printed value is only an indicative computed from the PREVIOUS month's.
+    # The coordinator then resolves the coefficients against the delivery
+    # month's own mean, cohort or not, and the printed rate is the fallback for
+    # an entry with no ENTSO-E key. False -> the printed rate is what is billed.
+    month_indexed: bool = False
     # The same coefficients for a bi-hourly meter's two bands, when the card
     # prints them per meter. Mega does: mono "Epex x 1,1095 + 3,6", peak
     # "x 1,3275 + 3,6", off-peak "x 0,94 + 3,6". Billing a bi-hourly cohort at

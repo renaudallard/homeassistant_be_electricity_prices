@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:619-634`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:558`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:564`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -159,7 +159,7 @@ pricing engine:
 - **Fixed and annual fees** - the yearly fee, data management, capacity, the DSO
   and supplier prosumer forfaits, the Brussels OSP table - never reach that path:
   the live, YTD, backfill and compare paths each sum them raw.
-  `base.apply_vat` (`providers/base.py:619`) bakes them once instead.
+  `base.apply_vat` (`providers/base.py:625`) bakes them once instead.
 
 `apply_vat` is called per config entry, from `_resolve_snapshot`
 (`coordinator.py:568`), never before the shared snapshot cache: that cache is
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:810`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:816`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -225,6 +225,27 @@ It cannot be applied without a volume, so it lands in `_annual_fees`
 consumption total is known and is NOT capped there; at the 2026 rates and the
 regulated 2,5 kW floor the ceiling binds under about 470 kWh a year, so the two
 agree for any household and part company only on a garage box or a second home.
+
+### Monthly-indexed variable cards
+
+A variable card can print a rate that is not what the contract bills. Cociter
+Tarif Variable prints one computed from the PREVIOUS month's BELIX and labels it
+so ("le prix indique est calcule avec l'indice BELIX du mois precedent ...
+renseigne a titre indicatif"), while note (7) indexes the contract on the
+delivery month's own arithmetic mean and settles it retroactively. Billing the
+printed rate therefore bills last month's index: the April 2026 card's printed
+12,6625 c/kWh is exactly the formula at March's BELIX of 92,61, and April
+settled at 78,93 and 11,5749.
+
+`VariableRates.month_indexed` marks such a card, and `_month_indexed_leg`
+(`cohort.py:278`) resolves the coefficients against the delivery month's mean
+through the same `SpotMonthlyRates` leg a signing cohort uses, so all five
+costing paths follow one decision. BELIX is exactly the arithmetic monthly mean
+the coordinator already computes, so nothing is approximated here.
+
+Without an ENTSO-E key it returns `None` and the printed indicative stands: the
+variable kind never prompts for a key, and an entry that has none is better
+served by a rate a month stale than by no energy leg at all.
 
 ### Contractual price ceilings
 
@@ -368,8 +389,8 @@ discount and is out of scope (`pricing.py:214-219`).
 `ImpactRates` (`tou_impact` kind) is Wallonia's Tarif Impact, distinct from TOU
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
-(`providers/base.py:270-273`). Fields: `pic`, `medium`, `eco`
-(`providers/base.py:285-287`). `dso_impact_band` (`pricing.py:547-563`):
+(`providers/base.py:276-279`). Fields: `pic`, `medium`, `eco`
+(`providers/base.py:291-293`). `dso_impact_band` (`pricing.py:547-563`):
 
 | Band | Hours (every day) |
 | --- | --- |
@@ -459,7 +480,7 @@ on an exclusive-night config entry when the card prints one (EBEM Groen Variabel
 otherwise the standard `yearly_fixed_fee` for every meter type
 (`pricing.py:420-434`). Three rate shapes carry the dedicated field: `FixedRates`
 (`providers/base.py:112-145`), `VariableRates` (`providers/base.py:121-125`) and
-`SpotMonthlyRates` (`providers/base.py:191-196`), the last because a variable card
+`SpotMonthlyRates` (`providers/base.py:197-202`), the last because a variable card
 re-priced onto a monthly-mean leg for a signing cohort keeps the separate charge
 its card printed. An exclusive-night circuit is configured as a SECOND config
 entry pointing at the night kWh sensor; the primary day meter stays
@@ -499,11 +520,11 @@ keys (`pricing.py:670-701`, same guard in `compute_breakdown` at
 Injection is computed in `coordinator.py`, not `pricing.py`, but it consumes the
 same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 `current`, an hourly formula `factor`/`base`, an optional per-slot TOU triplet
-`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:325-340`).
+`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:331-346`).
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption
-snapshot's `vat_rate` (`providers/base.py:594-594`). None of the injection code
+snapshot's `vat_rate` (`providers/base.py:600-600`). None of the injection code
 paths multiply by `1.0 + vat_rate`.
 
 Injection formulas can go negative at low spot (the producer pays to inject) and
@@ -664,7 +685,7 @@ capacity_cost_eur = peak_kw * overlay.capacity_eur_per_kw_year / 12.0
 
 Returns `0.0` when the entry lost its `CONF_DSO` key, the overlay is missing, or
 `capacity_eur_per_kw_year is None` (`fees.py:58-72`). The rate lives on
-`DsoOverlay.capacity_eur_per_kw_year` (`providers/base.py:324`); Flanders digital
+`DsoOverlay.capacity_eur_per_kw_year` (`providers/base.py:330`); Flanders digital
 meters publish it, other regions leave it `None`.
 
 `peak_kw` is the *billed* quantity, resolved by `_billed_peak_kw`, and applies

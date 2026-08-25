@@ -52,7 +52,7 @@ listing page; there is no JSON or CMS API. The listing is HTML with plain
 
 | id | label | TariffKind | regions | spot_indexed_injection | quarter_hourly | notes |
 |----|-------|------------|---------|------------------------|----------------|-------|
-| `cociter_variable` | Cociter Tarif Variable | `variable` | Wallonia | `True` | n/a | BELIX-indexed monthly variable energy. Publishes per-meter indicative rates (mono, bi-hourly, exclusive-night). Injection is an hourly `factor*spot+base` BELPEX formula with no printed monthly indicative, so it needs an ENTSO-E spot: hence `spot_indexed_injection=True` (`cociter.py:611-613`). |
+| `cociter_variable` | Cociter Tarif Variable | `variable` | Wallonia | `True` | n/a | BELIX-indexed monthly variable energy. Publishes per-meter indicative rates (mono, bi-hourly, exclusive-night). Injection is an hourly `factor*spot+base` BELPEX formula with no printed monthly indicative, so it needs an ENTSO-E spot: hence `spot_indexed_injection=True` (`cociter.py:610-618`). |
 | `cociter_dynamic` | Cociter Tarif Dynamique | `dynamic` | Wallonia | `False` (default) | `True` | SMR3 quarter-hourly BELPEX dynamic contract. Bills on the native 15-minute Belpex grid, so `DynamicRates.quarter_hourly=True` (`cociter.py:400`). Dynamic contracts already collect the ENTSO-E key via the energy formula, so `spot_indexed_injection` stays `False`. |
 
 Neither product is retired. Both are Wallonia-only by design, not by
@@ -205,7 +205,7 @@ at a spot of 100 EUR/MWh so a unit-conversion swap cannot cancel out. The
 
 ### DSO overlay: `_extract_dsos`
 
-`_extract_dsos` (`cociter.py:404-452`) parses one row per Wallonian DSO. The
+`_extract_dsos` (`cociter.py:408-456`) parses one row per Wallonian DSO. The
 DSO label to canonical registry key map is `_DSO_KEY` (`cociter.py:109-115`):
 
 | PDF row label | Registry key |
@@ -326,7 +326,7 @@ the shared ELIA transport rate, `data_management_per_year`, and either the
 compensation-regime prosumer forfait (variable) or the three Tarif Impact
 distribution bands PIC/MEDIUM/ECO (dynamic SMR3). The Impact bands feed the
 CWaPE 3-band pricing when a customer opts into the DSO Impact tariff (see
-`DsoOverlay` and `ImpactRates`, `base.py:364-401`, `base.py:249-271`).
+`DsoOverlay` and `ImpactRates`, `base.py:364-401`, `base.py:255-277`).
 
 ## Tax overlay
 
@@ -407,7 +407,7 @@ comment:
   several apostrophe/quote/dash glyphs; the regexes tolerate all of these
   (`cociter.py:319-331`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:656`).
 - **Injection has no indicative fallback.** `current=None` always; the credit
-  is spot-only, gated on `spot_indexed_injection` (`cociter.py:611-613`).
+  is spot-only, gated on `spot_indexed_injection` (`cociter.py:610-618`).
   Losing the gate zeros or drifts the solar credit.
 - **Archive validity cross-check.** `fetch_for_month` runs
   `archive_validity_check` with the French month names so a CDN-substituted
@@ -443,7 +443,7 @@ Ordered by likelihood of breaking when Cociter re-renders its cards:
    `Heures creuses` / `Compteur exclusif nuit` anchors and the
    `QUARTER HOURLY BELPEX ... + N% TVA` dynamic regex.
 3. **DSO table layout / column order / new column** -> `_extract_dsos`
-   (`cociter.py:404-452`) and the `"Tarif prosumer"` header discriminator
+   (`cociter.py:408-456`) and the `"Tarif prosumer"` header discriminator
    (`cociter.py:421`). A new DSO also needs `_DSO_KEY` and
    `const.WALLONIA_DSO_KEYS` updated together (`cociter.py:117-119`).
 4. **Injection formula relocation or wording** -> `_extract_injection`

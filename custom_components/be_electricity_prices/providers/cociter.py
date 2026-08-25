@@ -409,6 +409,10 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
                 if formula
                 else None
             ),
+            # Note (7) indexes the contract on the delivery month's own BELIX
+            # and settles it retroactively; the printed rate is computed from
+            # the previous month's and labelled indicative on the card itself.
+            month_indexed=formula_factor is not None,
             formula_factor=formula_factor,
             formula_base=formula_base,
         )

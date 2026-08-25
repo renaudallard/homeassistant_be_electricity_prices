@@ -113,7 +113,7 @@ _MD_UNANCHORED_BASELINE = 1
 # 2026-08 sweep the only thing checked about a range was that neither end ran
 # past EOF, so a span could sit on entirely unrelated code and pass: five of
 # the eight const.py ranges did exactly that.
-_RANGE_UNANCHORED_BASELINE = 35
+_RANGE_UNANCHORED_BASELINE = 34
 
 
 def _source_for(rel: str) -> Path | None:

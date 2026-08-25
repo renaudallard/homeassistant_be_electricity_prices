@@ -494,3 +494,55 @@ async def test_the_live_card_and_the_archived_one_resolve_the_same_file() -> Non
         )
     assert url.endswith("2608-fr.pdf")
     assert label == "2026-08"
+
+
+def test_variable_bills_the_delivery_month_not_the_printed_indicative() -> None:
+    """The printed rate is computed from the PREVIOUS month's BELIX and the
+    card says so: "le prix indique est calcule avec l'indice BELIX du mois
+    precedent ... renseigne a titre indicatif". Note (7) indexes the contract
+    on "la moyenne arithmetique des cotations journalieres Day Ahead EPEX SPOT
+    Belgium durant le mois de fourniture" and settles it retroactively.
+
+    So billing the printed rate bills last month's index. The April 2026 card
+    proves it: its printed 12,6625 c/kWh is exactly the formula at MARCH's
+    BELIX of 92,61, while April settled at 78,93 and 11,5749."""
+    from types import SimpleNamespace
+    from datetime import datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+
+    snap = parse_snapshot(
+        fixture_text("cociter_var_2604.pdf"),
+        "cociter_variable",
+        "test://var",
+        "2026-04",
+    )
+    assert snap.energy.month_indexed is True
+
+    entry = SimpleNamespace(data={"contract": "cociter_variable", "api_key": "k"})
+    leg = _month_indexed_leg(snap, entry)
+    assert leg is not None
+    when = datetime(2026, 4, 15, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    def at(belix_eur_per_kwh: float) -> float:
+        return energy_eur_per_kwh(
+            leg, when, belix_eur_per_kwh, meter="mono", region="wallonia"
+        )
+
+    # The printed indicative IS the formula at March's index, which is what the
+    # card says and what made this a defect rather than a rounding difference.
+    assert at(0.09261) == pytest.approx(snap.energy.current)
+    # April's own index is what April is billed at.
+    assert at(0.07893) == pytest.approx(0.115749, abs=1e-6)
+    # And May's, printed on the June card, matches too.
+    assert at(0.09177) == pytest.approx(0.125957, abs=1e-6)
+
+    # An entry with no ENTSO-E key keeps the printed rate rather than losing
+    # its energy leg: the variable kind never prompts for one.
+    assert (
+        _month_indexed_leg(snap, SimpleNamespace(data={"contract": "cociter_variable"}))
+        is None
+    )

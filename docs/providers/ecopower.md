@@ -365,7 +365,7 @@ VAT-exempt). Sets `current=None`, `factor`, `base`, and a diagnostic `formula` s
 
 There is no supplier-side PV/prosumer forfait: `supplier_prosumer_eur_per_kva_year` stays `None`.
 Flanders digital meters (post-2024 SMR3) do not carry the compensation-regime prosumer tariff
-(`DsoOverlay.prosumer_eur_per_kva_year` docstring, `base.py:429-429`), so the extractor never sets
+(`DsoOverlay.prosumer_eur_per_kva_year` docstring, `base.py:435-435`), so the extractor never sets
 it. No Wallonia Tarif Impact or Brussels OSP applies (Flanders-only).
 
 ### VAT scaling: the recurring Ecopower gotcha
@@ -376,7 +376,7 @@ Because Ecopower publishes HTVA, **every** value is stored exactly as the card p
 | value | grossed by | where |
 | --- | --- | --- |
 | per-kWh energy, distribution, levies | `compute_breakdown` via `vat_rate=0.06` | `pricing._finalize_breakdown` |
-| flat annual euro fees (yearly fee, data management, capacity, prosumer forfaits) | `base.apply_vat`, once per entry | `base.py:619` |
+| flat annual euro fees (yearly fee, data management, capacity, prosumer forfaits) | `base.apply_vat`, once per entry | `base.py:625` |
 
 The worked example: the same Fluvius databeheer prints `17,85` HTVA on Ecopower's card versus
 `18,92` TVAC on other suppliers' cards, and `apply_vat` is what turns one into the other

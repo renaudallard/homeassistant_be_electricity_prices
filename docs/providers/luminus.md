@@ -109,7 +109,7 @@ suppliers (Frank default, Mega, TotalEnergies, Eneco).
 ### Probe
 
 There is no probe. `EXTRACTOR` does not set `probe`, so it defaults to `None`
-(`base.py:558`). Per the `SnapshotProbe` contract (`base.py:841-841`), the
+(`base.py:564`). Per the `SnapshotProbe` contract (`base.py:847-847`), the
 `api-next/get-pricelist/` endpoint mints a fresh PDF per request with no cheap
 freshness key the coordinator can rely on, so the time-based TTL takes over.
 
