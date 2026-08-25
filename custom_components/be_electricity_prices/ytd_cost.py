@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import logging
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
@@ -96,6 +96,7 @@ from .pricing import (
 from .providers.base import (
     DynamicRates,
     ImpactRates,
+    InjectionRates,
     SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
@@ -501,6 +502,7 @@ async def _ytd_spot_injection_credit(
     entry: ConfigEntry,
     today: date,
     historical_spots: dict[datetime, float] | None,
+    snap_for: Callable[[date], Awaitable[SupplierSnapshot]] | None = None,
 ) -> float:
     """YTD solar-injection credit (EUR) for a contract whose injection is
     a per-hour spot formula with no monthly indicative.
@@ -516,6 +518,14 @@ async def _ytd_spot_injection_credit(
     Returns 0.0 (a no-op) unless the injection is exactly that shape
     (``factor``/``base`` set, ``current is None``), spots are cached, and
     an injection sensor is wired. Hours with no cached spot are skipped.
+
+    ``snap_for`` resolves each hour to its own delivery month's card, the way
+    the sibling walks and the backfill already do. Without it every past hour
+    was credited at TODAY's coefficients, so a contract whose feed-in formula
+    moved during the year was re-credited for the whole year at its newest
+    terms. An hour whose month printed an indicative is skipped here, because
+    the walk this term is added to already credited that month off it, and
+    crediting it twice would double the feed-in.
     """
     inj = snapshot.injection
     if (
@@ -544,6 +554,19 @@ async def _ytd_spot_injection_credit(
         spot = historical_spots.get(utc_hour)
         if spot is None:
             continue
+        inj_h: InjectionRates | None = inj
+        if snap_for is not None:
+            local = dt_util.as_local(utc_hour)
+            inj_h = (await snap_for(date(local.year, local.month, 1))).injection
+            if (
+                inj_h is None
+                or inj_h.factor is None
+                or inj_h.base is None
+                or inj_h.current is not None
+            ):
+                # That month is not this shape, so its own card was already
+                # credited by the walk this term is added to.
+                continue
         # Route through the shared helper so the floor_at_zero clamp the live
         # scalar and array apply is honoured here too, rather than summing the
         # raw factor*spot+base and diverging on a negative-spot hour.
@@ -551,7 +574,7 @@ async def _ytd_spot_injection_credit(
         # No quarters here, and none can exist: this term serves a card whose
         # ENERGY leg is static, and only DynamicRates carries quarter_hourly,
         # so the hour's spot IS the hour's price.
-        credit += kwh * (_historical_injection_rate(inj, spot) or 0.0)
+        credit += kwh * (_historical_injection_rate(inj_h, spot) or 0.0)
     return credit
 
 
@@ -799,7 +822,14 @@ async def _compute_current_year_cost(
             # above. Apply the same per-hour spot-replayed credit the
             # daily path uses; a no-op for monthly-indicative injection.
             hourly_energy -= await _ytd_spot_injection_credit(
-                hass, snapshot, entry, today, historical_spots
+                hass,
+                snapshot,
+                entry,
+                today,
+                historical_spots,
+                _month_snapshot_cache(
+                    hass, session, extractor, contract, region, snapshot, entry
+                ),
             )
         return hourly_energy + fees
 
@@ -920,7 +950,14 @@ async def _compute_current_year_cost(
         # spot-replayed credit
         # here. A no-op (0.0) for every other contract.
         energy_cost -= await _ytd_spot_injection_credit(
-            hass, snapshot, entry, today, historical_spots
+            hass,
+            snapshot,
+            entry,
+            today,
+            historical_spots,
+            _month_snapshot_cache(
+                hass, session, extractor, contract, region, snapshot, entry
+            ),
         )
         # This regime has no compensation clamp, so the billed energy is
         # already the raw energy term.

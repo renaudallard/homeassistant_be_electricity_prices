@@ -926,6 +926,67 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
         )
 
 
+async def test_ytd_spot_injection_credit_uses_each_month_own_card(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A feed-in formula that moved during the year must be replayed at the
+    terms each month actually carried.
+
+    This term took today's coefficients and applied them to every hour since
+    1 January, while the backfill resolved each month's own archived card, so
+    the two disagreed on the same history. A month whose card printed an
+    indicative is skipped here instead, because the walk this term is added to
+    already credited that month off it."""
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    today = dt_util.now().date()
+    march = InjectionRates(factor=1.0, base=-0.03, current=None)
+    january = InjectionRates(factor=1.0, base=0.02, current=None)
+    february = InjectionRates(factor=1.0, base=-0.03, current=0.05)
+
+    def _snap_with(inj: InjectionRates) -> Any:
+        return _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=VariableRates(current=0.16),
+            injection=inj,
+        )
+
+    entry = _entry(solar_regime="injection", injection_kwh="sensor.inj_total")
+    jan_h = dt_util.start_of_local_day(datetime(2026, 1, 6)).astimezone(
+        UTC
+    ) + timedelta(hours=11)
+    feb_h = dt_util.start_of_local_day(datetime(2026, 2, 6)).astimezone(
+        UTC
+    ) + timedelta(hours=11)
+    spots = {jan_h: 0.10, feb_h: 0.10}
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.inj_total":
+            return {jan_h: 2.0, feb_h: 2.0}
+        return {}
+
+    async def _snap_for(month_first: date) -> Any:
+        return _snap_with({1: january, 2: february}.get(month_first.month, march))
+
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        credit = await _ytd_spot_injection_credit(
+            hass, _snap_with(march), entry, today, spots, _snap_for
+        )
+    # January at its own base (+0.02), and February skipped: its card printed
+    # an indicative, so the walk this is added to already credited it.
+    assert credit == pytest.approx(2 * (1.0 * 0.10 + 0.02))
+
+    # Without a resolver every hour keeps taking today's card, which is what
+    # the backfill disagreed with.
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        flat = await _ytd_spot_injection_credit(
+            hass, _snap_with(march), entry, today, spots
+        )
+    assert flat == pytest.approx(4 * (1.0 * 0.10 - 0.03))
+
+
 async def test_band_ratio_refuses_a_once_a_day_sensor(hass: HomeAssistant) -> None:
     """All of a day's energy in one hour is a reading, not a load profile.
 
