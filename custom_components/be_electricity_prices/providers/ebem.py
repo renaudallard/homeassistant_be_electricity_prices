@@ -712,6 +712,14 @@ def _extract_dsos(text: str, contract: _ContractDef) -> dict[str, DsoOverlay]:
 
 _EBEM_REGIONS = frozenset({REGION_FLANDERS})
 
+# Contracts whose feed-in credit indexes on a MONTHLY mean. The credit
+# resolves against ENTSO-E spots the energy leg never fetches, so the config
+# flow has to offer the optional key or the formula can never resolve and every
+# path falls back to the card's printed figure. See
+# ``Contract.spot_indexed_injection``.
+_MONTH_INDEXED_INJECTION = frozenset({"ebem_variable", "ebem_basic_plus"})
+
+
 EXTRACTOR = SupplierExtractor(
     id="ebem",
     label="EBEM",
@@ -721,6 +729,7 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             regions=_EBEM_REGIONS,
+            spot_indexed_injection=c.contract_id in _MONTH_INDEXED_INJECTION,
         )
         for c in _CONTRACTS
     ),

@@ -701,11 +701,25 @@ def _extract_dsos_fr(text: str) -> dict[str, DsoOverlay]:
 # ---- EXTRACTOR ---------------------------------------------------------------
 
 
+# Contracts whose feed-in credit indexes on a MONTHLY mean. The credit
+# resolves against ENTSO-E spots the energy leg never fetches, so the config
+# flow has to offer the optional key or the formula can never resolve and every
+# path falls back to the card's printed figure. See
+# ``Contract.spot_indexed_injection``.
+_MONTH_INDEXED_INJECTION = frozenset({"energyvision_fixed_3y", "energyvision_fixed_1y"})
+
+
 EXTRACTOR = SupplierExtractor(
     id="energyvision",
     label="EnergyVision",
     contracts=tuple(
-        Contract(id=c.contract_id, label=c.label, kind=c.kind, regions=c.regions)
+        Contract(
+            id=c.contract_id,
+            label=c.label,
+            kind=c.kind,
+            regions=c.regions,
+            spot_indexed_injection=c.contract_id in _MONTH_INDEXED_INJECTION,
+        )
         for c in _CONTRACTS
     ),
     fetch=fetch,

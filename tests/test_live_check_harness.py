@@ -987,6 +987,43 @@ def test_injection_shape_is_asserted_even_when_the_card_prints_an_indicative() -
     assert shape_rows and shape_rows[0].ok
 
 
+def test_every_month_indexed_card_can_collect_a_key() -> None:
+    """The two flags that have to agree, and the test that makes them.
+
+    A parser sets ``InjectionRates.spp_indexed`` / ``month_indexed`` on the
+    snapshot; the config flow decides whether to offer the optional ENTSO-E key
+    from ``Contract.spot_indexed_injection`` on the registry. The first is
+    known only after a card is fetched, the second has to be known before.
+    When they disagree the parser wins on paper and loses in practice: no key
+    step, no spots, no monthly mean, and every path falls back to the card's
+    printed figure. Nine contracts across five suppliers shipped that way.
+
+    ``_INJECTION_SHAPE`` is the live check's own record of which cards carry a
+    month formula, so it is what the registry is held against here. A contract
+    whose KIND already collects the key for its energy leg (dynamic,
+    spot_monthly) is exempt and must leave the flag False: energie.be Variabel
+    is spot_monthly and would otherwise be asked for a key it already has.
+    """
+    from custom_components.be_electricity_prices.const import (
+        SPOT_PRICED_CONTRACT_KINDS,
+    )
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    by_id = {c.id: c for ex in EXTRACTORS.values() for c in ex.contracts}
+    missing = sorted(
+        cid
+        for cid, shape in lc._INJECTION_SHAPE.items()
+        if shape in ("spp", "month")
+        and cid in by_id
+        and by_id[cid].kind not in SPOT_PRICED_CONTRACT_KINDS
+        and not by_id[cid].spot_indexed_injection
+    )
+    assert missing == [], (
+        "these contracts index injection on a monthly mean but no flow step "
+        f"offers them an ENTSO-E key, so the formula can never resolve: {missing}"
+    )
+
+
 def test_a_month_indexed_card_losing_its_flag_fails() -> None:
     """The five cards that credit a monthly index carry coefficients AND the
     flag that names which mean they resolve against. Dropping the flag leaves

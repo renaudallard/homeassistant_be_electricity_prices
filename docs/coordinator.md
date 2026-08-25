@@ -122,7 +122,7 @@ probe-less supplier is never re-fetched.
 
 `_maybe_refresh_snapshot` (`coordinator_snapshot.py:194`) decides whether to re-fetch the full tariff card. It never fetches unconditionally; a full PDF/HTML fetch happens only when a cheap check says the published card changed.
 
-The cheap check is the extractor **probe** (`SnapshotProbe`, `providers/base.py:861`): a `HEAD` or small listing `GET` that returns a freshness key. Same key across calls means the snapshot is still valid; a changed key means re-fetch. The probe is optional; `None` means the supplier has no reliable probe path (Engie/Luminus API endpoints, DATS 24 single PDF) and the time-based TTL takes over.
+The cheap check is the extractor **probe** (`SnapshotProbe`, `providers/base.py:870`): a `HEAD` or small listing `GET` that returns a freshness key. Same key across calls means the snapshot is still valid; a changed key means re-fetch. The probe is optional; `None` means the supplier has no reliable probe path (Engie/Luminus API endpoints, DATS 24 single PDF) and the time-based TTL takes over.
 
 Decision order in `_maybe_refresh_snapshot`:
 
@@ -325,7 +325,7 @@ The same charge is accrued into the running bill by `_ytd_capacity`, which walks
 
 ## 7. Year-to-date / current-year cost
 
-`_compute_current_year_cost` (`ytd_cost.py:581`) computes the running bill from Jan 1 of the local year to today. It bills each past day at the tariff of the month that day belongs to, using an archived snapshot when the supplier exposes `fetch_for_month` (`providers/base.py:891`) and the current snapshot as a proxy otherwise (`_snapshot_for_month`, `snapshot_store.py:330`). When a contract start date is set it routes every past month through `_effective_snapshot_for_month` (`cohort.py:393`) instead, which splices the signing cohort's energy leg onto each delivery month's overlays, and dispatches on that cohort's effective energy kind so a re-priced variable contract takes the monthly-mean path. The whole year is recomputed from scratch each tick by design (`ytd_cost.py:581`): prior days are not immutable (a late ENTSO-E fill or a backfill correction changes a past rate), and the full replay is cheap pure arithmetic.
+`_compute_current_year_cost` (`ytd_cost.py:581`) computes the running bill from Jan 1 of the local year to today. It bills each past day at the tariff of the month that day belongs to, using an archived snapshot when the supplier exposes `fetch_for_month` (`providers/base.py:900`) and the current snapshot as a proxy otherwise (`_snapshot_for_month`, `snapshot_store.py:330`). When a contract start date is set it routes every past month through `_effective_snapshot_for_month` (`cohort.py:393`) instead, which splices the signing cohort's energy leg onto each delivery month's overlays, and dispatches on that cohort's effective energy kind so a re-priced variable contract takes the monthly-mean path. The whole year is recomputed from scratch each tick by design (`ytd_cost.py:581`): prior days are not immutable (a late ENTSO-E fill or a backfill correction changes a past rate), and the full replay is cheap pure arithmetic.
 
 Fees are always summed first and act as the floor: `_ytd_static_fees` (`ytd_cost.py:171`, the supplier yearly fee, energy fund, DSO data-management fee, and Brussels OSP fee, pro-rated per archived month) plus `_ytd_prosumer` (`ytd_cost.py:206`, the Walloon compensation fee). If no meters are wired the function returns fees only, never `unknown` (`ytd_cost.py:206`).
 
@@ -363,7 +363,7 @@ Per-regime day math is documented at `ytd_cost.py:403`. For `compensation` the i
 
 ## 8. Injection taxonomy and the spot-gating invariant
 
-Belgian residential injection is VAT-exempt, so `InjectionRates` values are never VAT-scaled (`providers/base.py:330`). `InjectionRates` (`providers/base.py:330`) can carry a monthly indicative (`current`), a formula (`factor`/`base`) that resolves either per hour or on a monthly mean depending on the `spp_indexed` / `month_indexed` flags, a per-slot TOU triplet (`peak`/`transition`/`offpeak`), and a guaranteed floor (`floor_at_zero`, or `minimum` for a card that promises more than non-negative). The coordinator distinguishes four shapes:
+Belgian residential injection is VAT-exempt, so `InjectionRates` values are never VAT-scaled (`providers/base.py:339`). `InjectionRates` (`providers/base.py:339`) can carry a monthly indicative (`current`), a formula (`factor`/`base`) that resolves either per hour or on a monthly mean depending on the `spp_indexed` / `month_indexed` flags, a per-slot TOU triplet (`peak`/`transition`/`offpeak`), and a guaranteed floor (`floor_at_zero`, or `minimum` for a card that promises more than non-negative). The coordinator distinguishes four shapes:
 
 | Shape | Fields | Live price source | Example |
 |-------|--------|-------------------|---------|
@@ -395,7 +395,7 @@ The config-flow consequence: because shape (c) needs a key that the dynamic ener
 
 ## 9. Error handling, backoff, and Repairs
 
-The fail policy is "keep serving the cached snapshot, surface a Repairs issue". `_maybe_refresh_snapshot` catches every fetch exception (`coordinator_snapshot.py:194`), records `_last_error`, populates the shared negative cache with an incremented consecutive-failure count, and re-raises only non-`ExtractorError`/non-`TimeoutError` types (`base.py:918`); a bad card thus keeps the last good data alive.
+The fail policy is "keep serving the cached snapshot, surface a Repairs issue". `_maybe_refresh_snapshot` catches every fetch exception (`coordinator_snapshot.py:194`), records `_last_error`, populates the shared negative cache with an incremented consecutive-failure count, and re-raises only non-`ExtractorError`/non-`TimeoutError` types (`base.py:927`); a bad card thus keeps the last good data alive.
 
 Repairs issues, all keyed by `entry_id`:
 
@@ -404,7 +404,7 @@ Repairs issues, all keyed by `entry_id`:
 | `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d) | 154 |
 | `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure | 264 |
 | `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures | 264 |
-| `extractor_unreadable` | `_sync_extractor_issue(unreadable=True)` | same, but the fetch raised `CardNotReadableError` (`providers/base.py:922`): the card downloaded fine and carries no text layer, so it names the custom-supplier workaround instead of asking for a GitHub issue | 279 |
+| `extractor_unreadable` | `_sync_extractor_issue(unreadable=True)` | same, but the fetch raised `CardNotReadableError` (`providers/base.py:931`): the card downloaded fine and carries no text layer, so it names the custom-supplier workaround instead of asking for a GitHub issue | 279 |
 | `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 322 |
 | `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) AND the successor has a contract in the entry's region | 338 |
 | `supplier_deprecated_no_successor` | `_sync_deprecated_supplier_issue` | same, but the successor is unset, unknown to this build, or has no contract in the entry's region | 338 |

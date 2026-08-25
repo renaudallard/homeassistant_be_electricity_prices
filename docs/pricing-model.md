@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:619-634`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:578`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:587`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:830`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:839`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -264,6 +264,18 @@ values to four decimals (March 92,6102 against the card's 92,6114, July
 109,2488 against 109,2498), so nothing is approximated. `spp_indexed` remains
 the solar-weighted sibling for cards that name Belpex_SPP; a card is one or the
 other, never both.
+
+Both flags live on the parsed snapshot, and the config flow cannot see a
+snapshot before the entry exists. So the registry carries the same fact a
+second time, as `Contract.spot_indexed_injection`, and the two have to agree.
+When they do not, the parser wins on paper and loses in practice: no key step
+means no spots, no monthly mean, and every path silently falls back to the
+card's printed figure, which is the defect the flag was set to fix. Nine
+contracts across five suppliers shipped in exactly that state.
+`test_every_month_indexed_card_can_collect_a_key` holds the registry against
+the live check's `_INJECTION_SHAPE`. A contract whose KIND already collects the
+key for its energy leg (`dynamic`, `spot_monthly`) is exempt and leaves the
+registry flag False, which is why energie.be Variabel does not set it.
 
 `month_indexed` also makes `_injection_is_spot_formula` return False outright.
 Month coefficients are never a per-hour formula, and without that guard a card
@@ -380,7 +392,7 @@ RLP would need a profile the package does not carry, and the note lives on
 ### Time-of-use: `tou_slot`
 
 `TimeOfUseRates` has three published rates `peak`, `transition`, `offpeak`, and a
-`weekend_rule` (`providers/base.py:210-245`). `tou_slot` maps a local datetime to
+`weekend_rule` (`providers/base.py:219-254`). `tou_slot` maps a local datetime to
 its band (`pricing.py:195-239`).
 
 Shared weekday schedule:
@@ -412,8 +424,8 @@ discount and is out of scope (`pricing.py:214-219`).
 `ImpactRates` (`tou_impact` kind) is Wallonia's Tarif Impact, distinct from TOU
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
-(`providers/base.py:282-285`). Fields: `pic`, `medium`, `eco`
-(`providers/base.py:297-299`). `dso_impact_band` (`pricing.py:547-563`):
+(`providers/base.py:291-294`). Fields: `pic`, `medium`, `eco`
+(`providers/base.py:306-308`). `dso_impact_band` (`pricing.py:547-563`):
 
 | Band | Hours (every day) |
 | --- | --- |
@@ -503,7 +515,7 @@ on an exclusive-night config entry when the card prints one (EBEM Groen Variabel
 otherwise the standard `yearly_fixed_fee` for every meter type
 (`pricing.py:420-434`). Three rate shapes carry the dedicated field: `FixedRates`
 (`providers/base.py:112-145`), `VariableRates` (`providers/base.py:121-125`) and
-`SpotMonthlyRates` (`providers/base.py:197-202`), the last because a variable card
+`SpotMonthlyRates` (`providers/base.py:206-211`), the last because a variable card
 re-priced onto a monthly-mean leg for a signing cohort keeps the separate charge
 its card printed. An exclusive-night circuit is configured as a SECOND config
 entry pointing at the night kWh sensor; the primary day meter stays
@@ -543,11 +555,11 @@ keys (`pricing.py:670-701`, same guard in `compute_breakdown` at
 Injection is computed in `coordinator.py`, not `pricing.py`, but it consumes the
 same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 `current`, an hourly formula `factor`/`base`, an optional per-slot TOU triplet
-`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:331-346`).
+`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:340-355`).
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption
-snapshot's `vat_rate` (`providers/base.py:600-600`). None of the injection code
+snapshot's `vat_rate` (`providers/base.py:609-609`). None of the injection code
 paths multiply by `1.0 + vat_rate`.
 
 Injection formulas can go negative at low spot (the producer pays to inject) and
@@ -595,8 +607,9 @@ importantly, stops the month coefficients being read as shape (b).
 
 Shape (c) is the subtle one: the energy contract is Variable (no spot needed for
 energy) but the injection prices off the hourly BELPEX with no printed monthly
-indicative, so pricing the credit still needs an ENTSO-E spot. `Contract`
-advertises this with `spot_indexed_injection` so the config flow offers the API-key
+indicative, so pricing the credit still needs an ENTSO-E spot. Shape (d) needs
+one too, at monthly rather than hourly resolution. `Contract` advertises both
+with `spot_indexed_injection` so the config flow offers the API-key
 step on the injection regime (`providers/base.py:71-77`). At runtime,
 `_injection_needs_spot` detects it (`injection.py:94-107`):
 

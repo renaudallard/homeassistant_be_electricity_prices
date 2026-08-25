@@ -83,7 +83,7 @@
       },
       "injection_api_key": {
         "title": "Cle API ENTSO-E (injection)",
-        "description": "Facultatif. Ce contrat indexe l'injection sur le prix spot day-ahead et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; le prix d'injection restera indisponible.",
+        "description": "Facultatif. Ce contrat indexe l'injection sur le prix spot day-ahead et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, le prix d'injection reprend le montant imprime sur votre fiche tarifaire, celui du mois precedent, ou reste indisponible si votre fiche n'en imprime aucun.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }
@@ -344,7 +344,7 @@
       },
       "injection_api_key": {
         "title": "Cle API ENTSO-E (injection)",
-        "description": "Facultatif. Ce contrat indexe l'injection sur le prix spot day-ahead et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; le prix d'injection restera indisponible.",
+        "description": "Facultatif. Ce contrat indexe l'injection sur le prix spot day-ahead et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, le prix d'injection reprend le montant imprime sur votre fiche tarifaire, celui du mois precedent, ou reste indisponible si votre fiche n'en imprime aucun.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }

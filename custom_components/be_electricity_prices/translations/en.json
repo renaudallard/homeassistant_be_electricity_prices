@@ -83,7 +83,7 @@
       },
       "injection_api_key": {
         "title": "ENTSO-E API key (injection)",
-        "description": "Optional. This contract prices solar injection off the day-ahead spot, which needs a free ENTSO-E key from transparency.entsoe.eu. Leave blank to skip; the injection price stays unavailable until you add a key.",
+        "description": "Optional. This contract indexes solar injection on the day-ahead spot, which needs a free ENTSO-E key from transparency.entsoe.eu. Leave blank to skip; without a key the injection price falls back to the figure printed on your tariff card, which is the previous month's, or stays unavailable if your card prints none.",
         "data": {
           "api_key": "ENTSO-E API key"
         }
@@ -344,7 +344,7 @@
       },
       "injection_api_key": {
         "title": "ENTSO-E API key (injection)",
-        "description": "Optional. This contract prices solar injection off the day-ahead spot, which needs a free ENTSO-E key from transparency.entsoe.eu. Leave blank to skip; the injection price stays unavailable until you add a key.",
+        "description": "Optional. This contract indexes solar injection on the day-ahead spot, which needs a free ENTSO-E key from transparency.entsoe.eu. Leave blank to skip; without a key the injection price falls back to the figure printed on your tariff card, which is the previous month's, or stays unavailable if your card prints none.",
         "data": {
           "api_key": "ENTSO-E API key"
         }

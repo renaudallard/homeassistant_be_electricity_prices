@@ -718,6 +718,14 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
 
 _OCTAPLUS_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
 
+# Contracts whose feed-in credit indexes on a MONTHLY mean. The credit
+# resolves against ENTSO-E spots the energy leg never fetches, so the config
+# flow has to offer the optional key or the formula can never resolve and every
+# path falls back to the card's printed figure. See
+# ``Contract.spot_indexed_injection``.
+# Every non-dynamic OCTA+ product indexes injection on the monthly Epex SPP;
+# the dynamic pair indexes per quarter-hour through its energy formula.
+
 EXTRACTOR = SupplierExtractor(
     id="octaplus",
     label="OCTA+",
@@ -727,6 +735,7 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             regions=c.regions or _OCTAPLUS_REGIONS,
+            spot_indexed_injection=c.kind != "dynamic",
         )
         for c in _CONTRACTS
     ),

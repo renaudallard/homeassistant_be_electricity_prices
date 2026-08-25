@@ -654,12 +654,16 @@ EXTRACTOR = SupplierExtractor(
             label="Eneco Zon & Wind Vast",
             kind="fixed",
             regions=_ENECO_REGIONS,
+            # Injection indexes on the monthly Belpex-injectie, which needs
+            # spots the fixed energy leg never fetches.
+            spot_indexed_injection=True,
         ),
         Contract(
             id="power_flex",
             label="Eneco Zon & Wind Flex",
             kind="variable",
             regions=_ENECO_REGIONS,
+            spot_indexed_injection=True,
         ),
         Contract(
             # Power Dynamic is sold in Flanders only: its card reads

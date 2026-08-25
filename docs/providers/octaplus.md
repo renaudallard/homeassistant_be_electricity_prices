@@ -74,7 +74,7 @@ Notes:
   it the live price table would aggregate to hourly and the current / next-slot
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
-  long-term statistics). See `DynamicRates` docs in `base.py:167-180`.
+  long-term statistics). See `DynamicRates` docs in `base.py:176-189`.
 - No product carries `spot_indexed_injection=True`. That flag means a PER-HOUR
   spot index, and no OCTA+ card has one on a static-energy product: the
   non-dynamic cards index their credit on the monthly Epex SPP, which the
@@ -117,7 +117,7 @@ preferred headers.
 ### `fetch_for_month`
 
 OCTA+ declares no `fetch_for_month` (the `SupplierExtractor` is built with only
-`fetch` and `probe`, `octaplus.py:721-735`). There is no accessible archive:
+`fetch` and `probe`, `octaplus.py:729-744`). There is no accessible archive:
 cards are overwrite-in-place, so past months fall back to the current snapshot
 as a proxy. This is the documented behaviour for overwrite-in-place suppliers in
 `base.py:519-524`.
@@ -211,7 +211,7 @@ non-matching separator to force the raise). Wallonia adds
 
 The `TaxOverlay` sets `vat_rate=0.0` (`octaplus.py:228`): OCTA+ snapshots ship
 VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
-`vat_rate` convention in `base.py:614-614`.
+`vat_rate` convention in `base.py:623-623`.
 
 ### Regional renewables
 

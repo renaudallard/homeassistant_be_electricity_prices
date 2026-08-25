@@ -252,7 +252,7 @@ transition : 11:00-17:00 + 22:00-01:00
 offpeak    : 01:00-07:00
 ```
 
-`weekend_rule` (`WeekendRule`, `providers/base.py:231`) selects the weekend
+`weekend_rule` (`WeekendRule`, `providers/base.py:240`) selects the weekend
 schedule:
 
 - `weekend_offpeak` (generic CWaPE default): Saturday, Sunday and public holidays are entirely off-peak.
@@ -340,7 +340,7 @@ regardless of the consumption snapshot's `vat_rate`. At least one of (`current`,
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py:126`; illustrative only). |
+| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py:135`; illustrative only). |
 | `factor` | `float \| None` | `None` | Multiplier for the hourly formula `injection = factor * spot + base`. |
 | `base` | `float \| None` | `None` | Additive term for that formula. Belgian formulas can produce negative values at low spot (the producer pays to inject) and the engine respects that. |
 | `formula` | `str \| None` | `None` | Formula text for diagnostics. |

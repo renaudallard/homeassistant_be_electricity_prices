@@ -77,12 +77,21 @@ class Contract:
     # consumption. Nothing else keys off it - a professional contract is
     # otherwise an ordinary contract.
     professional: bool = False
-    # True when this (non-dynamic) product's injection is a per-hour spot
-    # formula with no printed monthly indicative (Cociter Variable).
-    # Pricing the injection then needs an ENTSO-E spot even though the
-    # energy is variable, so the config flow offers the API-key step on
-    # the injection regime. Dynamic contracts already collect the key via
-    # their energy formula and leave this False.
+    # True when this (non-dynamic) product's injection needs ENTSO-E spots
+    # that its ENERGY leg does not fetch. Two shapes qualify: a per-hour spot
+    # formula with no printed indicative (Cociter Variable), and a formula
+    # indexed on a monthly mean (every spp_indexed / month_indexed card).
+    # Either way the config flow offers the API-key step on the injection
+    # regime; dynamic contracts collect the key via their energy formula and
+    # leave this False.
+    #
+    # This is a REGISTRY flag, known before any card is fetched, while the
+    # shape itself is only known after parsing. The two must agree or the fix
+    # is unreachable: a parser can set spp_indexed all it likes, but with this
+    # False no flow step ever offers the key, no spots are fetched, no mean is
+    # available and every path falls back to the card's printed figure. That
+    # silently disabled nine contracts across five suppliers.
+    # ``test_every_month_indexed_card_can_collect_a_key`` pins the agreement.
     spot_indexed_injection: bool = False
 
 
