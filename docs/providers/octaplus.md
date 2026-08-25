@@ -74,7 +74,7 @@ Notes:
   it the live price table would aggregate to hourly and the current / next-slot
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
-  long-term statistics). See `DynamicRates` docs in `base.py:150-163`.
+  long-term statistics). See `DynamicRates` docs in `base.py:167-180`.
 - No product carries `spot_indexed_injection=True`. Non-dynamic OCTA+ cards
   print a flat monthly indicative injection rate, so no ENTSO-E spot is needed
   for the injection regime (contrast Cociter Variable).
@@ -209,7 +209,7 @@ non-matching separator to force the raise). Wallonia adds
 
 The `TaxOverlay` sets `vat_rate=0.0` (`octaplus.py:228`): OCTA+ snapshots ship
 VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
-`vat_rate` convention in `base.py:577-577`.
+`vat_rate` convention in `base.py:594-594`.
 
 ### Regional renewables
 

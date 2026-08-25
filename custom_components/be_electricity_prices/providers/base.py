@@ -143,6 +143,16 @@ class VariableRates:
     # (few-percent) approximation of the true residential-load-profile weighting.
     formula_factor: float | None = None
     formula_base: float | None = None
+    # The same coefficients for a bi-hourly meter's two bands, when the card
+    # prints them per meter. Mega does: mono "Epex x 1,1095 + 3,6", peak
+    # "x 1,3275 + 3,6", off-peak "x 0,94 + 3,6". Billing a bi-hourly cohort at
+    # the mono pair over-charges its peak hours by a fifth and under-charges
+    # its off-peak ones. None -> the card publishes one formula for every
+    # meter and the mono pair applies throughout.
+    formula_factor_peak: float | None = None
+    formula_base_peak: float | None = None
+    formula_factor_offpeak: float | None = None
+    formula_base_offpeak: float | None = None
     # Contractual ceiling on the ENERGY component, per meter type, on the same
     # basis as the rates above (TVAC on a residential card, HTVA on a
     # professional one). Mega Cap is the product: "vous payez le minimum entre
@@ -197,6 +207,13 @@ class SpotMonthlyRates:
 
     factor: float
     base: float
+    # The bi-hourly bands' own coefficients, when the card printed them per
+    # meter and a signing cohort was re-priced onto this leg. None -> one
+    # formula for every meter, which is every card that does not split them.
+    factor_peak: float | None = None
+    base_peak: float | None = None
+    factor_offpeak: float | None = None
+    base_offpeak: float | None = None
     yearly_fixed_fee: float = 0.0
     # Dedicated yearly fixed fee for an exclusive-night meter circuit, carried
     # from a variable card re-priced to this monthly-mean leg for a signing

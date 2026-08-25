@@ -99,6 +99,21 @@ _VARIABLE_MONO_FORMULA_RE = re.compile(
     rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh",
     re.IGNORECASE,
 )
+# The same sentence continues with the bi-hourly bands, which carry their own
+# factors: "bi-horaire heures pleines : Epex * 1,3275 + 3,6 c€/kWh" and
+# "heures creuses : Epex * 0,94 + 3,6 c€/kWh" against the mono 1,1095.
+_VARIABLE_BAND_FORMULA_RES: dict[str, re.Pattern[str]] = {
+    "peak": re.compile(
+        rf"heures pleines\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
+        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh",
+        re.IGNORECASE,
+    ),
+    "offpeak": re.compile(
+        rf"heures creuses\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
+        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh",
+        re.IGNORECASE,
+    ),
+}
 
 
 def _impact_band_formula_re(band: str) -> re.Pattern[str]:
@@ -137,19 +152,50 @@ def _variable_cohort_coefficients(
 
     The Epex index is the monthly RLP-weighted spot; the coordinator applies
     these against the plain arithmetic monthly mean (a close, few-percent
-    approximation). A bi-hourly meter is billed the mono formula for the month.
+    approximation).
     """
     match = _VARIABLE_MONO_FORMULA_RE.search(re.sub(r"\s+", " ", text))
     if match is None:
         return None, None
-    vat_mult = (
-        1.0
-        if professional
-        else vat_multiplier(text, re.compile(r"TVA\s*(\d+)\s*%\s*incluse", re.I))
-    )
+    vat_mult = _cohort_vat_multiplier(text, professional=professional)
     factor = to_float(match.group(1)) * vat_mult
     base = parse_sign(match.group(2)) * to_float(match.group(3)) * vat_mult / 100.0
     return factor, base
+
+
+def _cohort_vat_multiplier(text: str, *, professional: bool) -> float:
+    """Basis multiplier for a cohort formula: 1 ex-VAT, the card's rate else."""
+    if professional:
+        return 1.0
+    return vat_multiplier(text, re.compile(r"TVA\s*(\d+)\s*%\s*incluse", re.I))
+
+
+def _variable_band_coefficients(
+    text: str, *, professional: bool = False
+) -> dict[str, tuple[float, float]]:
+    """Per-band coefficients of the variable indexation formula.
+
+    Mega prints one formula per meter in the same sentence as the mono one,
+    and the bands differ by a fifth: mono ``Epex x 1,1095 + 3,6``, peak
+    ``x 1,3275 + 3,6``, off-peak ``x 0,94 + 3,6``. A signing cohort on a
+    bi-hourly meter was re-priced onto the mono pair for every hour, which
+    over-charges its peak hours and under-charges its off-peak ones.
+
+    Same basis conversion as the mono formula. Empty for a card that prints a
+    single formula, and the mono pair then applies to every meter.
+    """
+    flat = re.sub(r"\s+", " ", text)
+    vat_mult = _cohort_vat_multiplier(text, professional=professional)
+    out: dict[str, tuple[float, float]] = {}
+    for band, pattern in _VARIABLE_BAND_FORMULA_RES.items():
+        match = pattern.search(flat)
+        if match is None:
+            continue
+        out[band] = (
+            to_float(match.group(1)) * vat_mult,
+            parse_sign(match.group(2)) * to_float(match.group(3)) * vat_mult / 100.0,
+        )
+    return out
 
 
 def _impact_band_coefficients(
@@ -252,6 +298,7 @@ def _extract_energy(
             yearly_fixed_fee=yearly_fee,
         )
     f_factor, f_base = _variable_cohort_coefficients(text, professional=professional)
+    bands = _variable_band_coefficients(text, professional=professional)
     ceiling = _energy_price_ceiling(text)
     return VariableRates(
         current=realized.get("mono", mono),
@@ -261,6 +308,10 @@ def _extract_energy(
         yearly_fixed_fee=yearly_fee,
         formula_factor=f_factor,
         formula_base=f_base,
+        formula_factor_peak=bands.get("peak", (None, None))[0],
+        formula_base_peak=bands.get("peak", (None, None))[1],
+        formula_factor_offpeak=bands.get("offpeak", (None, None))[0],
+        formula_base_offpeak=bands.get("offpeak", (None, None))[1],
         ceiling_single=ceiling.get("mono"),
         ceiling_peak=ceiling.get("peak"),
         ceiling_offpeak=ceiling.get("offpeak"),

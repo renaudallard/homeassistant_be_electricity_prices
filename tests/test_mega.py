@@ -1234,3 +1234,44 @@ def test_the_energy_ceiling_is_applied_per_slot_and_per_meter() -> None:
     assert energy_eur_per_kwh(
         plain, when, None, meter="mono", region="wallonia"
     ) == pytest.approx(0.60)
+
+
+def test_variable_cohort_carries_a_formula_per_meter() -> None:
+    """Mega prints one indexation formula per meter in the same sentence, and
+    the bands differ by a fifth: mono "Epex x 1,1095 + 3,6", peak "x 1,3275",
+    off-peak "x 0,94". Only the mono one was parsed, so a signing cohort on a
+    bi-hourly meter was re-priced onto it for every hour of the month, which
+    over-charges its peak hours and under-charges its off-peak ones."""
+    from datetime import datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.cohort import (
+        _cohort_energy_from_archived,
+    )
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+
+    snap = parse_snapshot(
+        "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"
+    )
+    energy = snap.energy
+    # Parsed on the card's TVAC basis, so each factor carries the 1,06.
+    assert energy.formula_factor == pytest.approx(1.1095 * 1.06)
+    assert energy.formula_factor_peak == pytest.approx(1.3275 * 1.06)
+    assert energy.formula_factor_offpeak == pytest.approx(0.94 * 1.06)
+
+    leg = _cohort_energy_from_archived(snap)
+    assert leg is not None
+    spot = 0.10
+
+    def rate(hour: int, meter: str) -> float:
+        when = datetime(2026, 3, 5, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        return energy_eur_per_kwh(leg, when, spot, meter=meter, region="wallonia")
+
+    # A mono meter keeps the mono formula whatever the hour.
+    assert rate(20, "mono") == pytest.approx(rate(3, "mono"))
+    # A bi-hourly one takes its band's own: dearer at peak, cheaper off-peak.
+    assert rate(20, "bi") > rate(20, "mono")
+    assert rate(3, "bi") < rate(3, "mono")
+    assert rate(20, "bi") == pytest.approx(1.3275 * 1.06 * spot + energy.formula_base)
+    assert rate(3, "bi") == pytest.approx(0.94 * 1.06 * spot + energy.formula_base)

@@ -584,7 +584,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v25: EnergyVision now parses the "maximumtarief" column, the VREG ceiling on
 # capacity plus the per-kWh network term, which the card printed and nothing
 # read. A snapshot written earlier carries no ceiling.
-_SNAPSHOT_SCHEMA_VERSION = 25
+# v26: Mega's variable cards print one indexation formula per meter and only
+# the mono one was parsed, so a bi-hourly signing cohort was re-priced onto it
+# for every hour. A snapshot written earlier carries no band coefficients.
+_SNAPSHOT_SCHEMA_VERSION = 26
 
 
 def _snapshot_to_dict(

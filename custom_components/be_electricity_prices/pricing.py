@@ -344,7 +344,28 @@ def energy_eur_per_kwh(
         # live slot price, so the flat monthly rate is the same pure formula.
         if spot_eur_per_kwh is None:
             raise ValueError("spot-monthly tariff needs a monthly mean spot")
-        return energy.factor * spot_eur_per_kwh + energy.base
+        factor, base = energy.factor, energy.base
+        if (
+            bi_capable
+            and energy.factor_peak is not None
+            and energy.factor_offpeak is not None
+        ):
+            # A card that prints one formula per meter is billed per meter.
+            # Mega's bands differ by a fifth (1,3275 peak against 1,1095 mono),
+            # so a bi-hourly cohort on the mono pair over-charges its peak
+            # hours and under-charges its off-peak ones. Same band rule as
+            # _routed_rate, including the Impact comptage variant.
+            if dso_tariff_mode == "impact":
+                off = dso_impact_band(when) == "eco"
+            else:
+                off = is_offpeak(when, region)
+            if off:
+                factor = energy.factor_offpeak
+                base = energy.base_offpeak or 0.0
+            else:
+                factor = energy.factor_peak
+                base = energy.base_peak or 0.0
+        return factor * spot_eur_per_kwh + base
     if isinstance(energy, TimeOfUseRates):
         slot = tou_slot(when, energy.weekend_rule)
         if slot == "peak":

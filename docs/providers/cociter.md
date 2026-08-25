@@ -201,7 +201,7 @@ result literally: from `(0.103 x BELPEX + 3) x 1.06`, `factor == 1.0918` and
 `base == 0.0318` (illustrative), and it checks `factor*0.10 + base == 0.14098`
 at a spot of 100 EUR/MWh so a unit-conversion swap cannot cancel out. The
 `quarter_hourly=True` flag (`cociter.py:400`) keeps the native 15-minute slots
-(see `DynamicRates`, `base.py:140-159`).
+(see `DynamicRates`, `base.py:157-176`).
 
 ### DSO overlay: `_extract_dsos`
 
@@ -300,7 +300,7 @@ TVAC (illustrative, pinned by `test_variable_extracts_supplier_prosumer_forfait`
 `test_cociter.py:97-106`). The anchor is deliberately the "EUR/kVA/an TVAC"
 footnote wording, not the bare "(EUR/kVA/an)" DSO prosumer column header, so the
 two do not collide. The value is already TVAC and must NOT be VAT-scaled
-(`SupplierSnapshot` comment, `base.py:568-598`). A miss on the variable card is
+(`SupplierSnapshot` comment, `base.py:585-615`). A miss on the variable card is
 fatal (`cociter.py:258-259`): every variable card prints it, so absence is a
 layout drift, not a fee-free contract.
 
@@ -326,7 +326,7 @@ the shared ELIA transport rate, `data_management_per_year`, and either the
 compensation-regime prosumer forfait (variable) or the three Tarif Impact
 distribution bands PIC/MEDIUM/ECO (dynamic SMR3). The Impact bands feed the
 CWaPE 3-band pricing when a customer opts into the DSO Impact tariff (see
-`DsoOverlay` and `ImpactRates`, `base.py:364-401`, `base.py:232-254`).
+`DsoOverlay` and `ImpactRates`, `base.py:364-401`, `base.py:249-271`).
 
 ## Tax overlay
 
@@ -402,7 +402,7 @@ comment:
   a VAT change tracks automatically.
 - **quarter_hourly=True.** Cociter Dynamique bills on the 15-minute Belpex grid;
   keep native quarter-hour slots, not the hourly mean (`cociter.py:394-400`,
-  `base.py:140-159`). YTD statistics still aggregate to hourly.
+  `base.py:157-176`). YTD statistics still aggregate to hourly.
 - **Split-glyph spellings.** pypdf can split "HOURLY" into `HOURL Y` and emit
   several apostrophe/quote/dash glyphs; the regexes tolerate all of these
   (`cociter.py:319-331`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:656`).

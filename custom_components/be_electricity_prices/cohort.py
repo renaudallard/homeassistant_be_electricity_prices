@@ -229,6 +229,13 @@ def _cohort_energy_from_archived(
         return SpotMonthlyRates(
             factor=energy.formula_factor,
             base=energy.formula_base if energy.formula_base is not None else 0.0,
+            # And the bands' own coefficients when the card printed them per
+            # meter, or a bi-hourly cohort is billed the mono formula around
+            # the clock: Mega's peak factor is a fifth above its mono one.
+            factor_peak=energy.formula_factor_peak,
+            base_peak=energy.formula_base_peak,
+            factor_offpeak=energy.formula_factor_offpeak,
+            base_offpeak=energy.formula_base_offpeak,
             yearly_fixed_fee=energy.yearly_fixed_fee,
             # Carry the dedicated exclusive-night standing fee so an
             # exclusive-night meter keeps its own fee instead of falling back to
