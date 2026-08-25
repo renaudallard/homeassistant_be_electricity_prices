@@ -675,7 +675,16 @@ _OSP_BOUND_TO_TIER: dict[float, str] = {
     6.0: "le6",
     9.6: "le9_6",
     13.0: "le13",
+    18.0: "le18",
+    36.0: "le36",
+    56.0: "le56",
 }
+# The table's last row has no upper bound, so it is keyed by the bound it opens
+# at rather than by one it closes. Suppliers write that bound as the top of the
+# band below ("> 56 kVA") or as the first value above it ("> 56,01 kVA"), so
+# the check is "at least", not equality.
+_OSP_OPEN_TIER = "gt56"
+_OSP_OPEN_MIN_BOUND = 56.0
 
 
 def parse_brussels_osp(text: str) -> dict[str, float] | None:
@@ -685,10 +694,15 @@ def parse_brussels_osp(text: str) -> dict[str, float] | None:
     block lists one flat EUR/year fee per connection-power tier. The three
     supplier extractors render it three different ways (label above vs.
     beside the value; ``et``/``Entre``/``<=`` phrasings), but each tier row
-    always ends ``<upper-bound> kVA <value>``, so anchor on the value-bearing
-    ``kVA`` token. Returns the four residential tiers (<=13 kVA) keyed by the
-    shared tier ids, or None when the block is absent (a card that omits it,
-    or a non-Brussels card).
+    always ends ``<bound> kVA <value>``, so anchor on the value-bearing
+    ``kVA`` token. Returns every tier the card prints, keyed by the shared tier
+    ids, or None when the block is absent (a card that omits it, or a
+    non-Brussels card).
+
+    The rows have to be told apart by their operator, not by the number alone.
+    "> 36 et <= 56 kVA" and "> 56 kVA" both end in ``56 kVA``, so keying on the
+    bound would make the open-ended top row overwrite the one below it and
+    charge a 40 kVA connection the 56-and-above fee.
     """
     # Case-insensitive: Bolt prints "Obligations de service publique" (lower
     # 's'), the others "Obligations de Service Public".
@@ -696,10 +710,21 @@ def parse_brussels_osp(text: str) -> dict[str, float] | None:
     if block is None:
         return None
     out: dict[str, float] = {}
-    for match in re.finditer(r"([\d.,]+)\s*kVA[\s\n]+([\d.,]+)", block.group(0)):
-        tier = _OSP_BOUND_TO_TIER.get(round(to_float(match.group(1)), 2))
+    for match in re.finditer(
+        r"(?P<open>>\s*)?(?P<bound>[\d.,]+)\s*kVA[\s\n]+(?P<value>[\d.,]+)",
+        block.group(0),
+    ):
+        bound = round(to_float(match.group("bound")), 2)
+        if match.group("open"):
+            # A ">" immediately before the value-bearing bound is the
+            # open-ended top row, in both layouts. A closed row reaches this
+            # bound through "<=" (Engie, TotalEnergies) or "et" (Mega), so its
+            # own ">" sits in front of the LOWER bound and never here.
+            tier = _OSP_OPEN_TIER if bound >= _OSP_OPEN_MIN_BOUND else None
+        else:
+            tier = _OSP_BOUND_TO_TIER.get(bound)
         if tier is not None:
-            out[tier] = to_float(match.group(2))
+            out[tier] = to_float(match.group("value"))
     return out or None
 
 

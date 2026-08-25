@@ -470,7 +470,11 @@
         "le1_44": "1,44 kVA of minder (geen OSP-bijdrage)",
         "le6": "Meer dan 1,44 tot 6 kVA",
         "le9_6": "Meer dan 6 tot 9,6 kVA",
-        "le13": "Meer dan 9,6 tot 13 kVA"
+        "le13": "Meer dan 9,6 tot 13 kVA",
+        "le18": "Meer dan 13 tot 18 kVA",
+        "le36": "Meer dan 18 tot 36 kVA",
+        "le56": "Meer dan 36 tot 56 kVA",
+        "gt56": "Meer dan 56 kVA"
       }
     },
     "meter": {

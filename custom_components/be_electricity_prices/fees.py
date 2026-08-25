@@ -38,6 +38,7 @@ from homeassistant.config_entries import ConfigEntry
 from .const import (
     CONF_CONNECTION_KVA_TIER,
     CONF_DSO,
+    CONNECTION_KVA_TIERS_ABOVE_13,
     CONF_DSO_TARIFF_MODE,
     CONF_REGION,
     CONF_SOLAR_KVA,
@@ -98,6 +99,27 @@ def _brussels_osp_fee(overlay: DsoOverlay | None, entry: ConfigEntry) -> float:
     return overlay.brussels_osp_by_tier.get(tier, 0.0)
 
 
+def _brussels_power_term(
+    overlay: DsoOverlay | None, entry: ConfigEntry
+) -> float | None:
+    """Sibelga's power term for this entry's connection, in EUR/year.
+
+    The card prints two columns, at or below 13 kVA and above it, and only the
+    first was ever billed. A 3x400 V / 25 A residential connection is 17,3 kVA
+    and belongs in the second, so a household with a heat pump or a charger was
+    billed the smaller term.
+
+    ``None`` when the card prints a single column or the entry is not above the
+    line, and the caller keeps using ``data_management_per_year``.
+    """
+    if overlay is None or overlay.brussels_power_term_above_13kva is None:
+        return None
+    tier = entry.data.get(CONF_CONNECTION_KVA_TIER, DEFAULT_CONNECTION_KVA_TIER)
+    if tier not in CONNECTION_KVA_TIERS_ABOVE_13:
+        return None
+    return overlay.brussels_power_term_above_13kva
+
+
 def _walloon_fixed_term_applies(entry: ConfigEntry) -> bool:
     """Whether this entry pays the Walloon DSO's ``terme fixe``.
 
@@ -142,6 +164,9 @@ def _annual_static_fees(
         if overlay is not None and _walloon_fixed_term_applies(entry)
         else 0.0
     )
+    above_13 = _brussels_power_term(overlay, entry)
+    if above_13 is not None:
+        fixed_term = above_13
     return (
         float(yearly_fixed_fee_for_meter(snapshot.energy, meter) or 0.0)
         + 12.0 * float(snapshot.taxes.energy_fund_eur_per_month or 0.0)

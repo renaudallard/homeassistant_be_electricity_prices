@@ -317,6 +317,56 @@ def test_walloon_fixed_term_is_not_billed_on_the_impact_tariff() -> None:
         )
 
 
+def test_a_brussels_connection_above_13_kva_is_billed_its_own_band() -> None:
+    """Sibelga bands both the power term and the Brugel OSP fee on connection
+    power, and only the bands at or below 13 kVA were reachable.
+
+    A 3x400 V / 25 A residential connection is 17,3 kVA, so a household with a
+    heat pump or a charger sits above the line and was billed the smaller term
+    plus an OSP fee capped at the 13 kVA row."""
+    from custom_components.be_electricity_prices.fees import _annual_static_fees
+    from custom_components.be_electricity_prices.providers import engie
+    from tests import fixture_text
+
+    snap = engie.parse_snapshot(
+        "engie_dynamic", {"brussels": fixture_text("engie_dynamic_b.pdf")}
+    )
+    overlay = snap.dsos["sibelga"]
+    # The card prints both power-term columns and eight OSP bands.
+    assert overlay.data_management_per_year == pytest.approx(64.80)
+    assert overlay.brussels_power_term_above_13kva == pytest.approx(114.88)
+    assert overlay.brussels_osp_by_tier == {
+        "le1_44": pytest.approx(0.0),
+        "le6": pytest.approx(13.36),
+        "le9_6": pytest.approx(21.37),
+        "le13": pytest.approx(26.71),
+        "le18": pytest.approx(39.94),
+        "le36": pytest.approx(53.30),
+        "le56": pytest.approx(106.59),
+        "gt56": pytest.approx(173.25),
+    }
+
+    def fees(tier: str) -> float:
+        entry = SimpleNamespace(
+            data={
+                "dso": "sibelga",
+                "region": "brussels",
+                "connection_kva_tier": tier,
+            }
+        )
+        return _annual_static_fees(snap, "mono", entry)  # type: ignore[arg-type]
+
+    # At or below the line nothing moves.
+    assert fees("le13") - fees("le6") == pytest.approx(26.71 - 13.36)
+    # Above it the power term steps up with the OSP fee, not instead of it.
+    assert fees("le18") - fees("le13") == pytest.approx(
+        (114.88 - 64.80) + (39.94 - 26.71)
+    )
+    assert fees("gt56") - fees("le13") == pytest.approx(
+        (114.88 - 64.80) + (173.25 - 26.71)
+    )
+
+
 def test_the_three_capacity_paths_share_one_formula() -> None:
     """peak x rate / 12 was written out in the live tick, the year-to-date walk
     and the backfill's per-hour accrual, each with its own spelling of the two

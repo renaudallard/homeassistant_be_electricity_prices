@@ -786,17 +786,21 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
     excl_night = to_float(match.group(4))
     mesure = to_float(match.group(5))
     transport = to_float(match.group(6))
-    # A residential <=13kVA connection also pays the Sibelga power term,
-    # printed on a separate "Terme de puissance mise a disposition" line.
-    # Brussels has no separate capacity charge (capacity is Flanders-only),
-    # so fold both flat annual euros into the DSO fee. Mandatory on every
-    # Brussels card, so raise on a miss.
+    # A Brussels connection also pays the Sibelga power term, printed on a
+    # separate "Terme de puissance mise a disposition" line with a band at or
+    # below 13 kVA and one above it. Brussels has no separate capacity charge
+    # (capacity is Flanders-only), so fold the flat annual euros into the DSO
+    # fee, one figure per band: a 3x400 V / 25 A house is 17,3 kVA, so the
+    # larger band is residential too. Mandatory on every Brussels card, so
+    # raise on a miss.
     power = re.search(
         r"Terme de puissance[\s\S]{0,80}?(?:<=|≤)\s*13\s*kVA\s+([\d.,]+)", text
     )
     if power is None:
         raise ExtractorError("TotalEnergies: Sibelga <=13kVA power term not found")
     fixed_term = to_float(power.group(1))
+    above = re.search(r">\s*13\s*kVA\s+([\d.,]+)", text)
+    fixed_term_above = to_float(above.group(1)) if above else None
     return {
         DSO_SIBELGA: brussels_sibelga_overlay(
             mono=mono,
@@ -805,6 +809,9 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
             excl_night=excl_night,
             transport=transport,
             data_management_per_year=mesure + fixed_term,
+            power_term_above_13kva=(
+                None if fixed_term_above is None else mesure + fixed_term_above
+            ),
             osp_by_tier=parse_brussels_osp(text),
         )
     }

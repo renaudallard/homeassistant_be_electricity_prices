@@ -283,14 +283,16 @@ forces a deliberate choice (issue #19 again, `flow_prefill.py:143`).
 ### `connection_power`: Brussels connection-power tier
 
 Schema `_connection_power_schema` (`flow_schemas.py:508`), default
-`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:277`). Options are the four
-residential tiers `CONNECTION_KVA_TIERS` (`const.py:271`): `le1_44`, `le6`,
+`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:294`). Options are the four
+residential tiers `CONNECTION_KVA_TIERS` (`const.py:275`): `le1_44`, `le6`,
 `le9_6`, `le13`, `translation_key="connection_kva_tier"`. Reached from
 `_before_solar` when region is Brussels (`config_flow.py:493`). Brussels bills a
 Brugel OSP (Obligations de Service Public) annual fee scaled by contractual
-connection power, so the tier is asked before solar. Residential connections are
-<=13 kVA, so only the four residential tiers are offered; the key is matched
-against the parsed OSP table (`const.py:183`). Other regions have no such fee and go
+connection power, so the tier is asked before solar. Every band the card prints
+is offered, not just the four at or below 13 kVA: a 3x400 V / 25 A residential
+connection is 17,3 kVA, and the same answer also picks Sibelga's power term,
+which bands at the same line (`fees.py:102`). The key is matched against the
+parsed OSP table (`const.py:183`). Other regions have no such fee and go
 straight to solar (`config_flow.py:206` comment).
 
 ### `solar`: inverter kVA + regime
@@ -300,7 +302,7 @@ Schema `_solar_schema` (`flow_schemas.py:959`). Fields:
 - `CONF_SOLAR_KVA`: `NumberSelector` box 0-50 step 0.1, default 0.0 (0 means no
   panels, no prosumer cost; `const.py:230`).
 - `CONF_SOLAR_REGIME`: `translation_key="solar_regime"`, options built from
-  `SOLAR_REGIMES` (`const.py:311`) with a region filter.
+  `SOLAR_REGIMES` (`const.py:328`) with a region filter.
 
 The region filter (`flow_prefill.py:169`): `SOLAR_REGIME_COMPENSATION` is offered
 only when `CONF_REGION == REGION_WALLONIA`. Compensation ("terugdraaiende teller" /
@@ -309,7 +311,7 @@ the prosumer tariff and no capacity tariff, so offering it in Flanders would
 double-count the Flemish capaciteitstarief. Outside Wallonia only `none` and
 `injection` apply. If the stored regime is not in the filtered list (for example a
 compensation entry re-edited after switching region away from Wallonia), the default
-falls back to `SOLAR_REGIME_NONE` (`const.py:308`).
+falls back to `SOLAR_REGIME_NONE` (`const.py:325`).
 
 ### `injection_api_key`: optional ENTSO-E token for spot-indexed injection
 
@@ -345,7 +347,7 @@ wirings per side, both feeding the `current_year_cost` computation:
 | Wiring | Keys | Behaviour |
 | --- | --- | --- |
 | Day/night registers | `CONF_DAY_CONSUMPTION_KWH`, `CONF_NIGHT_CONSUMPTION_KWH`, `CONF_DAY_INJECTION_KWH`, `CONF_NIGHT_INJECTION_KWH` | Used as-is; exact from the start, no warm-up |
-| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`const.py:298` docstring; `const.py:298`) |
+| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`const.py:315` docstring; `const.py:315`) |
 
 When both are filled for the same side, the day/night registers win (more accurate;
 `flow_schemas.py:719`). Each side (consumption, injection) is resolved independently,

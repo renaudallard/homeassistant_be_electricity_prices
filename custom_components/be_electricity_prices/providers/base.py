@@ -386,10 +386,15 @@ class DsoOverlay:
     data_management_per_year: float = 0.0
     capacity_eur_per_kw_year: float | None = None
     # Brussels Brugel OSP (Obligations de Service Public) annual fee keyed by
-    # residential connection-power tier (le1_44 / le6 / le9_6 / le13). Only
-    # the Sibelga overlay carries it; the user's configured tier selects the
-    # billed value. None outside Brussels or when the card omits the table.
+    # connection-power tier, every band the card prints (le1_44 through gt56).
+    # Only the Sibelga overlay carries it; the user's configured tier selects
+    # the billed value. None outside Brussels or when the card omits the table.
     brussels_osp_by_tier: dict[str, float] | None = None
+    # Sibelga's power term for a connection ABOVE 13 kVA, in EUR/year. The
+    # card prints two columns and ``data_management_per_year`` holds the one
+    # at or below 13 kVA; a 3x400 V / 25 A house is 17,3 kVA and belongs in
+    # this one. None outside Brussels or when the card prints a single column.
+    brussels_power_term_above_13kva: float | None = None
     # Prosumer (compensation-regime) tariff in EUR per kVA of solar inverter
     # capacity per year, valid in Wallonia until 2030 per CWaPE. Wallonia DSOs
     # publish it on every card. Some Flanders supplier cards also carry a
@@ -501,6 +506,7 @@ def brussels_sibelga_overlay(
     transport: float,
     data_management_per_year: float,
     osp_by_tier: dict[str, float] | None,
+    power_term_above_13kva: float | None = None,
 ) -> DsoOverlay:
     """Build the Brussels (Sibelga) :class:`DsoOverlay` from a card's row.
 
@@ -519,6 +525,7 @@ def brussels_sibelga_overlay(
         transport=transport / 100.0,
         data_management_per_year=data_management_per_year,
         brussels_osp_by_tier=osp_by_tier,
+        brussels_power_term_above_13kva=power_term_above_13kva,
     )
 
 
@@ -640,6 +647,11 @@ def _vat_dso(dso: DsoOverlay, factor: float) -> DsoOverlay:
             None
             if dso.brussels_osp_by_tier is None
             else {k: v * factor for k, v in dso.brussels_osp_by_tier.items()}
+        ),
+        brussels_power_term_above_13kva=(
+            None
+            if dso.brussels_power_term_above_13kva is None
+            else dso.brussels_power_term_above_13kva * factor
         ),
     )
 

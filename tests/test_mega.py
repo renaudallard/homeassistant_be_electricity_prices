@@ -264,15 +264,22 @@ def test_smart_fixed_brussels_extracts_sibelga_row() -> None:
     assert sibelga.distribution_peak == pytest.approx(0.0996)
     assert sibelga.distribution_offpeak == pytest.approx(0.0753)
     assert sibelga.transport == pytest.approx(0.0227)
-    # Metering fee 14.73 + Sibelga <=13kVA fixed term 50.0744 (both billed
-    # to a residential Brussels connection; no separate capacity charge).
+    # Metering fee 14.73 + the Sibelga power term for the band, both billed to
+    # a Brussels connection (no separate capacity charge). The card prints two
+    # bands and a 3x400 V / 25 A house is 17,3 kVA, so both are carried.
     assert sibelga.data_management_per_year == pytest.approx(14.73 + 50.0744)
-    # Brugel OSP fee tiers, billed per the configured connection power.
+    assert sibelga.brussels_power_term_above_13kva == pytest.approx(14.73 + 100.1488)
+    # Brugel OSP fee tiers, billed per the configured connection power. Every
+    # band the card prints, not just the four at or below 13 kVA.
     assert sibelga.brussels_osp_by_tier == {
         "le1_44": pytest.approx(0.0),
         "le6": pytest.approx(13.36),
         "le9_6": pytest.approx(21.37),
         "le13": pytest.approx(26.71),
+        "le18": pytest.approx(39.94),
+        "le36": pytest.approx(53.30),
+        "le56": pytest.approx(106.59),
+        "gt56": pytest.approx(173.25),
     }
 
 

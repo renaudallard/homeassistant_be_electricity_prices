@@ -149,7 +149,7 @@ There is no `probe`. `EXTRACTOR` (`dats24.py:507-524`) sets only `id`, `label`,
 month-keyed URL is not a freshness signal either: within a month the file is
 replaced in place, so a HEAD tells us nothing a cheap diff could use, and the
 coordinator's time-based TTL governs refresh. This is the "DATS 24 single-PDF"
-case called out in the `SnapshotProbe` contract comment in `base.py:799-799`.
+case called out in the `SnapshotProbe` contract comment in `base.py:811-811`.
 
 Note the module does define a `discover` coroutine (`dats24.py:202-215`), but it
 is a catalog-drift check for the live-check harness, not a coordinator probe. It
@@ -167,7 +167,7 @@ There is no `fetch_for_month`, so past months fall back to the current snapshot
 as a proxy in the yearly-cost backfill flow. Note that the CDN *does* retain
 per-month cards back to 2023, so unlike the old overwrite-in-place API URL an
 archive fetcher is now technically possible (DATS 24 is listed as API-only in the
-`ArchivedSnapshotFetcher` comment `base.py:807-809`, which that change would need
+`ArchivedSnapshotFetcher` comment `base.py:819-821`, which that change would need
 to correct). It is deliberately not implemented: the product ends on 2026-08-31,
 so the payoff would be one month of more accurate YTD backfill.
 
@@ -184,7 +184,7 @@ so the payoff would be one month of more accurate YTD backfill.
 | `taxes` | `_extract_taxes` | `dats24.py:371-442` |
 | `injection` | `_extract_injection` | `dats24.py:463-506` |
 | `publication_label` | `_extract_publication` | `dats24.py:497-499` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:922` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:945` |
 | `supplier` / `contract` | literals | `dats24.py:221-222` |
 
 Every numeric value is parsed with `to_float` (`_pdf.py:615-626`), which strips
@@ -400,7 +400,7 @@ only prosumer charge, and it lives on the DSO overlay, not the supplier snapshot
 `TARIEFKAART\s+(\w+\s+20\d{2})` case-insensitive, lowercased. Illustrative:
 `april 2026` (`test_dats24.py:91`), `mei 2026` (`test_dats24.py:257`). Empty string
 on miss (non-fatal). `valid_until` is parsed separately by the shared
-`parse_valid_until` (`_pdf.py:922`), which catches the explicit `GELDIG VAN 1 APRIL
+`parse_valid_until` (`_pdf.py:945`), which catches the explicit `GELDIG VAN 1 APRIL
 2026 T.E.M 30 APRIL 2026` header (`test_dats24.py:92-94`, expects `date(2026, 4, 30)`).
 
 ## Quirks and historical bugs
@@ -481,6 +481,6 @@ pure parsers are the unit under test.
 | `DATS 24: Wallonia CV / connection fee not found` | `_extract_taxes` (`dats24.py:371-442`) | `Waals Gewest: CV` or the `Aansluitingsvergoeding Wallonië` footnote changed |
 | `could not parse DATS 24 federal tax block` | `_extract_taxes` (`dats24.py:403-408`) | `Energiebijdrage` or `Verbruik tussen 0 kWh en 3.000 kWh` moved |
 | `DATS 24 injection: monthly indicative missing` | `_extract_injection` (`dats24.py:448-491`) | the `Teruglevering2 (c€/kWh)` label changed, or the card went spot-formula |
-| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:497-499`), `parse_valid_until` (`_pdf.py:922`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
+| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:497-499`), `parse_valid_until` (`_pdf.py:945`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
 | Values off by 100x | the per-column `/100.0` divisions in the DSO/energy/tax parsers | a c€/kWh column became EUR/kWh (or a EUR/yr column got divided) |
 | `PDF layout parse error` / html-not-pdf | `_pdf.py:244-251`, `334-344` | the CDN returned HTML (file moved) or an undecodable PDF |

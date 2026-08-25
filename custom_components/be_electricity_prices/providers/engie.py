@@ -1021,7 +1021,10 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
             offpeak=nums[2],
             excl_night=nums[3],
             transport=nums[7],
+            # Columns 5 and 6 are the power term's two bands, at or below
+            # 13 kVA and above it; the mesure fee (4) is billed either way.
             data_management_per_year=nums[4] + nums[5],
+            power_term_above_13kva=nums[4] + nums[6],
             osp_by_tier=parse_brussels_osp(text),
         )
     }

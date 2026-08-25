@@ -478,7 +478,11 @@
         "le1_44": "1.44 kVA or less (no OSP fee)",
         "le6": "Over 1.44 up to 6 kVA",
         "le9_6": "Over 6 up to 9.6 kVA",
-        "le13": "Over 9.6 up to 13 kVA"
+        "le13": "Over 9.6 up to 13 kVA",
+        "le18": "Over 13 up to 18 kVA",
+        "le36": "Over 18 up to 36 kVA",
+        "le56": "Over 36 up to 56 kVA",
+        "gt56": "Over 56 kVA"
       }
     },
     "solar_regime": {

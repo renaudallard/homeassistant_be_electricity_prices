@@ -149,7 +149,7 @@ field to helper:
 | `taxes` | `_extract_taxes` | `cociter.py:513-559` |
 | `injection` | `_extract_injection` | `cociter.py:263-313` |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` | `cociter.py:271-291` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:922` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:945` |
 
 Shared numeric helpers: `to_float` (`_pdf.py:615-626`) parses Belgian decimals
 (`15,93`) and strips every Unicode space variant used as a thousands separator;

@@ -529,17 +529,28 @@ def test_parse_sign_covers_canonical_hyphens() -> None:
 
 
 def test_parse_brussels_osp_across_extractor_formats() -> None:
-    # The three Brussels providers render the OSP table three different ways
-    # (label above vs. beside the value; et/Entre/<= phrasings) under their
-    # own extractors, but the shared parser must return the same four
-    # residential tiers for each.
+    # The Brussels providers render the OSP table several different ways
+    # (label above vs. beside the value; et/Entre/<= phrasings), but the shared
+    # parser must return the same eight bands for each. The open-ended top row
+    # is the one that needs care: "Entre 36,01 et 56,00 kVA" and "> 56,01 kVA"
+    # both end in a bound near 56, so keying on the number alone made the top
+    # row overwrite the one below it.
     from custom_components.be_electricity_prices.providers._pdf import (
         parse_brussels_osp,
     )
 
     from tests import fixture_text
 
-    expected = {"le1_44": 0.0, "le6": 13.36, "le9_6": 21.37, "le13": 26.71}
+    expected = {
+        "le1_44": 0.0,
+        "le6": 13.36,
+        "le9_6": 21.37,
+        "le13": 26.71,
+        "le18": 39.94,
+        "le36": 53.30,
+        "le56": 106.59,
+        "gt56": 173.25,
+    }
     for name, layout in (
         ("mega_smart_fixed_b.pdf", False),
         ("engie_dynamic_b.pdf", False),

@@ -156,7 +156,7 @@ long-term statistics.
 
 ### `probe`: none
 
-`EXTRACTOR` declares no `probe` (`engie.py:1037` has no `probe=` argument, so it
+`EXTRACTOR` declares no `probe` (`engie.py:1040` has no `probe=` argument, so it
 defaults to `None`, `base.py:541`). Engie's tariff API has no cheap freshness
 key: the endpoint always serves "the current month" for a slug with no ETag or
 listing to diff. Per the framework contract (`base.py:513`), a `None` probe means
@@ -164,7 +164,7 @@ the coordinator's time-based TTL governs refresh instead.
 
 ### `fetch_for_month`: none
 
-`EXTRACTOR` declares no `fetch_for_month` (`engie.py:1037`), so it defaults to
+`EXTRACTOR` declares no `fetch_for_month` (`engie.py:1040`), so it defaults to
 `None` (`base.py:547`). The API is overwrite-in-place / API-only: `monthOffset=0`
 is hardcoded in the URL (`engie.py:243`) and there is no accessible archive of
 past months. The framework lists Engie explicitly as an API-only supplier with no
@@ -208,7 +208,7 @@ Fields pulled from the card:
 | Flanders DSOs | `_extract_flanders_dsos` (`engie.py:878`) | Digital-meter Fluvius table. |
 | Wallonia DSOs | `_extract_wallonia_dsos` (`engie.py:927`) | 9/10-number rows, ORES divergence guard. |
 | Brussels DSO | `_extract_brussels_dsos` (`engie.py:997`) | Sibelga row + Brugel OSP table. |
-| `valid_until` | `parse_valid_until` (`_pdf.py:922`) | Best-effort validity date. |
+| `valid_until` | `parse_valid_until` (`_pdf.py:945`) | Best-effort validity date. |
 
 ### The yearly-fee two-layout problem
 
@@ -363,7 +363,7 @@ the metering fee (`Activité de mesure`, column 5) and the Sibelga <=13kVA power
 term (column 6), into `data_management_per_year` (`engie.py:1024`, test
 `test_dynamic_brussels_extracts_sibelga` `tests/test_engie.py:214`, illustrative
 `14.73 + 50.07`). It also parses the Brugel OSP annual-fee table via the shared
-`parse_brussels_osp` (`_pdf.py:681`) into `brussels_osp_by_tier`.
+`parse_brussels_osp` (`_pdf.py:688`) into `brussels_osp_by_tier`.
 
 ## Tax overlay
 

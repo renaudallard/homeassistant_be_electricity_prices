@@ -207,7 +207,7 @@ swapping comma for dot.
 
 `_extract_publication_month` (`eneco.py:294-296`) captures `Tariefkaart <month>
 <year>` (for example `mei 2026`). `valid_until` comes from the shared
-`parse_valid_until` (`_pdf.py:922`), which reads the "Geldig van ... t.e.m. ..."
+`parse_valid_until` (`_pdf.py:945`), which reads the "Geldig van ... t.e.m. ..."
 line. `test_extracts_valid_until_from_geldig_line` (`tests/test_eneco.py:231-243`)
 pins April 30 2026 on all three fixtures so the `tomorrow_prices_available` binary
 sensor flips off at month end.

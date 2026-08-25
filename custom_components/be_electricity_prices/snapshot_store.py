@@ -576,7 +576,12 @@ class _MigratingStore(Store[dict[str, Any]]):
 # A snapshot written earlier carries no ceiling, so the entry would price
 # straight through the cap the customer is protected by until the card
 # happened to refetch, which is exactly when the cap matters.
-_SNAPSHOT_SCHEMA_VERSION = 23
+# v24: the three Brussels extractors now carry Sibelga's power term for a
+# connection ABOVE 13 kVA, and parse_brussels_osp reads every band the card
+# prints rather than the four at or below 13 kVA. A snapshot written earlier
+# has neither, so a connection above the line would keep being billed the
+# smaller term and an OSP fee its tier does not have.
+_SNAPSHOT_SCHEMA_VERSION = 24
 
 
 def _snapshot_to_dict(

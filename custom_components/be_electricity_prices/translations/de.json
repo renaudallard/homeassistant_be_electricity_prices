@@ -478,7 +478,11 @@
         "le1_44": "1,44 kVA oder weniger (keine OSP-Abgabe)",
         "le6": "Über 1,44 bis 6 kVA",
         "le9_6": "Über 6 bis 9,6 kVA",
-        "le13": "Über 9,6 bis 13 kVA"
+        "le13": "Über 9,6 bis 13 kVA",
+        "le18": "Über 13 bis 18 kVA",
+        "le36": "Über 18 bis 36 kVA",
+        "le56": "Über 36 bis 56 kVA",
+        "gt56": "Über 56 kVA"
       }
     },
     "solar_regime": {

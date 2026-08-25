@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:619-634`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:526`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:533`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:768`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:780`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -473,7 +473,7 @@ same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption
-snapshot's `vat_rate` (`providers/base.py:562-562`). None of the injection code
+snapshot's `vat_rate` (`providers/base.py:569-569`). None of the injection code
 paths multiply by `1.0 + vat_rate`.
 
 Injection formulas can go negative at low spot (the producer pays to inject) and
@@ -693,7 +693,7 @@ full year of history has accumulated.
 ## Prosumer term
 
 The prosumer (compensation-regime) fee is Walloon-only and monthly
-(`_compute_prosumer`, `fees.py:195-210`):
+(`_compute_prosumer`, `fees.py:220-235`):
 
 ```
 prosumer_cost_eur = kva * (dso_rate + supplier_rate) / 12.0
@@ -716,7 +716,7 @@ CWaPE) and `None` on Flemish SMR3 connections. The supplier-side forfait lives o
 publishes one. It is already TVAC (VAT-incl) and summed raw, never VAT-scaled
 (`fees.py:120-136`, `providers/base.py:497`).
 
-Regime semantics (`const.py:308-315`): `compensation` ("compteur qui tourne a
+Regime semantics (`const.py:322-329`): `compensation` ("compteur qui tourne a
 l'envers") applies only to installations certified before 2024-01-01 and stays
 valid until 2030-12-31; newer installations use the `injection` tariff (no per-kVA
 fee); Flemish digital meters are SMR3 from the start. The YTD counterpart
