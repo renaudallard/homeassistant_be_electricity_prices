@@ -418,9 +418,9 @@ on 2026-08-01: EBEM's August card failed CI three times over for reporting the z
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py:2202`) runs two gates:
+`_validate_snapshot` (`scripts/live_check.py:2226`) runs two gates:
 
-- `_validate_energy` (`scripts/live_check.py:2263`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:2287`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
@@ -433,10 +433,19 @@ that reads the value 100x too large — and that part still holds.
   (region pays no feed-in, injection must be absent), `"monthly"` (`current` set, `factor`/`base`
   None), `"spot"` (`factor`/`base` set), `"spp"` (a formula indexed on the solar-weighted monthly
   mean: `current`, `factor`/`base` AND `spp_indexed` all set, with the coefficients bounds-checked),
-  or `"present"` (present, shape unconstrained). Per-contract
-  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1954`); the DATS 24 check passes
+  `"triplet"` (a per-slot peak/transition/offpeak feed-in tariff, which only Empower Flextime has),
+  or `"present"` (`factor`/`base` set). Per-contract
+  expectations live in `_INJECTION_SHAPE` (`scripts/live_check.py:1968`); the DATS 24 check passes
   `injection_shape` explicitly because its Wallonia card pays no feed-in while its Flanders card is
   monthly-indexed.
+
+  The shape assertion runs whatever else the card prints. It used to hang off the `else` of the
+  indicative's range check, so on the several dynamic cards that publish BOTH a formula and an
+  indicative it was only tested while the indicative happened to be absent: a redesign that dropped
+  the formula and kept the indicative passed green while the credit silently went flat. TOU and
+  Impact cards are derived as `"monthly"` rather than `"present"` for the same reason - a time-of-use
+  ENERGY leg does not make the feed-in credit per-slot, and asserting a `factor`/`base` they never
+  carry would have been noise rather than a gate.
 
 ### Per-supplier byte and wallclock budgets, and drift issues
 
@@ -476,10 +485,10 @@ under that cap, or the supplier is killed before it can report the drift the bud
 The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2153`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:2695`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:2719`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1672`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2582`) for the known-large catalogues (Bolt,
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2606`) for the known-large catalogues (Bolt,
 TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
 (`scripts/live_check.py:1720`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
 which are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request
@@ -491,7 +500,7 @@ budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see 
 false-firing drift alert means adjusting the override, not the code.
 
 A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:2370`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2682`). The
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2706`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever

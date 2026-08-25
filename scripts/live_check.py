@@ -1940,11 +1940,25 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
             -0.10 <= current <= 0.20,
             detail=f"current={current}",
         )
-    elif shape == "present":
+    # Asserted whatever the card prints alongside. Several dynamic cards
+    # publish BOTH a formula and an indicative, and this used to hang off the
+    # else of the check above, so the shape was only tested while current
+    # happened to be absent: a card redesign that dropped the formula and kept
+    # the indicative passed green while the credit silently went flat.
+    if shape == "present":
         _expect(
             f"{prefix}: dynamic injection factor + base present",
             factor is not None and base is not None,
             detail=f"factor={factor}, base={base}",
+        )
+    elif shape == "triplet":
+        peak = getattr(injection, "peak", None)
+        transition = getattr(injection, "transition", None)
+        offpeak = getattr(injection, "offpeak", None)
+        _expect(
+            f"{prefix}: per-slot injection triplet present",
+            peak is not None and transition is not None and offpeak is not None,
+            detail=f"peak={peak}, transition={transition}, offpeak={offpeak}",
         )
 
 
@@ -1963,6 +1977,12 @@ _INJECTION_SHAPE: dict[str, str] = {
     # while current happens to be None, so a regression that set current
     # would slip the shape check.
     "cociter_variable": "spot",
+    # Empower Flextime is the only card whose feed-in tariff varies by TOU
+    # slot, so it carries the peak/transition/offpeak triplet the pricing
+    # engine selects on. It prints an indicative too, which is what hid the
+    # loss of the triplet from the shape check.
+    "engie_empower_flextime": "triplet",
+    "engie_pro_empower_flextime": "triplet",
     # energie.be Variabel indexes its injection on Belpex_SPP while its energy
     # indexes on Belpex_RLP, so it carries the formula, the card's printed
     # indicative as a fallback, AND the flag that keeps the two indices apart.
@@ -1999,7 +2019,11 @@ def _expected_injection_shape(contract_id: str) -> str:
         return "present"
     if getattr(contract, "spot_indexed_injection", False):
         return "spot"
-    if getattr(contract, "kind", "") in ("fixed", "variable"):
+    kind = getattr(contract, "kind", "")
+    if kind in ("fixed", "variable", "tou", "tou_impact"):
+        # A time-of-use ENERGY leg does not make the feed-in credit per-slot.
+        # Every TOU and Impact card indexes its injection monthly, except the
+        # two Empower Flextime cards, which are pinned to "triplet" above.
         return "monthly"
     return "present"
 

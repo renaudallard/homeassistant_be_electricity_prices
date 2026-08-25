@@ -959,3 +959,56 @@ def test_the_ecopower_dynamic_card_is_not_exempt() -> None:
     wholesale would have re-hidden the dynamic bug fixed in 0.12.5."""
     assert "ecopower" not in lc._PERIOD_MAX_LAG_MONTHS
     assert "ecopower_dynamische_burgerstroom" not in lc._PERIOD_MAX_LAG_MONTHS
+
+
+def test_injection_shape_is_asserted_even_when_the_card_prints_an_indicative() -> None:
+    """Several dynamic cards publish BOTH a formula and an indicative, and the
+    shape assertion used to hang off the else of the indicative's range check.
+    So the formula was only ever tested while the indicative happened to be
+    absent, and a card redesign that dropped the formula and kept the
+    indicative passed green while the credit silently went flat."""
+    inj = SimpleNamespace(
+        current=0.09136,
+        factor=None,
+        base=None,
+        spp_indexed=False,
+        peak=None,
+        transition=None,
+        offpeak=None,
+    )
+    lc._validate_injection("x", SimpleNamespace(injection=inj), "present")
+    shape_rows = [c for c in lc.CHECKS if "factor + base present" in c.label]
+    assert shape_rows and not shape_rows[0].ok
+
+    lc.CHECKS.clear()
+    inj.factor, inj.base = 1.0, -0.0131
+    lc._validate_injection("x", SimpleNamespace(injection=inj), "present")
+    shape_rows = [c for c in lc.CHECKS if "factor + base present" in c.label]
+    assert shape_rows and shape_rows[0].ok
+
+
+def test_a_tou_card_losing_its_injection_triplet_fails() -> None:
+    """Empower Flextime is the one card whose feed-in tariff varies by slot.
+    Its kind is neither fixed nor variable, so the shape derived to "present",
+    which asserts a factor/base it does not have and never looks at the
+    triplet at all."""
+    assert lc._expected_injection_shape("engie_empower_flextime") == "triplet"
+
+    inj = SimpleNamespace(
+        current=0.04918,
+        factor=None,
+        base=None,
+        spp_indexed=False,
+        peak=None,
+        transition=None,
+        offpeak=None,
+    )
+    lc._validate_injection("x", SimpleNamespace(injection=inj), "triplet")
+    rows = [c for c in lc.CHECKS if "triplet present" in c.label]
+    assert rows and not rows[0].ok
+
+    lc.CHECKS.clear()
+    inj.peak, inj.transition, inj.offpeak = 0.08417, 0.04834, 0.01465
+    lc._validate_injection("x", SimpleNamespace(injection=inj), "triplet")
+    rows = [c for c in lc.CHECKS if "triplet present" in c.label]
+    assert rows and rows[0].ok
