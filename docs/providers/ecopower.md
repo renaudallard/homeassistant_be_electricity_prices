@@ -365,7 +365,7 @@ VAT-exempt). Sets `current=None`, `factor`, `base`, and a diagnostic `formula` s
 
 There is no supplier-side PV/prosumer forfait: `supplier_prosumer_eur_per_kva_year` stays `None`.
 Flanders digital meters (post-2024 SMR3) do not carry the compensation-regime prosumer tariff
-(`DsoOverlay.prosumer_eur_per_kva_year` docstring, `base.py:441-441`), so the extractor never sets
+(`DsoOverlay.prosumer_eur_per_kva_year` docstring, `base.py:449-449`), so the extractor never sets
 it. No Wallonia Tarif Impact or Brussels OSP applies (Flanders-only).
 
 ### VAT scaling: the recurring Ecopower gotcha

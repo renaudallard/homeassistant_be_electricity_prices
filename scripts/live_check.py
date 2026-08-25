@@ -2012,6 +2012,12 @@ _INJECTION_SHAPE: dict[str, str] = {
     # the variable card, so a drift that drops the formula from one card is
     # caught on both.
     "energiebe_fixed": "spp",
+    # Both EnergyVision fixed cards state "0,6 x Belpex-SPP-M - 15 EUR/MWh"
+    # and say in the same breath that the delivery month's value is only known
+    # at month-end, so the printed figure is a placeholder and the formula is
+    # the contract.
+    "energyvision_fixed_3y": "spp",
+    "energyvision_fixed_1y": "spp",
 }
 
 # contract id -> Contract, populated in _run once the providers are loaded so

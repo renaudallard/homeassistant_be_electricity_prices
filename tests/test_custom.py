@@ -228,6 +228,17 @@ def test_floor_injection_passthrough_without_flag() -> None:
     assert _floor_injection(None, inj) is None
 
 
+def test_floor_injection_honours_a_stated_minimum() -> None:
+    """EnergyVision guarantees 1 c€/kWh rather than merely non-negative, so
+    the clamp has to lift a positive-but-smaller rate, not only a negative
+    one. A zero clamp would leave 0,25 c€/kWh standing."""
+    inj = InjectionRates(current=0.0025, minimum=0.01)
+    assert _floor_injection(0.0025, inj) == 0.01
+    assert _floor_injection(-0.02, inj) == 0.01
+    assert _floor_injection(0.03, inj) == 0.03
+    assert _floor_injection(None, inj) is None
+
+
 # ---- serialization -----------------------------------------------------------
 
 

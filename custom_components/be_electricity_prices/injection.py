@@ -191,11 +191,20 @@ def _tou_injection_rate(
 
 
 def _floor_injection(rate: float | None, inj: InjectionRates) -> float | None:
-    """Clamp an injection rate at 0 when the contract forbids negatives
-    (``floor_at_zero``). A ``None`` rate (no data) passes through unchanged."""
-    if rate is None or not inj.floor_at_zero:
+    """Clamp an injection rate at the contract's guaranteed minimum.
+
+    ``floor_at_zero`` is the common "never negative" guarantee and clamps at 0;
+    ``minimum`` is the rarer stated floor above it (EnergyVision guarantees
+    1 c/kWh). A card sets one or the other. A ``None`` rate (no data) passes
+    through unchanged.
+    """
+    if rate is None:
         return rate
-    return max(rate, 0.0)
+    if inj.minimum is not None:
+        return max(rate, inj.minimum)
+    if inj.floor_at_zero:
+        return max(rate, 0.0)
+    return rate
 
 
 def _injection_is_spot_formula(inj: InjectionRates, energy: EnergyRates) -> bool:

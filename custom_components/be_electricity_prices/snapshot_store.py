@@ -604,7 +604,13 @@ class _MigratingStore(Store[dict[str, Any]]):
 # coefficients with spp_indexed, for the same reason as v29: the card's printed
 # figure is filled in from "de meest recente waarde" of that index, which is the
 # previous month's. A snapshot written earlier has neither.
-_SNAPSHOT_SCHEMA_VERSION = 30
+# v31: the EnergyVision fixed cards (Flanders 3-jaar, Wallonia 1-an) now
+# surface their "0,6 x Belpex-SPP-M - 15 EUR/MWh" coefficients with
+# spp_indexed and the card's 1 c/kWh guarantee as InjectionRates.minimum, so
+# the credit resolves against the delivery month's solar-weighted mean instead
+# of a printed figure the card says is not that month's. A snapshot written
+# earlier has none of the three.
+_SNAPSHOT_SCHEMA_VERSION = 31
 
 
 def _snapshot_to_dict(

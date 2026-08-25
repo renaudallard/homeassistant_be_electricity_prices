@@ -189,6 +189,26 @@ _FIXED_INJECTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# The fixed cards state the injection formula in prose, identically in both
+# languages: "0,6 x Belpex-SPP-M - 15 EUR/MWh". The separators inside the
+# index name are hyphens, so they are matched literally rather than through
+# SIGN_CHARS, which would let the sign group bind one of them.
+_SPP_FORMULA_RE = re.compile(
+    rf"{_NUM}\s*x\s*Belpex[\s{SIGN_CHARS}]*SPP[\s{SIGN_CHARS}]*M\s*"
+    rf"([{SIGN_CHARS}])\s*{_NUM}\s*EUR\s*/\s*MWh",
+    re.IGNORECASE,
+)
+
+# "dan garanderen wij in elk geval 1 EURcent/kWh" / "nous garantissons en tout
+# etat de cause 1 EURcent/kWh". Parsed rather than hardcoded so a change to the
+# guarantee is picked up instead of silently under-crediting.
+_GUARANTEE_RE = re.compile(
+    r"(?:garanderen\s+wij\s+in\s+elk\s+geval"
+    r"|garantissons\s+en\s+tout\s+(?:é|e)tat\s+de\s+cause)"
+    rf"\s*{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    re.IGNORECASE,
+)
+
 _FEE_RE = re.compile(rf"Vaste\s+vergoeding\s+{_NUM}\s*€\s*/\s*jaar", re.IGNORECASE)
 
 # Taxes (Flanders). GSC + WKC print as a single combined value; the
@@ -474,6 +494,41 @@ def _extract_dynamic(text: str) -> tuple[DynamicRates, InjectionRates]:
     return energy, injection
 
 
+def _spp_injection(text: str, indicative: float) -> InjectionRates:
+    """Injection leg for a fixed card, off its monthly Belpex-SPP-M formula.
+
+    The printed c/kWh figure cannot be the delivery month's rate: the card
+    says so itself, *"De waarde van Belpex-SPP-M van de lopende maand is pas
+    gekend aan het einde van de maand"*. Surface the formula's coefficients
+    with ``spp_indexed`` so the coordinator fetches the Synergrid profile and
+    resolves the credit against the delivery month's own solar-weighted mean,
+    and keep the printed figure as ``current`` for the months where that mean
+    is not available yet.
+
+    ``spp_indexed`` also keeps the coefficients away from the hourly spot:
+    they are month coefficients, and the energy leg here is a flat rate that
+    fetches no spots of its own.
+    """
+    formula = _SPP_FORMULA_RE.search(text)
+    guarantee = _GUARANTEE_RE.search(text)
+    factor: float | None = None
+    base: float | None = None
+    if formula is not None:
+        # Injection is VAT-exempt, so neither coefficient is grossed. The
+        # factor is a dimensionless multiplier on the index; the base is
+        # EUR/MWh and divides by 1000, as on the dynamic card.
+        factor = to_float(formula.group(1))
+        base = parse_sign(formula.group(2)) * to_float(formula.group(3)) / 1000.0
+    return InjectionRates(
+        current=indicative,
+        factor=factor,
+        base=base,
+        formula=formula.group(0) if formula else None,
+        spp_indexed=factor is not None,
+        minimum=to_float(guarantee.group(1)) / 100.0 if guarantee else None,
+    )
+
+
 def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:
     fee = _fee(text)
     m = _FIXED_ENERGY_RE.search(text)
@@ -484,11 +539,7 @@ def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:
     inj = _FIXED_INJECTION_RE.search(text)
     if inj is None:
         raise ExtractorError("EnergyVision: could not parse fixed injection price")
-    # Injection is indexed monthly (Belpex-SPP-M, known only at month-end), so
-    # the card prints the resolved monthly indicative, which is what we bill,
-    # never a live hourly factor/base against the spot. VAT-exempt, and the
-    # card's 1 c€/kWh floor is already applied to the printed value.
-    injection = InjectionRates(current=to_float(inj.group(1)) / 100.0)
+    injection = _spp_injection(text, to_float(inj.group(1)) / 100.0)
     return energy, injection
 
 
@@ -556,13 +607,7 @@ def _extract_fixed_fr(text: str) -> tuple[FixedRates, InjectionRates]:
     inj = _FIXED_INJECTION_FR_RE.search(text)
     if inj is None:
         raise ExtractorError("EnergyVision: could not parse Wallonia injection price")
-    # Belpex-SPP-M is a month-long average the card states is "connue qu'à la
-    # fin du mois", so there is no live spot to apply a factor to: bill the
-    # printed monthly indicative and leave factor / base None. Emitting them
-    # would apply a monthly coefficient to the hourly spot and mis-price the
-    # credit. The card's 1 c€/kWh guarantee is monthly too, so it is already
-    # baked into the printed value and floor_at_zero must stay False.
-    injection = InjectionRates(current=to_float(inj.group(1)) / 100.0)
+    injection = _spp_injection(text, to_float(inj.group(1)) / 100.0)
     return energy, injection
 
 

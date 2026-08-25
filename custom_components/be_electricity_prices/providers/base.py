@@ -351,7 +351,8 @@ class InjectionRates:
     contracts (e.g. the Mega groepsaankoop) guarantee the feed-in tariff can
     never go negative; the pricing engine then takes ``max(rate, 0)`` in both
     the live and historical paths. Default False keeps the negative-allowed
-    behaviour every scraped card relies on.
+    behaviour every scraped card relies on. ``minimum`` is the same clamp at a
+    card-stated floor above 0.
     """
 
     current: float | None = None
@@ -391,6 +392,13 @@ class InjectionRates:
     # one or the other, never both. Either way the coefficients are month
     # coefficients, so the pricing engine must never hand them an hourly spot.
     month_indexed: bool = False
+    # An explicit guaranteed minimum in EUR/kWh, for a card that promises more
+    # than "never negative". EnergyVision guarantees 1 c/kWh: *"Als de
+    # berekening van onze formule lager zou uitkomen dan 1 EURcent/kWh, dan
+    # garanderen wij in elk geval 1 EURcent/kWh. Dat wordt berekend op
+    # maandbasis"*. ``floor_at_zero`` is the same clamp at 0, so a card sets
+    # one or the other and the pricing engine applies whichever is present.
+    minimum: float | None = None
     # True when the card taxes injection (professional cards do, at 21%).
     # None of these rates passes through the pricing engine's per-component
     # VAT gross-up, so ``apply_vat`` bakes them, like the fixed fees. Left

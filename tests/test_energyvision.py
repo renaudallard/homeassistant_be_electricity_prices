@@ -157,14 +157,66 @@ def test_fixed_yearly_fixed_fee() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(75.0)
 
 
-def test_fixed_injection_is_monthly_indicative() -> None:
-    """Injection is Belpex-SPP-M (monthly), so the printed 2,07 c€/kWh
-    indicative is billed as ``current`` -- never a live hourly factor/base."""
+def test_fixed_injection_carries_the_spp_formula() -> None:
+    """The card's "0,6 x Belpex-SPP-M - 15 EUR/MWh" is surfaced as month
+    coefficients, with the printed 2,07 c€/kWh kept as the fallback for a
+    month whose index is not published yet."""
+    snap = _fixed()
+    inj = snap.injection
+    assert inj is not None
+    assert inj.current == pytest.approx(2.07 / 100.0)
+    assert inj.factor == pytest.approx(0.6)
+    assert inj.base == pytest.approx(-15.0 / 1000.0)
+    assert inj.spp_indexed is True
+    assert inj.formula == "0,6 x Belpex-SPP-M - 15 EUR/MWh"
+
+
+def test_fixed_injection_guarantee_is_parsed() -> None:
+    """ "Als de berekening van onze formule lager zou uitkomen dan 1 EURcent
+    /kWh, dan garanderen wij in elk geval 1 EURcent/kWh." Parsed off the card,
+    not hardcoded, and it is a floor above zero rather than a zero clamp."""
+    snap = _fixed()
+    inj = snap.injection
+    assert inj is not None
+    assert inj.minimum == pytest.approx(0.01)
+    assert inj.floor_at_zero is False
+
+
+def test_fixed_injection_is_never_priced_per_hour() -> None:
+    """Month coefficients on a flat-energy card. If the engine read them as an
+    hourly formula the credit would follow the current slot's spot, which is
+    the mis-credit the spp_indexed flag exists to prevent."""
+    from custom_components.be_electricity_prices.injection import (
+        _injection_is_spot_formula,
+    )
+
     snap = _fixed()
     assert snap.injection is not None
-    assert snap.injection.current == pytest.approx(2.07 / 100.0)
-    assert snap.injection.factor is None
-    assert snap.injection.base is None
+    assert _injection_is_spot_formula(snap.injection, snap.energy) is False
+
+
+def test_fixed_injection_resolves_the_delivery_month() -> None:
+    """April 2026's Belpex-SPP-M settled far below the July card's printed
+    figure, and low enough that the 1 c€/kWh guarantee binds."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.injection import (
+        _bake_monthly_injection,
+        _compute_injection_price,
+        _injection_needs_month_spot,
+    )
+
+    snap = _fixed()
+    entry = SimpleNamespace(data={"solar_regime": "injection"})
+    assert _injection_needs_month_spot(snap, entry) is True  # type: ignore[arg-type]
+
+    july = _bake_monthly_injection(snap, 0.063445)
+    assert _compute_injection_price(july, entry, {}) == pytest.approx(  # type: ignore[arg-type]
+        0.6 * 0.063445 - 0.015
+    )
+    # April resolves to 0,25 c€/kWh, so the guarantee lifts it to 1,00.
+    april = _bake_monthly_injection(snap, 0.029166)
+    assert _compute_injection_price(april, entry, {}) == pytest.approx(0.01)  # type: ignore[arg-type]
 
 
 # ---- shared DSO + tax blocks (identical on both cards) ----------------------
@@ -338,19 +390,18 @@ def test_wallonia_energy_is_one_flat_vat_inclusive_rate() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(75.0)
 
 
-def test_wallonia_injection_is_monthly_indicative_only() -> None:
-    """Belpex-SPP-M is a month-long average the card says is only known at
-    month-end, so there is no live spot to index: bill the printed monthly
-    indicative and leave factor/base None. Emitting them would apply a
-    monthly coefficient to the hourly spot and mis-price the credit."""
+def test_wallonia_injection_carries_the_same_spp_formula() -> None:
+    """The French card states the identical formula, so the Walloon leg is
+    month-indexed too and keeps its printed figure only as the fallback."""
     snap = _wal()
     inj = snap.injection
     assert inj is not None
     assert inj.current == pytest.approx(0.0207)
-    assert inj.factor is None
-    assert inj.base is None
-    # The card's 1 c-EUR/kWh guarantee is monthly and already applied to the
-    # printed value, and it is not a zero floor, so the flag stays off.
+    assert inj.factor == pytest.approx(0.6)
+    assert inj.base == pytest.approx(-15.0 / 1000.0)
+    assert inj.spp_indexed is True
+    # The guarantee is a floor above zero, so the zero clamp stays off.
+    assert inj.minimum == pytest.approx(0.01)
     assert inj.floor_at_zero is False
 
 

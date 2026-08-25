@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:619-634`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:570`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:578`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:822`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:830`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -577,13 +577,21 @@ The per-slot TOU triplet is never clamped. No card ships both a triplet and a
 floor, and `tests/test_custom.py` pins that rather than the pricing code
 carrying a branch that cannot run.
 
-### The three injection shapes
+### The four injection shapes
 
 | Shape | Populated fields | Needs spot? | Example |
 | --- | --- | --- | --- |
-| (a) Monthly indicative | `current` set | No | Eneco Fix/Flex, EBEM, DATS 24, EnergyVision fixed (both regions), monthly-indexed variables |
+| (a) Monthly indicative | `current` set | No | Ecofix Flexy, the fixed and variable cards that publish a realized rate |
 | (b) Hourly formula | `factor` + `base` set | Yes | Dynamic contracts (Engie, OCTA+, Luminus, Mega, TotalEnergies) |
 | (c) Spot-indexed on a static-energy card | `factor` + `base` set, `current is None`, energy NOT dynamic | Yes | Cociter Variable |
+| (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed` | A monthly MEAN, not an hourly spot | Eneco Fix/Flex, EBEM Variabel/B@sic+, DATS 24, EnergyVision fixed (both regions), energie.be |
+
+Shape (d) is the one that looks like (a) and is not. Those cards print a
+figure and a formula side by side, and their footnotes say the figure comes
+from the last published value of an index the contract settles on monthly and
+retroactively, so crediting the figure bills the previous month every month.
+The flag distinguishes which mean resolves the formula and, just as
+importantly, stops the month coefficients being read as shape (b).
 
 Shape (c) is the subtle one: the energy contract is Variable (no spot needed for
 energy) but the injection prices off the hourly BELPEX with no printed monthly
