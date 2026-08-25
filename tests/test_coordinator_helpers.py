@@ -263,6 +263,60 @@ def test_prosumer_no_regime_set_returns_zero() -> None:
     assert cost == 0.0
 
 
+def test_walloon_fixed_term_is_not_billed_on_the_impact_tariff() -> None:
+    """CWaPE prints two configurations per Walloon DSO, and row C, the terme
+    fixe, is a dash under the incitative one the cards sell as IMPACT. The
+    suppliers say so too: "le terme fixe n'est pas d'application pour le tarif
+    IMPACT". Nothing offsets it, since CWaPE set the capacity term that
+    replaces it to 0 EUR/kW for 2026 through 2029.
+
+    Every per-kWh leg already read the tariff mode. This fixed leg did not, so
+    the term was billed on all four costing paths at once, 14 to 27 EUR/yr
+    depending on the DSO."""
+    from custom_components.be_electricity_prices.fees import _annual_static_fees
+    from tests import fixture_text
+    from custom_components.be_electricity_prices.providers import engie
+
+    snap = engie.parse_snapshot(
+        "engie_empower_flextime",
+        {"wallonia": fixture_text("engie_empower_flextime_w.pdf")},
+    )
+    assert snap.dsos["resa"].data_management_per_year == pytest.approx(26.5)
+
+    def fees(mode: str, region: str = "wallonia", dso: str = "resa") -> float:
+        entry = SimpleNamespace(
+            data={"dso": dso, "region": region, "dso_tariff_mode": mode}
+        )
+        return _annual_static_fees(snap, "bi", entry)  # type: ignore[arg-type]
+
+    assert fees("bi_horaire") == pytest.approx(116.50)
+    assert fees("impact") == pytest.approx(90.00)
+
+    # The field carries three different charges. Only the Walloon one is tied
+    # to the tariff configuration, so a Flemish databeheer or a Brussels
+    # mesure keeps being billed whatever the mode says.
+    flanders = make_snapshot(
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(
+                distribution_single=0.1,
+                transport=0.01,
+                data_management_per_year=18.92,
+            )
+        },
+    )
+    for mode in ("bi_horaire", "impact"):
+        entry = SimpleNamespace(
+            data={
+                "dso": "fluvius_antwerpen",
+                "region": "flanders",
+                "dso_tariff_mode": mode,
+            }
+        )
+        assert _annual_static_fees(flanders, "mono", entry) == pytest.approx(  # type: ignore[arg-type]
+            18.92
+        )
+
+
 def test_the_three_capacity_paths_share_one_formula() -> None:
     """peak x rate / 12 was written out in the live tick, the year-to-date walk
     and the backfill's per-hour accrual, each with its own spelling of the two

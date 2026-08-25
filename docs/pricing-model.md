@@ -100,6 +100,14 @@ Note what is deliberately absent from the per-kWh formula:
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:614-629`); `energy_fund_eur_per_month` is defined on the
   `TaxOverlay` (`providers/base.py:517`) but is not touched here.
+- `data_management_per_year` carries three different charges depending on the
+  region, and one of them is tied to the tariff configuration. The Walloon
+  `terme fixe` is not billed under the CWaPE incitative configuration that the
+  cards sell as the IMPACT tariff, and `_walloon_fixed_term_applies`
+  (`fees.py:101`) is what drops it; nothing offsets it, because CWaPE set the
+  capacity term that replaces it to 0 EUR/kW for 2026 through 2029. The Flemish
+  `databeheer` and the Brussels `mesure` plus fixed-term pair are billed
+  whatever the mode says.
 - The Wallonia `region_connection_fee` is a per-kWh term and IS billed, but
   through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:632`), not
   `taxes_eur_per_kwh`. Engie's Walloon card prints `Redevance raccordement(8)`
@@ -652,7 +660,7 @@ full year of history has accumulated.
 ## Prosumer term
 
 The prosumer (compensation-regime) fee is Walloon-only and monthly
-(`_compute_prosumer`, `fees.py:162-177`):
+(`_compute_prosumer`, `fees.py:195-210`):
 
 ```
 prosumer_cost_eur = kva * (dso_rate + supplier_rate) / 12.0

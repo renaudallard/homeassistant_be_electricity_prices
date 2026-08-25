@@ -38,10 +38,12 @@ from homeassistant.config_entries import ConfigEntry
 from .const import (
     CONF_CONNECTION_KVA_TIER,
     CONF_DSO,
+    CONF_DSO_TARIFF_MODE,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     DEFAULT_CONNECTION_KVA_TIER,
+    DSO_MODE_IMPACT,
     REGION_WALLONIA,
     SOLAR_REGIME_COMPENSATION,
 )
@@ -96,6 +98,29 @@ def _brussels_osp_fee(overlay: DsoOverlay | None, entry: ConfigEntry) -> float:
     return overlay.brussels_osp_by_tier.get(tier, 0.0)
 
 
+def _walloon_fixed_term_applies(entry: ConfigEntry) -> bool:
+    """Whether this entry pays the Walloon DSO's ``terme fixe``.
+
+    The CWaPE tariff sheets print two configurations per DSO. The standard
+    one carries a fixed term (row C, ``terme fixe``, in EUR/year); the
+    incitative one, which the cards sell as the ``IMPACT`` tariff, carries a
+    dash there and charges a capacity term instead. The suppliers say so on
+    the cards: "le terme fixe n'est pas d'application pour le tarif IMPACT".
+
+    Nothing offsets the difference, because CWaPE set that capacity term to
+    0 EUR/kW for 2026 through 2029 on all five Walloon DSOs, so an entry on
+    the incitative configuration simply has no fixed term to pay.
+
+    Region-gated, because ``data_management_per_year`` is one field carrying
+    three different charges: the Walloon terme fixe, the Flemish databeheer
+    and the Brussels mesure plus fixed-term pair. Only the first one is tied
+    to the tariff configuration.
+    """
+    if entry.data.get(CONF_REGION) != REGION_WALLONIA:
+        return True
+    return entry.data.get(CONF_DSO_TARIFF_MODE) != DSO_MODE_IMPACT
+
+
 def _annual_static_fees(
     snapshot: SupplierSnapshot, meter: MeterType, entry: ConfigEntry
 ) -> float:
@@ -106,13 +131,21 @@ def _annual_static_fees(
 
     Shared by the live YTD sensor, the backfill accrual and the config-flow
     annual estimate so a new static-fee component is added in one place
-    instead of drifting between the three paths.
+    instead of drifting between the three paths. That is also why the
+    Walloon IMPACT exemption belongs here: the per-kWh legs already read the
+    tariff mode, and this was the one leg that did not, so the fixed term was
+    billed on all four paths at once.
     """
     overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
+    fixed_term = (
+        overlay.data_management_per_year
+        if overlay is not None and _walloon_fixed_term_applies(entry)
+        else 0.0
+    )
     return (
         float(yearly_fixed_fee_for_meter(snapshot.energy, meter) or 0.0)
         + 12.0 * float(snapshot.taxes.energy_fund_eur_per_month or 0.0)
-        + (overlay.data_management_per_year if overlay is not None else 0.0)
+        + fixed_term
         + _brussels_osp_fee(overlay, entry)
     )
 
