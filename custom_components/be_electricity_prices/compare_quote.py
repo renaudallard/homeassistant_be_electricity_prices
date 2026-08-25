@@ -40,7 +40,7 @@ local before: they close what would otherwise be an import cycle.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
@@ -114,6 +114,57 @@ def _tou_slot_weights(
     return acc["peak"], acc["transition"], acc["offpeak"]
 
 
+def _hour_weighted_mean(
+    samples: Iterable[tuple[datetime, float]],
+    hour_weights: dict[int, float] | None,
+) -> float | None:
+    """Mean of per-slot values weighted by the household's own hourly shape.
+
+    ``hour_weights`` is the measured share of kWh falling in each hour of the
+    local day, for whichever side is being priced. Without one every slot
+    weighs the same, which assumes a household that draws, or exports,
+    uniformly around the clock. Returns ``None`` when nothing carries weight,
+    so a caller can fall back rather than divide by zero.
+    """
+    num = 0.0
+    den = 0.0
+    for when, value in samples:
+        weight = (
+            1.0
+            if hour_weights is None
+            else hour_weights.get(dt_util.as_local(when).hour, 0.0)
+        )
+        if weight <= 0.0:
+            continue
+        num += weight * value
+        den += weight
+    return num / den if den > 0.0 else None
+
+
+def _consumption_weighted_spot(
+    spot_dict: dict[datetime, float],
+    hour_weights: dict[int, float] | None,
+) -> float | None:
+    """The spot to price a per-slot ENERGY leg at over the fetched window.
+
+    A dynamic contract's bill is the sum over slots of ``kWh * (factor*spot +
+    base)``, so the one spot that stands for the year is the mean weighted by
+    when the household actually draws, not by the clock. The two differ
+    because consumption is evening-heavy while the day-ahead curve troughs at
+    midday: measured over Jan to Aug 2026 the clock mean was 100,24 EUR/MWh
+    against 101,81 on a residential shape.
+
+    Falls back to the clock mean without a measured shape, which is what every
+    quote used before, and to ``None`` on an empty window.
+    """
+    if not spot_dict:
+        return None
+    weighted = _hour_weighted_mean(spot_dict.items(), hour_weights)
+    if weighted is not None:
+        return weighted
+    return _hour_weighted_mean(spot_dict.items(), None)
+
+
 def _export_weighted_credit(
     inj: Any,
     spot_dict: dict[datetime, float],
@@ -144,28 +195,17 @@ def _export_weighted_credit(
 
     if inj.factor is None or inj.base is None:
         return None
-    num = 0.0
-    den = 0.0
-    for when, spot in spot_dict.items():
-        weight = (
-            1.0
-            if hour_weights is None
-            else hour_weights.get(dt_util.as_local(when).hour, 0.0)
-        )
-        if weight <= 0.0:
-            continue
-        rate = _floor_injection(inj.factor * spot + inj.base, inj)
-        if rate is None:
-            continue
-        num += weight * rate
-        den += weight
-    if den > 0.0:
-        return num / den
-    if hour_weights is None:
-        return None
+    rates = [
+        (when, rate)
+        for when, spot in spot_dict.items()
+        if (rate := _floor_injection(inj.factor * spot + inj.base, inj)) is not None
+    ]
+    weighted = _hour_weighted_mean(rates, hour_weights)
+    if weighted is not None:
+        return weighted
     # A measured shape that exports in none of the hours this window covers.
     # Fall back to the clock mean rather than to no credit at all.
-    return _export_weighted_credit(inj, spot_dict, None)
+    return _hour_weighted_mean(rates, None)
 
 
 def _compare_injection_credit(

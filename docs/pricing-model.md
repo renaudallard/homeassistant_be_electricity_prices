@@ -492,7 +492,7 @@ convex and the two orders give different money:
   each slot at its own rate; the compare estimate (`_compare_injection_credit`,
   `compare_quote.py:171`) has to collapse the window to one number, so it takes
   the mean of the floored rates weighted by the household's own export shape
-  (`_export_weighted_credit`, `compare_quote.py:117`), which is the basis the
+  (`_export_weighted_credit`, `compare_quote.py:168`), which is the basis the
   year-to-date walk bills on.
 - a MONTH-MEAN formula floors once, on the delivery month's tariff, because such
   a card publishes one number a month and the guarantee is written against that

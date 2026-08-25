@@ -93,6 +93,7 @@ from .energy_meters import _measured_hour_weights, _measured_kwh
 from .compare_quote import (
     _annual_bill,
     _compare_injection_credit,
+    _consumption_weighted_spot,
     _populate_charts,
     _annual_volume,
     _covers_a_year,
@@ -696,8 +697,17 @@ class _CompareStepsMixin(OptionsFlow):
             return await _spp_month_spot()
 
         async def _spot_for(snapshot: SupplierSnapshot | None) -> float | None:
-            """The spot this side's energy shape actually bills on."""
-            return await _month_spot() if _needs_month_mean(snapshot) else avg_spot
+            """The spot this side's energy shape actually bills on.
+
+            A per-slot leg takes the mean weighted by when the household draws,
+            because its bill is the sum over slots of kWh times that slot's
+            rate, and consumption is evening-heavy while the day-ahead curve
+            troughs at midday. A month-mean leg takes its delivery month's own
+            index, which is a published number and not a shape question.
+            """
+            if _needs_month_mean(snapshot):
+                return await _month_spot()
+            return _consumption_weighted_spot(spot_dict, hour_weights) or avg_spot
 
         # Measured consumption / injection from the user's kWh sensors.
         # Injection is only relevant when a solar regime is configured; for

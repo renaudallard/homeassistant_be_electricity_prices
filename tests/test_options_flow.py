@@ -2662,6 +2662,44 @@ def test_compare_spot_indexed_injection_weights_the_window_by_export() -> None:
     assert credit != pytest.approx(0.97 * curve[0] - 0.021)
 
 
+def test_compare_prices_a_dynamic_energy_leg_on_the_consumption_shape() -> None:
+    """A dynamic bill is the sum over slots of kWh times that slot's rate, so
+    the one spot that stands for the year is the mean weighted by when the
+    household actually draws.
+
+    The clock mean assumes a household that consumes uniformly around the
+    clock. It does not: consumption is evening-heavy while the day-ahead curve
+    troughs at midday, so the clock mean under-quotes the energy leg."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _consumption_weighted_spot,
+    )
+
+    curve = [
+        0.078, 0.070, 0.065, 0.062, 0.065, 0.072, 0.085, 0.095,
+        0.080, 0.040, 0.020, 0.010, 0.008, 0.006, 0.010, 0.020,
+        0.035, 0.050, 0.070, 0.095, 0.120, 0.135, 0.110, 0.090,
+    ]  # fmt: skip
+    spot_dict = {
+        datetime(2026, 4, 29, h, 0, tzinfo=UTC): v for h, v in enumerate(curve)
+    }
+    clock_mean = sum(curve) / len(curve)
+
+    # No measured shape: the clock mean, exactly as every quote had it.
+    assert _consumption_weighted_spot(spot_dict, None) == pytest.approx(clock_mean)
+
+    # An evening-heavy residential shape, keyed by LOCAL hour (April is CEST,
+    # so local hour h reads UTC h-2), landing on the evening peak of the curve.
+    shape = {21: 0.3, 22: 0.4, 23: 0.3}
+    weighted = sum(w * curve[h - 2] for h, w in shape.items())
+    got = _consumption_weighted_spot(spot_dict, shape)
+    assert got == pytest.approx(weighted)
+    # Those are the expensive hours, so the leg is quoted ABOVE the clock mean.
+    assert got is not None and got > clock_mean
+
+    # An empty window still has no answer.
+    assert _consumption_weighted_spot({}, shape) is None
+
+
 def test_compare_floored_injection_averages_the_slot_rates() -> None:
     """A never-negative feed-in formula is convex, so the window mean does not
     price it.
