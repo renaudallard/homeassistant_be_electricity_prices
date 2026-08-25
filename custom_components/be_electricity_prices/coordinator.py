@@ -699,7 +699,12 @@ class BePricesCoordinator(
             )
 
         monthly_mean: float | None = None
-        if isinstance(priced.energy, SpotMonthlyRates):
+        if isinstance(priced.energy, SpotMonthlyRates) or _injection_needs_month_spot(
+            self._snapshot, self.entry
+        ):
+            # Also for a card whose ENERGY needs no mean but whose feed-in
+            # credit is indexed on one: without it the bake below would resolve
+            # against None and wipe the credit instead of resolving it.
             now_local = dt_util.now()
             monthly_mean = self._monthly_spot_mean(
                 now_local.year, now_local.month, spot_prices

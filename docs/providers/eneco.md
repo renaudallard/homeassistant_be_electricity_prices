@@ -32,7 +32,7 @@ Related reading:
 | Probe | listing scrape returning the resolved PDF URL | `eneco.py:210-228` |
 | Archive | per-month issues kept on the CDN, resolved by volume walk | `eneco.py:164-207` |
 
-`EXTRACTOR.regions()` (the union over its contracts, `base.py:584`) is
+`EXTRACTOR.regions()` (the union over its contracts, `base.py:590`) is
 `{flanders, wallonia}`. Power Fix and Power Flex cover both regions; Power Dynamic
 is Flanders-only (see the contracts table). Brussels (Sibelga) is never served, so
 `TaxOverlay.brussels_renewables` stays 0 and no Sibelga overlay is emitted.
@@ -391,17 +391,20 @@ Steps (`eneco.py:584-639`):
 
 Injection taxonomy (the three-shape rule, `base.py:268-306`):
 
-- **Power Fix and Power Flex are monthly-indicative-only**: the extractor surfaces
-  `current` (the `Maandprijs`) and leaves `factor` / `base` `None`
-  (`eneco.py:615-630`, the `contract_id == "power_dynamic"` guard). The card's
-  monthly Belpex-injectie coefficients must never be exposed as hourly-spot
-  factor / base, because the pricing engine would then apply monthly coefficients
-  to the hourly spot if the `Maandprijs` ever stopped printing (`eneco.py:616-620`).
-  Illustrative: `current = 0.0476`, `factor = None`, `base = None`
-  (`tests/test_eneco.py:246-268`).
+- **Power Fix and Power Flex are MONTH-indexed**: the extractor surfaces the
+  `Maandprijs` as `current` AND the card's Belpex-injectie coefficients, with
+  `month_indexed=True` (`eneco.py:614-631`). The flag is what makes surfacing
+  them safe: the engine resolves them against the delivery month's mean and
+  `_injection_is_spot_formula` refuses them to the per-hour path outright, so
+  monthly coefficients can never reach the hourly spot even if the `Maandprijs`
+  stops printing. Without them the credit was the printed indicative, which the
+  card computes from the LAST KNOWN (previous) month's index: on the August 2026
+  card, 6,38 c/kWh against the 8,0649 August settles at, a 20,9% under-credit.
+  Illustrative: `current = 0.0476`, `factor = 0.8`, `base = -0.0265`
+  (`tests/test_eneco.py:246-270`).
 - **Power Dynamic is hourly `factor * spot + base`**: it indexes on Belpex-H, so it
   is the only contract that surfaces spot coefficients. Illustrative, from
-  `test_dynamic_extracts_injection_rates` (`tests/test_eneco.py:271-279`): formula
+  `test_dynamic_extracts_injection_rates` (`tests/test_eneco.py:283-291`): formula
   `0,1 X BELPEX-H -1,188` yields `factor = 1.0`, `base = -0.01188`, and (no
   `Maandprijs`) `current = 0.0592` from the yearly estimate. The negative base is a
   real Belgian outcome (the producer can pay to inject at low spot), preserved via

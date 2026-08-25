@@ -157,7 +157,7 @@ long-term statistics.
 ### `probe`: none
 
 `EXTRACTOR` declares no `probe` (`engie.py:1040` has no `probe=` argument, so it
-defaults to `None`, `base.py:564`). Engie's tariff API has no cheap freshness
+defaults to `None`, `base.py:570`). Engie's tariff API has no cheap freshness
 key: the endpoint always serves "the current month" for a slug with no ETag or
 listing to diff. Per the framework contract (`base.py:513`), a `None` probe means
 the coordinator's time-based TTL governs refresh instead.

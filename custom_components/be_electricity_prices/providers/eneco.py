@@ -614,12 +614,15 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
 
     factor: float | None = None
     base: float | None = None
-    # Only Power Dynamic indexes injection on the hourly spot (Belpex-H);
-    # Fix/Flex settle on the monthly Belpex-injectie, whose coefficients
-    # must NOT be surfaced as spot factor/base -- the pricing engine would
-    # apply them to the hourly spot if the Maandprijs ever stopped
-    # printing. Fix/Flex surface only the monthly indicative (current).
-    if formula and contract_id == "power_dynamic":
+    # Power Dynamic indexes injection on the HOURLY spot (Belpex-H); Fix and
+    # Flex settle on the monthly Belpex-injectie. Both surface the same
+    # coefficients, and ``month_indexed`` is what keeps them apart: it makes
+    # the engine resolve them against the delivery month's mean and refuses
+    # them to the per-hour path outright. Without that flag these coefficients
+    # would be priced at the current slot's spot the moment a card stopped
+    # printing its Maandprijs, which is the 0.6.7 mis-credit.
+    month_indexed = contract_id != "power_dynamic"
+    if formula:
         factor_pdf = to_float(formula.group(1))
         base_pdf_cents = parse_sign(formula.group(2)) * to_float(formula.group(3))
         # PDF formula yields c/kWh (no VAT) from BELPEX in EUR/MWh; spot is
@@ -635,6 +638,7 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
         current=current_cents / 100.0 if current_cents is not None else None,
         factor=factor,
         base=base,
+        month_indexed=month_indexed and factor is not None,
         formula=formula.group(0) if formula else None,
     )
 

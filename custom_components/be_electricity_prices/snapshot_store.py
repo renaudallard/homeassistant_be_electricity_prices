@@ -591,7 +591,12 @@ class _MigratingStore(Store[dict[str, Any]]):
 # against the DELIVERY month's BELIX rather than the printed indicative, which
 # the card computes from the previous month's. A snapshot written earlier has
 # the flag absent and would keep billing a month late.
-_SNAPSHOT_SCHEMA_VERSION = 27
+# v28: Eneco Power Fix and Flex now surface their injection coefficients with
+# InjectionRates.month_indexed, so the credit resolves against the DELIVERY
+# month's Belpex-injectie instead of the printed indicative, which the card
+# computes from the last known (previous) month's. A snapshot written earlier
+# carries neither the coefficients nor the flag.
+_SNAPSHOT_SCHEMA_VERSION = 28
 
 
 def _snapshot_to_dict(

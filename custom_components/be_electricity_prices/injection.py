@@ -140,7 +140,7 @@ def _injection_needs_month_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) 
     inj = snapshot.injection
     return (
         inj is not None
-        and inj.spp_indexed
+        and (inj.spp_indexed or inj.month_indexed)
         and inj.factor is not None
         and inj.base is not None
         and not isinstance(snapshot.energy, (DynamicRates, SpotMonthlyRates))
@@ -207,6 +207,12 @@ def _injection_is_spot_formula(inj: InjectionRates, energy: EnergyRates) -> bool
     decides whether the display array varies intraday. A drift between them
     mis-gates the array against the billed value.
     """
+    if inj.month_indexed:
+        # Month coefficients are never a per-hour formula, whatever else is
+        # true. Without this a card that stopped printing its indicative would
+        # flip to pricing the credit at the current slot's spot, which is the
+        # 0.6.7 mis-credit and is silent.
+        return False
     return (
         inj.factor is not None
         and inj.base is not None

@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:619-634`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:564`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:570`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -159,7 +159,7 @@ pricing engine:
 - **Fixed and annual fees** - the yearly fee, data management, capacity, the DSO
   and supplier prosumer forfaits, the Brussels OSP table - never reach that path:
   the live, YTD, backfill and compare paths each sum them raw.
-  `base.apply_vat` (`providers/base.py:625`) bakes them once instead.
+  `base.apply_vat` (`providers/base.py:631`) bakes them once instead.
 
 `apply_vat` is called per config entry, from `_resolve_snapshot`
 (`coordinator.py:568`), never before the shared snapshot cache: that cache is
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:816`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:822`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -246,6 +246,29 @@ the coordinator already computes, so nothing is approximated here.
 Without an ENTSO-E key it returns `None` and the printed indicative stands: the
 variable kind never prompts for a key, and an entry that has none is better
 served by a rate a month stale than by no energy leg at all.
+
+### Monthly-indexed feed-in credits
+
+The same lag applies to a feed-in credit. Eneco Power Fix and Flex print a
+credit "berekend op basis van de LAATST GEKENDE waarde van Belpex-injectie",
+i.e. the previous month's, while the contract indexes it monthly and settles
+retroactively. `InjectionRates.month_indexed` marks that, and the credit then
+resolves against the delivery month's mean on the live tick, in both
+year-to-date walks and in the backfill. Measured on the August 2026 card, the
+printed 6,38 c/kWh against 8,0649 that August settles at: a 20,9%
+under-credit.
+
+Belpex-injectie is the plain arithmetic monthly mean of the Belgian day-ahead.
+Checked against the real 2026 series it reproduces the card's own published
+values to four decimals (March 92,6102 against the card's 92,6114, July
+109,2488 against 109,2498), so nothing is approximated. `spp_indexed` remains
+the solar-weighted sibling for cards that name Belpex_SPP; a card is one or the
+other, never both.
+
+`month_indexed` also makes `_injection_is_spot_formula` return False outright.
+Month coefficients are never a per-hour formula, and without that guard a card
+that stopped printing its indicative would flip to crediting the current slot's
+spot, which is the 0.6.7 mis-credit and is silent.
 
 ### Contractual price ceilings
 
@@ -389,8 +412,8 @@ discount and is out of scope (`pricing.py:214-219`).
 `ImpactRates` (`tou_impact` kind) is Wallonia's Tarif Impact, distinct from TOU
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
-(`providers/base.py:276-279`). Fields: `pic`, `medium`, `eco`
-(`providers/base.py:291-293`). `dso_impact_band` (`pricing.py:547-563`):
+(`providers/base.py:282-285`). Fields: `pic`, `medium`, `eco`
+(`providers/base.py:297-299`). `dso_impact_band` (`pricing.py:547-563`):
 
 | Band | Hours (every day) |
 | --- | --- |

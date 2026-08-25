@@ -149,7 +149,7 @@ onto these canonical keys.
 
 ### Supplier and contract
 
-A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:861`). It declares
+A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:867`). It declares
 the `Contract`s it sells (`providers/base.py:64`), each carrying a `TariffKind`
 (`providers/base.py:53`):
 
@@ -244,7 +244,7 @@ Numbered walkthrough:
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:177`),
    so the coordinator must not read `runtime_data` during first refresh.
-5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:615`):
+5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:621`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
    `InjectionRates`.
 6. For a dynamic contract (or a spot-indexed-injection one) the coordinator fetches the ENTSO-E
@@ -272,7 +272,7 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
 - Probe: each tick runs the supplier's cheap `probe()` (a HEAD or listing GET returning a
   freshness key like `Last-Modified`, `ETag`, or the resolved PDF URL). The full `fetch` runs
   only when the key changes, so a new publication is caught within an hour at near-zero
-  bandwidth (`providers/base.py:564`).
+  bandwidth (`providers/base.py:570`).
 - TTL fallback: suppliers with no usable probe (Engie, Luminus, DATS 24, where the only cheap
   response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
   `coordinator.py:225`).
@@ -300,7 +300,7 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:898`). It declares the
+   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:904`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.

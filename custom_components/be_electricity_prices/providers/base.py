@@ -385,6 +385,12 @@ class InjectionRates:
     # against a plain arithmetic mean - that is the failure this flag exists
     # to prevent, and it is silent.
     spp_indexed: bool = False
+    # True when the formula resolves against the delivery month's PLAIN
+    # arithmetic mean (Eneco's Belpex-injectie, which reproduces that mean to
+    # four decimals). ``spp_indexed`` is the solar-weighted sibling; a card is
+    # one or the other, never both. Either way the coefficients are month
+    # coefficients, so the pricing engine must never hand them an hourly spot.
+    month_indexed: bool = False
     # True when the card taxes injection (professional cards do, at 21%).
     # None of these rates passes through the pricing engine's per-component
     # VAT gross-up, so ``apply_vat`` bakes them, like the fixed fees. Left

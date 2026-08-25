@@ -311,13 +311,17 @@ def _injection_is_spp_indexed(snapshot: SupplierSnapshot | None) -> bool:
 def _injection_on_month_mean(snapshot: SupplierSnapshot | None) -> bool:
     """True when the injection formula resolves against a MONTH mean.
 
-    Two ways in: the energy leg is itself month-mean priced, so the credit
-    rides the same mean, or the card indexes the credit on the monthly
-    Belpex_SPP while pricing energy some other way (energie.be Vast, a flat
-    rate with a monthly-indexed feed-in credit). Shared by the live tick, the
-    YTD walk and the backfill so all three resolve the credit identically.
+    Three ways in: the energy leg is itself month-mean priced, so the credit
+    rides the same mean; the card indexes the credit on the monthly Belpex_SPP
+    while pricing energy some other way (energie.be Vast, a flat rate with a
+    monthly-indexed feed-in credit); or it indexes it on the month's plain
+    arithmetic mean (Eneco's Belpex-injectie). Shared by the live tick, the YTD
+    walk and the backfill so all three resolve the credit identically.
     """
     if isinstance(getattr(snapshot, "energy", None), SpotMonthlyRates):
+        return True
+    inj = getattr(snapshot, "injection", None)
+    if bool(getattr(inj, "month_indexed", False)):
         return True
     return _injection_is_spp_indexed(snapshot)
 

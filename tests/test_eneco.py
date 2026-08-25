@@ -255,12 +255,14 @@ def test_fix_extracts_injection_rates() -> None:
     snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
     inj = snap.injection
     assert inj is not None
-    # Power Fix prints "Maandprijs 4,76 c/kWh" + a MONTHLY Belpex-injectie
-    # formula. Surface only the monthly indicative; the monthly
-    # coefficients must not be exposed as hourly-spot factor/base.
+    # Power Fix prints "Maandprijs 4,76 c/kWh" and a MONTHLY Belpex-injectie
+    # formula. Both are surfaced, with month_indexed marking the coefficients
+    # as month coefficients: the engine resolves them against the delivery
+    # month's mean and refuses them to the hourly-spot path.
     assert inj.current == pytest.approx(0.0476)
-    assert inj.factor is None
-    assert inj.base is None
+    assert inj.month_indexed is True
+    assert inj.factor == pytest.approx(0.8)
+    assert inj.base == pytest.approx(-0.0265)
     assert inj.formula is not None and "BELPEX" in inj.formula
 
 
@@ -268,12 +270,14 @@ def test_flex_extracts_injection_rates() -> None:
     snap = parse_snapshot(fixture_text("eneco_flex.pdf"), "power_flex", "test://flex")
     inj = snap.injection
     assert inj is not None
-    # Power Flex settles injection on the monthly Belpex-injectie, so it
-    # surfaces only the monthly indicative ("Maandprijs 4,76 c/kWh"); the
-    # monthly coefficients must not leak out as hourly-spot factor/base.
+    # Power Flex settles injection on the monthly Belpex-injectie. It surfaces
+    # the indicative AND the month coefficients, with month_indexed set: that
+    # flag is what routes them to the delivery month's mean and refuses them to
+    # the hourly-spot path, which is why they can be surfaced at all.
     assert inj.current == pytest.approx(0.0476)
-    assert inj.factor is None
-    assert inj.base is None
+    assert inj.month_indexed is True
+    assert inj.factor == pytest.approx(0.8)
+    assert inj.base == pytest.approx(-0.0265)
 
 
 def test_dynamic_extracts_injection_rates() -> None:
@@ -391,3 +395,49 @@ def test_flex_extracts_cohort_coefficients() -> None:
     assert base == pytest.approx(0.034312, rel=1e-4)
     ref = 96.8502 / 1000.0
     assert factor * ref + base == pytest.approx(snap.energy.current, rel=2e-3)
+
+
+def test_fix_and_flex_credit_the_delivery_month_not_the_printed_indicative() -> None:
+    """The card says the credit is "maandelijks geindexeerd op basis van de
+    indexatieparameter Belpex-injectie" and that the printed figures are "een
+    prijsinschatting ... berekend op basis van de LAATST GEKENDE waarde van
+    Belpex-injectie (07/2026)". So the printed rate is last month's index and
+    the volume settles on the delivery month's, retroactively.
+
+    Belpex-injectie is the plain arithmetic monthly mean of the Belgian
+    day-ahead: measured against the real 2026 series it reproduces the card's
+    own published values to four decimals (March 92,6102 against 92,6114 and
+    July 109,2488 against 109,2498), so the coefficients resolve exactly."""
+    from custom_components.be_electricity_prices.injection import (
+        _bake_monthly_injection,
+        _historical_injection_rate,
+        _injection_is_spot_formula,
+    )
+
+    snap = parse_snapshot(
+        fixture_text("eneco_flex_aug26.pdf"), "power_flex", "flanders"
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert inj.month_indexed is True
+    assert inj.factor == pytest.approx(0.84)
+    assert inj.base == pytest.approx(-0.028)
+
+    # Month coefficients are refused to the per-hour path outright, whatever
+    # else the card prints. That guard is what makes surfacing them safe.
+    assert _injection_is_spot_formula(inj, snap.energy) is False
+
+    august = 0.1293439  # the delivery month's own Belpex-injectie, EUR/kWh
+    assert _historical_injection_rate(inj, august) == pytest.approx(0.080649, abs=1e-6)
+    # The printed indicative is July's index, and 20,9% below what August pays.
+    assert inj.current == pytest.approx(0.0638)
+    # The live sensor bakes the same number the year-to-date bills.
+    baked = _bake_monthly_injection(snap, august)
+    assert baked.injection is not None
+    assert baked.injection.current == pytest.approx(0.080649, abs=1e-6)
+
+    # Power Dynamic keeps its HOURLY index and is untouched.
+    dyn = parse_snapshot(fixture_text("eneco_dyn.pdf"), "power_dynamic", "flanders")
+    assert dyn.injection is not None
+    assert dyn.injection.month_indexed is False
+    assert _injection_is_spot_formula(dyn.injection, dyn.energy) is True
