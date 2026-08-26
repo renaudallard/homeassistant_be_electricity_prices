@@ -353,6 +353,42 @@ def _extract_injection(text: str) -> InjectionRates:
     )
 
 
+# One BELIX row per meter. The label anchors are mandatory: an optional one
+# lets the pattern wander onto the consumption formula of the July 2026
+# dynamic re-upload, which is the trap the injection pattern's own mandatory
+# "Compteur" label already exists for.
+_BELIX_ROW_TAIL = (
+    rf"[^\n]*?\(([\d,]+)\s*x\s*BELIX\s*"
+    rf"([{SIGN_CHARS}])\s*([\d,]+)\)\s*\+\s*(\d+)\s*%\s*TVA"
+)
+_BELIX_BANDS: tuple[tuple[str, str], ...] = (
+    ("peak", r"Heures pleines"),
+    ("offpeak", r"Heures creuses"),
+    ("exclusive_night", r"Compteur exclusif nuit"),
+)
+
+
+def _belix_band_coefficients(text: str) -> dict[str, tuple[float, float]]:
+    """Per-meter BELIX ``(factor, base)`` on a Cociter variable card.
+
+    Same conversion as the mono row: the coefficients print c€/kWh against a
+    BELIX expressed in EUR/MWh, so the factor takes a x10 and the base a /100,
+    and the "+ N% TVA" printed outside the parens lands on both. The VAT is
+    read per row rather than hardcoded.
+    """
+    out: dict[str, tuple[float, float]] = {}
+    for key, label in _BELIX_BANDS:
+        match = re.search(label + _BELIX_ROW_TAIL, text)
+        if match is None:
+            continue
+        vat_mult = 1.0 + to_float(match.group(4)) / 100.0
+        out[key] = (
+            to_float(match.group(1)) * vat_mult * 10.0,
+            parse_sign(match.group(2)) * to_float(match.group(3)) * vat_mult / 100.0,
+        )
+    return out
+
+
 def _extract_energy(text: str, contract_id: str) -> EnergyRates:
     yearly_fee_match = re.search(r"(\d+,\d+)\s*€/an\s*\n?\s*TVAC", text)
     if yearly_fee_match is None:
@@ -397,6 +433,12 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
                 * vat_mult
                 / 100.0
             )
+        # The card prints FOUR formulas, one per meter, and only the mono row
+        # was read. A bi-hourly or exclusive-night cohort was therefore
+        # re-priced on the mono pair: at April's BELIX that is 6,7% low at
+        # peak and 7,8% high off-peak, and the night circuit, which draws the
+        # volume, is 7,8% high all day.
+        bands = _belix_band_coefficients(text)
         return VariableRates(
             current=to_float(mono.group(1)) / 100.0,
             peak=to_float(peak.group(1)) / 100.0 if peak else None,
@@ -415,6 +457,17 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
             month_indexed=formula_factor is not None,
             formula_factor=formula_factor,
             formula_base=formula_base,
+            formula_factor_peak=bands.get("peak", (None, None))[0],
+            formula_base_peak=bands.get("peak", (None, None))[1],
+            formula_factor_offpeak=bands.get("offpeak", (None, None))[0],
+            formula_base_offpeak=bands.get("offpeak", (None, None))[1],
+            # A dedicated night circuit is its own contractual formula, not
+            # the off-peak one. They coincide on this card generation, which
+            # is exactly why it is parsed separately rather than aliased.
+            formula_factor_exclusive_night=bands.get("exclusive_night", (None, None))[
+                0
+            ],
+            formula_base_exclusive_night=bands.get("exclusive_night", (None, None))[1],
         )
 
     # cociter_dynamic

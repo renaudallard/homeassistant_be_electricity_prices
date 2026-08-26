@@ -551,3 +551,45 @@ def test_variable_bills_the_delivery_month_not_the_printed_indicative() -> None:
         )
         is None
     )
+
+
+def test_variable_carries_a_formula_per_meter() -> None:
+    """The card prints FOUR formulas, one per meter: "Compteur monohoraire
+    (0,075 x BELIX + 5) + 6% TVA ... Heures pleines (0,085 x BELIX + 5) ...
+    Heures creuses (0,065 x BELIX + 5) ... Compteur exclusif nuit (0,065 x
+    BELIX + 5)". Only the mono row was read, so a bi-hourly or night cohort
+    was re-priced on the mono pair.
+
+    The night circuit is parsed on its own key even though it coincides with
+    off-peak here: they are separate contractual formulas and Cociter can
+    move one without the other.
+    """
+    snap = parse_snapshot(
+        fixture_text("cociter_var_2604.pdf"), "cociter_variable", "t://v", "2026-04"
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    # c/kWh per EUR/MWh of index, with the "+ 6% TVA" printed outside the
+    # parens landing on both coefficients.
+    assert energy.formula_factor == pytest.approx(0.075 * 1.06 * 10)
+    assert energy.formula_factor_peak == pytest.approx(0.085 * 1.06 * 10)
+    assert energy.formula_factor_offpeak == pytest.approx(0.065 * 1.06 * 10)
+    assert energy.formula_factor_exclusive_night == pytest.approx(0.065 * 1.06 * 10)
+    for base in (
+        energy.formula_base,
+        energy.formula_base_peak,
+        energy.formula_base_offpeak,
+        energy.formula_base_exclusive_night,
+    ):
+        assert base == pytest.approx(5 * 1.06 / 100)
+
+
+def test_the_dynamic_card_gains_no_bands() -> None:
+    """The dynamic card publishes one SMR3 formula and excludes the very
+    meter this is about: "Si le Client a un compteur exclusif nuit,
+    l'application du present Contrat a prix dynamique est exclue"."""
+    from custom_components.be_electricity_prices.providers.cociter import (
+        _belix_band_coefficients,
+    )
+
+    assert _belix_band_coefficients(fixture_text("cociter_dyn_2604.pdf")) == {}
