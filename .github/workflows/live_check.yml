@@ -166,11 +166,9 @@ jobs:
             echo
             echo "$run_url"
             echo
-            # These are the ones that failed every attempt of the retry
-            # loop, so they are what to look at. The failures table below is
-            # filtered to match: a check that any attempt passed is a slow
-            # runner or a supplier blip, not a broken extractor, and listing
-            # it invites someone to investigate a timeout that is not there.
+            # The report below is the LAST attempt's, which on a slow runner
+            # also carries checks that failed only that once. These are the
+            # ones that failed every attempt, so they are what to look at.
             echo "## Persistent failures"
             echo
             echo "Failed on every attempt of the retry loop:"
@@ -180,37 +178,12 @@ jobs:
             echo "## Last report"
             echo
             if [ -s report.md ]; then
-              # Two edits to the last attempt's report.
-              #
-              # Drop the "## All checks" checklist: the full report outgrew
-              # GitHub's 65,536-character issue body limit, so createIssue
-              # rejected it and nothing was filed at all. It only repeats
-              # what the failures table says.
-              #
-              # And drop failures table rows for checks that a LATER attempt
-              # passed. The table is the last attempt's, so on a slow runner
-              # it carries one-off network timeouts beside the real
-              # regressions, and they read as part of the fault being
-              # reported. Only the rows are filtered; the count in the
-              # heading is the raw one, and the omission is stated at the end
-              # so nothing disappears silently.
-              awk 'NR==FNR{keep[$0]=1; next}
-                   /^## All checks$/{skip=1; next}
-                   /^## /{skip=0; infail=($0=="## Failures")}
-                   skip{next}
-                   {
-                     if (infail && $0 ~ /^\| `/) {
-                       row=$0
-                       sub(/^\| `/, "", row)
-                       sub(/` \|.*$/, "", row)
-                       if (!(row in keep)) { dropped++; next }
-                     }
-                     print
-                   }
-                   END{
-                     if (dropped)
-                       printf "\n_%d transient failure(s) that a later attempt passed are omitted from the table above; the run log has them._\n", dropped
-                   }' persistent_failures.txt report.md
+              # The full report outgrew GitHub's 65,536-character issue
+              # body limit, so createIssue rejected it and nothing was
+              # filed. Drop the "## All checks" checklist (the bulk, and
+              # it only repeats what the failures table already says);
+              # keep the failures table and the metrics block.
+              awk '/^## All checks$/{skip=1; next} /^## /{skip=0} !skip' report.md
             else
               # No report at all means the harness died before printing
               # (see the CancelledError note in live_check.py). Filing the
