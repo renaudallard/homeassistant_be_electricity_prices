@@ -83,20 +83,48 @@ def test_fix_extracts_consumption_rates() -> None:
     assert snap.energy.exclusive_night == pytest.approx(0.1671)
 
 
-def test_injection_is_flat_monthly_indicative() -> None:
-    # Bolt's feed-in is a flat monthly indicative printed under the
-    # "Injection" header ("Prix mensuel 5,31 ..."), the same on fix and
-    # variable cards. It is anchored on that header, not a positional
-    # "Prix mensuel" match, and carries no spot factor/base.
+def test_injection_carries_the_quarter_hourly_formula() -> None:
+    """The printed figure is an illustration, not the rate. The card says so:
+    "Le tableau ci-dessus indique le prix de vente base sur la valeur Belpex
+    la plus recente. Dans la facturation, l'injection par quart d'heure est
+    multipliee par la valeur Belpex pour ce quart d'heure." The fixed card
+    goes further: "Contrairement au prix fixe de consommation ..., le prix
+    pour l'injection est quant a lui variable selon l'indice Belpex."
+
+    The figure survives as the fallback for an entry with no ENTSO-E key.
+    """
     for cid, fixture in (
         ("bolt_fix", "bolt_fix.pdf"),
         ("bolt_variable", "bolt_variable.pdf"),
     ):
         snap = parse_snapshot(cid, fixture_text(fixture, layout=True), "wallonia")
-        assert snap.injection is not None
-        assert snap.injection.current == pytest.approx(0.0531)
-        assert snap.injection.factor is None
-        assert snap.injection.base is None
+        inj = snap.injection
+        assert inj is not None, cid
+        assert inj.current == pytest.approx(0.0531), cid
+        assert inj.factor == pytest.approx(0.94), cid
+        assert inj.base == pytest.approx(-11.33 / 1000.0), cid
+        assert inj.slot_indexed is True, cid
+
+
+def test_a_slot_indexed_credit_beats_its_printed_figure() -> None:
+    """slot_indexed exists to stop the engine preferring a printed ``current``
+    on a card whose ENERGY is static. Without it a Bolt fixed entry credits
+    5,31 c/kWh every quarter of the year, and can never show the negative
+    rates the contract really pays: 15% of Apr-Aug 2026 quarters are below
+    zero, which a flat positive figure cannot express.
+    """
+    from custom_components.be_electricity_prices.injection import (
+        _injection_is_spot_formula,
+    )
+
+    snap = parse_snapshot(
+        "bolt_fix", fixture_text("bolt_fix.pdf", layout=True), "wallonia"
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert _injection_is_spot_formula(inj, snap.energy) is True
+    # A quarter at 5 EUR/MWh is a NEGATIVE credit; the flat figure is +0,0531.
+    assert inj.factor * 0.005 + inj.base < 0.0
 
 
 def test_injection_accepts_negative_second_column() -> None:
@@ -108,8 +136,11 @@ def test_injection_accepts_negative_second_column() -> None:
     inj = bolt_mod._extract_injection(text, "fixed")
     assert inj is not None
     assert inj.current == pytest.approx(0.034)
+    # This stub carries no formula table, so the figure is all there is and
+    # crediting it flat beats crediting nothing.
     assert inj.factor is None
     assert inj.base is None
+    assert inj.slot_indexed is False
 
 
 def test_variable_missing_bihourly_rates_fails_loud() -> None:
@@ -349,17 +380,22 @@ def test_dynamic_injection_selected_by_factor_not_position() -> None:
     assert inj.base == pytest.approx(-11.33 / 1000.0)
 
 
-def test_variable_unchanged_by_dynamic_addition() -> None:
-    """Adding the dynamic contract must not change how the variable card prices
-    its resolved monthly rate."""
+def test_variable_energy_unchanged_by_dynamic_addition() -> None:
+    """Adding the dynamic contract must not change how the variable card
+    prices its resolved monthly ENERGY rate.
+
+    This used to assert that the variable card's INJECTION carried no
+    factor/base either. That was never what the card said - the same Belpex
+    formula table sits on the variable card as on the dynamic one - so the
+    assertion pinned the defect rather than the intent. The energy half is
+    the part this test exists for.
+    """
     snap = parse_snapshot(
         "bolt_variable", fixture_text("bolt_variable.pdf", layout=True), "wallonia"
     )
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.current == pytest.approx(0.1325)
-    # Variable injection stays the flat monthly indicative (not spot-indexed).
-    assert snap.injection is not None
-    assert snap.injection.factor is None and snap.injection.base is None
+    assert snap.energy.formula_factor is None
 
 
 def test_publication_month_tolerates_a_misspelled_accent() -> None:

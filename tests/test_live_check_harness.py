@@ -999,7 +999,8 @@ def test_every_month_indexed_card_can_collect_a_key() -> None:
     printed figure. Nine contracts across five suppliers shipped that way.
 
     ``_INJECTION_SHAPE`` is the live check's own record of which cards carry a
-    month formula, so it is what the registry is held against here. A contract
+    formula their energy leg does not fetch spots for, month or per-slot, so
+    it is what the registry is held against here. A contract
     whose KIND already collects the key for its energy leg (dynamic,
     spot_monthly) is exempt and must leave the flag False: energie.be Variabel
     is spot_monthly and would otherwise be asked for a key it already has.
@@ -1013,7 +1014,7 @@ def test_every_month_indexed_card_can_collect_a_key() -> None:
     missing = sorted(
         cid
         for cid, shape in lc._INJECTION_SHAPE.items()
-        if shape in ("spp", "month")
+        if shape in ("spp", "month", "spot")
         and cid in by_id
         and by_id[cid].kind not in SPOT_PRICED_CONTRACT_KINDS
         and not by_id[cid].spot_indexed_injection

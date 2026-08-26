@@ -388,7 +388,7 @@ hour is skipped, because `factor * spot + base` needs both terms
 month, or a non-static rate kind reaching the static path) skips just that hour
 rather than tearing the whole backfill down (`backfill.py:441`).
 
-The injection credit reuses `_historical_injection_rate` (`injection.py:346`,
+The injection credit reuses `_historical_injection_rate` (`injection.py:353`,
 called at `backfill.py:479`), the same coordinator helper the live YTD path uses, so a
 monthly-indexed, spot-indexed, or fixed injection rate is resolved identically in
 both places.

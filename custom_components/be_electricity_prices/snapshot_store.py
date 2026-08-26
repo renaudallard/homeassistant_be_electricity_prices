@@ -621,7 +621,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v34: the OCTA+ variable cards now carry their monthly Epex RLP coefficients
 # per meter, including a separate night-circuit pair, and month_indexed. A v33
 # snapshot holds only the card's V-test 12-month forward estimate.
-_SNAPSHOT_SCHEMA_VERSION = 34
+# v35: every non-dynamic Bolt card now carries the quarter-hourly Belpex
+# injection formula its own text describes, flagged slot_indexed, beside the
+# illustrative figure it used to credit flat. A v34 snapshot holds the figure
+# alone, which is a quarterly-lagged constant that can never go negative.
+_SNAPSHOT_SCHEMA_VERSION = 35
 
 
 def _snapshot_to_dict(

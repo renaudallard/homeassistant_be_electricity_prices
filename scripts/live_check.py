@@ -1987,6 +1987,23 @@ _INJECTION_SHAPE: dict[str, str] = {
     "ebem_variable": "spp",
     "ebem_basic_plus": "spp",
     "ecofix_flexy": "monthly",
+    # Every non-dynamic Bolt card prints the quarter-hourly Belpex formula
+    # beside its illustrative figure and says the billing multiplies each
+    # quarter by that quarter's own index. Losing the formula puts the credit
+    # back on a quarterly-lagged constant that can never go negative, and 15%
+    # of Apr-Aug 2026 quarters are.
+    "bolt_fix": "spot",
+    "bolt_plenty_fix": "spot",
+    "bolt_variable": "spot",
+    "bolt_plenty": "spot",
+    "bolt_online": "spot",
+    "bolt_plenty_online": "spot",
+    "bolt_pro_fix": "spot",
+    "bolt_pro_plenty_fix": "spot",
+    "bolt_pro_variable": "spot",
+    "bolt_pro_plenty": "spot",
+    "bolt_pro_online": "spot",
+    "bolt_pro_plenty_online": "spot",
     # Cociter Variable's injection is itself spot-indexed (factor x BELPEX
     # + base, current None at parse time). Pinning it to "spot" asserts
     # factor+base unconditionally; the "present" default only checks them

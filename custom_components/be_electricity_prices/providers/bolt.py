@@ -791,6 +791,45 @@ def _extract_publication_month(text: str) -> str:
     return match.group(1) if match else ""
 
 
+def _with_slot_formula(text: str, current: float) -> InjectionRates:
+    """Injection leg for a non-dynamic card: the printed figure AND the
+    quarter-hourly formula stated beside it.
+
+    Bolt's fixed and variable cards carry the same Belpex formula table the
+    dynamic card does, and say the printed column is only an illustration:
+    *"Le tableau ci-dessus indique le prix de vente base sur la valeur Belpex
+    la plus recente. Dans la facturation, l'injection par quart d'heure est
+    multipliee par la valeur Belpex pour ce quart d'heure."* The FIXED card
+    adds *"Contrairement au prix fixe de consommation pour l'electricite, le
+    prix pour l'injection est quant a lui variable selon l'indice Belpex."*
+
+    That printed value moves only when the QUARTERLY index does, and the
+    archive shows it: 202604, 202605 and 202606 all print 5,31; 202607 and
+    202608 both print 3,40. Crediting it flat misses every negative quarter
+    the contract really pays, and 15% of Apr-Aug 2026 quarters are negative.
+
+    The formula row is picked out by ``factor < 1``, the same discriminator
+    the dynamic branch uses: Bolt redistributes a fraction of the spot on the
+    injection side and marks it up on every consumption row. ``current`` is
+    kept as the fallback for an entry with no ENTSO-E key.
+    """
+    matches = _BELPEX_FORMULA_RE.findall(text)
+    inj = next((m for m in matches if to_float(m[0]) < 1.0), None)
+    if inj is None:
+        # No formula on this card generation: the printed figure is all there
+        # is, and crediting it is better than crediting nothing.
+        return InjectionRates(current=current, factor=None, base=None, formula=None)
+    return InjectionRates(
+        current=current,
+        # Feed-in is VAT-exempt for residential, so no VAT bake; base goes
+        # EUR/MWh -> EUR/kWh.
+        factor=to_float(inj[0]),
+        base=parse_sign(inj[1]) * to_float(inj[2]) / 1000.0,
+        formula=f"Belpex * {inj[0]} {inj[1]} {inj[2]}",
+        slot_indexed=True,
+    )
+
+
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     if kind == "dynamic":
         # Dynamic injection is spot-indexed: the same Belpex formula table
@@ -826,7 +865,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     m = re.search(r"Injection\b.*?Prix mensuel\s+(-?[\d.,]+)\s+-?[\d.,]+", text, re.S)
     if m:
         current = to_float(m.group(1)) / 100.0
-        return InjectionRates(current=current, factor=None, base=None, formula=None)
+        return _with_slot_formula(text, current)
     # A pre-April-2026 archive card has no "Prix mensuel" row. It prints the
     # indicative under the "Tarif d'injection (HTVA)" heading as
     # "Injection (c€/kWh) 5,87 6,69 3,78". Missing it dropped the feed-in
@@ -847,12 +886,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     )
     if not legacy:
         return None
-    return InjectionRates(
-        current=to_float(legacy.group(1)) / 100.0,
-        factor=None,
-        base=None,
-        formula=None,
-    )
+    return _with_slot_formula(text, to_float(legacy.group(1)) / 100.0)
 
 
 # ---- taxes --------------------------------------------------------------------
@@ -1250,6 +1284,11 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             professional=c.professional,
+            # Every non-dynamic card bills injection per quarter-hour off the
+            # Belpex index, so the credit needs spots the fixed or variable
+            # energy leg never fetches. The dynamic pair collects the key
+            # through its own energy formula.
+            spot_indexed_injection=c.kind != "dynamic",
         )
         for c in _CONTRACTS
     ),

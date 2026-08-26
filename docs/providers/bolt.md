@@ -61,7 +61,7 @@ all three regions still live inside that one French document. The listing page
 
 Bolt declares seven residential-electricity contracts and a professional edition of each, fourteen
 in all (`bolt.py:144`). All are region-unrestricted (default `regions` = all three). Six of the
-seven are fixed / variable with a flat monthly-indicative injection; the seventh, `bolt_dynamic`,
+seven are fixed / variable, all billing injection per quarter-hour off Belpex; the seventh, `bolt_dynamic`,
 is a `quarter_hourly` dynamic contract that depends on the ENTSO-E spot and has a spot-indexed
 injection (see Contracts / Injection below).
 
@@ -274,11 +274,11 @@ newline is expected, replacing them with `\n` so one set of regexes covers every
 | Snapshot field | Extractor | Notes |
 | --- | --- | --- |
 | `energy` | `_extract_energy` (`bolt.py:689`) | `FixedRates` or `VariableRates` |
-| `injection` | `_extract_injection` (`bolt.py:794`) | flat monthly indicative (`factor`/`base` = `None`); spot-indexed `factor`/`base` for `bolt_dynamic` |
+| `injection` | `_extract_injection` | printed figure PLUS the quarter-hourly `factor`/`base`, flagged `slot_indexed`; `current=None` with `factor`/`base` for `bolt_dynamic` |
 | `publication_label` | `_extract_publication_month` (`bolt.py:779`) | `<Month> <Year>` header. The accent classes span the whole Latin-1 range rather than the accents French month names actually use: Bolt's August 2026 fixed card prints "Aôut 2026" (circumflex on the wrong vowel) and an exact class blanked the label on that typo. The value is display-only and never feeds pricing, so a misspelling is tolerated verbatim rather than corrected or dropped. |
-| `taxes.federal_excise`, `energy_contribution`, `region_connection_fee` | `_extract_taxes` (`bolt.py:903`) | 3-column FL/WAL/BX rows, sliced by region |
-| `taxes.energy_fund_eur_per_month` | `_extract_energy_fund` (`bolt.py:966`) | Flanders only. The card prints both categories: a domiciled residential connection pays the `résidentiel` row, which is `-` (0); a **professional** contract pays the `non-résidentiel` row (10,07 EUR/month on the August 2026 card). The two rows need separate patterns, since the residential value sits after a U+2028 and the non-residential values are inline on the label line |
-| `taxes.{flanders,wallonia,brussels}_renewables` | `_extract_renewables` (`bolt.py:1007`) | certificats verts + Flanders WKK; zeroed outside the active region |
+| `taxes.federal_excise`, `energy_contribution`, `region_connection_fee` | `_extract_taxes` (`bolt.py:937`) | 3-column FL/WAL/BX rows, sliced by region |
+| `taxes.energy_fund_eur_per_month` | `_extract_energy_fund` (`bolt.py:1000`) | Flanders only. The card prints both categories: a domiciled residential connection pays the `résidentiel` row, which is `-` (0); a **professional** contract pays the `non-résidentiel` row (10,07 EUR/month on the August 2026 card). The two rows need separate patterns, since the residential value sits after a U+2028 and the non-residential values are inline on the label line |
+| `taxes.{flanders,wallonia,brussels}_renewables` | `_extract_renewables` (`bolt.py:1041`) | certificats verts + Flanders WKK; zeroed outside the active region |
 | `dsos` | `_extract_flanders_dsos` / `_extract_wallonia_dsos` / `_extract_brussels_dsos` | picked by region |
 | `valid_until` | `parse_valid_until` (`_pdf.py:947`) | always `None` in practice; Bolt prints no parseable validity date |
 
@@ -308,7 +308,7 @@ two `Jour Nuit` subheads: the first pair is for consumption, the second is for i
 the two subheads, so the parser scopes a `re.S` span between them and takes `pairs[-1]`. This is the
 stable invariant because `pdfplumber` sometimes renders the annual-estimate column vertically above
 the row (variable cards) and sometimes drops it entirely (fixed cards), so a fixed positional offset
-would break. `test_variable_uses_current_monthly_not_annual_estimate` (`tests/test_bolt.py:123`)
+would break. `test_variable_uses_current_monthly_not_annual_estimate` (`tests/test_bolt.py:154`)
 verifies the parser skips the annual estimate (15,20 / 15,20 illustrative) and picks the current
 monthly (14,56 / 12,09 illustrative).
 
@@ -320,19 +320,33 @@ The fallback logic when no bi-horaire pair is found is kind-dependent (`bolt.py:
   illustrative).
 - `variable`: a miss is a layout drift, not a mono contract; variable cards always publish distinct
   Jour / Nuit rates, so the parser raises rather than silently billing a bi-hourly user at the mono
-  rate. `test_variable_missing_bihourly_rates_fails_loud` (`tests/test_bolt.py:115`) enforces this.
+  rate. `test_variable_missing_bihourly_rates_fails_loud` (`tests/test_bolt.py:146`) enforces this.
 
 `exclusive_night` is populated for every card from `Prix mensuel` group 2; the pricing engine routes
 an exclusive-night meter through it.
 
 ### Injection block (`_extract_injection`)
 
-For fixed and variable contracts, Bolt's feed-in is a flat monthly indicative (`Prix mensuel 5,31
-4,03`) inside the block following the `Injection` header. This is INJECTION SHAPE (a) in the
-three-shape taxonomy: monthly-indicative-only. `factor`, `base` and `formula` stay `None`
-(`bolt.py:541`); there is no spot dependency. For `bolt_dynamic` the same card's injection formula
-row (`Belpex * 0,94 - 11,33`, the first formula that differs from consumption) is parsed instead into
-a spot-indexed `InjectionRates(current=None, factor, base)` (SHAPE (c)), VAT-exempt.
+Every Bolt card, dynamic or not, bills injection PER QUARTER-HOUR off the Belpex index, and the
+non-dynamic cards say so in the same paragraph as the figure: *"Le tableau ci-dessus indique le prix
+de vente basé sur la valeur Belpex la plus récente. Dans la facturation, l'injection par quart
+d'heure est multipliée par la valeur Belpex pour ce quart d'heure."* The fixed card is blunter
+still: *"Contrairement au prix fixe de consommation pour l'électricité, le prix pour l'injection est
+quant à lui variable selon l'indice Belpex."*
+
+So the `Prix mensuel 5,31 4,03` figure under the `Injection` header is an illustration at the latest
+QUARTERLY index, not a rate. The archive shows it standing still while the market does not: 202604,
+202605 and 202606 all print 5,31; 202607 and 202608 both print 3,40. Crediting it flat also cannot
+express a negative credit at all, and 15% of Apr–Aug 2026 quarters are negative under the card's own
+formula.
+
+`_with_slot_formula` therefore parses the figure AND the `Belpex * 0,94 - 11,33` row beside it,
+marking the leg `slot_indexed`. That flag is what stops the pricing engine preferring a printed
+`current` on a card whose ENERGY is static — correct for a card publishing a realized monthly rate,
+wrong for this one. The figure is kept as the fallback for an entry with no ENTSO-E key. This is
+INJECTION SHAPE (c): per-slot formula on a static-energy card, the same shape `bolt_dynamic` has
+always had, and VAT-exempt on both. A card generation that prints no formula table keeps the figure
+alone rather than losing the credit.
 
 Two land mines are baked into the anchor (`bolt.py:537`):
 
@@ -342,9 +356,9 @@ Two land mines are baked into the anchor (`bolt.py:537`):
 - The July 2026 fix cards print a NEGATIVE second column (`Prix mensuel 3,40 -0,43`, the "Exclusif
   nuit" injection column). Only the first column is billed, but the second is a required anchor
   token, so the regex allows an optional minus on it (`-?[\d.,]+`).
-  `test_injection_accepts_negative_second_column` (`tests/test_bolt.py:102`) locks this in.
+  `test_injection_accepts_negative_second_column` (`tests/test_bolt.py:130`) locks this in.
 
-`test_injection_is_flat_monthly_indicative` (`tests/test_bolt.py:86`) checks both fix and variable
+`test_injection_carries_the_quarter_hourly_formula` checks both fix and variable
 cards yield `current` = 5,31 c/kWh (illustrative) with `factor`/`base` `None`.
 
 ### Tax block (`_extract_taxes`)
@@ -360,7 +374,7 @@ permitted (returns 0). Its regex eats up to three integer footnote markers ahead
 values (`bolt.py:582`); the `{0,3}` cap deliberately stops a future integer-only Flanders value from
 being mistaken for a footnote and silently shifting the columns.
 
-`test_taxes_split_correctly_per_region` (`tests/test_bolt.py:137`) checks nationwide excise
+`test_taxes_split_correctly_per_region` (`tests/test_bolt.py:168`) checks nationwide excise
 (0.050329) and contribution (0.002042), Wallonia connection fee (0.00075), and per-region renewables
 (all illustrative).
 
@@ -379,9 +393,9 @@ renewables = `(1.17 + 0.39)/100` (cert + WKK, illustrative), proving the footnot
 Bolt maps every DSO sub-area the integration knows, region by region. A structural quirk that spans
 all three parsers: `pdfplumber` sometimes renders a row vertically (one number per line), so the
 regexes use `\s+` (which matches newlines) between values to handle both layouts.
-`test_wallonia_dso_handles_vertical_layout` (`tests/test_bolt.py:163`) exercises this.
+`test_wallonia_dso_handles_vertical_layout` (`tests/test_bolt.py:194`) exercises this.
 
-**Flanders (`_extract_flanders_dsos`, `bolt.py:1054`).** Eight Fluvius sub-areas via `_FLANDERS_LABELS`
+**Flanders (`_extract_flanders_dsos`, `bolt.py:1088`).** Eight Fluvius sub-areas via `_FLANDERS_LABELS`
 (`bolt.py:641`). Note the label-to-key mapping is not one-to-one by name: `Fluvius Kempen` maps to
 `DSO_FLUVIUS_IVEKA` and `Fluvius Midden-Vl` to `DSO_FLUVIUS_INTERGEM`. Each row has 8 numbers; the
 extractor bills the digital (SMR3) block (columns 1-4 plus the prosumer column 8) and ignores the
@@ -393,7 +407,7 @@ the general case, but Bolt still exposes a prosumer column, which is read into
 (`tests/test_bolt.py:189`) checks Antwerpen: transport 0.0, distribution 0.0535, exclusive-night
 0.0481 (< distribution), capacity 52.37 (all illustrative).
 
-**Wallonia (`_extract_wallonia_dsos`, `bolt.py:1120`).** Five DSOs via `_WALLONIA_LABELS`
+**Wallonia (`_extract_wallonia_dsos`, `bolt.py:1154`).** Five DSOs via `_WALLONIA_LABELS`
 (`bolt.py:710`). Ten numbers per row: mono, jour, nuit, excl_nuit, PIC, MEDIUM, ECO, transport,
 terme_fixe (EUR/an), prosumer (EUR/kVA/an). PIC/MEDIUM/ECO populate the CWaPE Tarif Impact band
 columns (`distribution_pic` / `_medium` / `_eco`); `terme_fixe` becomes `data_management_per_year`.
@@ -414,10 +428,10 @@ rings HA's notification bell at most once per boot. Three outcomes (`bolt.py:768
   layout and the compensating swap now inverts correct values, so it should be removed.
 
 The swap needs manual re-validation at least every 6 months (last done 2026-05, next due 2026-11,
-`bolt.py:706`). `test_resa_is_cheaper_than_rew_after_label_swap` (`tests/test_bolt.py:179`) guards
+`bolt.py:706`). `test_resa_is_cheaper_than_rew_after_label_swap` (`tests/test_bolt.py:210`) guards
 the invariant in CI.
 
-**Brussels (`_extract_brussels_dsos`, `bolt.py:1206`).** One row, `Sibelga`, with six captured
+**Brussels (`_extract_brussels_dsos`, `bolt.py:1240`).** One row, `Sibelga`, with six captured
 numbers: mono, jour, nuit, excl_nuit, transport, terme_fixe (the prosumer trailing token is `-`).
 The exclusive-night column (group 4) is wired into `distribution_exclusive_night` via the shared
 `brussels_sibelga_overlay` builder (`bolt.py:1179`); earlier it was dropped, which made a Brussels
@@ -426,7 +440,7 @@ Sibelga overlay also carries the Brussels Brugel OSP annual-fee table via `parse
 (`bolt.py:831`,
 `_pdf.py:553`); Bolt prints `Obligations de service publique` with a lowercase `s`, which the
 case-insensitive helper handles. A missing Sibelga row returns an empty dict (permitted).
-`test_brussels_extracts_sibelga` (`tests/test_bolt.py:208`) checks distribution 0.0996, off-peak
+`test_brussels_extracts_sibelga` (`tests/test_bolt.py:239`) checks distribution 0.0996, off-peak
 0.0753, exclusive-night 0.0753, transport 0.0227 (all illustrative).
 
 ## Quirks and historical bugs (the land mines)
@@ -477,20 +491,20 @@ routes through the `pdfplumber` layout extractor so tests see the same text the 
 
 Ordered by likelihood of breaking when Bolt re-renders or restructures a card:
 
-1. **DSO row regexes** (`_extract_flanders_dsos` `bolt.py:1054`, `_extract_wallonia_dsos`
-   `bolt.py:719`, `_extract_brussels_dsos` `bolt.py:1206`). Column-count changes, a renamed sub-area
+1. **DSO row regexes** (`_extract_flanders_dsos` `bolt.py:1088`, `_extract_wallonia_dsos`
+   `bolt.py:719`, `_extract_brussels_dsos` `bolt.py:1240`). Column-count changes, a renamed sub-area
    label, or a new footnote marker breaks these first. A row that stops matching is silently dropped
    (Flanders/Brussels) or raises via the Wallonia invariant path.
-2. **RESA/REW swap** (`_WALLONIA_LABELS` `bolt.py:1111`). If the ERROR invariant fires, Bolt probably
+2. **RESA/REW swap** (`_WALLONIA_LABELS` `bolt.py:1145`). If the ERROR invariant fires, Bolt probably
    fixed the upstream layout; remove the swap and re-point the labels straight.
 3. **`_extract_energy` bi-horaire span** (`bolt.py:689`). The two-`Jour Nuit`-subhead anchor is
    fragile; if Bolt reorders the injection/consumption blocks or drops a subhead, the variable path
    raises loud.
 4. **`_extract_yearly_fee`** (`bolt.py:558`). A phrasing change away from `€ N / mois` raises.
-5. **`_extract_injection`** (`bolt.py:794`). A relabeled `Injection` header or a third
+5. **`_extract_injection`** (`bolt.py:833`). A relabeled `Injection` header or a third
    consumption-side `Prix mensuel` row shifts the anchor; a new second-column sign convention needs
    the `-?` tolerance revisited.
-6. **`_extract_taxes` / `_extract_renewables`** (`bolt.py:1007`, `bolt.py:1007`). Federal levy and
+6. **`_extract_taxes` / `_extract_renewables`** (`bolt.py:1041`, `bolt.py:1041`). Federal levy and
    certificats-verts misses raise; the connection-fee footnote `{0,3}` cap may need widening if Bolt
    adds markers.
 7. **URL construction** (`_document_url` `bolt.py:248`, `_resolve_variable_suffix` `bolt.py:263`).

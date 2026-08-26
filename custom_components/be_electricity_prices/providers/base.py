@@ -413,6 +413,22 @@ class InjectionRates:
     # one or the other, never both. Either way the coefficients are month
     # coefficients, so the pricing engine must never hand them an hourly spot.
     month_indexed: bool = False
+    # True when the card bills the credit PER SETTLEMENT SLOT whatever the
+    # energy leg does, so the printed figure is an illustration rather than the
+    # rate. Bolt's fixed and variable cards say it outright: *"Le tableau
+    # ci-dessus indique le prix de vente base sur la valeur Belpex la plus
+    # recente. Dans la facturation, l'injection par quart d'heure est
+    # multipliee par la valeur Belpex pour ce quart d'heure"*, and, on the
+    # FIXED card, *"Contrairement au prix fixe de consommation ..., le prix
+    # pour l'injection est quant a lui variable selon l'indice Belpex"*.
+    #
+    # Without it the engine prefers a printed ``current`` on any card whose
+    # ENERGY is static, which is right for the cards that publish a realized
+    # monthly rate and wrong for these. ``current`` is still kept, as the
+    # fallback for an entry with no ENTSO-E key. Mutually exclusive with
+    # ``month_indexed`` / ``spp_indexed``: a credit settles per slot or per
+    # month, never both.
+    slot_indexed: bool = False
     # An explicit guaranteed minimum in EUR/kWh, for a card that promises more
     # than "never negative". EnergyVision guarantees 1 c/kWh: *"Als de
     # berekening van onze formule lager zou uitkomen dan 1 EURcent/kWh, dan

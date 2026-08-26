@@ -96,9 +96,10 @@ def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> boo
     even though the ENERGY contract isn't dynamic.
 
     The case is a static-energy card (Fixed / Variable / TOU) whose
-    injection is a per-hour spot formula (``factor``/``base``) with no
-    printed monthly indicative (``current is None``): Cociter Variable.
-    Such a card doesn't fetch ENTSO-E spots through the DynamicRates
+    injection is a per-slot spot formula (``factor``/``base``), either with
+    no printed indicative at all (Cociter Variable) or with one the card
+    labels an illustration (``slot_indexed``: every Bolt fixed and variable
+    card). Such a card doesn't fetch ENTSO-E spots through the DynamicRates
     energy path, so the coordinator must fetch spots for it too (and the
     config flow must collect an API key) to credit the injection.
     DynamicRates contracts already fetch spots via the energy
@@ -109,7 +110,7 @@ def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> boo
     inj = snapshot.injection
     return (
         inj is not None
-        and inj.current is None
+        and (inj.current is None or inj.slot_indexed)
         and inj.factor is not None
         and inj.base is not None
         and not isinstance(snapshot.energy, DynamicRates)
@@ -225,7 +226,13 @@ def _injection_is_spot_formula(inj: InjectionRates, energy: EnergyRates) -> bool
     return (
         inj.factor is not None
         and inj.base is not None
-        and (isinstance(energy, DynamicRates) or inj.current is None)
+        and (
+            isinstance(energy, DynamicRates)
+            or inj.current is None
+            # A card that bills per slot says so, and then the printed figure
+            # is an illustration rather than a rate to prefer.
+            or inj.slot_indexed
+        )
     )
 
 
