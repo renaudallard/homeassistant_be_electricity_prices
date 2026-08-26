@@ -2789,6 +2789,75 @@ def test_compare_floored_injection_averages_the_slot_rates() -> None:
     assert weighted < per_slot
 
 
+def test_compare_prices_a_slot_indexed_credit_off_the_window_not_the_clock(
+    freezer: Any,
+) -> None:
+    """A card that settles per slot beside a printed illustration is quoted
+    from the window, not from whichever hour the dialog opened in.
+
+    Every Bolt fixed and variable card carries this shape: a printed
+    indicative kept only as the fallback for an entry with no ENTSO-E key,
+    beside the Belpex formula the card says it really bills. The branch that
+    prices a spot formula used to ask only "is the energy dynamic, or is
+    there no printed figure", so these cards fell past it into the live
+    helper, which resolves the credit at the current slot. That valued a
+    whole year of export at one hour's spot, and the answer moved every time
+    the page was reopened."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import InjectionRates
+    from tests import make_entry, make_snapshot
+
+    # The Bolt shape tests/test_bolt.py pins: factor < 1, a negative base and
+    # the printed figure kept beside them.
+    inj = InjectionRates(
+        current=0.0531,
+        factor=0.94,
+        base=-0.01133,
+        formula="Belpex * 0,94 - 11,33",
+        slot_indexed=True,
+    )
+    snap = make_snapshot(supplier="bolt", contract="bolt_variable", injection=inj)
+    entry = make_entry(solar_regime="injection", injection_kwh="sensor.inj")
+
+    curve = [
+        0.078, 0.070, 0.065, 0.062, 0.065, 0.072, 0.085, 0.095,
+        0.080, 0.040, 0.005, -0.010, -0.025, -0.030, -0.028, -0.015,
+        0.002, 0.025, 0.060, 0.095, 0.120, 0.135, 0.110, 0.090,
+    ]  # fmt: skip
+    spot_dict = {
+        datetime(2026, 4, 29, h, 0, tzinfo=UTC): v for h, v in enumerate(curve)
+    }
+    avg_spot = sum(curve) / len(curve)
+
+    # Unfloored and unweighted, the window mean of the slot rates is exactly
+    # the formula at the mean spot.
+    expected = 0.94 * avg_spot - 0.01133
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    midday = _compare_injection_credit(snap, entry, spot_dict, avg_spot=avg_spot)
+    assert midday is not None
+    assert midday == pytest.approx(expected)
+
+    # The whole point: reopening the page at a different hour must not move
+    # the yearly credit. The midday block of this curve is negative and the
+    # evening peak is the day's highest, so before the fix these two differed
+    # by more than 15 c/kWh.
+    freezer.move_to("2026-04-29 21:00:00+02:00")
+    evening = _compare_injection_credit(snap, entry, spot_dict, avg_spot=avg_spot)
+    assert evening == pytest.approx(midday)
+
+    # And it is the formula that is quoted, not the illustration beside it.
+    assert midday != pytest.approx(0.0531)
+
+    # The export shape still applies, as it does for every other spot formula.
+    shape = {12: 0.5, 13: 0.5}
+    weighted = sum(w * (0.94 * curve[h - 2] - 0.01133) for h, w in shape.items())
+    assert _compare_injection_credit(
+        snap, entry, spot_dict, avg_spot=avg_spot, inj_hour_weights=shape
+    ) == pytest.approx(weighted)
+
+
 def test_compare_prices_an_spp_indexed_credit_on_the_solar_weighted_mean() -> None:
     """energie.be Variabel and Vast index the feed-in on Belpex_SPP.
 

@@ -595,7 +595,7 @@ carrying a branch that cannot run.
 | --- | --- | --- | --- |
 | (a) Monthly indicative | `current` set | No | Ecofix Flexy, the fixed and variable cards that publish a realized rate |
 | (b) Hourly formula | `factor` + `base` set | Yes | Dynamic contracts (Engie, OCTA+, Luminus, Mega, TotalEnergies) |
-| (c) Spot-indexed on a static-energy card | `factor` + `base` set, `current is None`, energy NOT dynamic | Yes | Cociter Variable |
+| (c) Spot-indexed on a static-energy card | `factor` + `base` set, energy NOT dynamic, and either `current is None` or the card flags `slot_indexed` | Yes | Cociter Variable, every Bolt fixed and variable card |
 | (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed` | A monthly MEAN, not an hourly spot | Eneco Fix/Flex, EBEM Variabel/B@sic+, DATS 24, EnergyVision fixed (both regions), energie.be |
 
 Shape (d) resolves through `_spp_injection_spot`, which is the one place that
@@ -616,8 +616,15 @@ The flag distinguishes which mean resolves the formula and, just as
 importantly, stops the month coefficients being read as shape (b).
 
 Shape (c) is the subtle one: the energy contract is Variable (no spot needed for
-energy) but the injection prices off the hourly BELPEX with no printed monthly
-indicative, so pricing the credit still needs an ENTSO-E spot. Shape (d) needs
+energy) but the injection prices off the hourly BELPEX, so pricing the credit
+still needs an ENTSO-E spot. It arrives two ways. Cociter Variable prints no
+indicative at all, so the absent `current` is the tell. Bolt prints one and its
+own footnotes call it an illustration of a per-quarter-hour settlement, so the
+card is flagged `slot_indexed` and the formula wins over the printed figure;
+`current` survives only as the fallback for an entry with no ENTSO-E key. Every
+predicate that asks "does this credit price off the spot" has to accept both
+tells, or the flagged cards silently fall back on a rate they do not bill.
+Shape (d) needs
 one too, at monthly rather than hourly resolution. `Contract` advertises both
 with `spot_indexed_injection` so the config flow offers the API-key
 step on the injection regime (`providers/base.py:71-77`). At runtime,

@@ -226,14 +226,16 @@ def _compare_injection_credit(
     dialog-open slot rate and bias the credit. Without a measurement it falls
     back to the published slot durations, which under-credit because the
     overnight off-peak block occupies a third of the clock and exports nothing. A
-    spot-indexed injection (Cociter Variable, or any dynamic-energy
-    contract) is priced per slot over the window and averaged by the
-    household's export shape, the same basis as the TOU branch and the same
-    one ``current_year_cost`` bills on. It deliberately does NOT follow the
-    energy term onto the plain window mean: the credit multiplies exported
+    spot-indexed injection is priced per slot over the window and averaged by
+    the household's export shape, the same basis as the TOU branch and the
+    same one ``current_year_cost`` bills on. It deliberately does NOT follow
+    the energy term onto the plain window mean: the credit multiplies exported
     kWh, and export is not spread evenly around the clock. Pricing it off the
     live current slot would be worse still, since the credit and the energy
-    cost would reflect different instants.
+    cost would reflect different instants. Three shapes qualify: any
+    dynamic-energy contract, a card that prints no indicative at all (Cociter
+    Variable), and a card that prints one but settles per slot anyway, which
+    is every Bolt fixed and variable card.
 
     An SPP-INDEXED credit (energie.be Variabel and Vast) resolves against
     ``spp_spot``, the solar-weighted month mean, because that is the index
@@ -279,7 +281,18 @@ def _compare_injection_credit(
         inj is not None
         and inj.factor is not None
         and inj.base is not None
-        and (isinstance(energy, DynamicRates) or inj.current is None)
+        and (
+            isinstance(energy, DynamicRates)
+            or inj.current is None
+            # A card that settles per slot prints its indicative as an
+            # illustration, so the formula wins over it here just as it does
+            # in ``_injection_is_spot_formula``, which this branch mirrors.
+            # Without the clause every Bolt fixed and variable card fell past
+            # this branch into the live helper at the bottom, which resolves
+            # the credit at whichever slot the dialog happened to open in and
+            # so valued a whole year of export at one hour's spot.
+            or inj.slot_indexed
+        )
     ):
         if avg_spot is None:
             return None
