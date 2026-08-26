@@ -1013,7 +1013,10 @@ def test_impact_bands_bill_only_on_the_incitative_mode() -> None:
 
     from homeassistant.util import dt as dt_util
 
-    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.pricing import (
+        DsoTariffMode,
+        energy_eur_per_kwh,
+    )
 
     energy = parse_snapshot(
         "bolt_variable",
@@ -1021,7 +1024,7 @@ def test_impact_bands_bill_only_on_the_incitative_mode() -> None:
         "wallonia",
     ).energy
 
-    def at(hour: int, mode: str) -> float:
+    def at(hour: int, mode: DsoTariffMode) -> float:
         when = datetime(2026, 4, 15, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
         return energy_eur_per_kwh(
             energy, when, None, meter="bi", region="wallonia", dso_tariff_mode=mode

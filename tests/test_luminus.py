@@ -450,7 +450,10 @@ def test_a_smartflex_cohort_prices_each_slot_on_the_month() -> None:
         _cohort_energy_from_archived,
     )
     from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
-    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+    from custom_components.be_electricity_prices.providers.base import (
+        SpotMonthlyRates,
+        TimeOfUseRates,
+    )
 
     snap = parse_snapshot(
         "luminus_smartflex", fixture_text("luminus_smartflex_w.pdf"), "wallonia"
@@ -470,4 +473,6 @@ def test_a_smartflex_cohort_prices_each_slot_on_the_month() -> None:
     assert at(8) == pytest.approx(0.1300 * 10 * 1.06 * mean + 2.6200 / 100 * 1.06)
     assert at(13) == pytest.approx(0.0410 * 10 * 1.06 * mean + 2.5400 / 100 * 1.06)
     assert at(8) > at(23) > at(13)
-    assert at(8) < snap.energy.peak
+    printed = snap.energy
+    assert isinstance(printed, TimeOfUseRates)
+    assert at(8) < printed.peak
