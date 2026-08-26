@@ -537,7 +537,14 @@ def _expect_professional_basis(prefix: str, contract: object, snap: object) -> N
             detail=f"vat_rate={taxes.vat_rate}",
         )
         if injection is not None:
-            cid = str(getattr(contract, "id", ""))
+            # Both shapes reach here: the registry Contract names the field
+            # "id", a provider's internal _ContractDef names it
+            # "contract_id", and this helper is called with each. Reading
+            # only one silently yielded "", which matches no exemption and
+            # failed three Mega rows a day on a card parsed correctly.
+            cid = str(
+                getattr(contract, "id", None) or getattr(contract, "contract_id", "")
+            )
             exempt = cid in _PRO_INJECTION_VAT_EXEMPT
             _expect(
                 f"{prefix}: professional injection VAT matches the card",

@@ -1017,6 +1017,48 @@ def test_pro_injection_vat_expectation_matches_the_cards() -> None:
         assert taxed is not expected_exempt, cid
 
 
+def test_the_vat_check_reads_the_contract_shape_it_is_actually_given() -> None:
+    """Two contract shapes reach _expect_professional_basis: the registry
+    Contract, which names the field "id", and a provider's internal
+    _ContractDef, which names it "contract_id". The Mega call site iterates
+    the latter.
+
+    Reading only "id" yielded "" for it, which matches no exemption, so the
+    check failed three rows on every live run against a card being parsed
+    correctly - and the first version of this test passed anyway, because it
+    built the registry shape by hand. It now drives the object the caller
+    really passes.
+    """
+    from custom_components.be_electricity_prices.providers import mega
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        TaxOverlay,
+    )
+    from custom_components.be_electricity_prices.providers.mega import (
+        _injection_vat_applies,
+    )
+    from tests import fixture_text
+
+    text = fixture_text("mega_pro_dynamic_w.pdf", layout=True)
+    snap = SimpleNamespace(
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.0, vat_rate=0.21),
+        injection=InjectionRates(
+            current=0.06, vat_applies=_injection_vat_applies(text, True)
+        ),
+    )
+    internal = next(c for c in mega._CONTRACTS if c.contract_id == "mega_pro_dynamic")
+    assert not hasattr(internal, "id")
+
+    for contract in (
+        internal,
+        SimpleNamespace(id="mega_pro_dynamic", professional=True),
+    ):
+        lc.CHECKS.clear()
+        lc._expect_professional_basis("x", contract, snap)
+        row = next(c for c in lc.CHECKS if "injection VAT" in c.label)
+        assert row.ok, f"{contract}: {row.detail}"
+
+
 def test_every_month_indexed_card_can_collect_a_key() -> None:
     """The two flags that have to agree, and the test that makes them.
 
