@@ -2051,6 +2051,19 @@ _INJECTION_SHAPE: dict[str, str] = {
     # formula resolves against the energy leg's mean and roughly doubles the
     # credit in a sunny month, and without the indicative there is nothing to
     # credit while the Synergrid profile is unavailable.
+    # Engie's EPEXDAM cards index the credit on the arithmetic mean of the
+    # DELIVERY month's daily EPEX day-ahead quotations and say the month's
+    # value is only known at month-end, so the printed Injection(3) figure is
+    # the formula on the PREVIOUS month. Flextime carries the same sentence
+    # but three coefficient pairs, so it stays a triplet.
+    "engie_empower_variable": "month",
+    "engie_flow": "month",
+    "engie_direct_online": "month",
+    "engie_basic_online": "month",
+    "engie_empty_house": "month",
+    "engie_pro_empower_variable": "month",
+    "engie_pro_flow": "month",
+    "engie_pro_empty_house": "month",
     "energiebe_variable": "spp",
     # The fixed card prints the same Belpex_SPP formula and settles on it too:
     # a fixed ENERGY leg does not make the feed-in credit fixed. Same shape as

@@ -106,9 +106,15 @@ def test_empower_flextime_injection_varies_by_slot() -> None:
     assert inj.offpeak == pytest.approx(0.01465)
 
 
-def test_empower_variable_injection_is_single_rate() -> None:
-    # The non-Flextime Empower variants keep a single injection rate
-    # (column 1); the per-slot triplet must stay None for them.
+def test_empower_variable_injection_is_single_band_but_month_indexed() -> None:
+    """The non-Flextime Empower variants credit ONE band, not a per-slot
+    triplet, and index that band on the delivery month's EPEXDAM.
+
+    This test used to assert only the two things that stayed true while the
+    whole month-indexing was missing - peak is None, current is 4,918 - so it
+    sat green through the defect it exists to catch. The coefficients are what
+    make it a real assertion.
+    """
     snap = parse_snapshot(
         "engie_empower_variable",
         {REGION_WALLONIA: fixture_text("engie_empower_flextime_w.pdf")},
@@ -117,6 +123,48 @@ def test_empower_variable_injection_is_single_rate() -> None:
     assert inj is not None
     assert inj.peak is None
     assert inj.current == pytest.approx(0.04918)
+    # "- Normal = 0,0300 + (0,0528 x EPEXDAM)", c/kWh per EUR/MWh, and NOT
+    # grossed: the formula reproduces the printed figure with no 1,06, while
+    # the energy leg's needs one.
+    assert inj.factor == pytest.approx(0.0528 * 10.0)
+    assert inj.base == pytest.approx(0.0300 / 100.0)
+    assert inj.month_indexed is True
+    assert inj.factor * 0.09257 + inj.base == pytest.approx(0.04918, abs=1e-5)
+
+
+def test_flextime_injection_keeps_its_triplet_and_no_formula() -> None:
+    """Flextime's card carries the same EPEXDAM sentence but prints THREE
+    injection coefficient pairs, one per slot, and InjectionRates holds one.
+    Storing the Normal pair would be a fourth, wrong formula: inert on the
+    live sensor because the per-slot rates win, but enough to make the
+    coordinator fetch spots for a number nothing reads."""
+    snap = parse_snapshot(
+        "engie_empower_flextime",
+        {REGION_WALLONIA: fixture_text("engie_empower_flextime_w.pdf")},
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert inj.peak == pytest.approx(0.08417)
+    assert inj.factor is None
+    assert inj.base is None
+    assert inj.month_indexed is False
+
+
+def test_endex_injection_keeps_its_printed_rate() -> None:
+    """Easy Variable prints a structurally identical injection formula on
+    ENDEX101, and it must not be swept in: that index is a futures average
+    over the month BEFORE delivery and the card states its value outright, so
+    the printed figure is the billed rate with no lag to correct. ENTSO-E
+    cannot produce it either."""
+    snap = parse_snapshot(
+        "engie_easy_variable",
+        {REGION_FLANDERS: fixture_text("engie_easy_indexed_v.pdf")},
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.04446)
+    assert inj.factor is None
+    assert inj.month_indexed is False
 
 
 def test_empower_flextime_dsos_match_wallonia_set() -> None:

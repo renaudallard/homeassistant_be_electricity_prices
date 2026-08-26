@@ -835,6 +835,34 @@ def _extract_injection(
         factor = factor_pdf * 10.0
         base = base_pdf_cents / 100.0
         formula = injection_match.group(0)
+    month_indexed = False
+    if kind == "variable" and current is not None:
+        # The same EPEXDAM story as the energy leg: "Les prix d'injection sont
+        # indexes en utilisant le parametre EPEXDAM. La valeur du EPEXDAM du
+        # mois en cours ne sera connue qu'en fin de mois", so the printed
+        # Injection(3) figure is the formula on the PREVIOUS month.
+        #
+        # Restricted to the variable kind on purpose. Flextime matches the
+        # same anchor but prints THREE distinct injection coefficient pairs,
+        # one per TOU slot, and InjectionRates holds exactly one pair: writing
+        # its Normal row here would store a fourth, wrong formula, and would
+        # flip _injection_needs_month_spot to True and fetch spots for a value
+        # nothing reads, because the per-slot rates win. The ENDEX101 cards
+        # are excluded by the formula regex itself, which requires the literal
+        # EPEXDAM; their index is a futures average published in ADVANCE, so
+        # their printed figure is the billed rate with no lag to correct.
+        #
+        # Injection is not grossed on either edition: residential is exempt,
+        # and a professional card is HTVA throughout with vat_applies carrying
+        # the 21% for apply_vat. The card proves it - its injection formula
+        # reproduces the printed figure with no 1,06 while the energy one
+        # needs it.
+        inj_coefs = _epexdam_formulas(text, current, 1.0)
+        single = inj_coefs.get("single")
+        if single is not None:
+            factor, base = single
+            month_indexed = True
+            formula = f"{base * 100.0:.4f} + ({factor / 10.0:.4f} x EPEXDAM)"
     if current is None and factor is None and peak is None:
         return None
     return InjectionRates(
@@ -842,6 +870,7 @@ def _extract_injection(
         factor=factor,
         base=base,
         formula=formula,
+        month_indexed=month_indexed,
         peak=peak,
         transition=transition,
         offpeak=offpeak,
@@ -1158,6 +1187,30 @@ def _contract_regions(c: _ContractDef) -> frozenset[str]:
     return frozenset(_LETTER_TO_REGION[k] for k in c.months_per_region)
 
 
+# The variable contracts whose card indexes the feed-in credit on the monthly
+# EPEXDAM. The credit resolves against ENTSO-E spots their variable energy leg
+# never fetches, so the flow has to offer the optional key or the formula can
+# never resolve.
+#
+# Flextime is deliberately absent even though its card carries the same
+# sentence: it prints one injection coefficient pair per TOU slot, which
+# InjectionRates cannot hold, so the extractor leaves its printed triplet
+# alone. The ENDEX101 products are absent because their index is a futures
+# average published in ADVANCE, so their printed figure is the billed rate.
+_EPEXDAM_INJECTION_CONTRACTS: frozenset[str] = frozenset(
+    {
+        "engie_empower_variable",
+        "engie_flow",
+        "engie_direct_online",
+        "engie_basic_online",
+        "engie_empty_house",
+        "engie_pro_empower_variable",
+        "engie_pro_flow",
+        "engie_pro_empty_house",
+    }
+)
+
+
 EXTRACTOR = SupplierExtractor(
     id="engie",
     label="Engie",
@@ -1168,6 +1221,7 @@ EXTRACTOR = SupplierExtractor(
             kind=c.kind,
             regions=_contract_regions(c),
             professional=c.professional,
+            spot_indexed_injection=c.contract_id in _EPEXDAM_INJECTION_CONTRACTS,
         )
         for c in _CONTRACTS
     ),

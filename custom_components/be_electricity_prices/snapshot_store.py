@@ -632,7 +632,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # their monthly EPEXDAM consumption coefficients and month_indexed. A v36
 # snapshot holds only the printed price, which the card itself labels as
 # computed from the last KNOWN month rather than the delivery one.
-_SNAPSHOT_SCHEMA_VERSION = 37
+# v38: the eight EPEXDAM-indexed Engie variable contracts now carry their
+# monthly injection coefficients and month_indexed. A v37 snapshot holds only
+# the printed Injection(3) figure, which is that formula at the PREVIOUS
+# month's index.
+_SNAPSHOT_SCHEMA_VERSION = 38
 
 
 def _snapshot_to_dict(
