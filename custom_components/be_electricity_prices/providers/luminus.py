@@ -244,6 +244,30 @@ _INJECTION_FORMULA_RE = re.compile(
 )
 
 
+# A non-dynamic card's feed-in formula, accepted ONLY when that same block
+# says the tariff is indexed monthly.
+#
+# The cadence sentence is the whole point. ComfyFlex and ComfyFlex+ print the
+# IDENTICAL "0,0481 x Belpex - 0,6392" and index it QUARTERLY ("Votre tarif
+# sera indexe tous les trimestres", against "du 1re trimestre 2026"). Keying on
+# the formula would sweep them onto a monthly mean the contract never mentions:
+# measured, their printed quarterly figure is 1,9% off the truth while April's
+# month mean is 16,3% off it in the other direction, so the "fix" would be
+# strictly worse than the lag it replaces.
+#
+# The leading guard keeps the scan inside the injection block: the SmartFlex
+# card carries a second, MaxxFlex-identical block for a non-SMR3 meter.
+_INJECTION_MONTHLY_RE = re.compile(
+    r"Formule\s+tarifaire\s+de\s+l['\u2019\u00a9]énergie\s+injectée"
+    r"(?:(?!Formule\s+tarifaire).)*?"
+    rf"=\s*((?P<factor>{_NUM})\s*x\s*Belpex\s*"
+    rf"(?P<sign>[{SIGN_CHARS}])\s*(?P<base>{_NUM}))"
+    r"(?:(?!Formule\s+tarifaire|Votre\s+tarif\s+sera\s+indexé).){0,400}?"
+    r"Votre\s+tarif\s+sera\s+indexé\s+(?:chaque|tous\s+les)\s+mois\b",
+    re.S,
+)
+
+
 def _vat_multiplier(text: str) -> float:
     return vat_multiplier(
         text,
@@ -402,6 +426,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     factor: float | None = None
     base: float | None = None
     formula: str | None = None
+    month_indexed = False
     if kind == "dynamic":
         match = _INJECTION_FORMULA_RE.search(text)
         if match:
@@ -411,6 +436,24 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
             factor = factor_pdf * 10.0
             base = base_pdf_cents / 100.0
             formula = match.group(0)
+    else:
+        # A non-dynamic card indexes the credit on the delivery month and says
+        # the printed figure is not it: "Votre tarif sera indexe tous les mois.
+        # La valeur Belpex du mois en cours n'est connue qu'a la fin du mois.
+        # Les prix affiches sont calcules sur la base de la derniere valeur
+        # Belpex connue (mois precedent)."
+        monthly = _INJECTION_MONTHLY_RE.search(text)
+        if monthly is not None:
+            # c/kWh per EUR/MWh of index, and the block is HTVA with the card
+            # noting "La TVA s'eleve a 0%", so nothing is grossed.
+            factor = to_float(monthly.group("factor")) * 10.0
+            base = (
+                parse_sign(monthly.group("sign"))
+                * to_float(monthly.group("base"))
+                / 100.0
+            )
+            formula = " ".join(monthly.group(1).split())
+            month_indexed = True
 
     if current is None and factor is None:
         # Both Luminus card families always publish injection: the
@@ -419,7 +462,13 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # contract; fail loud rather than silently crediting an injection
         # user nothing, mirroring the consumption helpers that raise.
         raise ExtractorError("Luminus: could not parse injection rate")
-    return InjectionRates(current=current, factor=factor, base=base, formula=formula)
+    return InjectionRates(
+        current=current,
+        factor=factor,
+        base=base,
+        formula=formula,
+        month_indexed=month_indexed,
+    )
 
 
 def _tax_block_values(text: str) -> list[str]:
@@ -682,6 +731,24 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
 
 _LUMINUS_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
 
+# Contracts whose card indexes the feed-in credit MONTHLY, so the credit needs
+# ENTSO-E spots their own energy leg does not fetch. ComfyFlex and ComfyFlex+
+# are absent on purpose: they print the same formula and index it quarterly,
+# and there is no quarterly mean here to resolve it against. Dynamic collects
+# its key through its own Belpex H energy formula.
+_MONTHLY_INJECTION_CONTRACTS: frozenset[str] = frozenset(
+    {
+        "luminus_comfy",
+        "luminus_comfy_plus",
+        "luminus_maxxfix",
+        "luminus_maxxflex",
+        "luminus_basicfix",
+        "luminus_basicflex",
+        "luminus_smartflex",
+    }
+)
+
+
 EXTRACTOR = SupplierExtractor(
     id="luminus",
     label="Luminus",
@@ -691,6 +758,7 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             regions=_LUMINUS_REGIONS,
+            spot_indexed_injection=c.contract_id in _MONTHLY_INJECTION_CONTRACTS,
         )
         for c in _CONTRACTS
     ),

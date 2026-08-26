@@ -257,6 +257,52 @@ def test_smartflex_parses_as_time_of_use() -> None:
     assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
 
 
+def test_monthly_cards_carry_the_injection_formula() -> None:
+    """The card says the printed figure is not the rate: "Votre tarif sera
+    indexe tous les mois. La valeur Belpex du mois en cours n'est connue qu'a
+    la fin du mois. Les prix affiches sont calcules sur la base de la derniere
+    valeur Belpex connue (mois precedent)."
+    """
+    for cid, fixture, region in (
+        ("luminus_comfy", "luminus_comfy_w.pdf", "wallonia"),
+        ("luminus_maxxflex", "luminus_maxxflex_w.pdf", "wallonia"),
+        ("luminus_smartflex", "luminus_smartflex_w.pdf", "wallonia"),
+    ):
+        snap = parse_snapshot(cid, fixture_text(fixture), region)
+        inj = snap.injection
+        assert inj is not None, cid
+        assert inj.current == pytest.approx(0.0381), cid
+        # "0,0481 x Belpex - 0,6392", c/kWh per EUR/MWh, and the block is
+        # HTVA with the card noting "La TVA s'eleve a 0%".
+        assert inj.factor == pytest.approx(0.481), cid
+        assert inj.base == pytest.approx(-0.006392), cid
+        assert inj.month_indexed is True, cid
+        # Round-trips to the card's own printed figure at its own index.
+        assert inj.factor * 0.09261 + inj.base == pytest.approx(0.0381, abs=1e-4), cid
+
+
+def test_quarterly_cards_keep_their_printed_figure() -> None:
+    """ComfyFlex and ComfyFlex+ print the IDENTICAL formula and index it
+    QUARTERLY: "Votre tarif sera indexe tous les trimestres", against "la
+    valeur de l'indice du 1re trimestre 2026". There is no quarterly mean to
+    resolve that against, and resolving it monthly would be strictly worse
+    than the lag: measured, the printed figure is 1,9% from the truth while
+    April's month mean is 16,3% from it the other way.
+
+    So the gate is the cadence sentence, never the formula.
+    """
+    for cid, fixture, region in (
+        ("luminus_comfyflex", "luminus_comfyflex_v.pdf", "flanders"),
+        ("luminus_comfyflex_plus", "luminus_comfyflex_plus_w.pdf", "wallonia"),
+    ):
+        snap = parse_snapshot(cid, fixture_text(fixture), region)
+        inj = snap.injection
+        assert inj is not None, cid
+        assert inj.current == pytest.approx(0.0396), cid
+        assert inj.factor is None, cid
+        assert inj.month_indexed is False, cid
+
+
 def test_injection_uses_applicable_rate_not_annual_estimate() -> None:
     # Cards print two injection rows: the applicable "Tarif de l'énergie
     # injectée" (3,81 / 3,96 c/kWh) and an "Estimation annuelle du tarif

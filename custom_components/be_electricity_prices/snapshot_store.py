@@ -644,7 +644,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # "Epex SPP * 0,85 - 2,2" injection coefficients with spp_indexed. A v39
 # snapshot holds only the printed figure, which is the previous month's
 # regularisation.
-_SNAPSHOT_SCHEMA_VERSION = 40
+# v41: the seven monthly-indexed Luminus contracts now carry their injection
+# coefficients and month_indexed. A v40 snapshot holds only the printed figure,
+# which the card says is the previous month's.
+_SNAPSHOT_SCHEMA_VERSION = 41
 
 
 def _snapshot_to_dict(

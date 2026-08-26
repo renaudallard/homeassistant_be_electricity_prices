@@ -2090,6 +2090,22 @@ _INJECTION_SHAPE: dict[str, str] = {
     "mega_pro_smart_flex": "spp",
     "mega_pro_cosy_flex": "spp",
     "mega_pro_cap": "spp",
+    # Luminus non-dynamic cards say "Votre tarif sera indexe tous les mois. La
+    # valeur Belpex du mois en cours n'est connue qu'a la fin du mois. Les prix
+    # affiches sont calcules sur la base de la derniere valeur Belpex connue
+    # (mois precedent)."
+    "luminus_comfy": "month",
+    "luminus_comfy_plus": "month",
+    "luminus_maxxfix": "month",
+    "luminus_maxxflex": "month",
+    "luminus_basicfix": "month",
+    "luminus_basicflex": "month",
+    "luminus_smartflex": "month",
+    # Pinned explicitly rather than left to derive: these two print the
+    # IDENTICAL formula and index it QUARTERLY, so the pin is what records
+    # that leaving them on the printed figure is deliberate.
+    "luminus_comfyflex": "monthly",
+    "luminus_comfyflex_plus": "monthly",
     "energiebe_variable": "spp",
     # The fixed card prints the same Belpex_SPP formula and settles on it too:
     # a fixed ENERGY leg does not make the feed-in credit fixed. Same shape as
