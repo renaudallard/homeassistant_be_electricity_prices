@@ -365,6 +365,75 @@ def test_spp_injection_spot_is_strict_for_an_spp_indexed_card() -> None:
     assert strict is None
 
 
+def test_a_month_indexed_credit_never_resolves_at_an_hours_spot() -> None:
+    """The caller's ``spot`` is the hour's own price whenever the ENERGY leg
+    is not month-priced, and that is the shape of every card indexing only its
+    credit monthly. Echoing it back resolved a month formula per hour: real
+    backfilled August rows for Eneco Flex spanned -3,48 to +25,66 c/kWh for a
+    month whose contractual credit is one number. The unweighted average of
+    those rows is exactly right, which is how it passed review.
+    """
+    from custom_components.be_electricity_prices.spot_stats import (
+        _bucket_by_local_month,
+        _spp_injection_spot,
+    )
+
+    # A month of hourly spots that averages 0.10, plus one wild hour.
+    spots = {
+        datetime(2026, 7, d, h, tzinfo=UTC): 0.10
+        for d in range(1, 29)
+        for h in range(24)
+    }
+    spots[datetime(2026, 7, 15, 18, tzinfo=UTC)] = 0.90
+    bucket = _bucket_by_local_month(spots)
+
+    common = dict(
+        monthly_mean=True,
+        spp_weights=None,
+        bucket=bucket,
+        year=2026,
+        month=7,
+        today=date(2026, 8, 22),
+        strict=False,
+    )
+    cache: dict[tuple[int, int, bool], float | None] = {}
+    quiet = _spp_injection_spot(0.10, cache=cache, **common)  # type: ignore[arg-type]
+    wild = _spp_injection_spot(0.90, cache=cache, **common)  # type: ignore[arg-type]
+
+    # Same month, same answer, whatever the hour handed in happened to cost.
+    assert quiet == wild
+    assert quiet == pytest.approx(0.101190, abs=1e-6)
+
+
+def test_the_daily_path_resolves_a_month_mean_it_was_not_given() -> None:
+    """The static-energy daily walk has no per-hour spot to offer and passes
+    None. That used to come straight back out, so the credit fell to the
+    card's printed figure - the previous month's - for every day of the year.
+    """
+    from custom_components.be_electricity_prices.spot_stats import (
+        _bucket_by_local_month,
+        _spp_injection_spot,
+    )
+
+    spots = {
+        datetime(2026, 7, d, h, tzinfo=UTC): 0.12
+        for d in range(1, 29)
+        for h in range(24)
+    }
+    resolved = _spp_injection_spot(
+        None,
+        monthly_mean=True,
+        spp_weights=None,
+        bucket=_bucket_by_local_month(spots),
+        year=2026,
+        month=7,
+        today=date(2026, 8, 22),
+        cache={},
+        strict=False,
+    )
+    assert resolved == pytest.approx(0.12)
+
+
 def test_a_formula_only_monthly_injection_is_never_priced_per_hour() -> None:
     """Skipping the month-mean bake must stay limited to SPP-indexed cards.
 

@@ -407,7 +407,7 @@ class _BackfillContext:
     regime: str
     snap_for: Callable[[date], Awaitable[Any]]
     spp_weights: SppWeights | None
-    month_spp_cache: dict[tuple[int, int], float | None]
+    month_spp_cache: dict[tuple[int, int, bool], float | None]
     month_mean_cache: dict[tuple[int, int], float | None]
     hourly_injection: bool
 
@@ -485,7 +485,7 @@ def _injection_rate_for_hour(
     utc_hour: datetime,
     local: datetime,
     spp_weights: SppWeights | None,
-    month_spp_cache: dict[tuple[int, int], float | None],
+    month_spp_cache: dict[tuple[int, int, bool], float | None],
     hourly_injection: bool,
     today: date,
 ) -> float | None:

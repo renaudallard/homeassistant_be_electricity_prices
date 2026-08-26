@@ -367,7 +367,7 @@ async def _ytd_hourly_energy(
     month_means: dict[tuple[int, int], float | None] = {}
     # SPP-weighted per-month injection means, when the entry opted in. Energy
     # keeps the flat mean above; only the injection credit uses these.
-    month_spp: dict[tuple[int, int], float | None] = {}
+    month_spp: dict[tuple[int, int, bool], float | None] = {}
     # Bucket the year's spots by local month once so each month's mean is a
     # lookup rather than a full-year rescan (the loop reads up to twelve
     # distinct months). Only the spot-monthly path reads it; a dynamic
@@ -451,7 +451,12 @@ async def _ytd_hourly_energy(
             # indicative is credited instead.
             inj_spot = _spp_injection_spot(
                 spot,
-                monthly_mean=monthly_mean,
+                # The INJECTION's flag, not the energy leg's. They differ on
+                # exactly the cards this matters for: Eneco Fix and Flex price
+                # energy without a mean and index the credit on one, so the
+                # energy flag is False here and ``spot`` is this hour's own
+                # price. Passing it resolved a month formula per hour.
+                monthly_mean=_injection_on_month_mean(snap_h),
                 strict=_injection_is_spp_indexed(snap_h),
                 spp_weights=spp_weights,
                 bucket=month_bucket,
@@ -882,7 +887,7 @@ async def _compute_current_year_cost(
     # (energie.be Vast). The daily walk has no spot of its own, so resolve the
     # delivery month's SPP-weighted mean here, memoised per month, and let the
     # shared helper fall back to the card's indicative when it is missing.
-    day_spp: dict[tuple[int, int], float | None] = {}
+    day_spp: dict[tuple[int, int, bool], float | None] = {}
     day_bucket = _bucket_by_local_month(historical_spots) if historical_spots else {}
     for day in _days_through(jan1, today):
         bundle = await _resolve_month(date(day.year, day.month, 1))

@@ -395,7 +395,7 @@ def _spp_injection_spot(
     year: int,
     month: int,
     today: date,
-    cache: dict[tuple[int, int], float | None],
+    cache: dict[tuple[int, int, bool], float | None],
     hourly_spot: float | None = None,
     hourly: bool = False,
     strict: bool = False,
@@ -414,16 +414,27 @@ def _spp_injection_spot(
     a flat month mean systematically over-pays. Deciding it here keeps the
     live tick, the YTD walk and the backfill on one rule.
 
-    Energy bills at the flat month-mean (``spot``); when the entry uses
-    SPP-weighted injection and the Synergrid profile is available, the
-    injection credit instead uses the SPP-weighted month-mean.
+    ``monthly_mean`` says the INJECTION settles on a month mean, and when it
+    does this returns a month mean or nothing. It never returns ``spot``,
+    because a caller's ``spot`` is the hour's own price whenever the ENERGY
+    leg is not itself month-priced -- which is the shape of every card that
+    indexes only its credit monthly (Eneco Fix and Flex). Handing that to
+    ``_historical_injection_rate`` resolves a month formula at one hour's
+    spot: real backfilled August rows spanned -3,48 to +25,66 c/kWh for a
+    month whose contractual credit is the single figure 8,06. The unweighted
+    average of those rows is right, which is why it survived review.
 
-    What happens when the profile is missing depends on WHY it was wanted.
-    The custom contract opted in as a refinement, so it falls back to
-    ``spot``. A card that INDEXES on Belpex_SPP cannot: that mean is a
+    Which mean depends on the card. With SPP weighting wanted and the
+    Synergrid profile available, the credit uses the SPP-weighted month-mean.
+    When the profile is missing it depends on WHY it was wanted: the custom
+    contract opted in as a refinement and falls back to the plain arithmetic
+    month mean, which is also what a ``month_indexed`` card names outright. A
+    card that INDEXES on Belpex_SPP cannot fall back at all: that mean is a
     different number, not a coarser one, so ``strict`` returns ``None`` and
     the caller credits the card's printed indicative instead.
-    ``cache`` memoises the per-month weighted mean.
+
+    ``cache`` memoises both per-month means, keyed on whether it is the
+    weighted one.
 
     Callers that already bucketed the spot cache for the tick pass ``bucket``;
     the rest pass the raw ``historical_spots`` and it is bucketed here on the
@@ -432,23 +443,32 @@ def _spp_injection_spot(
     """
     if hourly:
         return hourly_spot
-    if not (monthly_mean and spp_weights is not None):
+    if not monthly_mean:
         # ``strict`` means the formula indexes on Belpex_SPP and nothing else
         # will do, so answer "no spot" rather than the energy leg's mean and
         # let the caller fall back to the card's printed indicative.
         return None if strict else spot
-    key = (year, month)
-    if key not in cache:
-        if bucket is None:
-            if historical_spots is None:
-                return None if strict else spot
-            bucket = _bucket_by_local_month(historical_spots)
-        cache[key] = (
-            None
-            if _month_is_thinly_cached(bucket, year, month, today)
-            else _spp_month_mean(bucket, spp_weights, year, month)
-        )
-    weighted = cache[key]
-    if weighted is not None:
-        return weighted
-    return None if strict else spot
+    if bucket is None and historical_spots is not None:
+        bucket = _bucket_by_local_month(historical_spots)
+    if bucket is None:
+        return None if strict else spot
+    if spp_weights is not None:
+        key = (year, month, True)
+        if key not in cache:
+            cache[key] = (
+                None
+                if _month_is_thinly_cached(bucket, year, month, today)
+                else _spp_month_mean(bucket, spp_weights, year, month)
+            )
+        weighted = cache[key]
+        if weighted is not None:
+            return weighted
+    if strict:
+        return None
+    # The plain arithmetic month mean, resolved here rather than taken from
+    # the caller: ``spot`` is only a month mean when the ENERGY leg is one
+    # too, and this branch exists precisely for the cards where it is not.
+    plain_key = (year, month, False)
+    if plain_key not in cache:
+        cache[plain_key] = _covered_month_mean(bucket, year, month, today)
+    return cache[plain_key]

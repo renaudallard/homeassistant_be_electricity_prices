@@ -598,6 +598,16 @@ carrying a branch that cannot run.
 | (c) Spot-indexed on a static-energy card | `factor` + `base` set, `current is None`, energy NOT dynamic | Yes | Cociter Variable |
 | (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed` | A monthly MEAN, not an hourly spot | Eneco Fix/Flex, EBEM Variabel/B@sic+, DATS 24, EnergyVision fixed (both regions), energie.be |
 
+Shape (d) resolves through `_spp_injection_spot`, which is the one place that
+decides WHICH mean and is deliberately not allowed to answer with an hour's
+price. A caller's `spot` is a month mean only when the ENERGY leg is month-priced
+too, and shape (d) is defined by the energy leg not being that, so the resolver
+computes the mean itself from the spot bucket rather than echoing what it was
+handed. Passing the hour through instead resolved a month formula per hour: real
+backfilled August rows for Eneco Flex spanned -3,48 to +25,66 c/kWh against a
+contractual 8,06, and their unweighted average is exactly right, which is why it
+survived review.
+
 Shape (d) is the one that looks like (a) and is not. Those cards print a
 figure and a formula side by side, and their footnotes say the figure comes
 from the last published value of an index the contract settles on monthly and
