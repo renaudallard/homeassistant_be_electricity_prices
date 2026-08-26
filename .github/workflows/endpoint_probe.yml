@@ -51,14 +51,23 @@ jobs:
       # slow the answer down.
       - run: pip install aiohttp
       - name: Probe
+        # Inputs reach the shell through env, never interpolated into the
+        # script: a workflow_dispatch input is attacker-controlled text and
+        # "${{ ... }}" splices it in before bash ever sees it.
+        env:
+          PROBE_URLS: ${{ inputs.urls }}
+          PROBE_ATTEMPTS: ${{ inputs.attempts }}
+          PROBE_TIMEOUT: ${{ inputs.timeout }}
         run: |
           echo "runner egress address:"
           curl -sS --max-time 15 https://api.ipify.org || echo "  (ipify unreachable)"
           echo
+          # Unquoted on purpose: PROBE_URLS is a space-separated list and must
+          # word-split. Empty leaves the script on its own defaults.
           python scripts/probe_endpoint.py \
-            --attempts "${{ inputs.attempts }}" \
-            --timeout "${{ inputs.timeout }}" \
-            ${{ inputs.urls }} | tee probe.txt
+            --attempts "$PROBE_ATTEMPTS" \
+            --timeout "$PROBE_TIMEOUT" \
+            $PROBE_URLS | tee probe.txt
       - name: Summary
         if: always()
         run: |
