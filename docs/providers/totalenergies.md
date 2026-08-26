@@ -295,7 +295,7 @@ other product. Shape (c) spot-indexed-variable is not used; no contract sets
 `spot_indexed_injection`.
 
 There is **no supplier-side prosumer/PV forfait**: `supplier_prosumer_eur_per_kva_year`
-is left `None` (`SupplierSnapshot` default, `providers/base.py:638`). The only
+is left `None` (`SupplierSnapshot` default, `providers/base.py:650`). The only
 prosumer charge is the DSO tariff (`DsoOverlay.prosumer_eur_per_kva_year`), surfaced
 for both the Flanders and Wallonia rows where the card publishes it.
 

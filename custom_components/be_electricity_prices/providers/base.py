@@ -168,6 +168,13 @@ class VariableRates:
     formula_base_peak: float | None = None
     formula_factor_offpeak: float | None = None
     formula_base_offpeak: float | None = None
+    # And for a dedicated night-circuit meter, which is a THIRD formula and
+    # not the off-peak one. OCTA+ prints "exclusif nuit : Epex RLP M * 1,061"
+    # against an off-peak 1,011 and a mono 1,150, so routing that circuit onto
+    # either neighbour is wrong, and it draws the large volumes. None -> the
+    # card publishes no separate night formula and the mono pair applies.
+    formula_factor_exclusive_night: float | None = None
+    formula_base_exclusive_night: float | None = None
     # Contractual ceiling on the ENERGY component, per meter type, on the same
     # basis as the rates above (TVAC on a residential card, HTVA on a
     # professional one). Mega Cap is the product: "vous payez le minimum entre
@@ -229,6 +236,11 @@ class SpotMonthlyRates:
     base_peak: float | None = None
     factor_offpeak: float | None = None
     base_offpeak: float | None = None
+    # A dedicated night circuit is a third formula, not the off-peak one.
+    # Routed ahead of the bi-hourly band test, because that circuit is billed
+    # per meter rather than per hour of the day.
+    factor_exclusive_night: float | None = None
+    base_exclusive_night: float | None = None
     yearly_fixed_fee: float = 0.0
     # Dedicated yearly fixed fee for an exclusive-night meter circuit, carried
     # from a variable card re-priced to this monthly-mean leg for a signing

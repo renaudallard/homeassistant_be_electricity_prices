@@ -618,7 +618,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # renamed the parameter to "Epex SPP M" and swapped the x for a star. v32 was
 # written against April cards only, so every live card fell back to the printed
 # V-test estimate and a cached v32 snapshot carries no coefficients at all.
-_SNAPSHOT_SCHEMA_VERSION = 33
+# v34: the OCTA+ variable cards now carry their monthly Epex RLP coefficients
+# per meter, including a separate night-circuit pair, and month_indexed. A v33
+# snapshot holds only the card's V-test 12-month forward estimate.
+_SNAPSHOT_SCHEMA_VERSION = 34
 
 
 def _snapshot_to_dict(

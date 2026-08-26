@@ -42,7 +42,7 @@ on a single line.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import aiohttp
 
@@ -81,6 +81,7 @@ from .base import (
     SupplierSnapshot,
     TariffKind,
     TaxOverlay,
+    VariableRates,
     fixed_or_variable_rates,
     walloon_dso_overlay,
 )
@@ -301,6 +302,25 @@ _SPP_FORMULA_RE = re.compile(
     rf"(\d+(?:[.,]\d+)?)",
     re.IGNORECASE,
 )
+# The monthly index the variable cards bill CONSUMPTION on, one row per meter
+# configuration. Both card generations, same as the SPP sibling above:
+#   April  "compteur monohoraire : Epex RLP * 1,15 + 10"
+#   August "mono-horaire (simple) : Epex RLP M * 1,150 + 10,000"
+# Stated in EUR/MWh HTVA. The meter label sits before the formula and the two
+# generations word it differently, so each meter gets its own lead-in.
+_RLP_FORMULA = (
+    rf"Epex\s*RLP\s*M?\s*[x*]\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}+])\s*"
+    rf"(\d+(?:[.,]\d+)?)"
+)
+_RLP_METER_RES: dict[str, re.Pattern[str]] = {
+    "single": re.compile(rf"mono[\s-]*horaire[^:;.]{{0,20}}:\s*{_RLP_FORMULA}", re.I),
+    "peak": re.compile(rf"heures\s+pleines[^:;.]{{0,20}}:\s*{_RLP_FORMULA}", re.I),
+    "offpeak": re.compile(rf"heures\s+creuses[^:;.]{{0,20}}:\s*{_RLP_FORMULA}", re.I),
+    "exclusive_night": re.compile(
+        rf"exclusi[fv]\s+nuit[^:;.]{{0,20}}:\s*{_RLP_FORMULA}", re.I
+    ),
+}
+
 _INJECTION_LEAD = (
     r"(?:Le\s+prix\s+de\s+votre\s+injection"
     r"|prix\s+de\s+l['’]électricité\s+injectée\s+sont\s+indexés)"
@@ -390,13 +410,58 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     # so it stays nullable.)
     if peak is None or offpeak is None:
         raise ExtractorError(f"could not parse OCTA+ {kind} bi-hourly rates")
-    return fixed_or_variable_rates(
+    rates = fixed_or_variable_rates(
         kind,
         single=mono,
         peak=peak,
         offpeak=offpeak,
         exclusive_night=excl,
         yearly_fixed_fee=yearly_fee,
+    )
+    if not isinstance(rates, VariableRates):
+        return rates
+    # A variable card indexes consumption on the MONTHLY Epex RLP and says the
+    # figures above are not the rate: "Les prix de l'electricite consommee
+    # mentionnes en page 1 sont purement indicatifs et sont bases sur la valeur
+    # actuelle du parametre 'V-test' ... les prix moyens attendus pour les 12
+    # mois a venir". A forward estimate of a year is not a lagged index: over
+    # Jan-Aug 2026 the printed figure ran +9,4% to +19,8% against the contract
+    # with single months as far out as +50%, while resolving the formula
+    # against the plain arithmetic mean sits 3-4% low and never swings.
+    #
+    # That 3-4% is the residual: Epex RLP M weights by the residual load
+    # profile, which is dearer than a flat average because consumption leans
+    # into expensive hours, and Synergrid publishes that profile only as .xlsb.
+    # Documented in docs/providers/octaplus.md rather than hidden.
+    coefs: dict[str, tuple[float, float]] = {}
+    for slot, pattern in _RLP_METER_RES.items():
+        m = pattern.search(text)
+        if m is None:
+            continue
+        # EUR/MWh HTVA -> EUR/kWh TVAC, same axis as the dynamic branch: the
+        # factor is a dimensionless multiplier on a EUR/kWh spot, the base
+        # divides by 1000.
+        vat = _vat_multiplier(text)
+        coefs[slot] = (
+            to_float(m.group(1)) * vat,
+            parse_sign(m.group(2)) * to_float(m.group(3)) / 1000.0 * vat,
+        )
+    if "single" not in coefs:
+        # Every variable card states the formula. A miss is a layout drift,
+        # and silently billing the V-test estimate is what this exists to
+        # stop, so leave the printed rates and let the live check say so.
+        return rates
+    return replace(
+        rates,
+        month_indexed=True,
+        formula_factor=coefs["single"][0],
+        formula_base=coefs["single"][1],
+        formula_factor_peak=coefs.get("peak", (None, None))[0],
+        formula_base_peak=coefs.get("peak", (None, None))[1],
+        formula_factor_offpeak=coefs.get("offpeak", (None, None))[0],
+        formula_base_offpeak=coefs.get("offpeak", (None, None))[1],
+        formula_factor_exclusive_night=coefs.get("exclusive_night", (None, None))[0],
+        formula_base_exclusive_night=coefs.get("exclusive_night", (None, None))[1],
     )
 
 

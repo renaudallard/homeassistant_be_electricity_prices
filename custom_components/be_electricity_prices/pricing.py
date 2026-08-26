@@ -345,7 +345,14 @@ def energy_eur_per_kwh(
         if spot_eur_per_kwh is None:
             raise ValueError("spot-monthly tariff needs a monthly mean spot")
         factor, base = energy.factor, energy.base
-        if (
+        if meter == "exclusive_night" and energy.factor_exclusive_night is not None:
+            # A separate night circuit is billed on its own formula whatever
+            # the hour, so this is decided before the bi-hourly band test and
+            # never routed onto the off-peak pair. The two coincide on some
+            # cards and are 5% apart on others.
+            factor = energy.factor_exclusive_night
+            base = energy.base_exclusive_night or 0.0
+        elif (
             bi_capable
             and energy.factor_peak is not None
             and energy.factor_offpeak is not None

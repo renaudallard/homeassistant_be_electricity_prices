@@ -236,6 +236,8 @@ def _cohort_energy_from_archived(
             base_peak=energy.formula_base_peak,
             factor_offpeak=energy.formula_factor_offpeak,
             base_offpeak=energy.formula_base_offpeak,
+            factor_exclusive_night=energy.formula_factor_exclusive_night,
+            base_exclusive_night=energy.formula_base_exclusive_night,
             yearly_fixed_fee=energy.yearly_fixed_fee,
             # Carry the dedicated exclusive-night standing fee so an
             # exclusive-night meter keeps its own fee instead of falling back to

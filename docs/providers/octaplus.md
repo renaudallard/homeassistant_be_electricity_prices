@@ -41,7 +41,7 @@ https://files.octaplus.be/tariffs/E_OCTA_<SLUG>_RE_<VL|WL>_FR.pdf
 region code (`_REGION_TO_CODE`, `octaplus.py:89-92`): `VL` for Flanders, `WL`
 for Wallonia. There is no per-month archive: OCTA+ overwrites each card in place
 under the same filename (`octaplus.py:145-149`). A human-facing listing page at
-`_LISTING_URL` (`octaplus.py:134`) links every card and is used only by
+`_LISTING_URL` (`octaplus.py:135`) links every card and is used only by
 `discover` for CI drift detection, not by `fetch`.
 
 ## Contracts
@@ -74,7 +74,7 @@ Notes:
   it the live price table would aggregate to hourly and the current / next-slot
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
-  long-term statistics). See `DynamicRates` docs in `base.py:176-189`.
+  long-term statistics). See `DynamicRates` docs in `base.py:183-196`.
 - No product carries `spot_indexed_injection=True`. That flag means a PER-HOUR
   spot index, and no OCTA+ card has one on a static-energy product: the
   non-dynamic cards index their credit on the monthly Epex SPP, which the
@@ -89,7 +89,7 @@ Notes:
    `ExtractorError("unknown OCTA+ contract ...")` on miss
    (`test_unknown_contract_raises`).
 2. Validate `region` is `VL`/`WL`, raise `not available in region` otherwise.
-3. Build the URL via `_document_url` (`octaplus.py:136-137`).
+3. Build the URL via `_document_url` (`octaplus.py:137-138`).
 4. Fetch aligned PDF text with `fetch_pdf_text_aligned(session, url,
    x_join_threshold=1.0)` and hand off to `parse_snapshot`.
 
@@ -117,7 +117,7 @@ preferred headers.
 ### `fetch_for_month`
 
 OCTA+ declares no `fetch_for_month` (the `SupplierExtractor` is built with only
-`fetch` and `probe`, `octaplus.py:729-744`). There is no accessible archive:
+`fetch` and `probe`, `octaplus.py:794-809`). There is no accessible archive:
 cards are overwrite-in-place, so past months fall back to the current snapshot
 as a proxy. This is the documented behaviour for overwrite-in-place suppliers in
 `base.py:519-524`.
@@ -184,7 +184,7 @@ By kind:
   stays nullable (separate optional circuit). `fixed` returns `FixedRates`,
   `variable` returns `VariableRates`.
 
-### Publication month (`_extract_publication_month`, `octaplus.py:404-425`)
+### Publication month (`_extract_publication_month`, `octaplus.py:469-490`)
 
 Two layouts are handled. Pre-2026 cards print `Clients résidentiels en <region>
 - MM/YYYY - Tarifs N% TVAC`; the regex anchors on that prose so a footer
@@ -194,7 +194,7 @@ month spelled out and accented; the fallback maps the folded month name through
 `_FRENCH_MONTHS` (`:402-404`). `test_publication_month_reads_fiche_tarifaire_banner`
 exercises both, including accented `FÉVRIER` and `AOÛT`.
 
-### Taxes (`_extract_taxes`, `octaplus.py:505-539`)
+### Taxes (`_extract_taxes`, `octaplus.py:570-604`)
 
 OCTA+ prints four federal-tier rows on page 2; the residential tier is the first
 (`0 & 3.000 kWh`). The regex `0\s*&\s*3\.000\s*kWh\s+<a>\s+<b>` anchors on the
@@ -211,7 +211,7 @@ non-matching separator to force the raise). Wallonia adds
 
 The `TaxOverlay` sets `vat_rate=0.0` (`octaplus.py:228`): OCTA+ snapshots ship
 VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
-`vat_rate` convention in `base.py:623-623`.
+`vat_rate` convention in `base.py:635-635`.
 
 ### Regional renewables
 
@@ -226,7 +226,7 @@ VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
 
 Both raises are covered by `test_missing_regional_renewables_raises`.
 
-### Injection (`_extract_injection`, `octaplus.py:436-490`)
+### Injection (`_extract_injection`, `octaplus.py:501-555`)
 
 Injection taxonomy: **month-indexed formula** on fixed/variable/Impact,
 **hourly factor*spot+base** on dynamic. `current` is the second number on the
@@ -284,7 +284,7 @@ exactly like the Cociter Variable and Mega forfaits (see
 
 Region-branched in `parse_snapshot` (`octaplus.py:208-213`).
 
-### Wallonia (`_extract_wallonia_dsos`, `octaplus.py:557-603`)
+### Wallonia (`_extract_wallonia_dsos`, `octaplus.py:622-668`)
 
 Five DSO keys via `_WALLONIA_LABELS` (`:541-554`): `AIEG` -> `DSO_AIEG`,
 `AIESH` -> `DSO_AIESH`, `ORES\(` -> `DSO_ORES` (eight ORES sub-areas share one
@@ -307,7 +307,7 @@ illustrative for `aieg`: single 0.1087, peak 0.1205, offpeak 0.0667, transport
 (`test_wallonia_dsos_extract_full_set`, and the 2026-template variant
 `test_wallonia_dsos_new_2026_template`).
 
-### Flanders (`_extract_flanders_dsos`, `octaplus.py:609-667`)
+### Flanders (`_extract_flanders_dsos`, `octaplus.py:674-732`)
 
 Eight Fluvius sub-areas via `_FLANDERS_LABELS` (`:627-636`). Note the label-to-
 key mapping is not one-to-one by name: `Fluvius Kempen` -> `DSO_FLUVIUS_IVEKA`
@@ -345,6 +345,29 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
 - **Fixed-card injection column index**: `current` is the *second* number on the
   `Compteur monohoraire` line; a column-index slip that grabbed the consumption
   rate would over-credit feed-in ~3.4x (`test_fixed_wallonia_extracts_meter_rates`).
+- **The variable ENERGY column is an estimate too, and a worse one.** The card
+  says so: *"Les prix de l'électricité consommée mentionnés en page 1 sont
+  purement indicatifs et sont basés sur la valeur actuelle du paramètre
+  « V-test » ... Cette méthode a pour but de refléter les prix moyens attendus
+  pour les 12 mois à venir."* That is a forward forecast of a whole year, not
+  last month's index, so it does not track the delivery month at all: measured
+  against the contract over Jan–Aug 2026 the April card ran +9,4% on average
+  and +37,2% in April alone, the August card +19,8% and +50,2%. `_extract_energy`
+  parses the four per-meter `Epex RLP M` formulas and sets `month_indexed`, with
+  the printed figure kept as the keyless fallback.
+
+  **The residual, stated plainly:** `Epex RLP M` weights the day-ahead by the
+  residual load profile, and we resolve it against the plain arithmetic month
+  mean, which sits about 3–4% below because consumption leans into the
+  expensive hours. Synergrid publishes the RLP profile only as `.xlsb`
+  (`SLP-RLP-SPP/2026/RLP0N 2026 Electricity.xlsb`), a binary workbook no
+  current dependency can read. A bounded 3–4% one-way error replaces a
+  +9,4%-to-+19,8% one that swings 50 points month to month, so the trade is
+  worth making — but it is a trade, not an exact answer. Note this is the
+  OPPOSITE conclusion to Eneco's energy leg, where the printed figure is last
+  month's REALISED index: there the error is a lag that reverts across a year,
+  and swapping it for a systematic under-bill would make the annual figure
+  worse.
 - **That column is an ESTIMATE, not the rate**: it sits under `Prix estimés` and
   the card says the delivery month's Epex is only known at month-end. Billing it
   flat is a month-lag mis-credit, which is what `_SPP_FORMULA_RE` and

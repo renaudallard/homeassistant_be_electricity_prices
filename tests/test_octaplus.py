@@ -89,6 +89,92 @@ def test_fixed_wallonia_extracts_meter_rates() -> None:
     assert snap.injection.current == pytest.approx(0.0472)
 
 
+def test_variable_energy_carries_the_monthly_rlp_formula() -> None:
+    """A variable card says the page-1 figures are not the rate: "Les prix de
+    l'electricite consommee mentionnes en page 1 sont purement indicatifs et
+    sont bases sur la valeur actuelle du parametre 'V-test' ... les prix
+    moyens attendus pour les 12 mois a venir". A forward estimate of a year
+    is not a lagged index, and we were billing it."""
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    snap = parse_snapshot(
+        "octaplus_smartvariable", _text("octaplus_smartvariable_w.pdf"), "wallonia"
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is True
+    # HTVA on the card, TVAC in the snapshot, so every coefficient carries 1,06.
+    assert energy.formula_factor == pytest.approx(1.150 * 1.06)
+    assert energy.formula_base == pytest.approx(10.0 / 1000.0 * 1.06)
+    assert energy.formula_factor_peak == pytest.approx(1.290 * 1.06)
+    assert energy.formula_factor_offpeak == pytest.approx(1.011 * 1.06)
+    # The printed estimate survives as the fallback for a keyless entry.
+    assert energy.current == pytest.approx(0.1516)
+
+
+def test_the_night_circuit_gets_its_own_formula() -> None:
+    """ "exclusif nuit : Epex RLP M * 1,061" sits between the off-peak 1,011
+    and the mono 1,150, so routing that circuit onto either neighbour is
+    wrong by 5 to 8% on the meter that draws the large volumes."""
+    from datetime import datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.cohort import (
+        _cohort_energy_from_archived,
+    )
+    from custom_components.be_electricity_prices.pricing import (
+        MeterType,
+        energy_eur_per_kwh,
+    )
+
+    snap = parse_snapshot(
+        "octaplus_smartvariable", _text("octaplus_smartvariable_w.pdf"), "wallonia"
+    )
+    leg = _cohort_energy_from_archived(snap)
+    assert leg is not None
+    mean = 0.078812
+
+    def rate(hour: int, meter: MeterType) -> float:
+        when = datetime(2026, 4, 15, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        return energy_eur_per_kwh(leg, when, mean, meter=meter, region="wallonia")
+
+    night = rate(3, "exclusive_night")
+    assert night == pytest.approx((1.061 * mean + 0.010) * 1.06)
+    # Its own formula, not the off-peak pair it sits next to, and the same
+    # whatever the hour: it is a separate circuit, not a time band.
+    assert night != pytest.approx(rate(3, "bi"))
+    assert rate(14, "exclusive_night") == pytest.approx(night)
+
+
+def test_the_august_variable_card_states_the_same_formula() -> None:
+    """The August redesign reworded the meter labels and padded the numbers
+    ("mono-horaire (simple) : Epex RLP M * 1,150 + 10,000"). Same contract,
+    so the same coefficients have to come out."""
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    apr = parse_snapshot(
+        "octaplus_smartvariable", _text("octaplus_smartvariable_w.pdf"), "wallonia"
+    ).energy
+    assert isinstance(apr, VariableRates)
+    assert apr.formula_factor_exclusive_night == pytest.approx(1.061 * 1.06)
+
+
+def test_a_card_without_the_formula_keeps_its_printed_rates() -> None:
+    """A layout drift must not silently bill the V-test estimate as if it
+    were the contract, but it must not lose the entry its energy leg either.
+    Dropping to the printed rates is the honest middle, and the live check is
+    what says the formula went missing."""
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    text = _text("octaplus_smartvariable_w.pdf").replace("Epex RLP", "Epex XXX")
+    energy = parse_snapshot("octaplus_smartvariable", text, "wallonia").energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is False
+    assert energy.formula_factor is None
+    assert energy.current == pytest.approx(0.1516)
+
+
 def test_fixed_injection_carries_the_monthly_spp_formula() -> None:
     """ "Le prix de votre injection est indexé mensuellement sur base du
     paramètre d'indexation de la Epex SPP ... monohoraire : Epex SPP x 0,852
