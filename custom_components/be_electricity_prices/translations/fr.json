@@ -237,21 +237,21 @@
         }
       },
       "compare_contract": {
-        "title": "Comparer un autre fournisseur",
-        "description": "Choisissez un contrat de {supplier}. Les contrats statiques et dynamiques sont listes, vous pouvez donc comparer entre types de contrat.",
+        "title": "Comparer un contrat",
+        "description": "Choisissez un contrat chez {supplier}. Les contrats statiques et dynamiques sont proposes, afin de comparer entre types de contrat, et votre propre contrat figure aussi dans la liste : choisissez-le pour savoir ce que couterait le meme contrat avec un autre type de compteur ou un autre regime solaire.",
         "data": {
           "contract": "Contrat"
         }
       },
       "compare_meter": {
-        "title": "Comparer un autre fournisseur",
+        "title": "Comparer un contrat",
         "description": "Type de compteur pour la comparaison. Par defaut le reglage de votre entree actuelle; modifiez pour voir la facture sous un autre mode (mono = tarif unique, bi = jour / nuit).",
         "data": {
           "meter": "Type de compteur"
         }
       },
       "compare_solar": {
-        "title": "Comparer un autre fournisseur",
+        "title": "Comparer un contrat",
         "description": "Regime solaire pour ce devis. Choisissez-en un autre pour voir ce que vous paieriez sous un autre mode de comptage; le regime de votre entree est preselectionne. Contrairement au type de compteur, cela s'applique aux deux cotes, car le regime depend de votre raccordement et non du fournisseur. Rien n'est enregistre. Les deux champs de volume apparaissent lorsque aucun compteur d'injection n'est associe a cette entree: un compteur qui tourne a l'envers rapporte une consommation deja compensee par l'injection, ce qui n'est pas ce que facture le tarif d'injection. Encodez alors vos volumes annuels bruts, releves dans l'application de votre onduleur ou sur votre index annuel.",
         "data": {
           "solar_regime": "Regime",
@@ -260,7 +260,7 @@
         }
       },
       "compare_api_key": {
-        "title": "Comparer un autre fournisseur",
+        "title": "Comparer un contrat",
         "description": "L'option choisie necessite les prix day-ahead d'ENTSO-E pour le devis: un contrat indexe sur le spot (dynamique par créneau, ou mensuel sur la moyenne du mois de fourniture), soit un contrat dont l'injection solaire est indexee sur le prix horaire (Cociter Variable en regime d'injection). Collez un jeton ENTSO-E pour que le devis recupere les prix spot. Le jeton n'est utilise que pour ce devis et n'est pas enregistre.",
         "data": {
           "api_key": "Cle API ENTSO-E"

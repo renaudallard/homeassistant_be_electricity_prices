@@ -237,8 +237,8 @@
         }
       },
       "compare_contract": {
-        "title": "Anderen Lieferanten vergleichen",
-        "description": "Vertrag von {supplier} waehlen. Statische und dynamische Vertraege werden aufgelistet, sodass Sie ueber Vertragsarten hinweg vergleichen koennen.",
+        "title": "Einen Vertrag vergleichen",
+        "description": "Waehlen Sie einen Vertrag von {supplier}. Statische und dynamische Vertraege stehen zur Auswahl, sodass Sie ueber Vertragsarten hinweg vergleichen koennen, und Ihr eigener Vertrag steht ebenfalls in der Liste: waehlen Sie ihn, um zu sehen, was derselbe Vertrag mit einem anderen Zaehlertyp oder Solarregime kosten wuerde.",
         "data": {
           "contract": "Vertrag"
         }

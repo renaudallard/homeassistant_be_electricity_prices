@@ -140,10 +140,15 @@ def _compare_supplier_options(region: str, current_kind: str) -> list[SelectOpti
 def _compare_contract_schema(
     supplier_id: str, region: str, current_kind: str, exclude_contract: str
 ) -> vol.Schema:
-    """Contract picker scoped to the user's region, minus the user's
-    current contract (so they don't quote against themselves).
-    Includes both static and dynamic contracts so the user can ask
-    'should I switch from fixed to dynamic'."""
+    """Contract picker scoped to the user's region.
+
+    Includes both static and dynamic contracts so the user can ask "should I
+    switch from fixed to dynamic", and the user's OWN contract so they can ask
+    "what would this same contract cost me on a bi-hourly meter, or on the
+    injection tariff instead of compensation" - the two switches a household
+    can make without changing supplier. ``exclude_contract`` is kept for
+    callers that do want a strict alternative; pass "" for none.
+    """
     contracts = [
         c for c in _contracts_for(supplier_id, region) if c.id != exclude_contract
     ]
@@ -282,23 +287,18 @@ class _CompareStepsMixin(OptionsFlow):
             self._compare.update(user_input)
             return await self.async_step_compare_meter()
         # The contract picker spans both static and dynamic kinds (the
-        # compare flow supports cross-kind quotes); exclude only the
-        # user's current contract, and iff the picked supplier is the
-        # user's current one.
-        exclude = (
-            current[CONF_CONTRACT]
-            if self._compare[CONF_SUPPLIER] == current[CONF_SUPPLIER]
-            else ""
-        )
-        # Picking yourself when the supplier only has one contract in
-        # your region leaves the dropdown empty with nothing to confirm.
-        # Abort with the same reason as "no alternative supplier" so
-        # the user knows there's nothing to compare against.
-        remaining = [
-            c
-            for c in _contracts_for(self._compare[CONF_SUPPLIER], current[CONF_REGION])
-            if c.id != exclude
-        ]
+        # compare flow supports cross-kind quotes) and includes the user's
+        # OWN contract.
+        #
+        # It used to exclude it, on the grounds that quoting a contract
+        # against itself is a no-op. It is not: the meter and solar steps
+        # that follow default to the entry's own settings but can be changed,
+        # so picking your own contract answers "what would I pay on this same
+        # contract with a bi-hourly meter", or "on the injection tariff
+        # instead of compensation". Those are the two switches a household
+        # can actually make without changing supplier, and they were the only
+        # comparison the page could not do.
+        remaining = _contracts_for(self._compare[CONF_SUPPLIER], current[CONF_REGION])
         if not remaining:
             return self.async_abort(reason="compare_no_alternative")
         return self.async_show_form(
@@ -310,7 +310,7 @@ class _CompareStepsMixin(OptionsFlow):
                 self._compare[CONF_SUPPLIER],
                 current[CONF_REGION],
                 current_kind,
-                exclude,
+                "",
             ),
         )
 
@@ -1052,11 +1052,15 @@ class _CompareStepsMixin(OptionsFlow):
                 f"{_annual_bill(other_snap, quote_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, export_per_kwh=other_export_per_kwh, meter=meter):.2f}"
             )
 
-        # The compare branch cannot quote the user against their own
-        # contract (the picker excludes it), so a regime what-if that moves
-        # both sides together barely moves the printed supplier delta. Price
-        # the user's own contract once more under the entry as configured:
-        # that difference is the whole question a what-if is asking.
+        # A what-if moves BOTH sides together, so the printed supplier delta
+        # barely shifts and the interesting number goes missing. Price the
+        # user's own contract once more under the entry AS CONFIGURED: that
+        # difference is the whole question a what-if is asking.
+        #
+        # It matters more now that the picker offers the user's own contract:
+        # quoting that against itself with a different meter or regime makes
+        # the supplier delta zero by construction, and this baseline is the
+        # only line on the page that answers what the change is worth.
         baseline_annual: float | None = None
         if overridden and current_per_kwh is not None and baseline_snapshot is not None:
             baseline_inj_price = (

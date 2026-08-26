@@ -3918,3 +3918,35 @@ def test_compare_asks_the_raw_snapshot_whether_the_credit_is_monthly() -> None:
     assert export_weighted == pytest.approx(
         _export_weighted_credit(spliced.injection, curve, weights)
     )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_offers_your_own_contract(hass: HomeAssistant) -> None:
+    """The picker used to exclude the user's own contract, on the grounds
+    that quoting it against itself is a no-op. It is not: the meter and solar
+    steps default to the entry's own settings and can be changed, so picking
+    your own contract answers "what would this same contract cost me on a
+    bi-hourly meter", or "on the injection tariff instead of compensation".
+
+    Those are the two switches a household can make WITHOUT changing
+    supplier, and they were the only comparison the page could not do.
+    """
+    from custom_components.be_electricity_prices.compare_flow import (
+        _compare_contract_schema,
+    )
+
+    schema = _compare_contract_schema("eneco", "wallonia", "fixed", "")
+    options = schema.schema[  # the SelectSelector's option list
+        next(k for k in schema.schema if str(k) == "contract")
+    ].config["options"]
+    ids = [o["value"] for o in options]
+    assert "power_fix" in ids, ids
+    # And an explicit exclusion still works for callers that want one.
+    excluded = _compare_contract_schema("eneco", "wallonia", "fixed", "power_fix")
+    excluded_ids = [
+        o["value"]
+        for o in excluded.schema[
+            next(k for k in excluded.schema if str(k) == "contract")
+        ].config["options"]
+    ]
+    assert "power_fix" not in excluded_ids
