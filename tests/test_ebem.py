@@ -428,3 +428,53 @@ def test_injection_resolves_the_delivery_month_not_last_month() -> None:
         assert _historical_injection_rate(inj, 0.04237) == pytest.approx(
             0.026692, abs=1e-6
         )
+
+
+def test_variable_cohort_carries_a_formula_per_meter() -> None:
+    """All four rows were parsed and then dropped, so a bi-hourly cohort was
+    billed the mono pair around the clock: at the card's own May index that is
+    7,0% low at peak and 8,9% high off-peak.
+
+    The sharpest part is that the SAME entry with no start date already billed
+    both bands correctly off the printed columns, so setting a start date -
+    the feature meant to price a cohort more accurately - destroyed the split.
+    """
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    snap = parse_snapshot(
+        "ebem_variable",
+        fixture_text("ebem_variable_2026-05.pdf", layout=True),
+        "t://v",
+        "2026-05",
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    # c/kWh per EUR/MWh of index, grossed to the card's INCL. BTW 6% basis.
+    assert energy.formula_factor == pytest.approx(0.110 * 10 * 1.06)
+    assert energy.formula_factor_peak == pytest.approx(0.120 * 10 * 1.06)
+    assert energy.formula_factor_offpeak == pytest.approx(0.099 * 10 * 1.06)
+    assert energy.formula_factor_exclusive_night == pytest.approx(0.099 * 10 * 1.06)
+
+
+def test_basic_plus_keeps_no_band_formulas() -> None:
+    """B@sic+ prints ONE formula for every meter, "Verbruik alle uren 0,110
+    Belpex + 2,0", and mentions exclusive night only as a fee.
+
+    The trap is concrete rather than hypothetical: both cards live in one PDF,
+    so the text handed to the B@sic+ branch contains the Groen Variabel rows
+    too, and searching it for "Exclusief nacht" finds the OTHER product's
+    coefficients. Its branch must stay where it is and read none of them.
+    """
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    snap = parse_snapshot(
+        "ebem_basic_plus",
+        fixture_text("ebem_variable_2026-05.pdf", layout=True),
+        "t://b",
+        "2026-05",
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.formula_factor_peak is None
+    assert energy.formula_factor_offpeak is None
+    assert energy.formula_factor_exclusive_night is None

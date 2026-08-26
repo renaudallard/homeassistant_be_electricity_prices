@@ -657,7 +657,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v44: Cociter Variable now carries a BELIX coefficient pair per meter, the
 # night circuit included, where a v43 snapshot held only the mono pair and
 # billed every meter on it.
-_SNAPSHOT_SCHEMA_VERSION = 44
+# v45: EBEM Groen Variabel now converts all four of its per-meter formula rows
+# into cohort coefficients. A v44 snapshot carries only the mono pair, which
+# every meter was then billed on.
+_SNAPSHOT_SCHEMA_VERSION = 45
 
 
 def _snapshot_to_dict(

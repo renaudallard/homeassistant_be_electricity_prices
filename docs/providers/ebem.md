@@ -19,7 +19,7 @@ distinct PDF cards. Read this alongside the framework and pricing references:
 | --- | --- | --- |
 | Extractor id | `ebem` | `ebem.py:710` |
 | Label | `EBEM` | `ebem.py:711` |
-| Region(s) served | Flanders only | `_EBEM_REGIONS`, `ebem.py:713` |
+| Region(s) served | Flanders only | `_EBEM_REGIONS`, `ebem.py:728` |
 | Publication form | Monthly PDF cards linked from one HTML listing page | `ebem.py:36` |
 | Listing URL | `https://www.ebem.be/tarieven/` | `_LISTING_URL`, `ebem.py:92` |
 | PDF base | `https://www.ebem.be` | `_PDF_BASE`, `ebem.py:93` |
@@ -162,10 +162,10 @@ regulator-driven rate change propagates without a code change (`ebem.py:322`).
 | Field | Parser | Notes |
 | --- | --- | --- |
 | `energy` | `_extract_energy` (`ebem.py:337`) | branches on `contract_id` |
-| `injection` | `_extract_injection` (`ebem.py:519`) | branches dynamic vs variable |
-| `dsos` | `_extract_dsos` (`ebem.py:659`) | digital-meter table, optional analog prosumer |
-| `taxes.federal_excise` + `energy_contribution` | `_extract_federal_taxes` (`ebem.py:598`) | |
-| `taxes.flanders_renewables` | `_extract_flanders_renewables` (`ebem.py:619`) | |
+| `injection` | `_extract_injection` (`ebem.py:534`) | branches dynamic vs variable |
+| `dsos` | `_extract_dsos` (`ebem.py:674`) | digital-meter table, optional analog prosumer |
+| `taxes.federal_excise` + `energy_contribution` | `_extract_federal_taxes` (`ebem.py:613`) | |
+| `taxes.flanders_renewables` | `_extract_flanders_renewables` (`ebem.py:634`) | |
 | `valid_until` | `_extract_validity` (`ebem.py:299`) | printed Dutch month + year |
 
 ### Validity: `_extract_validity` (`ebem.py:299`)
@@ -220,7 +220,7 @@ parser. Factor / base go through `_formula_to_dynamic` with the card VAT.
 `quarter_hourly=True`. Illustrative from the test: `0.108 * 1.06 * 10 = 1.1448`
 and `1.625 * 1.06 / 100 = 0.017225` (`tests/test_ebem.py:256`).
 
-Yearly fee: `_extract_yearly_fee_abonnement` (`ebem.py:508`), the
+Yearly fee: `_extract_yearly_fee_abonnement` (`ebem.py:523`), the
 `Abonnement ... €/jaar ... €/jaar` row (incl-VAT second column). Illustrative
 `70` (`tests/test_ebem.py:260`).
 
@@ -254,7 +254,7 @@ Each row is `<label> <factor> Belpex <sign> <base>`. A missing row raises
 `Vaste vergoeding (jaarlijkse ...)` row; `yearly_fixed_fee_exclusive_night` is
 the `Vaste vergoeding exclusief nacht` row.
 
-### `_indicative_from_row` (`ebem.py:448`)
+### `_indicative_from_row` (`ebem.py:463`)
 
 EBEM variable cards print four numeric columns per row after the formula:
 `EXCL.BTW`, `INCL.BTW 6%`, `GESCHATTE JAARPRIJS EXCL.BTW`, and
@@ -271,9 +271,9 @@ Illustrative indicatives from the test (`tests/test_ebem.py:93`): mono
 `0.123363`, peak `0.132458`, off-peak / excl-night `0.113359` EUR/kWh; B@sic+
 `0.121243`.
 
-## DSO overlay: `_extract_dsos` (`ebem.py:659`)
+## DSO overlay: `_extract_dsos` (`ebem.py:674`)
 
-Maps the eight Fluvius sub-areas via `_FLANDERS_LABELS` (`ebem.py:647`). Note
+Maps the eight Fluvius sub-areas via `_FLANDERS_LABELS` (`ebem.py:662`). Note
 the card label to canonical DSO key mapping is not one-to-one on names:
 
 | Card label | Canonical key |
@@ -314,7 +314,7 @@ fatal (`ebem.py:687`). Illustrative for `fluvius_iveka`: capacity `59.58`,
 
 ## Tax overlay
 
-`_extract_federal_taxes` (`ebem.py:598`) returns
+`_extract_federal_taxes` (`ebem.py:613`) returns
 `(federal_excise, energy_contribution)` in EUR/kWh:
 
 - Federal excise: the residential `0-3 MWH` band (note the capital `MWH` on this
@@ -324,7 +324,7 @@ fatal (`ebem.py:687`). Illustrative for `fluvius_iveka`: capacity `59.58`,
 
 Both raise `ExtractorError` when the anchor row is missing.
 
-`_extract_flanders_renewables` (`ebem.py:619`) combines
+`_extract_flanders_renewables` (`ebem.py:634`) combines
 `Bijdrage groene stroom` + `Bijdrage WKK` into `flanders_renewables`. The card
 prints both an ex-VAT total and an incl-VAT total; the parser anchors on
 `Totale bijdrage` and reads the `<value> c€/kWh incl. BTW N%` figure (any 1-2
@@ -341,7 +341,7 @@ The remaining `TaxOverlay` fields are zeroed because EBEM is Flanders-only:
 `tests/test_ebem.py:136`). The residential energy-fund tariff is EUR 0; the
 non-residential EUR 10.07/month tier is not modelled (`tests/test_ebem.py:140`).
 
-## Injection: `_extract_injection` (`ebem.py:519`)
+## Injection: `_extract_injection` (`ebem.py:534`)
 
 EBEM spans two of the three injection shapes in the taxonomy (see
 [../pricing-model.md](../pricing-model.md)):
@@ -436,13 +436,13 @@ HTML is read at `tests/test_ebem.py:306`. Fixture text is loaded with
 | --- | --- | --- |
 | Wrong / missing month, or archive proxy silently used | `_extract_validity` (`ebem.py:299`) | title format or a new colliding `word + year` token |
 | Every fetch 404s or picks wrong month | `_PDF_RE` (`ebem.py:102`) / `_find_latest` (`ebem.py:243`) | filename pattern, separator, or kind token changed |
-| Dynamic energy / injection missing | `_extract_energy` dynamic branch (`ebem.py:337`) / `_extract_injection` dynamic (`ebem.py:519`) | `alle uren` / `Belpex15'` label or spacing drift |
-| Variable rate / indicative wrong | `_indicative_from_row` (`ebem.py:448`) | column order / count or sign changed |
+| Dynamic energy / injection missing | `_extract_energy` dynamic branch (`ebem.py:337`) / `_extract_injection` dynamic (`ebem.py:534`) | `alle uren` / `Belpex15'` label or spacing drift |
+| Variable rate / indicative wrong | `_indicative_from_row` (`ebem.py:463`) | column order / count or sign changed |
 | Variable formula row not found | row regexes (`ebem.py:403`) | meter-type label wording changed |
-| Yearly fees wrong | `_extract_yearly_fee_variable` / `_excl_night` / `_abonnement` (`ebem.py:477`) | `Vaste vergoeding` / `Abonnement` label changed |
-| A DSO drops out or a rate shifts | `_extract_dsos` (`ebem.py:659`) / `_FLANDERS_LABELS` (`ebem.py:647`) | Fluvius label rename, table heading, or column order |
-| Taxes zeroed or wrong | `_extract_federal_taxes` (`ebem.py:598`) / `_extract_flanders_renewables` (`ebem.py:619`) | `0-3 MWH` casing, `Beschermende klanten`, or `Totale bijdrage` row drift |
-| Monthly injection indicative missing (fatal) | `_extract_injection` variable branch (`ebem.py:519`) | card stopped printing the realized indicative column |
+| Yearly fees wrong | `_extract_yearly_fee_variable` / `_excl_night` / `_abonnement` (`ebem.py:492`) | `Vaste vergoeding` / `Abonnement` label changed |
+| A DSO drops out or a rate shifts | `_extract_dsos` (`ebem.py:674`) / `_FLANDERS_LABELS` (`ebem.py:662`) | Fluvius label rename, table heading, or column order |
+| Taxes zeroed or wrong | `_extract_federal_taxes` (`ebem.py:613`) / `_extract_flanders_renewables` (`ebem.py:634`) | `0-3 MWH` casing, `Beschermende klanten`, or `Totale bijdrage` row drift |
+| Monthly injection indicative missing (fatal) | `_extract_injection` variable branch (`ebem.py:534`) | card stopped printing the realized indicative column |
 
 Regenerate the fixtures from the current card before adjusting a regex, and keep
 the test-encoded illustrative values in sync with the new card.

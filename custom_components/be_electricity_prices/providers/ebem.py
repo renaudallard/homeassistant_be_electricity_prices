@@ -419,14 +419,21 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
             parse_sign(m.group(2)) * to_float(m.group(3)),
         )
     yearly_fee = _extract_yearly_fee_variable(text)
-    # Signing-cohort coefficients from the mono row, VAT-baked to the EUR/kWh
-    # basis (as the dynamic path does; snapshot vat_rate is 0). The RLP index is
-    # approximated by the plain arithmetic monthly mean; a bi-hourly meter is
-    # billed the mono formula for the whole month (the small peak/off-peak split
-    # is dropped in the re-price).
-    f_factor, f_base = _formula_to_dynamic(
-        parsed["mono"][0], parsed["mono"][1], _vat_multiplier(text)
-    )
+    # Signing-cohort coefficients, VAT-baked to the EUR/kWh basis (as the
+    # dynamic path does; snapshot vat_rate is 0). The RLP index is approximated
+    # by the plain arithmetic monthly mean.
+    #
+    # All four rows are converted, not just the mono one. They were parsed and
+    # then dropped, so a bi-hourly cohort was billed the mono pair around the
+    # clock: at the card's own May index that is 7,0% low at peak and 8,9% high
+    # off-peak, and the SAME entry with no start date already billed both bands
+    # correctly off the printed columns - so setting a start date, the feature
+    # meant to price a cohort more accurately, destroyed the split.
+    vat = _vat_multiplier(text)
+    f_factor, f_base = _formula_to_dynamic(*parsed["mono"], vat)
+    peak_pair = _formula_to_dynamic(*parsed["peak"], vat)
+    offpeak_pair = _formula_to_dynamic(*parsed["offpeak"], vat)
+    night_pair = _formula_to_dynamic(*parsed["excl_night"], vat)
     return VariableRates(
         current=_indicative_from_row(text, "Enkelvoudige teller"),
         peak=_indicative_from_row(text, "Dubbele teller piek"),
@@ -442,6 +449,14 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
         ),
         formula_factor=f_factor,
         formula_base=f_base,
+        formula_factor_peak=peak_pair[0],
+        formula_base_peak=peak_pair[1],
+        formula_factor_offpeak=offpeak_pair[0],
+        formula_base_offpeak=offpeak_pair[1],
+        # A separate night circuit is its own row on this card, not the
+        # off-peak one; they coincide numerically and are distinct contracts.
+        formula_factor_exclusive_night=night_pair[0],
+        formula_base_exclusive_night=night_pair[1],
     )
 
 
