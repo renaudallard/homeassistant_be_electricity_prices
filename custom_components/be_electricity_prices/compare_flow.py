@@ -162,6 +162,28 @@ def _compare_contract_schema(
     )
 
 
+def _chart_labels(
+    current: Mapping[str, Any], compare: Mapping[str, Any]
+) -> tuple[str, str]:
+    """The two row labels for the comparison charts.
+
+    The supplier name alone stops distinguishing the sides as soon as both
+    contracts come from one supplier, which the picker now allows outright.
+    Fall back through what actually differs: supplier, then contract, then
+    neither - the same contract quoted against itself under a different meter
+    or regime, where the only honest labels are which side is which.
+    """
+    cur_supplier = _label_for_supplier(current[CONF_SUPPLIER])
+    cmp_supplier = _label_for_supplier(compare[CONF_SUPPLIER])
+    if cur_supplier != cmp_supplier:
+        return cur_supplier, cmp_supplier
+    cur_contract = _label_for_contract(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+    cmp_contract = _label_for_contract(compare[CONF_SUPPLIER], compare[CONF_CONTRACT])
+    if cur_contract != cmp_contract:
+        return cur_contract, cmp_contract
+    return "Your entry", "Quoted"
+
+
 def _label_for_supplier(supplier_id: str) -> str:
     try:
         return get_extractor(supplier_id).label
@@ -1133,8 +1155,8 @@ class _CompareStepsMixin(OptionsFlow):
         if volumes_typed:
             _populate_charts(
                 placeholders,
-                current_label=_label_for_supplier(current[CONF_SUPPLIER]),
-                compare_label=_label_for_supplier(self._compare[CONF_SUPPLIER]),
+                current_label=_chart_labels(current, self._compare)[0],
+                compare_label=_chart_labels(current, self._compare)[1],
             )
             return placeholders
 
@@ -1252,8 +1274,8 @@ class _CompareStepsMixin(OptionsFlow):
                 )
                 _populate_charts(
                     placeholders,
-                    current_label=_label_for_supplier(current[CONF_SUPPLIER]),
-                    compare_label=_label_for_supplier(self._compare[CONF_SUPPLIER]),
+                    current_label=_chart_labels(current, self._compare)[0],
+                    compare_label=_chart_labels(current, self._compare)[1],
                 )
                 return placeholders
             # Fall through to the simple model on engine failure.
@@ -1305,7 +1327,7 @@ class _CompareStepsMixin(OptionsFlow):
             )
         _populate_charts(
             placeholders,
-            current_label=_label_for_supplier(current[CONF_SUPPLIER]),
-            compare_label=_label_for_supplier(self._compare[CONF_SUPPLIER]),
+            current_label=_chart_labels(current, self._compare)[0],
+            compare_label=_chart_labels(current, self._compare)[1],
         )
         return placeholders

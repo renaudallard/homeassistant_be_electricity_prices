@@ -466,7 +466,7 @@ stale stored value never renders as an invalid pre-selection:
 | Menu option | Step | Effect |
 | --- | --- | --- |
 | `edit` | `async_step_edit` (`config_flow.py:666`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
-| `compare` | `async_step_compare` (`compare_flow.py:253`) | One-off quote against another supplier; nothing saved |
+| `compare` | `async_step_compare` (`compare_flow.py:275`) | One-off quote against another supplier; nothing saved |
 
 Menu labels live in `options.step.init.menu_options` (`strings.json:193`).
 
@@ -533,8 +533,8 @@ anywhere on the page.
 | `compare_contract` | `compare_flow.py:258` | Contract picker via `_compare_contract_schema` (`compare_flow.py:140`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
 | `compare_meter` | `compare_flow.py:299` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:216`) |
 | `compare_solar` | `compare_flow.py:341` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:1028`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:980`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
-| `compare_api_key` | `compare_flow.py:429` | Shown when `_after_compare_meter` (`compare_flow.py:419`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved |
-| `compare_result` | `compare_flow.py:457` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:489`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
+| `compare_api_key` | `compare_flow.py:429` | Shown when `_after_compare_meter` (`compare_flow.py:441`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved |
+| `compare_result` | `compare_flow.py:457` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:511`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
 
 The quoted supplier's freshly fetched card is resolved through
 `snapshot_store._resolve_snapshot`, the same helper the live path uses, so it gets

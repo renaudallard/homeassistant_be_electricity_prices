@@ -587,22 +587,31 @@ def _populate_charts(
         except ValueError:
             continue
         placeholders[chart_key] = _bar_chart(
-            {current_label: cur_v, compare_label: cmp_v}
+            ((current_label, cur_v), (compare_label, cmp_v))
         )
 
 
-def _bar_chart(values: dict[str, float], width: int = 20) -> str:
+def _bar_chart(values: Sequence[tuple[str, float]], width: int = 20) -> str:
     """Two-row unicode bar chart, both rows scaled against the larger
     value so the visual ratio matches the numeric one. Labels are
-    padded so the bars line up. Returns ``""`` when any input is non-
-    finite (negative-billing cases are clamped to zero for the bar
-    only; the EUR values still render to keep the sign visible)."""
+    padded so the bars line up.
+
+    Takes an ORDERED SEQUENCE of pairs, not a mapping. Keyed by label, two
+    sides carrying the same label collapsed into one row - and into the wrong
+    one, because the second value overwrote the first while the first label
+    survived. Comparing two contracts from one supplier did exactly that, and
+    it became the common case once the picker started offering the user's own
+    contract.
+
+    Negative-billing cases (a large solar credit) are clamped to zero for the
+    bar only; the EUR values still render so the sign stays visible.
+    """
     if not values:
         return ""
-    max_v = max(max(values.values(), default=0.0), 1.0)
-    label_w = max(len(k) for k in values)
+    max_v = max(max((v for _, v in values), default=0.0), 1.0)
+    label_w = max(len(k) for k, _ in values)
     rows: list[str] = []
-    for label, v in values.items():
+    for label, v in values:
         bar_v = max(v, 0.0)  # negative annuals (huge solar credit) clamp to empty
         filled = round((bar_v / max_v) * width)
         filled = max(0, min(width, filled))

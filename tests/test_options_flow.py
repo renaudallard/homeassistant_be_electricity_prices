@@ -3950,3 +3950,51 @@ async def test_compare_offers_your_own_contract(hass: HomeAssistant) -> None:
         ].config["options"]
     ]
     assert "power_fix" not in excluded_ids
+
+
+def test_the_comparison_chart_keeps_both_rows_for_one_supplier() -> None:
+    """The chart took a dict keyed by label, so two sides carrying the same
+    label collapsed into ONE row - and into the wrong one, because the second
+    value overwrote the first while the first label survived. Comparing two
+    contracts from a single supplier did exactly that.
+    """
+    from custom_components.be_electricity_prices.compare_quote import (
+        _populate_charts,
+    )
+
+    base = {
+        "current_annual": "1200",
+        "compare_annual": "1050",
+        "current_ytd": "800",
+        "compare_ytd": "700",
+        "annual_chart": "",
+        "ytd_chart": "",
+    }
+    same = dict(base)
+    _populate_charts(same, current_label="Eneco", compare_label="Eneco")
+    rows = same["annual_chart"].splitlines()
+    assert len(rows) == 2, same["annual_chart"]
+    # Each row carries its OWN value, in order.
+    assert "1200" in rows[0]
+    assert "1050" in rows[1]
+
+    different = dict(base)
+    _populate_charts(different, current_label="Eneco", compare_label="Bolt")
+    assert len(different["annual_chart"].splitlines()) == 2
+
+
+def test_chart_labels_fall_back_to_what_actually_differs() -> None:
+    """Supplier name, then contract name, then which side is which. The last
+    case is the same contract quoted against itself under a different meter
+    or regime, where nothing about the product distinguishes the two."""
+    from custom_components.be_electricity_prices.compare_flow import _chart_labels
+
+    own = {"supplier": "eneco", "contract": "power_fix"}
+    assert _chart_labels(own, {"supplier": "bolt", "contract": "bolt_fix"}) == (
+        "Eneco",
+        "Bolt",
+    )
+    same_supplier = _chart_labels(own, {"supplier": "eneco", "contract": "power_flex"})
+    assert same_supplier[0] != same_supplier[1]
+    assert "Vast" in same_supplier[0] and "Flex" in same_supplier[1]
+    assert _chart_labels(own, dict(own)) == ("Your entry", "Quoted")
