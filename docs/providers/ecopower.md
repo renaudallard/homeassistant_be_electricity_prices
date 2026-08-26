@@ -34,7 +34,7 @@ The two products (module docstring, `ecopower.py:26-64`):
 Both cards print all amounts **HTVA** (ex-VAT). Ecopower is the cooperative outlier here: every
 other supplier publishes TVAC and sets `vat_rate=0.0`. Ecopower sets `vat_rate=0.06` in the tax
 overlay so `compute_breakdown` scales the per-kWh energy and levies up to TVAC (module docstring
-`ecopower.py:613-651`; `_extract_taxes` `ecopower.py:606-644`). Residential injection is VAT-exempt,
+`ecopower.py:623-651`; `_extract_taxes` `ecopower.py:606-644`). Residential injection is VAT-exempt,
 so injection formulas are stored unscaled.
 
 That `vat_rate=0.06` also makes Ecopower the one residential card where `base.apply_vat` is **not**
@@ -98,11 +98,11 @@ fetch(session, contract_id, region)              ecopower.py:149
 
 ### Current card discovery
 
-- **gbs** (`_resolve_latest_pdf`, `ecopower.py:846`): GET the price page HTML, run `_CARD_RE`
+- **gbs** (`_resolve_latest_pdf`, `ecopower.py:856`): GET the price page HTML, run `_CARD_RE`
   (`ecopower.py:113`) over it to collect every `(sort_key, YYYYMM, url)` triple, **drop any URL
   containing `inschatting`** (the next-month estimation preview), sort ascending and take the
   highest. That is the card billing today. Label is `YYYY-MM`.
-- **dbs** (`_resolve_latest_dbs_pdf`, `ecopower.py:875`): GET the dynamic product page, run
+- **dbs** (`_resolve_latest_dbs_pdf`, `ecopower.py:885`): GET the dynamic product page, run
   `_DBS_CARD_RE` (`ecopower.py:155`), sort and take the highest. The dynamic formula is
   stable across months, so the newest card is the one in effect.
 
@@ -143,7 +143,7 @@ possible.
   for the textual fallback when `valid_until` is absent. This guards against the CDN serving the
   current card under a historical URL and mis-billing past consumption at current rates. Returns
   `None` when the listing lacks the month, the URL 404s, or the PDF does not parse.
-- **dbs** (`_fetch_dbs_for_month`, `ecopower.py:895`): dynamic cards do not rotate monthly, so
+- **dbs** (`_fetch_dbs_for_month`, `ecopower.py:905`): dynamic cards do not rotate monthly, so
   pick the most recent card whose **month** is not after the requested one (`yyyymm <= target`,
   taken from `_card_stamp_keys` rather than the raw stamp -- comparing the raw stamp excluded a
   `YYYYMMDD` card from its own month, since `"20260801" > "202608"`). That is the card that was
@@ -180,9 +180,9 @@ same layout text through `fixture_text(name, layout=True)` (`test_ecopower.py:55
 | Snapshot field | gbs source | dbs source |
 | --- | --- | --- |
 | `energy` | `_extract_energy` (`ecopower.py:386`) -> `VariableRates.current` | `_extract_dbs_energy` (`ecopower.py:424`) -> `DynamicRates` |
-| `dsos` | `_extract_dsos` (`ecopower.py:470`) | `_extract_dbs_dsos` (`ecopower.py:547`) |
-| `taxes` | `_extract_taxes` (`ecopower.py:613`) | same helper reused |
-| `injection` | `_extract_injection` (`ecopower.py:748`) | `_extract_dbs_injection` (`ecopower.py:825`) |
+| `dsos` | `_extract_dsos` (`ecopower.py:470`) | `_extract_dbs_dsos` (`ecopower.py:557`) |
+| `taxes` | `_extract_taxes` (`ecopower.py:623`) | same helper reused |
+| `injection` | `_extract_injection` (`ecopower.py:758`) | `_extract_dbs_injection` (`ecopower.py:835`) |
 | `valid_until` | `parse_valid_until` (`_pdf.py:947`) | same |
 | `publication_label` | passed in (`YYYY-MM`) | passed in |
 
@@ -254,7 +254,7 @@ exclusive-night rate and the trailing dash on rows where Fluvius publishes a max
 April 2026 card has one, `test_ecopower.py:124-134`); the `(?:\s+[\d,]+)?` group skips it without
 mis-aligning the distribution rate.
 
-Captured columns map to `DsoOverlay` (`ecopower.py:516-522`):
+Captured columns map to `DsoOverlay` (`ecopower.py:523-532`):
 
 - `data_management_per_year` = databeheer (as printed, HTVA; `apply_vat` grosses it)
 - `capacity_eur_per_kw_year` = capacity (as printed, HTVA; `apply_vat` grosses it)
@@ -264,7 +264,7 @@ Captured columns map to `DsoOverlay` (`ecopower.py:516-522`):
   separate transport line, so it stays 0 rather than being double-counted by a guess,
   `test_ecopower.py:118-121`)
 
-**dbs** (`_extract_dbs_dsos`, `ecopower.py:547-588`): the dynamic card has only a digital block (a
+**dbs** (`_extract_dbs_dsos`, `ecopower.py:557-588`): the dynamic card has only a digital block (a
 dynamic contract requires a smart meter), sliced `_slice_between(text, "Nettarieven",
 "Heffingen")` (`ecopower.py:530`). The row layout differs (no separating dashes):
 
@@ -280,7 +280,7 @@ printed, HTVA; `apply_vat` grosses them), `transport = 0.0`.
 
 The dbs DSO block has a wrapped-label hurdle: on the narrower dynamic card pdfplumber wraps the
 longest label `Fluvius Midden-Vlaanderen` across three lines (`Fluvius Midden-` /
-`<numbers>` / `Vlaanderen`). `_DBS_WRAPPED_LABEL_RE` (`ecopower.py:544`) plus the `.sub`
+`<numbers>` / `Vlaanderen`). `_DBS_WRAPPED_LABEL_RE` (`ecopower.py:554`) plus the `.sub`
 (`ecopower.py:565-567`) stitches the two label fragments back around the rate row so the per-DSO
 row regex sees one line. Tests assert the stitched row keeps its real rates
 (`test_ecopower.py:336-343`).
@@ -293,7 +293,7 @@ would let the backfill path silently skip whole months (it swallows the resultin
 
 ### Tax parsing
 
-`_extract_taxes` (`ecopower.py:606-644`), shared by both cards. Regexes at `ecopower.py:613-651`:
+`_extract_taxes` (`ecopower.py:606-644`), shared by both cards. Regexes at `ecopower.py:623-651`:
 
 | TaxOverlay field | Card row | Regex | Required? |
 | --- | --- | --- | --- |
@@ -311,12 +311,12 @@ through per-kWh, so they belong in `flanders_renewables` rather than being baked
 `energy.current` (which would move their value silently when Fluvius changes the certificate
 quota, docstring `ecopower.py:614-619`). **Both are mandatory**: a missing GSC or WKK raises,
 because treating them as optional would let a relabel silently drop a per-kWh charge
-(`ecopower.py:639-640`; `test_missing_gsc_or_wkk_surcharge_is_fatal`, `test_ecopower.py:75-81`).
+(`ecopower.py:649-650`; `test_missing_gsc_or_wkk_surcharge_is_fatal`, `test_ecopower.py:75-81`).
 
 ### Injection parsing
 
 **gbs** injection is a **monthly-indicative-only** shape (taxonomy: `current` set, no
-`factor`/`base`). `_extract_injection` (`ecopower.py:723-756`). The terugleververgoeding is a
+`factor`/`base`). `_extract_injection` (`ecopower.py:733-766`). The terugleververgoeding is a
 feed-in credit the customer *receives*; Ecopower states it is never negative, but the card prints
 it as a negative EUR/kWh figure because it sits in the energy/cost column where a credit shows as a
 negative cost. The parser takes the magnitude (`abs`) so `current` holds a positive credit,
@@ -324,17 +324,17 @@ matching every other supplier's sign (`test_ecopower.py:153-160`).
 
 Three matching strategies, in priority order:
 
-1. `_INJECTION_FIXED_RE` (`ecopower.py:698-701`): an authoritative `OPGELET t.e.m. <date> is de
+1. `_INJECTION_FIXED_RE` (`ecopower.py:708-711`): an authoritative `OPGELET t.e.m. <date> is de
    terugleververgoeding <value> euro/kWh en 100% vast` note. When present **and still in effect**
    (`_fixed_note_in_effect`, `ecopower.py:702-720`), this fixed value wins.
-2. `_INJECTION_RE` (`ecopower.py:650-660`): the label line, matching both the pre-May-2026 label
+2. `_INJECTION_RE` (`ecopower.py:660-670`): the label line, matching both the pre-May-2026 label
    `Terugleververgoeding (digitale meter)` and the post-May-2026 label
    `Injectie Groene Burgerstroom (terugleververgoeding)`.
-3. `_INJECTION_VARIABEL_RE` (`ecopower.py:677-682`): the July 2026 `VAST` / `VARIABEL` layout,
+3. `_INJECTION_VARIABEL_RE` (`ecopower.py:687-692`): the July 2026 `VAST` / `VARIABEL` layout,
    mirroring `_ENERGY_VARIABEL_RE` and anchored the same way. Before it existed the whole block
    missed and `_extract_injection` returned `None`, which costs a solar user their entire feed-in
    credit with no error raised anywhere.
-4. `_INJECTION_SPLIT_RE` (`ecopower.py:672-676`): split-layout fallback where the resolved value
+4. `_INJECTION_SPLIT_RE` (`ecopower.py:682-686`): split-layout fallback where the resolved value
    is on the line below the label.
 
 All four use `SIGN_CHARS` for the leading sign, and non-ASCII minus glyphs are normalised to `-`
@@ -343,7 +343,7 @@ nullable).
 
 **dbs** injection is an **hourly `factor*spot+base`** shape. `_extract_dbs_injection`
 (`ecopower.py:761-776`) parses `Terugleververgoeding elk kwartier 0,00098 × EPEX DA - 0,015
-euro/kWh` via `_DBS_INJECTION_RE` (`ecopower.py:817-822`). Same MWh->kWh factor scaling (`× 1000`)
+euro/kWh` via `_DBS_INJECTION_RE` (`ecopower.py:827-832`). Same MWh->kWh factor scaling (`× 1000`)
 and signed base as the consumption formula. The base can be negative (the credit drops below zero
 at low spot, which the pricing engine respects). Stored unscaled (residential injection is
 VAT-exempt). Sets `current=None`, `factor`, `base`, and a diagnostic `formula` string
@@ -404,7 +404,7 @@ Every non-obvious hazard the source comments flag:
 - **Issue #31, May 2026 injection relabel.** The injection row was renamed from
   `Terugleververgoeding (digitale meter)` to `Injectie Groene Burgerstroom (terugleververgoeding)`,
   which the old regex missed, so the injection price went unavailable. `_INJECTION_RE` now matches
-  both labels (`ecopower.py:657-667`; `test_may_card_injection_label_is_matched`,
+  both labels (`ecopower.py:667-677`; `test_may_card_injection_label_is_matched`,
   `test_ecopower.py:252-260`).
 - **Split-layout cards (mid-2026).** The resolved energy and injection values moved onto the line
   **below** their label. `_ENERGY_SPLIT_RE` and `_INJECTION_SPLIT_RE` are the fallbacks
@@ -478,9 +478,9 @@ Ranked by likelihood of breaking when Ecopower re-renders a card:
    `_INJECTION_FIXED_RE`, `_fixed_note_in_effect` (`ecopower.py:650-720`). Injection is nullable,
    so a miss shows as an unavailable injection sensor, not a hard error (watch for silent loss).
 3. **DSO table column shuffle or new sub-area label** -> `_DSO_LABELS` (`ecopower.py:138-138`),
-   the gbs row regex (`ecopower.py:544-544`), the dbs row regex + `_DBS_WRAPPED_LABEL_RE`
+   the gbs row regex (`ecopower.py:494-500`), the dbs row regex + `_DBS_WRAPPED_LABEL_RE`
    (`ecopower.py:514`, `517-521`). Symptom: `Ecopower: no DSO rows parsed` or a missing sub-area.
-4. **Tax row relabelled** -> `_extract_taxes` regexes (`ecopower.py:613-651`). Symptom: `could not
+4. **Tax row relabelled** -> `_extract_taxes` regexes (`ecopower.py:623-651`). Symptom: `could not
    parse Ecopower federal tax block` or `GSC/WKK renewable surcharge`.
 5. **Card filename family or price-page structure changed** -> `_CARD_RE`, `_DBS_CARD_RE`
    (`ecopower.py:112-158`), `_resolve_latest_pdf` / `_resolve_latest_dbs_pdf`

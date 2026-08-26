@@ -342,10 +342,24 @@ def test_the_flemish_network_ceiling_caps_the_capacity_charge() -> None:
     assert _capped_capacity_annual(overlay, capacity, 600.0, "mono") == pytest.approx(
         capacity
     )
-    # At 400 kWh the headroom is 117,50 and the charge does get capped.
+    # At 400 kWh the headroom is 117,50, which is BELOW the regulated
+    # minimum, so the minimumbijdrage wins. The card states the rule as a
+    # sandwich and this is its second half: "U betaalt dus nooit meer dan dat.
+    # U betaalt wel minstens de minimumbijdrage van 2,5 kW."
+    #
+    # This assertion used to pin the 117,50 and so pinned an under-bill: the
+    # ceiling binds only where capacity dominates, and in exactly that region
+    # the headroom sits under the minimum, so a ceiling applied without the
+    # floor is worse than no ceiling at all.
     assert _capped_capacity_annual(overlay, capacity, 400.0, "mono") == pytest.approx(
-        400.0 * (0.3472738 - 0.0535329)
+        capacity
     )
+    # The cap still does real work where the headroom clears the minimum: at
+    # 460 kWh it takes 135,12 down from... nothing, because the charge is
+    # already lower. Push the charge up instead and the cap bites.
+    assert _capped_capacity_annual(
+        overlay, 5.0 * 52.3679, 460.0, "mono"
+    ) == pytest.approx(460.0 * (0.3472738 - 0.0535329))
     # A household is nowhere near it.
     assert _capped_capacity_annual(overlay, capacity, 3500.0, "mono") == pytest.approx(
         capacity

@@ -38,15 +38,16 @@ from homeassistant.config_entries import ConfigEntry
 from .const import (
     CONF_CONNECTION_KVA_TIER,
     CONF_DSO,
-    CONNECTION_KVA_TIERS_ABOVE_13,
     CONF_DSO_TARIFF_MODE,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
+    CONNECTION_KVA_TIERS_ABOVE_13,
     DEFAULT_CONNECTION_KVA_TIER,
     DSO_MODE_IMPACT,
     REGION_WALLONIA,
     SOLAR_REGIME_COMPENSATION,
+    VREG_CAPACITY_FLOOR_KW,
 )
 from .pricing import (
     MeterType,
@@ -102,11 +103,20 @@ def _capped_capacity_annual(
     times the volume, and the excess comes off the capacity term, which is the
     leg that produced it.
 
-    It binds only where capacity dominates: at the 2026 rates and the
-    regulated 2,5 kW floor that is under about 470 kWh a year, which is a
-    garage box or a second home rather than a household. Returns
-    ``capacity_annual`` unchanged when the card prints no ceiling, when the
-    volume is unknown, or when the total is already under it.
+    The card states it as a SANDWICH, not a ceiling, and the second half
+    matters as much as the first: "U betaalt dus nooit meer dan dat. U betaalt
+    wel minstens de minimumbijdrage van 2,5 kW." So the capped figure may not
+    fall below 2,5 kW of the capacity rate.
+
+    That floor is not decoration. The ceiling binds only where capacity
+    dominates, which at the 2026 rates is under about 470 kWh a year, and in
+    exactly that region the headroom is small; without the floor the cap
+    reduces the charge below the regulated minimum and UNDER-bills. Applying a
+    ceiling without it is worse than applying neither, which is why it lands
+    before the overlays that populate the ceiling rather than after them.
+
+    Returns ``capacity_annual`` unchanged when the card prints no ceiling,
+    when the volume is unknown, or when the total is already under it.
     """
     if overlay is None or overlay.network_ceiling_eur_per_kwh is None:
         return capacity_annual
@@ -116,7 +126,12 @@ def _capped_capacity_annual(
     if meter == "exclusive_night" and overlay.distribution_exclusive_night is not None:
         per_kwh = overlay.distribution_exclusive_night + overlay.transport
     headroom = (overlay.network_ceiling_eur_per_kwh - per_kwh) * annual_kwh
-    return min(capacity_annual, max(headroom, 0.0))
+    capped = min(capacity_annual, max(headroom, 0.0))
+    # ``_billed_peak_kw`` already floors the PEAK at 2,5 kW, so the charge
+    # arrives at or above the minimum; the cap is the only thing that can push
+    # it under, and the card forbids that.
+    minimum = VREG_CAPACITY_FLOOR_KW * (overlay.capacity_eur_per_kw_year or 0.0)
+    return max(capped, min(capacity_annual, minimum))
 
 
 def _brussels_osp_fee(overlay: DsoOverlay | None, entry: ConfigEntry) -> float:

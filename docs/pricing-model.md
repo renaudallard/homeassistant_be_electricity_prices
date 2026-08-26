@@ -832,7 +832,7 @@ overlay, gated the same Walloon-only way (`ytd_cost.py:203-229`).
 
 The Brussels Brugel OSP (Obligations de Service Public) fee is a flat annual
 Sibelga charge scaled by contractual connection power
-(`_brussels_osp_fee`, `fees.py:122-131`):
+(`_brussels_osp_fee`, `fees.py:137-146`):
 
 ```python
 def _brussels_osp_fee(overlay, entry) -> float:      # fees.py:87

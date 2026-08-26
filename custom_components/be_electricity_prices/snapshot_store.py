@@ -662,7 +662,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # every meter was then billed on.
 # v46: the Mega variable cards now carry the fourth per-meter formula, the
 # dedicated night circuit, which a v45 snapshot billed on the mono pair.
-_SNAPSHOT_SCHEMA_VERSION = 46
+# v47: energie.be, DATS 24 and Ecopower now carry the VREG maximumtarief on
+# their Flemish overlays. All three printed it and none stored it, so a
+# low-volume connection was quoted its uncapped network leg.
+_SNAPSHOT_SCHEMA_VERSION = 47
 
 
 def _snapshot_to_dict(

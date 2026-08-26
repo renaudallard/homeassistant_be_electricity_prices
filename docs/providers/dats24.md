@@ -111,7 +111,7 @@ Two deliberate choices:
 |---|---|---|---|---|
 | `dats24_groen_variabel` | `DATS 24 Elektriciteit Groen Variabel` | `variable` | Flanders, Wallonia | False (default) |
 
-Only one `Contract` is declared (`dats24.py:521-528`). There is no fixed, TOU, or
+Only one `Contract` is declared (`dats24.py:527-534`). There is no fixed, TOU, or
 dynamic product, so `quarter_hourly` does not apply (that flag lives on
 `DynamicRates`, not on a variable contract). `spot_indexed_injection` is left at
 its default `False`: that flag means a PER-HOUR spot formula, and this injection
@@ -184,7 +184,7 @@ so the payoff would be one month of more accurate YTD backfill.
 | `dsos` | `_extract_dsos` (dispatches per region) | `dats24.py:283-288` |
 | `taxes` | `_extract_taxes` | `dats24.py:371-442` |
 | `injection` | `_extract_injection` | `dats24.py:463-506` |
-| `publication_label` | `_extract_publication` | `dats24.py:513-515` |
+| `publication_label` | `_extract_publication` | `dats24.py:519-521` |
 | `valid_until` | `parse_valid_until` (shared) | `_pdf.py:947` |
 | `supplier` / `contract` | literals | `dats24.py:221-222` |
 
@@ -402,7 +402,7 @@ There is no supplier-side prosumer/PV forfait on DATS 24 (`supplier_prosumer_eur
 is left unset). The Walloon DSO prosumer term (`prosumer_eur_per_kva_year`) is the
 only prosumer charge, and it lives on the DSO overlay, not the supplier snapshot.
 
-### Publication label (`_extract_publication`, `dats24.py:513-515`)
+### Publication label (`_extract_publication`, `dats24.py:519-521`)
 
 `TARIEFKAART\s+(\w+\s+20\d{2})` case-insensitive, lowercased. Illustrative:
 `april 2026` (`test_dats24.py:91`), `mei 2026` (`test_dats24.py:257`). Empty string
@@ -488,6 +488,6 @@ pure parsers are the unit under test.
 | `DATS 24: Wallonia CV / connection fee not found` | `_extract_taxes` (`dats24.py:371-442`) | `Waals Gewest: CV` or the `Aansluitingsvergoeding Wallonië` footnote changed |
 | `could not parse DATS 24 federal tax block` | `_extract_taxes` (`dats24.py:403-408`) | `Energiebijdrage` or `Verbruik tussen 0 kWh en 3.000 kWh` moved |
 | `DATS 24 injection: monthly indicative missing` | `_extract_injection` (`dats24.py:448-491`) | the `Teruglevering2 (c€/kWh)` label changed, or the card went spot-formula |
-| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:513-515`), `parse_valid_until` (`_pdf.py:947`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
+| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:519-521`), `parse_valid_until` (`_pdf.py:947`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
 | Values off by 100x | the per-column `/100.0` divisions in the DSO/energy/tax parsers | a c€/kWh column became EUR/kWh (or a EUR/yr column got divided) |
 | `PDF layout parse error` / html-not-pdf | `_pdf.py:244-251`, `334-344` | the CDN returned HTML (file moved) or an undecodable PDF |

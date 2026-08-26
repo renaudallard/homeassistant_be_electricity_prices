@@ -540,7 +540,21 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     start = text.find("Nettarieven")
     if start < 0:
         raise ExtractorError("could not locate energie.be DSO table")
-    section = text[start:]
+    # The residential block only. The dynamic card carries a SECOND
+    # "Nettarieven" table, the professional one, and it prints its own
+    # maximumtarief HTVA (0,3276168 against the residential 0,3472738). A
+    # whole-document search hands a residential entry a ceiling 6% low.
+    nxt = text.find("Nettarieven", start + 1)
+    section = text[start:] if nxt < 0 else text[start:nxt]
+    # "Voor digitale meters geldt een maximumtarief van 0,3472738 EUR/kWh
+    # (excl. databeheer)." pdfplumber renders it "maxi mumtarief" on the two
+    # August cards and "maximumtarief" on the July dynamic one, so the space
+    # is optional or only one of the three generations matches. Stored as
+    # printed, on this card's own basis.
+    ceiling_match = re.search(
+        r"maxi\s*mumtarief\s+van\s+" + _NUM + r"\s*EUR/kWh", section, re.IGNORECASE
+    )
+    ceiling = to_float(ceiling_match.group(1)) if ceiling_match else None
     out: dict[str, DsoOverlay] = {}
     for prefix, key in _DSO_ROWS:
         row = re.search(
@@ -561,6 +575,7 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             transport=0.0,
             capacity_eur_per_kw_year=capacity,
             data_management_per_year=databeheer,
+            network_ceiling_eur_per_kwh=ceiling,
         )
     return out
 

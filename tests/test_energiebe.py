@@ -953,3 +953,27 @@ def test_fixed_contract_is_registered() -> None:
         "energiebe_variable",
         "energiebe_fixed",
     }
+
+
+def test_the_residential_maximumtarief_is_captured() -> None:
+    """ "Voor digitale meters geldt een maximumtarief van 0,3472738 EUR/kWh
+    (excl. databeheer)." The VREG ceiling caps the network leg, and without it
+    a low-volume connection is over-quoted.
+
+    Scoped to the residential Nettarieven block: the dynamic card carries a
+    SECOND, professional table printing its own ceiling HTVA (0,3276168), and
+    a whole-document search hands a residential entry a figure 6% low.
+    pdfplumber also splits the word as "maxi mumtarief" on the August cards
+    and not on the July one, so the space has to be optional or only one
+    generation matches.
+    """
+    for fixture, cid in (
+        ("energiebe_fixed_aug.pdf", "energiebe_fixed"),
+        ("energiebe_variable_aug.pdf", "energiebe_variable"),
+        ("energiebe_dynamic_jul.pdf", "energiebe_dynamic"),
+    ):
+        snap = parse_snapshot(fixture_text(fixture, layout=True), "t://x", cid)
+        for key, overlay in snap.dsos.items():
+            assert overlay.network_ceiling_eur_per_kwh == pytest.approx(0.3472738), (
+                f"{fixture}/{key}"
+            )

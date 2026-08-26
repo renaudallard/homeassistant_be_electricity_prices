@@ -476,3 +476,17 @@ def test_injection_resolves_the_delivery_month_not_the_most_recent_value() -> No
         "wallonia",
     )
     assert walloon.injection is None
+
+
+def test_the_maximum_tarief_column_is_kept() -> None:
+    """The Flanders row captured ten columns and used nine. Column 4 is the
+    VREG MAXIMUM-TARIEF, printed under "AFNAME AFNAME MAXIMUM-" with units
+    "c€/kWh", and the card's footer says every price includes 6% btw, so it is
+    stored TVAC like the rest."""
+    snap = parse_snapshot(
+        fixture_text("dats24_groen_variabel_apr.pdf", layout=True), "t://x", "flanders"
+    )
+    for key, overlay in snap.dsos.items():
+        assert overlay.network_ceiling_eur_per_kwh == pytest.approx(0.3473, abs=1e-4), (
+            key
+        )

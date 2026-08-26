@@ -720,3 +720,20 @@ def test_energy_fund_marker_is_not_read_as_a_third_decimal() -> None:
     ):
         snap = parse_snapshot(fixture_text(fixture, layout=True), "t://", "x")
         assert snap.taxes.energy_fund_eur_per_month == pytest.approx(0.0), fixture
+
+
+def test_the_optional_maximumtarief_column_is_kept() -> None:
+    """The 7th column slides in only on rows where Fluvius publishes a
+    maximum. It was matched to keep the row aligned and then thrown away.
+
+    Stored HTVA as printed, like every per-kWh figure on this card: 0,3276168
+    here against the 0,3472738 the TVAC cards print, and apply_vat is what
+    turns one into the other.
+    """
+    snap = parse_snapshot(
+        fixture_text("ecopower_burgerstroom_apr.pdf", layout=True), "t://x", "2026-04"
+    )
+    imewo = snap.dsos["fluvius_imewo"]
+    assert imewo.network_ceiling_eur_per_kwh == pytest.approx(0.3276168)
+    # A row without the column keeps None rather than borrowing a neighbour's.
+    assert snap.dsos["fluvius_antwerpen"].network_ceiling_eur_per_kwh is None

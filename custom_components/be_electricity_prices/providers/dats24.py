@@ -322,6 +322,12 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
             # Flanders cards so the overlay is complete.
             prosumer_eur_per_kva_year=to_float(row.group(8)),
             data_management_per_year=to_float(row.group(10)),
+            # Column 4 is the VREG MAXIMUM-TARIEF, captured all along and then
+            # discarded. The card's header reads "AFNAME AFNAME MAXIMUM-" over
+            # units "c€/kWh c€/kWh c€/kWh", and the footer says "Alle prijzen
+            # zijn inclusief 6% btw", so it is stored TVAC as printed like the
+            # rest of this card.
+            network_ceiling_eur_per_kwh=to_float(row.group(4)) / 100.0,
         )
     return out
 

@@ -493,7 +493,7 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         # Fluvius publishes a maximum (Imewo's Apr 2026 card has one).
         row = re.search(
             rf"^{re.escape(label)}\s+([\d,]+)\s+([\d,]+)\s+-\s+([\d,]+)\s+([\d,]+)"
-            rf"(?:\s+[\d,]+)?\s+-",
+            rf"(?:\s+([\d,]+))?\s+-",
             section,
             re.MULTILINE,
         )
@@ -513,12 +513,22 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         # for it; now propagated for users on the exclusive_night
         # meter type. Same scaling as ``single``.
         excl_night = to_float(row.group(4))
+        # Group 5 is the optional Maximumtarief. The card states the rule the
+        # engine applies: "Zou u met het capaciteitstarief en het nettarief
+        # per kWh meer nettarieven betalen dan met het maximumtarief? Dan
+        # betaalt u het maximumtarief. U betaalt dus nooit meer dan dat. U
+        # betaalt wel minstens de minimumbijdrage van 2,5 kW." Stored HTVA as
+        # printed, like every other per-kWh figure on this card; apply_vat
+        # grosses it per entry.
         out[key] = DsoOverlay(
             distribution_single=single,
             distribution_exclusive_night=excl_night,
             transport=0.0,  # rolled into distribution on Ecopower's card
             capacity_eur_per_kw_year=capacity,
             data_management_per_year=databeheer,
+            network_ceiling_eur_per_kwh=(
+                to_float(row.group(5)) if row.group(5) else None
+            ),
         )
     if not out:
         # The section header matched but no DSO row did - a column-layout
