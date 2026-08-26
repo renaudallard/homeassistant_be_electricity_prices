@@ -322,6 +322,48 @@ async def test_a_real_impact_triplet_is_left_alone(hass: HomeAssistant) -> None:
     assert entry.data["custom_dso_distribution_pic"] == pytest.approx(0.1511)
 
 
+async def test_a_stale_signing_rate_cannot_override_the_typed_formula(
+    hass: HomeAssistant,
+) -> None:
+    """An entry EDITED onto the custom supplier keeps the manual rate and
+    start date from its previous life. The signing-rate step is never offered
+    for custom, so nothing pops them, and the overlay silently replaced the
+    formula the user typed with the old supplier's rate - measured at +0,09
+    EUR/kWh and +60 EUR of fee, in whichever direction that supplier charged.
+    """
+    from custom_components.be_electricity_prices.cohort import _cohort_energy_leg
+    from custom_components.be_electricity_prices.providers.custom import (
+        build_snapshot,
+    )
+
+    data = {
+        "supplier": "custom",
+        "contract": "custom_fixed",
+        "region": "wallonia",
+        "custom_energy_single": 0.1300,
+        "custom_yearly_fixed_fee": 60.0,
+        # left behind by the entry's previous life as a real supplier
+        "manual_energy_single": 0.22,
+        "manual_yearly_fee": 120.0,
+        "contract_start_date": "2025-06-01",
+    }
+    entry = make_entry(**data)
+    entry.add_to_hass(hass)
+    snap = build_snapshot(data, "wallonia", "custom")
+
+    leg = await _cohort_energy_leg(
+        hass,
+        None,  # type: ignore[arg-type]
+        None,  # type: ignore[arg-type]
+        "custom_fixed",
+        "wallonia",
+        entry,
+        snap,
+    )
+    # Not the 0,22 the old supplier charged; the typed 0,13 stands.
+    assert leg is None
+
+
 def test_floor_injection_passthrough_without_flag() -> None:
     inj = InjectionRates(current=-0.001, floor_at_zero=False)
     assert _floor_injection(-0.001, inj) == -0.001

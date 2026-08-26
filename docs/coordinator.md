@@ -197,9 +197,9 @@ falls through to branch 2's soft path. Because only the dynamic and spot-monthly
 never prompted for; `_cohort_energy_leg` therefore drops the cohort leg when no
 key is configured (`coordinator.py:766`), keeping the current card instead.
 
-**Cohort resolution order** (`_cohort_energy_leg`, `cohort.py:280`): the
+**Cohort resolution order** (`_cohort_energy_leg`, `cohort.py:282`): the
 hand-entered signing rate first, then the archived signing-month card, then the
-current card. `_manual_energy_leg` (`cohort.py:106`) overlays what the user
+current card. `_manual_energy_leg` (`cohort.py:108`) overlays what the user
 typed onto whichever card was retrieved, **per field**, so a half-filled form
 keeps the archived signing-month values for the boxes left blank rather than
 today's. The archive is authoritative only about the *published* card; a
@@ -325,7 +325,7 @@ The same charge is accrued into the running bill by `_ytd_capacity`, which walks
 
 ## 7. Year-to-date / current-year cost
 
-`_compute_current_year_cost` (`ytd_cost.py:586`) computes the running bill from Jan 1 of the local year to today. It bills each past day at the tariff of the month that day belongs to, using an archived snapshot when the supplier exposes `fetch_for_month` (`providers/base.py:928`) and the current snapshot as a proxy otherwise (`_snapshot_for_month`, `snapshot_store.py:330`). When a contract start date is set it routes every past month through `_effective_snapshot_for_month` (`cohort.py:395`) instead, which splices the signing cohort's energy leg onto each delivery month's overlays, and dispatches on that cohort's effective energy kind so a re-priced variable contract takes the monthly-mean path. The whole year is recomputed from scratch each tick by design (`ytd_cost.py:586`): prior days are not immutable (a late ENTSO-E fill or a backfill correction changes a past rate), and the full replay is cheap pure arithmetic.
+`_compute_current_year_cost` (`ytd_cost.py:586`) computes the running bill from Jan 1 of the local year to today. It bills each past day at the tariff of the month that day belongs to, using an archived snapshot when the supplier exposes `fetch_for_month` (`providers/base.py:928`) and the current snapshot as a proxy otherwise (`_snapshot_for_month`, `snapshot_store.py:330`). When a contract start date is set it routes every past month through `_effective_snapshot_for_month` (`cohort.py:412`) instead, which splices the signing cohort's energy leg onto each delivery month's overlays, and dispatches on that cohort's effective energy kind so a re-priced variable contract takes the monthly-mean path. The whole year is recomputed from scratch each tick by design (`ytd_cost.py:586`): prior days are not immutable (a late ENTSO-E fill or a backfill correction changes a past rate), and the full replay is cheap pure arithmetic.
 
 Fees are always summed first and act as the floor: `_ytd_static_fees` (`ytd_cost.py:171`, the supplier yearly fee, energy fund, DSO data-management fee, and Brussels OSP fee, pro-rated per archived month) plus `_ytd_prosumer` (`ytd_cost.py:206`, the Walloon compensation fee). If no meters are wired the function returns fees only, never `unknown` (`ytd_cost.py:206`).
 

@@ -57,6 +57,8 @@ from .const import (
     CONF_MANUAL_ENERGY_PEAK,
     CONF_MANUAL_ENERGY_SINGLE,
     CONF_MANUAL_YEARLY_FEE,
+    CONF_SUPPLIER,
+    SUPPLIER_CUSTOM,
 )
 from .providers.base import (
     DynamicRates,
@@ -309,6 +311,21 @@ async def _cohort_energy_leg(
     signing history, so it must always price at the current card).
     """
     if contract != entry.data.get(CONF_CONTRACT):
+        return None
+    if entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
+        # The custom supplier's rate IS what the user typed on the
+        # custom_energy step, so there is nothing for a signing rate to
+        # improve on and the signing-rate step is never offered for it
+        # (_needs_manual_rate). But an entry EDITED onto the custom supplier
+        # keeps whatever manual rate and start date it carried from its
+        # previous life, and nothing pops them: only async_step_signed_rate
+        # does that, and it no longer runs. The overlay then quietly replaced
+        # the typed formula with the old supplier's rate - measured at +0,09
+        # EUR/kWh and +60 EUR of fee on one such entry, in whichever direction
+        # the old supplier happened to charge.
+        #
+        # Guarding here rather than only popping the keys in the flow is what
+        # heals the entries already holding them.
         return None
     start = _contract_start_month(entry)
     if start is None:
