@@ -1,0 +1,71 @@
+name: Endpoint probe
+
+# The other half of scripts/probe_endpoint.py. A supplier fetch that times out
+# in CI and succeeds from a workstation is a different fault from one that is
+# simply slow, and the live-check report cannot tell them apart: both arrive as
+# TimeoutError. Mega has already done the first kind to this repository,
+# serving a residential connection normally while timing out from Actions
+# runners for weeks.
+#
+# So this runs the same probe from a runner. Compare its output against the
+# same command run locally:
+#
+#   * both slow, near the timeout  -> the supplier is slow, tune the timeout
+#   * fast locally, slow here      -> the runner's egress is treated
+#                                     differently, and no timeout fixes that
+#
+# Manual only. It answers a question someone is asking, and there is nothing to
+# gate: a supplier being slow today is not a reason to fail a workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: >-
+          Space-separated URLs to probe. Empty probes the three suppliers that
+          have timed out in recent live runs.
+        required: false
+        default: ""
+      attempts:
+        description: "Requests per URL"
+        required: false
+        default: "5"
+      timeout:
+        description: "Per-request ceiling in seconds (30 = the PDF fetch default)"
+        required: false
+        default: "30"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # aiohttp alone: the probe imports USER_AGENT from the providers package
+      # but touches no Home Assistant code, so the full test extra would just
+      # slow the answer down.
+      - run: pip install aiohttp
+      - name: Probe
+        run: |
+          echo "runner egress address:"
+          curl -sS --max-time 15 https://api.ipify.org || echo "  (ipify unreachable)"
+          echo
+          python scripts/probe_endpoint.py \
+            --attempts "${{ inputs.attempts }}" \
+            --timeout "${{ inputs.timeout }}" \
+            ${{ inputs.urls }} | tee probe.txt
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '## Endpoint probe (GitHub runner)'
+            echo
+            echo '```'
+            cat probe.txt 2>/dev/null || echo 'no output'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

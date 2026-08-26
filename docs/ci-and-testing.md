@@ -564,6 +564,34 @@ published rather than a hardcoded supplier list: a supplier that goes back to pu
 starts gating again by itself, with no edit here. The rows still appear in the report, under their
 own heading and counted separately in the headline, so a green run never hides them.
 
+### Telling a slow supplier from a blocked runner
+
+`scripts/probe_endpoint.py` and the `Endpoint probe` workflow exist for one
+question the live-check report cannot answer: a fetch that times out in CI and
+succeeds from a workstation is a **different fault** from one that is simply
+slow, and both arrive as `TimeoutError`. Mega has already done the first kind to
+this repository, serving a residential connection normally while timing out from
+Actions runners for weeks.
+
+The probe reports DNS, connect (TCP + TLS), time-to-first-byte and total, per
+attempt, using the integration's own `User-Agent` and the same 30 s ceiling
+`fetch_pdf_text_layout` applies — so what it measures is what the extractor
+would experience. Run it locally and dispatch the workflow, then compare:
+
+| both vantage points | reading |
+| --- | --- |
+| similar, near the ceiling | the supplier is slow; the timeout is the number to argue about |
+| fast locally, slow or failing from CI | the runner's egress is being treated differently, and no timeout value fixes it |
+
+Two details that make the numbers mean something. The connector sets
+`force_close`, so every attempt pays the full handshake rather than reusing a
+warm connection and hiding the cost this is here to time. And the trace hook is
+attached to the **session**: a `TraceConfig` built per request and attached to
+nothing is never called, which reports every connect as `None`.
+
+It never gates. A supplier being slow today is not a reason to fail a workflow
+someone ran to find out whether it is.
+
 ### The transient-only retry helper
 
 `_fetch_with_retry(factory, *, attempts=3)` (`scripts/live_check.py:551`) calls `factory()`, and on
