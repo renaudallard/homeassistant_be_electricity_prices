@@ -837,6 +837,10 @@ class _CompareStepsMixin(OptionsFlow):
         # feature exists for. _cohort_energy_leg returns None for a contract
         # that is not the entry's own, so it can never touch the other side.
         current_snapshot = coord._snapshot
+        # Kept before any cohort splice: _compare_injection_credit has to ask
+        # the RAW snapshot whether the CREDIT rides a month mean, because the
+        # splice replaces the ENERGY leg only.
+        raw_snapshot = coord._snapshot
         # The card the entry is actually configured on, which the baseline
         # leg prices. Only the expert custom supplier builds its snapshot
         # out of entry.data, so only there can the what-if card and the
@@ -1001,6 +1005,7 @@ class _CompareStepsMixin(OptionsFlow):
                     avg_spot,
                     await _spp_spot_for(current_snapshot),
                     inj_hour_weights,
+                    raw_snapshot=raw_snapshot,
                 )
                 if current_inj_price is None and rolling_inj_kwh > 0:
                     uncredited.append(
@@ -1062,6 +1067,7 @@ class _CompareStepsMixin(OptionsFlow):
                     avg_spot,
                     await _spp_spot_for(baseline_snapshot),
                     inj_hour_weights,
+                    raw_snapshot=raw_snapshot,
                 )
                 if stored_regime == SOLAR_REGIME_INJECTION
                 else None

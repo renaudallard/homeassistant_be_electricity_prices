@@ -159,7 +159,7 @@ endpoint, this is how the live-check script detects a retired product (its URL
 starts 404ing) versus the registry's declared ids. A brand-new product is invisible
 to `discover()` until its filename is added to `_CONTRACTS`. Behaviour is pinned by
 `test_discover_returns_all_three_contracts_when_each_url_200s` and
-`test_discover_drops_retired_product_when_url_404s` (`tests/test_ecofix.py:406`).
+`test_discover_drops_retired_product_when_url_404s` (`tests/test_ecofix.py:407`).
 
 ## Parsing
 
@@ -295,7 +295,7 @@ Non-ORES DSOs mapped from `_WALLONIA_LABELS`: `aieg`, `aiesh`, `rew` (label `WAV
 which are collapsed to a single `ores` key. If a future card splits sub-areas
 (different numbers per row), `_extract_ores` raises `ExtractorError` rather than
 silently billing at the first sub-area's rate
-(`test_ores_subarea_drift_is_rejected`, `tests/test_ecofix.py:346`).
+(`test_ores_subarea_drift_is_rejected`, `tests/test_ecofix.py:347`).
 
 ## Tax overlay
 

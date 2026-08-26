@@ -3827,3 +3827,94 @@ def test_compensation_prices_each_side_of_the_netting_on_its_own_shape() -> None
         cons,
         inj,
     ) == pytest.approx(lumped)
+
+
+def test_compare_asks_the_raw_snapshot_whether_the_credit_is_monthly() -> None:
+    """The compare page splices a cohort's SpotMonthlyRates ENERGY leg onto
+    the current side, so a Cociter Variable entry arrives looking month-mean
+    priced while its injection is still the hourly BELPEX formula - note (9)
+    "le prix de l'injection varie chaque heure" against note (7)'s monthly
+    consumption.
+
+    Judged on the spliced snapshot the credit falls onto the flat window mean,
+    which weighs every hour of the clock alike and ignores that panels export
+    into the midday trough. That understates the user's OWN bill and so biases
+    the comparison toward staying put.
+    """
+    from datetime import UTC, datetime as dt
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        InjectionRates,
+        SpotMonthlyRates,
+        SupplierSnapshot,
+        TaxOverlay,
+        VariableRates,
+    )
+
+    def _snap(energy: Any) -> SupplierSnapshot:
+        return SupplierSnapshot(
+            supplier="cociter",
+            contract="cociter_variable",
+            energy=energy,
+            injection=InjectionRates(current=None, factor=0.97, base=-0.021),
+            dsos={
+                "ores": DsoOverlay(
+                    distribution_single=0.1,
+                    transport=0.02,
+                    data_management_per_year=0.0,
+                )
+            },
+            taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+            source_url="t://x",
+        )
+
+    raw = _snap(VariableRates(current=0.12))
+    spliced = _snap(SpotMonthlyRates(factor=0.795, base=0.053))
+    entry = SimpleNamespace(data={"solar_regime": "injection"})
+    # A midday trough with an export shape that lives in it.
+    curve = {
+        dt(2026, 4, 15, h, tzinfo=UTC): (0.02 if 10 <= h <= 15 else 0.14)
+        for h in range(24)
+    }
+    weights = {h: (3.0 if 10 <= h <= 15 else 0.1) for h in range(24)}
+    avg = sum(curve.values()) / len(curve)
+
+    on_window_mean = _compare_injection_credit(
+        spliced,
+        entry,  # type: ignore[arg-type]
+        curve,
+        avg,
+        None,
+        weights,
+    )
+    export_weighted = _compare_injection_credit(
+        spliced,
+        entry,  # type: ignore[arg-type]
+        curve,
+        avg,
+        None,
+        weights,
+        raw_snapshot=raw,
+    )
+    assert on_window_mean is not None and export_weighted is not None
+    # Weighting by when the panels actually export lands well below the flat
+    # window mean, because the export sits in the midday trough. The exact
+    # figure depends on the local-hour mapping; the direction and the size of
+    # the gap are the point.
+    assert export_weighted < on_window_mean
+    assert on_window_mean - export_weighted > 0.02
+    # And it equals what the shared export-weighting helper computes, so the
+    # raw snapshot really did route through that branch.
+    from custom_components.be_electricity_prices.compare_quote import (
+        _export_weighted_credit,
+    )
+
+    assert spliced.injection is not None
+    assert export_weighted == pytest.approx(
+        _export_weighted_credit(spliced.injection, curve, weights)
+    )

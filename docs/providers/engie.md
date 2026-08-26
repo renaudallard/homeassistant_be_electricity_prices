@@ -247,7 +247,7 @@ On the 7-column Empower card the pricing model only carries mono + bi-horaire +
 exclusive-night, so the three Flextime middle columns are skipped for the
 non-Flextime variants, and exclusive-night is taken from index 6, not from the
 visually-cheapest Flextime super-creuses column (`engie.py:509`, test
-`test_empower_variable_skips_flextime_tiers` `tests/test_engie.py:309`).
+`test_empower_variable_skips_flextime_tiers` `tests/test_engie.py:310`).
 
 ### Dynamic formula parsing and unit conversion
 
@@ -265,7 +265,7 @@ factor_eur_kwh = factor_pdf * vat * 1000 / 100 = factor_pdf * vat * 10
 base_eur_kwh   = base_cents  * vat / 100
 ```
 
-`test_dynamic_extracts_consumption_formula` (`tests/test_engie.py:178`) pins the
+`test_dynamic_extracts_consumption_formula` (`tests/test_engie.py:179`) pins the
 result (illustrative, April 2026 card printing `0,8702 + (0,1039 x eSpot_15)` at
 6% VAT): `factor == 1.10134`, `base == 0.00922412`, `yearly_fixed_fee == 100.7`.
 The pinned literal deliberately guards a `1.06` vs `10` unit-swap bug that would
@@ -338,7 +338,7 @@ Five DSOs mapped via `_WALLONIA_LABELS` (`engie.py:1068`): AIEG, AIESH,
 on dynamic contracts (the prosumer column is replaced by nothing, since dynamic
 SMR3 contracts have no compensation regime; `engie.py:793`, test
 `test_dynamic_wallonia_dso_has_separate_transport_no_prosumer`
-`tests/test_engie.py:202`). The last column is always the c€/kWh transport rate,
+`tests/test_engie.py:203`). The last column is always the c€/kWh transport rate,
 so it is billed separately (unlike Flanders).
 
 Two gotchas guard this parser:
@@ -353,7 +353,7 @@ Two gotchas guard this parser:
   sub-area row equals the first and raises `ORES sub-area tariffs diverged`
   otherwise, so a future tariff split is caught rather than silently billing
   every ORES customer the Brab. Wal. rate. Test
-  `test_wallonia_ores_subarea_divergence_is_fatal` (`tests/test_engie.py:190`).
+  `test_wallonia_ores_subarea_divergence_is_fatal` (`tests/test_engie.py:191`).
 
 ### Brussels (`_extract_brussels_dsos`, `engie.py:1147`)
 
@@ -361,7 +361,7 @@ Reads the single Sibelga row (`engie.py:841`). Brussels has no separate capacity
 charge (capacity is Flanders-only), so the parser folds two flat annual euros,
 the metering fee (`Activité de mesure`, column 5) and the Sibelga <=13kVA power
 term (column 6), into `data_management_per_year` (`engie.py:1024`, test
-`test_dynamic_brussels_extracts_sibelga` `tests/test_engie.py:262`, illustrative
+`test_dynamic_brussels_extracts_sibelga` `tests/test_engie.py:263`, illustrative
 `14.73 + 50.07`). It also parses the Brugel OSP annual-fee table via the shared
 `parse_brussels_osp` (`_pdf.py:690`) into `brussels_osp_by_tier`.
 
@@ -446,7 +446,7 @@ No supplier-side PV / prosumer forfait: Engie does not populate
   `<N>% de tva comprise` phrase and raises `could not parse Engie dynamic VAT
   multiplier` if absent, rather than falling back to the shared helper's 6%
   default and masking a rate/wording change. Test
-  `test_dynamic_missing_vat_phrase_is_fatal` (`tests/test_engie.py:202`).
+  `test_dynamic_missing_vat_phrase_is_fatal` (`tests/test_engie.py:203`).
 - Yearly-fee two-layout fallback (standard `Type d'usage` vs Empower
   `Prix mensuels`), `engie.py:432`.
 - One PDF, three billing modes. Empower Variable and Empower Flextime share the
@@ -455,7 +455,7 @@ No supplier-side PV / prosumer forfait: Engie does not populate
 - `Prix mensuels` vs `Prix annuels estimés`. The variable card prints two
   Consommation rows; the extractor must take the monthly one (the first match),
   because the annual estimate over-bills by ~7% in a falling-price month (test
-  `test_easy_variable_uses_monthly_not_annual_estimate` `tests/test_engie.py:451`).
+  `test_easy_variable_uses_monthly_not_annual_estimate` `tests/test_engie.py:453`).
 - Comma-stripped energy contribution (`020417` for `0,20417`), `engie.py:649`.
 - Apostrophe glyph drift: `d'usage` matched as `d[©']usage`, `Cotisation sur
   l['©]énergie` (`engie.py:445`, `engie.py:663`).
@@ -470,7 +470,7 @@ No supplier-side PV / prosumer forfait: Engie does not populate
 - Tarif Social is intentionally excluded (`engie.py:225`).
 - Partial-region resilience: `parse_snapshot` accepts a single-region map so a
   snapshot still builds if Engie's API is down for one region (test
-  `test_parse_snapshot_with_partial_regions_still_works` `tests/test_engie.py:475`).
+  `test_parse_snapshot_with_partial_regions_still_works` `tests/test_engie.py:477`).
 
 ## Test fixtures
 

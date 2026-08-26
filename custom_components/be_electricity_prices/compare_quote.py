@@ -216,6 +216,7 @@ def _compare_injection_credit(
     avg_spot: float | None,
     spp_spot: float | None = None,
     inj_hour_weights: dict[int, float] | None = None,
+    raw_snapshot: Any = None,
 ) -> float | None:
     """Injection credit (EUR/kWh) for the compare flow's annual estimate.
 
@@ -282,7 +283,19 @@ def _compare_injection_credit(
     ):
         if avg_spot is None:
             return None
-        if spot_dict and not _injection_on_month_mean(snapshot):
+        # Asked of the RAW, pre-splice snapshot when the caller has one. The
+        # compare page splices a cohort's SpotMonthlyRates energy leg onto the
+        # current side, so a Cociter Variable entry arrives here looking
+        # month-mean priced while its injection is still the hourly BELPEX
+        # formula the card describes - note (9) "le prix de l'injection varie
+        # chaque heure" against note (7)'s monthly consumption. Judged on the
+        # spliced snapshot the credit fell onto the window mean and the page
+        # quoted 0,07959 EUR/kWh where the live tick, the year-to-date walk
+        # and the backfill all say 0,05023: it understated the user's own bill
+        # and so biased the comparison toward staying put.
+        if spot_dict and not _injection_on_month_mean(
+            snapshot if raw_snapshot is None else raw_snapshot
+        ):
             # Priced per slot and averaged by when the panels export, because
             # that is what the year's exported kWh is billed at. Evaluating
             # the formula once at the window mean instead answers a different
