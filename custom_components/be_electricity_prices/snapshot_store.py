@@ -671,7 +671,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # and month_indexed, and SpotMonthlyRates gained the third band plus the
 # weekend rule to price them. A v48 snapshot holds only the printed triplet,
 # which is the previous month's.
-_SNAPSHOT_SCHEMA_VERSION = 49
+# v50: Bolt's Walloon variable cards now carry the CWaPE incitative supplier
+# energy bands beside their standard rates, so an entry on the incitative DSO
+# mode bills both halves on the same schedule. A v49 snapshot has the network
+# side banded and the energy side flat.
+_SNAPSHOT_SCHEMA_VERSION = 50
 
 
 def _snapshot_to_dict(

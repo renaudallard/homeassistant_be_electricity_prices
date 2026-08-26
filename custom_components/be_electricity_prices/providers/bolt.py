@@ -764,12 +764,28 @@ def _extract_energy(
             yearly_fixed_fee=yearly_fee,
         )
     if kind == "variable":
+        # A Walloon card prices this product two ways and lets the customer
+        # pick; the incitative bands ride on the same contract, selected by
+        # dso_tariff_mode, exactly as the DSO side already is.
+        # The Impact block is residential and Walloon; a professional card
+        # is HTVA and carries no such block.
+        bands = _impact_energy_bands(
+            text,
+            1.0
+            if professional
+            else vat_multiplier(
+                text, re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE)
+            ),
+        )
         return VariableRates(
             current=mono,
             peak=peak,
             offpeak=offpeak,
             exclusive_night=excl,
             yearly_fixed_fee=yearly_fee,
+            impact_pic=bands.get("pic"),
+            impact_medium=bands.get("medium"),
+            impact_eco=bands.get("eco"),
         )
     # Dynamic is handled up front by _extract_dynamic_energy; any other kind is
     # a registry mistake.
@@ -789,6 +805,38 @@ def _extract_publication_month(text: str) -> str:
     """
     match = re.search(r"^([A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]+\s+\d{4})\s*/", text, re.MULTILINE)
     return match.group(1) if match else ""
+
+
+# The Walloon "Tarif Impact (Wallonie)" block, one row per CWaPE band:
+#   "Eco consommation 9,91 65,59 Belpex * 1,168 + 16,90"
+# printed price, that band's own quarterly index, then the shared formula.
+_IMPACT_ROW_RE = re.compile(
+    rf"(Eco|Medium|Pic)\s+consommation\s+([\d,]+)\s+([\d,]+)\s+"
+    rf"Belpex\s*\*\s*([\d,]+)\s*([{SIGN_CHARS}])\s*([\d,]+)",
+    re.IGNORECASE,
+)
+
+
+def _impact_energy_bands(text: str, vat: float) -> dict[str, float]:
+    """The three CWaPE supplier-energy rates, or ``{}``.
+
+    Derived from each band's formula and its own index rather than read off
+    the printed column, because the card's own arithmetic disagrees with one
+    of them: at the Q2 2026 indices Eco resolves to 9,912 against a printed
+    9,91 and Pic to 19,232 against 19,23, but Medium resolves to 15,636
+    against a printed 14,64. One digit, and taking the printed value would
+    bake a supplier typo into every Medium hour.
+    """
+    out: dict[str, float] = {}
+    for band, _printed, index, factor, sign, base in _IMPACT_ROW_RE.findall(text):
+        # EUR/MWh HTVA throughout, so /1000 to EUR/kWh, then the card's VAT.
+        rate = (
+            (to_float(factor) * to_float(index) + parse_sign(sign) * to_float(base))
+            / 1000.0
+            * vat
+        )
+        out[band.lower()] = rate
+    return out if len(out) == 3 else {}
 
 
 def _with_slot_formula(text: str, current: float) -> InjectionRates:

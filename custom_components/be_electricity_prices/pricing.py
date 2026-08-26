@@ -300,6 +300,22 @@ def energy_eur_per_kwh(
             dso_tariff_mode=dso_tariff_mode,
         )
     if isinstance(energy, VariableRates):
+        if (
+            dso_tariff_mode == "impact"
+            and energy.impact_pic is not None
+            and energy.impact_medium is not None
+            and energy.impact_eco is not None
+        ):
+            # The card prices this product two ways and the customer picked
+            # the incitative one. Its supplier energy moves with the CWaPE
+            # band, like the network leg already does; billing the mono or
+            # bi-hourly rate here left the two halves on different schedules.
+            band = dso_impact_band(when)
+            if band == "pic":
+                return energy.impact_pic
+            if band == "medium":
+                return energy.impact_medium
+            return energy.impact_eco
         rate = _routed_rate(
             energy.current,
             energy,

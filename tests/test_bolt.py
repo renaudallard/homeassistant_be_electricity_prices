@@ -976,3 +976,70 @@ def test_a_non_numeric_version_does_not_break_the_resolver() -> None:
         assert resolved == bolt_mod._VARIABLE_SUFFIX_FALLBACK
 
     asyncio.run(_run())
+
+
+def test_wallonia_impact_energy_bands_are_derived_from_the_formula() -> None:
+    """The Walloon variable card prices this product two ways: standard rates
+    and a "Tarif Impact (Wallonie)" block with one row per CWaPE band. The
+    network leg already moved with the band; the supplier energy stayed on the
+    mono / bi-hourly rate, so the two halves billed on different schedules.
+
+    The bands are derived from each row's formula and its own index, not from
+    the printed column, because the card's own arithmetic disagrees with one
+    of them. At the Q2 2026 indices Eco resolves to 9,912 against a printed
+    9,91 and Pic to 19,232 against 19,23 - but Medium resolves to 15,636
+    against a printed 14,64. One digit, and reading the column would bake that
+    typo into every Medium hour.
+    """
+    snap = parse_snapshot(
+        "bolt_variable",
+        fixture_text("bolt_variable_impact_w.pdf", layout=True),
+        "wallonia",
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.impact_eco == pytest.approx((1.168 * 65.59 + 16.90) / 1000 * 1.06)
+    assert energy.impact_pic == pytest.approx((1.168 * 140.87 + 16.90) / 1000 * 1.06)
+    # The formula, not the printed 14,64.
+    assert energy.impact_medium == pytest.approx((1.168 * 111.82 + 16.90) / 1000 * 1.06)
+    assert energy.impact_medium == pytest.approx(0.15636, abs=1e-4)
+    assert energy.impact_medium != pytest.approx(0.1464, abs=1e-4)
+
+
+def test_impact_bands_bill_only_on_the_incitative_mode() -> None:
+    """Same contract, two configurations. An entry on the standard mode keeps
+    the bi-hourly rates; one on the incitative mode bills the bands."""
+    from datetime import datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+
+    energy = parse_snapshot(
+        "bolt_variable",
+        fixture_text("bolt_variable_impact_w.pdf", layout=True),
+        "wallonia",
+    ).energy
+
+    def at(hour: int, mode: str) -> float:
+        when = datetime(2026, 4, 15, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        return energy_eur_per_kwh(
+            energy, when, None, meter="bi", region="wallonia", dso_tariff_mode=mode
+        )
+
+    # Three distinct band rates under the incitative mode...
+    assert at(19, "impact") > at(9, "impact") > at(13, "impact")
+    # ...and the unchanged two-band split under the standard one.
+    assert at(19, "bi_horaire") == at(9, "bi_horaire")
+
+
+def test_a_card_without_the_impact_block_gains_no_bands() -> None:
+    """The block is Walloon and residential; a card that does not print it
+    must not acquire an energy shape it has no rates for."""
+    energy = parse_snapshot(
+        "bolt_variable", fixture_text("bolt_variable.pdf", layout=True), "wallonia"
+    ).energy
+    assert isinstance(energy, VariableRates)
+    assert energy.impact_pic is None
+    assert energy.impact_medium is None
+    assert energy.impact_eco is None

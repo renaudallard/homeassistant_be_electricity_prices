@@ -184,6 +184,20 @@ class VariableRates:
     ceiling_peak: float | None = None
     ceiling_offpeak: float | None = None
     ceiling_exclusive_night: float | None = None
+    # The CWaPE incitative bands for the SUPPLIER energy, on a card that
+    # prices the same product two ways and lets the customer pick. Bolt's
+    # Walloon variable cards print a "Tarif Impact (Wallonie)" block beside
+    # the standard rates.
+    #
+    # Carried here rather than as a separate contract because that is what the
+    # card is: one product, two network configurations, chosen by
+    # ``dso_tariff_mode``. The DSO side already works that way, and it was the
+    # ENERGY side that stayed on the mono / bi-hourly rates while the network
+    # moved with the band. ``energy_eur_per_kwh`` routes these whenever the
+    # entry is on the incitative mode and all three are present.
+    impact_pic: float | None = None
+    impact_medium: float | None = None
+    impact_eco: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
