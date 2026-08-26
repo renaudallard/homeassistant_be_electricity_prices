@@ -499,6 +499,24 @@ def _expect(label: str, condition: bool, detail: str = "") -> bool:
 _MAX_ENERGY_CONTRIBUTION = 0.01
 
 
+# Professional contracts whose CARD exempts injection from VAT. Being a
+# business edition does not settle the question and Mega proves it: the pro
+# fixed and smart cards read "Les prix d'injection sont a majorer de la TVA,
+# sauf si vous etes soumis au regime d'exoneration", while the pro DYNAMIC
+# card reads "Les prix d'injection sont exemptes de TVA", exactly like its
+# residential twin.
+#
+# mega._injection_vat_applies reads that sentence off each card, which is the
+# correct behaviour and is what this check has to expect. Keying the
+# assertion on the edition instead failed three live rows a day (issue #71)
+# for a card the extractor was reading right.
+#
+# test_pro_injection_vat_expectation_matches_the_cards holds this set against
+# what the extractor actually parses from the fixtures, so the two cannot
+# drift the way this one did.
+_PRO_INJECTION_VAT_EXEMPT: frozenset[str] = frozenset({"mega_pro_dynamic"})
+
+
 def _expect_professional_basis(prefix: str, contract: object, snap: object) -> None:
     """Assert what a professional card must carry, and a residential one
     must not.
@@ -519,9 +537,15 @@ def _expect_professional_basis(prefix: str, contract: object, snap: object) -> N
             detail=f"vat_rate={taxes.vat_rate}",
         )
         if injection is not None:
+            cid = str(getattr(contract, "id", ""))
+            exempt = cid in _PRO_INJECTION_VAT_EXEMPT
             _expect(
-                f"{prefix}: professional injection is taxed",
-                injection.vat_applies,
+                f"{prefix}: professional injection VAT matches the card",
+                injection.vat_applies is not exempt,
+                detail=(
+                    f"vat_applies={injection.vat_applies}, "
+                    f"card exempts injection={exempt}"
+                ),
             )
     else:
         _expect(

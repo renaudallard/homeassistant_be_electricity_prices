@@ -987,6 +987,36 @@ def test_injection_shape_is_asserted_even_when_the_card_prints_an_indicative() -
     assert shape_rows and shape_rows[0].ok
 
 
+def test_pro_injection_vat_expectation_matches_the_cards() -> None:
+    """The live check's expectation and the extractor must agree.
+
+    Whether a professional card taxes injection is printed on the card, not
+    implied by the edition, and Mega splits: its pro fixed and smart cards say
+    "a majorer de la TVA", its pro DYNAMIC card says "exemptes de TVA". The
+    extractor reads that sentence; the live check cannot, because it is handed
+    a parsed snapshot rather than the text, so it carries an expectation set
+    instead. This holds the two together against the real fixtures, which is
+    the check that was missing when the extractor was corrected and the live
+    run started failing three rows a day (issue #71).
+    """
+    from custom_components.be_electricity_prices.providers.mega import (
+        _injection_vat_applies,
+    )
+    from tests import fixture_text
+
+    cards = {
+        "mega_pro_dynamic": "mega_pro_dynamic_w.pdf",
+        "mega_pro_smart_fixed": "mega_pro_smart_fixed_w.pdf",
+        "mega_pro_offpeak_fixed": "mega_pro_offpeak_fixed_v.pdf",
+    }
+    for cid, fixture in cards.items():
+        # professional=True is what the live check keys on; the point is that
+        # the CARD's own sentence overrides the edition.
+        taxed = _injection_vat_applies(fixture_text(fixture, layout=True), True)
+        expected_exempt = cid in lc._PRO_INJECTION_VAT_EXEMPT
+        assert taxed is not expected_exempt, cid
+
+
 def test_every_month_indexed_card_can_collect_a_key() -> None:
     """The two flags that have to agree, and the test that makes them.
 
