@@ -52,7 +52,7 @@ snapshots carry ``vat_rate`` and their per-kWh values as printed;
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import aiohttp
 
@@ -89,7 +89,6 @@ from ._pdf import (
     vat_multiplier,
 )
 from .base import (
-    walloon_dso_overlay,
     Contract,
     DsoOverlay,
     DynamicRates,
@@ -101,8 +100,10 @@ from .base import (
     TariffKind,
     TaxOverlay,
     TimeOfUseRates,
+    VariableRates,
     brussels_sibelga_overlay,
     fixed_or_variable_rates,
+    walloon_dso_overlay,
 )
 
 _API_URL = (
@@ -547,6 +548,97 @@ _FORMULA_RE = re.compile(
 )
 
 
+# Empower Variable / Empty House index BOTH legs on the monthly EPEXDAM and say
+# so: "Le prix de l'electricite est indexe mensuellement. Le parametre
+# d'indexation est la moyenne arithmetique des cotations journalieres Day Ahead
+# EPEX SPOT Belgium (ci-apres EPEXDAM) durant le mois de fourniture", and "La
+# valeur du EPEXDAM du mois en cours ne sera connue qu'en fin de mois. A titre
+# informatif, les prix indiques sont bases sur la derniere valeur du EPEXDAM
+# connue (Mars 2026: 92,57 EUR/MWh)."
+#
+# Two spellings, both on cards in the tree:
+#   Empower     "- Normal = 2,1552 + (0,1171 x EPEXDAM)", one row per band
+#   Empty House "3,2150 + (0,2150 x EPEXDAM)", bare, one row full stop
+_EPEXDAM_FORMULA_RE = re.compile(
+    rf"(?:[-\u2013]\s*([^=\n]{{1,44}}?)\s*=\s*)?"
+    rf"([{SIGN_CHARS}]?)\s*(\d+[,.]\d+)\s*\+\s*\((\d+[,.]\d+)\s*x\s*EPEXDAM\)",
+    re.IGNORECASE,
+)
+# Exact labels, never a substring. The Empower card prints SEVEN energy rows,
+# and "Flextime Heures pleines" contains "heures pleines": a substring match
+# binds the Flextime band to the bi-hourly meter, 0,1388 against 0,1264 on the
+# April card, ~10% high. An unmapped label is dropped rather than guessed - the
+# Flextime triplet belongs to the tou kind, which carries no coefficients at
+# all. The empty key is the Empty House card, whose single formula is printed
+# bare with no "- <label> =" prefix.
+_EPEXDAM_BAND: dict[str, str] = {
+    "": "single",
+    "normal": "single",
+    "tarif bihoraire heures pleines": "peak",
+    "tarif bihoraire heures creuses": "offpeak",
+    "exclusif nuit": "exclusive_night",
+}
+# "(Mars 2026: 92,57 EUR/MWh)" - the index the printed prices were computed at.
+_EPEXDAM_INDEX_RE = re.compile(
+    r"EPEXDAM\s+connue\s*\([^)]*?(\d+[,.]\d+)\s*€?\s*/\s*MWh", re.IGNORECASE
+)
+
+
+def _epexdam_index(text: str) -> float | None:
+    """The EUR/MWh index the card's printed prices were computed at."""
+    match = _EPEXDAM_INDEX_RE.search(text)
+    return to_float(match.group(1)) if match else None
+
+
+def _epexdam_formulas(
+    text: str, printed: float, vat: float
+) -> dict[str, tuple[float, float]]:
+    """Per-band ``(factor, base)`` in EUR/kWh for the leg printing ``printed``.
+
+    Both legs' formula blocks live on the same card and the two-column PDF
+    interleaves them, so binding by document order is exactly the mistake the
+    OCTA+ card punished. Bind by ARITHMETIC instead: evaluate each candidate at
+    the index the card states and keep the block whose unlabelled-or-Normal row
+    reproduces the price this leg actually prints. That is self-verifying, it
+    survives a reordering, and it fails closed - no match means the caller
+    keeps the printed value rather than billing a formula bound to the wrong
+    leg.
+
+    ``vat`` is the multiplier this leg is printed on: 1.06 for a residential
+    consumption row, 1.0 for injection, which is VAT-exempt.
+    """
+    index = _epexdam_index(text)
+    if index is None:
+        return {}
+    # Group into contiguous blocks. Each block opens on its Normal / bare row
+    # and its band rows follow, so a band can never be lifted out of the other
+    # leg's block - which is exactly what a flat scan did, pairing this leg's
+    # Normal with the other leg's Heures pleines.
+    blocks: list[dict[str, tuple[float, float]]] = []
+    for label, sign, base_s, factor_s in _EPEXDAM_FORMULA_RE.findall(text):
+        # The card states c/kWh per EUR/MWh of index, so onto a EUR/kWh spot
+        # the factor carries a x10 and the base a /100.
+        factor = to_float(factor_s) * 10.0 * vat
+        base = parse_sign(sign or "+") * to_float(base_s) / 100.0 * vat
+        slot = " ".join((label or "").split()).lower()
+        key = _EPEXDAM_BAND.get(slot)
+        if key is None:
+            # A Flextime row, or a label this card generation invented.
+            continue
+        if key == "single" or not blocks:
+            blocks.append({})
+        blocks[-1].setdefault(key, (factor, base))
+    for block in blocks:
+        single = block.get("single")
+        if single is None:
+            continue
+        if abs((single[0] * index / 1000.0 + single[1]) - printed) <= 1e-4:
+            return block
+    # No block reproduces this leg's printed price: the caller keeps that
+    # price rather than billing a formula bound to the wrong leg.
+    return {}
+
+
 def _extract_energy(
     text: str, kind: TariffKind, *, professional: bool = False
 ) -> EnergyRates:
@@ -646,13 +738,42 @@ def _extract_energy(
             "(Flextime triplet); not present in this card."
         )
 
-    return fixed_or_variable_rates(
+    rates = fixed_or_variable_rates(
         kind,
         single=mono,
         peak=peak,
         offpeak=offpeak,
         exclusive_night=excl_night,
         yearly_fixed_fee=yearly_fee,
+    )
+    if not isinstance(rates, VariableRates) or mono is None:
+        return rates
+    # Empower Variable and Empty House index consumption on the DELIVERY
+    # month's EPEXDAM and print a price computed from the last month whose
+    # value is known. Easy Variable indexes on ENDEX101, which is published in
+    # advance and correct as printed, and its card names no EPEXDAM at all, so
+    # gating on the formula being present is what keeps it out.
+    coefs = _epexdam_formulas(
+        text, mono, _vat_multiplier(text, professional=professional)
+    )
+    if not coefs:
+        return rates
+    none2: tuple[float | None, float | None] = (None, None)
+    return replace(
+        rates,
+        month_indexed=True,
+        formula_factor=coefs["single"][0],
+        formula_base=coefs["single"][1],
+        formula_factor_peak=coefs.get("peak", none2)[0],
+        formula_base_peak=coefs.get("peak", none2)[1],
+        formula_factor_offpeak=coefs.get("offpeak", none2)[0],
+        formula_base_offpeak=coefs.get("offpeak", none2)[1],
+        # The card prices a night circuit separately, "Exclusif nuit = 2,4510
+        # + (0,1005 x EPEXDAM)", between the mono 0,1171 and the off-peak
+        # 0,0988. Routing it onto either neighbour is wrong on the meter that
+        # draws the volume.
+        formula_factor_exclusive_night=coefs.get("exclusive_night", none2)[0],
+        formula_base_exclusive_night=coefs.get("exclusive_night", none2)[1],
     )
 
 

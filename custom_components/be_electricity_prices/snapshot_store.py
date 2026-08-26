@@ -628,7 +628,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v36: Ecofix Flexy now surfaces its BELPEX-SPP-M injection coefficients with
 # spp_indexed. A v35 snapshot carries only the printed Maandprijs, which runs
 # two months behind the index the card says it settles on.
-_SNAPSHOT_SCHEMA_VERSION = 36
+# v37: Engie Empower Variable and Empty House (and their pro twins) now carry
+# their monthly EPEXDAM consumption coefficients and month_indexed. A v36
+# snapshot holds only the printed price, which the card itself labels as
+# computed from the last KNOWN month rather than the delivery one.
+_SNAPSHOT_SCHEMA_VERSION = 37
 
 
 def _snapshot_to_dict(

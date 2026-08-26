@@ -277,6 +277,97 @@ def test_empower_variable_skips_flextime_tiers() -> None:
     assert snap.energy.exclusive_night == pytest.approx(0.12460)
 
 
+def test_empower_energy_carries_the_epexdam_formula() -> None:
+    """The card indexes consumption on the DELIVERY month's EPEXDAM and says
+    the printed price is only informative: "La valeur du EPEXDAM du mois en
+    cours ne sera connue qu'en fin de mois. A titre informatif, les prix
+    indiques sont bases sur la derniere valeur du EPEXDAM connue (Mars 2026:
+    92,57 EUR/MWh)." So the printed 13,775 is March's rate on an April card.
+    """
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    snap = parse_snapshot(
+        "engie_empower_variable",
+        {REGION_FLANDERS: fixture_text("engie_empower_variable_v.pdf")},
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is True
+    assert energy.current == pytest.approx(0.13775)
+    # "Normal = 2,1552 + (0,1171 x EPEXDAM)", c/kWh per EUR/MWh and printed
+    # hors TVA, so a x10 onto a EUR/kWh spot, a /100 base, both x 1,06.
+    assert energy.formula_factor == pytest.approx(0.1171 * 10.0 * 1.06)
+    assert energy.formula_base == pytest.approx(2.1552 / 100.0 * 1.06)
+    assert energy.formula_factor_peak == pytest.approx(0.1264 * 10.0 * 1.06)
+    assert energy.formula_factor_offpeak == pytest.approx(0.0988 * 10.0 * 1.06)
+    # "Exclusif nuit = 2,4510 + (0,1005 x EPEXDAM)": its own formula, between
+    # the mono and the off-peak, not either of them.
+    assert energy.formula_factor_exclusive_night == pytest.approx(0.1005 * 10.0 * 1.06)
+    # And the Flextime rows on the same card are NOT swept in: "Flextime
+    # Heures pleines = 2,9422 + (0,1388 x EPEXDAM)" contains "heures
+    # pleines", so a substring match binds it to the bi-hourly meter ~10%
+    # high. Labels are matched exactly.
+    assert energy.formula_factor_peak != pytest.approx(0.1388 * 10.0 * 1.06)
+    # The coefficients reproduce the card's own printed price at its own index.
+    assert energy.formula_factor * 0.09257 + energy.formula_base == pytest.approx(
+        0.13775, abs=1e-5
+    )
+
+
+def test_empty_house_energy_carries_its_bare_epexdam_formula() -> None:
+    """Empty House states one formula with no band label at all,
+    "3,2150 + (0,2150 x EPEXDAM)", so the parser cannot key on the row
+    heading the Empower card uses."""
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    snap = parse_snapshot(
+        "engie_empty_house",
+        {REGION_FLANDERS: fixture_text("engie_empty_house_v.pdf")},
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is True
+    assert energy.formula_factor == pytest.approx(0.2150 * 10.0 * 1.06)
+    assert energy.formula_base == pytest.approx(3.2150 / 100.0 * 1.06)
+    # Mono-only card: no band pair to bind.
+    assert energy.formula_factor_peak is None
+
+
+def test_endex_indexed_card_keeps_its_printed_rate() -> None:
+    """Easy Variable indexes on ENDEX101, which is published in ADVANCE, so
+    its printed rate is the contract and must not be swept into the EPEXDAM
+    fix. Its card names no EPEXDAM at all, which is what keeps it out."""
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    snap = parse_snapshot(
+        "engie_easy_variable",
+        {REGION_FLANDERS: fixture_text("engie_easy_indexed_v.pdf")},
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is False
+    assert energy.formula_factor is None
+
+
+def test_epexdam_bands_are_not_lifted_from_the_other_leg() -> None:
+    """Both legs print an EPEXDAM block on the same card and the two-column
+    PDF interleaves them. Binding by document order paired the energy leg's
+    Normal row with the INJECTION block's Heures pleines, which is a factor
+    of two out. Each block is grouped from its own Normal row instead."""
+    from custom_components.be_electricity_prices.providers.engie import (
+        _epexdam_formulas,
+    )
+
+    text = fixture_text("engie_empower_variable_v.pdf")
+    energy = _epexdam_formulas(text, 0.13775, 1.06)
+    injection = _epexdam_formulas(text, 0.04918, 1.0)
+    # Each leg's bands belong to its own block.
+    assert energy["peak"][0] == pytest.approx(0.1264 * 10.0 * 1.06)
+    assert injection["peak"][0] == pytest.approx(0.0528 * 10.0)
+    # And a price no block reproduces binds nothing at all.
+    assert _epexdam_formulas(text, 0.999, 1.06) == {}
+
+
 def test_empty_house_is_mono_only() -> None:
     # The 'Tarif bâtiment vide' card has a single rate (no bihoraire, no
     # exclusive-night) because vacant homes don't run time-of-use loads.
