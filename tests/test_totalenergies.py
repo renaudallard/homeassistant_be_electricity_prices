@@ -171,11 +171,18 @@ def test_mycomfort_variable_uses_realized_monthly_indicative() -> None:
     assert snap.taxes.energy_contribution == pytest.approx(0.002)
 
 
-def test_non_dynamic_injection_uses_realized_monthly_indicative() -> None:
-    # Non-dynamic injection is monthly-indexed: use the realized monthly
-    # indicative (1,12 c€/kWh) printed in the "prix mensuels de
-    # l'injection" block, not the V-test annual estimate in the table.
-    # Holds for both variable and fixed cards; factor/base stay None.
+def test_non_dynamic_injection_carries_the_belpexm_formula() -> None:
+    """The printed 1,12 c€/kWh is the FALLBACK; the formula is the contract.
+
+    The card says which: "Les prix mensuels de l'injection calcules sur base
+    de la derniere valeur connue du Belpex_M", and the Impact sibling adds
+    "La valeur exacte de l'indice repris dans votre formule n'est connue qu'a
+    la fin du mois en cours." So the figure is last month's index.
+
+    This test used to assert factor and base stay None, and its comment
+    called that "monthly-indexed" - which is the shape that must carry
+    coefficients. It pinned the defect.
+    """
     for cid, fixture, region in (
         ("totalenergies_mycomfort", "totalenergies_mycomfort_v.pdf", "flanders"),
         (
@@ -185,10 +192,29 @@ def test_non_dynamic_injection_uses_realized_monthly_indicative() -> None:
         ),
     ):
         snap = parse_snapshot(cid, fixture_text(fixture, layout=True), region)
-        assert snap.injection is not None
-        assert snap.injection.current == pytest.approx(0.0112)
-        assert snap.injection.factor is None
-        assert snap.injection.base is None
+        inj = snap.injection
+        assert inj is not None, cid
+        assert inj.current == pytest.approx(0.0112), cid
+        # "0.01881 * BELPEXM - 0.625", c/kWh per EUR/MWh, HTVA and VAT-exempt.
+        assert inj.factor == pytest.approx(0.1881), cid
+        assert inj.base == pytest.approx(-0.00625), cid
+        assert inj.month_indexed is True, cid
+        assert inj.spp_indexed is False, cid
+
+
+def test_the_consumption_index_is_not_mistaken_for_the_injection_one() -> None:
+    """The same page prints "0.1099 * BELPEXM_RLP + 2.03" for CONSUMPTION.
+    That is a load-profile-weighted index, not the injection one, and the
+    only thing keeping them apart is a lookahead. Without it the credit is
+    parsed at roughly six times the right coefficient."""
+    from custom_components.be_electricity_prices.providers.totalenergies import (
+        _MONTH_FORMULA_RE,
+    )
+
+    assert _MONTH_FORMULA_RE.search("0.1099 * BELPEXM_RLP + 2.03") is None
+    match = _MONTH_FORMULA_RE.search("0.01881 * BELPEXM -0.625")
+    assert match is not None
+    assert match.group(1) == "0.01881"
 
 
 def test_impact_parses_as_flat_supplier_energy_with_impact_dso_bands() -> None:
@@ -209,6 +235,12 @@ def test_impact_parses_as_flat_supplier_energy_with_impact_dso_bands() -> None:
     assert snap.energy.offpeak is None
     assert snap.injection is not None
     assert snap.injection.current == pytest.approx(0.0147)
+    # Impact is the only fixture with a different injection coefficient
+    # (0,0228 against 0,01881) and the only one whose formula prints on a
+    # single line, so it is where both are pinned.
+    assert snap.injection.factor == pytest.approx(0.228)
+    assert snap.injection.base == pytest.approx(-0.00625)
+    assert snap.injection.month_indexed is True
     dso = next(iter(snap.dsos.values()))
     assert dso.distribution_pic is not None
     assert dso.distribution_medium is not None

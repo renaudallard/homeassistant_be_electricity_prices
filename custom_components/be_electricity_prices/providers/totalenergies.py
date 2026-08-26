@@ -530,6 +530,26 @@ def _realized_monthly_injection(text: str) -> float | None:
     return to_float(vals[-1]) / 100.0
 
 
+# The non-dynamic cards print the injection formula under the
+# "Injection*** (Compensation ...)" heading. Anchoring on that heading is
+# required rather than reusing the dynamic branch's column-1 prefix: on two of
+# the three fixtures the formula lands in the LAST column, not the first.
+#
+# The two optional "/" allow for the "Compteur excl. nuit" column printing a
+# literal slash between the factor and the index, or between the index and the
+# sign, depending on the card. \s* spans the newline that carries all three
+# layouts.
+#
+# BELPEXM(?!_) is the guard that matters. The CONSUMPTION formula on the same
+# page reads "0.1099 * BELPEXM_RLP + 2.03", a DIFFERENT, load-profile-weighted
+# index; without the lookahead the search returns that instead and credits
+# injection at roughly six times the right coefficient.
+_INJECTION_HEADING_RE = re.compile(r"Injection\*{0,5}\s*\(Compensation[^\n]*\n")
+_MONTH_FORMULA_RE = re.compile(
+    rf"([\d.,]+)\s*\*\s*/?\s*BELPEXM(?!_)\s*/?\s*([{SIGN_CHARS}])\s*([\d.,]+)"
+)
+
+
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     indicative = re.search(
         r"Injection\*{0,5}[^\n]*\n\s*([\d.,]+)",
@@ -540,6 +560,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     factor: float | None = None
     base: float | None = None
     formula: str | None = None
+    month_indexed = False
     if kind == "dynamic":
         # Injection block always prints the formula cleanly on one line
         # ("0.1 * BELPEXH -1.3 ..."). Anchor the search after "Injection"
@@ -567,14 +588,34 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     else:
         # Non-dynamic injection is monthly-indexed: the table value read
         # above is the Vlaamse-Nutsregulator ANNUAL ESTIMATE, while the
-        # billed price is the realized monthly indicative. Prefer it.
+        # printed monthly figure is the formula at the LAST KNOWN value of
+        # the index. The card says so: "Les prix mensuels de l'injection
+        # calcules sur base de la derniere valeur connue du Belpex_M", and
+        # the Impact card adds "La valeur exacte de l'indice repris dans
+        # votre formule n'est connue qu'a la fin du mois en cours". Prefer
+        # the printed figure over the annual estimate, then index it.
         realized = _realized_monthly_injection(text)
         if realized is not None:
             current = realized
+        head = _INJECTION_HEADING_RE.search(text)
+        match = _MONTH_FORMULA_RE.search(text, head.end()) if head else None
+        if match is not None:
+            # c/kWh per EUR/MWh of index, HTVA, and residential injection is
+            # VAT-exempt, so neither coefficient is grossed.
+            factor = to_float(match.group(1)) * 10.0
+            base = parse_sign(match.group(2)) * to_float(match.group(3)) / 100.0
+            month_indexed = True
+            formula = " ".join(match.group(0).split())
 
     if current is None and factor is None:
         return None
-    return InjectionRates(current=current, factor=factor, base=base, formula=formula)
+    return InjectionRates(
+        current=current,
+        factor=factor,
+        base=base,
+        formula=formula,
+        month_indexed=month_indexed,
+    )
 
 
 # ---- taxes --------------------------------------------------------------------
@@ -826,6 +867,11 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             regions=c.regions,
+            # Every non-dynamic card indexes its feed-in credit on the
+            # monthly Belpex_M, which the fixed / variable energy leg never
+            # fetches spots for. myDynamic collects the key via its own
+            # BELPEXH energy formula.
+            spot_indexed_injection=c.kind != "dynamic",
         )
         for c in _CONTRACTS
     ),

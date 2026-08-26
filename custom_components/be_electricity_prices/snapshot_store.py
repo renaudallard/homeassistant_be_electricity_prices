@@ -636,7 +636,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # monthly injection coefficients and month_indexed. A v37 snapshot holds only
 # the printed Injection(3) figure, which is that formula at the PREVIOUS
 # month's index.
-_SNAPSHOT_SCHEMA_VERSION = 38
+# v39: the eight non-dynamic TotalEnergies contracts now carry their monthly
+# Belpex_M injection coefficients and month_indexed. TotalEnergies is
+# probe-based, so a cached v38 snapshot is not re-parsed without this and keeps
+# serving the previous month's printed figure.
+_SNAPSHOT_SCHEMA_VERSION = 39
 
 
 def _snapshot_to_dict(

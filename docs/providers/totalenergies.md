@@ -141,16 +141,16 @@ Fields pulled and their helpers:
 | Field | Helper | Source anchor |
 |---|---|---|
 | Energy rates | `_extract_energy` | `totalenergies.py:364` |
-| Injection | `_extract_injection` | `totalenergies.py:533` |
+| Injection | `_extract_injection` | `totalenergies.py:553` |
 | Publication label | `_extract_publication_month` | `totalenergies.py:463` |
-| Federal excise (0-3000 kWh tier) | `_extract_federal_excise` | `totalenergies.py:583` |
-| Federal energy contribution | `_extract_energy_contribution` + `_energy_contribution_from_table` | `totalenergies.py:613`, `:620` |
+| Federal excise (0-3000 kWh tier) | `_extract_federal_excise` | `totalenergies.py:624` |
+| Federal energy contribution | `_extract_energy_contribution` + `_energy_contribution_from_table` | `totalenergies.py:654`, `:620` |
 | Yearly fee + regional renewables | `_extract_fee_and_renewables` | `totalenergies.py:430` |
-| Wallonia connection fee | `_extract_connection_fee` | `totalenergies.py:646` |
-| Flanders energy fund | `_extract_energy_fund` | `totalenergies.py:655` |
-| DSO overlay (Flanders) | `_extract_flanders_dsos` | `totalenergies.py:680` |
-| DSO overlay (Wallonia) | `_extract_wallonia_dsos` | `totalenergies.py:724` |
-| DSO overlay (Brussels) | `_extract_brussels_dsos` | `totalenergies.py:768` |
+| Wallonia connection fee | `_extract_connection_fee` | `totalenergies.py:687` |
+| Flanders energy fund | `_extract_energy_fund` | `totalenergies.py:696` |
+| DSO overlay (Flanders) | `_extract_flanders_dsos` | `totalenergies.py:721` |
+| DSO overlay (Wallonia) | `_extract_wallonia_dsos` | `totalenergies.py:765` |
+| DSO overlay (Brussels) | `_extract_brussels_dsos` | `totalenergies.py:809` |
 | Validity date | `parse_valid_until` (shared) | `_pdf.py:947` |
 
 Notable parsing hurdles:
@@ -176,7 +176,7 @@ Notable parsing hurdles:
   shared `SIGN_CHARS` class, which covers ASCII `+`/`-` plus several Unicode dashes
   that TotalEnergies flips between on re-renders (`_pdf.py:521-539`).
 - **DSO name to canonical key mapping.** Card labels are mapped to `DSO_*`
-  constants via `_FLANDERS_LABELS` (`totalenergies.py:677`) and `_WALLONIA_LABELS`
+  constants via `_FLANDERS_LABELS` (`totalenergies.py:718`) and `_WALLONIA_LABELS`
   (`totalenergies.py:722`). Note the non-obvious ones: `Fluvius Kempen` maps to
   `DSO_FLUVIUS_IVEKA`, `Fluvius Midden-Vlaanderen` to `DSO_FLUVIUS_INTERGEM`, and
   Wallonia uses the exact card strings `ORES (Namur - Namen)`, `REGIE DE WAVRE`
@@ -232,7 +232,7 @@ Region specifics:
   (`totalenergies.py:731-772`, `tests/test_totalenergies.py:260-276`).
 - **Brussels** Sibelga has no separate capacity charge, so the metering fee and the
   `<=13kVA` "Terme de puissance mise a disposition" power term are folded together
-  into `data_management_per_year` (`totalenergies.py:796-814`). The OSP annual fee
+  into `data_management_per_year` (`totalenergies.py:837-855`). The OSP annual fee
   table is parsed by the shared `parse_brussels_osp` into `brussels_osp_by_tier`
   (`_pdf.py:553`). The test pins `data_management_per_year == 14.73 + 50.07`
   (illustrative, `tests/test_totalenergies.py:218-235`).
@@ -252,7 +252,7 @@ Region specifics:
   matters since 2026-08-01: the levy fell to zero, and the old
   `if energy_contribution == 0.0: raise` would have taken every TotalEnergies
   contract offline the way it took Frank offline (issue #49).
-  `test_zero_energy_contribution_is_accepted` (`tests/test_totalenergies.py:238`)
+  `test_zero_energy_contribution_is_accepted` (`tests/test_totalenergies.py:270`)
   and `test_missing_energy_contribution_is_fatal` (`:249`) pin both halves.
 - Regional renewables land in exactly one of `flanders_renewables`,
   `wallonia_renewables`, `brussels_renewables` per region (all others 0), taken
@@ -262,7 +262,7 @@ Region specifics:
 - `region_connection_fee`: Wallonia only ("Redevance de raccordement"), mandatory
   there, raises on a miss (`totalenergies.py:653`). Illustrative 0.0007 EUR/kWh.
 - `energy_fund_eur_per_month`: Flanders only ("Résidence principale sans tarif
-  social" line, `_extract_energy_fund`, `totalenergies.py:655`).
+  social" line, `_extract_energy_fund`, `totalenergies.py:696`).
 - `vat_rate` is set to `0.0`, meaning the snapshot's consumption prices are already
   VAT-incl and must not be rescaled by the pricing engine (`providers/base.py:471-474`).
   The dynamic path applies VAT during parsing (see above); the fixed/variable table
@@ -270,7 +270,7 @@ Region specifics:
 
 ### Injection
 
-Two shapes, selected on `kind` in `_extract_injection` (`totalenergies.py:533`):
+Two shapes, selected on `kind` in `_extract_injection` (`totalenergies.py:553`):
 
 - **Dynamic contracts: hourly `factor * spot + base`.** The injection block always
   prints the formula on one clean line ("0.1 * BELPEXH -1.3 ..."); the regex anchors
@@ -387,12 +387,12 @@ Ordered by how likely a card change is to break them:
    raises.
 6. **Tax anchors**: `_extract_federal_excise` ("Consommation entre 0 et 3.000 kWh"),
    `_extract_energy_contribution` + `_energy_contribution_from_table`,
-   `_extract_connection_fee`, `_extract_energy_fund` (`totalenergies.py:655`-`:668`).
+   `_extract_connection_fee`, `_extract_energy_fund` (`totalenergies.py:696`-`:668`).
    Watch especially for the wrapped-header fallback column indices if the DSO table
    width changes.
 7. **DSO row parsers**: `_FLANDERS_LABELS` / `_extract_flanders_dsos` (9 cols),
    `_WALLONIA_LABELS` / `_extract_wallonia_dsos` (12 cols),
-   `_extract_brussels_dsos` (7 cols + power term) (`totalenergies.py:768`-`:817`). A
+   `_extract_brussels_dsos` (7 cols + power term) (`totalenergies.py:809`-`:817`). A
    new DSO name, a renamed sub-area, or a changed column order needs the label map
    and the fixed group indices updated together.
 8. **Publication label + validity**: `_extract_publication_month`

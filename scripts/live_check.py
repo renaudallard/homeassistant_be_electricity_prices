@@ -2064,6 +2064,17 @@ _INJECTION_SHAPE: dict[str, str] = {
     "engie_pro_empower_variable": "month",
     "engie_pro_flow": "month",
     "engie_pro_empty_house": "month",
+    # Every non-dynamic TotalEnergies card prints "f * BELPEXM - b" beside a
+    # figure the card says is computed from "la derniere valeur connue du
+    # Belpex_M". myDynamic indexes per hour on BELPEXH and stays derived.
+    "totalenergies_electricite_fixe": "month",
+    "totalenergies_electricite_variable": "month",
+    "totalenergies_impact": "month",
+    "totalenergies_mycomfort": "month",
+    "totalenergies_mycomfort_fixed": "month",
+    "totalenergies_mydrive": "month",
+    "totalenergies_myessential": "month",
+    "totalenergies_myessential_fixed": "month",
     "energiebe_variable": "spp",
     # The fixed card prints the same Belpex_SPP formula and settles on it too:
     # a fixed ENERGY leg does not make the feed-in credit fixed. Same shape as
