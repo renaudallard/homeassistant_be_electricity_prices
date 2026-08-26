@@ -199,6 +199,43 @@ async def fetch(
     return parse_snapshot(text, url, region)
 
 
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """The published snapshot for a specific (year, month), or ``None``.
+
+    The CDN keeps every month under the same month-keyed URL ``_card_url``
+    already builds, so the archive costs one HTTP GET per past month and no
+    new resolution logic at all.
+
+    This was a documented omission whose stated reason was that the payoff
+    would be one month. Measured, it is not: a year-to-date walk spans every
+    month since January, and proxying the current card into all of them ran
+    Flanders 10,5% high over Jan-Jul at 3500 kWh (EUR 543,12 against 491,54)
+    and Wallonia 5,7%, worst in May at 18,0%. The backfill shares the same
+    cache, so those prices were being written into the recorder as well.
+
+    ``None`` for a month the CDN does not hold, which is the pre-publication
+    state for the running month and the permanent state after the 2026-08-31
+    transfer to EnergyVision.
+    """
+    if contract_id != _CONTRACT_ID:
+        return None
+    if region not in (REGION_FLANDERS, REGION_WALLONIA):
+        return None
+    url = _card_url(year_month.year, year_month.month)
+    try:
+        text = await fetch_pdf_text_layout(session, url)
+    except ExtractorError as err:
+        if _card_absent(str(err)):
+            return None
+        raise
+    return parse_snapshot(text, url, region)
+
+
 async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Confirm DATS 24 still publishes a card.
 
@@ -542,6 +579,7 @@ EXTRACTOR = SupplierExtractor(
         ),
     ),
     fetch=fetch,
+    fetch_for_month=fetch_for_month,
     # DATS 24's own site: contracts transfer automatically to EnergyVision on
     # 31 August 2026. Existing entries keep pricing off the monthly card until
     # it stops publishing; new setups are steered to the successor instead.

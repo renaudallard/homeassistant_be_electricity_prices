@@ -490,3 +490,58 @@ def test_the_maximum_tarief_column_is_kept() -> None:
         assert overlay.network_ceiling_eur_per_kwh == pytest.approx(0.3473, abs=1e-4), (
             key
         )
+
+
+async def test_fetch_for_month_uses_the_month_keyed_cdn_url() -> None:
+    """The CDN keeps every month under the URL _card_url already builds, so
+    the archive needs no new resolution logic.
+
+    It was left out on the grounds that the payoff would be one month. A
+    year-to-date walk spans every month since January: proxying the current
+    card into all of them ran Flanders 10,5% high over Jan-Jul, worst in May
+    at 18,0%, and the backfill writes those prices into the recorder.
+    """
+    from datetime import date
+
+    import custom_components.be_electricity_prices.providers.dats24 as mod
+
+    seen: list[str] = []
+
+    async def _fake(_session: object, url: str) -> str:
+        seen.append(url)
+        return fixture_text("dats24_groen_variabel_apr.pdf", layout=True)
+
+    with patch.object(mod, "fetch_pdf_text_layout", _fake):
+        snap = await mod.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "dats24_groen_variabel",
+            "flanders",
+            date(2026, 4, 1),
+        )
+    assert snap is not None
+    assert seen == [mod._card_url(2026, 4)]
+    assert snap.energy is not None
+
+
+async def test_fetch_for_month_returns_none_for_an_unpublished_month() -> None:
+    """A month the CDN does not hold is the pre-publication state for the
+    running month and the permanent state after the EnergyVision transfer;
+    neither is an error."""
+    from datetime import date
+
+    import custom_components.be_electricity_prices.providers.dats24 as mod
+    from custom_components.be_electricity_prices.providers.base import ExtractorError
+
+    async def _missing(_session: object, url: str) -> str:
+        raise ExtractorError(f"HTTP 404 fetching {url}")
+
+    with patch.object(mod, "fetch_pdf_text_layout", _missing):
+        assert (
+            await mod.fetch_for_month(
+                None,  # type: ignore[arg-type]
+                "dats24_groen_variabel",
+                "flanders",
+                date(2026, 12, 1),
+            )
+            is None
+        )

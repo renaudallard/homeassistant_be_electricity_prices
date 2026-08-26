@@ -912,7 +912,7 @@ SnapshotProbe = Callable[[aiohttp.ClientSession, str, str], Awaitable[str | None
 # (year, month). Used by the time-correct yearly-cost flow to bill each
 # past month at its own rate. Returns ``None`` when the supplier has no
 # accessible archive for that month (overwrite-in-place suppliers like
-# OCTA+ / TotalEnergies, API-only suppliers like Engie / Luminus / DATS 24,
+# OCTA+ / TotalEnergies, API-only suppliers like Engie / Luminus,
 # or a month before the supplier's archive horizon).
 ArchivedSnapshotFetcher = Callable[
     [aiohttp.ClientSession, str, str, "date"], Awaitable["SupplierSnapshot | None"]
