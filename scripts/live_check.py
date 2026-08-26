@@ -1986,7 +1986,11 @@ _INJECTION_SHAPE: dict[str, str] = {
     # EBEM indexes on SPP0, the solar-weighted mean, same reasoning.
     "ebem_variable": "spp",
     "ebem_basic_plus": "spp",
-    "ecofix_flexy": "monthly",
+    # Ecofix Flexy states "Injectie: (BELPEX-SPP-M * 0,0884) - 0,5000" and
+    # settles on the billed period's index. Its printed Maandprijs runs two
+    # months behind: the Mei 2026 card's 4,32 inverts to an index of 54,52,
+    # which is March's.
+    "ecofix_flexy": "spp",
     # Every non-dynamic Bolt card prints the quarter-hourly Belpex formula
     # beside its illustrative figure and says the billing multiplies each
     # quarter by that quarter's own index. Losing the formula puts the credit

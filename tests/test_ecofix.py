@@ -282,18 +282,47 @@ def test_missing_wallonia_connection_fee_is_fatal() -> None:
         parse_snapshot("ecofix_flexy", text, "wallonia", "test://f")
 
 
-def test_flexy_injection_surfaces_monthly_indicative_only() -> None:
-    # BELPEX-SPP-M is a MONTHLY index, so the realized monthly indicative
-    # ("Maandprijs") is surfaced as current; factor/base stay None so the
-    # engine never applies the monthly coefficient to the hourly spot. The
-    # formula text is retained for diagnostics.
+def test_flexy_injection_carries_the_spp_formula() -> None:
+    """The card states "Injectie: (BELPEX-SPP-M * 0,0884) - 0,5000" and says
+    the settlement uses "de index die van toepassing is tijdens de periode
+    waarvoor je wordt gefactureerd". spp_indexed routes the coefficients to
+    the delivery month's weighted mean and keeps them off the hourly spot;
+    the printed Maandprijs stays as the keyless fallback."""
     snap = parse_snapshot("ecofix_flexy", _layout(_FLEXY), "wallonia", "test://f")
     inj = snap.injection
     assert inj is not None
     assert inj.current == pytest.approx(0.0432)
-    assert inj.factor is None
-    assert inj.base is None
+    # c/kWh per EUR/MWh of index -> a x10 factor onto a EUR/kWh spot, /100 base.
+    assert inj.factor == pytest.approx(0.884)
+    assert inj.base == pytest.approx(-0.005)
+    assert inj.spp_indexed is True
     assert inj.formula is not None and "BELPEX-SPP-M" in inj.formula
+
+
+def test_flexy_printed_figure_is_two_months_stale() -> None:
+    """Why the formula is worth parsing. Invert the Mei 2026 card's printed
+    4,32 c/kWh through its own coefficients and the index comes out at 54,52
+    EUR/MWh, which is MARCH's SPP-weighted mean, not May's."""
+    snap = parse_snapshot("ecofix_flexy", _layout(_FLEXY), "wallonia", "test://f")
+    inj = snap.injection
+    assert inj is not None and inj.factor is not None and inj.base is not None
+    implied_index = (inj.current - inj.base) / inj.factor
+    assert implied_index == pytest.approx(0.05452, abs=1e-5)
+    # April's own index credits less than half of what the card printed.
+    assert inj.factor * 0.029166 + inj.base == pytest.approx(0.02078, abs=1e-5)
+
+
+def test_flexy_injection_is_never_priced_per_hour() -> None:
+    """Month coefficients on a variable card. The old comment refused to emit
+    them at all for fear of exactly this, and was right to: without the flag
+    the engine would credit whatever the current slot costs."""
+    from custom_components.be_electricity_prices.injection import (
+        _injection_is_spot_formula,
+    )
+
+    snap = parse_snapshot("ecofix_flexy", _layout(_FLEXY), "wallonia", "test://f")
+    assert snap.injection is not None
+    assert _injection_is_spot_formula(snap.injection, snap.energy) is False
 
 
 def test_flexy_renewables_survives_number_before_verbruik_layout() -> None:

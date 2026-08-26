@@ -445,11 +445,18 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates:
             ),
         )
 
-    # Flexy variable: injection settles on BELPEX-SPP-M, a MONTHLY index,
-    # so surface only the realized monthly indicative ("Maandprijs"); the
-    # formula is kept as diagnostic text. Emitting factor/base would make
-    # the pricing engine apply the monthly coefficient to the hourly spot
-    # (mirrors EBEM Groen Variabel / B@sic+ and DATS24 Groen Variabel).
+    # Flexy variable: injection settles on BELPEX-SPP-M, the solar-weighted
+    # MONTHLY index, and the card says which month: "worden berekend op basis
+    # van de index die van toepassing is tijdens de periode waarvoor je wordt
+    # gefactureerd bij de afrekening van je reele verbruik en desgevallend
+    # injectie". The printed Maandprijs is not that month's: on the Mei 2026
+    # card 4,32 c/kWh inverts through the card's own formula to an index of
+    # 54,52, which is MARCH's, two months back.
+    #
+    # The coefficients are surfaced with spp_indexed, which routes them to the
+    # delivery month's own weighted mean and keeps them away from the hourly
+    # spot. Emitting them without that flag is what the old comment feared,
+    # and it was right to.
     current_block = re.search(
         r"Injectie[\s\S]+?Maandprijs:\s+([\d,]+)",
         text,
@@ -460,12 +467,27 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates:
         # emit a spot-shaped credit the pipeline cannot price.
         raise ExtractorError("Ecofix Flexy injection: monthly indicative missing")
     formula_match = re.search(
-        rf"Injectie:\s*\(BELPEX-SPP-M\s*\*\s*[\d,]+\)\s*"
-        rf"[{SIGN_CHARS}]\s*[\d,]+",
+        rf"Injectie:\s*\(BELPEX-SPP-M\s*\*\s*([\d,]+)\)\s*"
+        rf"([{SIGN_CHARS}])\s*([\d,]+)",
         text,
     )
+    factor: float | None = None
+    base: float | None = None
+    if formula_match is not None:
+        # The card states c/kWh per EUR/MWh of index, so the factor carries a
+        # x10 onto a EUR/kWh spot and the base a /100. Injection is VAT-exempt,
+        # so neither is grossed.
+        factor = to_float(formula_match.group(1)) * 10.0
+        base = (
+            parse_sign(formula_match.group(2))
+            * to_float(formula_match.group(3))
+            / 100.0
+        )
     return InjectionRates(
         current=to_float(current_block.group(1)) / 100.0,
+        factor=factor,
+        base=base,
+        spp_indexed=factor is not None,
         formula=formula_match.group(0) if formula_match else None,
     )
 
@@ -753,6 +775,10 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             regions=_ECOFIX_REGIONS,
+            # Flexy indexes injection on the monthly BELPEX-SPP-M, which its
+            # variable energy leg fetches no spots for. The dynamic pair
+            # collects the key through their own energy formula.
+            spot_indexed_injection=c.kind != "dynamic",
         )
         for c in _CONTRACTS
     ),

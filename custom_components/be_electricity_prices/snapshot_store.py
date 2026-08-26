@@ -625,7 +625,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # injection formula its own text describes, flagged slot_indexed, beside the
 # illustrative figure it used to credit flat. A v34 snapshot holds the figure
 # alone, which is a quarterly-lagged constant that can never go negative.
-_SNAPSHOT_SCHEMA_VERSION = 35
+# v36: Ecofix Flexy now surfaces its BELPEX-SPP-M injection coefficients with
+# spp_indexed. A v35 snapshot carries only the printed Maandprijs, which runs
+# two months behind the index the card says it settles on.
+_SNAPSHOT_SCHEMA_VERSION = 36
 
 
 def _snapshot_to_dict(
