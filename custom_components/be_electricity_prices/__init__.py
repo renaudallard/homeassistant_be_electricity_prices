@@ -52,13 +52,19 @@ from homeassistant.util import dt as dt_util
 from .backfill import backfill_if_missing, backfill_range
 from .const import (
     CONF_CONTRACT,
+    CONF_CUSTOM_DSO_DISTRIBUTION_ECO,
+    CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM,
+    CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
+    CONF_DSO_TARIFF_MODE,
     CONF_REGION,
     CONF_SUPPLIER,
     DOMAIN,
+    DSO_MODE_IMPACT,
     PLATFORMS,
     RESOLUTION_HOURLY,
     RESOLUTION_QUARTER,
     STORAGE_VERSION,
+    SUPPLIER_CUSTOM,
 )
 from .coordinator import BePricesCoordinator
 from .snapshot_store import evict_shared_caches
@@ -168,9 +174,44 @@ def _migrate_current_year_cost_unique_id(
     registry.async_update_entity(entity_id, new_unique_id=new_unique_id)
 
 
+def _migrate_zeroed_custom_impact_bands(
+    hass: HomeAssistant, entry: BePricesConfigEntry
+) -> None:
+    """Drop a custom entry's all-zero CWaPE Impact triplet.
+
+    The three Impact distribution boxes were built with a 0,00 default rather
+    than as fallback fields, so a Walloon custom entry that left them alone
+    stored three zeros. ``network_eur_per_kwh`` takes the Impact branch as
+    soon as all three are non-None, so those zeros did not fall back to the
+    single rate, they billed no distribution at all: 0,1198 EUR/kWh gone,
+    about EUR 419/yr at 3500 kWh, on the live tick, the year-to-date walk,
+    the backfill and the compare quote alike. No Repairs card fired either,
+    because that check tests for None and a stored zero is not None.
+
+    Fixing the schema stops new entries taking the zeros but cannot clear the
+    ones already stored, and the user has no way to blank a box that is not
+    shown as blankable. Only an ALL-zero triplet is dropped: a genuine tariff
+    has no zero bands, and a partly filled one is the user's own data.
+    """
+    if entry.data.get(CONF_SUPPLIER) != SUPPLIER_CUSTOM:
+        return
+    if entry.data.get(CONF_DSO_TARIFF_MODE) != DSO_MODE_IMPACT:
+        return
+    bands = (
+        CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
+        CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM,
+        CONF_CUSTOM_DSO_DISTRIBUTION_ECO,
+    )
+    if not all(entry.data.get(k) == 0.0 for k in bands):
+        return
+    data = {k: v for k, v in entry.data.items() if k not in bands}
+    hass.config_entries.async_update_entry(entry, data=data)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> bool:
     """Set up one config entry."""
     _migrate_current_year_cost_unique_id(hass, entry)
+    _migrate_zeroed_custom_impact_bands(hass, entry)
     coordinator = BePricesCoordinator(hass, entry)
     await coordinator.async_load_persistent()
     await coordinator.async_config_entry_first_refresh()

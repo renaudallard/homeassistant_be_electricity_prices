@@ -29,7 +29,7 @@ Related docs:
 
 ### 1.1 Where the coordinator is built
 
-The coordinator is instantiated once per config entry in `async_setup_entry` (`__init__.py:171`). The setup order is load-bearing:
+The coordinator is instantiated once per config entry in `async_setup_entry` (`__init__.py:211`). The setup order is load-bearing:
 
 ```
 coordinator = BePricesCoordinator(hass, entry)      # __init__.py:173
@@ -47,7 +47,7 @@ await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 `entry.runtime_data` is assigned *after* `async_config_entry_first_refresh` returns (`__init__.py:177`). During that very first refresh `runtime_data` is HA's `UNDEFINED` sentinel, not this coordinator. Two guards depend on this:
 
 - `_save_persistent` reads `runtime_data` defensively (`coordinator.py:1046`) and only skips the write when it has been explicitly assigned to a *different* `BePricesCoordinator`. It must not skip during first refresh (when the attribute is `UNDEFINED`), or the first snapshot would never persist.
-- `async_unload_entry` (`__init__.py:247`) reads `runtime_data` with `getattr(..., None)` and an `isinstance` check, because a setup that raised before line 172 leaves the sentinel in place; a bare `is not None` test would pass and then `AttributeError` on `._supplier_tuple`, masking the real setup failure.
+- `async_unload_entry` (`__init__.py:288`) reads `runtime_data` with `getattr(..., None)` and an `isinstance` check, because a setup that raised before line 172 leaves the sentinel in place; a bare `is not None` test would pass and then `AttributeError` on `._supplier_tuple`, masking the real setup failure.
 
 Never read `entry.runtime_data` as "this coordinator" during first refresh.
 
@@ -55,8 +55,8 @@ Never read `entry.runtime_data` as "this coordinator" during first refresh.
 
 `__init__` snapshots two things at construction time so later reload races resolve correctly:
 
-- `self._supplier_tuple` (`coordinator.py:881`): the `(supplier, contract, region)` triple frozen at build time. `async_unload_entry` (`__init__.py:247`) and `_save_persistent` (`coordinator.py:1046`) target this *original* tuple even after an OptionsFlow edit has mutated `entry.data`, because HA mutates `entry.data` before firing the reload.
-- `self._entry_data_signature` (`coordinator.py:890`): a `frozenset` of every `entry.data` item, built by `_compute_data_signature` (`coordinator.py:933`). `_async_options_updated` (`__init__.py:338`) compares it against the current entry to skip a needless reload when only `entry.options` changed (an OptionsFlow no-op `options = {}` finalize). Every load-bearing field lives in `entry.data`, so an options-only delta is safe to ignore.
+- `self._supplier_tuple` (`coordinator.py:881`): the `(supplier, contract, region)` triple frozen at build time. `async_unload_entry` (`__init__.py:288`) and `_save_persistent` (`coordinator.py:1046`) target this *original* tuple even after an OptionsFlow edit has mutated `entry.data`, because HA mutates `entry.data` before firing the reload.
+- `self._entry_data_signature` (`coordinator.py:890`): a `frozenset` of every `entry.data` item, built by `_compute_data_signature` (`coordinator.py:933`). `_async_options_updated` (`__init__.py:379`) compares it against the current entry to skip a needless reload when only `entry.options` changed (an OptionsFlow no-op `options = {}` finalize). Every load-bearing field lives in `entry.data`, so an options-only delta is safe to ignore.
 
 Other important instance fields set in `__init__`:
 
@@ -148,7 +148,7 @@ Two config entries on the same `(supplier, contract, region)` share one fetched 
 | `monthly_snapshot_locks` | `dict[key, asyncio.Lock]` | dedup lock per month key | 405 |
 | `tuple_generations` | `dict[tuple, int]` | generation counter for eviction races | 413 |
 
-`_SharedSnapshot` (`snapshot_store.py:130`) carries the snapshot, `fetched_at`, and the `probe_key` seen at fetch. `evict_shared_caches` (`snapshot_store.py:164`) is called from `async_unload_entry` (`__init__.py:247`) only when no other loaded entry still references the tuple; it bumps the generation counter first so an in-flight fetch that resumes after eviction detects the change and skips its write (`coordinator_snapshot.py:335`), preventing an orphaned cache row.
+`_SharedSnapshot` (`snapshot_store.py:130`) carries the snapshot, `fetched_at`, and the `probe_key` seen at fetch. `evict_shared_caches` (`snapshot_store.py:164`) is called from `async_unload_entry` (`__init__.py:288`) only when no other loaded entry still references the tuple; it bumps the generation counter first so an in-flight fetch that resumes after eviction detects the change and skips its write (`coordinator_snapshot.py:335`), preventing an orphaned cache row.
 
 ### 2.3 The on-disk Store and cache invalidation
 
@@ -290,7 +290,7 @@ The entities, not the coordinator, do the current/next-slot lookup. `sensor.py:1
 
 ### 5.1 Slot-boundary push
 
-The coordinator's 60-minute tick is not clock-aligned. `async_setup_entry` registers an `async_track_time_change` callback (`__init__.py:171`) that fires `coordinator.async_update_listeners()` at `:00` (and `:15/:30/:45` for a quarter-hourly supplier, `__init__.py:171`) so the live price sensors re-read the wall clock at the exact slot boundary without re-fetching.
+The coordinator's 60-minute tick is not clock-aligned. `async_setup_entry` registers an `async_track_time_change` callback (`__init__.py:211`) that fires `coordinator.async_update_listeners()` at `:00` (and `:15/:30/:45` for a quarter-hourly supplier, `__init__.py:211`) so the live price sensors re-read the wall clock at the exact slot boundary without re-fetching.
 
 The push only helps a sensor whose `value_fn` reads the clock: re-evaluating a value baked into `CoordinatorData` yields the same value. That is why every per-slot number a user sees has to come out of a per-slot table indexed at `utcnow()`, not out of a scalar the tick resolved. `injection_price` was the exception until issue #44 and now goes through `_current_injection`.
 
@@ -306,7 +306,7 @@ Widening the table to three local days would also have papered over the symptom,
 
 ### 5.2 Cheapest / most-expensive window
 
-The window computation is *not* owned by the coordinator. `_find_window` (`__init__.py:382`) is a pure helper behind the `cheapest_window` and `most_expensive_window` services (`__init__.py:382`, `__init__.py:382`). It reads `coordinator.data.hourly` and `.resolution`, scales the requested `duration_hours` to slots via `slots_per_hour(resolution)` (`__init__.py:539`), and only considers strictly time-contiguous runs (`__init__.py:539`) so a gap in a dynamic table can't stretch a window past its duration. `_today_ranked` in `sensor.py` computes the `cheapest_4h_today` / `most_expensive_4h_today` attributes on the `current_price` sensor.
+The window computation is *not* owned by the coordinator. `_find_window` (`__init__.py:423`) is a pure helper behind the `cheapest_window` and `most_expensive_window` services (`__init__.py:423`, `__init__.py:423`). It reads `coordinator.data.hourly` and `.resolution`, scales the requested `duration_hours` to slots via `slots_per_hour(resolution)` (`__init__.py:580`), and only considers strictly time-contiguous runs (`__init__.py:580`) so a gap in a dynamic table can't stretch a window past its duration. `_today_ranked` in `sensor.py` computes the `cheapest_4h_today` / `most_expensive_4h_today` attributes on the `current_price` sensor.
 
 ## 6. Monthly capacity peak (Flanders)
 
@@ -448,4 +448,4 @@ Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`snapshot_store.py:99`,
 - **Identity guard** (`coordinator.py:948`): skip when `runtime_data` is a *different* coordinator (must not skip during first refresh, when it is `UNDEFINED`).
 - **Tuple guard** (`coordinator.py:968`): skip when live `entry.data` has drifted from `_supplier_tuple` (the OptionsFlow window where `entry.data` changed but `runtime_data` is still swapping).
 
-Serialization is `_snapshot_to_dict` (`snapshot_store.py:634`) and `_snapshot_from_dict` (`snapshot_store.py:669`), which stamp and check `_SNAPSHOT_SCHEMA_VERSION` as described in section 2.3. What is persisted is the card **as parsed**, not as priced: `_set_snapshot` keeps both, and the per-entry VAT and excise-band resolution is re-applied on load. Historical spots are pruned with a local-midnight Jan 1 anchor (`coordinator_snapshot.py:146`) so a Brussels restart in early January doesn't drop the first hour or two of YTD. On entry removal, `async_remove_entry` (`__init__.py:300`) deletes every Repairs issue id and removes the Store file so nothing outlives the entry; `test_repair_issue_kinds_match_the_declared_strings` pins that list against `strings.json` so a newly added issue cannot skip it.
+Serialization is `_snapshot_to_dict` (`snapshot_store.py:634`) and `_snapshot_from_dict` (`snapshot_store.py:669`), which stamp and check `_SNAPSHOT_SCHEMA_VERSION` as described in section 2.3. What is persisted is the card **as parsed**, not as priced: `_set_snapshot` keeps both, and the per-entry VAT and excise-band resolution is re-applied on load. Historical spots are pruned with a local-midnight Jan 1 anchor (`coordinator_snapshot.py:146`) so a Brussels restart in early January doesn't drop the first hour or two of YTD. On entry removal, `async_remove_entry` (`__init__.py:341`) deletes every Repairs issue id and removes the Store file so nothing outlives the entry; `test_repair_issue_kinds_match_the_declared_strings` pins that list against `strings.json` so a newly added issue cannot skip it.

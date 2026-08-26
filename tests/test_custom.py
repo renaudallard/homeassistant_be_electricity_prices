@@ -47,6 +47,7 @@ from custom_components.be_electricity_prices.flow_schemas import (
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
 )
+from tests import make_entry
 from custom_components.be_electricity_prices.injection import (
     _bake_monthly_injection,
     _floor_injection,
@@ -220,6 +221,105 @@ def test_the_zero_floor_can_never_meet_a_tou_injection() -> None:
             assert snap.injection.floor_at_zero is True
             assert snap.injection.peak is None
             assert not isinstance(snap.energy, TimeOfUseRates)
+
+
+def test_impact_boxes_left_blank_do_not_bill_zero_distribution() -> None:
+    """The three CWaPE Impact boxes had a 0,00 default, so a Walloon custom
+    entry that filled in only the single rate stored three zeros.
+    network_eur_per_kwh takes the Impact branch as soon as all three are
+    non-None, so those zeros did not fall back: they billed no distribution
+    at all, in every band, every hour."""
+    from custom_components.be_electricity_prices.flow_schemas import (
+        _custom_dso_schema,
+    )
+
+    schema = _custom_dso_schema(
+        {"region": "wallonia", "meter": "mono", "dso_tariff_mode": "impact"}
+    )
+    stored = schema(
+        {"custom_dso_distribution_single": 0.1198, "custom_dso_transport": 0.0274}
+    )
+    for key in (
+        "custom_dso_distribution_pic",
+        "custom_dso_distribution_medium",
+        "custom_dso_distribution_eco",
+    ):
+        assert key not in stored, key
+
+
+def test_a_zeroed_impact_triplet_costs_the_whole_distribution_leg() -> None:
+    """What the zeros were worth, through the real engine."""
+    from datetime import datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.pricing import network_eur_per_kwh
+    from custom_components.be_electricity_prices.providers.custom import build_snapshot
+
+    base = {
+        "custom_dso_distribution_single": 0.1198,
+        "custom_dso_transport": 0.0274,
+    }
+    zeroed = dict(
+        base,
+        custom_dso_distribution_pic=0.0,
+        custom_dso_distribution_medium=0.0,
+        custom_dso_distribution_eco=0.0,
+    )
+    when = datetime(2026, 4, 15, 14, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    def net(data: dict[str, float]) -> float:
+        overlay = build_snapshot(data, "wallonia", "custom").dsos["custom"]
+        return network_eur_per_kwh(overlay, when, "mono", "impact", "wallonia")
+
+    assert net(base) == pytest.approx(0.1472)
+    # Transport alone: the whole distribution leg silently gone.
+    assert net(zeroed) == pytest.approx(0.0274)
+
+
+async def test_a_stored_zero_impact_triplet_is_migrated_away(
+    hass: HomeAssistant,
+) -> None:
+    """Fixing the schema stops new entries taking the zeros; it cannot clear
+    the ones already stored, and the user cannot blank a box that is not
+    shown as blankable."""
+    from custom_components.be_electricity_prices import (
+        _migrate_zeroed_custom_impact_bands,
+    )
+
+    entry = make_entry(
+        supplier="custom",
+        region="wallonia",
+        dso_tariff_mode="impact",
+        custom_dso_distribution_single=0.1198,
+        custom_dso_distribution_pic=0.0,
+        custom_dso_distribution_medium=0.0,
+        custom_dso_distribution_eco=0.0,
+    )
+    entry.add_to_hass(hass)
+    _migrate_zeroed_custom_impact_bands(hass, entry)
+    assert "custom_dso_distribution_pic" not in entry.data
+    assert entry.data["custom_dso_distribution_single"] == pytest.approx(0.1198)
+
+
+async def test_a_real_impact_triplet_is_left_alone(hass: HomeAssistant) -> None:
+    """Only an ALL-zero triplet is dropped. A genuine tariff has no zero
+    bands, and a partly filled one is the user's own data."""
+    from custom_components.be_electricity_prices import (
+        _migrate_zeroed_custom_impact_bands,
+    )
+
+    entry = make_entry(
+        supplier="custom",
+        region="wallonia",
+        dso_tariff_mode="impact",
+        custom_dso_distribution_pic=0.1511,
+        custom_dso_distribution_medium=0.1183,
+        custom_dso_distribution_eco=0.0666,
+    )
+    entry.add_to_hass(hass)
+    _migrate_zeroed_custom_impact_bands(hass, entry)
+    assert entry.data["custom_dso_distribution_pic"] == pytest.approx(0.1511)
 
 
 def test_floor_injection_passthrough_without_flag() -> None:

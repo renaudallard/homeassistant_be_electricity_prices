@@ -410,6 +410,17 @@ _CUSTOM_FALLBACK_KEYS: tuple[str, ...] = (
     CONF_CUSTOM_DSO_DISTRIBUTION_PEAK,
     CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK,
     CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT,
+    # The CWaPE Impact triplet belongs here for the same reason and was the
+    # one group left out. network_eur_per_kwh takes the Impact branch when all
+    # three are non-None, so a defaulted 0,00 does not fall back to the single
+    # rate: it BILLS zero distribution in every band, every hour. A Walloon
+    # Impact entry that filled in only distribution_single lost 0,1198 EUR/kWh
+    # of network, EUR 419/yr at 3500 kWh, on the live tick, the year-to-date
+    # walk, the backfill and the compare quote at once, with no Repairs card
+    # because _sync_impact_gap_issue tests for None and the zero defeats it.
+    CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
+    CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM,
+    CONF_CUSTOM_DSO_DISTRIBUTION_ECO,
 )
 
 
@@ -709,9 +720,18 @@ def _custom_dso_schema(defaults: dict[str, Any]) -> vol.Schema:
     if region == REGION_WALLONIA:
         _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR)
         if dso_mode == DSO_MODE_IMPACT:
-            _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_PIC)
-            _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM)
-            _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_ECO)
+            # fallback=True: leaving these blank must mean "I am not on the
+            # incitative bands", which falls back to the single rate. A
+            # default would submit 0,00 and bill no distribution at all.
+            _add_custom_num(
+                fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_PIC, fallback=True
+            )
+            _add_custom_num(
+                fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM, fallback=True
+            )
+            _add_custom_num(
+                fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_ECO, fallback=True
+            )
     if region == REGION_BRUSSELS:
         _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_BRUSSELS_OSP)
     return vol.Schema(fields)
