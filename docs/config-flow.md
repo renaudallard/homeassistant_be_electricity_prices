@@ -466,7 +466,7 @@ stale stored value never renders as an invalid pre-selection:
 | Menu option | Step | Effect |
 | --- | --- | --- |
 | `edit` | `async_step_edit` (`config_flow.py:666`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
-| `compare` | `async_step_compare` (`compare_flow.py:275`) | One-off quote against another supplier; nothing saved |
+| `compare` | `async_step_compare` (`compare_flow.py:291`) | One-off quote against another supplier; nothing saved |
 
 Menu labels live in `options.step.init.menu_options` (`strings.json:193`).
 
@@ -511,14 +511,25 @@ user to edit the existing entry instead (`strings.json:166`).
 
 ### Compare path (one-off quote, nothing saved)
 
-The compare branch (`compare_flow.py:231` onward) walks `compare -> compare_contract
+The compare branch (`compare_flow.py:286` onward) walks `compare -> compare_contract
 -> compare_meter -> compare_solar -> (compare_api_key) -> compare_result` and exits
-via `async_abort`, so it creates no entry and writes no options. Region, DSO, peak
-and DSO mode stay fixed to the current entry so the quote is apples-to-apples;
-supplier, contract, (for static targets) meter, and the solar regime vary.
+via `async_abort`, so it creates no entry and writes no options. Region, DSO and
+peak stay fixed to the current entry so the quote is apples-to-apples;
+supplier, contract, (for static targets) meter, the DSO tariff mode and the
+solar regime vary.
 
 The meter override applies to the TARGET side only: it is a billing mode the
-quoted contract can differ on. The solar regime override applies to BOTH sides,
+quoted contract can differ on. So does the DSO tariff mode, and for one product
+family it is not optional: a `tou_impact` card carries three CWaPE band rates
+and no mono/bi structure at all, so the band schedule prices its energy whatever
+the household is on, while the network leg and the Walloon terme fixe follow the
+mode. Quoting such a target on the household's own bi-horaire settings therefore
+banded the energy, billed the network off the standard jour/nuit columns and
+charged a fixed term the incitative tariff does not have. The target side is
+forced to `DSO_MODE_IMPACT` for that kind, mirroring what `_after_meter` already
+does at install, and it rides the `_QuoteEntry` proxy rather than a parameter
+because the fee leg and the year-to-date engine both read the mode straight off
+`entry.data`. The solar regime override applies to BOTH sides,
 because the regime belongs to the grid connection rather than to the supplier, so
 two suppliers at one address are necessarily on the same one. That symmetry is
 also why it barely moves `delta_annual`, and why the result page prints the user's
@@ -529,12 +540,12 @@ anywhere on the page.
 
 | Step | Method | Notes |
 | --- | --- | --- |
-| `compare` | `compare_flow.py:230` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:115`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
-| `compare_contract` | `compare_flow.py:258` | Contract picker via `_compare_contract_schema` (`compare_flow.py:140`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
-| `compare_meter` | `compare_flow.py:299` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:216`) |
-| `compare_solar` | `compare_flow.py:341` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:1028`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:980`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
-| `compare_api_key` | `compare_flow.py:429` | Shown when `_after_compare_meter` (`compare_flow.py:441`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved |
-| `compare_result` | `compare_flow.py:457` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:511`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
+| `compare` | `compare_flow.py:291` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:116`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
+| `compare_contract` | `compare_flow.py:319` | Contract picker via `_compare_contract_schema` (`compare_flow.py:141`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
+| `compare_meter` | `compare_flow.py:355` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:216`) |
+| `compare_solar` | `compare_flow.py:397` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:1028`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:980`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
+| `compare_api_key` | `compare_flow.py:486` | Shown when `_after_compare_meter` (`compare_flow.py:457`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved |
+| `compare_result` | `compare_flow.py:514` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:527`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
 
 The quoted supplier's freshly fetched card is resolved through
 `snapshot_store._resolve_snapshot`, the same helper the live path uses, so it gets

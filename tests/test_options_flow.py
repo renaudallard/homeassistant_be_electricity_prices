@@ -2263,6 +2263,105 @@ async def test_compare_meter_override_changes_per_kwh(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_prices_a_tarif_impact_target_on_its_own_configuration(
+    hass: HomeAssistant,
+) -> None:
+    """A Tarif Impact product is sold only on the CWaPE incitative
+    configuration, so it must be quoted on that whatever the household is on.
+
+    Its energy carries three band rates and no mono/bi structure, so the band
+    schedule prices it regardless of the mode. The network leg and the Walloon
+    terme fixe do follow the mode, so quoting the target on the household's
+    own bi-horaire settings banded the energy while billing the network off
+    the standard jour/nuit columns and charging a fixed term the tariff does
+    not have. The install flow forces the mode for exactly this reason.
+
+    The invariant: the target's price does not depend on what the household
+    next door is configured as."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _tou_weighted_per_kwh,
+    )
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        ImpactRates,
+    )
+    from tests import make_snapshot
+
+    # A Walloon overlay carrying BOTH structures, as the real cards do: the
+    # jour/nuit pair the standard tariff bills and the CWaPE triplet the
+    # incitative one bills, plus a terme fixe that Impact does not charge.
+    overlay = DsoOverlay(
+        distribution_single=0.10,
+        distribution_peak=0.12,
+        distribution_offpeak=0.08,
+        distribution_pic=0.15,
+        distribution_medium=0.10,
+        distribution_eco=0.06,
+        transport=0.0145,
+        data_management_per_year=19.49,
+    )
+    # The OCTA+ Wallonia card's bands, which tests/test_octaplus.py pins.
+    impact_snap = make_snapshot(
+        supplier="octaplus",
+        contract="octaplus_fixed_impact",
+        energy=ImpactRates(
+            pic=0.1972, medium=0.1683, eco=0.1284, yearly_fixed_fee=65.0
+        ),
+        dsos={"ores": overlay},
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+
+    on_bi = _make_entry()
+    on_bi.add_to_hass(hass)
+    on_bi.runtime_data = _real_coordinator(
+        hass, on_bi, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    quoted_from_bi = await _drive_compare(
+        hass,
+        on_bi,
+        other_snap=impact_snap,
+        other_supplier="octaplus",
+        other_contract="octaplus_fixed_impact",
+    )
+
+    # The same target, quoted by a household already on the incitative
+    # configuration. Nothing about the product changed, so nothing about its
+    # price may either.
+    on_impact = make_entry(dso_tariff_mode="impact")
+    on_impact.add_to_hass(hass)
+    on_impact.runtime_data = _real_coordinator(
+        hass, on_impact, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    quoted_from_impact = await _drive_compare(
+        hass,
+        on_impact,
+        other_snap=impact_snap,
+        other_supplier="octaplus",
+        other_contract="octaplus_fixed_impact",
+    )
+
+    assert quoted_from_bi["compare_per_kwh"] == quoted_from_impact["compare_per_kwh"]
+    assert quoted_from_bi["compare_annual"] == quoted_from_impact["compare_annual"]
+
+    # And it is the incitative price that both quote, not the standard one.
+    # Without this the assertion above would pass on two identically wrong
+    # numbers if the modes ever priced alike.
+    now = dt_util.as_local(dt_util.utcnow())
+    on_bands = _tou_weighted_per_kwh(
+        impact_snap, "ores", "wallonia", now, None, "dynamic", "impact"
+    )
+    off_bands = _tou_weighted_per_kwh(
+        impact_snap, "ores", "wallonia", now, None, "dynamic", "bi_horaire"
+    )
+    assert on_bands is not None and off_bands is not None
+    assert on_bands != pytest.approx(off_bands)
+    assert float(quoted_from_bi["compare_per_kwh"]) == pytest.approx(on_bands, abs=5e-5)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_tou_uses_weighted_average_across_slots(
     hass: HomeAssistant,
 ) -> None:

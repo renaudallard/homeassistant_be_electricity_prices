@@ -78,6 +78,7 @@ from .const import (
     CONF_WHATIF_INJECTION_KWH,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DSO_MODE_BI_HORAIRE,
+    DSO_MODE_IMPACT,
     MEASURED_FULL_YEAR_DAYS,
     METER_DYNAMIC,
     METER_MONO,
@@ -243,20 +244,35 @@ def _effective_regime(current: Mapping[str, Any], compare: Mapping[str, Any]) ->
     return str(compare.get(CONF_SOLAR_REGIME, stored))
 
 
-def _quote_entry(entry: ConfigEntry, regime: str) -> ConfigEntry:
+def _quote_entry(
+    entry: ConfigEntry, regime: str, dso_mode: str | None = None
+) -> ConfigEntry:
     """``entry`` itself when the what-if matches it, else a proxy holding
-    the overridden regime.
+    the overridden regime and DSO tariff mode.
 
     Returning the real entry unchanged on the common path keeps every
     quote that does not use the what-if on exactly the code it ran
     before, proxy included.
+
+    ``dso_mode`` is the target side's billing configuration, which is not
+    always the household's: a Tarif Impact product is only sold on the
+    incitative one. It rides the proxy rather than a parameter for the same
+    reason the regime does, and it reaches further, because the fee leg and
+    the year-to-date engine both read it straight off ``entry.data``.
     """
-    if regime == entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE):
+    overrides: dict[str, Any] = {}
+    if regime != entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE):
+        overrides[CONF_SOLAR_REGIME] = regime
+    if dso_mode is not None and dso_mode != entry.data.get(
+        CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE
+    ):
+        overrides[CONF_DSO_TARIFF_MODE] = dso_mode
+    if not overrides:
         return entry
     # Only entry.data is ever read through this (audited across the quote,
     # fee, injection and year-to-date helpers), so the mapping is a
     # complete stand-in; the cast is what tells mypy that.
-    return cast(ConfigEntry, _QuoteEntry({**entry.data, CONF_SOLAR_REGIME: regime}))
+    return cast(ConfigEntry, _QuoteEntry({**entry.data, **overrides}))
 
 
 def _kva(data: Mapping[str, Any]) -> float:
@@ -623,6 +639,18 @@ class _CompareStepsMixin(OptionsFlow):
         other_kind = _contract_kind(
             self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
         )
+        # A Tarif Impact product is sold only on the CWaPE incitative
+        # configuration: its energy carries three band rates and no
+        # mono/bi structure at all, so the band schedule prices it whatever
+        # the household is on, while the network leg and the Walloon terme
+        # fixe both follow the mode. Quoting the TARGET on the household's
+        # own mode therefore banded its energy, billed its network off the
+        # standard jour/nuit columns and charged it a fixed term the tariff
+        # does not have. The install flow forces the mode for exactly this
+        # reason; mirror it here, for the target only, the same way the
+        # meter override applies to the target only.
+        other_dso_mode = DSO_MODE_IMPACT if other_kind == "tou_impact" else dso_mode
+        target_entry = _quote_entry(self.config_entry, regime, other_dso_mode)
         # A spot-indexed-injection side (Cociter Variable) prices its
         # feed-in credit off the hourly day-ahead even though its energy
         # kind is "variable", so it needs spots just like a dynamic side.
@@ -922,7 +950,7 @@ class _CompareStepsMixin(OptionsFlow):
         other_export_per_kwh: float | None = None
 
         async def _export_rate_for(
-            snapshot: SupplierSnapshot | None, meter_type: Any
+            snapshot: SupplierSnapshot | None, meter_type: Any, mode: str
         ) -> float | None:
             """All-in EUR/kWh weighted by when the panels EXPORT.
 
@@ -930,6 +958,9 @@ class _CompareStepsMixin(OptionsFlow):
             force at the time, so the exported side has to be priced on its
             own shape rather than on the consumption one. Every other regime
             never reads it, so it is not worth the second pass.
+
+            ``mode`` is the side's own DSO tariff mode, since a Tarif Impact
+            target is billed on a configuration the household need not be on.
             """
             if regime != SOLAR_REGIME_COMPENSATION or snapshot is None:
                 return None
@@ -942,7 +973,7 @@ class _CompareStepsMixin(OptionsFlow):
                 dt_util.as_local(now_utc),
                 await _spot_for(snapshot),
                 meter_type,
-                dso_mode,
+                mode,
                 inj_hour_weights,
             )
 
@@ -958,7 +989,7 @@ class _CompareStepsMixin(OptionsFlow):
                 hour_weights,
             )
             current_export_per_kwh = await _export_rate_for(
-                current_snapshot, current_meter
+                current_snapshot, current_meter, dso_mode
             )
 
         # Other supplier: fetch + compute.
@@ -997,10 +1028,12 @@ class _CompareStepsMixin(OptionsFlow):
                     dt_util.as_local(now_utc),
                     await _spot_for(other_snap),
                     meter,
-                    dso_mode,
+                    other_dso_mode,
                     hour_weights,
                 )
-                other_export_per_kwh = await _export_rate_for(other_snap, meter)
+                other_export_per_kwh = await _export_rate_for(
+                    other_snap, meter, other_dso_mode
+                )
                 if other_per_kwh is None:
                     placeholders["error"] = "compute failed"
 
@@ -1071,7 +1104,7 @@ class _CompareStepsMixin(OptionsFlow):
         if other_per_kwh is not None and other_snap is not None:
             placeholders["compare_per_kwh"] = f"{other_per_kwh:.4f}"
             placeholders["compare_annual"] = (
-                f"{_annual_bill(other_snap, quote_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, export_per_kwh=other_export_per_kwh, meter=meter):.2f}"
+                f"{_annual_bill(other_snap, target_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, export_per_kwh=other_export_per_kwh, meter=meter):.2f}"
             )
 
         # A what-if moves BOTH sides together, so the printed supplier delta
@@ -1126,7 +1159,7 @@ class _CompareStepsMixin(OptionsFlow):
         ):
             delta = _annual_bill(
                 other_snap,
-                quote_entry,
+                target_entry,
                 peak_kw,
                 other_per_kwh,
                 annual_kwh,
@@ -1255,7 +1288,7 @@ class _CompareStepsMixin(OptionsFlow):
                     session,
                     other_extractor,
                     other_snap,
-                    quote_entry,
+                    target_entry,
                     contract_override=self._compare[CONF_CONTRACT],
                     meter_override=meter,
                     historical_spots=hist_spots,
@@ -1307,7 +1340,7 @@ class _CompareStepsMixin(OptionsFlow):
             )
             compare_ytd = _annual_bill(
                 other_snap,
-                quote_entry,
+                target_entry,
                 peak_kw,
                 other_per_kwh,
                 ytd_kwh,
