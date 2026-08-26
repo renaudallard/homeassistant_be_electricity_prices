@@ -279,6 +279,7 @@ def test_maxxflex_energy_carries_the_monthly_formula() -> None:
     assert energy.formula_factor_offpeak == pytest.approx(0.0940 * 10.0 * 1.06)
     assert energy.formula_factor_exclusive_night == pytest.approx(0.0940 * 10.0 * 1.06)
     # Round-trips to the card's own printed rate at its own index.
+    assert energy.formula_factor is not None and energy.formula_base is not None
     assert energy.formula_factor * 0.09261 + energy.formula_base == pytest.approx(
         0.1441, abs=1e-4
     )
@@ -333,6 +334,7 @@ def test_monthly_cards_carry_the_injection_formula() -> None:
         assert inj.factor == pytest.approx(0.481), cid
         assert inj.base == pytest.approx(-0.006392), cid
         assert inj.month_indexed is True, cid
+        assert inj.factor is not None and inj.base is not None
         # Round-trips to the card's own printed figure at its own index.
         assert inj.factor * 0.09261 + inj.base == pytest.approx(0.0381, abs=1e-4), cid
 

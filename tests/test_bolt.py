@@ -123,6 +123,7 @@ def test_a_slot_indexed_credit_beats_its_printed_figure() -> None:
     inj = snap.injection
     assert inj is not None
     assert _injection_is_spot_formula(inj, snap.energy) is True
+    assert inj.factor is not None and inj.base is not None
     # A quarter at 5 EUR/MWh is a NEGATIVE credit; the flat figure is +0,0531.
     assert inj.factor * 0.005 + inj.base < 0.0
 

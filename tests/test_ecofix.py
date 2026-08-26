@@ -306,6 +306,7 @@ def test_flexy_printed_figure_is_two_months_stale() -> None:
     snap = parse_snapshot("ecofix_flexy", _layout(_FLEXY), "wallonia", "test://f")
     inj = snap.injection
     assert inj is not None and inj.factor is not None and inj.base is not None
+    assert inj.current is not None
     implied_index = (inj.current - inj.base) / inj.factor
     assert implied_index == pytest.approx(0.05452, abs=1e-5)
     # April's own index credits less than half of what the card printed.

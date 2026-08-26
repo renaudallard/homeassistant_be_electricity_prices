@@ -208,6 +208,7 @@ def test_july_card_splits_the_credit_fixed_and_spp() -> None:
     # "De terugleververgoeding kan nooit negatief zijn." - on this card only.
     assert inj.floor_at_zero is True
     # Round-trips to the card's own printed figure at its own index.
+    assert inj.factor is not None and inj.base is not None
     assert inj.factor * 0.06264597 + inj.base == pytest.approx(0.0332, abs=1e-4)
     assert inj.current == pytest.approx(0.0332)
 

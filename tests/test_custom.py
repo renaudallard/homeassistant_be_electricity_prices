@@ -347,7 +347,7 @@ async def test_a_stale_signing_rate_cannot_override_the_typed_formula(
         "manual_yearly_fee": 120.0,
         "contract_start_date": "2025-06-01",
     }
-    entry = make_entry(**data)
+    entry = make_entry(**data)  # type: ignore[arg-type]
     entry.add_to_hass(hass)
     snap = build_snapshot(data, "wallonia", "custom")
 
@@ -390,7 +390,7 @@ def test_compare_honours_the_entry_level_spp_opt_in() -> None:
         "custom_injection_spp_weighted": True,
     }
     snap = build_snapshot(data, "wallonia", "custom")
-    entry = make_entry(**data)
+    entry = make_entry(**data)  # type: ignore[arg-type]
     assert snap.injection is not None
     # spp_indexed is False - no card said so - yet the caller resolved an
     # SPP mean, and that mean must be what the credit is priced at.

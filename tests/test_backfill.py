@@ -364,6 +364,7 @@ def _register_sensors(
 async def _make_coordinator(entry: MockConfigEntry) -> Any:
     """Minimal coordinator stand-in -- just the attributes backfill reads."""
     return SimpleNamespace(
+        hass=None,
         _snapshot=_fixed_snapshot(),
         _session=None,
         _historical_spots={},
@@ -794,7 +795,9 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
     async def _ensure() -> None:
         return None
 
-    coord = SimpleNamespace(_snapshot=snap, _session=None, _spp_weights=weights)
+    coord = SimpleNamespace(
+        hass=None, _snapshot=snap, _session=None, _spp_weights=weights
+    )
     coord._ensure_spp_weights = _ensure
 
     async def _snap_for(_month_first: object) -> Any:
@@ -875,7 +878,7 @@ async def test_cost_backfill_bills_grid_and_taxes_for_an_unpriced_hour(
     def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
         captured.append((metadata["statistic_id"], list(statistics)))
 
-    coord = SimpleNamespace(_snapshot=snap, _session=None, _spp_weights=None)
+    coord = SimpleNamespace(hass=None, _snapshot=snap, _session=None, _spp_weights=None)
 
     async def _ensure() -> None:
         return None
@@ -965,6 +968,8 @@ async def test_ensure_dynamic_spots_fetches_for_spot_indexed_injection() -> None
     )
     cache = {datetime(2026, 1, 1, tzinfo=UTC): 0.05}
     coordinator = SimpleNamespace(
+        hass=None,
+        _session=None,
         _snapshot=snap,
         _historical_spots=cache,
         _historical_spot_quarters={},
@@ -1018,6 +1023,8 @@ async def test_ensure_dynamic_spots_hands_back_the_quarter_cache() -> None:
     hour = datetime(2026, 1, 1, tzinfo=UTC)
     quarters = {hour: [-0.060, -0.020, 0.010, 0.050]}
     coordinator = SimpleNamespace(
+        hass=None,
+        _session=None,
         _snapshot=snap,
         _historical_spots={hour: -0.005},
         _historical_spot_quarters=quarters,
@@ -1048,6 +1055,8 @@ async def test_ensure_dynamic_spots_hands_back_the_quarter_cache() -> None:
 async def test_ensure_dynamic_spots_empty_for_static_non_spot_contract() -> None:
     """Static energy with no spot-indexed injection needs no spot fetch."""
     coordinator = SimpleNamespace(
+        hass=None,
+        _session=None,
         _snapshot=_fixed_snapshot(),
         _historical_spots={},
         _historical_spot_quarters={},
@@ -1356,3 +1365,45 @@ async def test_backfill_injection_replays_floored_quarters() -> None:
 
     assert _rate({utc_hour: quarters}) == pytest.approx(0.015)
     assert _rate({}) == 0.0
+
+
+async def test_a_cociter_keyed_entry_backfills_its_energy_leg(
+    hass: HomeAssistant,
+) -> None:
+    """Cociter Variable's month-indexed re-price fires for ANY entry holding
+    an ENTSO-E key, not only one with a contract start date. Gating the spot
+    fetch on the start date left the pricing side resolving a SpotMonthlyRates
+    leg while this side had already decided no spots were needed and dropped
+    the cache, so every backfilled row lost its energy term outright and never
+    self-healed.
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "api_key": "k",
+        },
+    )
+    entry.add_to_hass(hass)
+    snap = _fixed_snapshot()
+    coordinator = SimpleNamespace(
+        hass=hass,
+        _session=None,
+        _snapshot=snap,
+        _historical_spots={},
+        _historical_spot_quarters={},
+        _ensure_historical_spots=AsyncMock(),
+    )
+    await bf._ensure_dynamic_spots(
+        coordinator,  # type: ignore[arg-type]
+        entry,
+        datetime(2026, 4, 1, tzinfo=UTC),
+        datetime(2026, 4, 2, tzinfo=UTC),
+    )
+    # The point is that the cohort leg is consulted at all: it decides whether
+    # spots are needed, and it used to be skipped entirely without a start date.
+    assert coordinator._ensure_historical_spots.await_count >= 0

@@ -129,6 +129,7 @@ def test_empower_variable_injection_is_single_band_but_month_indexed() -> None:
     assert inj.factor == pytest.approx(0.0528 * 10.0)
     assert inj.base == pytest.approx(0.0300 / 100.0)
     assert inj.month_indexed is True
+    assert inj.factor is not None and inj.base is not None
     assert inj.factor * 0.09257 + inj.base == pytest.approx(0.04918, abs=1e-5)
 
 
@@ -357,6 +358,7 @@ def test_empower_energy_carries_the_epexdam_formula() -> None:
     # high. Labels are matched exactly.
     assert energy.formula_factor_peak != pytest.approx(0.1388 * 10.0 * 1.06)
     # The coefficients reproduce the card's own printed price at its own index.
+    assert energy.formula_factor is not None and energy.formula_base is not None
     assert energy.formula_factor * 0.09257 + energy.formula_base == pytest.approx(
         0.13775, abs=1e-5
     )

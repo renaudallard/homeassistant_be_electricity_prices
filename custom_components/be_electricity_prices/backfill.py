@@ -87,7 +87,6 @@ from .const import (
 from .synergrid import SppWeights
 from .cohort import (
     _cohort_energy_leg,
-    _contract_start_month,
     _month_snapshot_cache,
 )
 from .coordinator import (
@@ -325,19 +324,29 @@ async def _ensure_dynamic_spots(
     # spots for the cohort too, matching the live coordinator (which gates the
     # historical-spot fetch on ``priced.energy``); otherwise the cohort hours
     # get no spot and are dropped, leaving a fees-only backfill.
+    # Resolved unconditionally rather than only for an entry with a start
+    # date. Cociter Variable's month-indexed re-price fires for ANY entry
+    # holding an ENTSO-E key, through _month_indexed_leg, so gating on the
+    # start date left the pricing side resolving a SpotMonthlyRates leg while
+    # this side had already decided no spots were needed and thrown the cache
+    # away: measured, a backfilled April hour came out at 0,23003 EUR/kWh
+    # instead of 0,34578, its energy term zeroed outright, and the persisted
+    # year-to-date ran 36,6% low without ever self-healing.
+    #
+    # The common path still never fetches: with no start date
+    # _cohort_energy_leg returns through _month_indexed_leg before any I/O.
     eff_energy = snap.energy
-    if _contract_start_month(entry) is not None:
-        cohort = await _cohort_energy_leg(
-            coordinator.hass,
-            coordinator._session,
-            get_extractor(entry.data[CONF_SUPPLIER]),
-            entry.data[CONF_CONTRACT],
-            entry.data.get(CONF_REGION, ""),
-            entry,
-            snap,
-        )
-        if cohort is not None:
-            eff_energy = cohort
+    cohort = await _cohort_energy_leg(
+        coordinator.hass,
+        coordinator._session,
+        get_extractor(entry.data[CONF_SUPPLIER]),
+        entry.data[CONF_CONTRACT],
+        entry.data.get(CONF_REGION, ""),
+        entry,
+        snap,
+    )
+    if cohort is not None:
+        eff_energy = cohort
     if (
         not isinstance(eff_energy, (DynamicRates, SpotMonthlyRates))
         and not _injection_needs_spot(snap, entry)
