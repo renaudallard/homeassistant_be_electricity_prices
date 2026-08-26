@@ -396,6 +396,13 @@ signal that would report it. Two suppliers in this repo have lost or blocked the
 weeks, so this is not hypothetical; a transient blip still files nothing, because the workflow only
 opens an issue for a check that fails every retry.
 
+That rule governs whether an issue is filed; it now governs what the issue *shows* as well. The body
+carries the **last** attempt's report, which on a slow runner also lists checks that failed only that
+once, so a one-off supplier timeout used to sit in the failures table beside the real regression and
+read as part of it. The table is filtered to the persistent set, and a footer states how many rows
+were dropped so nothing disappears silently. The pass/fail counts in the report heading stay raw, and
+the run log still holds every attempt.
+
 Matching is case-**insensitive**. Every provider module compiles its card patterns with
 `re.IGNORECASE`, so a case-sensitive gate is stricter than the extractor it audits in that one
 dimension and goes blind exactly where the extractor still sees.
