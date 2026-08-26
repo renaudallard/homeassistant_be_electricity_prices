@@ -263,9 +263,14 @@ def _compare_injection_credit(
         )
     if (
         inj is not None
-        and inj.spp_indexed
         and inj.factor is not None
         and inj.base is not None
+        # NOT gated on inj.spp_indexed. The caller decides whether an
+        # SPP-weighted mean applies, because the custom supplier's answer
+        # lives on the ENTRY rather than on any card, and a second narrower
+        # copy of the rule here made the caller's work unreachable: the page
+        # then quoted the credit at the two-day day-ahead window mean while
+        # the sensor beside it showed the month's SPP-weighted one.
         and spp_spot is not None
     ):
         return _floor_injection(inj.factor * spp_spot + inj.base, inj)

@@ -364,6 +364,41 @@ async def test_a_stale_signing_rate_cannot_override_the_typed_formula(
     assert leg is None
 
 
+def test_compare_honours_the_entry_level_spp_opt_in() -> None:
+    """The SPP-weighting opt-in lives on the ENTRY for the custom supplier,
+    because a hand-entered contract has no card to read a flag off. The
+    compare page gated on the card flag alone, so the one supplier the opt-in
+    exists for never reached the branch, and the page quoted the credit at the
+    two-day day-ahead window mean while the sensor beside it used the month's
+    SPP-weighted one.
+    """
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.custom import (
+        build_snapshot,
+    )
+
+    data = {
+        "supplier": "custom",
+        "contract": "custom_monthly",
+        "region": "wallonia",
+        "solar_regime": "injection",
+        "custom_injection_mode": "formula",
+        "custom_injection_factor": 0.9,
+        "custom_injection_base": -0.01,
+        "custom_injection_spp_weighted": True,
+    }
+    snap = build_snapshot(data, "wallonia", "custom")
+    entry = make_entry(**data)
+    assert snap.injection is not None
+    # spp_indexed is False - no card said so - yet the caller resolved an
+    # SPP mean, and that mean must be what the credit is priced at.
+    assert snap.injection.spp_indexed is False
+    credit = _compare_injection_credit(snap, entry, {}, 0.1142, spp_spot=0.0634)
+    assert credit == pytest.approx(0.9 * 0.0634 - 0.01)
+
+
 def test_floor_injection_passthrough_without_flag() -> None:
     inj = InjectionRates(current=-0.001, floor_at_zero=False)
     assert _floor_injection(-0.001, inj) == -0.001

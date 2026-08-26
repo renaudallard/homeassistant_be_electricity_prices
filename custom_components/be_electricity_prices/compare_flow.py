@@ -62,7 +62,7 @@ from homeassistant.helpers.selector import (
 
 from .providers import all_extractors, get as get_extractor
 from .providers.base import SpotMonthlyRates, SupplierSnapshot
-from .spot_stats import _injection_is_spp_indexed
+from .spot_stats import _spp_weighting_enabled
 
 from .const import (
     CONF_API_KEY,
@@ -691,8 +691,19 @@ class _CompareStepsMixin(OptionsFlow):
             return spp_spot_resolved[0]
 
         async def _spp_spot_for(snapshot: SupplierSnapshot | None) -> float | None:
-            """The SPP month mean, resolved only for a card indexed on it."""
-            if not _injection_is_spp_indexed(snapshot):
+            """The SPP month mean, for a card indexed on it OR an entry that
+            opted into the weighting.
+
+            Gating on the card flag alone silently excluded the one supplier
+            the opt-in exists for: providers/custom.py never sets
+            spp_indexed, because a hand-entered contract has no card to read
+            it off, and the answer lives on the entry instead
+            (CONF_CUSTOM_INJECTION_SPP_WEIGHTED). _spp_weighting_enabled is
+            the predicate the live tick already uses for exactly this
+            question, so use it here too rather than keeping a second, and
+            narrower, copy of the rule.
+            """
+            if not _spp_weighting_enabled(self.config_entry, snapshot):
                 return None
             return await _spp_month_spot()
 
