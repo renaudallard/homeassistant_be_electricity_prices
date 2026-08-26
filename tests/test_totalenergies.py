@@ -374,3 +374,45 @@ def test_unknown_region_raises() -> None:
             )
 
     asyncio.run(_run())
+
+
+def test_impact_preselects_the_incitative_network_mode() -> None:
+    """TE Impact prints ONLY the CWaPE PIC/MEDIUM/ECO columns for supplier
+    energy, and its footnote describes the incitative tariff outright. Mega
+    and OCTA+ register their Impact products as tou_impact and are
+    auto-selected on that; TE registers its as "variable", so the gate never
+    fired and the user was offered bi_horaire pre-selected.
+
+    Accepting that costs a 3500 kWh ORES household about EUR 29/yr on a bi
+    meter and EUR 113 on a mono one, partly because the incitative
+    configuration also exempts the Walloon terme fixe.
+
+    Pre-selected, not forced: unlike the Mega and OCTA+ cards, the TE one
+    states only that a communicating digital meter is required, so a holder on
+    the standard configuration exists and forcing would under-bill them by the
+    same amount the other way.
+    """
+    from custom_components.be_electricity_prices.flow_schemas import (
+        _dso_tariff_mode_schema,
+    )
+
+    assert (
+        _dso_tariff_mode_schema({"contract": "totalenergies_impact"})({})[
+            "dso_tariff_mode"
+        ]
+        == "impact"
+    )
+    # A sibling product is unaffected.
+    assert (
+        _dso_tariff_mode_schema({"contract": "totalenergies_mycomfort"})({})[
+            "dso_tariff_mode"
+        ]
+        == "bi_horaire"
+    )
+    # And a stored answer still wins, so the question is a question.
+    assert (
+        _dso_tariff_mode_schema(
+            {"contract": "totalenergies_impact", "dso_tariff_mode": "bi_horaire"}
+        )({})["dso_tariff_mode"]
+        == "bi_horaire"
+    )

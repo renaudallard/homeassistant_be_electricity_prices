@@ -176,7 +176,7 @@ step, a stored value is only defaulted when it is still a valid slug for the reg
 
 ### `meter`: type, narrowed by contract kind
 
-Schema `_meter_schema` (`flow_schemas.py:761`). The key rule (`flow_schemas.py:761`):
+Schema `_meter_schema` (`flow_schemas.py:782`). The key rule (`flow_schemas.py:782`):
 
 - If contract kind is `dynamic`, `tou`, or `tou_impact`, the only option is
   `METER_DYNAMIC` and the default is `METER_DYNAMIC`.
@@ -202,7 +202,7 @@ supplier:contract:region:dso tuple; see the unique-id note below.
 
 ### `dso_tariff_mode`: Wallonia-only DSO billing mode
 
-Schema `_dso_tariff_mode_schema` (`flow_schemas.py:503`), default `DSO_MODE_BI_HORAIRE`.
+Schema `_dso_tariff_mode_schema` (`flow_schemas.py:521`), default `DSO_MODE_BI_HORAIRE`.
 Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:256`),
 `translation_key="dso_tariff_mode"`.
 
@@ -216,11 +216,11 @@ capacity tariff; `config_flow.py:178` comment).
 
 ### `api_key`: ENTSO-E token for spot-indexed energy (required)
 
-Schema `_api_key_schema` (`flow_schemas.py:794`), a `PASSWORD` text field. Reached
+Schema `_api_key_schema` (`flow_schemas.py:815`), a `PASSWORD` text field. Reached
 from `_after_dso_tariff_mode` when the contract kind is `dynamic` or
 `spot_monthly` (both price off ENTSO-E spots — live per-slot for dynamic, monthly
 mean for spot-monthly). The typed key is stripped and validated live against the
-ENTSO-E day-ahead endpoint by `_validate_entsoe_key` (`flow_schemas.py:805`) before
+ENTSO-E day-ahead endpoint by `_validate_entsoe_key` (`flow_schemas.py:826`) before
 the flow proceeds:
 
 - returns `None` on success,
@@ -238,7 +238,7 @@ strings map to `config.error.invalid_api_key` / `config.error.cannot_connect`
 
 ### `capacity`: Flanders capacity-tariff peak source
 
-Schema `_capacity_schema` (`flow_schemas.py:836`). Reached from `_after_api_key` or
+Schema `_capacity_schema` (`flow_schemas.py:857`). Reached from `_after_api_key` or
 `_after_dso_tariff_mode` when region is Flanders (`config_flow.py:501`, `:507`).
 Fields:
 
@@ -282,7 +282,7 @@ forces a deliberate choice (issue #19 again, `flow_prefill.py:143`).
 
 ### `connection_power`: Brussels connection-power tier
 
-Schema `_connection_power_schema` (`flow_schemas.py:519`), default
+Schema `_connection_power_schema` (`flow_schemas.py:540`), default
 `DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:294`). Options are the four
 residential tiers `CONNECTION_KVA_TIERS` (`const.py:275`): `le1_44`, `le6`,
 `le9_6`, `le13`, `translation_key="connection_kva_tier"`. Reached from
@@ -297,7 +297,7 @@ straight to solar (`config_flow.py:206` comment).
 
 ### `solar`: inverter kVA + regime
 
-Schema `_solar_schema` (`flow_schemas.py:979`). Fields:
+Schema `_solar_schema` (`flow_schemas.py:1000`). Fields:
 
 - `CONF_SOLAR_KVA`: `NumberSelector` box 0-50 step 0.1, default 0.0 (0 means no
   panels, no prosumer cost; `const.py:230`).
@@ -330,11 +330,11 @@ but the feed-in credit needs the day-ahead curve. Unlike the required `api_key`
 step, this one is skippable (`flow_schemas.py:965` docstring): submitting blank pops
 `CONF_API_KEY` and continues to `meters`, leaving the injection price unavailable
 until a key is added via Reconfigure. A typed key is validated by
-`_validate_entsoe_key` the same way as the dynamic step (`flow_schemas.py:805`).
+`_validate_entsoe_key` the same way as the dynamic step (`flow_schemas.py:826`).
 
 ### `meters`: cumulative kWh sensors (current-year cost)
 
-Schema `_meters_schema` (`flow_schemas.py:921`). All six fields are optional
+Schema `_meters_schema` (`flow_schemas.py:942`). All six fields are optional
 `EntitySelector`s restricted to `device_class="energy"` (`flow_schemas.py:727`) so a
 power/temperature/unitless sensor cannot be read as raw kWh. A stored entity id is
 rendered as a `description={"suggested_value": ...}`, never a `default`: ha-form
@@ -532,7 +532,7 @@ anywhere on the page.
 | `compare` | `compare_flow.py:230` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:115`): suppliers with at least one contract in the user's region, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
 | `compare_contract` | `compare_flow.py:258` | Contract picker via `_compare_contract_schema` (`compare_flow.py:140`), spans static and dynamic kinds; excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
 | `compare_meter` | `compare_flow.py:299` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:216`) |
-| `compare_solar` | `compare_flow.py:341` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:1007`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:959`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
+| `compare_solar` | `compare_flow.py:341` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:1028`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:980`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
 | `compare_api_key` | `compare_flow.py:429` | Shown when `_after_compare_meter` (`compare_flow.py:419`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved |
 | `compare_result` | `compare_flow.py:457` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:489`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
 

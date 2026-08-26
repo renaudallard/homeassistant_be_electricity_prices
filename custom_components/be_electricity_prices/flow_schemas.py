@@ -500,9 +500,30 @@ def _dso_schema(region: str, defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema({vol.Required(CONF_DSO): selector})
 
 
+# Contracts whose card prints ONLY the CWaPE incitative bands for supplier
+# energy, so the incitative network configuration is the overwhelmingly likely
+# answer, but whose card does not actually SAY the product implies it.
+#
+# TotalEnergies Impact is the case. Mega and OCTA+ register their Impact
+# products as tou_impact and are auto-selected on that; TE registers its as
+# "variable", so the gate never fired and the user was offered bi_horaire
+# pre-selected. Accepting that costs a 3500 kWh ORES household about EUR 29/yr
+# on a bi meter and EUR 113 on a mono one, partly because the incitative
+# configuration also exempts the Walloon terme fixe.
+#
+# Pre-selected rather than forced: unlike the Mega and OCTA+ cards, the TE one
+# states only that a communicating digital meter is required, so a holder on
+# the standard configuration exists and hard-forcing would under-bill them by
+# the same amount in the other direction.
+_IMPACT_DEFAULT_CONTRACTS: frozenset[str] = frozenset({"totalenergies_impact"})
+
+
 def _dso_tariff_mode_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Wallonia-only step: which DSO-side billing mode applies?"""
-    current = defaults.get(CONF_DSO_TARIFF_MODE) or DSO_MODE_BI_HORAIRE
+    current = defaults.get(CONF_DSO_TARIFF_MODE)
+    if not current and defaults.get(CONF_CONTRACT) in _IMPACT_DEFAULT_CONTRACTS:
+        current = DSO_MODE_IMPACT
+    current = current or DSO_MODE_BI_HORAIRE
     return vol.Schema(
         {
             vol.Required(CONF_DSO_TARIFF_MODE, default=current): SelectSelector(
