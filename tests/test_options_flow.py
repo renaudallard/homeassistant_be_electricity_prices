@@ -432,6 +432,12 @@ async def test_options_flow_flanders_branch_asks_capacity(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"solar_kva": 5.0, "solar_regime": "injection"}
     )
+    # Power Fix indexes its feed-in credit on the monthly Belpex-injectie, so
+    # the injection regime now offers the optional ENTSO-E key. Skipped here.
+    assert result["step_id"] == "injection_api_key"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_key": ""}
+    )
     assert result["step_id"] == "meters"
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
@@ -1021,6 +1027,13 @@ async def _drive_compare(
                 payload["whatif_injection_kwh"] = whatif_kwh[1]
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"], payload
+            )
+        if result["step_id"] == "compare_api_key":
+            # A target whose feed-in credit indexes on a monthly mean is now
+            # offered the optional ENTSO-E key, like a spot-indexed one always
+            # was. Skipped here: these cases assert the quote, not the key.
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"api_key": ""}
             )
         assert result["step_id"] == "compare_result"
     placeholders = result["description_placeholders"]
