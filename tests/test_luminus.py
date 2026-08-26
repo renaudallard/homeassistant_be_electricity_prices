@@ -257,6 +257,62 @@ def test_smartflex_parses_as_time_of_use() -> None:
     assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
 
 
+def test_maxxflex_energy_carries_the_monthly_formula() -> None:
+    """MaxxFlex indexes the COMMODITY on the delivery month too: "Le parametre
+    d'indexation est base sur la moyenne arithmetique des cotations
+    journalieres Day Ahead Belpex Baseload ... pendant le mois de livraison."
+    The printed 14,41 is that formula at March's index on an April card.
+    """
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    snap = parse_snapshot(
+        "luminus_maxxflex", fixture_text("luminus_maxxflex_w.pdf"), "wallonia"
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is True
+    assert energy.current == pytest.approx(0.1441)
+    # c/kWh HTVA per EUR/MWh of index, printed TVAC, so x10 and x1,06 on both.
+    assert energy.formula_factor == pytest.approx(0.1096 * 10.0 * 1.06)
+    assert energy.formula_base == pytest.approx(3.4516 / 100.0 * 1.06)
+    assert energy.formula_factor_peak == pytest.approx(0.1290 * 10.0 * 1.06)
+    assert energy.formula_factor_offpeak == pytest.approx(0.0940 * 10.0 * 1.06)
+    assert energy.formula_factor_exclusive_night == pytest.approx(0.0940 * 10.0 * 1.06)
+    # Round-trips to the card's own printed rate at its own index.
+    assert energy.formula_factor * 0.09261 + energy.formula_base == pytest.approx(
+        0.1441, abs=1e-4
+    )
+
+
+def test_quarterly_and_tou_cards_get_no_energy_formula() -> None:
+    """Three traps on one supplier, all resolved by gating on the
+    arithmetic-mean sentence rather than the formula.
+
+    ComfyFlex prints a TWO-term formula, "x Belpex + 0,0000 x Endex 1-0-3 +
+    4,2102", against a QUARTERLY index; without the tail guard _NUM
+    backtracks and binds "0,000" as the base. SmartFlex carries a
+    MaxxFlex-identical block for a non-SMR3 meter but not the sentence. A
+    fixed card has no energy formula at all, and searching the whole document
+    rather than the energy block would hand it the INJECTION one.
+    """
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+    from custom_components.be_electricity_prices.providers.luminus import (
+        _monthly_energy_coefficients,
+    )
+
+    for cid, fixture, region in (
+        ("luminus_comfyflex", "luminus_comfyflex_v.pdf", "flanders"),
+        ("luminus_comfyflex_plus", "luminus_comfyflex_plus_w.pdf", "wallonia"),
+    ):
+        energy = parse_snapshot(cid, fixture_text(fixture), region).energy
+        assert isinstance(energy, VariableRates), cid
+        assert energy.month_indexed is False, cid
+        assert energy.formula_factor is None, cid
+
+    assert _monthly_energy_coefficients(fixture_text("luminus_smartflex_w.pdf")) == {}
+    assert _monthly_energy_coefficients(fixture_text("luminus_comfy_w.pdf")) == {}
+
+
 def test_monthly_cards_carry_the_injection_formula() -> None:
     """The card says the printed figure is not the rate: "Votre tarif sera
     indexe tous les mois. La valeur Belpex du mois en cours n'est connue qu'a

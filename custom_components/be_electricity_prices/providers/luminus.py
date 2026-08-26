@@ -47,7 +47,7 @@ base are scaled by the parsed VAT multiplier.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import aiohttp
 
@@ -268,6 +268,52 @@ _INJECTION_MONTHLY_RE = re.compile(
 )
 
 
+# MaxxFlex indexes the COMMODITY on the delivery month too: "Le parametre
+# d'indexation est base sur la moyenne arithmetique des cotations journalieres
+# Day Ahead Belpex Baseload ... pendant le mois de livraison. La valeur Belpex M
+# du mois en cours n'est connue qu'a la fin du mois."
+#
+# That sentence is the gate. ComfyFlex quotes a QUARTERLY index and SmartFlex
+# carries a second MaxxFlex-identical block for a non-SMR3 meter, so neither
+# may be swept in by the formula shape.
+_MONTHLY_ARITHMETIC_RE = re.compile(
+    r"moyenne\s+arithm[ée]tique.{0,200}?pendant\s+le\s+mois\s+de\s+livraison",
+    re.S,
+)
+# The ENERGY block only. Scoping matters: searched over the whole document the
+# mono pattern also finds the INJECTION formula ("0,0481 x Belpex - 0,6392"),
+# and a fixed card would gain an energy formula it does not have.
+_ENERGY_FORMULA_BLOCK_RE = re.compile(
+    r"Formules\s+tarifaires\s+pour\s+le\s+co[uû]t\s+de\s+l['\u2019\u00a9]\s*[ée]nergie"
+    r"(?:(?!Formule\s+tarifaire\s+de).)*",
+    re.S,
+)
+
+
+def _band_formula_re(label: str) -> re.Pattern[str]:
+    """One per-meter row inside the energy block.
+
+    The two tail guards are load-bearing. ComfyFlex prints a TWO-term formula,
+    "x Belpex + 0,0000 x Endex 1-0-3 + 4,2102"; without them ``_NUM``
+    backtracks and binds "0,000" as the base, which is how a first cut swept
+    the quarterly cards in. A bare ``Belpex`` is also required, so "Belpex M",
+    "Belpex RLP M" and the dynamic "Belpex H" cannot match.
+    """
+    return re.compile(
+        rf"{label}\s*=\s*({_NUM})\s*x\s*Belpex\s+"
+        rf"([{SIGN_CHARS}])\s*({_NUM})(?![\d,])(?!\s*x)",
+        re.S,
+    )
+
+
+_ENERGY_BANDS: tuple[tuple[str, str], ...] = (
+    ("single", r"Compteur\s+mono-horaire"),
+    ("peak", r"Heures\s+pleines(?:\s*\([^)]*\))?"),
+    ("offpeak", r"Heures\s+creuses"),
+    ("exclusive_night", r"Exclusif\s+nuit"),
+)
+
+
 def _vat_multiplier(text: str) -> float:
     return vat_multiplier(
         text,
@@ -379,7 +425,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             yearly_fixed_fee=fee,
             yearly_fixed_fee_exclusive_night=excl_night_fee,
         )
-    return VariableRates(
+    rates = VariableRates(
         current=mono,
         peak=peak,
         offpeak=offpeak,
@@ -387,6 +433,52 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         yearly_fixed_fee=fee,
         yearly_fixed_fee_exclusive_night=excl_night_fee,
     )
+    coefs = _monthly_energy_coefficients(text)
+    if not coefs:
+        return rates
+    none2: tuple[float | None, float | None] = (None, None)
+    return replace(
+        rates,
+        month_indexed=True,
+        formula_factor=coefs["single"][0],
+        formula_base=coefs["single"][1],
+        formula_factor_peak=coefs.get("peak", none2)[0],
+        formula_base_peak=coefs.get("peak", none2)[1],
+        formula_factor_offpeak=coefs.get("offpeak", none2)[0],
+        formula_base_offpeak=coefs.get("offpeak", none2)[1],
+        formula_factor_exclusive_night=coefs.get("exclusive_night", none2)[0],
+        formula_base_exclusive_night=coefs.get("exclusive_night", none2)[1],
+    )
+
+
+def _monthly_energy_coefficients(text: str) -> dict[str, tuple[float, float]]:
+    """Per-meter ``(factor, base)`` for a card that indexes energy monthly.
+
+    Empty unless the card carries the arithmetic-mean sentence AND its energy
+    block yields a mono row. Both halves matter: ComfyFlex has the block but
+    quotes a QUARTERLY index, SmartFlex has a MaxxFlex-identical block for a
+    non-SMR3 meter but not the sentence, and a fixed card has neither.
+    """
+    if _MONTHLY_ARITHMETIC_RE.search(text) is None:
+        return {}
+    block = _ENERGY_FORMULA_BLOCK_RE.search(text)
+    if block is None:
+        return {}
+    # The row prints c/kWh HTVA against an index in EUR/MWh, while the energy
+    # row itself is TVAC, so both coefficients take the x10 / 100 conversion
+    # and the VAT multiplier. Round-trips to the printed 14,41 at the card's
+    # own 92,61 index.
+    vat = _vat_multiplier(text)
+    out: dict[str, tuple[float, float]] = {}
+    for key, label in _ENERGY_BANDS:
+        match = _band_formula_re(label).search(block.group(0))
+        if match is None:
+            continue
+        out[key] = (
+            to_float(match.group(1)) * 10.0 * vat,
+            parse_sign(match.group(2)) * to_float(match.group(3)) / 100.0 * vat,
+        )
+    return out if "single" in out else {}
 
 
 def _extract_publication_month(text: str) -> str:

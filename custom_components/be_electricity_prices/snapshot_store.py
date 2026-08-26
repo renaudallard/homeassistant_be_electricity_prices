@@ -647,7 +647,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v41: the seven monthly-indexed Luminus contracts now carry their injection
 # coefficients and month_indexed. A v40 snapshot holds only the printed figure,
 # which the card says is the previous month's.
-_SNAPSHOT_SCHEMA_VERSION = 41
+# v42: Luminus MaxxFlex now carries its monthly Belpex ENERGY coefficients per
+# meter, including the night circuit, and month_indexed. A v41 snapshot holds
+# only the printed rate, which is the formula at the previous month's index.
+_SNAPSHOT_SCHEMA_VERSION = 42
 
 
 def _snapshot_to_dict(
