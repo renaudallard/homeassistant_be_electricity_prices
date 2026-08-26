@@ -345,6 +345,28 @@ def energy_eur_per_kwh(
         if spot_eur_per_kwh is None:
             raise ValueError("spot-monthly tariff needs a monthly mean spot")
         factor, base = energy.factor, energy.base
+        if energy.factor_transition is not None:
+            # A time-of-use schedule, not a bi-hourly one: three bands chosen
+            # by the contract's own slot rule. Decided before every other
+            # branch, because a TOU card has no mono/peak/offpeak split to
+            # fall back on.
+            slot = tou_slot(when, energy.weekend_rule)
+            if slot == "peak":
+                factor = (
+                    energy.factor_peak if energy.factor_peak is not None else factor
+                )
+                base = energy.base_peak or 0.0
+            elif slot == "transition":
+                factor = energy.factor_transition
+                base = energy.base_transition or 0.0
+            else:
+                factor = (
+                    energy.factor_offpeak
+                    if energy.factor_offpeak is not None
+                    else factor
+                )
+                base = energy.base_offpeak or 0.0
+            return factor * spot_eur_per_kwh + base
         if meter == "exclusive_night" and energy.factor_exclusive_night is not None:
             # A separate night circuit is billed on its own formula whatever
             # the hour, so this is decided before the bi-hourly band test and

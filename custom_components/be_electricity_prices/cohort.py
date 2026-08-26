@@ -67,6 +67,7 @@ from .providers.base import (
     SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
+    TimeOfUseRates,
     VariableRates,
 )
 from .snapshot_store import (
@@ -219,6 +220,21 @@ def _cohort_energy_from_archived(
     card whose coefficients couldn't be parsed, or a TOU / Impact kind).
     """
     energy = archived.energy
+    if isinstance(energy, TimeOfUseRates) and energy.month_indexed:
+        # A TOU card that indexes each band monthly becomes the three-band
+        # monthly leg, so every existing month-mean gate keeps working.
+        return SpotMonthlyRates(
+            factor=energy.formula_factor_peak or 0.0,
+            base=energy.formula_base_peak or 0.0,
+            factor_peak=energy.formula_factor_peak,
+            base_peak=energy.formula_base_peak,
+            factor_transition=energy.formula_factor_transition,
+            base_transition=energy.formula_base_transition,
+            factor_offpeak=energy.formula_factor_offpeak,
+            base_offpeak=energy.formula_base_offpeak,
+            weekend_rule=energy.weekend_rule,
+            yearly_fixed_fee=energy.yearly_fixed_fee,
+        )
     if isinstance(energy, (FixedRates, DynamicRates, SpotMonthlyRates)):
         # SpotMonthlyRates is already the right shape to carry forward: the
         # archived card's coefficients are exactly what the cohort signed, and
@@ -278,7 +294,9 @@ def _month_indexed_leg(
     Same reasoning, and the same guard, as the variable cohort below.
     """
     energy = snapshot.energy
-    if not isinstance(energy, VariableRates) or not energy.month_indexed:
+    if not isinstance(energy, (VariableRates, TimeOfUseRates)):
+        return None
+    if not energy.month_indexed:
         return None
     if not entry.data.get(CONF_API_KEY):
         return None

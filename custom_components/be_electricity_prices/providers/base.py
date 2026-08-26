@@ -252,6 +252,21 @@ class SpotMonthlyRates:
     ceiling_peak: float | None = None
     ceiling_offpeak: float | None = None
     ceiling_exclusive_night: float | None = None
+    # A THIRD band, and the marker that this leg follows a time-of-use
+    # schedule rather than a bi-hourly one. Luminus SmartFlex is the case: it
+    # prints one monthly formula per TOU slot (pleines / creuses /
+    # super-creuses) and its printed rates are the previous month's.
+    #
+    # Carried on this kind rather than making TimeOfUseRates month-priced in
+    # its own right: twenty places already gate the month-mean machinery on
+    # SpotMonthlyRates, and a second month-priced kind would have to be added
+    # to every one of them. Missing one is a silently unpriced hour.
+    #
+    # When ``factor_transition`` is set the band is chosen by ``tou_slot``
+    # with ``weekend_rule``, not by the bi-hourly day/night split.
+    factor_transition: float | None = None
+    base_transition: float | None = None
+    weekend_rule: WeekendRule = "weekend_offpeak"
     yearly_fixed_fee: float = 0.0
     # Dedicated yearly fixed fee for an exclusive-night meter circuit, carried
     # from a variable card re-priced to this monthly-mean leg for a signing
@@ -299,6 +314,16 @@ class TimeOfUseRates:
     yearly_fixed_fee: float = 0.0
     formula: str | None = None
     weekend_rule: WeekendRule = "weekend_offpeak"
+    # Per-slot monthly coefficients, for a card that indexes each band on the
+    # delivery month rather than publishing a settled rate. The printed
+    # peak / transition / offpeak stay as the keyless fallback.
+    month_indexed: bool = False
+    formula_factor_peak: float | None = None
+    formula_base_peak: float | None = None
+    formula_factor_transition: float | None = None
+    formula_base_transition: float | None = None
+    formula_factor_offpeak: float | None = None
+    formula_base_offpeak: float | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

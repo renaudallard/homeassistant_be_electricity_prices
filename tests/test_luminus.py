@@ -408,3 +408,66 @@ def test_unknown_contract_raises() -> None:
             await EXTRACTORS["luminus"].fetch(None, "bogus", "wallonia")  # type: ignore[arg-type]
 
     asyncio.run(_run())
+
+
+def test_smartflex_carries_a_formula_per_slot() -> None:
+    """SmartFlex prints one monthly formula per TOU band, "Prelevement Heures
+    pleines = 0,1300 x Belpex + 2,6200; ... creuses = 0,1080 ...;
+    ... super-creuses = 0,0410 ...", and attributes its index to a past month:
+    "Belpex = 92,61 EUR/MWh (valeur de l'indice de mars 2026)" on an April
+    card. So the printed triplet is March's.
+
+    The gate is that month attribution, not a cadence sentence: unlike its
+    bi-hourly siblings this card's energy block carries none, the sentence
+    sits under the injection block and governs that tariff. ComfyFlex
+    attributes its index to a QUARTER, which is what keeps it out.
+    """
+    from custom_components.be_electricity_prices.providers.base import TimeOfUseRates
+
+    snap = parse_snapshot(
+        "luminus_smartflex", fixture_text("luminus_smartflex_w.pdf"), "wallonia"
+    )
+    energy = snap.energy
+    assert isinstance(energy, TimeOfUseRates)
+    assert energy.month_indexed is True
+    assert energy.formula_factor_peak == pytest.approx(0.1300 * 10 * 1.06)
+    assert energy.formula_factor_transition == pytest.approx(0.1080 * 10 * 1.06)
+    assert energy.formula_factor_offpeak == pytest.approx(0.0410 * 10 * 1.06)
+    # The printed rates survive as the keyless fallback.
+    assert energy.peak == pytest.approx(0.1554)
+
+
+def test_a_smartflex_cohort_prices_each_slot_on_the_month() -> None:
+    """The cohort leg becomes a three-band SpotMonthlyRates carrying the
+    card's own weekend rule, so every existing month-mean gate keeps working
+    without a second month-priced energy kind.
+    """
+    from datetime import datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.cohort import (
+        _cohort_energy_from_archived,
+    )
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+
+    snap = parse_snapshot(
+        "luminus_smartflex", fixture_text("luminus_smartflex_w.pdf"), "wallonia"
+    )
+    leg = _cohort_energy_from_archived(snap)
+    assert isinstance(leg, SpotMonthlyRates)
+    assert leg.weekend_rule == "smartflex_seasonal"
+
+    mean = 0.08096  # April 2026 arithmetic mean, EUR/kWh
+
+    def at(hour: int) -> float:
+        when = datetime(2026, 4, 15, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        return energy_eur_per_kwh(leg, when, mean, meter="dynamic", region="wallonia")
+
+    # Three distinct bands, each on its own formula, and each below the
+    # printed rate because April's index sits under March's.
+    assert at(8) == pytest.approx(0.1300 * 10 * 1.06 * mean + 2.6200 / 100 * 1.06)
+    assert at(13) == pytest.approx(0.0410 * 10 * 1.06 * mean + 2.5400 / 100 * 1.06)
+    assert at(8) > at(23) > at(13)
+    assert at(8) < snap.energy.peak

@@ -667,7 +667,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # low-volume connection was quoted its uncapped network leg.
 # v48: SpotMonthlyRates carries the four ceiling columns, so a Mega Cap
 # signing cohort keeps the contractual cap its card guarantees for the year.
-_SNAPSHOT_SCHEMA_VERSION = 48
+# v49: Luminus SmartFlex now carries a monthly coefficient pair per TOU band
+# and month_indexed, and SpotMonthlyRates gained the third band plus the
+# weekend rule to price them. A v48 snapshot holds only the printed triplet,
+# which is the previous month's.
+_SNAPSHOT_SCHEMA_VERSION = 49
 
 
 def _snapshot_to_dict(

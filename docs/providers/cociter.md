@@ -244,7 +244,7 @@ number, while distribution rates still parse. The variable DSO test
 0.1087`, `distribution_peak 0.1205`, `distribution_offpeak 0.0666`, `transport
 0.0274252`, `data_management_per_year 19.49`, `prosumer_eur_per_kva_year 81.03`.
 
-Each row produces a `DsoOverlay` (`base.py:403-463`) with the four distribution
+Each row produces a `DsoOverlay` (`base.py:428-488`) with the four distribution
 rates, the shared transport rate, `data_management_per_year` (column 1, not
 divided), the optional prosumer forfait, and the optional Impact triplet.
 
@@ -279,7 +279,7 @@ Mapping into `TaxOverlay` (`cociter.py:606-612`): `energy_contribution`
 
 Critically `vat_rate=0.0` (`cociter.py:511`): the whole card is TVAC, so the
 snapshot's prices are already VAT-inclusive and the pricing engine must not
-re-apply VAT (see `TaxOverlay` comment, `base.py:579-626`). The tax test
+re-apply VAT (see `TaxOverlay` comment, `base.py:604-651`). The tax test
 (`test_cociter.py:161-174`) pins illustrative Wallonian values and asserts
 `vat_rate == 0.0` and `flanders_renewables == 0.0`.
 
@@ -300,7 +300,7 @@ TVAC (illustrative, pinned by `test_variable_extracts_supplier_prosumer_forfait`
 `test_cociter.py:97-106`). The anchor is deliberately the "EUR/kVA/an TVAC"
 footnote wording, not the bare "(EUR/kVA/an)" DSO prosumer column header, so the
 two do not collide. The value is already TVAC and must NOT be VAT-scaled
-(`SupplierSnapshot` comment, `base.py:647-677`). A miss on the variable card is
+(`SupplierSnapshot` comment, `base.py:672-702`). A miss on the variable card is
 fatal (`cociter.py:258-259`): every variable card prints it, so absence is a
 layout drift, not a fee-free contract.
 
@@ -326,7 +326,7 @@ the shared ELIA transport rate, `data_management_per_year`, and either the
 compensation-regime prosumer forfait (variable) or the three Tarif Impact
 distribution bands PIC/MEDIUM/ECO (dynamic SMR3). The Impact bands feed the
 CWaPE 3-band pricing when a customer opts into the DSO Impact tariff (see
-`DsoOverlay` and `ImpactRates`, `base.py:403-463`, `base.py:287-309`).
+`DsoOverlay` and `ImpactRates`, `base.py:428-488`, `base.py:302-334`).
 
 ## Tax overlay
 
@@ -346,7 +346,7 @@ and compare paths, all gated on the contract's `spot_indexed_injection` flag
 credit.
 
 Injection is VAT-exempt for residential, so `factor`/`base` are never VAT-scaled
-(`InjectionRates` comment, `base.py:309-371`). Unit handling mirrors the dynamic
+(`InjectionRates` comment, `base.py:334-396`). Unit handling mirrors the dynamic
 consumption side: the PDF factor (against BELPEX in EUR/MWh) is multiplied by 10
 to work against a EUR/kWh spot, and the base (c€/kWh) is divided by 100
 (`cociter.py:306-311`). From the printed `(0,097 x BELPEX - 2,1)` the tests pin

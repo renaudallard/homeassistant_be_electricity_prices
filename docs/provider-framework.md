@@ -252,7 +252,7 @@ transition : 11:00-17:00 + 22:00-01:00
 offpeak    : 01:00-07:00
 ```
 
-`weekend_rule` (`WeekendRule`, `providers/base.py:263`) selects the weekend
+`weekend_rule` (`WeekendRule`, `providers/base.py:278`) selects the weekend
 schedule:
 
 - `weekend_offpeak` (generic CWaPE default): Saturday, Sunday and public holidays are entirely off-peak.
@@ -303,7 +303,7 @@ parsed independently, so a card that prints only some of them still contributes 
 it has, and `None` means "not published" rather than zero.
 
 They are **diagnostic only**. Signing-cohort re-pricing does not use them:
-`_cohort_energy_from_archived` (`cohort.py:208`) returns `None` for this shape. An
+`_cohort_energy_from_archived` (`cohort.py:209`) returns `None` for this shape. An
 Impact contract is monthly-indexed, so re-pricing a cohort correctly needs a
 three-band monthly-mean shape that resolves downstream the way `SpotMonthlyRates`
 does for the single-rate case, and that shape does not exist. Freezing the archived

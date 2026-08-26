@@ -379,12 +379,29 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         # (21/03-20/09), and 22-07 is always creuses. The weekend_rule
         # "smartflex_seasonal" tells pricing.tou_slot to bill those windows
         # (the "free Sundays" first-year promo is not modelled).
-        return TimeOfUseRates(
+        tou_rates = TimeOfUseRates(
             peak=peak,
             transition=transition,
             offpeak=offpeak,
             yearly_fixed_fee=fee,
             weekend_rule="smartflex_seasonal",
+        )
+        # SmartFlex indexes each band on the delivery month, same sentence as
+        # its bi-hourly siblings: "Votre tarif sera indexe tous les mois. La
+        # valeur Belpex du mois en cours n'est connue qu'a la fin du mois."
+        # So the printed triplet is the previous month's.
+        coefs = _monthly_tou_coefficients(text)
+        if not coefs:
+            return tou_rates
+        return replace(
+            tou_rates,
+            month_indexed=True,
+            formula_factor_peak=coefs["peak"][0],
+            formula_base_peak=coefs["peak"][1],
+            formula_factor_transition=coefs["transition"][0],
+            formula_base_transition=coefs["transition"][1],
+            formula_factor_offpeak=coefs["offpeak"][0],
+            formula_base_offpeak=coefs["offpeak"][1],
         )
 
     if kind == "dynamic":
@@ -449,6 +466,51 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         formula_factor_exclusive_night=coefs.get("exclusive_night", none2)[0],
         formula_base_exclusive_night=coefs.get("exclusive_night", none2)[1],
     )
+
+
+_TOU_BANDS: tuple[tuple[str, str], ...] = (
+    ("peak", r"Pr[ée]l[èe]vement\s+Heures\s+pleines"),
+    ("transition", r"Pr[ée]l[èe]vement\s+Heures\s+creuses"),
+    ("offpeak", r"Pr[ée]l[èe]vement\s+Heures\s+super[\s-]*creuses"),
+)
+
+
+# "(valeur de l'indice de mars 2026)" against ComfyFlex's "(valeur de l'indice
+# du 1re trimestre 2026)". A MONTH attribution is the discriminator that works
+# on the SmartFlex card, whose energy block carries no cadence sentence of its
+# own: the sentence sits under the injection block and governs that tariff.
+_MONTHLY_INDEX_ATTRIBUTION_RE = re.compile(
+    r"valeur\s+de\s+l['\u2019\u00a9]indice\s+de\s+(?!\s*\d)\w+", re.IGNORECASE
+)
+
+
+def _monthly_tou_coefficients(text: str) -> dict[str, tuple[float, float]]:
+    """The three SmartFlex per-slot monthly coefficients, or ``{}``.
+
+    Gated on the energy block attributing its index to a MONTH, which is what
+    separates this card from ComfyFlex's quarterly one, and scoped to that
+    block so the card's second MaxxFlex-identical section (the non-SMR3
+    fallback) cannot supply them.
+
+    All three bands are required. A partial match would leave one slot on the
+    printed rate and the others on the index, which is worse than either.
+    """
+    block = _ENERGY_FORMULA_BLOCK_RE.search(text)
+    if block is None:
+        return {}
+    if _MONTHLY_INDEX_ATTRIBUTION_RE.search(block.group(0)) is None:
+        return {}
+    vat = _vat_multiplier(text)
+    out: dict[str, tuple[float, float]] = {}
+    for key, label in _TOU_BANDS:
+        match = _band_formula_re(label).search(block.group(0))
+        if match is None:
+            continue
+        out[key] = (
+            to_float(match.group(1)) * 10.0 * vat,
+            parse_sign(match.group(2)) * to_float(match.group(3)) / 100.0 * vat,
+        )
+    return out if len(out) == len(_TOU_BANDS) else {}
 
 
 def _monthly_energy_coefficients(text: str) -> dict[str, tuple[float, float]]:
