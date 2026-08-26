@@ -168,7 +168,7 @@ The docs pin roughly 760 `file.py:line` references. They rot whenever a module g
 stale pin is worse than no pin: it sends a reader to a line that now says something else.
 `scripts/doc_ref_check.py` resolves each one by CONTENT, never by offset arithmetic. The docs
 almost always name the symbol a reference points at, in backticks, on the same line
-(``_extract_energy`` (`_mega_cards.py:236`)), so the checker resolves that symbol's real definition
+(``_extract_energy`` (`_mega_cards.py:254`)), so the checker resolves that symbol's real definition
 line from an AST index and, with `--write`, repins it.
 
 It runs in the `test` job (`.github/workflows/test.yml:62`), before the suite, and needs no

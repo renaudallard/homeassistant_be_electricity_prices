@@ -557,6 +557,34 @@ def test_impact_coefficients_are_absent_when_the_formula_is_missing() -> None:
     assert energy.pic == pytest.approx(0.1578)
 
 
+def test_the_night_circuit_gets_its_fourth_formula() -> None:
+    """The variable sentence prints FOUR per-meter formulas and only three
+    were matched, so a night circuit on a signing cohort was billed the mono
+    pair around the clock: "Compteur mono-horaire : Epex * 1,1095 + 3,6 ...
+    Compteur exclusif nuit : Epex * 0,94 + 3,6 c€/kWh", 12 to 14% high on the
+    meter that draws the volume.
+
+    Its own key, not an alias of off-peak: the two coincide on this card and
+    are separate contractual formulas.
+    """
+    from custom_components.be_electricity_prices.providers._mega_cards import (
+        _variable_band_coefficients,
+    )
+
+    bands = _variable_band_coefficients(fixture_text("mega_smart_flex_w.pdf"))
+    assert bands["exclusive_night"][0] == pytest.approx(0.94 * 1.06)
+    assert bands["exclusive_night"][1] == pytest.approx(3.6 * 1.06 / 100)
+    # Distinct from mono, which is what was billed before.
+    assert bands["exclusive_night"][0] != pytest.approx(1.1095 * 1.06)
+
+    snap = parse_snapshot(
+        "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.formula_factor_exclusive_night == pytest.approx(0.94 * 1.06)
+
+
 def test_variable_and_impact_injection_carry_the_spp_formula() -> None:
     """Both card kinds state "le prix de rachat de votre energie injectee est
     indexe mensuellement ... pondere par le SPP (publie par Synergrid), sur le

@@ -113,6 +113,22 @@ _VARIABLE_BAND_FORMULA_RES: dict[str, re.Pattern[str]] = {
         rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh",
         re.IGNORECASE,
     ),
+    # And the dedicated night circuit, a FOURTH formula in the same sentence:
+    # "Compteur exclusif nuit : Epex * 0,94 + 3,6 c€/kWh". It coincides with
+    # the off-peak pair on this card generation and is still parsed on its own
+    # key: they are separate contractual formulas and Mega can move one
+    # without the other.
+    #
+    # The trailing unit is optional HERE ONLY. This formula is last in the
+    # sentence and pypdf splices the page footer in right after "+ 3,6", so a
+    # mandatory "c€/kWh" matches nothing at all. The other three end in a real
+    # unit, and that mandatory anchor is what stops them wandering, so it is
+    # not relaxed on them.
+    "exclusive_night": re.compile(
+        rf"exclusif\s+nuit\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
+        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*(?:c€/kWh)?",
+        re.IGNORECASE,
+    ),
 }
 
 
@@ -177,9 +193,11 @@ def _variable_band_coefficients(
 
     Mega prints one formula per meter in the same sentence as the mono one,
     and the bands differ by a fifth: mono ``Epex x 1,1095 + 3,6``, peak
-    ``x 1,3275 + 3,6``, off-peak ``x 0,94 + 3,6``. A signing cohort on a
-    bi-hourly meter was re-priced onto the mono pair for every hour, which
-    over-charges its peak hours and under-charges its off-peak ones.
+    ``x 1,3275 + 3,6``, off-peak ``x 0,94 + 3,6``, and a dedicated night
+    circuit ``x 0,94 + 3,6``. A signing cohort on a bi-hourly meter was
+    re-priced onto the mono pair for every hour, which over-charges its peak
+    hours and under-charges its off-peak ones; a night circuit was billed the
+    mono pair all day, 12 to 14% high on the meter that draws the volume.
 
     Same basis conversion as the mono formula. Empty for a card that prints a
     single formula, and the mono pair then applies to every meter.
@@ -312,6 +330,8 @@ def _extract_energy(
         formula_base_peak=bands.get("peak", (None, None))[1],
         formula_factor_offpeak=bands.get("offpeak", (None, None))[0],
         formula_base_offpeak=bands.get("offpeak", (None, None))[1],
+        formula_factor_exclusive_night=bands.get("exclusive_night", (None, None))[0],
+        formula_base_exclusive_night=bands.get("exclusive_night", (None, None))[1],
         ceiling_single=ceiling.get("mono"),
         ceiling_peak=ceiling.get("peak"),
         ceiling_offpeak=ceiling.get("offpeak"),

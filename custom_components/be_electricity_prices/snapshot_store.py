@@ -660,7 +660,9 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v45: EBEM Groen Variabel now converts all four of its per-meter formula rows
 # into cohort coefficients. A v44 snapshot carries only the mono pair, which
 # every meter was then billed on.
-_SNAPSHOT_SCHEMA_VERSION = 45
+# v46: the Mega variable cards now carry the fourth per-meter formula, the
+# dedicated night circuit, which a v45 snapshot billed on the mono pair.
+_SNAPSHOT_SCHEMA_VERSION = 46
 
 
 def _snapshot_to_dict(
