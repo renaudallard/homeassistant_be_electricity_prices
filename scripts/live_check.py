@@ -2075,6 +2075,21 @@ _INJECTION_SHAPE: dict[str, str] = {
     "totalenergies_mydrive": "month",
     "totalenergies_myessential": "month",
     "totalenergies_myessential_fixed": "month",
+    # Every Mega variable ("Flex" / Cap) and Impact card states "le prix de
+    # rachat ... est indexe mensuellement ... pondere par le SPP (publie par
+    # Synergrid), sur le mois de fourniture ... : Epex SPP * 0,85 - 2,2
+    # c€/kWh", while the commodity leg indexes on the RLP mean. The printed
+    # figure is the PREVIOUS month's regularisation. The fixed cards lock
+    # the credit for a year and stay derived as "monthly".
+    "mega_smart_flex": "spp",
+    "mega_online_flex": "spp",
+    "mega_cosy_flex": "spp",
+    "mega_offpeak_flex": "spp",
+    "mega_cap": "spp",
+    "mega_offpeak_impact_var": "spp",
+    "mega_pro_smart_flex": "spp",
+    "mega_pro_cosy_flex": "spp",
+    "mega_pro_cap": "spp",
     "energiebe_variable": "spp",
     # The fixed card prints the same Belpex_SPP formula and settles on it too:
     # a fixed ENERGY leg does not make the feed-in credit fixed. Same shape as

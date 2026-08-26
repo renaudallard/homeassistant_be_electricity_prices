@@ -250,7 +250,7 @@ the listing minus `_KNOWN_UNSUPPORTED_PRODUCTS`. It is best-effort catalog signa
 for the daily live-check: diffing against `{c.product_name for c in _CONTRACTS}`
 flags any new Mega product to add to the registry. Filtering out the prepaid
 products keeps them from re-opening the same catalog issue every day (regression
-2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:619`).
+2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:671`).
 On a listing fetch failure it returns an empty set rather than raising.
 
 ## Parsing
@@ -272,7 +272,7 @@ Fields pulled and their helpers:
 | Field | Helper | Location |
 | --- | --- | --- |
 | Energy rates (per kind) | `_extract_energy` | `_mega_cards.py:236` |
-| Injection | `_extract_injection` | `_mega_cards.py:520` |
+| Injection | `_extract_injection` | `_mega_cards.py:528` |
 | Publication label | `_extract_publication_month` | `_mega_cards.py:489` |
 | Valid until | `parse_valid_until` then `_extract_valid_until` | `_pdf.py:947`, `_mega_cards.py:508` |
 | Federal excise | `_extract_federal_excise` | `_mega_overlays.py:149` |
@@ -486,7 +486,7 @@ cross-region excise (0.0503288) and the per-region renewables split.
 
 ## Injection
 
-`_extract_injection` (`_mega_cards.py:520`) produces an `InjectionRates` from the same energy
+`_extract_injection` (`_mega_cards.py:528`) produces an `InjectionRates` from the same energy
 block, second column. There are three shapes depending on the kind:
 
 - `tou_impact`: injection is the second number under any of the three tier labels

@@ -557,6 +557,58 @@ def test_impact_coefficients_are_absent_when_the_formula_is_missing() -> None:
     assert energy.pic == pytest.approx(0.1578)
 
 
+def test_variable_and_impact_injection_carry_the_spp_formula() -> None:
+    """Both card kinds state "le prix de rachat de votre energie injectee est
+    indexe mensuellement ... pondere par le SPP (publie par Synergrid), sur le
+    mois de fourniture ... : Epex SPP * 0,85 - 2,2 c€/kWh". The figure beside
+    it is the PREVIOUS month's regularisation, so it is the fallback.
+
+    The formula is quoted in c€/kWh throughout, index included, so the factor
+    is used as-is and only the base scales.
+    """
+    for cid, fixture in (
+        ("mega_smart_flex", "mega_smart_flex_w.pdf"),
+        ("mega_offpeak_impact_var", "mega_offpeak_impact_w.pdf"),
+    ):
+        snap = parse_snapshot(cid, fixture_text(fixture), "wallonia")
+        inj = snap.injection
+        assert inj is not None, cid
+        assert inj.factor == pytest.approx(0.85), cid
+        assert inj.base == pytest.approx(-0.022), cid
+        assert inj.spp_indexed is True, cid
+
+
+def test_the_fixed_cards_index_no_injection_formula() -> None:
+    """A fixed card prints a different sentence under the same heading: the
+    credit is "fixe egalement pour une duree d'un an". No formula, no index,
+    so the branch must be gated on the kind AND the Epex SPP anchor rather
+    than on the shared "Tarif d'injection" label."""
+    snap = parse_snapshot(
+        "mega_smart_fixed", fixture_text("mega_smart_fixed_w.pdf"), "wallonia"
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.0167)
+    assert inj.factor is None
+    assert inj.spp_indexed is False
+
+
+def test_the_dynamic_anchor_does_not_bind_the_monthly_formula() -> None:
+    """Both card generations contain the literal "formule suivante (HTVA)",
+    so widening the dynamic anchor to accept "Epex SPP" would let it bind
+    this MONTHLY formula and price it at the current slot's spot. The two
+    anchors stay separate, and the dynamic card keeps its own per-hour
+    Day Ahead formula."""
+    snap = parse_snapshot(
+        "mega_dynamic", fixture_text("mega_dynamic_w.pdf"), "wallonia"
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert inj.factor == pytest.approx(1.0)
+    assert inj.base == pytest.approx(-0.04)
+    assert inj.spp_indexed is False
+
+
 def test_offpeak_impact_injection_uses_per_tier_column() -> None:
     snap = parse_snapshot(
         "mega_offpeak_impact_var",

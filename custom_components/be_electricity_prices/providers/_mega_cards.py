@@ -517,6 +517,14 @@ def _extract_valid_until(text: str) -> date | None:
     return end_of_month(year, month)
 
 
+# The monthly feed-in formula on a variable / Impact card. Kept apart from the
+# dynamic anchor deliberately: see the comment at its use site.
+_VARIABLE_INJECTION_SPP_RE = re.compile(
+    rf"Epex\s*SPP\s*\*\s*([\d.,]+)\s*([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh",
+    re.IGNORECASE,
+)
+
+
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     """Mega prints injection rates in the same energy block, second column.
 
@@ -551,6 +559,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     factor: float | None = None
     base: float | None = None
     formula: str | None = None
+    spp_indexed = False
     if kind == "dynamic":
         # Distinct anchor: injection is the formula after "(HTVA)".
         # Residential injection is VAT-exempt so the HTVA value is
@@ -560,7 +569,40 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         if parsed is not None and inj_match is not None:
             factor, base = parsed
             formula = inj_match.group(0)
+    elif kind in ("variable", "tou_impact"):
+        # The variable and Impact cards state their own monthly formula: "le
+        # prix de rachat de votre energie injectee est indexe mensuellement
+        # selon la formule tarifaire. Il est base sur la moyenne des valeurs
+        # quart-horaires Day-Ahead EPEX SPOT Belgium, ponderee par le SPP
+        # (publie par Synergrid), sur le mois de fourniture ... : Epex SPP *
+        # 0,85 - 2,2 c€/kWh". The figure read above is the PREVIOUS month's
+        # regularisation, so it is the fallback and the formula is the
+        # contract.
+        #
+        # A separate anchor from the dynamic one on purpose. Both card
+        # generations contain the literal "formule suivante (HTVA)", so
+        # widening _INJECTION_FORMULA_RE to also accept "Epex SPP" would let
+        # the dynamic anchor bind this MONTHLY formula and price it at the
+        # current slot's spot.
+        spp_match = _VARIABLE_INJECTION_SPP_RE.search(re.sub(r"\s+", " ", text))
+        if spp_match is not None:
+            # The card quotes the formula in c€/kWh throughout, index
+            # included, so the factor is used as-is and only the base scales.
+            # Not the x10 rule, which is for a card quoting c/kWh per EUR/MWh.
+            factor = to_float(spp_match.group(1))
+            base = parse_sign(spp_match.group(2)) * to_float(spp_match.group(3)) / 100.0
+            formula = spp_match.group(0)
+            # Epex SPP is the solar-weighted mean, and the commodity leg on
+            # the same card indexes on the RLP one. The flag is what keeps
+            # the credit off the energy leg's index.
+            spp_indexed = True
 
     if current is None and factor is None:
         return None
-    return InjectionRates(current=current, factor=factor, base=base, formula=formula)
+    return InjectionRates(
+        current=current,
+        factor=factor,
+        base=base,
+        formula=formula,
+        spp_indexed=spp_indexed,
+    )

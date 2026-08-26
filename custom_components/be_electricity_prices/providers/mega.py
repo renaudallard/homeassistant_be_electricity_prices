@@ -852,6 +852,11 @@ EXTRACTOR = SupplierExtractor(
             kind=c.kind,
             regions=c.regions,
             professional=c.professional,
+            # The variable and Impact cards index the feed-in credit on the
+            # monthly Epex SPP, which their own energy leg fetches no spots
+            # for. Dynamic collects the key via its energy formula; the
+            # fixed cards lock the credit for a year and index nothing.
+            spot_indexed_injection=c.kind in ("variable", "tou_impact"),
         )
         for c in _CONTRACTS
     ),

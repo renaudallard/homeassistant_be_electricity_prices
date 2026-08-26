@@ -640,7 +640,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # Belpex_M injection coefficients and month_indexed. TotalEnergies is
 # probe-based, so a cached v38 snapshot is not re-parsed without this and keeps
 # serving the previous month's printed figure.
-_SNAPSHOT_SCHEMA_VERSION = 39
+# v40: the nine Mega variable and Impact contracts now carry their monthly
+# "Epex SPP * 0,85 - 2,2" injection coefficients with spp_indexed. A v39
+# snapshot holds only the printed figure, which is the previous month's
+# regularisation.
+_SNAPSHOT_SCHEMA_VERSION = 40
 
 
 def _snapshot_to_dict(
