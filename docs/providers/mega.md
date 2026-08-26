@@ -173,9 +173,9 @@ did before.
    still published (Dynamic Wallonia, July 2026, #42), the resolver rewrites a
    surviving sibling region's URL by swapping the `-B2C-<REGION>-` code
    (`_REGION_SEGMENT_RE`, `mega.py:146`). The test
-   `test_listing_url_finder_picks_electricity_for_region` (`test_mega.py:75`) confirms
+   `test_listing_url_finder_picks_electricity_for_region` (`test_mega.py:76`) confirms
    a Smart Fixed / WL match ends `Smart2204-Fixed.pdf` and never contains `NG`;
-   `test_resolver_falls_back_to_sibling_region_when_block_missing` (`test_mega.py:101`)
+   `test_resolver_falls_back_to_sibling_region_when_block_missing` (`test_mega.py:102`)
    covers the fallback.
 4. Download the PDF text (`fetch_pdf_text`, `_pdf.py:224`) and hand it to
    `parse_snapshot`, which asserts the card's own `Client résidentiel - <Region>`
@@ -250,7 +250,7 @@ the listing minus `_KNOWN_UNSUPPORTED_PRODUCTS`. It is best-effort catalog signa
 for the daily live-check: diffing against `{c.product_name for c in _CONTRACTS}`
 flags any new Mega product to add to the registry. Filtering out the prepaid
 products keeps them from re-opening the same catalog issue every day (regression
-2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:699`).
+2026-05-05, `test_discover_filters_known_unsupported_products`, `test_mega.py:700`).
 On a listing fetch failure it returns an empty set rather than raising.
 
 ## Parsing
@@ -288,7 +288,7 @@ Fields pulled and their helpers:
 (`_extract_yearly_fee`, `_mega_cards.py:494`), which accepts both the split dynamic layout
 (`Redevance fixe\n(€/an)\n42.4`) and the joined fixed layout
 (`Redevance fixe (€/an)\n111.3`). A missing standing charge raises (it is on every
-card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:411`) enforces it.
+card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:412`) enforces it.
 
 - `dynamic`: parse the consumption formula (see next section) into `DynamicRates`.
 - `tou_impact`: parse three CWaPE bands (`_extract_impact_tier` for `PIC`,
@@ -380,7 +380,7 @@ Each is matched by its own label-anchored regex (`_CONSUMPTION_FORMULA_RE`
 `mega.py:544`, `_INJECTION_FORMULA_RE` `_mega_cards.py:79`) sharing `_FORMULA_TAIL`
 (`mega.py:536`). This is critical because Mega prints the injection formula BEFORE
 the consumption formula, so a naive "first / second formula" policy swaps them; the
-test `test_dynamic_consumption_and_injection_are_not_swapped` (`test_mega.py:226`)
+test `test_dynamic_consumption_and_injection_are_not_swapped` (`test_mega.py:227`)
 guards against exactly that. `_parse_formula` (`_mega_cards.py:84`) converts factor and
 signed base-cents to EUR via `to_float` and `parse_sign`. The sign parser accepts any
 Unicode dash, which matters because the injection base uses an en-dash, not an ASCII
@@ -420,7 +420,7 @@ PIC, MEDIUM, ECO, transport. The Impact triplet (`distribution_pic` / `_medium` 
 `_eco`) is always populated here because every Wallonia card prints the three CWaPE
 bands. Prosumer rates come from a separate small `Tarif Prosumer (€/kW/an)` table
 further down and are cross-referenced onto each overlay
-(`test_wallonia_dso_carries_prosumer_rate_from_separate_table`, `test_mega.py:286`).
+(`test_wallonia_dso_carries_prosumer_rate_from_separate_table`, `test_mega.py:287`).
 
 Brussels (`_extract_brussels_dsos`, `_mega_overlays.py:381`) maps the single Sibelga row, an
 8-number block: mono, jour, nuit, excl_nuit, transport, mesure_comptage (€/an),
@@ -429,7 +429,7 @@ terme_fixe <=13kVA (€/an), terme_fixe >13kVA (€/an). Brussels has no capacit
 Sibelga <=13kVA fixed term) are folded into `data_management_per_year`; the >13kVA
 term (group 8) is not billed here. The Brugel OSP annual fee table is parsed by the
 shared `parse_brussels_osp` (`_pdf.py:690`) and keyed by connection-power tier. The
-test `test_smart_fixed_brussels_extracts_sibelga_row` (`test_mega.py:258`) pins the
+test `test_smart_fixed_brussels_extracts_sibelga_row` (`test_mega.py:259`) pins the
 folded fee to 14.73 + 50.0744 and the OSP tiers to
 `{le1_44: 0.0, le6: 13.36, le9_6: 21.37, le13: 26.71}` (illustrative).
 
@@ -437,7 +437,7 @@ folded fee to 14.73 + 50.0744 and the OSP tiers to
 
 `_extract_publication_month` (`_mega_cards.py:509`) first tries the versioned Smart Fixed
 prefix `V<n> <month> <year>` (the token class includes `é` and `û` so `août` keeps
-its version, `test_publication_month_keeps_version_for_august`, `test_mega.py:404`),
+its version, `test_publication_month_keeps_version_for_august`, `test_mega.py:405`),
 then falls back to `Prix du mois MM/YYYY` rendered as `<month-name> YYYY` from
 `_FR_MONTH_NAMES` (`_mega_cards.py:506`). `valid_until` prefers the shared
 `parse_valid_until` keyword scan and falls back to `_extract_valid_until`
@@ -481,7 +481,7 @@ month (Mega cards are valid for the printed month).
   This is the same convention as Eneco and Cociter; do not add a VAT multiplier when
   parsing.
 
-The test `test_taxes_split_correctly_per_region` (`test_mega.py:379`) pins the
+The test `test_taxes_split_correctly_per_region` (`test_mega.py:380`) pins the
 cross-region excise (0.0503288) and the per-region renewables split.
 
 ## Injection
@@ -521,7 +521,7 @@ window rather than a fixed layout. Illustrative: 7.63 EUR/kVA/month annualises t
 Absence is legitimate only on Brussels cards and the Flanders Dynamic card (neither
 carries a compensation regime); everywhere else a miss is a layout drift and raises
 (`mega.py:523`). `test_supplier_pv_forfait_absent_on_brussels_and_flanders_dynamic`
-(`test_mega.py:258`) pins the two legitimate-`None` cases.
+(`test_mega.py:259`) pins the two legitimate-`None` cases.
 
 ## Quirks and historical bugs
 

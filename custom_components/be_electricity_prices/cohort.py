@@ -240,6 +240,12 @@ def _cohort_energy_from_archived(
             base_offpeak=energy.formula_base_offpeak,
             factor_exclusive_night=energy.formula_factor_exclusive_night,
             base_exclusive_night=energy.formula_base_exclusive_night,
+            # From the SIGNING-month card, which is the one that priced this
+            # cohort's guarantee.
+            ceiling_single=energy.ceiling_single,
+            ceiling_peak=energy.ceiling_peak,
+            ceiling_offpeak=energy.ceiling_offpeak,
+            ceiling_exclusive_night=energy.ceiling_exclusive_night,
             yearly_fixed_fee=energy.yearly_fixed_fee,
             # Carry the dedicated exclusive-night standing fee so an
             # exclusive-night meter keeps its own fee instead of falling back to

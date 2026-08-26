@@ -252,7 +252,7 @@ transition : 11:00-17:00 + 22:00-01:00
 offpeak    : 01:00-07:00
 ```
 
-`weekend_rule` (`WeekendRule`, `providers/base.py:252`) selects the weekend
+`weekend_rule` (`WeekendRule`, `providers/base.py:263`) selects the weekend
 schedule:
 
 - `weekend_offpeak` (generic CWaPE default): Saturday, Sunday and public holidays are entirely off-peak.

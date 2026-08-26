@@ -665,7 +665,9 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v47: energie.be, DATS 24 and Ecopower now carry the VREG maximumtarief on
 # their Flemish overlays. All three printed it and none stored it, so a
 # low-volume connection was quoted its uncapped network leg.
-_SNAPSHOT_SCHEMA_VERSION = 47
+# v48: SpotMonthlyRates carries the four ceiling columns, so a Mega Cap
+# signing cohort keeps the contractual cap its card guarantees for the year.
+_SNAPSHOT_SCHEMA_VERSION = 48
 
 
 def _snapshot_to_dict(

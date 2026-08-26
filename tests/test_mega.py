@@ -33,6 +33,7 @@ from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from dataclasses import replace
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import _mega_cards as cards_mod
@@ -1361,3 +1362,47 @@ def test_variable_cohort_carries_a_formula_per_meter() -> None:
     assert rate(3, "bi") < rate(3, "mono")
     assert rate(20, "bi") == pytest.approx(1.3275 * 1.06 * spot + base)
     assert rate(3, "bi") == pytest.approx(0.94 * 1.06 * spot + base)
+
+
+def test_a_cap_cohort_keeps_its_ceiling() -> None:
+    """Mega Cap's contractual ceiling is cohort-scoped: "Le plafond et la
+    formule tarifaire sont garantis pour une duree de 1 an a compter du debut
+    de la fourniture", "valables pour tout contrat signe en 08/2026".
+
+    Re-pricing a Cap cohort converts VariableRates to SpotMonthlyRates, and
+    that kind had no ceiling columns, so the cap was dropped outright - the
+    half of the contract that protects the user. It binds today rather than
+    hypothetically: the early-2026 cards cap at 16,23 to 16,65 c/kWh mono and
+    the index is already above them.
+    """
+    from datetime import datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.cohort import (
+        _cohort_energy_from_archived,
+    )
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers.base import (
+        SpotMonthlyRates,
+        VariableRates,
+    )
+
+    snap = parse_snapshot(
+        "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    # Give the card a tight cap, as the Jan-Mar Cap cards carry.
+    capped = replace(snap, energy=replace(energy, ceiling_single=0.1665))
+    leg = _cohort_energy_from_archived(capped)
+    assert isinstance(leg, SpotMonthlyRates)
+    assert leg.ceiling_single == pytest.approx(0.1665)
+
+    when = datetime(2026, 4, 15, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    # An index high enough that the formula clears the cap.
+    rate = energy_eur_per_kwh(leg, when, 0.15, meter="mono", region="wallonia")
+    assert rate == pytest.approx(0.1665)
+    # And below it the formula still governs.
+    low = energy_eur_per_kwh(leg, when, 0.05, meter="mono", region="wallonia")
+    assert low < 0.1665

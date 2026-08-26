@@ -241,6 +241,17 @@ class SpotMonthlyRates:
     # per meter rather than per hour of the day.
     factor_exclusive_night: float | None = None
     base_exclusive_night: float | None = None
+    # The signing cohort's contractual ceiling on the ENERGY component, per
+    # meter. Mega Cap is the product, and its cap is cohort-scoped: "Le plafond
+    # et la formule tarifaire sont garantis pour une duree de 1 an a compter du
+    # debut de la fourniture ... valables pour tout contrat signe en 08/2026".
+    # Converting a Cap cohort to this kind without carrying them dropped the
+    # cap outright, and the early-2026 cards cap TIGHT (16,23 / 16,65 c/kWh
+    # mono) against an index already above them, so it binds today.
+    ceiling_single: float | None = None
+    ceiling_peak: float | None = None
+    ceiling_offpeak: float | None = None
+    ceiling_exclusive_night: float | None = None
     yearly_fixed_fee: float = 0.0
     # Dedicated yearly fixed fee for an exclusive-night meter circuit, carried
     # from a variable card re-priced to this monthly-mean leg for a signing

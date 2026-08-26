@@ -372,7 +372,31 @@ def energy_eur_per_kwh(
             else:
                 factor = energy.factor_peak
                 base = energy.base_peak or 0.0
-        return factor * spot_eur_per_kwh + base
+        rate = factor * spot_eur_per_kwh + base
+        if energy.ceiling_single is None:
+            return rate
+        # Same clamp as the variable kind, and for the same reason: "vous
+        # payez le minimum entre les prix variables mensuels et ce plafond".
+        # A Cap cohort re-priced onto this kind kept its coefficients and lost
+        # its cap, which is the half of the contract that protects the user.
+        ceiling = FixedRates(
+            single=energy.ceiling_single,
+            peak=energy.ceiling_peak,
+            offpeak=energy.ceiling_offpeak,
+            exclusive_night=energy.ceiling_exclusive_night,
+        )
+        return min(
+            rate,
+            _routed_rate(
+                ceiling.single,
+                ceiling,
+                when,
+                meter,
+                region,
+                bi_capable=bi_capable,
+                dso_tariff_mode=dso_tariff_mode,
+            ),
+        )
     if isinstance(energy, TimeOfUseRates):
         slot = tou_slot(when, energy.weekend_rule)
         if slot == "peak":

@@ -375,7 +375,7 @@ first and last UTC hour, keeping the query window aligned with the backfill's
 ### Billing each past hour at its historical rate
 
 Both backfill passes cache one `SupplierSnapshot` per month via
-`_month_snapshot_cache` (`cohort.py:449`, called at `backfill.py:431`), so a 365-day window
+`_month_snapshot_cache` (`cohort.py:455`, called at `backfill.py:431`), so a 365-day window
 touches at most 12 archive fetches. `_snapshot_for_month` reuses the extractor's
 `fetch_for_month` archive path (see [provider-framework.md](provider-framework.md)),
 falling back to the current live snapshot when a supplier publishes no archive.

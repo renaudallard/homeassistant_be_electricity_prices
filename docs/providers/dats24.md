@@ -150,7 +150,7 @@ There is no `probe`. `EXTRACTOR` (`dats24.py:507-524`) sets only `id`, `label`,
 month-keyed URL is not a freshness signal either: within a month the file is
 replaced in place, so a HEAD tells us nothing a cheap diff could use, and the
 coordinator's time-based TTL governs refresh. This is the "DATS 24 single-PDF"
-case called out in the `SnapshotProbe` contract comment in `base.py:898-898`.
+case called out in the `SnapshotProbe` contract comment in `base.py:909-909`.
 
 Note the module does define a `discover` coroutine (`dats24.py:202-215`), but it
 is a catalog-drift check for the live-check harness, not a coordinator probe. It
@@ -168,7 +168,7 @@ There is no `fetch_for_month`, so past months fall back to the current snapshot
 as a proxy in the yearly-cost backfill flow. Note that the CDN *does* retain
 per-month cards back to 2023, so unlike the old overwrite-in-place API URL an
 archive fetcher is now technically possible (DATS 24 is listed as API-only in the
-`ArchivedSnapshotFetcher` comment `base.py:906-908`, which that change would need
+`ArchivedSnapshotFetcher` comment `base.py:917-919`, which that change would need
 to correct). It is deliberately not implemented: the product ends on 2026-08-31,
 so the payoff would be one month of more accurate YTD backfill.
 
