@@ -98,11 +98,11 @@ fetch(session, contract_id, region)              ecopower.py:149
 
 ### Current card discovery
 
-- **gbs** (`_resolve_latest_pdf`, `ecopower.py:797`): GET the price page HTML, run `_CARD_RE`
+- **gbs** (`_resolve_latest_pdf`, `ecopower.py:846`): GET the price page HTML, run `_CARD_RE`
   (`ecopower.py:113`) over it to collect every `(sort_key, YYYYMM, url)` triple, **drop any URL
   containing `inschatting`** (the next-month estimation preview), sort ascending and take the
   highest. That is the card billing today. Label is `YYYY-MM`.
-- **dbs** (`_resolve_latest_dbs_pdf`, `ecopower.py:826`): GET the dynamic product page, run
+- **dbs** (`_resolve_latest_dbs_pdf`, `ecopower.py:875`): GET the dynamic product page, run
   `_DBS_CARD_RE` (`ecopower.py:155`), sort and take the highest. The dynamic formula is
   stable across months, so the newest card is the one in effect.
 
@@ -143,7 +143,7 @@ possible.
   for the textual fallback when `valid_until` is absent. This guards against the CDN serving the
   current card under a historical URL and mis-billing past consumption at current rates. Returns
   `None` when the listing lacks the month, the URL 404s, or the PDF does not parse.
-- **dbs** (`_fetch_dbs_for_month`, `ecopower.py:846`): dynamic cards do not rotate monthly, so
+- **dbs** (`_fetch_dbs_for_month`, `ecopower.py:895`): dynamic cards do not rotate monthly, so
   pick the most recent card whose **month** is not after the requested one (`yyyymm <= target`,
   taken from `_card_stamp_keys` rather than the raw stamp -- comparing the raw stamp excluded a
   `YYYYMMDD` card from its own month, since `"20260801" > "202608"`). That is the card that was
@@ -182,7 +182,7 @@ same layout text through `fixture_text(name, layout=True)` (`test_ecopower.py:55
 | `energy` | `_extract_energy` (`ecopower.py:386`) -> `VariableRates.current` | `_extract_dbs_energy` (`ecopower.py:424`) -> `DynamicRates` |
 | `dsos` | `_extract_dsos` (`ecopower.py:470`) | `_extract_dbs_dsos` (`ecopower.py:547`) |
 | `taxes` | `_extract_taxes` (`ecopower.py:613`) | same helper reused |
-| `injection` | `_extract_injection` (`ecopower.py:730`) | `_extract_dbs_injection` (`ecopower.py:776`) |
+| `injection` | `_extract_injection` (`ecopower.py:748`) | `_extract_dbs_injection` (`ecopower.py:825`) |
 | `valid_until` | `parse_valid_until` (`_pdf.py:947`) | same |
 | `publication_label` | passed in (`YYYY-MM`) | passed in |
 
@@ -208,7 +208,7 @@ parse time, and carrying a variable cost without a live spot is what `VariableRa
 
 **dbs** (`_extract_dbs_energy`, `ecopower.py:424-450`): the card prints
 `Dynamische burgerstroom elk kwartier 0,00102 × EPEX DA +0,004 euro/kWh` (illustrative,
-`test_ecopower.py:359-368`). `_DBS_ENERGY_RE` (`ecopower.py:414-419`) captures factor, sign, base.
+`test_ecopower.py:413-422`). `_DBS_ENERGY_RE` (`ecopower.py:414-419`) captures factor, sign, base.
 
 - **Factor is scaled by 1000** because the card multiplies EPEX DA in EUR/MWh while the pricing
   engine feeds the spot in EUR/kWh (`0,00102 × MWh = 1.02 × kWh`).
@@ -338,12 +338,12 @@ Three matching strategies, in priority order:
    is on the line below the label.
 
 All four use `SIGN_CHARS` for the leading sign, and non-ASCII minus glyphs are normalised to `-`
-before `to_float` (`ecopower.py:755-763`). Returns `None` when nothing matches (injection is
+before `to_float` (`ecopower.py:773-781`). Returns `None` when nothing matches (injection is
 nullable).
 
 **dbs** injection is an **hourly `factor*spot+base`** shape. `_extract_dbs_injection`
 (`ecopower.py:761-776`) parses `Terugleververgoeding elk kwartier 0,00098 × EPEX DA - 0,015
-euro/kWh` via `_DBS_INJECTION_RE` (`ecopower.py:768-773`). Same MWh->kWh factor scaling (`× 1000`)
+euro/kWh` via `_DBS_INJECTION_RE` (`ecopower.py:817-822`). Same MWh->kWh factor scaling (`× 1000`)
 and signed base as the consumption formula. The base can be negative (the credit drops below zero
 at low spot, which the pricing engine respects). Stored unscaled (residential injection is
 VAT-exempt). Sets `current=None`, `factor`, `base`, and a diagnostic `formula` string
@@ -400,7 +400,7 @@ Every non-obvious hazard the source comments flag:
   (`..._gbs_inschatting_tariefkaart_ecopower.pdf`) alongside the definitive one. The fetcher and
   `fetch_for_month` both drop any URL containing `inschatting`; `_CARD_RE` matches only the
   definitive form (`ecopower.py:109-119`, `191-197`, `733-739`). Test:
-  `test_fetch_for_month_skips_inschatting_preview` (`test_ecopower.py:472-484`).
+  `test_fetch_for_month_skips_inschatting_preview` (`test_ecopower.py:526-538`).
 - **Issue #31, May 2026 injection relabel.** The injection row was renamed from
   `Terugleververgoeding (digitale meter)` to `Injectie Groene Burgerstroom (terugleververgoeding)`,
   which the old regex missed, so the injection price went unavailable. `_INJECTION_RE` now matches
@@ -422,7 +422,7 @@ Every non-obvious hazard the source comments flag:
   card's own month (`Tariefkaart <month> <year>`) against the note's declared expiry (`t.e.m. <n>
   <month>`) and ignores a stale note, falling back to the variable value. It returns `True` when
   staleness cannot be established (a card with no parseable month still trusts its note). Test:
-  `test_stale_fixed_injection_note_is_ignored_on_a_later_card` (`test_ecopower.py:314-327`).
+  `test_stale_fixed_injection_note_is_ignored_on_a_later_card` (`test_ecopower.py:368-381`).
 - **Injection sign / never-negative.** The card prints the credit in the cost column as negative;
   the parser takes `abs()` so a card that ever prints it positive is not flipped into a debit
   (`ecopower.py:750-756`).
@@ -462,8 +462,8 @@ Fixtures under `tests/fixtures/` exercised by `tests/test_ecopower.py`:
 | `ecopower_burgerstroom_feb.pdf` | Feb 2026 gbs | `fetch_for_month` happy path |
 | `ecopower_dynamische_burgerstroom_jan.pdf` | Jan 2026 dbs, dynamic + wrapped Midden-Vlaanderen label | dynamic formula, subscription fee, dynamic injection, wrapped-label stitch, dbs taxes, dbs `fetch_for_month` |
 
-`fetch_for_month` tests also use inline HTML listings `_LISTING_HTML` (`test_ecopower.py:442-448`)
-and `_DBS_LISTING_HTML` (`test_ecopower.py:514-519`) with a stub `_Session` / `_Resp`, patching
+`fetch_for_month` tests also use inline HTML listings `_LISTING_HTML` (`test_ecopower.py:496-502`)
+and `_DBS_LISTING_HTML` (`test_ecopower.py:568-573`) with a stub `_Session` / `_Resp`, patching
 `fetch_pdf_text_layout` to return fixture text.
 
 ## When the card changes, look here

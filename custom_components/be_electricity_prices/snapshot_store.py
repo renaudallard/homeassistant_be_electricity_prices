@@ -650,7 +650,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v42: Luminus MaxxFlex now carries its monthly Belpex ENERGY coefficients per
 # meter, including the night circuit, and month_indexed. A v41 snapshot holds
 # only the printed rate, which is the formula at the previous month's index.
-_SNAPSHOT_SCHEMA_VERSION = 42
+# v43: Ecopower Groene Burgerstroom now carries the blended coefficients of its
+# 50/50 fixed-plus-SPP feed-in credit, with spp_indexed and the card's
+# never-negative floor. A v42 snapshot holds only the printed figure, which for
+# an arrears publisher is always a settled past month.
+_SNAPSHOT_SCHEMA_VERSION = 43
 
 
 def _snapshot_to_dict(

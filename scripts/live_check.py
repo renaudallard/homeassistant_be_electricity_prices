@@ -2106,6 +2106,12 @@ _INJECTION_SHAPE: dict[str, str] = {
     # that leaving them on the printed figure is deliberate.
     "luminus_comfyflex": "monthly",
     "luminus_comfyflex_plus": "monthly",
+    # Ecopower's July 2026 card split the feed-in credit 50/50: "VAST 50% x
+    # 0,02 euro / VARIABEL +50% ... volgt de formule 0,9 x <index> [EPEX SPP]
+    # - 0,01", footnote 2 naming the index as the delivery month's realized
+    # SPP-weighted mean. Definitive cards publish in ARREARS, so the printed
+    # figure is always a settled past month.
+    "ecopower_burgerstroom": "spp",
     "energiebe_variable": "spp",
     # The fixed card prints the same Belpex_SPP formula and settles on it too:
     # a fixed ENERGY leg does not make the feed-in credit fixed. Same shape as

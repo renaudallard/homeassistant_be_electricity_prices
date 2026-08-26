@@ -418,9 +418,9 @@ on 2026-08-01: EBEM's August card failed CI three times over for reporting the z
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py:2358`) runs two gates:
+`_validate_snapshot` (`scripts/live_check.py:2364`) runs two gates:
 
-- `_validate_energy` (`scripts/live_check.py:2419`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:2425`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
@@ -494,10 +494,10 @@ under that cap, or the supplier is killed before it can report the drift the bud
 The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2153`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:2851`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:2857`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1672`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2738`) for the known-large catalogues (Bolt,
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2744`) for the known-large catalogues (Bolt,
 TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
 (`scripts/live_check.py:1720`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
 which are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request
@@ -509,7 +509,7 @@ budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see 
 false-firing drift alert means adjusting the override, not the code.
 
 A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:2370`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2838`). The
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2844`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever
@@ -525,7 +525,7 @@ rerun.
 `_run()` (`scripts/live_check.py:1537`) splits checks into `extractor` and `catalog` kinds. The
 extractor report (with the metrics block) is printed to stdout, which the workflow captures. The
 catalog diff is written to `catalog_report.md` and the drift warnings to `drift_report.md` at the
-repo root (`scripts/live_check.py:2419`), each a side-channel the workflow reads to file a separate
+repo root (`scripts/live_check.py:2425`), each a side-channel the workflow reads to file a separate
 issue so the three failure modes never conflate in one thread.
 
 The exit code is bit-encoded (`scripts/live_check.py:1648`):
@@ -550,7 +550,7 @@ rows). It also handed every other supplier seven rolls of the dice at a transien
 is where the collateral rows in those issues came from.
 
 `_record` (`scripts/live_check.py:478`) marks such a check `expected`, and `_extractor_regressions`
-(`scripts/live_check.py:2358`) is the single definition of what gates CI. The classification reads
+(`scripts/live_check.py:2364`) is the single definition of what gates CI. The classification reads
 the exception type the fetch sites already write into the detail string
 (`CardNotReadableError`, raised by `providers/_pdf.py`), so it follows the card actually
 published rather than a hardcoded supplier list: a supplier that goes back to publishing text

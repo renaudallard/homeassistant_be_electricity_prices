@@ -186,6 +186,60 @@ def test_april_card_taxes_are_htva_with_vat_06() -> None:
     assert t.brussels_renewables == 0.0
 
 
+def test_july_card_splits_the_credit_fixed_and_spp() -> None:
+    """From July 2026 the credit is half fixed and half indexed: "VAST 50% x
+    0,02 euro / VARIABEL +50% x 0,04638137 euro deze waarde volgt de formule
+    0,9 x 0,06264597 [EPEX SPP 2] - 0,01", footnote 2 naming the index as "het
+    werkelijke SPP gewogen gemiddelde van de Day Ahead EPEX ... voor de maand
+    juli".
+
+    The two halves blend into one pair: 0,50 x 0,02 + 0,50 x (0,9 SPP - 0,01)
+    = 0,45 SPP + 0,005. No unit conversion, because this card's index is
+    already EUR/kWh - unlike the dynamic sibling, which prints EUR/MWh.
+    """
+    snap = parse_snapshot(
+        fixture_text("ecopower_burgerstroom_jul.pdf", layout=True), "t://x", "2026-07"
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert inj.factor == pytest.approx(0.45)
+    assert inj.base == pytest.approx(0.005)
+    assert inj.spp_indexed is True
+    # "De terugleververgoeding kan nooit negatief zijn." - on this card only.
+    assert inj.floor_at_zero is True
+    # Round-trips to the card's own printed figure at its own index.
+    assert inj.factor * 0.06264597 + inj.base == pytest.approx(0.0332, abs=1e-4)
+    assert inj.current == pytest.approx(0.0332)
+
+
+def test_the_pre_july_and_split_cards_keep_a_flat_credit() -> None:
+    """Two separate reasons not to surface coefficients.
+
+    Feb/Apr/May are 100% fixed at 0,020 and the May card says the change is
+    still ahead: "Vanaf 1 juli 2026 wordt de prijs van de terugleververgoeding
+    50% variabel." The June card prints the formula but pins the credit,
+    "OPGELET t.e.m. 30 juni is de terugleververgoeding 0,020 euro/kWh en 100%
+    vast", and its own index is a twelve-month VNR forecast rather than a
+    settled month - it must never be surfaced as one.
+
+    This matters beyond today: fetch_for_month re-parses each past month, so a
+    year-to-date walk crosses all of these.
+    """
+    for fixture in (
+        "ecopower_burgerstroom_feb.pdf",
+        "ecopower_burgerstroom_apr.pdf",
+        "ecopower_burgerstroom_may.pdf",
+        "ecopower_burgerstroom_jun_split.pdf",
+    ):
+        snap = parse_snapshot(fixture_text(fixture, layout=True), "t://x", "2026-01")
+        inj = snap.injection
+        assert inj is not None, fixture
+        assert inj.current == pytest.approx(0.02), fixture
+        assert inj.factor is None, fixture
+        assert inj.spp_indexed is False, fixture
+        assert inj.floor_at_zero is False, fixture
+
+
 def test_april_card_injection_is_positive_credit() -> None:
     """The terugleververgoeding is a feed-in credit the customer
     receives. The card prints it as a negative cost

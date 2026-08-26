@@ -727,6 +727,24 @@ def _fixed_note_in_effect(text: str) -> bool:
     )
 
 
+# The July 2026 generation split the feed-in credit 50/50 between a fixed half
+# and a half indexed on the delivery month's SPP-weighted EPEX DA mean.
+# Anchored on the literal VAST / VARIABEL rows: the pre-July cards, and the
+# June split card, print the same words in prose without those rows, and the
+# June one pins an actual 100%-fixed credit that must keep winning.
+_INJECTION_SPP_SPLIT_RE = re.compile(
+    r"Injectie\s+Groene\s+Burgerstroom\s*\(terugleververgoeding\)[^\n]*\n"
+    r"\s*VAST\s+(\d+)\s*%\s*[×xX*]\s*([\d,]+)\s*euro[^\n]*\n"
+    r"\s*VARIABEL\s*\+?\s*(\d+)\s*%[^\n]*?formule\s+"
+    r"([\d,]+)\s*[×xX*]\s*[\d,]+\s*\[[^\]]*SPP[^\]]*\]\s*"
+    rf"([{SIGN_CHARS}]?)\s*([\d,]+)",
+    re.IGNORECASE,
+)
+_INJECTION_NEVER_NEGATIVE_RE = re.compile(
+    r"terugleververgoeding\s+kan\s+nooit\s+negatief\s+zijn", re.IGNORECASE
+)
+
+
 def _extract_injection(text: str) -> InjectionRates | None:
     """Parse the injection (terugleververgoeding) price.
 
@@ -760,7 +778,38 @@ def _extract_injection(text: str) -> InjectionRates | None:
     # hand-rolled variant list missed U+2010 / U+2011 and to_float raised
     # ValueError on them -- and take the magnitude.
     raw = match.group(1).replace(" ", "").lstrip(SIGN_CHARS)
-    return InjectionRates(current=abs(to_float(raw)))
+    current = abs(to_float(raw))
+    # From the July 2026 card the credit is half fixed and half indexed on the
+    # DELIVERY month's SPP-weighted EPEX DA mean: "VAST 50% x 0,02 euro /
+    # VARIABEL +50% x 0,04638137 euro deze waarde volgt de formule 0,9 x
+    # 0,06264597 [EPEX SPP 2] - 0,01", with footnote 2 naming the index as
+    # "het werkelijke SPP gewogen gemiddelde van de Day Ahead EPEX (EPEX DA)
+    # voor de maand juli". Ecopower publishes definitive cards in ARREARS, so
+    # the printed figure is always a settled past month.
+    #
+    # Blending the two halves gives one pair:
+    #   credit = 0,50 x 0,02 + 0,50 x (0,9 x SPP - 0,01)
+    #          = 0,45 x SPP + 0,005
+    # No unit conversion: this card's index is already EUR/kWh, unlike the
+    # dbs sibling which prints EUR/MWh and scales by 1000.
+    split = _INJECTION_SPP_SPLIT_RE.search(text)
+    if split is None:
+        return InjectionRates(current=current)
+    vast_share = to_float(split.group(1)) / 100.0
+    vast_value = to_float(split.group(2))
+    var_share = to_float(split.group(3)) / 100.0
+    multiplier = to_float(split.group(4))
+    var_base = parse_sign(split.group(5) or "+") * to_float(split.group(6))
+    return InjectionRates(
+        current=current,
+        factor=var_share * multiplier,
+        base=vast_share * vast_value + var_share * var_base,
+        formula=" ".join(split.group(0).split()),
+        spp_indexed=True,
+        # "De terugleververgoeding kan nooit negatief zijn." Stated on this
+        # card generation and this one only.
+        floor_at_zero=_INJECTION_NEVER_NEGATIVE_RE.search(text) is not None,
+    )
 
 
 # The dynamic card prints the injection formula like the consumption one:
@@ -900,6 +949,10 @@ EXTRACTOR = SupplierExtractor(
             label=_CONTRACT_LABEL,
             kind="variable",
             regions=_ECOPOWER_REGIONS,
+            # Half the feed-in credit indexes on the delivery month's
+            # SPP-weighted EPEX DA mean, which the variable energy leg fetches
+            # no spots for.
+            spot_indexed_injection=True,
         ),
         Contract(
             id=_DBS_CONTRACT_ID,
