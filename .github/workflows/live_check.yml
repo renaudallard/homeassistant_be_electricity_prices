@@ -2,8 +2,12 @@ name: Live extractor check
 
 on:
   schedule:
-    # 06:00 UTC = 07:00 CET / 08:00 CEST (after suppliers' overnight publication).
-    - cron: "0 6 * * *"
+    # 06:17 UTC = 07:17 CET / 08:17 CEST, after the suppliers' overnight
+    # publication. Off the hour on purpose: GitHub documents the start of every
+    # hour as a high-load slot for the schedule event and drops queued runs out
+    # of it when the load is bad enough. That is what took the 06:00 slot on
+    # 2026-08-27, here and in validate.yml both, with no run created at all.
+    - cron: "17 6 * * *"
   workflow_dispatch:
   pull_request:
     paths:

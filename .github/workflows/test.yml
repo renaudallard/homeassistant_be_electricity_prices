@@ -57,7 +57,7 @@ jobs:
         # still catches Mapping[str,str]|None index errors and the
         # like. live_check.py runs as a daily workflow; covering it
         # here means a regression surfaces on PR rather than in the
-        # next 06:00 UTC scheduled run.
+        # next 06:17 UTC scheduled run.
         run: mypy custom_components/ tests/ scripts/
       - name: Doc references
         # The docs pin ~760 file.py:line references, and they rot whenever a

@@ -635,7 +635,7 @@ linted for; `[tool.ruff.format] exclude` keeps the formatter off Markdown. The s
 | --- | --- | --- |
 | Lint | `ruff check .` then `ruff format --check .` | `.github/workflows/test.yml:48` |
 | Type check (production) | `mypy --strict custom_components/be_electricity_prices` | strict; production code must be strict-clean (`.github/workflows/test.yml:52`) |
-| Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next 06:00 UTC scheduled run (`.github/workflows/test.yml:54`) |
+| Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next 06:17 UTC scheduled run (`.github/workflows/test.yml:54`) |
 | Tests | `pytest tests/ -q` | `.github/workflows/test.yml:69` |
 
 `concurrency` cancels a stale push/PR run when a new commit lands (`.github/workflows/test.yml:17`).
@@ -644,7 +644,7 @@ described above exists.
 
 ### validate.yml - Validate
 
-Runs on push to `main`, on pull requests, on a daily `cron: "0 6 * * *"`, and on manual dispatch
+Runs on push to `main`, on pull requests, on a daily `cron: "17 6 * * *"`, and on manual dispatch
 (`.github/workflows/validate.yml:3`). Two independent jobs:
 
 - `hacs` runs `hacs/action@main` with `category: integration` (HACS repository requirements).
@@ -655,14 +655,21 @@ These validate packaging and manifest conformance, not runtime behaviour.
 
 ### live_check.yml - Live extractor check
 
-Runs on the daily `cron: "0 6 * * *"` (06:00 UTC is 07:00/08:00 Belgian local, after suppliers'
+Runs on the daily `cron: "17 6 * * *"` (06:17 UTC is 07:17/08:17 Belgian local, after suppliers'
 overnight publication), on manual dispatch, and on pull requests that touch `providers/**`,
 `scripts/live_check.py`, or the workflow itself (`.github/workflows/live_check.yml:3`). It needs
-`issues: write` to file drift/catalog/extractor issues (`.github/workflows/live_check.yml:14`).
+`issues: write` to file drift/catalog/extractor issues (`.github/workflows/live_check.yml:18`).
+
+The `:17` is deliberate. GitHub documents the start of every hour as a high-load slot for the
+`schedule` event and says queued runs may be dropped when the load is high enough, which is exactly
+what happened on 2026-08-27: neither this workflow nor `validate.yml` produced a run from the 06:00
+slot, no delayed run and no `startup_failure`, just nothing. A dropped slot is not recovered
+automatically, so the day's check has to be dispatched by hand:
+`gh workflow run live_check.yml --ref main`.
 
 The single `check` job installs the pinned HA version (needed because `providers/_pdf.py` imports
 `homeassistant.util.dt`) and runs `scripts/live_check.py` inside a two-tier retry loop
-(`.github/workflows/live_check.yml:52`). The retry exists so an issue is filed only when a supplier
+(`.github/workflows/live_check.yml:56`). The retry exists so an issue is filed only when a supplier
 is still broken roughly an hour after first detection, not for a transient CDN blip (issue #30):
 seven attempts with delays `10 30 60 120 300 3000` seconds, bounded by a 5400s wall-clock deadline
 so the job always reaches the issue-creation steps before the 120-minute job timeout. Only a bit-0
@@ -696,15 +703,15 @@ catch these comments):
 
 The extractor issue body keeps only the failures table and the per-supplier metrics block, dropping
 the `## All checks` checklist: the full report outgrew GitHub's 65,536-character issue body limit,
-which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml:185`). A
+which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml:189`). A
 defensive cap truncates the body at a line boundary near 60,000 bytes in case a mass failure
 inflates the failures table itself. The full report is always in the run log.
 
 On `pull_request` events the issue-creation steps are skipped; instead a final step fails the PR
 check if any bit other than the catalog-only bit is set (`rc & ~2`), since a new-product signal is
-informational, not a regression (`.github/workflows/live_check.yml:354`). A separate step fails the
+informational, not a regression (`.github/workflows/live_check.yml:358`). A separate step fails the
 run on `rc=8` (harness crash) so a top-level traceback shows red on the Actions tab instead of
-ending green (`.github/workflows/live_check.yml:368`).
+ending green (`.github/workflows/live_check.yml:372`).
 
 ### autorelease.yml - Autorelease
 
