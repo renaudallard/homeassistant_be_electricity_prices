@@ -627,18 +627,18 @@ Runs on push to `main`, on every pull request, and on manual dispatch (`.github/
 It pins Python 3.13 and installs a pinned toolchain: `homeassistant==2026.2.3`,
 `pytest-homeassistant-custom-component==0.13.316` and `ruff==0.16.0` (plus `pytest-freezer==0.4.9`,
 `pypdf`, `pdfplumber`, `defusedxml`), so an upstream HA-core, test-shim or linter release cannot
-silently turn the suite red on `main` (`.github/workflows/test.yml:31`). The lint rule set is itself
+silently turn the suite red on `main` (`.github/workflows/test.yml:37`). The lint rule set is itself
 pinned in `pyproject.toml` (`[tool.ruff.lint] select`), so a ruff upgrade cannot expand what is
 linted for; `[tool.ruff.format] exclude` keeps the formatter off Markdown. The steps are:
 
 | Step | Command | Notes |
 | --- | --- | --- |
-| Lint | `ruff check .` then `ruff format --check .` | `.github/workflows/test.yml:42` |
-| Type check (production) | `mypy --strict custom_components/be_electricity_prices` | strict; production code must be strict-clean (`.github/workflows/test.yml:47`) |
-| Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next 06:00 UTC scheduled run (`.github/workflows/test.yml:48`) |
-| Tests | `pytest tests/ -q` | `.github/workflows/test.yml:56` |
+| Lint | `ruff check .` then `ruff format --check .` | `.github/workflows/test.yml:48` |
+| Type check (production) | `mypy --strict custom_components/be_electricity_prices` | strict; production code must be strict-clean (`.github/workflows/test.yml:52`) |
+| Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next 06:00 UTC scheduled run (`.github/workflows/test.yml:54`) |
+| Tests | `pytest tests/ -q` | `.github/workflows/test.yml:69` |
 
-`concurrency` cancels a stale push/PR run when a new commit lands (`.github/workflows/test.yml:11`).
+`concurrency` cancels a stale push/PR run when a new commit lands (`.github/workflows/test.yml:17`).
 The non-strict pass over `tests/` and `scripts/` is why the `# type: ignore[arg-type]` convention
 described above exists.
 
@@ -696,15 +696,15 @@ catch these comments):
 
 The extractor issue body keeps only the failures table and the per-supplier metrics block, dropping
 the `## All checks` checklist: the full report outgrew GitHub's 65,536-character issue body limit,
-which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml:134`). A
+which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml:185`). A
 defensive cap truncates the body at a line boundary near 60,000 bytes in case a mass failure
 inflates the failures table itself. The full report is always in the run log.
 
 On `pull_request` events the issue-creation steps are skipped; instead a final step fails the PR
 check if any bit other than the catalog-only bit is set (`rc & ~2`), since a new-product signal is
-informational, not a regression (`.github/workflows/live_check.yml:272`). A separate step fails the
+informational, not a regression (`.github/workflows/live_check.yml:354`). A separate step fails the
 run on `rc=8` (harness crash) so a top-level traceback shows red on the Actions tab instead of
-ending green (`.github/workflows/live_check.yml:281`).
+ending green (`.github/workflows/live_check.yml:368`).
 
 ### autorelease.yml - Autorelease
 
@@ -718,18 +718,18 @@ calling it removes the chance to forget. `test.yml`'s concurrency group includes
 (the **caller's** name) for that reason — without it the standalone Tests run and the one
 autorelease calls would share a group on a push to `main` and `cancel-in-progress` would kill the
 release's own gate. The `release` job needs all three
-(`.github/workflows/autorelease.yml:72`), then:
+(`.github/workflows/autorelease.yml:44`), then:
 
 1. Extracts the version from `manifest.json` via `jq` and derives `tag=v<version>`
-   (`.github/workflows/autorelease.yml:81`).
-2. Skips if the tag already exists (`.github/workflows/autorelease.yml:92`), making the workflow
+   (`.github/workflows/autorelease.yml:51`).
+2. Skips if the tag already exists (`.github/workflows/autorelease.yml:62`), making the workflow
    idempotent against re-pushes.
 3. Builds `dist/be_electricity_prices.zip` from the component directory, excluding `*.pyc` and
-   `__pycache__` (`.github/workflows/autorelease.yml:101`).
+   `__pycache__` (`.github/workflows/autorelease.yml:71`).
 4. Tags, pushes the tag, and runs `gh release create --generate-notes` with the zip attached,
    retrying up to five times with exponential backoff (a past release, v0.5.28, was lost to a 504
    from GitHub's REST API) and treating an already-created release as success
-   (`.github/workflows/autorelease.yml:111`).
+   (`.github/workflows/autorelease.yml:81`).
 
 The practical consequence: tagging and publishing a GitHub release is fully automatic once a
 manifest version bump lands on `main`. Do not tag or create releases by hand.
