@@ -38,23 +38,20 @@ aiohttp follows, so a typo yields 480 KB of HTML rather than an error status.
 _fetch_validated_pdf_bytes catches that on the magic bytes and raises, which
 is why nothing here inspects the payload itself.
 
-Two of the eight published products are modelled. Agilior Online prices each
+Three of the eight published products are modelled. Agilior Online prices each
 quarter hour off Belpex_15 and Agilis Online each hour off Belpex_h; they are
 the same card with a different index token, and the only thing separating them
-in the snapshot is DynamicRates.quarter_hourly.
+in the snapshot is DynamicRates.quarter_hourly. Essentia Online is indexed
+monthly, on Belpex-RLP for offtake and the solar-weighted Belpex-SPP for the
+credit, and it is the contractual fallback the other two bill on when Fluvius
+cannot deliver quarter values.
 
-The other six are catalogued in DISCOVER_IDS so discover() flags only a
-genuinely new product, and none is sold here. Essentia Online is indexed
-monthly on Belpex-RLP for offtake and Belpex-SPP for injection, which the
-model can carry, but the figure its card prints is computed from the VREG
-weighted average rather than the index it settles on, and the two are at
-least 10% apart in 19 of the 26 months Energy Knights publishes; how to price
-it for an entry with no ENTSO-E key is an open question rather than a parsing
-one. Optima Online carries a "Service fee onbalans handelen" whose amount
-depends on which home energy management system the customer runs: 10,00
-EUR/jaar in December 2025, printed without a value in August 2026, and no
-field here can hold it. The four "green" twins add a flat "Groene stroom"
-line and are otherwise identical.
+The other five are catalogued in DISCOVER_IDS so discover() flags only a
+genuinely new product, and neither is sold here. Optima Online carries a
+"Service fee onbalans handelen" whose amount depends on which home energy
+management system the customer runs: 10,00 EUR/jaar in December 2025, printed
+without a value in August 2026, and no field here can hold it. The four
+"green" twins add a flat "Groene stroom" line and are otherwise identical.
 
 Two things on these cards are easy to get wrong.
 
@@ -73,10 +70,15 @@ The coefficients drift monthly and none of them may be pinned. Agilior ran
 "x 1 - 12" inside the same year.
 
 The printed c€/kWh figures are indicatives computed from the VREG weighted
-average, not the rate that gets billed, and Energy Knights publishes both
-series at /priceparameters. Nothing here stores one: a dynamic contract
-settles every slot against the spot, so the coefficients are the contract and
-the printed column is an illustration.
+average annual price, not the rate that gets billed, and Energy Knights
+publishes both series at /priceparameters. Over the 26 months that table
+covers the two sit at least 10% apart in 19 of them, ranging -24,7% to +56,2%,
+because the VREG series barely moves while the settled index swings by half.
+Nothing here stores one for offtake: every contract modelled settles against
+the spot, whether per slot or per month, so the coefficients are the contract
+and the printed column is an illustration. That is also why Essentia is
+spot_monthly rather than variable - the kind is what makes the ENTSO-E key
+mandatory, and there is no honest way to price this card without one.
 
 Region: Flanders only (all 8 Fluvius sub-areas).
 """
@@ -115,8 +117,10 @@ from .base import (
     Contract,
     DsoOverlay,
     DynamicRates,
+    EnergyRates,
     ExtractorError,
     InjectionRates,
+    SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
     TariffKind,
@@ -150,12 +154,24 @@ class _ContractDef:
     # the turn of 2026). Matching exactly also keeps the "Green" twin, which
     # prints "Agilior Online Green", from parsing as the plain product.
     product: str
-    # Index token the card names, on both the offtake rows and the "optie
-    # solar" row. Belpex_15 is the quarter-hour day-ahead price and Belpex_h
-    # the hourly one. Reading one against the other's axis is a silent
-    # mis-price rather than a failure, so the token is captured and checked.
+    # Index token the card names on the offtake rows. Belpex_15 is the
+    # quarter-hour day-ahead price, Belpex_h the hourly one and BelpexRLP the
+    # load-profile-weighted monthly mean. Reading one against another's axis is
+    # a silent mis-price rather than a failure, so the token is captured and
+    # checked on every row.
     index: str
+    # Index token on the "optie solar" row, when it differs. The two dynamic
+    # products settle the credit on the same per-slot index as the offtake
+    # leg, which the card states outright ("voor zowel afname als injectie");
+    # Essentia settles offtake on the load-weighted BelpexRLP and the credit
+    # on the solar-weighted BelpexSPP, which is a different series. Empty
+    # means "same as the offtake index".
+    injection_index: str = ""
     quarter_hourly: bool = False
+
+    @property
+    def credit_index(self) -> str:
+        return self.injection_index or self.index
 
 
 _CONTRACTS: tuple[_ContractDef, ...] = (
@@ -175,6 +191,26 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "agilisonline",
         "Agilis Online",
         "Belpex_h",
+    ),
+    # "spot_monthly", not "variable". The kind is what decides whether the
+    # ENTSO-E key is mandatory, and this contract cannot be priced without
+    # one: the c-EUR/kWh figures beside the formula are computed from the VREG
+    # weighted average ANNUAL price, not the Belpex-RLP-M the contract
+    # settles on, and Energy Knights publishes both series at /priceparameters
+    # so the gap is measurable rather than arguable. Over the 26 months that
+    # table covers, the printed offtake figure sits at least 10% from the
+    # settled index in 19 of them (-24,7% to +56,2%) and the printed credit in
+    # 23 of them (-56,1% to +242,9%). Resolved against the month's own mean the
+    # offtake leg lands about 5% low with a known, one-directional
+    # RLP-weighting residual, and the credit is exact.
+    _ContractDef(
+        "energyknights_essentia",
+        "Energy Knights Essentia Online",
+        "spot_monthly",
+        "essentiaonline",
+        "Essentia Online",
+        "BelpexRLP",
+        injection_index="BelpexSPP",
     ),
 )
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
@@ -389,10 +425,15 @@ def parse_snapshot(
     vat = vat_multiplier(text, _VAT_RE)
     rows = _extract_rows(text, contract)
     fee = _yearly_fee(text)
+    energy: EnergyRates
+    if contract.kind == "dynamic":
+        energy = _dynamic_energy(rows, fee, vat, contract)
+    else:
+        energy = _spot_monthly_energy(rows, fee, vat)
     return SupplierSnapshot(
         supplier="energyknights",
         contract=contract_id,
-        energy=_dynamic_energy(rows, fee, vat, contract),
+        energy=energy,
         dsos=_extract_dsos(text),
         taxes=_extract_taxes(text),
         source_url=source_url,
@@ -499,6 +540,59 @@ def _dynamic_energy(
     )
 
 
+def _spot_monthly_energy(
+    rows: dict[str, tuple[float, float, float]],
+    fee: float,
+    vat: float,
+) -> SpotMonthlyRates:
+    """Essentia Online's monthly-indexed leg.
+
+    The card prints a separate formula per register and they differ: August
+    2026 reads "x 1,03 + 7" mono, "x 1,045 + 8" day and "x 0,997 + 8" for both
+    night registers. Every register the card prints is carried, including the
+    dedicated exclusive-night pair, which pricing routes ahead of the
+    bi-hourly band test because that circuit is billed per meter rather than
+    per hour of the day.
+
+    Nothing of the printed c-EUR/kWh column is stored. It is an estimate off
+    the VREG weighted average annual price rather than the Belpex-RLP-M this
+    contract settles on, and SpotMonthlyRates has nowhere to keep a fallback
+    anyway: the kind makes the ENTSO-E key mandatory, so the coefficients
+    always resolve.
+    """
+
+    def pair(slot: str) -> tuple[float | None, float | None]:
+        row = rows.get(slot)
+        if row is None:
+            return (None, None)
+        # The card states "Tariefformule in EUR/MWh excl BTW", so the
+        # coefficient is a dimensionless multiplier on a EUR/kWh mean (scaled
+        # by VAT, never by 10) and the offset goes EUR/MWh to EUR/kWh.
+        return (row[1] * vat, row[2] / 1000.0 * vat)
+
+    factor, base = pair("single")
+    assert factor is not None and base is not None  # _extract_rows guarantees it
+    peak_factor, peak_base = pair("peak")
+    offpeak_factor, offpeak_base = pair("offpeak")
+    # A bi-hourly meter needs both halves or neither: billing one band off the
+    # card and the other off the mono formula would split a meter across two
+    # contracts that were never quoted together.
+    if peak_factor is None or offpeak_factor is None:
+        peak_factor = peak_base = offpeak_factor = offpeak_base = None
+    night_factor, night_base = pair("exclusive_night")
+    return SpotMonthlyRates(
+        factor=factor,
+        base=base,
+        factor_peak=peak_factor,
+        base_peak=peak_base,
+        factor_offpeak=offpeak_factor,
+        base_offpeak=offpeak_base,
+        factor_exclusive_night=night_factor,
+        base_exclusive_night=night_base,
+        yearly_fixed_fee=fee,
+    )
+
+
 def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates:
     m = _INJECTION_RE.search(text)
     if m is None:
@@ -507,28 +601,44 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates:
         # a solar user 0 EUR/kWh.
         raise ExtractorError("Energy Knights: injection row not found")
     index = m.group(2)
-    if index.casefold() != contract.index.casefold():
-        # Both products settle the credit on the same per-slot index as the
-        # offtake leg, which the card states outright: the quarter values are
-        # quoted "voor zowel afname als injectie".
+    if index.casefold() != contract.credit_index.casefold():
         raise ExtractorError(
             f"Energy Knights {contract.contract_id}: injection is indexed on "
-            f"{index!r}, expected {contract.index!r}"
+            f"{index!r}, expected {contract.credit_index!r}"
         )
     coefficient = to_float(m.group(3))
     offset = parse_sign(m.group(4)) * to_float(m.group(5))
+    formula = (
+        f"{contract.credit_index} * {m.group(3)} {m.group(4)} {m.group(5)} EUR/MWh"
+    )
     # Residential injection is VAT-exempt and the card says so on this row
     # with footnote (1), so neither the coefficient nor the offset is grossed.
     # The offset is a deduction in EUR/MWh, and it is large enough that the
     # credit turns negative whenever the index falls below it, which the
     # August 2026 card does below 12 EUR/MWh.
+    if contract.kind == "dynamic":
+        # No `current`: the credit settles against each slot's own index, so
+        # the printed figure is an illustration rather than a rate to prefer.
+        return InjectionRates(factor=coefficient, base=offset / 1000.0, formula=formula)
+    # Essentia settles the credit on Belpex-SPP-M, the solar-weighted monthly
+    # mean, while its energy leg indexes on the load-weighted Belpex-RLP-M.
+    # spp_indexed is what stops the coordinator resolving this formula against
+    # the energy leg's mean: measured against Energy Knights' own published
+    # series, the SPP-weighted mean the integration already computes matches
+    # the settled index to 0,01%, while the two series themselves run far
+    # apart in a sunny month.
     #
-    # No `current`: the credit settles against each slot's own index, so the
-    # printed figure is an illustration rather than a rate to fall back on.
+    # `current` is kept even though the kind guarantees a key, because the
+    # SPP mean needs Synergrid's solar profile on top of the spots and the
+    # coordinator leaves the credit on the printed figure until that lands.
+    # It is a VREG-derived illustration, averaging 56% from the settled index,
+    # so it is the cold-start value and never the answer.
     return InjectionRates(
+        current=to_float(m.group(1)) / 100.0,
         factor=coefficient,
         base=offset / 1000.0,
-        formula=f"{contract.index} * {m.group(3)} {m.group(4)} {m.group(5)} EUR/MWh",
+        formula=formula,
+        spp_indexed=True,
     )
 
 
@@ -608,9 +718,11 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             regions=_FLANDERS_ONLY,
-            # spot_indexed_injection stays False: both products are dynamic,
-            # so the kind already collects the ENTSO-E key for the energy leg
-            # and the credit resolves on the same index.
+            # spot_indexed_injection stays False on all three. It exists to
+            # offer an OPTIONAL key to a contract whose kind does not collect
+            # one, and every kind here is in SPOT_PRICED_CONTRACT_KINDS, so
+            # the key is already mandatory: setting it would add a second,
+            # redundant key step to the flow.
         )
         for c in _CONTRACTS
     ),

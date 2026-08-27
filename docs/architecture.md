@@ -160,7 +160,7 @@ the `Contract`s it sells (`providers/base.py:64`), each carrying a `TariffKind`
 | `dynamic` | `factor x spot + base` per slot | `DynamicRates` (`providers/base.py:204`) | `quarter_hourly` picks the 15-minute vs hourly billing grid. |
 | `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/base.py:297`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
 | `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/base.py:345`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. |
-| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py:228`) | energie.be Variabel (Belpex_RLP) and the expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. Distinct from `variable`, which reads a rate the card already resolved: this kind is for cards that name the index but publish only a forecast of it. |
+| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py:228`) | energie.be Variabel and Energy Knights Essentia Online (both Belpex_RLP) and the expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. Distinct from `variable`, which reads a rate the card already resolved: this kind is for cards that name the index but publish only a forecast of it. |
 
 A `Contract` also carries the `regions` it is actually published in (some products 404 outside
 their home region) and `spot_indexed_injection` (`providers/base.py:95`), a flag for the one

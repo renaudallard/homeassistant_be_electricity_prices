@@ -6,7 +6,7 @@ Knights' monthly tariff cards, how the energy / injection / tax / DSO fields are
 parsed for the three supported products, and the land mines a future maintainer
 must know when Energy Knights changes its cards. The test module
 `tests/test_energyknights.py` is treated as ground truth throughout: it pins the
-expected parse output against four real fixtures.
+expected parse output against six real fixtures.
 
 Related reading:
 
@@ -25,21 +25,19 @@ Related reading:
 
 Energy Knights BV (Mechelen) sells residential electricity in Flanders only. It
 publishes eight products, four base and a "green" twin of each. The integration
-tracks two:
+tracks three:
 
 | Contract id | Card product | Kind | Settles on |
 | --- | --- | --- | --- |
 | `energyknights_agilior` | Agilior Online | `dynamic`, quarter-hourly | `Belpex_15`, the 15-minute day-ahead price |
 | `energyknights_agilis` | Agilis Online | `dynamic`, hourly | `Belpex_h`, the hourly day-ahead price |
+| `energyknights_essentia` | Essentia Online | `spot_monthly` | `Belpex-RLP-M` for offtake, `Belpex-SPP-M` for the credit |
 
-They are the same card on different settlement grids; the only thing separating them in
-the parsed snapshot is `DynamicRates.quarter_hourly`.
-
-Worth knowing when reading a bill: Essentia Online, the monthly-indexed product below, is
-the contractual fallback for both. Page 3 of every dynamic card says that consumption
-Fluvius cannot deliver quarter values for is billed "volgens het variabele tarief
-(Essentia Online) dat van toepassing is in dezelfde tariefmaand", and this integration
-prices no such month.
+Agilior and Agilis are the same card on different settlement grids; the only thing
+separating them in the parsed snapshot is `DynamicRates.quarter_hourly`. Essentia Online
+is also the contractual fallback for both: page 3 of every dynamic card says that
+consumption Fluvius cannot deliver quarter values for is billed "volgens het variabele
+tarief (Essentia Online) dat van toepassing is in dezelfde tariefmaand".
 
 **Optima Online is out of scope.** Its energy block was byte-identical to Agilior's in
 August 2026, but its card carries a `Service fee onbalans handelen (€/jaar)` whose
@@ -66,7 +64,7 @@ https://www.energyknights.be/website/getCurrentTariffchart/<slug>/nl
 ```
 
 The `/website/` prefix is part of the path. Without it the site answers 404. Slugs are
-`agilioronline` and `agilisonline`.
+`agilioronline`, `agilisonline` and `essentiaonline`.
 
 ```
 config (contract_id) -> fetch(): GET the product's card URL
@@ -164,11 +162,10 @@ models: one coefficient pair for every meter.
 No `current` is stored on the injection leg for these two. The credit settles against
 each slot's own index, so the printed figure is an illustration.
 
-### Essentia Online is not modelled
+### Essentia Online
 
-The monthly-indexed variable product parses cleanly and the model can carry its shape,
-but how to price it is unresolved, so it is left out. The card prints four registers with
-genuinely different coefficients:
+`SpotMonthlyRates`, from `kind="spot_monthly"`. The card prints four registers with
+genuinely different coefficients, and all of them are carried:
 
 ```
 Verbruik enkelvoudig      14,66   BelpexRLP * 1,03  + 7
@@ -177,10 +174,19 @@ Verbruik nacht            14,32   BelpexRLP * 0,997 + 8
 Verbruik exclusief nacht  14,32   BelpexRLP * 0,997 + 8
 ```
 
-The problem is the printed figure. It is computed from the VREG weighted average annual
-price, not the Belpex-RLP-M the contract settles on, and Energy Knights publishes both
-series at `https://www.energyknights.be/priceparameters`. Over the 26 months that table
-covers, for Fluvius Antwerpen:
+The dedicated exclusive-night pair is populated even though it happens to equal the
+off-peak one on every card so far: `pricing.py` routes it ahead of the bi-hourly band
+test, because that circuit is billed per meter rather than per hour of the day, and
+OCTA+ proves the two rows can diverge. A test asserting the four are all *different*
+would be asserting a coincidence. The bi-hourly pair is all-or-nothing: half of it would
+bill one band off the card and the other off the mono formula, splitting a meter across
+two quotes that were never sold together.
+
+**Nothing of the printed c€/kWh column is stored**, and that is the whole reason this
+product is `spot_monthly` rather than `variable`. The figure is computed from the VREG
+weighted average annual price, not the Belpex-RLP-M the contract settles on, and Energy
+Knights publishes both series at `https://www.energyknights.be/priceparameters`. Over the
+26 months that table covers, for Fluvius Antwerpen:
 
 | | offtake (RLP) | injection (SPP) |
 | --- | --- | --- |
@@ -188,40 +194,50 @@ covers, for Fluvius Antwerpen:
 | range | -24,7% to +56,2% | -56,1% to +242,9% |
 
 The VREG series barely moves (78 to 116 EUR/MWh over two years) while the settled index
-swings 55 to 131, which is why the gap is large and signed both ways.
+swings 55 to 131, which is why the gap is large and signed both ways. As an *estimator*
+of the month's settled index the printed figure is about 20% out on average and the
+previous month's settled value about 15%; the arithmetic mean of the ENTSO-E curve, which
+is what the coordinator resolves the coefficients against, is about 5% out and always in
+the same direction (below), the known RLP-weighting residual `README.md` already
+discloses for the EBEM / Eneco / Mega cohorts.
 
-That leaves two unattractive options. As `spot_monthly` the ENTSO-E key becomes mandatory
-and validated at setup (`const.py:243` puts the kind in `SPOT_PRICED_CONTRACT_KINDS` and
-`config_flow.py:506` routes it into a `vol.Required` key step), so the rate is always
-right but a user without a key cannot add the contract at all. As `variable` with
-`month_indexed` coefficients the entry can be created keyless, but it then bills the
-printed figure permanently: `_month_indexed_leg` (`cohort.py:284`) returns `None` without
-a key, and the only step that can hand a key to a `variable` contract is
-`injection_api_key`, which `config_flow.py:352` offers solely on the injection solar
-regime, so a customer without PV never gets one.
-
-The second is how all 45 `variable` contracts in the registry already behave, and it is
-tolerated because their cards print the previous month of the SAME index, a bounded lag.
-This card prints a different series, which is why the same trade-off does not obviously
-carry over.
-
-The parameter table is published in arrears, so it could not serve the live path either,
-but it is the reference if this is ever revisited.
+`spot_monthly` is in `SPOT_PRICED_CONTRACT_KINDS` (`const.py:243`), which routes the
+config flow through `async_step_api_key` (`config_flow.py:308`) with a `vol.Required`
+field validated live against ENTSO-E. So the coefficients always resolve, at the cost
+that a user without a key cannot add this contract at all: they reach a password field
+with no skip and the only exit is closing the dialog. That is exactly energie.be
+Variabel's behaviour, and it is the trade this measurement buys.
 
 ## Injection
 
-Both cards print `optie "solar" ... Belpex_15|h * 1 - 12`, and the credit settles on the
-same per-slot index as the offtake leg, which page 3 states outright: the quarter values
-are quoted *"voor zowel afname als injectie"*. So the leg carries `factor` and `base` and
-no `current` at all, the same shape EnergyVision Dynamisch and Bolt Dynamisch use. The
-printed 5,85 is an illustration computed from a monthly average, not a rate to fall back
-on.
+| Contract | Card row | Shape |
+| --- | --- | --- |
+| Agilior / Agilis | `optie "solar" ... Belpex_15\|h * 1 - 12` | `factor` + `base`, no flags, no `current` |
+| Essentia | `optie "solar" ... BelpexSPP * 0,98 - 10` | `factor` + `base` + `current`, `spp_indexed=True` |
 
-`Contract.spot_indexed_injection` stays `False` on both: the `dynamic` kind already
-collects the ENTSO-E key for the energy leg, so offering a second key step would be
-redundant. `scripts/live_check.py` needs no `_INJECTION_SHAPE` entry either, because the
-shape derived from the kind is `"present"`, which asserts `factor` and `base` exactly as
-`"spot"` would.
+The two dynamic cards settle the credit on the same per-slot index as their offtake leg,
+which page 3 states outright: the quarter values are quoted *"voor zowel afname als
+injectie"*. So that leg carries no `current` at all, the same shape EnergyVision
+Dynamisch and Bolt Dynamisch use, and the printed 5,85 is an illustration.
+
+Essentia settles it on Belpex-SPP-M, the solar-weighted monthly mean, while its energy
+leg indexes on the load-weighted Belpex-RLP-M. `spp_indexed` is what stops the
+coordinator resolving the formula against the energy leg's mean. This is the one place
+the integration is *exact*: measured against Energy Knights' own published series, the
+SPP-weighted mean the coordinator already computes from Synergrid's solar profile
+reproduces the settled `BELPEX_SPP_M` to 0,007% mean and 0,015% worst over 2026-01..07.
+Its `current` is kept anyway, because that profile has to land before the mean can be
+computed and the coordinator leaves the credit on the printed figure until it does; it is
+a VREG-derived illustration averaging 56% from the settled index, so it is the cold-start
+value and never the answer.
+
+`Contract.spot_indexed_injection` stays `False` on all three. It exists to offer an
+*optional* key to a contract whose kind does not collect one, and every kind here is
+spot-priced, so the key is already mandatory. `scripts/live_check.py` pins
+`energyknights_essentia` to the `"spp"` shape: an unlisted `spot_monthly` derives
+`"present"`, which asserts only that a leg exists, so the flag and both coefficients
+would go unchecked. The dynamic pair needs no entry, because `"present"` asserts `factor`
+and `base` exactly as `"spot"` would.
 
 The offset is a deduction large enough that the credit turns negative whenever the index
 falls below it - below 12 EUR/MWh on the August 2026 card, which happens at summer

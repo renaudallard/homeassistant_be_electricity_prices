@@ -36,6 +36,7 @@ from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
+    SpotMonthlyRates,
     SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.energyknights import (
@@ -46,6 +47,7 @@ from tests import fixture_text
 
 _AGILIOR = "energyknights_agilior"
 _AGILIS = "energyknights_agilis"
+_ESSENTIA = "energyknights_essentia"
 
 # 6% VAT, as the card header states it. Written out here so the expected
 # values below read as the card's own arithmetic rather than as magic numbers.
@@ -58,6 +60,17 @@ def _agilior_text() -> str:
 
 def _agilis_text() -> str:
     return fixture_text("energyknights_agilis_aug.pdf", layout=True)
+
+
+def _essentia_text() -> str:
+    return fixture_text("energyknights_essentia_aug.pdf", layout=True)
+
+
+def _essentia_jan_text() -> str:
+    """January 2026. Its mono coefficient is 1,04 against August's 1,03 and
+    its peak 1,12 against 1,045, which is what stops any of them being
+    pinned as constants."""
+    return fixture_text("energyknights_essentia_jan.pdf", layout=True)
 
 
 def _may_text() -> str:
@@ -80,6 +93,14 @@ def _agilis() -> SupplierSnapshot:
     return parse_snapshot(_AGILIS, _agilis_text(), "test://ek-agilis-aug")
 
 
+def _essentia() -> SupplierSnapshot:
+    return parse_snapshot(_ESSENTIA, _essentia_text(), "test://ek-essentia-aug")
+
+
+def _essentia_jan() -> SupplierSnapshot:
+    return parse_snapshot(_ESSENTIA, _essentia_jan_text(), "test://ek-essentia-jan")
+
+
 def _may() -> SupplierSnapshot:
     return parse_snapshot(_AGILIOR, _may_text(), "test://ek-agilior-may")
 
@@ -99,18 +120,25 @@ def test_agilior_energy_is_quarter_hourly() -> None:
     assert energy.quarter_hourly is True
 
 
-def _printed_cents(energy: DynamicRates, index_eur_per_mwh: float) -> float:
-    """Re-derive the card's printed c€/kWh from the coefficients we parsed.
+def _printed_cents_from(
+    factor: float | None, base: float | None, index_eur_per_mwh: float
+) -> float:
+    """Re-derive the card's printed c€/kWh from one parsed coefficient pair.
 
     Energy Knights rounds the ex-VAT cents to two decimals BEFORE applying
     the 6%, so the reconstruction rounds twice. A single multiply is one cent
     low on roughly a quarter of the cards, the May 2026 one included, and
     getting that wrong here would look like a VAT bug in the parser.
     """
-    coefficient = energy.factor / _VAT
-    offset_eur_per_mwh = energy.base / _VAT * 1000
+    assert factor is not None and base is not None
+    coefficient = factor / _VAT
+    offset_eur_per_mwh = base / _VAT * 1000
     ex_vat_cents = round((coefficient * index_eur_per_mwh + offset_eur_per_mwh) / 10, 2)
     return round(ex_vat_cents * _VAT, 2)
+
+
+def _printed_cents(energy: DynamicRates, index_eur_per_mwh: float) -> float:
+    return _printed_cents_from(energy.factor, energy.base, index_eur_per_mwh)
 
 
 def test_the_offtake_indicative_reconciles_with_its_own_formula() -> None:
@@ -185,6 +213,130 @@ def test_agilis_injection_matches_its_own_index() -> None:
     assert injection.base == pytest.approx(-12 / 1000)
 
 
+# ---- Essentia Online: the monthly-indexed card ------------------------------
+
+
+def test_essentia_energy_is_a_monthly_leg_with_every_register() -> None:
+    energy = _essentia().energy
+    assert isinstance(energy, SpotMonthlyRates)
+    # "BelpexRLP * 1,03 + 7" mono, "* 1,045 + 8" day, "* 0,997 + 8" for both
+    # night registers, quoted in EUR/MWh excluding VAT: the coefficient takes
+    # the gross-up and no rescale, the offset goes EUR/MWh to EUR/kWh.
+    assert energy.factor == pytest.approx(1.03 * _VAT)
+    assert energy.base == pytest.approx(7 / 1000 * _VAT)
+    assert energy.factor_peak == pytest.approx(1.045 * _VAT)
+    assert energy.base_peak == pytest.approx(8 / 1000 * _VAT)
+    assert energy.factor_offpeak == pytest.approx(0.997 * _VAT)
+    assert energy.base_offpeak == pytest.approx(8 / 1000 * _VAT)
+    assert energy.yearly_fixed_fee == 10.00
+    # No quarter_hourly on this kind: the rate is flat for the whole month.
+    assert not hasattr(energy, "quarter_hourly")
+
+
+def test_essentia_night_circuit_gets_its_own_pair() -> None:
+    """The dedicated exclusive-night pair is populated even though it happens
+    to equal the off-peak one on every card so far.
+
+    pricing routes it ahead of the bi-hourly band test, because that circuit
+    is billed per meter rather than per hour of the day, and OCTA+ proves the
+    two rows can diverge. Asserting the two are DIFFERENT would be asserting a
+    coincidence, so this pins that the pair is present and correct instead.
+    """
+    energy = _essentia().energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.factor_exclusive_night == pytest.approx(0.997 * _VAT)
+    assert energy.base_exclusive_night == pytest.approx(8 / 1000 * _VAT)
+    # The day band really is a different contract from the mono one, though.
+    assert energy.factor_peak != pytest.approx(energy.factor)
+
+
+def test_essentia_printed_rates_reconcile_with_their_own_formulas() -> None:
+    """Each register's printed c-EUR/kWh re-derives from the coefficients we
+    parsed and the VREG index the card names (2026-08 = 127,50 EUR/MWh).
+
+    Nothing of the printed column is stored - it is an estimate off a
+    different series than the contract settles on - so this is the only place
+    the VAT basis of the monthly leg is checked against the card itself.
+    """
+    energy = _essentia().energy
+    assert isinstance(energy, SpotMonthlyRates)
+    idx = 127.50
+    assert _printed_cents_from(energy.factor, energy.base, idx) == 14.66
+    assert _printed_cents_from(energy.factor_peak, energy.base_peak, idx) == 14.97
+    assert _printed_cents_from(energy.factor_offpeak, energy.base_offpeak, idx) == 14.32
+
+
+def test_essentia_injection_is_spp_indexed_and_vat_exempt() -> None:
+    injection = _essentia().injection
+    assert injection is not None
+    # "BelpexSPP * 0,98 - 10". The energy leg indexes on the load-weighted
+    # Belpex-RLP-M and the credit on the solar-weighted Belpex-SPP-M; the flag
+    # is what stops the coordinator resolving this formula against the energy
+    # leg's mean, which is a different series entirely.
+    assert injection.spp_indexed is True
+    assert injection.factor == pytest.approx(0.98)
+    assert injection.base == pytest.approx(-10 / 1000)
+    assert injection.vat_applies is False
+    # VAT-exempt, so the printed 5,91 only divides by 100 - and it reconciles
+    # against the card's own solar index with no gross-up at all.
+    assert injection.current == pytest.approx(0.0591)
+    assert round((70.54 * 0.98 - 10) / 10, 2) == 5.91
+
+
+def test_essentia_january_card_carries_its_own_coefficients() -> None:
+    """Nothing on these cards may be pinned. The mono coefficient moved 1,04
+    to 1,03 across 2026 and the peak one 1,12 to 1,045, so a bi-hourly entry
+    priced off August's card in January runs about 6% out on its peak hours.
+    """
+    energy = _essentia_jan().energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.factor == pytest.approx(1.04 * _VAT)
+    assert energy.factor_peak == pytest.approx(1.12 * _VAT)
+    assert energy.factor_offpeak == pytest.approx(0.997 * _VAT)
+    injection = _essentia_jan().injection
+    assert injection is not None
+    assert injection.factor == pytest.approx(0.86)
+    assert injection.base == pytest.approx(-5 / 1000)
+    assert _essentia_jan().publication_label == "2026-01"
+    assert _essentia_jan().valid_until == date(2026, 1, 31)
+
+
+def test_essentia_standing_charge_is_not_the_coin_rebate() -> None:
+    """Both rows print in EUR/jaar, and on the two dynamic cards both read
+    25,00. Essentia's abonnement is 10,00 against the same 25,00 rebate, so
+    this card is what proves the two regexes are not reading the same row.
+    """
+    assert _essentia().energy.yearly_fixed_fee == 10.00
+    assert "Spaar korting met munten" in _essentia_text()
+
+
+def test_essentia_injection_index_swap_raises() -> None:
+    """The credit settles on BelpexSPP while the energy leg indexes on
+    BelpexRLP. A card that printed the energy index on the solar row would
+    resolve the credit against the wrong monthly mean, which is a silent
+    mis-credit rather than a failure."""
+    text = _essentia_text().replace("BelpexSPP * 0,98 - 10", "BelpexRLP * 0,98 - 10")
+    with pytest.raises(ExtractorError, match="injection is indexed on 'BelpexRLP'"):
+        parse_snapshot(_ESSENTIA, text, "test://ek-swapped")
+
+
+def test_essentia_bi_hourly_pair_is_all_or_nothing() -> None:
+    """Half a bi-hourly pair would bill one band off the card and the other
+    off the mono formula, splitting a meter across two quotes that were never
+    sold together. Drop both instead and let the mono pair apply throughout.
+    """
+    text = _essentia_text().replace("Verbruik dag", "XXX")
+    energy = parse_snapshot(_ESSENTIA, text, "test://ek-half").energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.factor_peak is None
+    assert energy.base_peak is None
+    assert energy.factor_offpeak is None
+    assert energy.base_offpeak is None
+    # The mono pair and the night circuit are untouched.
+    assert energy.factor == pytest.approx(1.03 * _VAT)
+    assert energy.factor_exclusive_night == pytest.approx(0.997 * _VAT)
+
+
 # ---- the May card: nothing may be pinned as a constant ----------------------
 
 
@@ -248,8 +400,8 @@ def test_antwerpen_row_reads_the_digital_meter_columns() -> None:
 def test_every_product_reads_the_same_network_tariffs() -> None:
     # The net-tariff and tax blocks are regulated pass-through, identical on
     # every product's card, so a per-product drift would mean a parse bug.
-    assert _agilior().dsos == _agilis().dsos
-    assert _agilior().taxes == _agilis().taxes
+    assert _agilior().dsos == _agilis().dsos == _essentia().dsos
+    assert _agilior().taxes == _agilis().taxes == _essentia().taxes
 
 
 # ---- taxes ------------------------------------------------------------------
@@ -299,6 +451,8 @@ def test_optima_card_does_not_parse_as_agilior() -> None:
 def test_a_sibling_product_card_does_not_parse_as_agilior() -> None:
     with pytest.raises(ExtractorError, match="card is for 'Agilis Online'"):
         parse_snapshot(_AGILIOR, _agilis_text(), "test://ek-wrong")
+    with pytest.raises(ExtractorError, match="card is for 'Essentia Online'"):
+        parse_snapshot(_AGILIOR, _essentia_text(), "test://ek-wrong")
 
 
 def test_a_card_that_names_no_product_raises() -> None:
@@ -436,23 +590,35 @@ def test_energyknights_is_registered() -> None:
     assert "energyknights" in EXTRACTORS
     assert EXTRACTORS["energyknights"].label == "Energy Knights"
     contract_ids = {c.id for c in EXTRACTORS["energyknights"].contracts}
-    assert contract_ids == {_AGILIOR, _AGILIS}
+    assert contract_ids == {_AGILIOR, _AGILIS, _ESSENTIA}
 
 
 def test_contract_kinds_and_regions() -> None:
     contracts = {c.id: c for c in EXTRACTORS["energyknights"].contracts}
     assert contracts[_AGILIOR].kind == "dynamic"
     assert contracts[_AGILIS].kind == "dynamic"
+    # "spot_monthly", not "variable": the kind is what makes the ENTSO-E key
+    # mandatory, and this contract cannot be priced without one. Its printed
+    # rate comes off the VREG weighted average rather than the Belpex-RLP-M it
+    # settles on, and the two sit at least 10% apart in 19 of the 26 months
+    # Energy Knights publishes.
+    assert contracts[_ESSENTIA].kind == "spot_monthly"
     for contract in contracts.values():
         assert contract.regions == frozenset({"flanders"})
         assert contract.professional is False
 
 
-def test_neither_contract_asks_for_a_second_key() -> None:
-    # Both are dynamic, so the kind already collects the ENTSO-E key for the
-    # energy leg and the credit settles on the same index. Setting the flag
-    # would add a redundant step to the flow.
+def test_no_contract_asks_for_a_second_key() -> None:
+    # spot_indexed_injection exists to offer an OPTIONAL key to a contract
+    # whose kind does not collect one. Every kind here is spot-priced, so the
+    # key is already mandatory and setting the flag would add a redundant
+    # second key step to the flow.
+    from custom_components.be_electricity_prices.const import (
+        SPOT_PRICED_CONTRACT_KINDS,
+    )
+
     for contract in EXTRACTORS["energyknights"].contracts:
+        assert contract.kind in SPOT_PRICED_CONTRACT_KINDS
         assert contract.spot_indexed_injection is False
 
 
@@ -460,9 +626,9 @@ def test_discover_ids_cover_the_published_catalogue() -> None:
     # Every slug the listing publishes, including the four "green" twins and
     # Optima Online, so live_check flags only a genuinely new product.
     assert len(DISCOVER_IDS) == 8
-    modelled = {"agilioronline", "agilisonline"}
+    modelled = {"agilioronline", "agilisonline", "essentiaonline"}
     assert modelled < DISCOVER_IDS
-    # Essentia and Optima Online and the four green twins are published but
-    # not sold here; they are listed so discover() does not report them as new.
-    assert "essentiaonline" in DISCOVER_IDS
+    # Optima Online and the four green twins are published but not sold here;
+    # they are listed so discover() does not report them as new.
     assert "optimaonline" in DISCOVER_IDS
+    assert "agilioronlinegreen" in DISCOVER_IDS

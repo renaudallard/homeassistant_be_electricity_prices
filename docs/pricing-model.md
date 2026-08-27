@@ -596,7 +596,7 @@ carrying a branch that cannot run.
 | (a) Monthly indicative | `current` set | No | Ecofix Flexy, the fixed and variable cards that publish a realized rate |
 | (b) Hourly formula | `factor` + `base` set | Yes | Dynamic contracts (Engie, OCTA+, Luminus, Mega, TotalEnergies) |
 | (c) Spot-indexed on a static-energy card | `factor` + `base` set, energy NOT dynamic, and either `current is None` or the card flags `slot_indexed` | Yes | Cociter Variable, every Bolt fixed and variable card |
-| (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed` | A monthly MEAN, not an hourly spot | Eneco Fix/Flex, EBEM Variabel/B@sic+, DATS 24, EnergyVision fixed (both regions), energie.be |
+| (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed` | A monthly MEAN, not an hourly spot | Eneco Fix/Flex, EBEM Variabel/B@sic+, DATS 24, EnergyVision fixed (both regions), energie.be, Energy Knights Essentia |
 
 Shape (d) resolves through `_spp_injection_spot`, which is the one place that
 decides WHICH mean and is deliberately not allowed to answer with an hour's

@@ -967,10 +967,14 @@ async def _check_energiebe(
 async def _check_energyknights(
     session: aiohttp.ClientSession, energyknights: types.ModuleType
 ) -> None:
-    # Two products, two independently published PDFs. Each is served from its
-    # own product-keyed URL and carries its own coefficients, which drift every
-    # month, so both are fetched.
-    for cid in ("energyknights_agilior", "energyknights_agilis"):
+    # Three products, three independently published PDFs. Each is served from
+    # its own product-keyed URL and carries its own coefficients, which drift
+    # every month, so each one is fetched.
+    for cid in (
+        "energyknights_agilior",
+        "energyknights_agilis",
+        "energyknights_essentia",
+    ):
         await _check_flanders_card(session, energyknights, "energyknights", cid)
 
 
@@ -2143,6 +2147,12 @@ _INJECTION_SHAPE: dict[str, str] = {
     # the contract.
     "energyvision_fixed_3y": "spp",
     "energyvision_fixed_1y": "spp",
+    # Energy Knights Essentia settles the credit on Belpex-SPP-M while its
+    # energy leg indexes on the load-weighted Belpex-RLP-M. Pinned because an
+    # unlisted spot_monthly derives "present", which asserts only that a leg
+    # exists: the spp_indexed flag and both coefficients would go unchecked,
+    # and losing the flag resolves the credit against the wrong monthly mean.
+    "energyknights_essentia": "spp",
     # Every non-dynamic OCTA+ card prints "Le prix de votre injection est
     # indexe mensuellement sur base du parametre d'indexation de la Epex SPP"
     # and puts its c/kWh figure under a "Prix estimes" heading. The formula is
