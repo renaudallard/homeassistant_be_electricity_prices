@@ -99,11 +99,11 @@ relative to that package directory.
 | `providers/__init__.py` | The supplier registry: imports each module's `EXTRACTOR`, exposes the `EXTRACTORS` dict, and the `get()` / `all_extractors()` lookups. |
 | `providers/_pdf.py` | Shared PDF and HTTP helpers used by the extractors (text extraction, transient-error classification via `is_transient_fetch_error`, and column-alignment utilities). |
 
-In addition, fifteen scraped supplier modules live under `providers/`, each exposing a top-level
+In addition, sixteen scraped supplier modules live under `providers/`, each exposing a top-level
 `EXTRACTOR`: `bolt.py`, `cociter.py`, `dats24.py`, `ebem.py`, `ecofix.py`, `ecopower.py`,
-`eneco.py`, `energiebe.py`, `energyvision.py`, `engie.py`, `frank.py`, `luminus.py`, `mega.py`,
-`octaplus.py`, and `totalenergies.py`. Each has its own page under [providers/](providers/). A
-sixteenth module, `custom.py`, is the expert escape hatch: it is not scraped (its `fetch` is a
+`eneco.py`, `energiebe.py`, `energyknights.py`, `energyvision.py`, `engie.py`, `frank.py`,
+`luminus.py`, `mega.py`, `octaplus.py`, and `totalenergies.py`. Each has its own page under
+[providers/](providers/). A seventeenth module, `custom.py`, is the expert escape hatch: it is not scraped (its `fetch` is a
 stub) and the
 coordinator builds its snapshot from the config entry. The framework they implement is
 documented in [provider-framework.md](provider-framework.md).
@@ -122,7 +122,7 @@ region  (flanders | wallonia | brussels)                     const.py:43
   |     wallonia : AIEG | AIESH | ORES | RESA | REW
   |     brussels : Sibelga (only one)
   |
-  +-- supplier   (which extractor's EXTRACTOR is used)        providers/__init__.py:65
+  +-- supplier   (which extractor's EXTRACTOR is used)        providers/__init__.py:66
         |
         +-- contract  (a Contract with a TariffKind)          providers/base.py:53
         |     fixed | variable | dynamic | tou | tou_impact | spot_monthly
@@ -149,7 +149,7 @@ onto these canonical keys.
 
 ### Supplier and contract
 
-A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:962`). It declares
+A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:963`). It declares
 the `Contract`s it sells (`providers/base.py:64`), each carrying a `TariffKind`
 (`providers/base.py:53`):
 
@@ -158,9 +158,9 @@ the `Contract`s it sells (`providers/base.py:64`), each carrying a `TariffKind`
 | `fixed` | Constant EUR/kWh, optionally bi-hourly | `FixedRates` (`providers/base.py:99`) | Optional `exclusive_night` rate for a dedicated night circuit. |
 | `variable` | Current month's effective EUR/kWh (monthly-indexed) | `VariableRates` (`providers/base.py:121`) | May carry per-meter peak/offpeak; `formula` for diagnostics. |
 | `dynamic` | `factor x spot + base` per slot | `DynamicRates` (`providers/base.py:204`) | `quarter_hourly` picks the 15-minute vs hourly billing grid. |
-| `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/base.py:296`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
-| `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/base.py:344`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. |
-| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py:227`) | energie.be Variabel (Belpex_RLP) and the expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. Distinct from `variable`, which reads a rate the card already resolved: this kind is for cards that name the index but publish only a forecast of it. |
+| `tou` | 3 hour-of-day bands (peak / transition / offpeak) | `TimeOfUseRates` (`providers/base.py:297`) | Weekday schedule shared; `weekend_rule` varies per product. Needs a smart meter. |
+| `tou_impact` | Wallonia CWaPE 3-band (pic / medium / eco) | `ImpactRates` (`providers/base.py:345`) | CWaPE hour-of-day bands, every day; needs SMR3 and DSO Impact opt-in. |
+| `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py:228`) | energie.be Variabel (Belpex_RLP) and the expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. Distinct from `variable`, which reads a rate the card already resolved: this kind is for cards that name the index but publish only a forecast of it. |
 
 A `Contract` also carries the `regions` it is actually published in (some products 404 outside
 their home region) and `spot_indexed_injection` (`providers/base.py:95`), a flag for the one
@@ -244,7 +244,7 @@ Numbered walkthrough:
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:177`),
    so the coordinator must not read `runtime_data` during first refresh.
-5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:716`):
+5. `EXTRACTOR.fetch(session, contract, region)` returns a `SupplierSnapshot` (`providers/base.py:717`):
    the energy formula, a `DsoOverlay` per relevant DSO sub-area, the `TaxOverlay`, and optional
    `InjectionRates`.
 6. For a dynamic contract (or a spot-indexed-injection one) the coordinator fetches the ENTSO-E
@@ -300,12 +300,12 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:999`). It declares the
+   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:1000`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.
 2. Register it in `providers/__init__.py` by importing its `EXTRACTOR` and adding it to the
-   `EXTRACTORS` dict (`providers/__init__.py:65`). The `Eneco` module is the reference
+   `EXTRACTORS` dict (`providers/__init__.py:66`). The `Eneco` module is the reference
    implementation.
 3. Ship a fixture-driven unit test against a real card sample (`tests/fixtures/*.pdf`), and add
    the supplier to the weekly `scripts/live_check.py` harness that fetches every real card and

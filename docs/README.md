@@ -54,6 +54,7 @@ changes, look here" reference tied to the provider's tests and fixtures.
 | Ecopower | [providers/ecopower.md](providers/ecopower.md) |
 | Eneco | [providers/eneco.md](providers/eneco.md) |
 | energie.be | [providers/energiebe.md](providers/energiebe.md) |
+| Energy Knights | [providers/energyknights.md](providers/energyknights.md) |
 | EnergyVision | [providers/energyvision.md](providers/energyvision.md) |
 | Engie | [providers/engie.md](providers/engie.md) |
 | Frank Energie | [providers/frank.md](providers/frank.md) |

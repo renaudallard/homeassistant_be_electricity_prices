@@ -208,13 +208,14 @@ class DynamicRates:
     Belgian dynamic suppliers (Frank Energie by default, Luminus, Mega,
     TotalEnergies, Eneco) price per clock hour, so the integration
     aggregates ENTSO-E's 15-minute day-ahead curve to hourly. Engie,
-    Cociter, EBEM, Ecofix, OCTA+ and Ecopower (Dynamische Burgerstroom)
-    bill per quarter-hour (their cards multiply the 15-minute Belpex /
-    eSpot_15 / Epex 15 / EPEX DA spot); those extractors set this True so
-    the live price table, current / next-slot sensors and the
-    cheapest-window service keep the native 15-minute slots. YTD billing
-    stays hourly regardless: Home Assistant only retains hourly long-term
-    statistics.
+    Cociter, EBEM, Ecofix, OCTA+, Ecopower (Dynamische Burgerstroom),
+    Bolt (Dynamisch), energie.be, EnergyVision and Energy Knights
+    (Agilior Online) bill per quarter-hour (their cards multiply the
+    15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot); those
+    extractors set this True so the live price table, current /
+    next-slot sensors and the cheapest-window service keep the native
+    15-minute slots. YTD billing stays hourly regardless: Home Assistant
+    only retains hourly long-term statistics.
     """
 
     factor: float

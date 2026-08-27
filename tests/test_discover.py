@@ -49,6 +49,9 @@ from custom_components.be_electricity_prices.providers import ecofix as ecofix_m
 from custom_components.be_electricity_prices.providers import ecopower as ecopower_mod
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
 from custom_components.be_electricity_prices.providers import (
+    energyknights as energyknights_mod,
+)
+from custom_components.be_electricity_prices.providers import (
     energyvision as energyvision_mod,
 )
 from custom_components.be_electricity_prices.providers import engie as engie_mod
@@ -166,6 +169,15 @@ def test_energyvision_discover_matches_registry() -> None:
     # registry baseline is DISCOVER_IDS (the full catalogue, so only a
     # genuinely new code flags).
     assert discovered == set(energyvision_mod.DISCOVER_IDS)
+
+
+def test_energyknights_discover_matches_registry() -> None:
+    session = _FakeSession(_read("energyknights.html"))
+    discovered = _run(energyknights_mod.discover(session))
+    # The listing carries all eight products; only three are modelled, so the
+    # baseline is DISCOVER_IDS (the full catalogue) and a genuinely new
+    # product is the only thing that flags.
+    assert discovered == set(energyknights_mod.DISCOVER_IDS)
 
 
 def test_bolt_discover_matches_registry() -> None:
@@ -449,3 +461,6 @@ def test_discover_returns_empty_on_http_error() -> None:
     assert _run(ebem_mod.discover(session)) == set()
     # Frank queries the Sanity CMS; a 5xx raises ExtractorError -> set().
     assert _run(frank_mod.discover(session)) == set()
+    # Energy Knights and EnergyVision both scrape a listing page.
+    assert _run(energyknights_mod.discover(session)) == set()
+    assert _run(energyvision_mod.discover(session)) == set()

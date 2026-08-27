@@ -85,6 +85,7 @@ _SUPPLIERS: tuple[str, ...] = (
     "frank",
     "energiebe",
     "energyvision",
+    "energyknights",
 )
 
 
@@ -963,6 +964,16 @@ async def _check_energiebe(
         await _check_flanders_card(session, energiebe, "energiebe", cid)
 
 
+async def _check_energyknights(
+    session: aiohttp.ClientSession, energyknights: types.ModuleType
+) -> None:
+    # Two products, two independently published PDFs. Each is served from its
+    # own product-keyed URL and carries its own coefficients, which drift every
+    # month, so both are fetched.
+    for cid in ("energyknights_agilior", "energyknights_agilis"):
+        await _check_flanders_card(session, energyknights, "energyknights", cid)
+
+
 async def _check_energyvision(
     session: aiohttp.ClientSession, energyvision: types.ModuleType
 ) -> None:
@@ -1226,6 +1237,7 @@ async def _check_catalogs(
         "dats24": {modules["dats24"]._CONTRACT_ID},
         "frank": {t[0] for t in modules["frank"]._TIERS},
         "energyvision": set(modules["energyvision"].DISCOVER_IDS),
+        "energyknights": set(modules["energyknights"].DISCOVER_IDS),
     }
     for name, mod in modules.items():
         discover = getattr(mod, "discover", None)
@@ -2630,6 +2642,7 @@ _CHECKS_BY_SUPPLIER: dict[
     "frank": _check_frank,
     "energiebe": _check_energiebe,
     "energyvision": _check_energyvision,
+    "energyknights": _check_energyknights,
 }
 assert set(_CHECKS_BY_SUPPLIER) == set(_SUPPLIERS), (
     "live check supplier list and check registry disagree: "
