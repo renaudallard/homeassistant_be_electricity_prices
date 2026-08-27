@@ -4435,6 +4435,77 @@ def test_manual_energy_leg_spot_monthly() -> None:
     )
 
 
+def test_manual_energy_leg_spot_monthly_keeps_what_the_step_cannot_collect() -> None:
+    """The step offers a factor, a base and a fee, and nothing else.
+
+    This leg is rarely the bare pair the two scraped spot-monthly cards
+    produce: _cohort_energy_from_archived converts a month-indexed variable or
+    TOU card into it and fills in the bi-hourly bands, the night circuit, the
+    TOU schedule and the cohort's ceiling. Rebuilding it from the typed values
+    alone dropped all of that. On a Mega Flex bi-hourly cohort, typing only a
+    yearly fee billed peak hours at the mono coefficient (1,1095 against
+    1,3275, 16% low), off-peak 18% high, and discarded the Mega Cap ceiling.
+    """
+    card = SpotMonthlyRates(
+        factor=1.1095,
+        base=0.0036,
+        factor_peak=1.3275,
+        base_peak=0.0036,
+        factor_offpeak=0.94,
+        base_offpeak=0.0036,
+        factor_exclusive_night=1.061,
+        base_exclusive_night=0.0036,
+        ceiling_single=0.1623,
+        ceiling_peak=0.1665,
+        yearly_fixed_fee=100.0,
+        yearly_fixed_fee_exclusive_night=55.0,
+    )
+    entry = _entry(contract="test", **{CONF_MANUAL_YEARLY_FEE: 120.0})
+    assert _manual_energy_leg(entry, card) == replace(card, yearly_fixed_fee=120.0)
+
+
+def test_manual_energy_leg_spot_monthly_typed_pair_replaces_only_the_mono_pair() -> (
+    None
+):
+    """A typed box replaces its own field and nothing else, as on the fixed
+    branch: the bands the step never asked about keep the card's values."""
+    card = SpotMonthlyRates(
+        factor=1.1095,
+        base=0.0036,
+        factor_peak=1.3275,
+        base_peak=0.0036,
+        ceiling_single=0.1623,
+        yearly_fixed_fee=100.0,
+    )
+    entry = _entry(
+        contract="test",
+        **{CONF_MANUAL_ENERGY_FACTOR: 1.05, CONF_MANUAL_ENERGY_BASE: 0.002},
+    )
+    assert _manual_energy_leg(entry, card) == replace(card, factor=1.05, base=0.002)
+
+
+def test_manual_energy_leg_spot_monthly_keeps_a_tou_schedule() -> None:
+    """A SmartFlex-shaped cohort carries a third band and a weekend rule.
+
+    Losing weekend_rule silently re-bands every weekend hour, and losing the
+    transition pair bills the middle band at the peak coefficient.
+    """
+    card = SpotMonthlyRates(
+        factor=1.2,
+        base=0.003,
+        factor_peak=1.2,
+        base_peak=0.003,
+        factor_transition=1.0,
+        base_transition=0.003,
+        factor_offpeak=0.8,
+        base_offpeak=0.003,
+        weekend_rule="smartflex_seasonal",
+        yearly_fixed_fee=90.0,
+    )
+    entry = _entry(contract="test", **{CONF_MANUAL_YEARLY_FEE: 99.0})
+    assert _manual_energy_leg(entry, card) == replace(card, yearly_fixed_fee=99.0)
+
+
 def test_manual_energy_leg_spot_monthly_blank_step_is_no_override() -> None:
     """No box filled means "price off the card", not "price off zero"."""
     current = make_snapshot(energy=SpotMonthlyRates(factor=1.19, base=0.009))

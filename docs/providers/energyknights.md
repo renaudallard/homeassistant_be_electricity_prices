@@ -195,7 +195,7 @@ and validated at setup (`const.py:243` puts the kind in `SPOT_PRICED_CONTRACT_KI
 `config_flow.py:506` routes it into a `vol.Required` key step), so the rate is always
 right but a user without a key cannot add the contract at all. As `variable` with
 `month_indexed` coefficients the entry can be created keyless, but it then bills the
-printed figure permanently: `_month_indexed_leg` (`cohort.py:274`) returns `None` without
+printed figure permanently: `_month_indexed_leg` (`cohort.py:284`) returns `None` without
 a key, and the only step that can hand a key to a `variable` contract is
 `injection_api_key`, which `config_flow.py:352` offers solely on the injection solar
 regime, so a customer without PV never gets one.

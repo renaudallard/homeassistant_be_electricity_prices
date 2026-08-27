@@ -168,11 +168,21 @@ def _manual_energy_leg(
         base = entry.data.get(CONF_MANUAL_ENERGY_BASE)
         if factor is None and base is None and fee_raw is None:
             return None
-        return SpotMonthlyRates(
+        # Everything the step cannot collect is carried through, the same rule
+        # the fixed branch below follows: a typed box replaces its own field
+        # and nothing else. Rebuilding from the two typed values alone dropped
+        # the rest, and this leg is rarely the bare pair the two shipped
+        # spot-monthly cards produce - _cohort_energy_from_archived converts a
+        # month-indexed variable or TOU card into it and fills in the bands,
+        # the night circuit, the TOU schedule and the cohort's ceiling. On a
+        # Mega Flex bi-hourly cohort, typing only a yearly fee billed peak
+        # hours at the mono coefficient (1,1095 against 1,3275, 16% low),
+        # off-peak 18% high, and silently discarded the Mega Cap ceiling.
+        return replace(
+            energy,
             factor=float(factor) if factor is not None else energy.factor,
             base=float(base) if base is not None else energy.base,
             yearly_fixed_fee=fee,
-            yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
         )
     if isinstance(energy, FixedRates):
         single = entry.data.get(CONF_MANUAL_ENERGY_SINGLE)
