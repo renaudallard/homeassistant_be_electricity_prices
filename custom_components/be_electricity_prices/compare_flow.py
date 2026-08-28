@@ -1215,11 +1215,12 @@ class _CompareStepsMixin(OptionsFlow):
         # compare would show the dynamic side missing its entire energy bill.
         # The simple per-kwh model below prices both sides off the same
         # current per-kwh rate and proration, so the delta stays honest.
-        # spot_monthly is in that set for the same reason as dynamic. It
-        # cannot be reached today (no spot-monthly supplier keeps an archive,
-        # so the fetch_for_month test already fails), but energie.be does
-        # publish one and wiring it up is a live proposal - which would arm
-        # this the moment it lands.
+        # spot_monthly is in that set for the same reason as dynamic, and it
+        # is what holds archive_capable False for Energy Knights Essentia:
+        # that contract DOES keep an archive now, so the fetch_for_month test
+        # alone no longer excludes it and the kind test is the one doing the
+        # work. Quoting it through the historical replay would need the same
+        # spot cache the dynamic side needs and does not have here.
         archive_capable = (
             current_extractor.fetch_for_month is not None
             and other_extractor.fetch_for_month is not None

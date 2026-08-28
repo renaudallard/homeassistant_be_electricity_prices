@@ -48,11 +48,8 @@ customer's own hardware, and shipping the product would price it at zero and sil
 under-bill whenever Energy Knights re-prints it.
 
 **The four green twins are catalogued but not sold here.** The difference is one extra
-row, `Groene stroom (c€/kWh) 0,32`, with no formula, stable at 0,32 on every month and
-product tested. Adding them is a four-line parser hook plus three contracts; it doubles
-the catalogue for a flat adder nobody has asked for. `DISCOVER_IDS`
-(`providers/energyknights.py:204`) lists all eight slugs so `discover()` only flags a
-genuinely new product.
+row, `Groene stroom (c€/kWh)`, with no formula. `DISCOVER_IDS` lists all eight slugs so
+`discover()` only flags a genuinely new product.
 
 ## Fetching
 
@@ -373,20 +370,45 @@ Vilvoorde)
 never referenced from any row on pages 1 or 2, and page 3 says of the reminder fees that
 `Op deze bedragen is geen BTW verschuldigd`. No 21% component is modelled from it.
 
-## If an archive is ever added
+## The archive
 
-`getHistoricalTariffchart/<YYYY-MM>/<slug>/nl` is a real `fetch_for_month` on the
-`providers/ebem.py:153` shape, but three things have to be right:
+`fetch_for_month` reads `getHistoricalTariffchart/<YYYY-MM>/<slug>/nl`, so a past month
+bills at the card Energy Knights actually published for it rather than at today's. Three
+things make that work, and each of them is a way to get it wrong.
 
-1. **The slug changes at 2025-12/2026-01, with no overlap and no gap.** Before that,
-   Agilior is `dynamic15`, Agilis is `dynamic`, Essentia is `variable`.
-2. **The product-name guard needs the legacy names, including a spelling change.** The
-   2025-09 card says `Elektriciteit Dynamisch 15`, with a space; 2025-10 onward say
-   `Dynamisch15`.
-3. **The horizon must stop at 2025-01.** The 2024 cards print the pre-merger ten Fluvius
-   areas (Gaselwest, Iverlek, Pbe, Sibelgas, none of which exist in `const.py`) and omit
-   Halle-Vilvoorde and Zenne-Dijle, two live DSO keys. The 2024-06 card prints `0,05` and
-   `0,03` under a `(c€/kWh)` header, which are EUR/kWh values in a cents column, and its
-   two databeheer columns differ (13,95 SMR1 against 15,14 SMR3) where later cards have
-   them equal. Making those months parse would leave the overlays wrong in silence, which
-   is worse than the loud failure it replaced.
+**The slug and the product name both change at 2026-01.** Energy Knights renamed all four
+products at the turn of the year, so an archived month resolves under a predecessor:
+
+| Contract | 2026-01 onward | before that | archive reaches back to |
+| --- | --- | --- | --- |
+| Agilior | `agilioronline` / "Agilior Online" | `dynamic15` / "Elektriciteit Dynamisch 15" or "Dynamisch15" | 2025-09 |
+| Agilis | `agilisonline` / "Agilis Online" | `dynamic` / "Elektriciteit Dynamisch" | 2025-01 |
+| Essentia | `essentiaonline` / "Essentia Online" | `variable` / "Elektriciteit Variabel" | 2025-01 |
+
+The handover is clean, measured against the live site: no month resolves under both
+slugs, and none is missing between them. Agilior stops at 2025-09 because `dynamic15`
+did not exist before that, not because of the horizon.
+
+**"Elektriciteit Dynamisch" is a prefix of "Elektriciteit Dynamisch15".** The product
+guard compares the whole captured name, so it separates them; a prefix or a substring
+match would hand every archived Agilis month the quarter-hourly card, and since the two
+products carry the same formula against different grids, that is a wrong bill rather than
+a failure. September 2025 spells it with a space and every later month without one, so
+Agilior accepts both.
+
+**The horizon is 2025-01 and it is not negotiable.** The 2024 cards print the pre-merger
+ten Fluvius areas (Gaselwest, Iverlek, Pbe, Sibelgas, none of which exist in `const.py`)
+and omit Halle-Vilvoorde and Zenne-Dijle, two live DSO keys; 2024-06 prints `0,05` and
+`0,03` under a `(c€/kWh)` header, which are EUR/kWh values in a cents column; and the two
+databeheer columns differ there (13,95 SMR1 against 15,14 SMR3) where every later card
+has them equal. Their ENERGY block parses perfectly well, which is exactly the danger, so
+the month is refused before any fetch rather than left to the DSO table failing.
+
+Everything else is the shape `providers/ebem.py:153` already uses. An out-of-range month
+or a retired slug answers 302 to the marketing homepage, which aiohttp follows, so the
+payload is a few hundred bytes of HTML rather than an error status; nothing here inspects
+it, because `_fetch_validated_pdf_bytes` rejects it on the magic bytes. Every failure
+returns `None` rather than raising, since this runs inside the year-to-date walk and one
+unpublished month must not take the whole year down. The result goes through
+`archive_validity_check`, and because these cards carry their own "geldig van ... tot en
+met ..." range the authoritative tier always applies.

@@ -647,3 +647,113 @@ def test_discover_ids_cover_the_published_catalogue() -> None:
     # they are listed so discover() does not report them as new.
     assert "optimaonline" in DISCOVER_IDS
     assert "agilioronlinegreen" in DISCOVER_IDS
+
+
+# ---- the archive -------------------------------------------------------------
+
+
+def _legacy(fixture: str, contract: str) -> SupplierSnapshot:
+    """Parse an archived card the way fetch_for_month does: through the
+    product names that month was published under."""
+    from custom_components.be_electricity_prices.providers.energyknights import (
+        _CONTRACTS_BY_ID,
+    )
+
+    products = _CONTRACTS_BY_ID[contract].legacy_products
+    return parse_snapshot(
+        contract, fixture_text(fixture, layout=True), "test://", products
+    )
+
+
+def test_the_legacy_slug_and_names_switch_at_2026_01() -> None:
+    """Energy Knights renamed all four products at the turn of 2026, so an
+    archived month resolves under a different slug AND a different name than
+    the current card. The handover is clean: no month resolves under both.
+    """
+    from custom_components.be_electricity_prices.providers.energyknights import (
+        _CONTRACTS_BY_ID,
+    )
+
+    agilior = _CONTRACTS_BY_ID[_AGILIOR]
+    assert agilior.slug_for(date(2025, 12, 1)) == "dynamic15"
+    assert agilior.slug_for(date(2026, 1, 1)) == "agilioronline"
+    assert agilior.products_for(date(2026, 1, 1)) == ("Agilior Online",)
+    # 2025-09 spells it with a space and every later month without one.
+    assert agilior.products_for(date(2025, 12, 1)) == (
+        "Elektriciteit Dynamisch 15",
+        "Elektriciteit Dynamisch15",
+    )
+    assert _CONTRACTS_BY_ID[_AGILIS].slug_for(date(2025, 12, 1)) == "dynamic"
+    assert _CONTRACTS_BY_ID[_ESSENTIA].slug_for(date(2025, 12, 1)) == "variable"
+
+
+def test_an_archived_card_parses_under_its_old_name() -> None:
+    agilior = _legacy("energyknights_agilior_sep25.pdf", _AGILIOR)
+    assert agilior.publication_label == "2025-09"
+    assert agilior.valid_until == date(2025, 9, 30)
+    assert isinstance(agilior.energy, DynamicRates)
+    assert agilior.energy.quarter_hourly is True
+    assert agilior.energy.yearly_fixed_fee == 15.00
+    assert set(agilior.dsos) == set(FLUVIUS_KEYS)
+
+    essentia = _legacy("energyknights_essentia_dec25.pdf", _ESSENTIA)
+    assert essentia.publication_label == "2025-12"
+    dec = essentia.energy
+    aug = _essentia().energy
+    assert isinstance(dec, SpotMonthlyRates)
+    assert isinstance(aug, SpotMonthlyRates)
+    # December still printed all four registers, with its own coefficients.
+    assert dec.factor_peak is not None
+    assert dec.factor != pytest.approx(aug.factor)
+
+
+def test_the_two_dynamic_products_do_not_share_an_archived_card() -> None:
+    """ "Elektriciteit Dynamisch" is a PREFIX of "Elektriciteit Dynamisch15".
+
+    A prefix match would hand every archived Agilis month the quarter-hourly
+    card, and the two products price the same formula against different grids,
+    so the swap is a wrong bill rather than a failure.
+    """
+    agilis_card = fixture_text("energyknights_agilis_dec25.pdf", layout=True)
+    agilior_card = fixture_text("energyknights_agilior_sep25.pdf", layout=True)
+    from custom_components.be_electricity_prices.providers.energyknights import (
+        _CONTRACTS_BY_ID,
+    )
+
+    agilis_names = _CONTRACTS_BY_ID[_AGILIS].legacy_products
+    agilior_names = _CONTRACTS_BY_ID[_AGILIOR].legacy_products
+    # Each parses under its own names.
+    hourly = parse_snapshot(_AGILIS, agilis_card, "t", agilis_names).energy
+    quarterly = parse_snapshot(_AGILIOR, agilior_card, "t", agilior_names).energy
+    assert isinstance(hourly, DynamicRates) and hourly.quarter_hourly is False
+    assert isinstance(quarterly, DynamicRates) and quarterly.quarter_hourly is True
+    # And rejects the other's card.
+    # This fixture is the September card, the one month spelled with a space.
+    with pytest.raises(
+        ExtractorError, match="card is for 'Elektriciteit Dynamisch 15'"
+    ):
+        parse_snapshot(_AGILIS, agilior_card, "t", agilis_names)
+    with pytest.raises(ExtractorError, match="card is for 'Elektriciteit Dynamisch'"):
+        parse_snapshot(_AGILIOR, agilis_card, "t", agilior_names)
+
+
+def test_the_archive_horizon_refuses_2024() -> None:
+    """The 2024 cards print the PRE-MERGER ten Fluvius areas and omit
+    Halle-Vilvoorde and Zenne-Dijle, and 2024-06 prints EUR/kWh values under a
+    c-EUR/kWh header. Their energy block parses perfectly well, so the refusal
+    has to be explicit rather than left to the DSO table failing.
+    """
+    from custom_components.be_electricity_prices.providers.energyknights import (
+        _ARCHIVE_HORIZON,
+        _CONTRACTS_BY_ID,
+    )
+
+    assert _ARCHIVE_HORIZON == date(2025, 1, 1)
+    assert _CONTRACTS_BY_ID[_AGILIS].archive_from == _ARCHIVE_HORIZON
+    assert _CONTRACTS_BY_ID[_ESSENTIA].archive_from == _ARCHIVE_HORIZON
+    # Agilior's predecessor did not exist before September 2025.
+    assert _CONTRACTS_BY_ID[_AGILIOR].archive_from == date(2025, 9, 1)
+
+
+def test_fetch_for_month_is_registered() -> None:
+    assert EXTRACTORS["energyknights"].fetch_for_month is not None

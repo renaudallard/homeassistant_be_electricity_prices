@@ -273,9 +273,9 @@ def _cohort_energy_from_archived(
         # SpotMonthlyRates is already the right shape to carry forward: the
         # archived card's coefficients are exactly what the cohort signed, and
         # the leg re-resolves against the CURRENT month's mean every tick, so
-        # nothing pins the signing-month index. No spot-monthly supplier keeps
-        # an archive yet (energie.be publishes one that is not wired up), which
-        # is the only reason this has never been reachable.
+        # nothing pins the signing-month index. Reachable since Energy Knights
+        # Essentia, the first spot-monthly contract with a wired-up archive;
+        # before that no supplier of this kind kept one.
         return energy
     if isinstance(energy, VariableRates) and energy.formula_factor is not None:
         return SpotMonthlyRates(

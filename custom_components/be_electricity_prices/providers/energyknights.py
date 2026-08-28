@@ -87,6 +87,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 
 import aiohttp
 
@@ -103,6 +104,7 @@ from ..const import (
 )
 from ._pdf import (
     NUM_NO_THOUSANDS,
+    archive_validity_check,
     SIGN_CHARS,
     fetch_pdf_text_layout,
     fetch_text,
@@ -129,6 +131,7 @@ from .base import (
 
 _SITE_BASE = "https://www.energyknights.be"
 _CARD_URL = _SITE_BASE + "/website/getCurrentTariffchart/{slug}/{lang}"
+_ARCHIVE_URL = _SITE_BASE + "/website/getHistoricalTariffchart/{month}/{slug}/{lang}"
 _LISTING_URL = f"{_SITE_BASE}/tariffcharts"
 _FLANDERS_ONLY = frozenset({REGION_FLANDERS})
 
@@ -137,6 +140,19 @@ _FLANDERS_ONLY = frozenset({REGION_FLANDERS})
 # line: the French card wraps the long area names ("Fluvius (Halle-" then the
 # figures then "Vilvoorde)"), which splits the label away from its columns.
 _LANG = "nl"
+
+# Energy Knights renamed all four products at the turn of 2026. From this month
+# the current slugs serve the archive; before it, the predecessors do. The
+# handover is clean: no month resolves under both.
+_RENAMED_FROM = date(2026, 1, 1)
+
+# No month before this can be billed. The 2024 cards print the PRE-MERGER ten
+# Fluvius areas (Gaselwest, Iverlek, Pbe, Sibelgas) and omit Halle-Vilvoorde
+# and Zenne-Dijle, two live DSO keys, and 2024-06 prints EUR/kWh values under a
+# c€/kWh column header. Their ENERGY block would parse perfectly well, so the
+# refusal has to be explicit: an old card whose overlays land wrong bills a
+# whole month at the wrong network cost, which is worse than not billing it.
+_ARCHIVE_HORIZON = date(2025, 1, 1)
 
 
 @dataclass(frozen=True)
@@ -168,10 +184,24 @@ class _ContractDef:
     # means "same as the offtake index".
     injection_index: str = ""
     quarter_hourly: bool = False
+    # The slug and product names this product was published under before
+    # Energy Knights renamed everything at the turn of 2026, and the first
+    # month the archive can be billed from. Agilior reaches back only to
+    # 2025-09 because its predecessor did not exist before that; the other
+    # two stop at the horizon below.
+    legacy_slug: str = ""
+    legacy_products: tuple[str, ...] = ()
+    archive_from: date = _ARCHIVE_HORIZON
 
     @property
     def credit_index(self) -> str:
         return self.injection_index or self.index
+
+    def slug_for(self, year_month: date) -> str:
+        return self.slug if year_month >= _RENAMED_FROM else self.legacy_slug
+
+    def products_for(self, year_month: date) -> tuple[str, ...]:
+        return (self.product,) if year_month >= _RENAMED_FROM else self.legacy_products
 
 
 _CONTRACTS: tuple[_ContractDef, ...] = (
@@ -183,6 +213,11 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "Agilior Online",
         "Belpex_15",
         quarter_hourly=True,
+        legacy_slug="dynamic15",
+        # 2025-09 spells it with a space and every later month without one.
+        legacy_products=("Elektriciteit Dynamisch 15", "Elektriciteit Dynamisch15"),
+        # The predecessor's first published month; "dynamic15" 302s before it.
+        archive_from=date(2025, 9, 1),
     ),
     _ContractDef(
         "energyknights_agilis",
@@ -191,6 +226,10 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "agilisonline",
         "Agilis Online",
         "Belpex_h",
+        legacy_slug="dynamic",
+        # Prefix of Agilior's legacy name, so the match has to stay exact:
+        # "Elektriciteit Dynamisch" must not accept a "Dynamisch15" card.
+        legacy_products=("Elektriciteit Dynamisch",),
     ),
     # "spot_monthly", not "variable". The kind is what decides whether the
     # ENTSO-E key is mandatory, and this contract cannot be priced without
@@ -211,6 +250,8 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "Essentia Online",
         "BelpexRLP",
         injection_index="BelpexSPP",
+        legacy_slug="variable",
+        legacy_products=("Elektriciteit Variabel",),
     ),
 )
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
@@ -230,6 +271,7 @@ DISCOVER_IDS: frozenset[str] = frozenset(
         "optimaonlinegreen",
     }
 )
+
 
 # Accept both decimal separators: a dot-decimal re-render must not truncate a
 # mandatory value to its integer part (matches the sibling extractors).
@@ -396,6 +438,48 @@ async def probe(
     )
 
 
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # noqa: ARG001 - Energy Knights only sells in Flanders.
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """The card Energy Knights published for one past month, or ``None``.
+
+    ``None`` means "no archive here, bill the proxy": before the contract's own
+    horizon, or when the month does not resolve, or when the served card fails
+    the validity cross-check. Every failure is swallowed rather than raised,
+    because this runs inside the year-to-date walk and one unpublished month
+    must not take the whole year down.
+
+    An out-of-range month or a retired slug answers 302 to the marketing
+    homepage, which aiohttp follows, so the payload is 480 bytes of HTML rather
+    than an error status. Nothing here inspects it: _fetch_validated_pdf_bytes
+    rejects it on the magic bytes and raises, and that raise lands in the
+    except below.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None:
+        return None
+    first = date(year_month.year, year_month.month, 1)
+    if first < contract.archive_from:
+        return None
+    url = _ARCHIVE_URL.format(
+        month=f"{first.year:04d}-{first.month:02d}",
+        slug=contract.slug_for(first),
+        lang=_LANG,
+    )
+    try:
+        text = await fetch_pdf_text_layout(session, url)
+        snap = parse_snapshot(contract_id, text, url, contract.products_for(first))
+    except ExtractorError:
+        return None
+    # The card carries its own "geldig van ... tot en met ..." range, so the
+    # authoritative tier of the cross-check always applies and the textual
+    # fallback is never needed.
+    return archive_validity_check(snap, text, first)
+
+
 async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Product slugs on the tariff card listing, diffed against DISCOVER_IDS
     so live_check can flag a new product."""
@@ -417,11 +501,15 @@ def parse_snapshot(
     contract_id: str,
     text: str,
     source_url: str,
+    products: tuple[str, ...] | None = None,
 ) -> SupplierSnapshot:
+    """Parse one card. ``products`` overrides the names the intro line may
+    carry, which an archived month needs: these products were called something
+    else before 2026."""
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None:
         raise ExtractorError(f"unknown Energy Knights contract {contract_id!r}")
-    _require_product(text, contract)
+    _require_product(text, contract, products or (contract.product,))
     vat = vat_multiplier(text, _VAT_RE)
     rows = _extract_rows(text, contract)
     fee = _yearly_fee(text)
@@ -443,20 +531,28 @@ def parse_snapshot(
     )
 
 
-def _require_product(text: str, contract: _ContractDef) -> None:
+def _require_product(
+    text: str, contract: _ContractDef, accepted: tuple[str, ...]
+) -> None:
     """Fail unless the card names the product we asked for.
 
     A slug that stops resolving would otherwise be answered with whichever
     card the site decides to serve, and two of these products print the same
     formula, so the wrong card is a wrong price rather than a missing one.
+
+    The comparison stays EXACT for the same reason: Agilis Online's
+    predecessor was "Elektriciteit Dynamisch" and Agilior's was "Elektriciteit
+    Dynamisch15", so a prefix match would hand every archived Agilis month the
+    quarter-hourly card.
     """
     m = _PRODUCT_RE.search(text)
     if m is None:
         raise ExtractorError("Energy Knights: card does not name its product")
     served = " ".join(m.group(1).split())
-    if served.casefold() != contract.product.casefold():
+    if served.casefold() not in {name.casefold() for name in accepted}:
         raise ExtractorError(
-            f"Energy Knights: asked for {contract.product!r}, card is for {served!r}"
+            f"Energy Knights {contract.contract_id}: asked for "
+            f"{' / '.join(accepted)!r}, card is for {served!r}"
         )
 
 
@@ -732,6 +828,7 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     probe=probe,
+    fetch_for_month=fetch_for_month,
 )
 
 
@@ -740,6 +837,7 @@ __all__ = [
     "EXTRACTOR",
     "discover",
     "fetch",
+    "fetch_for_month",
     "parse_snapshot",
     "probe",
 ]
