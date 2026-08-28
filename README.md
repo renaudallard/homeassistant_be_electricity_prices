@@ -848,12 +848,11 @@ the supplier's published `exclusive_night` rate. Configure it as a
 Energy is billed at the supplier's `exclusive_night` rate; distribution
 uses the DSO's published exclusive-night rate when the supplier's card
 prints it (Bolt, Cociter, DATS 24, EBEM, Ecofix, Ecopower, Eneco,
-energie.be, Energy Knights, EnergyVision, Engie, Frank, Luminus, Mega, OCTA+,
-and
-TotalEnergies in Wallonia and Brussels), falling back to the DSO's
-off-peak rate where it does not, and finally to the single day rate on a
-card that publishes neither. TotalEnergies' Flemish cards are that last
-case: such an entry raises an `exclusive_night_rate_missing` repair
+energie.be, Energy Knights, EnergyVision, Engie, Frank, Luminus, Mega,
+OCTA+, and TotalEnergies in Wallonia and Brussels), falling back to the
+DSO's off-peak rate where it does not, and finally to the single day rate
+on a card that publishes neither. TotalEnergies' Flemish cards are that
+last case: such an entry raises an `exclusive_night_rate_missing` repair
 saying the night circuit is being billed at the day distribution rate,
 since no figure can be substituted for a column the supplier does not
 print. The supplier's own exclusive-night *energy* rate still applies; it
