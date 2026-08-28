@@ -605,7 +605,7 @@ def test_energyknights_is_registered() -> None:
     assert "energyknights" in EXTRACTORS
     assert EXTRACTORS["energyknights"].label == "Energy Knights"
     contract_ids = {c.id for c in EXTRACTORS["energyknights"].contracts}
-    assert contract_ids == {_AGILIOR, _AGILIS, _ESSENTIA}
+    assert {_AGILIOR, _AGILIS, _ESSENTIA} < contract_ids
 
 
 def test_contract_kinds_and_regions() -> None:
@@ -641,12 +641,16 @@ def test_discover_ids_cover_the_published_catalogue() -> None:
     # Every slug the listing publishes, including the four "green" twins and
     # Optima Online, so live_check flags only a genuinely new product.
     assert len(DISCOVER_IDS) == 8
-    modelled = {"agilioronline", "agilisonline", "essentiaonline"}
-    assert modelled < DISCOVER_IDS
-    # Optima Online and the four green twins are published but not sold here;
-    # they are listed so discover() does not report them as new.
-    assert "optimaonline" in DISCOVER_IDS
-    assert "agilioronlinegreen" in DISCOVER_IDS
+    # Every slug we sell has to be catalogued, or the nightly check reports
+    # our own products as new ones. The module asserts this too.
+    from custom_components.be_electricity_prices.providers.energyknights import (
+        _CONTRACTS,
+    )
+
+    assert {c.slug for c in _CONTRACTS} < DISCOVER_IDS
+    # Optima and its twin are published but out of scope; they stay listed so
+    # discover() does not report them as new.
+    assert {"optimaonline", "optimaonlinegreen"} < DISCOVER_IDS
 
 
 # ---- the archive -------------------------------------------------------------
@@ -757,3 +761,100 @@ def test_the_archive_horizon_refuses_2024() -> None:
 
 def test_fetch_for_month_is_registered() -> None:
     assert EXTRACTORS["energyknights"].fetch_for_month is not None
+
+
+# ---- the green twins ---------------------------------------------------------
+
+_AGILIOR_GREEN = "energyknights_agilior_green"
+_ESSENTIA_GREEN = "energyknights_essentia_green"
+
+
+def test_a_green_card_is_its_base_card_plus_a_flat_adder() -> None:
+    """The only pricing difference is one "Groene stroom" row, and it applies
+    to every kWh whatever the register.
+
+    Adding it to the mono offset alone would leave a bi-hourly or
+    night-circuit customer paying for green power they are not charged for on
+    those registers.
+    """
+    green = parse_snapshot(
+        _AGILIOR_GREEN,
+        fixture_text("energyknights_agilior_green_aug.pdf", layout=True),
+        "test://",
+    ).energy
+    base = _agilior().energy
+    assert isinstance(green, DynamicRates) and isinstance(base, DynamicRates)
+    # 0,32 c€/kWh, already VAT-inclusive: the row carries no formula and no
+    # footnote, so it sits on the same basis as the printed rate columns.
+    assert green.factor == pytest.approx(base.factor)
+    assert green.base == pytest.approx(base.base + 0.0032)
+    assert green.yearly_fixed_fee == base.yearly_fixed_fee
+    assert green.quarter_hourly is base.quarter_hourly
+
+
+def test_the_green_adder_reaches_every_register() -> None:
+    green = parse_snapshot(
+        _ESSENTIA_GREEN,
+        fixture_text("energyknights_essentia_green_aug.pdf", layout=True),
+        "test://",
+    ).energy
+    base = _essentia().energy
+    assert isinstance(green, SpotMonthlyRates) and isinstance(base, SpotMonthlyRates)
+    for reg in ("base", "base_peak", "base_offpeak", "base_exclusive_night"):
+        assert getattr(green, reg) == pytest.approx(getattr(base, reg) + 0.0032), reg
+    for reg in ("factor", "factor_peak", "factor_offpeak", "factor_exclusive_night"):
+        assert getattr(green, reg) == pytest.approx(getattr(base, reg)), reg
+
+
+def test_the_green_premium_is_parsed_not_pinned() -> None:
+    """It moves. September 2025 printed 0,42 c€/kWh against 0,32 everywhere
+    else, so a hardcoded adder would have under-billed that month by a third.
+    """
+    sep = parse_snapshot(
+        _AGILIOR_GREEN,
+        fixture_text("energyknights_agilior_green_sep25.pdf", layout=True),
+        "test://",
+        ("Elektriciteit Dynamisch 15 Groen", "Elektriciteit Dynamisch15 Groen"),
+    ).energy
+    aug = parse_snapshot(
+        _AGILIOR_GREEN,
+        fixture_text("energyknights_agilior_green_aug.pdf", layout=True),
+        "test://",
+    ).energy
+    assert isinstance(sep, DynamicRates) and isinstance(aug, DynamicRates)
+    # The September card's own base card carries 0,00742, so the adder is the
+    # difference: 0,42 c€/kWh there against 0,32 in August.
+    assert sep.base == pytest.approx(0.00742 + 0.0042)
+    plain_aug = _agilior().energy
+    assert isinstance(plain_aug, DynamicRates)
+    assert aug.base - plain_aug.base == pytest.approx(0.0032)
+
+
+def test_a_green_card_that_stops_printing_the_row_raises() -> None:
+    """The row is what the customer pays the premium for; losing it would
+    silently bill them the grey rate."""
+    text = fixture_text("energyknights_agilior_green_aug.pdf", layout=True).replace(
+        "Groene stroom", "XXX"
+    )
+    with pytest.raises(ExtractorError, match="groene stroom row not found"):
+        parse_snapshot(_AGILIOR_GREEN, text, "test://")
+
+
+def test_a_green_card_does_not_parse_as_its_base_product() -> None:
+    green_text = fixture_text("energyknights_agilior_green_aug.pdf", layout=True)
+    with pytest.raises(ExtractorError, match="card is for 'Agilior Online Green'"):
+        parse_snapshot(_AGILIOR, green_text, "test://")
+    with pytest.raises(ExtractorError, match="card is for 'Agilior Online'"):
+        parse_snapshot(_AGILIOR_GREEN, _agilior_text(), "test://")
+
+
+def test_all_six_products_are_registered() -> None:
+    contracts = {c.id: c for c in EXTRACTORS["energyknights"].contracts}
+    assert len(contracts) == 6
+    assert contracts[_AGILIOR_GREEN].kind == "dynamic"
+    assert contracts[_ESSENTIA_GREEN].kind == "spot_monthly"
+    for contract in contracts.values():
+        assert contract.regions == frozenset({"flanders"})
+        assert contract.spot_indexed_injection is False
+    # Optima has no twin here because Optima itself is out of scope.
+    assert "energyknights_optima_green" not in contracts

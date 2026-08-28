@@ -38,7 +38,7 @@ aiohttp follows, so a typo yields 480 KB of HTML rather than an error status.
 _fetch_validated_pdf_bytes catches that on the magic bytes and raises, which
 is why nothing here inspects the payload itself.
 
-Three of the eight published products are modelled. Agilior Online prices each
+Six of the eight published products are modelled. Agilior Online prices each
 quarter hour off Belpex_15 and Agilis Online each hour off Belpex_h; they are
 the same card with a different index token, and the only thing separating them
 in the snapshot is DynamicRates.quarter_hourly. Essentia Online is indexed
@@ -46,12 +46,16 @@ monthly, on Belpex-RLP for offtake and the solar-weighted Belpex-SPP for the
 credit, and it is the contractual fallback the other two bill on when Fluvius
 cannot deliver quarter values.
 
-The other five are catalogued in DISCOVER_IDS so discover() flags only a
-genuinely new product, and neither is sold here. Optima Online carries a
+Each also has a "green" twin, which is the same card plus one flat
+"Groene stroom" row applying to every kWh, so the six share every parser here.
+That row is not a constant: it printed 0,42 c€/kWh in September 2025 against
+0,32 everywhere else.
+
+Optima Online and its twin are the two products left out. Optima carries a
 "Service fee onbalans handelen" whose amount depends on which home energy
 management system the customer runs: 10,00 EUR/jaar in December 2025, printed
-without a value in August 2026, and no field here can hold it. The four
-"green" twins add a flat "Groene stroom" line and are otherwise identical.
+without a value in August 2026, and no field here can hold it. Both stay in
+DISCOVER_IDS so discover() flags only a genuinely new product.
 
 Two things on these cards are easy to get wrong.
 
@@ -192,6 +196,11 @@ class _ContractDef:
     legacy_slug: str = ""
     legacy_products: tuple[str, ...] = ()
     archive_from: date = _ARCHIVE_HORIZON
+    # The "green" twin of a product is the same card plus one flat
+    # "Groene stroom" row, which is added to every register's offset. The rate
+    # is not constant: it printed 0,42 c€/kWh in September 2025 and 0,32
+    # everywhere else, so it is parsed like everything else here.
+    green: bool = False
 
     @property
     def credit_index(self) -> str:
@@ -253,6 +262,48 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         legacy_slug="variable",
         legacy_products=("Elektriciteit Variabel",),
     ),
+    # The green twins. Same cards plus one flat "Groene stroom" row, so they
+    # share every parser here and differ only by that offset. Optima has no
+    # twin listed because Optima itself is out of scope.
+    _ContractDef(
+        "energyknights_agilior_green",
+        "Energy Knights Agilior Online Green",
+        "dynamic",
+        "agilioronlinegreen",
+        "Agilior Online Green",
+        "Belpex_15",
+        quarter_hourly=True,
+        legacy_slug="dynamic15green",
+        legacy_products=(
+            "Elektriciteit Dynamisch 15 Groen",
+            "Elektriciteit Dynamisch15 Groen",
+        ),
+        archive_from=date(2025, 9, 1),
+        green=True,
+    ),
+    _ContractDef(
+        "energyknights_agilis_green",
+        "Energy Knights Agilis Online Green",
+        "dynamic",
+        "agilisonlinegreen",
+        "Agilis Online Green",
+        "Belpex_h",
+        legacy_slug="dynamicgreen",
+        legacy_products=("Elektriciteit Dynamisch Groen",),
+        green=True,
+    ),
+    _ContractDef(
+        "energyknights_essentia_green",
+        "Energy Knights Essentia Online Green",
+        "spot_monthly",
+        "essentiaonlinegreen",
+        "Essentia Online Green",
+        "BelpexRLP",
+        injection_index="BelpexSPP",
+        legacy_slug="variablegreen",
+        legacy_products=("Elektriciteit Variabel Groen",),
+        green=True,
+    ),
 )
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
@@ -271,7 +322,7 @@ DISCOVER_IDS: frozenset[str] = frozenset(
         "optimaonlinegreen",
     }
 )
-
+assert {c.slug for c in _CONTRACTS} <= DISCOVER_IDS
 
 # Accept both decimal separators: a dot-decimal re-render must not truncate a
 # mandatory value to its integer part (matches the sibling extractors).
@@ -284,6 +335,11 @@ _NUM = NUM_NO_THOUSANDS
 # on page order alone, which would silently gross the whole energy leg by 21%
 # the day the footnote moved ahead of it.
 _VAT_RE = re.compile(r"inclusief\s+(\d+)\s*%\s*btw", re.IGNORECASE)
+
+# "Groene stroom (c€/kWh) 0,32", present only on a green card and applying to
+# every kWh whatever the register. No formula and no footnote, so it is on the
+# same VAT-inclusive basis as the printed rate columns.
+_GREEN_RE = re.compile(rf"Groene\s+stroom\s*\(c[^)]*\)\s*{_NUM}", re.IGNORECASE)
 
 # "Met Agilior Online van Energy Knights kies je voor:"
 _PRODUCT_RE = re.compile(
@@ -513,11 +569,12 @@ def parse_snapshot(
     vat = vat_multiplier(text, _VAT_RE)
     rows = _extract_rows(text, contract)
     fee = _yearly_fee(text)
+    green = _green_premium(text, contract)
     energy: EnergyRates
     if contract.kind == "dynamic":
-        energy = _dynamic_energy(rows, fee, vat, contract)
+        energy = _dynamic_energy(rows, fee, vat, contract, green)
     else:
-        energy = _spot_monthly_energy(rows, fee, vat)
+        energy = _spot_monthly_energy(rows, fee, vat, green)
     return SupplierSnapshot(
         supplier="energyknights",
         contract=contract_id,
@@ -621,11 +678,33 @@ def _extract_rows(
     return out
 
 
+def _green_premium(text: str, contract: _ContractDef) -> float:
+    """The "Groene stroom" adder in EUR/kWh, or 0.0 on a plain card.
+
+    Mandatory on a green product: the row is what the customer is paying the
+    premium for, so a card that stopped printing it would silently bill them
+    the grey rate. It is not constant either, 0,42 c€/kWh in September 2025
+    against 0,32 everywhere else, so it is parsed rather than pinned. The row
+    carries no formula and no footnote, which puts it on the same
+    VAT-inclusive basis as the printed rate columns.
+    """
+    m = _GREEN_RE.search(text)
+    if m is None:
+        if contract.green:
+            raise ExtractorError(
+                f"Energy Knights {contract.contract_id}: "
+                "groene stroom row not found on a green card"
+            )
+        return 0.0
+    return to_float(m.group(1)) / 100.0
+
+
 def _dynamic_energy(
     rows: dict[str, tuple[float, float, float]],
     fee: float,
     vat: float,
     contract: _ContractDef,
+    green: float = 0.0,
 ) -> DynamicRates:
     """The per-slot leg. Agilior settles per quarter hour, Agilis per hour.
 
@@ -639,7 +718,9 @@ def _dynamic_energy(
     # 10) and the offset goes EUR/MWh to EUR/kWh.
     return DynamicRates(
         factor=coefficient * vat,
-        base=offset / 1000.0 * vat,
+        # The green adder rides on the offset: it is a flat per-kWh charge on
+        # top of whatever the formula resolves to, already VAT-inclusive.
+        base=offset / 1000.0 * vat + green,
         yearly_fixed_fee=fee,
         quarter_hourly=contract.quarter_hourly,
     )
@@ -649,6 +730,7 @@ def _spot_monthly_energy(
     rows: dict[str, tuple[float, float, float]],
     fee: float,
     vat: float,
+    green: float = 0.0,
 ) -> SpotMonthlyRates:
     """Essentia Online's monthly-indexed leg.
 
@@ -673,7 +755,11 @@ def _spot_monthly_energy(
         # The card states "Tariefformule in EUR/MWh excl BTW", so the
         # coefficient is a dimensionless multiplier on a EUR/kWh mean (scaled
         # by VAT, never by 10) and the offset goes EUR/MWh to EUR/kWh.
-        return (row[1] * vat, row[2] / 1000.0 * vat)
+        # The green adder is a flat per-kWh charge on top of whatever the
+        # formula resolves to, so it rides on EVERY register's offset rather
+        # than on the mono one alone: a bi-hourly customer pays it on every
+        # kWh too, and it is already VAT-inclusive.
+        return (row[1] * vat, row[2] / 1000.0 * vat + green)
 
     factor, base = pair("single")
     assert factor is not None and base is not None  # _extract_rows guarantees it

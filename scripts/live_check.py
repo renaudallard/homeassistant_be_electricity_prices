@@ -967,15 +967,13 @@ async def _check_energiebe(
 async def _check_energyknights(
     session: aiohttp.ClientSession, energyknights: types.ModuleType
 ) -> None:
-    # Three products, three independently published PDFs. Each is served from
-    # its own product-keyed URL and carries its own coefficients, which drift
-    # every month, so each one is fetched.
-    for cid in (
-        "energyknights_agilior",
-        "energyknights_agilis",
-        "energyknights_essentia",
-    ):
-        await _check_flanders_card(session, energyknights, "energyknights", cid)
+    # Six products, six independently published PDFs. Each is served from its
+    # own product-keyed URL and carries its own coefficients, which drift every
+    # month, so each one is fetched. The green twins are the same cards plus a
+    # "Groene stroom" row whose rate also moves (0,42 c€/kWh in September 2025
+    # against 0,32 since), so they are not derivable from their base product.
+    for contract in energyknights.EXTRACTOR.contracts:
+        await _check_flanders_card(session, energyknights, "energyknights", contract.id)
 
 
 async def _check_energyvision(
@@ -2153,6 +2151,7 @@ _INJECTION_SHAPE: dict[str, str] = {
     # exists: the spp_indexed flag and both coefficients would go unchecked,
     # and losing the flag resolves the credit against the wrong monthly mean.
     "energyknights_essentia": "spp",
+    "energyknights_essentia_green": "spp",
     # Every non-dynamic OCTA+ card prints "Le prix de votre injection est
     # indexe mensuellement sur base du parametre d'indexation de la Epex SPP"
     # and puts its c/kWh figure under a "Prix estimes" heading. The formula is

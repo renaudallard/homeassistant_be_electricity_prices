@@ -25,13 +25,16 @@ Related reading:
 
 Energy Knights BV (Mechelen) sells residential electricity in Flanders only. It
 publishes eight products, four base and a "green" twin of each. The integration
-tracks three:
+tracks six:
 
 | Contract id | Card product | Kind | Settles on |
 | --- | --- | --- | --- |
 | `energyknights_agilior` | Agilior Online | `dynamic`, quarter-hourly | `Belpex_15`, the 15-minute day-ahead price |
 | `energyknights_agilis` | Agilis Online | `dynamic`, hourly | `Belpex_h`, the hourly day-ahead price |
 | `energyknights_essentia` | Essentia Online | `spot_monthly` | `Belpex-RLP-M` for offtake, `Belpex-SPP-M` for the credit |
+| `energyknights_agilior_green` | Agilior Online Green | as above | as above, plus the green adder |
+| `energyknights_agilis_green` | Agilis Online Green | as above | as above, plus the green adder |
+| `energyknights_essentia_green` | Essentia Online Green | as above | as above, plus the green adder |
 
 Agilior and Agilis are the same card on different settlement grids; the only thing
 separating them in the parsed snapshot is `DynamicRates.quarter_hourly`. Essentia Online
@@ -47,9 +50,17 @@ value at all in August 2026. No field in `SupplierSnapshot` can hold a fee keyed
 customer's own hardware, and shipping the product would price it at zero and silently
 under-bill whenever Energy Knights re-prints it.
 
-**The four green twins are catalogued but not sold here.** The difference is one extra
-row, `Groene stroom (c€/kWh)`, with no formula. `DISCOVER_IDS` lists all eight slugs so
-`discover()` only flags a genuinely new product.
+**The green twins are the same card plus one row.** `Groene stroom (c€/kWh)`, no formula
+and no footnote, so it is on the same VAT-inclusive basis as the printed rate columns and
+is added straight to every register's offset - a bi-hourly or night-circuit customer pays
+it on every kWh too, so putting it on the mono offset alone would under-bill them. It is
+**not** a constant: September 2025 printed 0,42 c€/kWh against 0,32 everywhere else, so a
+hardcoded adder would have been a third light that month. It is mandatory on a green
+card, since the row is what the customer is paying the premium for.
+
+`DISCOVER_IDS` lists all eight published slugs so `discover()` only flags a genuinely new
+product, and the module asserts that every slug it sells is in that set - otherwise the
+nightly catalogue check would report our own products as new.
 
 ## Fetching
 
