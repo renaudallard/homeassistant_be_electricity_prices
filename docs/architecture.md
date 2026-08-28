@@ -273,7 +273,7 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
   freshness key like `Last-Modified`, `ETag`, or the resolved PDF URL). The full `fetch` runs
   only when the key changes, so a new publication is caught within an hour at near-zero
   bandwidth (`providers/base.py:570`).
-- TTL fallback: suppliers with no usable probe (Engie, Luminus, DATS 24, where the only cheap
+- TTL fallback: suppliers with no usable probe (DATS 24, Engie, Luminus, where the only cheap
   response is the PDF itself) fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
   `coordinator.py:225`).
 - On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:367`)

@@ -347,9 +347,10 @@ meter type (`providers/base.py:108-109`).
 `ValueError("dynamic tariff needs a spot price")` when `spot` is `None`
 (`pricing.py:312-315`). The spot is the ENTSO-E BE day-ahead price for the slot.
 `DynamicRates.quarter_hourly` selects whether the contract bills on the native
-15-minute grid (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische
-Burgerstroom, Bolt Dynamisch, energie.be, EnergyVision, Energy Knights Agilior Online) or the hourly-aggregated curve (Frank default, Luminus, Mega,
-TotalEnergies, Eneco); YTD billing stays hourly regardless
+15-minute grid (Bolt Dynamisch, Cociter, EBEM, Ecofix, Ecopower Dynamische
+Burgerstroom, energie.be, Energy Knights Agilior Online, EnergyVision, Engie,
+OCTA+) or the hourly-aggregated curve (Eneco, Frank default, Luminus, Mega,
+TotalEnergies); YTD billing stays hourly regardless
 (`providers/base.py:139-159`). See [data-sources.md](data-sources.md) for how the
 curve is fetched and the grid helpers `slots_per_hour` / `slot_delta` /
 `slot_start` (`pricing.py:84-105`).
@@ -594,9 +595,9 @@ carrying a branch that cannot run.
 | Shape | Populated fields | Needs spot? | Example |
 | --- | --- | --- | --- |
 | (a) Monthly indicative | `current` set | No | Ecofix Flexy, the fixed and variable cards that publish a realized rate |
-| (b) Hourly formula | `factor` + `base` set | Yes | Dynamic contracts (Engie, OCTA+, Luminus, Mega, TotalEnergies) |
+| (b) Hourly formula | `factor` + `base` set | Yes | Dynamic contracts (Engie, Luminus, Mega, OCTA+, TotalEnergies) |
 | (c) Spot-indexed on a static-energy card | `factor` + `base` set, energy NOT dynamic, and either `current is None` or the card flags `slot_indexed` | Yes | Cociter Variable, every Bolt fixed and variable card |
-| (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed` | A monthly MEAN, not an hourly spot | Eneco Fix/Flex, EBEM Variabel/B@sic+, DATS 24, EnergyVision fixed (both regions), energie.be, Energy Knights Essentia |
+| (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed` | A monthly MEAN, not an hourly spot | DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex, energie.be, Energy Knights Essentia, EnergyVision fixed (both regions) |
 
 Shape (d) resolves through `_spp_injection_spot`, which is the one place that
 decides WHICH mean and is deliberately not allowed to answer with an hour's
@@ -698,14 +699,14 @@ otherwise so the caller falls back to the current / factor+base path.
 priority for a past hour: TOU slot first, then `factor*spot+base` when both the
 formula and a historical spot exist, then `current` (`injection.py:268-289`).
 The ordering (formula before `current`) is a bug fix: several dynamic-injection
-contracts (Engie, OCTA+, TotalEnergies, Luminus, Mega) publish BOTH a `current`
+contracts (Engie, Luminus, Mega, OCTA+, TotalEnergies) publish BOTH a `current`
 indicative and `factor`/`base`, and checking `current` first made the YTD credit
 use the flat indicative while the live sensor used the spot formula, so the two
 user-facing numbers diverged (`injection.py:278-281`).
 
 ### Historical bug: monthly-indexed injection emitting an hourly factor
 
-A monthly-indexed injection (EBEM Variabel/B@sic+, Eneco Fix/Flex, DATS 24,
+A monthly-indexed injection (DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex,
 EnergyVision 3 jaar vast / 1 an fixe) must
 emit only the realized monthly `current`, never an hourly `factor*spot+base`,
 because the indicative is the actual credit. The guard that keeps shape (b)/(c)

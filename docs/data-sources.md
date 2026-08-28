@@ -577,5 +577,5 @@ Only the **ex-ante** (forecast) profile is public for the running year; the
 realized ex-post lags and is not published for the current month. So the
 SPP-weighted value is much closer than the plain mean but not the exact settled
 figure a supplier prints on its card. Scraped SPP-indexed suppliers (DATS 24,
-Ecofix Flexy, EBEM) are unaffected: they print the realized value and the
+EBEM, Ecofix Flexy) are unaffected: they print the realized value and the
 integration reads it into `InjectionRates.current` directly.

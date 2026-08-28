@@ -289,11 +289,12 @@ one; the loose pattern still sees it, and the mismatch fails the run.
 ### Which suppliers are covered, and which deliberately are not
 
 The gate covers the **eight supplier-families that pick a card from a set of several advertised
-ones** -- Bolt, Ecopower (definitive + dynamic), Mega, Eneco, EBEM, Cociter (variable + dynamic),
-Frank and EnergyVision (one row per product code), twelve rows in all. That shape is the one that
-can silently resolve an older card, because the older card is still there and still parses.
+ones** -- Bolt, Cociter (variable + dynamic), EBEM, Ecopower (definitive + dynamic), Eneco,
+EnergyVision and Frank (one row per product code), and Mega, twelve rows in all. That shape
+is the one that can silently resolve an older card, because the older card is still there and
+still parses.
 
-OCTA+, TotalEnergies, Engie and Luminus get no freshness ROW, because each constructs one URL per
+Engie, Luminus, OCTA+ and TotalEnergies get no freshness ROW, because each constructs one URL per
 contract from static constants or a parameter-only API query: there is no candidate set to choose
 wrongly from, so a wrong resolution 404s loudly and the extractor phase reports it. They are
 covered instead by the card-period check below, which asks a different question.
@@ -387,7 +388,7 @@ served URL the gate's own pattern cannot read fails the row instead.
 ### What an unreadable page means differs per supplier
 
 It depends on how that supplier's resolver fails, and it is read out of the resolver, never assumed.
-Most of them -- Ecopower, Mega, Eneco, EBEM, Cociter, EnergyVision, Frank -- **raise** when the page
+Most of them -- Cociter, EBEM, Ecopower, Eneco, EnergyVision, Frank, Mega -- **raise** when the page
 will not load or carries no card, so their own extractor row already reports the breakage and this
 gate records a pass rather than duplicating it. Bolt's `_resolve_variable_suffix` instead falls back
 to `_VARIABLE_SUFFIX_FALLBACK`: the card still downloads, still parses, and `_check_bolt` stays
@@ -462,7 +463,7 @@ that reads the value 100x too large — and that part still holds.
   IS the rate and no coefficient may ever reach the pricing engine. `"spp"` / `"month"` say the
   printed figure is last month's estimate and the coefficients are what settles the bill, so
   losing them is the mis-credit. Five cards moved from the first to the second over this batch
-  (Eneco Power Fix / Flex, EBEM Variabel / B@sic+, DATS 24 Groen Variabel), and the two
+  (DATS 24 Groen Variabel, EBEM Variabel / B@sic+, Eneco Power Fix / Flex), and the two
   EnergyVision fixed cards followed.
 
   The shape assertion runs whatever else the card prints. It used to hang off the `else` of the
@@ -515,8 +516,8 @@ requests.
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:2800`), with per-supplier overrides in
 `_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2817`) for the known-large catalogues (Bolt,
-TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py:2847`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
+Ecofix, Engie, Mega, OCTA+, TotalEnergies) and `_LATENCY_BUDGET_OVERRIDES`
+(`scripts/live_check.py:2847`) for those same multi-fetch suppliers plus EBEM, Eneco and Luminus,
 which are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request
 durations, not true wallclock, so a supplier that fetches concurrently (Bolt fetches its six PDFs
 with `asyncio.gather`, `scripts/live_check.py:1060`) records the sum of its parallel fetches; the

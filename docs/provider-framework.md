@@ -130,7 +130,7 @@ one. Semantics of the return value:
   still valid (skip the expensive `fetch`).
 - A different string means the card changed; refetch.
 - `None` means the supplier has no probe path the coordinator can rely on
-  (for example Engie/Luminus API endpoints, or DATS 24's one PDF per month,
+  (for example DATS 24's one PDF per month, or Engie/Luminus API endpoints,
   replaced in place within the month). The coordinator then falls back to its
   time-based TTL.
 
@@ -153,7 +153,7 @@ month at the current rate. Return-value semantics:
 - A `SupplierSnapshot` for the requested month when the archive resolves.
 - `None` when the supplier has no accessible archive for that month. This
   applies to overwrite-in-place suppliers (OCTA+, TotalEnergies), API-only
-  suppliers (Engie, Luminus, DATS 24), and any month before the supplier's
+  suppliers (DATS 24, Engie, Luminus), and any month before the supplier's
   archive horizon. On `None` the coordinator falls back to the current snapshot
   as a proxy.
 
@@ -230,11 +230,13 @@ price slot, against the ENTSO-E BE day-ahead spot.
 | `quarter_hourly` | `bool` | `False` | Selects the spot billing grid. `True` keeps ENTSO-E's native 15-minute slots; `False` aggregates to clock hours. |
 
 `quarter_hourly` reflects a real billing-grid difference between suppliers.
-Frank Energie (by default), Luminus, Mega, TotalEnergies and Eneco price per
+Eneco, Frank Energie (by default), Luminus, Mega and TotalEnergies price per
 clock hour, so the integration aggregates the 15-minute day-ahead curve to
-hourly and these leave the flag `False`. Engie, Cociter, EBEM, Ecofix, OCTA+,
-Ecopower (Dynamische Burgerstroom), Bolt (Dynamisch), energie.be, EnergyVision and Energy Knights (Agilior Online) bill per quarter-hour (their cards multiply
-the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot) and set it `True`;
+hourly and these leave the flag `False`. Bolt (Dynamisch), Cociter, EBEM,
+Ecofix, Ecopower (Dynamische Burgerstroom), energie.be, Energy Knights (Agilior
+Online), EnergyVision, Engie and OCTA+ bill per quarter-hour (their cards
+multiply the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot) and set it
+`True`;
 that keeps the live price table, current/next-slot sensors and cheapest-window
 service on native 15-minute slots. Year-to-date billing stays hourly regardless,
 because HA only retains hourly long-term statistics (`providers/base.py:152`).
@@ -401,7 +403,7 @@ energy fund.
 | `brussels_renewables` | `float` | `0.0` | Brussels green-energy levy. |
 | `region_connection_fee` | `float` | `0.0` | Regional connection fee. |
 | `energy_fund_eur_per_month` | `float` | `0.0` | Monthly energy-fund charge (the one field not per-kWh). |
-| `vat_rate` | `float` | `0.0` | VAT convention. `0.0` means the snapshot's prices are already VAT-incl (the convention for both Eneco and Cociter today). An extractor that ships ex-VAT numbers must set this to the parsed rate explicitly. |
+| `vat_rate` | `float` | `0.0` | VAT convention. `0.0` means the snapshot's prices are already VAT-incl (the convention for both Cociter and Eneco today). An extractor that ships ex-VAT numbers must set this to the parsed rate explicitly. |
 
 Regional renewables differ across the three regions; the pricing engine picks
 the right one per region, and an extractor that operates in only one or two
@@ -507,7 +509,7 @@ consistent.
 | `fetch_pdf_text` | `fetch_pdf_text(session, url, *, timeout=30) -> str` | Download a PDF and return concatenated pypdf text; parsing runs in a worker thread so a multi-page card never stalls the HA event loop (`_pdf.py:224`). |
 | `fetch_pdf_text_layout` | `fetch_pdf_text_layout(session, url, *, timeout=30) -> str` | Layout-preserving pdfplumber variant (`_pdf.py:401`). |
 | `fetch_pdf_text_aligned` | `fetch_pdf_text_aligned(session, url, x_join_threshold=0.0, *, timeout=30) -> str` | Word-coordinate aligned pdfplumber variant (`_pdf.py:387`). |
-| `flanders_tax_overlay` | `flanders_tax_overlay(text, *, supplier, excise, renewables, contribution=None, fund=None) -> TaxOverlay` | The tax block of a Flanders-only, VAT-inclusive card. Callers pass their own compiled anchors; this holds the POLICY, which is what drifted: excise mandatory (patterns tried in order, so a flat row wins over the tiered one being phased out), renewables mandatory and all summed, contribution optional (absent = the levy abolished on 2026-08-01, not a layout drift), fund optional and in EUR/month so unscaled. Used by Frank, energie.be, EnergyVision and Energy Knights. |
+| `flanders_tax_overlay` | `flanders_tax_overlay(text, *, supplier, excise, renewables, contribution=None, fund=None) -> TaxOverlay` | The tax block of a Flanders-only, VAT-inclusive card. Callers pass their own compiled anchors; this holds the POLICY, which is what drifted: excise mandatory (patterns tried in order, so a flat row wins over the tiered one being phased out), renewables mandatory and all summed, contribution optional (absent = the levy abolished on 2026-08-01, not a layout drift), fund optional and in EUR/month so unscaled. Used by energie.be, Energy Knights, EnergyVision and Frank. |
 | `head_freshness_key` | `head_freshness_key(session, url, *, prefer=("Last-Modified", "ETag")) -> str \| None` | Cheap `SnapshotProbe` implementation: HEAD the card and return the first present preferred header, else `None`. Bolt prefers `ETag` first (its `Last-Modified` flips per CDN edge); everyone else prefers `Last-Modified` (`_pdf.py:414`). |
 
 Internals worth knowing:

@@ -122,7 +122,7 @@ probe-less supplier is never re-fetched.
 
 `_maybe_refresh_snapshot` (`coordinator_snapshot.py:194`) decides whether to re-fetch the full tariff card. It never fetches unconditionally; a full PDF/HTML fetch happens only when a cheap check says the published card changed.
 
-The cheap check is the extractor **probe** (`SnapshotProbe`, `providers/base.py:949`): a `HEAD` or small listing `GET` that returns a freshness key. Same key across calls means the snapshot is still valid; a changed key means re-fetch. The probe is optional; `None` means the supplier has no reliable probe path (Engie/Luminus API endpoints, DATS 24 single PDF) and the time-based TTL takes over.
+The cheap check is the extractor **probe** (`SnapshotProbe`, `providers/base.py:949`): a `HEAD` or small listing `GET` that returns a freshness key. Same key across calls means the snapshot is still valid; a changed key means re-fetch. The probe is optional; `None` means the supplier has no reliable probe path (DATS 24 single PDF, Engie/Luminus API endpoints) and the time-based TTL takes over.
 
 Decision order in `_maybe_refresh_snapshot`:
 
@@ -228,7 +228,7 @@ cache written before the field existed, so no schema bump was needed.
 
 ### 3.1 Resolution selection (hourly vs quarter-hourly)
 
-`_energy_is_quarter_hourly` (`spot_stats.py:68`) returns True only for `DynamicRates` with `quarter_hourly=True`. Those extractors (Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower Dynamische Burgerstroom, Bolt Dynamisch, energie.be, EnergyVision, Energy Knights Agilior Online) bill on the native 15-minute Belpex/eSpot_15/Epex/EPEX DA grid; every other contract stays hourly. `_fetch_spot_prices` passes this as `quarter_hourly=` to `client.fetch_day_ahead` (`coordinator_spots.py:356`). The constants are `RESOLUTION_HOURLY = "PT60M"` and `RESOLUTION_QUARTER = "PT15M"` (`const.py:320`), matching ENTSO-E's resolution tokens. YTD billing stays hourly regardless (section 7).
+`_energy_is_quarter_hourly` (`spot_stats.py:68`) returns True only for `DynamicRates` with `quarter_hourly=True`. Those extractors (Bolt Dynamisch, Cociter, EBEM, Ecofix, Ecopower Dynamische Burgerstroom, energie.be, Energy Knights Agilior Online, EnergyVision, Engie, OCTA+) bill on the native 15-minute Belpex/eSpot_15/Epex/EPEX DA grid; every other contract stays hourly. `_fetch_spot_prices` passes this as `quarter_hourly=` to `client.fetch_day_ahead` (`coordinator_spots.py:356`). The constants are `RESOLUTION_HOURLY = "PT60M"` and `RESOLUTION_QUARTER = "PT15M"` (`const.py:320`), matching ENTSO-E's resolution tokens. YTD billing stays hourly regardless (section 7).
 
 ### 3.2 The today/tomorrow spot cache
 
@@ -367,10 +367,10 @@ Belgian residential injection is VAT-exempt, so `InjectionRates` values are neve
 
 | Shape | Fields | Live price source | Example |
 |-------|--------|-------------------|---------|
-| (a) monthly-indicative only | `current` set, no usable `factor`/`base` for pricing | the printed `current` value, no spot | Ecofix Flexy, Engie/Mega/Luminus fixed and variable |
-| (b) hourly `factor*spot+base` | `factor`+`base`, energy is dynamic | `factor*spot+base` at the current slot | Engie, OCTA+, TotalEnergies, Luminus, Mega dynamic |
+| (a) monthly-indicative only | `current` set, no usable `factor`/`base` for pricing | the printed `current` value, no spot | Ecofix Flexy, Engie/Luminus/Mega fixed and variable |
+| (b) hourly `factor*spot+base` | `factor`+`base`, energy is dynamic | `factor*spot+base` at the current slot | Engie, Luminus, Mega, OCTA+, TotalEnergies dynamic |
 | (c) spot-indexed on static energy | `factor`+`base`, `current is None`, energy NOT dynamic | `factor*spot+base`, but the energy path fetches no spot | Cociter Variable |
-| (d) month-indexed formula | `current` + `factor`/`base` + `spp_indexed` or `month_indexed` | `factor*month_mean+base` for the DELIVERY month, `current` only while that mean is unpublished | Eneco Fix/Flex, EBEM Variabel/B@sic+, DATS 24, EnergyVision fixed, energie.be, Energy Knights Essentia |
+| (d) month-indexed formula | `current` + `factor`/`base` + `spp_indexed` or `month_indexed` | `factor*month_mean+base` for the DELIVERY month, `current` only while that mean is unpublished | DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex, energie.be, Energy Knights Essentia, EnergyVision fixed |
 
 Shape (d) is what several cards used to be read as shape (a). They print a
 figure AND a formula, and say in their own footnotes that the figure is the
