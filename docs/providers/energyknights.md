@@ -178,9 +178,15 @@ The dedicated exclusive-night pair is populated even though it happens to equal 
 off-peak one on every card so far: `pricing.py` routes it ahead of the bi-hourly band
 test, because that circuit is billed per meter rather than per hour of the day, and
 OCTA+ proves the two rows can diverge. A test asserting the four are all *different*
-would be asserting a coincidence. The bi-hourly pair is all-or-nothing: half of it would
-bill one band off the card and the other off the mono formula, splitting a meter across
-two quotes that were never sold together.
+would be asserting a coincidence.
+
+All four rows are mandatory on this card, and only on this card. A dynamic card repeats
+one formula in all four registers and `DynamicRates` carries a single coefficient pair
+for every meter, so Agilior and Agilis read the mono row and a missing band row there is
+an unread column. Essentia bills all four, so a row that goes missing is a silent
+re-price instead: relabelling the dag row on the August 2026 card moves peak hours
+-2,05% and off-peak +2,39%, and every bound in the live check still passes, because what
+is left behind is entirely plausible.
 
 **Nothing of the printed c€/kWh column is stored**, and that is the whole reason this
 product is `spot_monthly` rather than `variable`. The figure is computed from the VREG

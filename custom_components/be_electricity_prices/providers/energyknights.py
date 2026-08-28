@@ -501,17 +501,26 @@ def _extract_rows(
             to_float(m.group(3)),
             parse_sign(m.group(4)) * to_float(m.group(5)),
         )
-    if _ROW_CARD_LABELS["single"] in missing:
-        # Only the mono row is mandatory, because it is the only one these
-        # products bill on: a dynamic card repeats the same formula in all
-        # four registers and DynamicRates carries one coefficient pair for
-        # every meter. The other three are still parsed and still checked
-        # against the index token, so a mixed-token card fails, but a card
-        # that stops printing one of them must not take a working contract
-        # offline over a row nothing reads.
+    # How many rows are mandatory depends on how many the contract bills.
+    # A dynamic card repeats one formula in all four registers and
+    # DynamicRates carries a single coefficient pair for every meter, so only
+    # the mono row is read and a card that stopped printing one of the others
+    # must not take a working contract offline. A monthly-indexed card bills
+    # all four, each with its own coefficients, so a row that goes missing
+    # there is a silent re-price: relabelling the dag row on the August 2026
+    # Essentia card moves peak hours -2,05% and off-peak +2,39%, and every
+    # bound in the live check still passes because the values that remain are
+    # all plausible.
+    required = (
+        [_ROW_CARD_LABELS["single"]]
+        if contract.kind == "dynamic"
+        else list(_ROW_CARD_LABELS.values())
+    )
+    absent = [label for label in required if label in missing]
+    if absent:
         raise ExtractorError(
             f"Energy Knights {contract.contract_id}: could not parse the "
-            f"{_ROW_CARD_LABELS['single']} consumption row"
+            f"{', '.join(absent)} consumption row(s)"
         )
     return out
 
@@ -574,11 +583,6 @@ def _spot_monthly_energy(
     assert factor is not None and base is not None  # _extract_rows guarantees it
     peak_factor, peak_base = pair("peak")
     offpeak_factor, offpeak_base = pair("offpeak")
-    # A bi-hourly meter needs both halves or neither: billing one band off the
-    # card and the other off the mono formula would split a meter across two
-    # contracts that were never quoted together.
-    if peak_factor is None or offpeak_factor is None:
-        peak_factor = peak_base = offpeak_factor = offpeak_base = None
     night_factor, night_base = pair("exclusive_night")
     return SpotMonthlyRates(
         factor=factor,

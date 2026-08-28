@@ -320,21 +320,36 @@ def test_essentia_injection_index_swap_raises() -> None:
         parse_snapshot(_ESSENTIA, text, "test://ek-swapped")
 
 
-def test_essentia_bi_hourly_pair_is_all_or_nothing() -> None:
-    """Half a bi-hourly pair would bill one band off the card and the other
-    off the mono formula, splitting a meter across two quotes that were never
-    sold together. Drop both instead and let the mono pair apply throughout.
+def test_every_essentia_register_is_mandatory() -> None:
+    """A monthly-indexed card bills all four registers, so a row that goes
+    missing is a silent re-price rather than an unread column.
+
+    Relabelling the dag row moves peak hours -2,05% and off-peak +2,39%, and
+    every bound in the live check still passes because what remains is
+    plausible. The dynamic products bill only the mono row, so they keep the
+    old leniency and are covered separately below.
     """
-    text = _essentia_text().replace("Verbruik dag", "XXX")
-    energy = parse_snapshot(_ESSENTIA, text, "test://ek-half").energy
-    assert isinstance(energy, SpotMonthlyRates)
-    assert energy.factor_peak is None
-    assert energy.base_peak is None
-    assert energy.factor_offpeak is None
-    assert energy.base_offpeak is None
-    # The mono pair and the night circuit are untouched.
-    assert energy.factor == pytest.approx(1.03 * _VAT)
-    assert energy.factor_exclusive_night == pytest.approx(0.997 * _VAT)
+    for card_row, wording in (
+        ("Verbruik enkelvoudig", "enkelvoudig"),
+        ("Verbruik dag", "dag"),
+        ("Verbruik nacht", "nacht"),
+        ("Verbruik exclusief nacht", "exclusief nacht"),
+    ):
+        text = _essentia_text().replace(card_row, "XXX")
+        with pytest.raises(ExtractorError, match=f"{wording} consumption row"):
+            parse_snapshot(_ESSENTIA, text, "test://ek-missing")
+
+
+def test_a_dynamic_card_still_only_needs_its_mono_row() -> None:
+    """DynamicRates carries one coefficient pair for every meter and these
+    cards repeat the same formula in all four registers, so a card that
+    stopped printing one of the others must not take a working contract
+    offline over a row nothing reads."""
+    for card_row in ("Verbruik dag", "Verbruik nacht", "Verbruik exclusief nacht"):
+        text = _agilior_text().replace(card_row, "XXX")
+        energy = parse_snapshot(_AGILIOR, text, "test://ek-partial").energy
+        assert isinstance(energy, DynamicRates)
+        assert energy.factor == pytest.approx(1.0 * _VAT)
 
 
 # ---- the May card: nothing may be pinned as a constant ----------------------
