@@ -68,9 +68,10 @@ from .synergrid import (
 def _energy_is_quarter_hourly(energy: EnergyRates) -> bool:
     """True when the energy model bills on the native 15-minute grid.
 
-    Engie, Cociter, EBEM, Ecofix, OCTA+ and Ecopower (Dynamische
-    Burgerstroom) dynamic contracts set ``quarter_hourly`` (their cards
-    price on the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot);
+    Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower (Dynamische
+    Burgerstroom), Bolt (Dynamisch), energie.be, EnergyVision and Energy
+    Knights (Agilior Online) dynamic contracts set ``quarter_hourly`` (their
+    cards price on the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot);
     every other contract (static, TOU, hourly-billed dynamic such as
     Eneco, Frank, Luminus, Mega, TotalEnergies) stays hourly.
     """

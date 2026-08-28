@@ -308,8 +308,9 @@ async def _ytd_hourly_energy(
     by the commodity it could not price, rather than by the whole hour.
     TOU callers pass ``None`` and every hour gets billed at the slot rate.
 
-    Quarter-hourly dynamic contracts (Engie, Cociter, EBEM, Ecofix,
-    OCTA+, Ecopower DBS) bill the live price on 15-minute slots, but the
+    Quarter-hourly dynamic contracts (Engie, Cociter, EBEM, Ecofix, OCTA+,
+    Ecopower DBS, Bolt Dynamisch, energie.be, EnergyVision, Energy Knights
+    Agilior Online) bill the live price on 15-minute slots, but the
     recorder only retains hourly long-term statistics, so this YTD replay
     aggregates consumption / injection to the clock hour and prices each
     hour at its hourly spot. When intra-hour load correlates with the
