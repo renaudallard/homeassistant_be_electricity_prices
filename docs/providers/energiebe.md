@@ -149,7 +149,7 @@ There is neither a probe nor an archive:
   to its time-based TTL, which is adequate for a card that only rotates monthly (the live
   price comes from the ENTSO-E spot each tick, not from the card).
 - `EXTRACTOR.fetch_for_month` is `None`. Both cards' URLs are overwritten in place, so
-  past months bill at the current snapshot as a proxy, the same as DATS 24 / Ecofix.
+  past months bill at the current snapshot as a proxy, the same as Ecofix / EnergyVision.
   energie.be *does* publish a month-scoped archive at
   `www.energie.be/api/v1/data/tariff-cards?isProfessional=<bool>&tariffType=<type>` (33
   months back, one PDF per month per product, uploaded in arrears in the first days of the

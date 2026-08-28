@@ -110,7 +110,7 @@ so the coordinator re-fetches on a month roll rather than on the time-based TTL.
 codes on the listing (`EV-<MMYY>-<CODE>-nl`), which live_check diffs against `DISCOVER_IDS`
 to flag a new SKU. `EXTRACTOR.fetch_for_month` is `None`: the listing only exposes the
 current month and old versioned URLs are not reliably reachable, so past months bill at the
-current snapshot as a proxy, the same as DATS 24 / Ecofix / energie.be.
+current snapshot as a proxy, the same as Ecofix / energie.be.
 
 ## Parsing
 

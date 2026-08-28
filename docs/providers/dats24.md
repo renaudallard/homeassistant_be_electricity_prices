@@ -25,8 +25,8 @@ Related reading:
 | Regions served | Flanders, Wallonia (`dats24.py:520`, `_DATS24_REGIONS`) |
 | Products | one: `dats24_groen_variabel` (`dats24.py:111`) |
 | Card format | one PDF per month on a CDN, month spelled in the filename |
-| Probe | none (`EXTRACTOR` sets no `probe`, `dats24.py:544-561`) |
-| Archive | none (no `fetch_for_month`); past months fall back to current snapshot |
+| Probe | none (`EXTRACTOR` sets no `probe`, `dats24.py:565-587`) |
+| Archive | `fetch_for_month` over the month-keyed CDN URL; cards back to 2023 |
 | Lifecycle | withdrawn: contracts transfer to EnergyVision on 2026-08-31 |
 
 DATS 24 sells one residential electricity product, "Elektriciteit Groen
@@ -145,8 +145,9 @@ pages-present-but-no-text document as a hard error (`_pdf.py:337-344`,
 
 ### Probe
 
-There is no `probe`. `EXTRACTOR` (`dats24.py:544-561`) sets only `id`, `label`,
-`contracts`, and `fetch`; `probe` and `fetch_for_month` default to `None`. The
+There is no `probe`. `EXTRACTOR` (`dats24.py:565-587`) sets `id`, `label`,
+`contracts`, `fetch` and `fetch_for_month`, plus the two lifecycle fields;
+`probe` is the one left to default to `None`. The
 month-keyed URL is not a freshness signal either: within a month the file is
 replaced in place, so a HEAD tells us nothing a cheap diff could use, and the
 coordinator's time-based TTL governs refresh. This is the "DATS 24 single-PDF"
