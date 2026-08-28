@@ -4465,16 +4465,26 @@ def test_manual_energy_leg_spot_monthly_keeps_what_the_step_cannot_collect() -> 
     assert _manual_energy_leg(entry, card) == replace(card, yearly_fixed_fee=120.0)
 
 
-def test_manual_energy_leg_spot_monthly_typed_pair_replaces_only_the_mono_pair() -> (
-    None
-):
-    """A typed box replaces its own field and nothing else, as on the fixed
-    branch: the bands the step never asked about keep the card's values."""
+def test_manual_energy_leg_spot_monthly_typed_pair_reaches_every_meter() -> None:
+    """A typed coefficient has to price the meter the entry actually bills on.
+
+    The step offers this kind one factor and one base, so the pairs the card
+    printed per meter shadow them: pricing routes a bi-hourly or night-circuit
+    entry onto the bands and never looks at the mono pair, and the typed value
+    priced nothing at all. Measured on Energy Knights Essentia, a typed 0,95
+    moved the mono leg by 0,0202 EUR/kWh and the other three meters by zero.
+    Same shadowing the fixed branch clears when a general fee is typed over a
+    night-circuit one.
+    """
     card = SpotMonthlyRates(
         factor=1.1095,
         base=0.0036,
         factor_peak=1.3275,
         base_peak=0.0036,
+        factor_offpeak=0.94,
+        base_offpeak=0.0036,
+        factor_exclusive_night=1.061,
+        base_exclusive_night=0.0036,
         ceiling_single=0.1623,
         yearly_fixed_fee=100.0,
     )
@@ -4482,7 +4492,42 @@ def test_manual_energy_leg_spot_monthly_typed_pair_replaces_only_the_mono_pair()
         contract="test",
         **{CONF_MANUAL_ENERGY_FACTOR: 1.05, CONF_MANUAL_ENERGY_BASE: 0.002},
     )
-    assert _manual_energy_leg(entry, card) == replace(card, factor=1.05, base=0.002)
+    assert _manual_energy_leg(entry, card) == replace(
+        card,
+        factor=1.05,
+        base=0.002,
+        factor_peak=None,
+        base_peak=None,
+        factor_offpeak=None,
+        base_offpeak=None,
+        factor_exclusive_night=None,
+        base_exclusive_night=None,
+    )
+
+
+def test_manual_energy_leg_spot_monthly_keeps_a_tou_schedule_when_a_pair_is_typed() -> (
+    None
+):
+    """One typed number cannot express three bands.
+
+    Clearing them would not fall back to the mono pair either: pricing decides
+    the TOU branch first, so dropping the bands re-bands the contract onto the
+    plain bi-hourly clock instead of the schedule it is sold on.
+    """
+    card = SpotMonthlyRates(
+        factor=1.2,
+        base=0.003,
+        factor_peak=1.2,
+        base_peak=0.003,
+        factor_transition=1.0,
+        base_transition=0.003,
+        factor_offpeak=0.8,
+        base_offpeak=0.003,
+        weekend_rule="smartflex_seasonal",
+        yearly_fixed_fee=90.0,
+    )
+    entry = _entry(contract="test", **{CONF_MANUAL_ENERGY_FACTOR: 0.95})
+    assert _manual_energy_leg(entry, card) == replace(card, factor=0.95)
 
 
 def test_manual_energy_leg_spot_monthly_keeps_a_tou_schedule() -> None:

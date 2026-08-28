@@ -178,12 +178,36 @@ def _manual_energy_leg(
         # Mega Flex bi-hourly cohort, typing only a yearly fee billed peak
         # hours at the mono coefficient (1,1095 against 1,3275, 16% low),
         # off-peak 18% high, and silently discarded the Mega Cap ceiling.
-        return replace(
-            energy,
-            factor=float(factor) if factor is not None else energy.factor,
-            base=float(base) if base is not None else energy.base,
-            yearly_fixed_fee=fee,
-        )
+        overrides: dict[str, Any] = {
+            "factor": float(factor) if factor is not None else energy.factor,
+            "base": float(base) if base is not None else energy.base,
+            "yearly_fixed_fee": fee,
+        }
+        if (
+            factor is not None or base is not None
+        ) and energy.factor_transition is None:
+            # A typed coefficient has to reach the meter the entry bills on.
+            # The step offers this kind ONE factor and ONE base, so the pairs
+            # the card printed per meter would shadow them on a bi-hourly or
+            # night-circuit entry and the typed value would price nothing at
+            # all: the same shadowing the fixed branch below clears when a
+            # general fee is typed over a night-circuit one. Measured on
+            # Energy Knights Essentia, a typed 0,95 moved the mono leg by
+            # 0,0202 EUR/kWh and the other three meters by zero.
+            #
+            # A TOU-scheduled leg is left alone. One number cannot express
+            # three bands, and dropping them would not fall back to the mono
+            # pair, it would re-band the contract onto the plain bi-hourly
+            # clock instead of the schedule it is sold on.
+            overrides.update(
+                factor_peak=None,
+                base_peak=None,
+                factor_offpeak=None,
+                base_offpeak=None,
+                factor_exclusive_night=None,
+                base_exclusive_night=None,
+            )
+        return replace(energy, **overrides)
     if isinstance(energy, FixedRates):
         single = entry.data.get(CONF_MANUAL_ENERGY_SINGLE)
         peak = entry.data.get(CONF_MANUAL_ENERGY_PEAK)
