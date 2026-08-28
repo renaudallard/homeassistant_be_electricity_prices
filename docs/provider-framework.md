@@ -130,9 +130,9 @@ one. Semantics of the return value:
   still valid (skip the expensive `fetch`).
 - A different string means the card changed; refetch.
 - `None` means the supplier has no probe path the coordinator can rely on
-  (for example DATS 24's one PDF per month, or Engie/Luminus API endpoints,
-  replaced in place within the month). The coordinator then falls back to its
-  time-based TTL.
+  (for example DATS 24's one PDF per month, or energie.be/Engie/Luminus API
+  endpoints, replaced in place within the month). The coordinator then falls
+  back to its time-based TTL.
 
 Most PDF providers implement this by delegating to `head_freshness_key()` (see
 [_pdf.py helpers](#the-pdf-toolkit-providers_pdfpy) below).
@@ -153,9 +153,9 @@ month at the current rate. Return-value semantics:
 - A `SupplierSnapshot` for the requested month when the archive resolves.
 - `None` when the supplier has no accessible archive for that month. This
   applies to overwrite-in-place suppliers (OCTA+, TotalEnergies), API-only
-  suppliers (DATS 24, Engie, Luminus), and any month before the supplier's
-  archive horizon. On `None` the coordinator falls back to the current snapshot
-  as a proxy.
+  suppliers (DATS 24, energie.be, Engie, Luminus), and any month before the
+  supplier's archive horizon. On `None` the coordinator falls back to the
+  current snapshot as a proxy.
 
 An extractor whose `fetch_for_month` field is itself `None` means the supplier
 has no archive at all. Providers that do implement it typically cross-check the

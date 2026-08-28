@@ -122,7 +122,7 @@ probe-less supplier is never re-fetched.
 
 `_maybe_refresh_snapshot` (`coordinator_snapshot.py:194`) decides whether to re-fetch the full tariff card. It never fetches unconditionally; a full PDF/HTML fetch happens only when a cheap check says the published card changed.
 
-The cheap check is the extractor **probe** (`SnapshotProbe`, `providers/base.py:949`): a `HEAD` or small listing `GET` that returns a freshness key. Same key across calls means the snapshot is still valid; a changed key means re-fetch. The probe is optional; `None` means the supplier has no reliable probe path (DATS 24 single PDF, Engie/Luminus API endpoints) and the time-based TTL takes over.
+The cheap check is the extractor **probe** (`SnapshotProbe`, `providers/base.py:949`): a `HEAD` or small listing `GET` that returns a freshness key. Same key across calls means the snapshot is still valid; a changed key means re-fetch. The probe is optional; `None` means the supplier has no reliable probe path (DATS 24 single PDF, energie.be/Engie/Luminus API endpoints) and the time-based TTL takes over.
 
 Decision order in `_maybe_refresh_snapshot`:
 
