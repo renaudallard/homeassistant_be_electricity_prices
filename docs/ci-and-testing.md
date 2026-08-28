@@ -246,31 +246,31 @@ markdown report to stdout and encodes the outcome in its exit code. It is run da
 `.github/workflows/live_check.yml` (`scripts/live_check.py:35`).
 
 The script deliberately does not import Home Assistant. `_load_providers()`
-(`scripts/live_check.py:89`) synthesises a `be_pkg.providers` package and loads each provider
+(`scripts/live_check.py:92`) synthesises a `be_pkg.providers` package and loads each provider
 module by file path, so it can import `providers/*.py` and `providers/base.py` without pulling HA
 into scope. It binds the base rate classes (`FixedRates`, `VariableRates`, `DynamicRates`,
 `TimeOfUseRates`, `ImpactRates`) for the `isinstance`-based energy validation
-(`scripts/live_check.py:89`); class identity matches because every provider imports from the same
+(`scripts/live_check.py:92`); class identity matches because every provider imports from the same
 loaded `base` module.
 
 ### Structure and main functions
 
 ```
-main()                       scripts/live_check.py:1760  asyncio.run(_run()); rc=8 on harness crash
-  _run()                     scripts/live_check.py:1537  load providers, gather checks, render, exit code
-    _load_providers()        scripts/live_check.py:62    file-path import of every provider (no HA)
-    _attributed_check(...)   scripts/live_check.py:322   per-supplier wait_for + trace attribution
-      _check_eneco ...       scripts/live_check.py:437   one _check_<supplier> per registered extractor
+main()                       scripts/live_check.py:2986  asyncio.run(_run()); rc=8 on harness crash
+  _run()                     scripts/live_check.py:2707  load providers, gather checks, render, exit code
+    _load_providers()        scripts/live_check.py:92    file-path import of every provider (no HA)
+    _attributed_check(...)   scripts/live_check.py:408   per-supplier wait_for + trace attribution
+      _check_eneco ...       scripts/live_check.py:661   one _check_<supplier> per registered extractor
       _check_frank                                       (cociter, dats24, ebem, ecofix, ecopower,
       _check_bolt                                         engie, luminus, mega, totalenergies,
       ...                                                 bolt, octaplus, frank, energiebe,
                                                           energyvision, energyknights)
-    _check_catalogs(...)     scripts/live_check.py:1188   run each discover(), flag new product ids
-    _check_card_freshness()  scripts/live_check.py:1240   resolved card == newest advertised
-    _fetch_with_retry(...)   scripts/live_check.py:398   transient-only retry with backoff
-    _validate_snapshot(...)  scripts/live_check.py:1365  energy + injection shape gates
-    _drift_warnings(...)     scripts/live_check.py:1725  latency / byte budget checks
-    _render_report(...)      scripts/live_check.py:1508  markdown pass/fail report
+    _check_catalogs(...)     scripts/live_check.py:1220   run each discover(), flag new product ids
+    _check_card_freshness()  scripts/live_check.py:1639   resolved card == newest advertised
+    _fetch_with_retry(...)   scripts/live_check.py:622   transient-only retry with backoff
+    _validate_snapshot(...)  scripts/live_check.py:2393  energy + injection shape gates
+    _drift_warnings(...)     scripts/live_check.py:2931  latency / byte budget checks
+    _render_report(...)      scripts/live_check.py:2624  markdown pass/fail report
 ```
 
 ### Card freshness
@@ -372,7 +372,7 @@ is in use, and that is fine for now.
 ### The stamps do not sort
 
 Every one of the eight formats fails a naive `max()`, each at a different boundary, so each has its
-own key (`scripts/live_check.py:1257` onwards): Mega's `MMYYYY` is month-major (`122026` outranks
+own key (`scripts/live_check.py:1392` onwards): Mega's `MMYYYY` is month-major (`122026` outranks
 `012027`), Eneco's issue is volume-major (an April re-issue `022604` outranks May's first issue
 `012605`), EBEM's `MM-YYYY` sorts lexically wrong (`12-2025` over `08-2026`) and may be a Dutch
 month *name*, Frank names its cards with a month word (`December 2026` over `April 2027`), and
@@ -413,7 +413,7 @@ renamed symbol, a changed signature -- propagates and is recorded as a failure, 
 those made the gate report green in exactly the case where it had stopped working.
 
 Each `_check_<supplier>` derives its contract list from the runtime registry (for example
-`for cid in (c.id for c in eneco.EXTRACTOR.contracts)`, `scripts/live_check.py:610`) so adding a
+`for cid in (c.id for c in eneco.EXTRACTOR.contracts)`, `scripts/live_check.py:665`) so adding a
 product to `EXTRACTOR.contracts` gets it validated here without editing the harness. Every check
 asserts the publication label is non-empty, the expected DSO keys for the region are present
 (`_FLUVIUS_KEYS`, `_WALLONIA_DSO_KEYS`, or `sibelga` for Brussels), the relevant taxes are
@@ -475,13 +475,13 @@ that reads the value 100x too large — and that part still holds.
 
 ### Per-supplier byte and wallclock budgets, and drift issues
 
-An aiohttp `TraceConfig` (`scripts/live_check.py:288`) tags every request with the supplier
+An aiohttp `TraceConfig` (`scripts/live_check.py:367`) tags every request with the supplier
 currently being checked (via a `ContextVar` set by the `_attributed()` context manager,
-`scripts/live_check.py:347`) and accumulates per-supplier fetch count, summed request duration,
+`scripts/live_check.py:285`) and accumulates per-supplier fetch count, summed request duration,
 body bytes, and failed-attempt count / duration into `METRICS`. These metrics
 surface silent slowdowns and PDF-size jumps, both leading indicators that a supplier reworked its
 publication, and are appended to the daily report by `_render_metrics`
-(`scripts/live_check.py:1476`).
+(`scripts/live_check.py:2592`).
 
 Reading a row correctly needs three facts about which hook feeds which column:
 
@@ -503,29 +503,29 @@ Reading a row correctly needs three facts about which hook feeds which column:
   that first url whichever hop died.
 
 Two safety caps bound runtime. Each supplier check runs under
-`asyncio.wait_for(..., timeout=_SUPPLIER_HARD_TIMEOUT_S)` (`scripts/live_check.py:349`) with a 600s
-hard cap (`scripts/live_check.py:327`, raised from 240s when the professional editions roughly
+`asyncio.wait_for(..., timeout=_SUPPLIER_HARD_TIMEOUT_S)` (`scripts/live_check.py:405`) with a 600s
+hard cap (`scripts/live_check.py:405`, raised from 240s when the professional editions roughly
 doubled Engie's and Mega's sequential fetch counts), recorded as an extractor failure rather than
 propagating so one hung supplier cannot starve the `gather()`. Every latency budget below must stay
 under that cap, or the supplier is killed before it can report the drift the budget exists to catch.
-The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2153`) bounds individual
+The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2714`) bounds individual
 requests.
 
 `_drift_warnings` (`scripts/live_check.py:2931`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
-`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:1672`), with per-supplier overrides in
+`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:2801`), with per-supplier overrides in
 `_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2818`) for the known-large catalogues (Bolt,
 TotalEnergies, Engie, Ecofix, Mega, OCTA+) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py:1720`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
+(`scripts/live_check.py:2848`) for those same multi-fetch suppliers plus Luminus, Eneco and EBEM,
 which are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request
 durations, not true wallclock, so a supplier that fetches concurrently (Bolt fetches its six PDFs
-with `asyncio.gather`, `scripts/live_check.py:966`) records the sum of its parallel fetches; the
+with `asyncio.gather`, `scripts/live_check.py:1062`) records the sum of its parallel fetches; the
 budgets are sized around that. The synthetic `_catalog` bucket is skipped in drift analysis because
 it aggregates every supplier's discovery fetch under one name (`scripts/live_check.py:1810`). When a
 budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see below). Tuning a
 false-firing drift alert means adjusting the override, not the code.
 
-A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:2370`,
+A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:2945`,
 against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2918`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
@@ -539,13 +539,13 @@ rerun.
 
 ### Exit codes and the two report side-channels
 
-`_run()` (`scripts/live_check.py:1537`) splits checks into `extractor` and `catalog` kinds. The
+`_run()` (`scripts/live_check.py:2707`) splits checks into `extractor` and `catalog` kinds. The
 extractor report (with the metrics block) is printed to stdout, which the workflow captures. The
 catalog diff is written to `catalog_report.md` and the drift warnings to `drift_report.md` at the
-repo root (`scripts/live_check.py:2456`), each a side-channel the workflow reads to file a separate
+repo root (`scripts/live_check.py:2774`), each a side-channel the workflow reads to file a separate
 issue so the three failure modes never conflate in one thread.
 
-The exit code is bit-encoded (`scripts/live_check.py:1648`):
+The exit code is bit-encoded (`scripts/live_check.py:2784`):
 
 | Bit | Value | Meaning | Retried by workflow? |
 | --- | --- | --- | --- |
@@ -554,7 +554,7 @@ The exit code is bit-encoded (`scripts/live_check.py:1648`):
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
 | - | 8 | harness crash (top-level Python exception in the script) | no |
 
-`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:1768`) so the workflow
+`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:2994`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
 
 ### Unreadable cards do not gate bit 0
@@ -604,7 +604,7 @@ someone ran to find out whether it is.
 
 ### The transient-only retry helper
 
-`_fetch_with_retry(factory, *, attempts=3)` (`scripts/live_check.py:551`) calls `factory()`, and on
+`_fetch_with_retry(factory, *, attempts=3)` (`scripts/live_check.py:622`) calls `factory()`, and on
 a transient network failure retries with a short backoff (`_RETRY_BACKOFF_S = (1.0, 3.0)`). A
 failure is "transient" only if it is a bare `TimeoutError` or an `ExtractorError` whose message the
 shared `providers/_pdf.is_transient_fetch_error` predicate classifies as transient (a wrapped
