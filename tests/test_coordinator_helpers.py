@@ -38,6 +38,7 @@ from datetime import UTC, date, datetime, timedelta
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -5267,3 +5268,73 @@ def test_an_spp_indexed_credit_is_never_read_as_a_per_hour_one() -> None:
     """
     entry = _entry(solar_regime="injection")
     assert not _injection_hourly_on_cohort(_spp_snap(), entry)
+
+
+def test_compare_quote_weights_a_monthly_leg_that_splits_by_meter() -> None:
+    """A monthly-indexed card splits by hour with a COEFFICIENT pair per meter.
+
+    _tou_weighted_per_kwh spread its weighting over the day only when the leg
+    carried peak / offpeak RATES, which SpotMonthlyRates does not have: its
+    bands are factor_peak / factor_offpeak. Energy Knights Essentia is the
+    first card to reach the compare page with them, and Fluvius publishes no
+    day / night distribution split to stand in, so a bi-hourly quote returned
+    whichever band the dialog happened to open in. On its August 2026 card
+    that is 0,0066 EUR/kWh between the two, about 23 EUR a year at 3500 kWh,
+    against a target the user is deciding whether to switch to.
+    """
+    from custom_components.be_electricity_prices import compare_quote
+
+    snap = make_snapshot(
+        energy=SpotMonthlyRates(
+            factor=1.0918,
+            base=0.00742,
+            factor_peak=1.1077,
+            base_peak=0.00848,
+            factor_offpeak=1.05682,
+            base_offpeak=0.00848,
+            yearly_fixed_fee=10.0,
+        ),
+        # Fluvius prints one "afname normaal" rate and no day / night split,
+        # which is why the overlay disjunct cannot stand in for the missing
+        # energy bands.
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(
+                distribution_single=0.0535,
+                distribution_exclusive_night=0.0481,
+                transport=0.0,
+                data_management_per_year=18.92,
+                capacity_eur_per_kw_year=52.37,
+            )
+        },
+    )
+    quotes = {
+        hour: compare_quote._tou_weighted_per_kwh(
+            snap,
+            "fluvius_antwerpen",
+            "flanders",
+            datetime(2026, 8, 12, hour, tzinfo=ZoneInfo("Europe/Brussels")),
+            0.129219,
+            "bi",
+            "bi_horaire",
+        )
+        for hour in range(24)
+    }
+    priced = [v for v in quotes.values() if v is not None]
+    assert len(priced) == 24
+    assert len(set(priced)) == 1, (
+        "a bi-hourly quote must not depend on the hour the dialog opened: "
+        f"{min(priced)} to {max(priced)}"
+    )
+    # And it lands between the two bands rather than on either of them, which
+    # is what a weighted average of the week has to do.
+    peak_only = compare_quote._tou_weighted_per_kwh(
+        snap,
+        "fluvius_antwerpen",
+        "flanders",
+        datetime(2026, 8, 12, 14, tzinfo=ZoneInfo("Europe/Brussels")),
+        0.129219,
+        "mono",
+        "bi_horaire",
+    )
+    assert peak_only is not None
+    assert quotes[14] != pytest.approx(peak_only)

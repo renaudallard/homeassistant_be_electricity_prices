@@ -429,6 +429,18 @@ def _tou_weighted_per_kwh(
             getattr(snapshot.energy, "peak", None) is not None
             and getattr(snapshot.energy, "offpeak", None) is not None
         )
+        # A monthly-indexed card splits by hour too, but it prints a
+        # COEFFICIENT pair per meter rather than a rate pair, so it carries
+        # factor_peak / factor_offpeak and has no peak / offpeak at all. Energy
+        # Knights Essentia is the first card that reaches here with them: its
+        # bands are 1,1077 against 1,05682, worth 0,0066 EUR/kWh, so quoting
+        # whichever hour the dialog opened in swung the annual estimate by
+        # 23 EUR at 3500 kWh. Fluvius publishes no day / night distribution
+        # split either, so the overlay disjunct below cannot stand in for it.
+        or (
+            getattr(snapshot.energy, "factor_peak", None) is not None
+            and getattr(snapshot.energy, "factor_offpeak", None) is not None
+        )
         or (
             overlay is not None
             and getattr(overlay, "distribution_peak", None) is not None
