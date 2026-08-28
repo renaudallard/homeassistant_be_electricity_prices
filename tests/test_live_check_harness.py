@@ -39,11 +39,14 @@ import asyncio
 import sys
 from datetime import date, datetime
 from types import SimpleNamespace
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import aiohttp
 import pytest
+
+from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -1170,3 +1173,112 @@ def test_a_tou_card_losing_its_injection_triplet_fails() -> None:
     lc._validate_injection("x", SimpleNamespace(injection=inj), "triplet")
     rows = [c for c in lc.CHECKS if "triplet present" in c.label]
     assert rows and rows[0].ok
+
+
+@pytest.fixture
+def _bound_rate_types() -> Iterator[None]:
+    """Bind the rate classes _validate_energy dispatches on.
+
+    live_check leaves them as ``object`` until _load_providers() has run, and
+    ``isinstance(anything, object)`` is True, so an unbound harness sends every
+    leg down the FIRST branch and reports a fixed-rate failure for a card that
+    has no such field. Bind the real classes instead of loading the whole
+    provider set: identity is all the dispatch needs.
+    """
+    from custom_components.be_electricity_prices.providers import base
+
+    saved = (
+        lc._RATE_FIXED,
+        lc._RATE_VARIABLE,
+        lc._RATE_DYNAMIC,
+        lc._RATE_SPOT_MONTHLY,
+        lc._RATE_TOU,
+        lc._RATE_IMPACT,
+    )
+    lc._RATE_FIXED = base.FixedRates
+    lc._RATE_VARIABLE = base.VariableRates
+    lc._RATE_DYNAMIC = base.DynamicRates
+    lc._RATE_SPOT_MONTHLY = base.SpotMonthlyRates
+    lc._RATE_TOU = base.TimeOfUseRates
+    lc._RATE_IMPACT = base.ImpactRates
+    yield
+    (
+        lc._RATE_FIXED,
+        lc._RATE_VARIABLE,
+        lc._RATE_DYNAMIC,
+        lc._RATE_SPOT_MONTHLY,
+        lc._RATE_TOU,
+        lc._RATE_IMPACT,
+    ) = saved
+
+
+def _essentia_leg() -> SpotMonthlyRates:
+    """Energy Knights Essentia Online, August 2026, as the extractor parses it."""
+    return SpotMonthlyRates(
+        factor=1.0918,
+        base=0.00742,
+        factor_peak=1.1077,
+        base_peak=0.00848,
+        factor_offpeak=1.05682,
+        base_offpeak=0.00848,
+        factor_exclusive_night=1.05682,
+        base_exclusive_night=0.00848,
+        yearly_fixed_fee=10.0,
+    )
+
+
+def _energy_failures(energy: object) -> list[str]:
+    lc.CHECKS.clear()
+    lc._validate_energy("x", "energyknights_essentia", energy)
+    return [c.label.removeprefix("x: ") for c in lc.CHECKS if not c.ok]
+
+
+def test_a_spot_monthly_card_with_per_meter_bands_is_fully_bounded(
+    _bound_rate_types: None,
+) -> None:
+    """Until Essentia, no card populated these pairs at parse time.
+
+    energie.be Variabel and the custom supplier both print one formula for
+    every meter, so this branch only ever bounded the mono pair and a card
+    that prints them per register could drift a band without failing
+    anything.
+    """
+    assert _energy_failures(_essentia_leg()) == []
+
+    # The two rows swapped. Both coefficients stay inside every range, so only
+    # the ordering catches it.
+    card = _essentia_leg()
+    swapped = replace(
+        card, factor_peak=card.factor_offpeak, factor_offpeak=card.factor_peak
+    )
+    assert _energy_failures(swapped) == ["spot-monthly peak factor not below offpeak"]
+
+    # A card that flattens the two bands is normal publishing, not a swap:
+    # this supplier's predecessor printed one formula in all four registers
+    # for nineteen consecutive months.
+    flat = replace(card, factor_peak=card.factor_offpeak, base_peak=card.base_offpeak)
+    assert _energy_failures(flat) == []
+
+    # Half a bi-hourly pair silently sends both bands back to the mono
+    # formula, because pricing routes onto them only when both are set.
+    half = replace(card, factor_offpeak=None, base_offpeak=None)
+    assert _energy_failures(half) == [
+        "spot-monthly bi-hourly pair is complete or absent"
+    ]
+
+    # Each band's own bounds, including the night circuit.
+    assert _energy_failures(replace(card, factor_peak=11.0)) == [
+        "spot-monthly peak factor in [0.5, 3.0]"
+    ]
+    assert _energy_failures(replace(card, base_peak=1.5)) == [
+        "spot-monthly peak base in [0, 0.10] EUR/kWh"
+    ]
+    assert _energy_failures(replace(card, factor_exclusive_night=0.1)) == [
+        "spot-monthly exclusive_night factor in [0.5, 3.0]"
+    ]
+
+
+def test_a_mono_only_spot_monthly_card_is_unaffected(_bound_rate_types: None) -> None:
+    """energie.be Variabel prints one formula for every meter. The new band
+    assertions must not start demanding pairs it never had."""
+    assert _energy_failures(SpotMonthlyRates(factor=1.19, base=0.009)) == []

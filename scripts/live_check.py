@@ -2495,6 +2495,50 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:  # 
             base is not None and 0.0 <= base <= 0.10,
             detail=f"base={base}",
         )
+        # The per-meter pairs, which until Energy Knights Essentia no card
+        # populated at parse time: energie.be Variabel and the custom supplier
+        # both print one formula for every meter, so the two bounds above were
+        # the whole of this branch. A card that prints them per register can
+        # now drift a band without failing anything, which is the shape of the
+        # gap this whole map exists to close.
+        for band in ("peak", "offpeak", "exclusive_night"):
+            band_factor = getattr(energy, f"factor_{band}", None)
+            band_base = getattr(energy, f"base_{band}", None)
+            if band_factor is None and band_base is None:
+                continue
+            _expect(
+                f"{prefix}: spot-monthly {band} factor in [0.5, 3.0]",
+                band_factor is not None and 0.5 <= band_factor <= 3.0,
+                detail=f"factor_{band}={band_factor}",
+            )
+            _expect(
+                f"{prefix}: spot-monthly {band} base in [0, 0.10] EUR/kWh",
+                band_base is not None and 0.0 <= band_base <= 0.10,
+                detail=f"base_{band}={band_base}",
+            )
+        # A bi-hourly meter needs both halves or neither: pricing routes it
+        # onto the bands only when both are set, so half a pair silently sends
+        # both back to the mono formula.
+        peak_factor = getattr(energy, "factor_peak", None)
+        offpeak_factor = getattr(energy, "factor_offpeak", None)
+        _expect(
+            f"{prefix}: spot-monthly bi-hourly pair is complete or absent",
+            (peak_factor is None) == (offpeak_factor is None),
+            detail=f"factor_peak={peak_factor}, factor_offpeak={offpeak_factor}",
+        )
+        # And the day band never costs LESS than the night one. Swapping the
+        # two rows is the misread the bounds cannot see, since both land
+        # inside the same range. Not strict: this supplier's own predecessor
+        # product printed one formula in all four registers for nineteen
+        # consecutive months, and Essentia's two bands have been converging
+        # since March, so a card that flattens them is normal publishing and
+        # must not gate CI.
+        if peak_factor is not None and offpeak_factor is not None:
+            _expect(
+                f"{prefix}: spot-monthly peak factor not below offpeak",
+                peak_factor >= offpeak_factor,
+                detail=(f"factor_peak={peak_factor}, factor_offpeak={offpeak_factor}"),
+            )
     elif isinstance(energy, _RATE_TOU):
         peak = getattr(energy, "peak", None)
         transition = getattr(energy, "transition", None)
