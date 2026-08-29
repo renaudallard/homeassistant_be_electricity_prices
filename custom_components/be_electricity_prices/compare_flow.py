@@ -41,7 +41,7 @@ argument for it.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
@@ -353,6 +353,54 @@ def _kva(data: Mapping[str, Any]) -> float:
         return 0.0
 
 
+@dataclass(frozen=True)
+class _HouseholdQuote:
+    """The half of a quote that belongs to the household rather than to any
+    contract it is being compared against.
+
+    Wide on purpose: these are the values the compare arithmetic reads, and
+    naming them here is what lets a ranking resolve them once for a whole
+    cell instead of once per row. Three of the fields are callables closed
+    over the rest -- the spot, SPP and export-rate resolvers -- because each
+    memoises a fetch that must happen at most once per page.
+    """
+
+    region: str
+    dso: str
+    current_meter: str
+    dso_mode: str
+    peak_kw: float
+    stored_regime: str
+    regime: str
+    quote_entry: Any
+    overridden: bool
+    now_utc: datetime
+    today_local: date
+    jan1: date
+    fee_proration: float
+    month_proration: float
+    spot_dict: dict[datetime, float]
+    current_kind: str
+    avg_spot: float | None
+    compare_spot_injection: bool
+    ytd_kwh: float | None
+    rolling_inj_kwh: float
+    ytd_inj_kwh: float
+    annual_kwh: float
+    volumes_typed: bool
+    placeholders: dict[str, str]
+    current_snapshot: Any
+    raw_snapshot: Any
+    baseline_snapshot: Any
+    hour_weights: Any
+    inj_hour_weights: Any
+    current_per_kwh: float | None
+    current_export_per_kwh: float | None
+    spot_for: Any
+    spp_spot_for: Any
+    export_rate_for: Any
+
+
 class _CompareStepsMixin(OptionsFlow):
     """The compare branch, mixed into BePricesOptionsFlow."""
 
@@ -607,53 +655,32 @@ class _CompareStepsMixin(OptionsFlow):
             last_step=True,
         )
 
-    async def _build_compare_placeholders(self) -> dict[str, str]:
-        """Fetch the picked supplier's snapshot and compute a side-by-side
-        annual estimate against the user's current entry.
+    async def _resolve_household(
+        self,
+        coord: Any,
+        *,
+        candidates: Sequence[tuple[str, str]],
+        meter: str,
+    ) -> _HouseholdQuote:
+        """Everything a quote needs that does not depend on which contract is
+        being quoted.
 
-        Annual = per_kwh_now * the resolved yearly volume + yearly fees, where the
-        yearly fees are yearly_fixed_fee + 12 * energy_fund + 12 *
-        capacity (Flanders) + 12 * prosumer (Wallonia compensation +
-        solar). Errors collapse to ``-`` so the page always renders.
+        Resolved once, whatever the page above it is doing. The one-to-one
+        compare passes a single candidate; a ranking passes the whole cell and
+        pays for this exactly once rather than once per row, which is what
+        makes a sweep affordable at all: the meter reads, the recorder walk,
+        the measured hour shapes and the day-ahead window are all O(1) in the
+        number of contracts being compared.
+
+        ``candidates`` is read for one decision only -- whether any row will
+        need day-ahead spots -- because that window is fetched here and shared.
+
+        ``meter`` is the target's, not the household's: it lands in the
+        rendered ``meter_used`` token, and a dynamic or slot contract forces
+        its own. The household's real meter stays on ``current_meter``, so a
+        mono household's own bill is never quoted at the target's rates.
         """
-
-        from .coordinator import BePricesCoordinator
-
         current = self.config_entry.data
-        coord = getattr(self.config_entry, "runtime_data", None)
-        # Coordinator may not be a BePricesCoordinator if the entry is
-        # mid-reload (UNDEFINED sentinel) or never finished setup. We
-        # still need to populate every placeholder the result template
-        # references; otherwise HA renders the missing ones as raw
-        # ``{token}`` text.
-        if not isinstance(coord, BePricesCoordinator):
-            return {
-                "current_supplier": str(current.get(CONF_SUPPLIER, "")),
-                "current_contract": str(current.get(CONF_CONTRACT, "")),
-                "compare_supplier": str(self._compare.get(CONF_SUPPLIER, "")),
-                "compare_contract": str(self._compare.get(CONF_CONTRACT, "")),
-                "current_per_kwh": "-",
-                "compare_per_kwh": "-",
-                "current_annual": "-",
-                "compare_annual": "-",
-                "delta_annual": "-",
-                "current_ytd": "-",
-                "compare_ytd": "-",
-                "delta_ytd": "-",
-                "annual_kwh": f"{DEFAULT_ANNUAL_CONSUMPTION_KWH:.0f}",
-                "ytd_kwh": "-",
-                "ytd_injection_kwh": "-",
-                "solar_note": "",
-                "meter_used": str(
-                    self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
-                ),
-                "consumption_source": "default (entry reloading)",
-                "annual_chart": "",
-                "ytd_chart": "",
-                "card_note": "",
-                "error": "current entry is reloading; try again in a moment",
-            }
-
         region = current[CONF_REGION]
         dso = current[CONF_DSO]
         # Comparison may override the meter type for static contracts;
@@ -662,7 +689,6 @@ class _CompareStepsMixin(OptionsFlow):
         # dynamic/TOU target forces METER_DYNAMIC). The user's current side
         # must keep its real meter, else a mono user's current bill gets
         # quoted at bi-horaire / dynamic rates and biases the decision.
-        meter = self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
         current_meter = current.get(CONF_METER, METER_MONO)
         dso_mode = current.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
         # The quantity the capacity tariff is charged on, not this month's
@@ -720,9 +746,6 @@ class _CompareStepsMixin(OptionsFlow):
         # priced at all and the quote renders a bare "-" for a contract the
         # user explicitly asked about.
         current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
-        other_kind = _contract_kind(
-            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
-        )
         # A Tarif Impact product is sold only on the CWaPE incitative
         # configuration: its energy carries three band rates and no
         # mono/bi structure at all, so the band schedule prices it whatever
@@ -746,20 +769,27 @@ class _CompareStepsMixin(OptionsFlow):
         # the same amount in the other direction. The install flow pre-selects
         # the mode for that card and lets the user say otherwise, which is the
         # decision this flow has no step to ask about.
-        other_dso_mode = DSO_MODE_IMPACT if other_kind == "tou_impact" else dso_mode
-        target_entry = _quote_entry(self.config_entry, regime, other_dso_mode)
-        # A spot-indexed-injection side (Cociter Variable) prices its
-        # feed-in credit off the hourly day-ahead even though its energy
-        # kind is "variable", so it needs spots just like a dynamic side.
+        # A spot-indexed-injection side (Cociter Variable) prices its feed-in
+        # credit off the hourly day-ahead even though its energy kind is
+        # "variable", so it needs spots just like a dynamic side. Asked across
+        # every candidate rather than one, because the day-ahead window is
+        # fetched once and shared by every row that reads it. For the
+        # one-to-one page ``candidates`` is a list of one and the answer is
+        # exactly what it was; for a ranking this is why the key is collected
+        # once for the whole sweep rather than per row.
         compare_spot_injection = regime == SOLAR_REGIME_INJECTION and (
             _contract_has_spot_injection(current[CONF_SUPPLIER], current[CONF_CONTRACT])
-            or _contract_has_spot_injection(
-                self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+            or any(
+                _contract_has_spot_injection(supplier, contract)
+                for supplier, contract in candidates
             )
         )
         need_spot = (
             current_kind in SPOT_PRICED_CONTRACT_KINDS
-            or other_kind in SPOT_PRICED_CONTRACT_KINDS
+            or any(
+                _contract_kind(supplier, contract) in SPOT_PRICED_CONTRACT_KINDS
+                for supplier, contract in candidates
+            )
             or compare_spot_injection
         )
         if need_spot and not spot_dict:
@@ -1067,7 +1097,6 @@ class _CompareStepsMixin(OptionsFlow):
         )
         current_per_kwh: float | None = None
         current_export_per_kwh: float | None = None
-        other_export_per_kwh: float | None = None
 
         async def _export_rate_for(
             snapshot: SupplierSnapshot | None, meter_type: Any, mode: str
@@ -1111,6 +1140,163 @@ class _CompareStepsMixin(OptionsFlow):
             current_export_per_kwh = await _export_rate_for(
                 current_snapshot, current_meter, dso_mode
             )
+        return _HouseholdQuote(
+            region=region,
+            dso=dso,
+            current_meter=current_meter,
+            dso_mode=dso_mode,
+            peak_kw=peak_kw,
+            stored_regime=stored_regime,
+            regime=regime,
+            quote_entry=quote_entry,
+            overridden=overridden,
+            now_utc=now_utc,
+            today_local=today_local,
+            jan1=jan1,
+            fee_proration=fee_proration,
+            month_proration=month_proration,
+            spot_dict=spot_dict,
+            current_kind=current_kind,
+            avg_spot=avg_spot,
+            compare_spot_injection=compare_spot_injection,
+            ytd_kwh=ytd_kwh,
+            rolling_inj_kwh=rolling_inj_kwh,
+            ytd_inj_kwh=ytd_inj_kwh,
+            annual_kwh=annual_kwh,
+            volumes_typed=volumes_typed,
+            placeholders=placeholders,
+            current_snapshot=current_snapshot,
+            raw_snapshot=raw_snapshot,
+            baseline_snapshot=baseline_snapshot,
+            hour_weights=hour_weights,
+            inj_hour_weights=inj_hour_weights,
+            current_per_kwh=current_per_kwh,
+            current_export_per_kwh=current_export_per_kwh,
+            spot_for=_spot_for,
+            spp_spot_for=_spp_spot_for,
+            export_rate_for=_export_rate_for,
+        )
+
+    async def _build_compare_placeholders(self) -> dict[str, str]:
+        """Fetch the picked supplier's snapshot and compute a side-by-side
+        annual estimate against the user's current entry.
+
+        Annual = per_kwh_now * the resolved yearly volume + yearly fees, where the
+        yearly fees are yearly_fixed_fee + 12 * energy_fund + 12 *
+        capacity (Flanders) + 12 * prosumer (Wallonia compensation +
+        solar). Errors collapse to ``-`` so the page always renders.
+        """
+
+        from .coordinator import BePricesCoordinator
+
+        current = self.config_entry.data
+        coord = getattr(self.config_entry, "runtime_data", None)
+        # Coordinator may not be a BePricesCoordinator if the entry is
+        # mid-reload (UNDEFINED sentinel) or never finished setup. We
+        # still need to populate every placeholder the result template
+        # references; otherwise HA renders the missing ones as raw
+        # ``{token}`` text.
+        if not isinstance(coord, BePricesCoordinator):
+            return {
+                "current_supplier": str(current.get(CONF_SUPPLIER, "")),
+                "current_contract": str(current.get(CONF_CONTRACT, "")),
+                "compare_supplier": str(self._compare.get(CONF_SUPPLIER, "")),
+                "compare_contract": str(self._compare.get(CONF_CONTRACT, "")),
+                "current_per_kwh": "-",
+                "compare_per_kwh": "-",
+                "current_annual": "-",
+                "compare_annual": "-",
+                "delta_annual": "-",
+                "current_ytd": "-",
+                "compare_ytd": "-",
+                "delta_ytd": "-",
+                "annual_kwh": f"{DEFAULT_ANNUAL_CONSUMPTION_KWH:.0f}",
+                "ytd_kwh": "-",
+                "ytd_injection_kwh": "-",
+                "solar_note": "",
+                "meter_used": str(
+                    self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
+                ),
+                "consumption_source": "default (entry reloading)",
+                "annual_chart": "",
+                "ytd_chart": "",
+                "card_note": "",
+                "error": "current entry is reloading; try again in a moment",
+            }
+
+        meter = self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
+        hh = await self._resolve_household(
+            coord,
+            candidates=[(self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT])],
+            meter=meter,
+        )
+        region = hh.region
+        dso = hh.dso
+        current_meter = hh.current_meter
+        dso_mode = hh.dso_mode
+        peak_kw = hh.peak_kw
+        stored_regime = hh.stored_regime
+        regime = hh.regime
+        quote_entry = hh.quote_entry
+        overridden = hh.overridden
+        now_utc = hh.now_utc
+        today_local = hh.today_local
+        jan1 = hh.jan1
+        fee_proration = hh.fee_proration
+        month_proration = hh.month_proration
+        spot_dict = hh.spot_dict
+        current_kind = hh.current_kind
+        avg_spot = hh.avg_spot
+        compare_spot_injection = hh.compare_spot_injection
+        ytd_kwh = hh.ytd_kwh
+        rolling_inj_kwh = hh.rolling_inj_kwh
+        ytd_inj_kwh = hh.ytd_inj_kwh
+        annual_kwh = hh.annual_kwh
+        volumes_typed = hh.volumes_typed
+        placeholders = hh.placeholders
+        current_snapshot = hh.current_snapshot
+        raw_snapshot = hh.raw_snapshot
+        baseline_snapshot = hh.baseline_snapshot
+        hour_weights = hh.hour_weights
+        inj_hour_weights = hh.inj_hour_weights
+        current_per_kwh = hh.current_per_kwh
+        current_export_per_kwh = hh.current_export_per_kwh
+        _spot_for = hh.spot_for
+        _spp_spot_for = hh.spp_spot_for
+        _export_rate_for = hh.export_rate_for
+
+        # The target side. Unlike everything above, each of these is a
+        # property of the ONE contract being quoted, and a ranking recomputes
+        # them per row against the household context resolved once.
+        other_kind = _contract_kind(
+            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+        )
+        # A Tarif Impact product is sold only on the CWaPE incitative
+        # configuration: its energy carries three band rates and no
+        # mono/bi structure at all, so the band schedule prices it whatever
+        # the household is on, while the network leg and the Walloon terme
+        # fixe both follow the mode. Quoting the TARGET on the household's
+        # own mode therefore banded its energy, billed its network off the
+        # standard jour/nuit columns and charged it a fixed term the tariff
+        # does not have. The install flow forces the mode for exactly this
+        # reason; mirror it here, for the target only, the same way the
+        # meter override applies to the target only.
+        #
+        # Gated on the registered kind, which deliberately leaves
+        # totalenergies_impact out: it is registered "variable" and its impact
+        # bands are read only in impact mode, so a household on the standard
+        # configuration quoting it still bills the target's network leg on the
+        # jour/nuit columns, worth about EUR 29/yr on a bi meter and EUR 113 on
+        # a mono one. Not forced, for the reason _IMPACT_DEFAULT_CONTRACTS
+        # gives at flow_schemas.py:514: the TE card states only that a
+        # communicating digital meter is required, so a holder on the standard
+        # configuration genuinely exists and forcing would under-bill them by
+        # the same amount in the other direction. The install flow pre-selects
+        # the mode for that card and lets the user say otherwise, which is the
+        # decision this flow has no step to ask about.
+        other_dso_mode = DSO_MODE_IMPACT if other_kind == "tou_impact" else dso_mode
+        target_entry = _quote_entry(self.config_entry, regime, other_dso_mode)
+        other_export_per_kwh: float | None = None
 
         # Other supplier: fetch + compute.
         session = async_get_clientsession(self.hass)
