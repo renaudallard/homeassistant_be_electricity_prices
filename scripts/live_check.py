@@ -165,6 +165,9 @@ def _load_providers() -> dict[str, types.ModuleType]:
             if getattr(mod.EXTRACTOR, "deprecated_until", None) is not None
         }
     )
+    _DECLARED_SWEEP_COST.update(
+        {supplier: mod.EXTRACTOR.sweep_cost_s for supplier, mod in loaded.items()}
+    )
     return loaded
 
 
@@ -192,6 +195,9 @@ class Check:
 CHECKS: list[Check] = []
 
 # Populated from custom_components.be_electricity_prices.const at startup.
+# Each supplier's declared per-card sweep cost, filled by _load_providers.
+_DECLARED_SWEEP_COST: dict[str, float] = {}
+
 # Declared here so module-load doesn't fail before _load_providers() runs.
 _FLUVIUS_KEYS: frozenset[str] = frozenset()
 _WALLONIA_DSO_KEYS: frozenset[str] = frozenset()
@@ -381,10 +387,43 @@ def _attributed(supplier: str) -> Iterator[None]:
     thread the supplier id through. Re-entry is safe via ContextVar.
     """
     token = _CURRENT_SUPPLIER.set(supplier)
+    started = time.monotonic()
     try:
         yield
     finally:
         _CURRENT_SUPPLIER.reset(token)
+        _record_sweep_cost(supplier, time.monotonic() - started)
+
+
+def _record_sweep_cost(supplier: str, wallclock_s: float) -> None:
+    """Log what one card cost here, against the declared ``sweep_cost_s``.
+
+    Reported, never warned on. The declared value is fetch PLUS parse measured
+    on a Raspberry Pi, and parse CPU dominates it for the expensive suppliers;
+    a GitHub runner's CPU and network are neither comparable nor stable. Four
+    suppliers in _LATENCY_BUDGET_OVERRIDES already carry notes explaining that
+    they are slow only from runners, and this workflow opens issues by itself,
+    so a threshold here would file supplier-side bugs for runner variance.
+
+    What the number IS good for is tuning: sweep_cost_s schedules the ranking
+    page's budget, and a supplier that reworks its cards changes it. Keeping
+    the measurement in the log means adjusting the value later needs no rerun.
+    """
+    bucket = METRICS.get(supplier)
+    if not bucket:
+        return
+    cards = bucket.get("fetches", 0.0)
+    if cards <= 0:
+        return
+    declared = _DECLARED_SWEEP_COST.get(supplier)
+    if declared is None:
+        return
+    print(
+        f"sweep-cost: {supplier} {wallclock_s / cards:.2f}s per card over "
+        f"{int(cards)} fetches (declares {declared:.1f}s; runner CPU and "
+        f"network are not the Pi this was measured on)",
+        file=sys.stderr,
+    )
 
 
 # Hard cap for a single supplier's whole check. aiohttp's session-level

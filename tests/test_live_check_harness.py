@@ -1282,3 +1282,54 @@ def test_a_mono_only_spot_monthly_card_is_unaffected(_bound_rate_types: None) ->
     """energie.be Variabel prints one formula for every meter. The new band
     assertions must not start demanding pairs it never had."""
     assert _energy_failures(SpotMonthlyRates(factor=1.19, base=0.009)) == []
+
+
+def test_sweep_cost_is_reported_and_never_warned_on(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The declared sweep cost is fetch PLUS parse on a Raspberry Pi, and
+    parse CPU dominates it for the expensive suppliers. A GitHub runner's CPU
+    and network are neither comparable nor stable - four suppliers already
+    carry latency-budget notes saying they are slow only from runners - and
+    this workflow opens issues by itself, so a threshold here would file
+    supplier-side bugs for runner variance.
+
+    Logged for whoever tunes the value later; never a warning."""
+    import live_check as lc
+
+    lc.METRICS.clear()
+    lc.METRICS["bolt"] = {
+        "fetches": 6.0,
+        "elapsed_s": 120.0,
+        "bytes": 0.0,
+        "failed": 0.0,
+        "failed_s": 0.0,
+    }
+    lc._DECLARED_SWEEP_COST["bolt"] = 45.3
+
+    # Wildly over the declared figure, which is exactly the runner case.
+    lc._record_sweep_cost("bolt", 900.0)
+    err = capsys.readouterr().err
+    assert "sweep-cost: bolt" in err
+    assert "150.00s per card" in err
+    assert "declares 45.3s" in err
+
+    # And it contributes nothing to the warning list that files issues.
+    assert not any("sweep" in w.lower() for w in lc._drift_warnings(lc.METRICS))
+
+
+def test_sweep_cost_reporting_is_silent_without_a_measurement() -> None:
+    """A supplier whose check made no request, or one this build does not
+    ship, must not divide by zero or raise out of a logging helper."""
+    import live_check as lc
+
+    lc.METRICS.clear()
+    lc._record_sweep_cost("nosuch", 5.0)
+    lc.METRICS["bolt"] = {
+        "fetches": 0.0,
+        "elapsed_s": 0.0,
+        "bytes": 0.0,
+        "failed": 0.0,
+        "failed_s": 0.0,
+    }
+    lc._record_sweep_cost("bolt", 5.0)
