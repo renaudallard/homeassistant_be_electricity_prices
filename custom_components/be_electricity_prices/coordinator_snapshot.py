@@ -224,7 +224,13 @@ class _SnapshotMixin:
             self._snapshot_fetched_at = result.row.fetched_at
             self._snapshot_probe_key = result.row.probe_key
             self._last_error = ""
-            _shared_failed_fetches(self.hass).pop(self._shared_key(), None)
+            # No pop here. A successful fetch already clears the negative row
+            # inside fetch_shared, and the ADOPT arm must not: adopting a
+            # sibling's card says nothing about whether the supplier answered
+            # us, so resetting the consecutive-failure counter there delays
+            # the "could not reach the supplier" card, or suppresses it while
+            # a quiet sibling keeps re-adopting. Clearing _last_error is
+            # right, and is what the arm this replaced did.
             if result.source == "fetch":
                 # Only a real fetch satisfies a forced refresh, and only a real
                 # fetch clears the extractor issue.

@@ -48,6 +48,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, cast
 
 import asyncio
+import contextlib
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlowResult, OptionsFlow
@@ -1338,11 +1339,20 @@ class _CompareStepsMixin(OptionsFlow):
         # coordinator and IS resolved, so the comparison was biased.
         from .snapshot_store import _resolve_snapshot, fetch_shared
 
-        # Through the shared policy rather than extractor.fetch directly: this
-        # was the last bare fetch outside the coordinator, and it meant the
-        # page paid a full download for a card a sibling entry already held,
-        # re-downloaded on every reopen, and hammered a supplier that had just
-        # failed instead of backing off with everything else.
+        # Through the shared policy rather than extractor.fetch directly, but
+        # asking for a fresh card: this is one quote the user explicitly asked
+        # for, and three compare targets (Engie, Luminus, energie.be) publish
+        # no probe, so adopting a cached row would quote them off a card up to
+        # a day old where this page always downloaded. The other two wins of
+        # going through the policy are kept: the per-key lock, so two dialogs
+        # on one tuple do not both download, and the write into the shared
+        # cache on success, so the coordinators can adopt what this fetched.
+        #
+        # record_failure=False because this is a read-only page. A background
+        # tick's failure is evidence about the supplier and the negative row
+        # exists so siblings back off; a dialog's failure is not, and writing
+        # it here cancels a real entry's due download for five minutes and
+        # inflates the counter the Repairs card is thresholded on.
         fetched = await fetch_shared(
             self.hass,
             session,
@@ -1350,6 +1360,8 @@ class _CompareStepsMixin(OptionsFlow):
             self._compare[CONF_CONTRACT],
             region,
             supplier=self._compare[CONF_SUPPLIER],
+            force=True,
+            record_failure=False,
         )
         if fetched.row is None:
             # Includes the backoff arm, which carries a sibling's recent
@@ -1722,7 +1734,9 @@ class _CompareStepsMixin(OptionsFlow):
 _YTD_FIELD = "with_ytd"
 
 
-def _sweep_rows(hass: HomeAssistant, entry_id: str) -> dict[tuple[str, str], Any]:
+def _sweep_rows(
+    hass: HomeAssistant, entry_id: str, region: str
+) -> dict[tuple[str, str, str], Any]:
     """Snapshots this entry's sweep has already fetched, for the life of the
     process.
 
@@ -1731,13 +1745,34 @@ def _sweep_rows(hass: HomeAssistant, entry_id: str) -> dict[tuple[str, str], Any
     was already downloaded instead of re-downloading it. The expensive half of
     a sweep is the fetch and the parse; the arithmetic on top is free.
 
+    Keyed by region as well as contract. A household that edits its region
+    between two opens is asking about a different market with different DSOs,
+    and a card fetched for the old one would be re-priced against the new one
+    without being re-fetched.
+
     Deliberately not the shared snapshot cache: that one is keyed by tuple and
     shared between entries, and evicting it is the coordinator's business.
-    This is scratch belonging to one dialog.
+    This is scratch belonging to one dialog. It is dropped when the entry
+    unloads (``evict_sweep_rows``), which is the only lifetime it needs: a
+    ranking is read in one sitting, and the shared cache underneath it already
+    applies the freshness rules.
     """
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
-    store: dict[str, dict[tuple[str, str], Any]] = bucket.setdefault("sweep_rows", {})
+    store: dict[str, dict[tuple[str, str, str], Any]] = bucket.setdefault(
+        "sweep_rows", {}
+    )
     return store.setdefault(entry_id, {})
+
+
+def evict_sweep_rows(hass: HomeAssistant, entry_id: str) -> None:
+    """Drop an entry's ranking scratch when it unloads.
+
+    Without it the cards a sweep fetched outlive the entry that asked for
+    them, for the life of the Home Assistant process.
+    """
+    bucket: dict[str, Any] = hass.data.get(DOMAIN, {})
+    store: dict[str, Any] = bucket.get("sweep_rows", {})
+    store.pop(entry_id, None)
 
 
 class _SweepStepsMixin(_CompareStepsMixin):
@@ -1934,8 +1969,8 @@ class _SweepStepsMixin(_CompareStepsMixin):
             _label_for_supplier(supplier), _label_for_contract(supplier, contract)
         )
         region = self._sweep["region"]
-        cached = _sweep_rows(self.hass, self.config_entry.entry_id)
-        snap = cached.get((supplier, contract))
+        cached = _sweep_rows(self.hass, self.config_entry.entry_id, region)
+        snap = cached.get((region, supplier, contract))
         if snap is None:
             fetched = await fetch_shared(
                 self.hass,
@@ -1944,6 +1979,12 @@ class _SweepStepsMixin(_CompareStepsMixin):
                 contract,
                 region,
                 supplier=supplier,
+                # The sweep DOES adopt a cached card, unlike the one-off quote
+                # above: it is pricing fifty rows against a wall-clock budget,
+                # and re-downloading a card a sibling already holds is the
+                # whole cost it is trying to avoid. Still read-only, so still
+                # no negative-cache write.
+                record_failure=False,
             )
             if fetched.row is None:
                 return RankedRow(
@@ -1952,10 +1993,31 @@ class _SweepStepsMixin(_CompareStepsMixin):
                     status=fetched.error_message or "supplier unreachable",
                 )
             snap = fetched.row.snapshot
-            cached[(supplier, contract)] = snap
+            cached[(region, supplier, contract)] = snap
 
         hh = self._sweep["household"]
-        resolved = _resolve_snapshot(hh.quote_entry, snap)
+        kind = _contract_kind(supplier, contract)
+        # The three target-side adjustments the one-to-one page makes, which a
+        # ranking needs for exactly the same reasons. Left out, a sweep is a
+        # second pricing path that quietly disagrees with the first.
+        #
+        # METER: the household's own meter is the right default, because a
+        # ranking has no step to ask a what-if and the physical meter is a
+        # fact. But where the target's KIND forces one, that is not an
+        # override at all - it is the only meter the product is sold on, and
+        # quoting a dynamic card on a mono meter routes distribution through
+        # the bi-horaire split while the supplier bills energy by slot.
+        meter = (
+            METER_DYNAMIC if kind in SMART_METER_CONTRACT_KINDS else hh.current_meter
+        )
+        # DSO MODE: a Tarif Impact card carries three CWaPE band rates and no
+        # mono/bi structure, so the band schedule prices its energy whatever
+        # the household is on while the network leg and the Walloon terme fixe
+        # follow the mode. Quoting it on the household's own mode bands the
+        # energy and then bills the network off the standard columns.
+        dso_mode = DSO_MODE_IMPACT if kind == "tou_impact" else hh.dso_mode
+        target_entry = _quote_entry(self.config_entry, hh.regime, dso_mode)
+        resolved = _resolve_snapshot(target_entry, snap)
         if hh.dso not in resolved.dsos:
             return RankedRow(
                 label=label, annual=None, status=f"does not serve DSO {hh.dso}"
@@ -1966,28 +2028,34 @@ class _SweepStepsMixin(_CompareStepsMixin):
             region,
             dt_util.as_local(hh.now_utc),
             await hh.spot_for(resolved),
-            hh.current_meter,
-            hh.dso_mode,
+            meter,
+            dso_mode,
             hour_weights=hh.hour_weights,
         )
         if per_kwh is None:
             return RankedRow(label=label, annual=None, status="could not be priced")
         annual = _annual_bill(
             resolved,
-            hh.quote_entry,
+            target_entry,
             hh.peak_kw,
             per_kwh,
             hh.annual_kwh,
             hh.rolling_inj_kwh,
             _compare_injection_credit(
                 resolved,
-                hh.quote_entry,
+                target_entry,
                 hh.spot_dict,
                 hh.avg_spot,
                 await hh.spp_spot_for(resolved, own=False),
                 hh.inj_hour_weights,
             ),
-            meter=hh.current_meter,
+            # EXPORT RATE: under compensation the bill nets consumption
+            # against injection, and each side has to be priced on its own
+            # hour-of-day shape or the netting values exported kWh at the
+            # hours the household draws them instead of the hours the panels
+            # produce. Omitted, a compensation row came out 23% low.
+            export_per_kwh=await hh.export_rate_for(resolved, meter, dso_mode),
+            meter=meter,
         )
         return RankedRow(label=label, annual=annual)
 
@@ -2040,7 +2108,8 @@ class _SweepStepsMixin(_CompareStepsMixin):
         A candidate is abandoned at the first month it cannot supply, so a
         contract with no archive costs one month rather than eight.
         """
-        from .snapshot_store import archived_months_present
+        from .snapshot_store import _snapshot_for_month, archived_months_present
+        from .ytd_cost import _compute_current_year_cost
 
         sweep = self._sweep
         hh = sweep["household"]
@@ -2048,6 +2117,21 @@ class _SweepStepsMixin(_CompareStepsMixin):
         today = hh.today_local
         months = [date(today.year, m, 1) for m in range(1, today.month + 1)]
 
+        # The household's own side sets the standard, so it is walked first -
+        # again, before anything asks about coverage. Its own snapshot is the
+        # fallback the walk needs, and _compute_current_year_cost is what
+        # fills every month of the cache read below.
+        session = async_get_clientsession(self.hass)
+        if hh.current_snapshot is not None:
+            with contextlib.suppress(Exception):
+                await _compute_current_year_cost(
+                    self.hass,
+                    session,
+                    get_extractor(current[CONF_SUPPLIER]),
+                    hh.current_snapshot,
+                    hh.quote_entry,
+                    billed_peak_kw=hh.peak_kw,
+                )
         baseline = archived_months_present(
             self.hass,
             current[CONF_SUPPLIER],
@@ -2055,25 +2139,47 @@ class _SweepStepsMixin(_CompareStepsMixin):
             sweep["region"],
             months,
         )
-        from .ytd_cost import _compute_current_year_cost
-
-        session = async_get_clientsession(self.hass)
-        cached = _sweep_rows(self.hass, self.config_entry.entry_id)
+        cached = _sweep_rows(self.hass, self.config_entry.entry_id, sweep["region"])
         rows: list[RankedRow] = []
         for row in sweep["rows"]:
             pair = sweep["labels"].get(row.label)
-            snap = cached.get(pair) if pair is not None else None
+            snap = cached.get((sweep["region"], *pair)) if pair is not None else None
             if row.annual is None or pair is None or snap is None or not baseline:
                 rows.append(row)
                 continue
             supplier, contract = pair
-            covered = archived_months_present(
-                self.hass, supplier, contract, sweep["region"], months
-            )
-            # Equal coverage, not merely "some": a row replaying nine of the
-            # baseline's twelve months is not a smaller figure in the same
-            # column, it is a different question answered in it.
-            if covered != baseline:
+            # Spot-priced kinds are excluded for the same reason the
+            # one-to-one page excludes them: the archive engine bills each
+            # past hour at factor*spot+base and needs the historical spot
+            # cache, which this pass does not carry. Called without it the
+            # energy leg silently vanishes -- measured 33,7% low on a dynamic
+            # card -- in a column the table sorts.
+            if _contract_kind(supplier, contract) in SPOT_PRICED_CONTRACT_KINDS:
+                rows.append(row)
+                continue
+            # January first, and BEFORE asking about coverage. The coverage
+            # cache is only ever written by this walk, so checking it up front
+            # answers "nothing is covered" for every candidate and the whole
+            # pass becomes a no-op that hides its own checkbox. One month is
+            # also the cheap reject: a contract with no month-addressable card
+            # costs one fetch here rather than a full year of them.
+            try:
+                await _snapshot_for_month(
+                    self.hass,
+                    session,
+                    get_extractor(supplier),
+                    contract,
+                    sweep["region"],
+                    months[0],
+                    snap,
+                    hh.quote_entry,
+                )
+            except Exception:  # noqa: BLE001 - one row loses its history
+                rows.append(row)
+                continue
+            if not archived_months_present(
+                self.hass, supplier, contract, sweep["region"], months[:1]
+            ):
                 rows.append(row)
                 continue
             try:
@@ -2087,6 +2193,18 @@ class _SweepStepsMixin(_CompareStepsMixin):
                     billed_peak_kw=hh.peak_kw,
                 )
             except Exception:  # noqa: BLE001 - one row loses its history
+                rows.append(row)
+                continue
+            # Coverage is judged AFTER the walk, which is what filled the
+            # cache. Equal to the baseline's, not merely non-empty: a row
+            # replaying nine of the baseline's twelve months is not a smaller
+            # figure in the same column, it is a different question answered
+            # in it, and the walk quietly proxies the current card for the
+            # months it could not fetch.
+            covered = archived_months_present(
+                self.hass, supplier, contract, sweep["region"], months
+            )
+            if covered != baseline:
                 rows.append(row)
                 continue
             rows.append(replace(row, ytd=value))

@@ -2299,7 +2299,6 @@ async def test_compare_prices_a_tarif_impact_target_on_its_own_configuration(
     from custom_components.be_electricity_prices.compare_quote import (
         _tou_weighted_per_kwh,
     )
-    from homeassistant.util import dt as dt_util
 
     from custom_components.be_electricity_prices.providers.base import (
         DsoOverlay,
@@ -3748,8 +3747,6 @@ async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
     from dataclasses import replace
     from datetime import timedelta
 
-    from homeassistant.util import dt as dt_util
-
     from custom_components.be_electricity_prices.pricing import compute_breakdown
     from custom_components.be_electricity_prices.providers import EXTRACTORS
     from custom_components.be_electricity_prices.providers.base import (
@@ -3879,8 +3876,6 @@ async def test_compare_branch_static_to_spot_monthly_prompts_for_api_key(
     # Month-to-date spots at 0.10 EUR/kWh, today's day-ahead window at 0.02:
     # the delivery-month mean and the day-ahead mean must not be confusable.
     from datetime import timedelta
-
-    from homeassistant.util import dt as dt_util
 
     now_local = dt_util.now()
     month_start = now_local.replace(
@@ -4932,19 +4927,24 @@ def test_golden_dicts_cover_every_template_token() -> None:
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_compare_quote_reuses_a_cached_card_on_reopen(
+async def test_compare_quote_always_asks_for_a_fresh_card(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """The quote goes through the shared policy, not extractor.fetch.
+    """The one-off quote goes through the shared policy but does not adopt
+    from it.
 
-    It was the last bare fetch outside the coordinator, which meant the page
-    paid a full download for a card a sibling entry already held, downloaded
-    it again on every reopen, and kept asking a supplier that had just failed
-    instead of backing off with everything else."""
+    Three compare targets publish no probe (Engie, Luminus, energie.be), so a
+    cached row would quote them off a card up to a day old where this page
+    always downloaded. What going through the policy buys instead is the
+    per-key lock and the write into the shared cache, so a coordinator can
+    adopt what the dialog fetched."""
     freezer.move_to("2026-04-29 13:00:00+02:00")
     from dataclasses import replace
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _shared_snapshots,
+    )
 
     entry = _make_entry()
     entry.add_to_hass(hass)
@@ -4980,24 +4980,31 @@ async def test_compare_quote_reuses_a_cached_card_on_reopen(
         assert fetch.await_count == 1
         second = await _open()
 
-    # Second open: the row was already in the shared cache and inside its TTL.
-    assert fetch.await_count == 1
-    # And it is the same quote, not a degraded one.
+    # Fresh every open, as it was before the page went through the policy.
+    assert fetch.await_count == 2
     assert second["compare_annual"] == first["compare_annual"]
     assert second["error"] == ""
+    # But what it fetched IS left where a coordinator can adopt it.
+    assert ("cociter", "cociter_variable", "wallonia") in _shared_snapshots(hass)
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_compare_quote_reports_a_sibling_backoff_without_fetching(
+async def test_a_failed_compare_quote_does_not_poison_the_shared_caches(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """A supplier that just failed for another entry is not asked again. The
-    page says so rather than firing the same broken request, and the backoff
-    arm carries the sibling's reason with no exception of its own."""
+    """A read-only dialog must not write the shared negative cache.
+
+    That row exists so sibling coordinators back off instead of refiring a
+    request the supplier just refused, and its third field is the consecutive-
+    failure count the "could not reach the supplier" card is thresholded on.
+    A dialog writing it cancels a real entry's due download for five minutes
+    and raises that card a failure early - on a single-entry install too,
+    because the picker offers the household its own supplier."""
     freezer.move_to("2026-04-29 13:00:00+02:00")
     from dataclasses import replace
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers.base import ExtractorError
     from custom_components.be_electricity_prices.snapshot_store import (
         _shared_failed_fetches,
     )
@@ -5007,14 +5014,11 @@ async def test_compare_quote_reports_a_sibling_backoff_without_fetching(
     entry.runtime_data = _real_coordinator(
         hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
     )
-    _shared_failed_fetches(hass)[("cociter", "cociter_variable", "wallonia")] = (
-        dt_util.utcnow(),
-        "supplier said no",
-        1,
+    fake = replace(
+        EXTRACTORS["cociter"],
+        fetch=AsyncMock(side_effect=ExtractorError("supplier said no")),
+        probe=None,
     )
-    fetch = AsyncMock(return_value=_stub_snapshot("cociter", "cociter_variable", 0.16))
-    fake = replace(EXTRACTORS["cociter"], fetch=fetch, probe=None)
-
     with patch.dict(EXTRACTORS, {"cociter": fake}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -5031,10 +5035,12 @@ async def test_compare_quote_reports_a_sibling_backoff_without_fetching(
                 result["flow_id"], {"meter": "mono"}
             )
 
-    fetch.assert_not_awaited()
     placeholders = result["description_placeholders"]
     assert placeholders is not None
+    # The page says so...
     assert "supplier said no" in placeholders["error"]
+    # ...and leaves nothing behind for the coordinators to trip over.
+    assert _shared_failed_fetches(hass) == {}
 
 
 def test_row_label_dedupes_the_supplier_and_elides_the_middle() -> None:
@@ -5370,3 +5376,226 @@ def test_archived_months_present_ignores_a_proxied_month() -> None:
         )
         == set()
     )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_sweep_and_one_to_one_agree_on_the_same_contract(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The two pricing paths must not disagree.
+
+    The sweep reuses the one-to-one page's household context but does its own
+    target-side work, which is exactly where a second path drifts. It dropped
+    three adjustments and disagreed by 116,81 EUR/yr on a compensation
+    household (no export weighting), 26,87 on a dynamic target (no forced
+    smart meter) and 12,19 on a Tarif Impact target (no forced CWaPE mode)."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    for extra in (
+        {},
+        {"solar_regime": "compensation", "solar_kva": 5.0},
+    ):
+        from tests import make_entry
+
+        entry = make_entry(**extra)  # type: ignore[arg-type]
+        entry.add_to_hass(hass)
+        entry.runtime_data = _real_coordinator(
+            hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+        )
+        target = _stub_snapshot("cociter", "cociter_variable", 0.16)
+        fake = replace(
+            EXTRACTORS["cociter"], fetch=AsyncMock(return_value=target), probe=None
+        )
+        with patch.dict(EXTRACTORS, {"cociter": fake}):
+            one = await _compare_placeholders(
+                hass,
+                entry,
+                supplier="cociter",
+                contract="cociter_variable",
+                target_snapshot=target,
+                meter=entry.data.get("meter", "mono"),
+            )
+            patched = {
+                sid: replace(
+                    ext,
+                    fetch=AsyncMock(return_value=_stub_snapshot(sid, "x", 0.16)),
+                    probe=None,
+                )
+                for sid, ext in EXTRACTORS.items()
+            }
+            patched["cociter"] = fake
+            with patch.dict(EXTRACTORS, patched):
+                result = await hass.config_entries.options.async_init(entry.entry_id)
+                result = await hass.config_entries.options.async_configure(
+                    result["flow_id"], {"next_step_id": "compare_all"}
+                )
+                for _ in range(400):
+                    if result["type"] != data_entry_flow.FlowResultType.SHOW_PROGRESS:
+                        break
+                    await hass.async_block_till_done()
+                    result = await hass.config_entries.options.async_configure(
+                        result["flow_id"]
+                    )
+                sweep_ph = result["description_placeholders"]
+                assert sweep_ph is not None
+                ranking = sweep_ph["ranking"]
+
+        row = next(ln for ln in ranking.splitlines() if "Cociter Tarif Variable" in ln)
+        swept = float(row.split()[-2] if row.split()[-1] == "-" else row.split()[-2])
+        assert abs(swept - float(one["compare_annual"])) < 0.01, (
+            f"regime={extra.get('solar_regime', 'none')}: "
+            f"sweep {swept} vs one-to-one {one['compare_annual']}\n{row}"
+        )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_ytd_pass_walks_before_it_judges_coverage(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The ordering that made the pass a no-op.
+
+    archived_months_present reads a cache written only by the walk it gates,
+    so asking first answers "nothing is covered" for every candidate: the
+    engine is never called, no column appears, and the checkbox then hides
+    itself as though the work had been done. The walk has to come first.
+
+    Asserted as an order of operations rather than as fetches, because in a
+    test the year-to-date engine has no recorder history to price and so never
+    reaches a month fetch - which is exactly how the vacuous version passed
+    for its whole life."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices import compare_flow
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    trace: list[str] = []
+    real_cov = compare_flow_module_coverage()
+
+    def _cov(hass_, supplier, contract, region, months):
+        trace.append(f"coverage:{supplier}")
+        return real_cov(hass_, supplier, contract, region, months)
+
+    async def _walk(hass_, session, extractor, contract, region, ym, current, ent=None):
+        trace.append(f"walk:{extractor.id}")
+        return current
+
+    async def _engine(hass_, session, extractor, snap, ent, **kw):
+        # A real walk fills the month cache on its way through; the stub must
+        # too, or the household's own coverage comes back empty and every
+        # candidate is correctly skipped for want of a baseline to match.
+        from custom_components.be_electricity_prices.snapshot_store import (
+            _monthly_snapshots,
+        )
+
+        trace.append(f"engine:{extractor.id}")
+        contract = kw.get("contract_override") or ent.data["contract"]
+        for month in range(1, 5):
+            _monthly_snapshots(hass_)[
+                (extractor.id, contract, "wallonia", f"2026-{month:02d}")
+            ] = snap
+        return 42.0
+
+    patched = {
+        sid: replace(
+            ext,
+            fetch=AsyncMock(return_value=_stub_snapshot(sid, "x", 0.16)),
+            probe=None,
+        )
+        for sid, ext in EXTRACTORS.items()
+    }
+    with (
+        patch.dict(EXTRACTORS, patched),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_store"
+            ".archived_months_present",
+            _cov,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_store"
+            "._snapshot_for_month",
+            _walk,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            _engine,
+        ),
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare_all"}
+        )
+        for _ in range(400):
+            if result["type"] != data_entry_flow.FlowResultType.SHOW_PROGRESS:
+                break
+            await hass.async_block_till_done()
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"]
+            )
+        assert result["step_id"] == "compare_all_result"
+        schema = result["data_schema"]
+        assert schema is not None
+        assert compare_flow._YTD_FIELD in {str(k) for k in schema.schema}
+        await hass.config_entries.options.async_configure(
+            result["flow_id"], {compare_flow._YTD_FIELD: True}
+        )
+
+    assert trace, "the year-to-date pass did nothing at all"
+    # The household's own side is walked before its coverage is read: that
+    # baseline gates every candidate, so reading it first zeroed the column.
+    first_engine = next((i for i, e in enumerate(trace) if e.startswith("engine:")), -1)
+    first_cov = next((i for i, e in enumerate(trace) if e.startswith("coverage:")), -1)
+    assert first_engine != -1, f"the engine was never called: {trace[:8]}"
+    assert first_engine < first_cov, (
+        f"coverage was read before anything filled the cache it reads: {trace[:8]}"
+    )
+    # And candidates are reached, not skipped wholesale by an empty baseline.
+    assert any(e.startswith("walk:") for e in trace), trace[:8]
+
+
+def compare_flow_module_coverage() -> Any:
+    """The real archived_months_present, captured before patching."""
+    from custom_components.be_electricity_prices.snapshot_store import (
+        archived_months_present,
+    )
+
+    return archived_months_present
+
+
+async def test_sweep_scratch_is_region_keyed_and_evicted(hass: HomeAssistant) -> None:
+    """The ranking's scratch holds fetched cards for the life of the process.
+
+    Keyed by region as well as contract, because a household that edits its
+    region is asking about a different market with different DSOs and a card
+    fetched for the old one would be re-priced against the new one without
+    being re-fetched. Dropped when the entry unloads, or the cards outlive the
+    entry that asked for them."""
+    from custom_components.be_electricity_prices.compare_flow import (
+        _sweep_rows,
+        evict_sweep_rows,
+    )
+
+    wallonia = _sweep_rows(hass, "entry-1", "wallonia")
+    wallonia[("wallonia", "cociter", "cociter_variable")] = "card-w"
+    flanders = _sweep_rows(hass, "entry-1", "flanders")
+    # Same dict, but the region is part of the key, so nothing collides.
+    assert flanders.get(("flanders", "cociter", "cociter_variable")) is None
+    assert flanders[("wallonia", "cociter", "cociter_variable")] == "card-w"
+
+    # Another entry has its own scratch.
+    other = _sweep_rows(hass, "entry-2", "wallonia")
+    assert other == {}
+
+    evict_sweep_rows(hass, "entry-1")
+    assert _sweep_rows(hass, "entry-1", "wallonia") == {}
+    # And evicting an entry that never swept is not an error.
+    evict_sweep_rows(hass, "entry-never-swept")

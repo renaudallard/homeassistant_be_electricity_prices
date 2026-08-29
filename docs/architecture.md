@@ -233,7 +233,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
 Numbered walkthrough:
 
 1. The user completes the config flow; HA stores the selections in `entry.data` and calls
-   `async_setup_entry` (`__init__.py:211`).
+   `async_setup_entry` (`__init__.py:212`).
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
    tuple (`coordinator.py:881`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.

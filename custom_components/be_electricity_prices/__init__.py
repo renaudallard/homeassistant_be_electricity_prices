@@ -67,6 +67,7 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .coordinator import BePricesCoordinator
+from .compare_flow import evict_sweep_rows
 from .snapshot_store import evict_shared_caches
 from .pricing import PriceBreakdown, slot_delta, slot_start, slots_per_hour
 
@@ -303,6 +304,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
     cached_key = coordinator._supplier_tuple if coordinator is not None else None
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        # The ranking page's scratch belongs to this entry alone, so it goes
+        # unconditionally - unlike the shared caches below, which are keyed by
+        # supplier tuple and may still be referenced by a sibling entry.
+        evict_sweep_rows(hass, entry.entry_id)
         if coordinator is not None:
             # Flag the coordinator so a slow in-flight tick that resumes after
             # this unload/removal skips its Repairs-issue sync and persistent

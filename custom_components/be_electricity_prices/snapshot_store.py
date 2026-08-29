@@ -211,6 +211,7 @@ async def fetch_shared(
     supplier: str,
     local: _SharedSnapshot | None = None,
     force: bool = False,
+    record_failure: bool = True,
 ) -> SharedFetch:
     """Resolve one supplier card through the shared cache, probe and lock.
 
@@ -236,6 +237,14 @@ async def fetch_shared(
     ``force`` opts out of every adoption shortcut, for the user-facing refresh
     service. Without it a sibling that re-seeded the shared cache between the
     eviction and the next tick would silently satisfy the forced refresh.
+
+    ``record_failure`` decides whether a failure here is written to the shared
+    negative cache. It must be False for a read-only caller. A background
+    tick's failure is evidence about the supplier, and the row exists so
+    siblings back off instead of refiring a broken request; a dialog's failure
+    is evidence about that dialog, and letting it write the row makes an
+    interactive page cancel a real entry's due download for five minutes and
+    inflate the consecutive-failure counter the Repairs card is thresholded on.
 
     Returns rather than raises; see ``SharedFetch``.
     """
@@ -349,7 +358,7 @@ async def fetch_shared(
             # rides the shared row and resets the moment a fetch succeeds.
             prev = failed.get(key)
             fail_count = (prev[2] if prev is not None else 0) + 1
-            if _tuple_generation(hass, key) == gen_at_entry:
+            if record_failure and _tuple_generation(hass, key) == gen_at_entry:
                 failed[key] = (dt_util.utcnow(), str(err), fail_count)
             return SharedFetch(
                 None, "failed", probe_key, confirmed, err, str(err), fail_count
