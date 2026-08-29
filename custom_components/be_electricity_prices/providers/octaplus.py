@@ -792,6 +792,7 @@ _OCTAPLUS_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
 # the dynamic pair indexes per quarter-hour through its energy formula.
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=2.2,
     id="octaplus",
     label="OCTA+",
     contracts=tuple(

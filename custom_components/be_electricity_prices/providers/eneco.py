@@ -646,6 +646,7 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
 _ENECO_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=0.7,
     id="eneco",
     label="Eneco",
     contracts=(

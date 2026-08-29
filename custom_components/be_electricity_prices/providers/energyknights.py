@@ -896,6 +896,7 @@ def _extract_taxes(text: str) -> TaxOverlay:
 
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=7.3,
     id="energyknights",
     label="Energy Knights",
     contracts=tuple(

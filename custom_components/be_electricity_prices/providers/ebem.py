@@ -736,6 +736,7 @@ _MONTH_INDEXED_INJECTION = frozenset({"ebem_variable", "ebem_basic_plus"})
 
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=5.3,
     id="ebem",
     label="EBEM",
     contracts=tuple(

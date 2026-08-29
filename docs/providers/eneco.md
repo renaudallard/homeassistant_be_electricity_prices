@@ -59,9 +59,9 @@ https://eneco.be/nl/elektriciteit-gas/tariefkaarten
 
 | id | label | kind | regions | source line |
 | --- | --- | --- | --- | --- |
-| `power_fix` | Eneco Zon & Wind Vast | `fixed` | flanders, wallonia | `eneco.py:648-653` |
-| `power_flex` | Eneco Zon & Wind Flex | `variable` | flanders, wallonia | `eneco.py:654-662` |
-| `power_dynamic` | Eneco Zon & Wind Dynamisch | `dynamic` | flanders only | `eneco.py:663-674` |
+| `power_fix` | Eneco Zon & Wind Vast | `fixed` | flanders, wallonia | `eneco.py:653-661` |
+| `power_flex` | Eneco Zon & Wind Flex | `variable` | flanders, wallonia | `eneco.py:662-668` |
+| `power_dynamic` | Eneco Zon & Wind Dynamisch | `dynamic` | flanders only | `eneco.py:669-680` |
 
 Notes:
 

@@ -710,6 +710,7 @@ _MONTH_INDEXED_INJECTION = frozenset({"energyvision_fixed_3y", "energyvision_fix
 
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=5.7,
     id="energyvision",
     label="EnergyVision",
     contracts=tuple(

@@ -52,7 +52,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # used to land green -- one branch shifted 98 refs and CI never noticed.
 # Raise it only for a pin deliberately aimed at an implementation site, and
 # say which in the commit message; lower it whenever one is resolved.
-_REWRITABLE_BASELINE = 2
+_REWRITABLE_BASELINE = 1
 REF = re.compile(r"`([A-Za-z0-9_./]+\.py):(\d+)`")
 # Range refs ("`coordinator.py:2653-2675`"). REF does not match these, so for
 # as long as the sweep only knew about single-line refs they were never

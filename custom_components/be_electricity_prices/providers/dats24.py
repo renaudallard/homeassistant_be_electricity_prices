@@ -564,6 +564,7 @@ __all__ = ["EXTRACTOR", "extract_pdf_text_layout", "fetch", "parse_snapshot"]
 _DATS24_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=9.3,
     id="dats24",
     label="DATS 24",
     contracts=(

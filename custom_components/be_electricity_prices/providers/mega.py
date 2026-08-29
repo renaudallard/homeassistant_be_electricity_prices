@@ -843,6 +843,7 @@ def parse_snapshot(
 
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=2.1,
     id="mega",
     label="Mega",
     contracts=tuple(

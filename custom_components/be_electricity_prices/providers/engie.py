@@ -1212,6 +1212,7 @@ _EPEXDAM_INJECTION_CONTRACTS: frozenset[str] = frozenset(
 
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=0.3,
     id="engie",
     label="Engie",
     contracts=tuple(

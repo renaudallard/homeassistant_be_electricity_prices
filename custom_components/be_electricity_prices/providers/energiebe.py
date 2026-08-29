@@ -584,6 +584,7 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
 
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=18.6,
     id="energiebe",
     label="energie.be",
     contracts=(

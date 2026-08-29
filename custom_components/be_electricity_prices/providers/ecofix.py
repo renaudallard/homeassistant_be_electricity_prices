@@ -767,6 +767,7 @@ def _build_wallonia_overlay(nums: tuple[float, ...]) -> DsoOverlay:
 _ECOFIX_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=10.1,
     id="ecofix",
     label="Ecofix",
     contracts=tuple(

@@ -951,6 +951,7 @@ __all__ = [
 _ECOPOWER_REGIONS = frozenset({REGION_FLANDERS})
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=8.6,
     id="ecopower",
     label="Ecopower",
     contracts=(

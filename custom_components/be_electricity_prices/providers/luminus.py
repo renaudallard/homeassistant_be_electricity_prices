@@ -904,6 +904,7 @@ _MONTHLY_INJECTION_CONTRACTS: frozenset[str] = frozenset(
 
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=1.1,
     id="luminus",
     label="Luminus",
     contracts=tuple(

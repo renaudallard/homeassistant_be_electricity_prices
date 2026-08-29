@@ -134,7 +134,7 @@ Decision order in `_maybe_refresh_snapshot`:
 
 All five live in `fetch_shared` (`snapshot_store.py:203`) rather than on the coordinator, because the coordinator is no longer the only caller that needs a card: it returns a `SharedFetch` (`snapshot_store.py:140`) rather than raising, so one caller can turn a failure into a Repairs card while another prints one row as unreachable. `_maybe_refresh_snapshot` (`coordinator_snapshot.py:152`) is what is left: build `local`, call, then map the result onto this entry's snapshot, error state and Repairs issues.
 
-`SNAPSHOT_REFRESH_HOURS` is `24` (`snapshot_store.py:81`): the TTL used only by probe-less suppliers. `SNAPSHOT_STALE_DAYS` is `7` (`snapshot_store.py:81`): once the snapshot is older than 7 days, `_sync_stale_issue` raises a Repairs warning.
+`SNAPSHOT_REFRESH_HOURS` is `24` (`snapshot_store.py:81`): the TTL used only by probe-less suppliers. `SNAPSHOT_STALE_DAYS` is `7` (`snapshot_store.py:82`): once the snapshot is older than 7 days, `_sync_stale_issue` raises a Repairs warning.
 
 ### 2.2 Cross-entry sharing and dedup
 
@@ -397,7 +397,7 @@ The config-flow consequence: because shape (c) needs a key that the dynamic ener
 
 ## 9. Error handling, backoff, and Repairs
 
-The fail policy is "keep serving the cached snapshot, surface a Repairs issue". `_maybe_refresh_snapshot` catches every fetch exception (`coordinator_snapshot.py:152`), records `_last_error`, populates the shared negative cache with an incremented consecutive-failure count, and re-raises only non-`ExtractorError`/non-`TimeoutError` types (`base.py:1006`); a bad card thus keeps the last good data alive.
+The fail policy is "keep serving the cached snapshot, surface a Repairs issue". `_maybe_refresh_snapshot` catches every fetch exception (`coordinator_snapshot.py:152`), records `_last_error`, populates the shared negative cache with an incremented consecutive-failure count, and re-raises only non-`ExtractorError`/non-`TimeoutError` types (`base.py:1023`); a bad card thus keeps the last good data alive.
 
 Repairs issues, all keyed by `entry_id`:
 
@@ -406,7 +406,7 @@ Repairs issues, all keyed by `entry_id`:
 | `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d) | 154 |
 | `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure | 264 |
 | `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures | 264 |
-| `extractor_unreadable` | `_sync_extractor_issue(unreadable=True)` | same, but the fetch raised `CardNotReadableError` (`providers/base.py:1010`): the card downloaded fine and carries no text layer, so it names the custom-supplier workaround instead of asking for a GitHub issue | 279 |
+| `extractor_unreadable` | `_sync_extractor_issue(unreadable=True)` | same, but the fetch raised `CardNotReadableError` (`providers/base.py:1027`): the card downloaded fine and carries no text layer, so it names the custom-supplier workaround instead of asking for a GitHub issue | 279 |
 | `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 322 |
 | `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) AND the successor has a contract in the entry's region | 338 |
 | `supplier_deprecated_no_successor` | `_sync_deprecated_supplier_issue` | same, but the successor is unset, unknown to this build, or has no contract in the entry's region | 338 |

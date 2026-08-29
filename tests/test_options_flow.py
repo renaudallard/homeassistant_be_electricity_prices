@@ -5111,3 +5111,52 @@ def test_ranking_table_is_empty_for_no_rows() -> None:
     from custom_components.be_electricity_prices.compare_quote import _ranking_table
 
     assert _ranking_table([]) == ""
+
+
+def test_every_supplier_declares_what_a_card_costs_to_sweep() -> None:
+    """The ranking orders by sweep_cost_s so a wall-clock budget buys many
+    cheap rows before a few expensive ones. A provider added without one
+    inherits a middling default and is scheduled somewhere sane rather than
+    first, but it should be measured rather than guessed, so this fails when a
+    new supplier lands without a figure.
+
+    The custom supplier keeps the default deliberately: it has no card to
+    fetch and is never a sweep candidate."""
+    from custom_components.be_electricity_prices.const import SUPPLIER_CUSTOM
+    from custom_components.be_electricity_prices.providers import all_extractors
+    from custom_components.be_electricity_prices.providers.base import (
+        SupplierExtractor,
+    )
+
+    default = SupplierExtractor.__dataclass_fields__["sweep_cost_s"].default
+    undeclared = [
+        e.id
+        for e in all_extractors()
+        if e.id != SUPPLIER_CUSTOM and e.sweep_cost_s == default
+    ]
+    assert not undeclared, f"no measured sweep cost: {undeclared}"
+    assert all(e.sweep_cost_s > 0 for e in all_extractors())
+
+
+def test_sweep_cost_ordering_front_loads_the_cheap_cards() -> None:
+    """The property the budget relies on: ordering by declared cost fills far
+    more of the table early than the registry's own order does."""
+    from custom_components.be_electricity_prices.flow_schemas import _sweep_candidates
+    from custom_components.be_electricity_prices.providers import get as get_extractor
+
+    rows = _sweep_candidates("flanders", "static", False, "")
+    costs = [get_extractor(supplier).sweep_cost_s for supplier, _c in rows]
+
+    def priced_within(budget: float, order: list[float]) -> int:
+        spent = 0.0
+        for n, cost in enumerate(order):
+            if spent + cost > budget and n:
+                return n
+            spent += cost
+        return len(order)
+
+    cheapest_first = priced_within(60.0, sorted(costs))
+    registry_order = priced_within(60.0, costs)
+    assert cheapest_first > registry_order
+    # And the whole cell is reachable, so the budget is a pace, not a cap.
+    assert priced_within(10**6, sorted(costs)) == len(rows)

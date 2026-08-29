@@ -657,6 +657,7 @@ def _yymm_to_label(yymm: str) -> str:
 _COCITER_REGIONS = frozenset({REGION_WALLONIA})
 
 EXTRACTOR = SupplierExtractor(
+    sweep_cost_s=1.6,
     id="cociter",
     label="Cociter",
     contracts=(

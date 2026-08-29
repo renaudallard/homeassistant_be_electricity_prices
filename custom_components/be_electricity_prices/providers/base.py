@@ -988,6 +988,23 @@ class SupplierExtractor:
     # supplied. Purely declarative: nothing compares these to the clock.
     deprecated_until: date | None = None
     deprecated_successor: str | None = None
+    # Roughly what one card of this supplier costs to fetch and parse, in
+    # seconds, on the slowest hardware this runs on. The ranking sweep orders
+    # by it so a wall-clock budget spends itself on many cheap rows before a
+    # few expensive ones. On the 51-contract Flanders static cell these values
+    # fill 15 rows in the first ten seconds and 35 in the first sixty, against
+    # 458 s to finish; ordered by supplier name the first ten seconds would
+    # buy one Bolt card.
+    #
+    # The worst fixture card of each supplier plus 10%, not the mean: a budget
+    # exists to be honoured, and a mean under-reserves for exactly the card
+    # that blows it. Deliberately coarse - it schedules work, it does not
+    # price anything - so it needs re-measuring only when a supplier changes
+    # how it publishes, which scripts/live_check.py watches for.
+    #
+    # The default is a middling value rather than zero, so a provider added
+    # without one is scheduled somewhere sane instead of first.
+    sweep_cost_s: float = 5.0
 
     def regions(self) -> frozenset[str]:
         """Union of regions across this supplier's contracts."""
