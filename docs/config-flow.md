@@ -529,7 +529,17 @@ charged a fixed term the incitative tariff does not have. The target side is
 forced to `DSO_MODE_IMPACT` for that kind, mirroring what `_after_meter` already
 does at install, and it rides the `_QuoteEntry` proxy rather than a parameter
 because the fee leg and the year-to-date engine both read the mode straight off
-`entry.data`. The solar regime override applies to BOTH sides,
+`entry.data`. The gate is the registered kind, which leaves `totalenergies_impact`
+out on purpose: it is registered `variable` and its impact bands are read only in
+impact mode, so a household on the standard configuration quoting it still bills
+the target's network leg off the jour/nuit columns, worth about EUR 29/yr on a bi
+meter and EUR 113 on a mono one. It is left un-forced for the reason
+`_IMPACT_DEFAULT_CONTRACTS` gives (`flow_schemas.py:518`): that card states only
+that a communicating digital meter is required, so a holder on the standard
+configuration genuinely exists and forcing would under-bill them by the same
+amount in the other direction. The install flow pre-selects the mode for it and
+lets the user say otherwise; the compare flow has no step to ask, so it does not
+decide. The solar regime override applies to BOTH sides,
 because the regime belongs to the grid connection rather than to the supplier, so
 two suppliers at one address are necessarily on the same one. That symmetry is
 also why it barely moves `delta_annual`, and why the result page prints the user's
