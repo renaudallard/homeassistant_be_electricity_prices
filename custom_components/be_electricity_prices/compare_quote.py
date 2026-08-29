@@ -645,6 +645,109 @@ def _bar_chart(values: Sequence[tuple[str, float]], width: int = 20) -> str:
     return "\n".join(rows)
 
 
+# A ranked row is `  NN. label  annual  delta  ytd`, and 32 keeps that inside
+# 68 columns with every column present. Measured over the registry the widest
+# de-duplicated candidate label is 36 and only two exceed 32, so this elides
+# almost nothing today; it exists so a supplier with a long product name
+# cannot silently break the alignment of every other row.
+_ROW_LABEL_WIDTH = 32
+
+
+def _row_label(
+    supplier_label: str, contract_label: str, width: int = _ROW_LABEL_WIDTH
+) -> str:
+    """One row's name, de-duplicated against the supplier and elided to fit.
+
+    Some suppliers put their own name in the product ("Eneco Zon & Wind Vast")
+    and some do not ("Fix"), so joining unconditionally reads as "Eneco Eneco
+    Zon & Wind Vast" for one half of the table and correctly for the other.
+
+    Elision is in the MIDDLE rather than at the end, because these names
+    disambiguate on their tails: Agilior Online GREEN against Agilior Online,
+    Plenty Fix against Plenty. Truncating the right cuts exactly the word that
+    tells two rows apart.
+    """
+    joined = (
+        contract_label
+        if contract_label.lower().startswith(supplier_label.lower())
+        else f"{supplier_label} {contract_label}"
+    )
+    if len(joined) <= width:
+        return joined
+    keep = width - 1
+    head = keep // 2
+    return joined[:head] + "\u2026" + joined[len(joined) - (keep - head) :]
+
+
+@dataclass(frozen=True)
+class RankedRow:
+    """One line of the ranking, already priced or explicitly not.
+
+    ``annual`` is None when the row could not be priced, and ``status`` says
+    why in the household's own terms. A row that failed is not dropped: a
+    missing row reads as "not competitive", which is the one thing it does not
+    mean.
+    """
+
+    label: str
+    annual: float | None
+    ytd: float | None = None
+    status: str = ""
+    is_own: bool = False
+
+
+def _ranking_table(rows: Sequence[RankedRow], *, deferred: int = 0) -> str:
+    """The ranked table, as one block, ready to drop into a single token.
+
+    One token rather than one per row: every token a step description names
+    must be populated or Home Assistant renders the literal, and a per-row
+    template would spread that obligation across five files.
+
+    Rows that priced are sorted and numbered; rows that did not follow in a
+    named block underneath, because dropping them reads as "not competitive"
+    and losing them silently is how a sweep looks complete when it is not.
+    The year-to-date column disappears entirely when nothing can fill it,
+    rather than printing a column of dashes.
+    """
+    priced = sorted(
+        (r for r in rows if r.annual is not None),
+        key=lambda r: r.annual if r.annual is not None else 0.0,
+    )
+    unpriced = [r for r in rows if r.annual is None]
+    if not priced and not unpriced:
+        return ""
+
+    show_ytd = any(r.ytd is not None for r in priced)
+    cheapest = priced[0].annual if priced else None
+    out: list[str] = []
+    for n, row in enumerate(priced, 1):
+        annual = row.annual if row.annual is not None else 0.0
+        # Against the cheapest, not against the household's own row: the
+        # question a ranking answers is what the best available deal costs,
+        # and the own row is in the list carrying the same comparison.
+        delta = annual - (cheapest if cheapest is not None else annual)
+        mark = "*" if row.is_own else " "
+        line = (
+            f"{mark}{n:2}. {row.label.ljust(_ROW_LABEL_WIDTH)}"
+            f"  {annual:8.2f}  {delta:+8.2f}"
+        )
+        if show_ytd:
+            line += f"  {row.ytd:8.2f}" if row.ytd is not None else f"  {'-':>8}"
+        out.append(line)
+
+    if unpriced:
+        out.append("")
+        for row in unpriced:
+            out.append(f"    {row.label.ljust(_ROW_LABEL_WIDTH)}  {row.status}")
+    if deferred:
+        out.append("")
+        out.append(
+            f"    {deferred} more not priced yet - reopen to finish "
+            "(the slowest cards are left for last)"
+        )
+    return "\n".join(out)
+
+
 _VOLUMES_CLAUSE = (
     " Yearly volumes entered by hand, so the year-to-date rows are left "
     "blank: they replay measured meter history, not the figures typed."

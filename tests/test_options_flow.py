@@ -5034,3 +5034,80 @@ async def test_compare_quote_reports_a_sibling_backoff_without_fetching(
     placeholders = result["description_placeholders"]
     assert placeholders is not None
     assert "supplier said no" in placeholders["error"]
+
+
+def test_row_label_dedupes_the_supplier_and_elides_the_middle() -> None:
+    """Some suppliers put their own name in the product and some do not, so
+    joining unconditionally reads as "Eneco Eneco Zon & Wind Vast" for half
+    the table. Elision is in the middle because these names disambiguate on
+    their tails: Agilior Online Green against Agilior Online."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _ROW_LABEL_WIDTH,
+        _row_label,
+    )
+
+    assert _row_label("Eneco", "Eneco Zon & Wind Vast") == "Eneco Zon & Wind Vast"
+    assert _row_label("Bolt", "Fix") == "Bolt Fix"
+    long = _row_label("Energy Knights", "Energy Knights Essentia Online Green")
+    assert len(long) == _ROW_LABEL_WIDTH
+    assert long.endswith("Online Green"), long
+    assert "…" in long
+
+
+def test_ranking_table_fits_and_keeps_every_row_visible() -> None:
+    """A dropped row reads as "not competitive", which is the one thing it
+    does not mean, so a row that failed to price leaves the numbered list for
+    a named block rather than disappearing."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        RankedRow,
+        _ranking_table,
+    )
+
+    table = _ranking_table(
+        [
+            RankedRow("Eneco Zon & Wind Vast", 1141.50, 22.0, is_own=True),
+            RankedRow("Ecofix Flexy", 900.01, 19.5),
+            RankedRow("Ecofix Motion", None, None, "card unreadable"),
+        ],
+        deferred=6,
+    )
+    lines = table.splitlines()
+    # Cheapest first, whatever order they arrived in.
+    assert lines[0].strip().startswith("1. Ecofix Flexy")
+    # The household's own row is marked, and still ranked among the rest.
+    assert lines[1].startswith("*")
+    assert "Eneco" in lines[1]
+    # The unpriced row is present and says why.
+    assert any("card unreadable" in ln for ln in lines)
+    # And the deferred tail is named rather than silently missing.
+    assert any("6 more not priced yet" in ln for ln in lines)
+    # Ranked rows stay inside a terminal-ish width so columns line up.
+    ranked = [
+        ln for ln in lines if ln[:3].strip().rstrip(".").isdigit() or ln[:1] == "*"
+    ]
+    assert ranked and max(len(ln) for ln in ranked) <= 68
+
+
+def test_ranking_table_drops_the_ytd_column_when_nothing_can_fill_it() -> None:
+    """A column of dashes is worse than no column: the archive engine and the
+    flat-rate engine would sit in adjacent rows saying nothing."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        RankedRow,
+        _ranking_table,
+    )
+
+    without = _ranking_table([RankedRow("A", 900.0), RankedRow("B", 950.0)])
+    with_one = _ranking_table([RankedRow("A", 900.0, 12.0), RankedRow("B", 950.0)])
+    assert all(len(ln.rstrip()) <= 59 for ln in without.splitlines())
+    # One row carrying a figure is enough to earn the column; the row that
+    # cannot fill it prints a dash rather than a wrong number.
+    assert "12.00" in with_one
+    assert any(ln.rstrip().endswith("-") for ln in with_one.splitlines())
+
+
+def test_ranking_table_is_empty_for_no_rows() -> None:
+    """An empty cell renders nothing here and is explained by the step above,
+    which knows the region and the group; this helper does not."""
+    from custom_components.be_electricity_prices.compare_quote import _ranking_table
+
+    assert _ranking_table([]) == ""
