@@ -4166,3 +4166,87 @@ def test_chart_labels_fall_back_to_what_actually_differs() -> None:
     assert same_supplier[0] != same_supplier[1]
     assert "Vast" in same_supplier[0] and "Flex" in same_supplier[1]
     assert _chart_labels(own, dict(own)) == ("Your entry", "Quoted")
+
+
+def test_borrowed_spot_cache_puts_every_attribute_back() -> None:
+    """The compare page reads the coordinator's spot caches but must leave
+    nothing behind: the next tick persists them, so a key typed into this
+    dialog could otherwise seed a cache the entry can never refresh."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_flow import (
+        _borrowed_spot_cache,
+    )
+
+    hour = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    later = datetime(2026, 3, 2, 10, 0, tzinfo=UTC)
+    coord = SimpleNamespace(
+        _historical_spots={hour: 0.10},
+        _historical_spot_quarters={hour: [0.1, 0.2, 0.3, 0.4]},
+        _complete_spot_days={date(2026, 3, 1)},
+    )
+
+    # Merging: the fetch sees what is already cached, and adds to it.
+    with _borrowed_spot_cache(coord, isolate=False):
+        assert coord._historical_spots == {hour: 0.10}
+        coord._historical_spots[later] = 0.20
+        coord._complete_spot_days.add(date(2026, 3, 2))
+    assert coord._historical_spots == {hour: 0.10}
+    assert coord._complete_spot_days == {date(2026, 3, 1)}
+
+    # Isolating: the fetch starts empty, and the entry's cache still returns.
+    with _borrowed_spot_cache(coord, isolate=True):
+        assert coord._historical_spots == {}
+        assert coord._historical_spot_quarters == {}
+        assert coord._complete_spot_days == set()
+        coord._historical_spots[later] = 0.20
+    assert coord._historical_spots == {hour: 0.10}
+    assert coord._historical_spot_quarters == {hour: [0.1, 0.2, 0.3, 0.4]}
+    assert coord._complete_spot_days == {date(2026, 3, 1)}
+
+
+def test_borrowed_spot_cache_restores_in_place() -> None:
+    """Restored into the same dicts rather than rebound.
+    ``_ensure_historical_spots`` merges each fetched chunk into the attribute
+    and re-resolves it after every await, so a caller holding the old object
+    must still see the restored contents."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_flow import (
+        _borrowed_spot_cache,
+    )
+
+    hour = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    coord = SimpleNamespace(
+        _historical_spots={hour: 0.10},
+        _historical_spot_quarters={},
+        _complete_spot_days=set(),
+    )
+    held = coord._historical_spots
+    with _borrowed_spot_cache(coord, isolate=True):
+        coord._historical_spots[hour] = 0.99
+    assert held is coord._historical_spots
+    assert held == {hour: 0.10}
+
+
+def test_isolating_the_cache_clears_the_completeness_set() -> None:
+    """A day in ``_complete_spot_days`` is treated as fully present without
+    consulting the hour dict, so it has to be emptied with them. Leaving it
+    behind makes an isolated fetch skip every day the coordinator has already
+    walked and return without fetching anything."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_flow import (
+        _borrowed_spot_cache,
+    )
+
+    walked = {date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3)}
+    coord = SimpleNamespace(
+        _historical_spots={},
+        _historical_spot_quarters={},
+        _complete_spot_days=set(walked),
+    )
+    with _borrowed_spot_cache(coord, isolate=True):
+        # What _ensure_historical_spots reads to decide whether to fetch.
+        assert coord._complete_spot_days == set()
+    assert coord._complete_spot_days == walked

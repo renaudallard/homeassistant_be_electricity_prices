@@ -41,7 +41,8 @@ argument for it.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Any, cast
@@ -111,6 +112,49 @@ from .flow_schemas import (
     _contracts_for,
     _validate_entsoe_key,
 )
+
+
+@contextmanager
+def _borrowed_spot_cache(coord: Any, *, isolate: bool) -> Iterator[None]:
+    """Put the coordinator's spot caches back after a compare-only fetch.
+
+    The compare page borrows ``_ensure_historical_spots`` to price a target,
+    and the next tick persists whatever that leaves behind
+    (``_save_persistent``). A household with no stored key can otherwise seed
+    its own persistent cache by opening this dialog and typing one, and then
+    never refresh it, so a partial month mean gets baked over the card's
+    printed indicative for the rest of the month.
+
+    Three attributes are saved, not two. A day listed in
+    ``_complete_spot_days`` is treated as fully present without consulting
+    the hour dict at all, so it has to travel with them: emptying the dicts
+    alone leaves the fetch believing every day the coordinator has already
+    walked is covered, and it returns without fetching anything.
+
+    Copied and restored in place rather than rebound, because
+    ``_ensure_historical_spots`` merges each chunk into the attribute and
+    re-resolves it after every await.
+
+    ``isolate`` empties the caches first, for a caller that wants only the
+    hours it fetched itself; without it the fetch merges into what is
+    already there, which is what a month mean wants.
+    """
+    saved_spots = dict(coord._historical_spots)
+    saved_quarters = dict(coord._historical_spot_quarters)
+    saved_complete = set(coord._complete_spot_days)
+    if isolate:
+        coord._historical_spots.clear()
+        coord._historical_spot_quarters.clear()
+        coord._complete_spot_days.clear()
+    try:
+        yield
+    finally:
+        coord._historical_spots.clear()
+        coord._historical_spots.update(saved_spots)
+        coord._historical_spot_quarters.clear()
+        coord._historical_spot_quarters.update(saved_quarters)
+        coord._complete_spot_days.clear()
+        coord._complete_spot_days.update(saved_complete)
 
 
 def _compare_supplier_options(region: str, current_kind: str) -> list[SelectOptionDict]:
@@ -703,15 +747,19 @@ class _CompareStepsMixin(OptionsFlow):
                 return month_spot_resolved[0]
             value = avg_spot
             key = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
-            try:
-                await coord._ensure_historical_spots(
-                    today_local.replace(day=1), today_local, key
+            # Merged rather than isolated: a month mean is the same number
+            # whoever asks, so whatever the entry has already cached is valid
+            # input, and it is what still answers when the fetch fails.
+            with _borrowed_spot_cache(coord, isolate=False):
+                try:
+                    await coord._ensure_historical_spots(
+                        today_local.replace(day=1), today_local, key
+                    )
+                except Exception:  # noqa: BLE001 - degrade to the day-ahead mean
+                    pass
+                resolved = coord._monthly_spot_mean(
+                    today_local.year, today_local.month, spot_dict
                 )
-            except Exception:  # noqa: BLE001 - degrade to the day-ahead mean
-                pass
-            resolved = coord._monthly_spot_mean(
-                today_local.year, today_local.month, spot_dict
-            )
             if resolved is not None:
                 value = resolved
             month_spot_resolved.append(value)
@@ -1252,23 +1300,16 @@ class _CompareStepsMixin(OptionsFlow):
                 # the next tick persist) live coordinator state.
                 borrowed = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
                 if borrowed:
-                    saved = coord._historical_spots
-                    # The quarter cache is swapped with it, or the throwaway
-                    # fetch would leave a year of slots behind on a live
-                    # coordinator whose hourly cache is back to empty, and the
-                    # next tick would persist them.
-                    saved_quarters = coord._historical_spot_quarters
-                    coord._historical_spots = {}
-                    coord._historical_spot_quarters = {}
-                    try:
+                    # Isolated: this wants the target's own year, not whatever
+                    # the entry happens to hold. Copied out before the context
+                    # manager puts the entry's caches back, since it restores
+                    # into the same dicts rather than rebinding them.
+                    with _borrowed_spot_cache(coord, isolate=True):
                         await coord._ensure_historical_spots(
                             jan1, today_local, borrowed
                         )
-                        hist_spots = coord._historical_spots
-                        hist_quarters = coord._historical_spot_quarters
-                    finally:
-                        coord._historical_spots = saved
-                        coord._historical_spot_quarters = saved_quarters
+                        hist_spots = dict(coord._historical_spots)
+                        hist_quarters = dict(coord._historical_spot_quarters)
             try:
                 current_ytd_val = await _compute_current_year_cost(
                     self.hass,
