@@ -4455,9 +4455,9 @@ def test_spp_opt_in_does_not_reach_a_foreign_card() -> None:
 
     # The entry-side predicate still says yes about a card that is not ours,
     # which is exactly why the target side must not consult it.
-    assert _spp_weighting_enabled(entry, foreign) is True
+    assert _spp_weighting_enabled(entry, foreign) is True  # type: ignore[arg-type]
     # The card-side predicate, which the target side uses instead, says no.
-    assert _injection_is_spp_indexed(foreign) is False
+    assert _injection_is_spp_indexed(foreign) is False  # type: ignore[arg-type]
 
     # And it still says yes for a card that really is SPP-indexed, so the
     # narrowing does not cost a legitimate target its resolution.
@@ -4467,7 +4467,7 @@ def test_spp_opt_in_does_not_reach_a_foreign_card() -> None:
             factor=0.84, base=-0.028, current=0.0476, spp_indexed=True
         ),
     )
-    assert _injection_is_spp_indexed(spp_card) is True
+    assert _injection_is_spp_indexed(spp_card) is True  # type: ignore[arg-type]
 
 
 def test_spp_month_mean_would_invert_a_foreign_credit() -> None:
@@ -4514,4 +4514,5 @@ def test_spp_month_mean_would_invert_a_foreign_credit() -> None:
 
     leaked = _compare_injection_credit(foreign, entry, {}, 0.0950, 0.0060)
     assert leaked == pytest.approx(0.84 * 0.0060 - 0.028)
+    assert printed is not None and leaked is not None
     assert leaked < 0 < printed
