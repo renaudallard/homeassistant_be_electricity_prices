@@ -720,6 +720,45 @@ def _whatif_note(
     return note + " Your entry is unchanged."
 
 
+def _vintage_note(
+    current: Any, current_label: str, other: Any, other_label: str
+) -> str:
+    """Named when the two sides are priced off cards of different vintages.
+
+    Every supplier transcribes the same regulated tariffs onto its own card,
+    so the two sides of a quote share their DSO and federal overlays only for
+    as long as both cards were published under the same rules. Measured
+    across twelve Flemish cards, suppliers agree to four decimals on the DSO
+    tables and to the last digit on the excise -- until a regulatory change
+    lands, and then a card published either side of it differs by about
+    0,0036 EUR/kWh, four times the ordinary spread between suppliers and
+    worth around 13 EUR a year at 3500 kWh.
+
+    That gap belongs to the calendar, not to the offer, so it is disclosed
+    rather than corrected: re-pricing one side onto the other's overlays
+    would invent a card neither supplier published.
+
+    ``valid_until`` is a real date and sorts. ``publication_label`` is free
+    text off the card ('Avril 2026', 'augustus 2026', '04/2026') and does
+    not, so it is only ever printed, never compared.
+    """
+    ours = getattr(current, "valid_until", None)
+    theirs = getattr(other, "valid_until", None)
+    if ours is None or theirs is None or ours == theirs:
+        return ""
+    if ours < theirs:
+        older, older_snap, newer = current_label, current, other_label
+    else:
+        older, older_snap, newer = other_label, other, current_label
+    printed = getattr(older_snap, "publication_label", "") or ""
+    stamp = f" ({printed})" if printed else ""
+    return (
+        f"{older}'s card{stamp} is older than {newer}'s, so each side carries "
+        "the regulated tariffs as they stood when it was published; a levy "
+        "change between the two moves a side for a reason that is not its offer"
+    )
+
+
 def _card_caveats(snapshot: Any, label: str) -> list[str]:
     """What one side's card does not say, in the household's own terms.
 

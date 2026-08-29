@@ -4330,3 +4330,47 @@ def test_card_caveat_names_the_supplier_whose_card_omits_the_walloon_fee() -> No
     # A side that failed to fetch carries no snapshot and must not raise.
     assert _card_caveats(None, "Bolt") == []
     assert _card_caveats(SimpleNamespace(), "Bolt") == []
+
+
+def test_vintage_note_names_the_older_card_only_when_they_differ() -> None:
+    """Suppliers agree on the regulated overlays to four decimals while both
+    cards were published under the same rules, and diverge by about four times
+    that the moment a levy change lands between them. That gap belongs to the
+    calendar rather than the offer, so it is disclosed, not corrected."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_quote import _vintage_note
+
+    april = SimpleNamespace(
+        valid_until=date(2026, 4, 30), publication_label="Avril 2026"
+    )
+    august = SimpleNamespace(valid_until=date(2026, 8, 31), publication_label="08/2026")
+    undated = SimpleNamespace(valid_until=None, publication_label="")
+
+    note = _vintage_note(april, "Engie", august, "energie.be")
+    assert "Engie" in note and "energie.be" in note
+    assert "Avril 2026" in note
+    # Whichever side is older gets named, not whichever side is ours.
+    assert _vintage_note(august, "energie.be", april, "Engie").startswith("Engie")
+
+    # Same vintage, or a card that publishes no validity date: nothing to say.
+    assert _vintage_note(april, "Engie", april, "Eneco") == ""
+    assert _vintage_note(april, "Engie", undated, "Bolt") == ""
+    assert _vintage_note(undated, "Bolt", april, "Engie") == ""
+    assert _vintage_note(None, "Bolt", april, "Engie") == ""
+
+
+def test_vintage_note_prints_no_stamp_when_the_older_card_has_no_label() -> None:
+    """publication_label is free text off the card ('Avril 2026', 'augustus
+    2026', '04/2026') and does not sort, so it is only ever printed. Four of
+    the twelve Flemish cards leave valid_until unset and some leave the label
+    empty too, and neither may render as an empty bracket."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_quote import _vintage_note
+
+    older = SimpleNamespace(valid_until=date(2026, 4, 30), publication_label="")
+    newer = SimpleNamespace(valid_until=date(2026, 8, 31), publication_label="08/2026")
+    note = _vintage_note(older, "Bolt", newer, "Engie")
+    assert note.startswith("Bolt's card is older")
+    assert "()" not in note

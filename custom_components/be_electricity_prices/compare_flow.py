@@ -104,6 +104,7 @@ from .compare_quote import (
     _solar_note,
     _tou_weighted_per_kwh,
     _uncredited_note,
+    _vintage_note,
     _whatif_note,
 )
 from .flow_schemas import (
@@ -1248,6 +1249,14 @@ class _CompareStepsMixin(OptionsFlow):
             caveats += _card_caveats(
                 other_snap, _label_for_supplier(self._compare[CONF_SUPPLIER])
             )
+        vintage = _vintage_note(
+            current_snapshot,
+            _label_for_supplier(current[CONF_SUPPLIER]),
+            other_snap,
+            _label_for_supplier(self._compare[CONF_SUPPLIER]),
+        )
+        if vintage:
+            caveats.append(vintage)
         placeholders["card_note"] = ("Note: " + "; ".join(caveats)) if caveats else ""
         if (
             current_per_kwh is not None
