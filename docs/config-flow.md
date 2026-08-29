@@ -543,10 +543,12 @@ decide. The solar regime override applies to BOTH sides,
 because the regime belongs to the grid connection rather than to the supplier, so
 two suppliers at one address are necessarily on the same one. That symmetry is
 also why it barely moves `delta_annual`, and why the result page prints the user's
-own contract priced both ways inside `{solar_note}`: the compare branch excludes
-the user's own contract from the picker (`compare_flow.py:270`), so without that
-clause the question "what does leaving compensation cost me" has no answer
-anywhere on the page.
+own contract priced both ways inside `{solar_note}`: with both sides moving
+together the printed supplier delta barely shifts, so without that clause the
+question "what does leaving compensation cost me" would have no direct answer on
+the page. The clause predates the picker offering the user's own contract
+(`e2a52af`); picking yourself is now a second route to the same number, and the
+table below is the authority on what the picker excludes.
 
 | Step | Method | Notes |
 | --- | --- | --- |

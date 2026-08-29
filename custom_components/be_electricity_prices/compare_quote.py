@@ -682,11 +682,12 @@ def _whatif_note(
     Returns ``base_note`` untouched when the quote runs on the entry's own
     regime, so an ordinary comparison reads exactly as before.
 
-    The baseline clause exists because the compare branch cannot quote a
-    user against their own contract: the picker excludes it. With the
-    regime moving both sides together, the printed supplier delta barely
-    shifts, and the number the user actually came for, their own contract
-    under the other regime, would otherwise appear nowhere.
+    The baseline clause exists because, with the regime moving both sides
+    together, the printed supplier delta barely shifts, and the number the
+    user actually came for -- their own contract under the other regime --
+    would otherwise appear nowhere. It predates the picker offering the
+    user's own contract (e2a52af): picking yourself is now a second route to
+    the same answer, and the clause still gives it without the detour.
     """
     if regime == stored_regime:
         # Typed volumes blank the year-to-date rows on their own, without
