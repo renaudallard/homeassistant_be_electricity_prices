@@ -4302,3 +4302,31 @@ def test_compare_supplier_list_drops_a_segment_only_supplier() -> None:
             )
             selector = list(schema.schema.values())[0]
             assert selector.config["options"], (sup["value"], professional)
+
+
+def test_card_caveat_names_the_supplier_whose_card_omits_the_walloon_fee() -> None:
+    """A Walloon card that prints no connection-fee row still leaves the
+    household paying the fee, so a target carrying that flag bills short and
+    ranks cheaper for a reason that is not its offer. The coordinator raises a
+    repair issue about it for the user's OWN entry, which says nothing about a
+    contract they are being quoted."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_quote import _card_caveats
+
+    missing = SimpleNamespace(
+        taxes=SimpleNamespace(region_connection_fee_unavailable=True)
+    )
+    printed = SimpleNamespace(
+        taxes=SimpleNamespace(region_connection_fee_unavailable=False)
+    )
+
+    notes = _card_caveats(missing, "EnergyVision")
+    assert len(notes) == 1
+    assert "EnergyVision" in notes[0]
+    assert "connection-fee" in notes[0]
+
+    assert _card_caveats(printed, "Eneco") == []
+    # A side that failed to fetch carries no snapshot and must not raise.
+    assert _card_caveats(None, "Bolt") == []
+    assert _card_caveats(SimpleNamespace(), "Bolt") == []

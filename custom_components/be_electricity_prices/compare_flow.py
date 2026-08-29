@@ -94,6 +94,7 @@ from .const import (
 from .energy_meters import _measured_hour_weights, _measured_kwh
 from .compare_quote import (
     _annual_bill,
+    _card_caveats,
     _compare_injection_credit,
     _consumption_weighted_spot,
     _populate_charts,
@@ -648,6 +649,7 @@ class _CompareStepsMixin(OptionsFlow):
                 "consumption_source": "default (entry reloading)",
                 "annual_chart": "",
                 "ytd_chart": "",
+                "card_note": "",
                 "error": "current entry is reloading; try again in a moment",
             }
 
@@ -960,6 +962,7 @@ class _CompareStepsMixin(OptionsFlow):
             "solar_note": _solar_note(regime, rolling_inj_kwh),
             "consumption_source": consumption_source,
             "meter_used": meter,
+            "card_note": "",
             "error": "",
         }
 
@@ -1236,6 +1239,16 @@ class _CompareStepsMixin(OptionsFlow):
             volumes_typed=volumes_typed,
             missing_kva=_kva(current) <= 0.0,
         )
+        caveats: list[str] = []
+        if current_snapshot is not None:
+            caveats += _card_caveats(
+                current_snapshot, _label_for_supplier(current[CONF_SUPPLIER])
+            )
+        if other_snap is not None:
+            caveats += _card_caveats(
+                other_snap, _label_for_supplier(self._compare[CONF_SUPPLIER])
+            )
+        placeholders["card_note"] = ("Note: " + "; ".join(caveats)) if caveats else ""
         if (
             current_per_kwh is not None
             and other_per_kwh is not None

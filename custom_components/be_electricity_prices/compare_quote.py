@@ -720,6 +720,32 @@ def _whatif_note(
     return note + " Your entry is unchanged."
 
 
+def _card_caveats(snapshot: Any, label: str) -> list[str]:
+    """What one side's card does not say, in the household's own terms.
+
+    Separate from ``_uncredited_note``, which explains a missing injection
+    credit. These are caveats about the card itself: a regulated charge it
+    does not print, so the estimate beside it is short by a real amount the
+    household still pays.
+
+    Returned per side and joined by the caller, so the page names which
+    supplier each caveat belongs to rather than hedging the whole quote.
+    """
+    out: list[str] = []
+    taxes = getattr(snapshot, "taxes", None)
+    if taxes is not None and getattr(taxes, "region_connection_fee_unavailable", False):
+        # The coordinator raises a repair issue for this on the user's own
+        # entry, but that says nothing about a target they are being quoted.
+        # Wallonia levies the fee and the supplier passes it through, so a
+        # card that omits the row bills short and ranks cheaper for a reason
+        # that is not its offer.
+        out.append(
+            f"{label}'s card prints no Walloon connection-fee row, so its "
+            "estimate excludes a charge you would still pay"
+        )
+    return out
+
+
 def _uncredited_note(snapshot: Any, label: str) -> str:
     """Why one side of the quote credits nothing for the injected kWh.
 
