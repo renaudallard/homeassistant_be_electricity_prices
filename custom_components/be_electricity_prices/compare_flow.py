@@ -108,6 +108,7 @@ from .compare_quote import (
 from .flow_schemas import (
     _compare_solar_schema,
     _contract_has_spot_injection,
+    _contract_is_professional,
     _contract_kind,
     _contracts_for,
     _validate_entsoe_key,
@@ -157,13 +158,18 @@ def _borrowed_spot_cache(coord: Any, *, isolate: bool) -> Iterator[None]:
         coord._complete_spot_days.update(saved_complete)
 
 
-def _compare_supplier_options(region: str, current_kind: str) -> list[SelectOptionDict]:
+def _compare_supplier_options(
+    region: str, current_kind: str, professional: bool
+) -> list[SelectOptionDict]:
     """Suppliers that have at least one contract available in the
     user's region. ``current_kind`` is kept in the signature for
     callers that may want to pre-filter, but the compare flow now
     accepts cross-kind quotes (static <-> dynamic) -- the dynamic
     side is priced from the user's spot cache or a fresh ENTSO-E
-    fetch when crossing into dynamic territory."""
+    fetch when crossing into dynamic territory.
+
+    ``professional`` scopes the list to products the household could
+    actually sign; see ``_compare_contract_schema`` for why."""
     out: list[SelectOptionDict] = []
     for ext in all_extractors():
         # The expert custom supplier has no fetchable card, so it can't be a
@@ -176,16 +182,23 @@ def _compare_supplier_options(region: str, current_kind: str) -> list[SelectOpti
             continue
         if region not in ext.regions():
             continue
-        if not any(region in c.regions for c in ext.contracts):
+        if not any(
+            region in c.regions and c.professional == professional
+            for c in ext.contracts
+        ):
             continue
         out.append(SelectOptionDict(value=ext.id, label=ext.label))
     return out
 
 
 def _compare_contract_schema(
-    supplier_id: str, region: str, current_kind: str, exclude_contract: str
+    supplier_id: str,
+    region: str,
+    current_kind: str,
+    exclude_contract: str,
+    professional: bool,
 ) -> vol.Schema:
-    """Contract picker scoped to the user's region.
+    """Contract picker scoped to the user's region and segment.
 
     Includes both static and dynamic contracts so the user can ask "should I
     switch from fixed to dynamic", and the user's OWN contract so they can ask
@@ -193,9 +206,20 @@ def _compare_contract_schema(
     injection tariff instead of compensation" - the two switches a household
     can make without changing supplier. ``exclude_contract`` is kept for
     callers that do want a strict alternative; pass "" for none.
+
+    It does NOT cross the residential/professional line. A professional card
+    is published excluding VAT and bands the federal excise by annual volume,
+    so ``_resolve_snapshot`` grosses it at the entry's own rate -- 21% against
+    a residential 6% -- while its excise is a fifth of the residential one and
+    it carries a monthly energy-fund charge the residential card zeroes. The
+    row that comes out is neither the price the household would pay nor a
+    contract it could sign, and nothing on the page says so beyond the
+    supplier's own "(pro)" label.
     """
     contracts = [
-        c for c in _contracts_for(supplier_id, region) if c.id != exclude_contract
+        c
+        for c in _contracts_for(supplier_id, region)
+        if c.id != exclude_contract and c.professional == professional
     ]
     options = [SelectOptionDict(value=c.id, label=c.label) for c in contracts]
     return vol.Schema(
@@ -337,12 +361,17 @@ class _CompareStepsMixin(OptionsFlow):
     ) -> ConfigFlowResult:
         current = self.config_entry.data
         current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        own_professional = _contract_is_professional(
+            current[CONF_SUPPLIER], current[CONF_CONTRACT]
+        )
         if not hasattr(self, "_compare"):
             self._compare = {}
         if user_input is not None:
             self._compare.update(user_input)
             return await self.async_step_compare_contract()
-        options = _compare_supplier_options(current[CONF_REGION], current_kind)
+        options = _compare_supplier_options(
+            current[CONF_REGION], current_kind, own_professional
+        )
         if not options:
             return self.async_abort(reason="compare_no_alternative")
         return self.async_show_form(
@@ -365,6 +394,9 @@ class _CompareStepsMixin(OptionsFlow):
     ) -> ConfigFlowResult:
         current = self.config_entry.data
         current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        own_professional = _contract_is_professional(
+            current[CONF_SUPPLIER], current[CONF_CONTRACT]
+        )
         if user_input is not None:
             self._compare.update(user_input)
             return await self.async_step_compare_meter()
@@ -380,7 +412,11 @@ class _CompareStepsMixin(OptionsFlow):
         # instead of compensation". Those are the two switches a household
         # can actually make without changing supplier, and they were the only
         # comparison the page could not do.
-        remaining = _contracts_for(self._compare[CONF_SUPPLIER], current[CONF_REGION])
+        remaining = [
+            c
+            for c in _contracts_for(self._compare[CONF_SUPPLIER], current[CONF_REGION])
+            if c.professional == own_professional
+        ]
         if not remaining:
             return self.async_abort(reason="compare_no_alternative")
         return self.async_show_form(
@@ -393,6 +429,7 @@ class _CompareStepsMixin(OptionsFlow):
                 current[CONF_REGION],
                 current_kind,
                 "",
+                own_professional,
             ),
         )
 

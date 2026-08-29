@@ -621,22 +621,22 @@ async def test_compare_branch_supplier_picker_lists_all_in_region(
     hass: HomeAssistant,
 ) -> None:
     """The compare flow now allows cross-kind quotes (static <->
-    dynamic), so the supplier picker is filtered only by region and
-    by 'has at least one contract here'. The kind switch happens at
-    the contract picker (via _compare_contract_schema) and the
-    api_key step kicks in when the user crosses into dynamic
-    territory without a saved key."""
+    dynamic), so the supplier picker is filtered by region, by 'has at least
+    one contract here', and by segment -- not by kind. The kind switch happens
+    at the contract picker (via _compare_contract_schema) and the api_key step
+    kicks in when the user crosses into dynamic territory without a saved
+    key."""
     from custom_components.be_electricity_prices.compare_flow import (
         _compare_supplier_options,
     )
 
     # Static-side caller still gets every Walloon supplier.
-    static_options = _compare_supplier_options("wallonia", "fixed")
+    static_options = _compare_supplier_options("wallonia", "fixed", False)
     static_ids = {o["value"] for o in static_options}
     assert "eneco" in static_ids
     assert "cociter" in static_ids
     # Dynamic-side caller gets the same set: cross-kind is allowed.
-    dynamic_options = _compare_supplier_options("wallonia", "dynamic")
+    dynamic_options = _compare_supplier_options("wallonia", "dynamic", False)
     dynamic_ids = {o["value"] for o in dynamic_options}
     assert dynamic_ids == static_ids
 
@@ -4103,14 +4103,16 @@ async def test_compare_offers_your_own_contract(hass: HomeAssistant) -> None:
         _compare_contract_schema,
     )
 
-    schema = _compare_contract_schema("eneco", "wallonia", "fixed", "")
+    schema = _compare_contract_schema("eneco", "wallonia", "fixed", "", False)
     options = schema.schema[  # the SelectSelector's option list
         next(k for k in schema.schema if str(k) == "contract")
     ].config["options"]
     ids = [o["value"] for o in options]
     assert "power_fix" in ids, ids
     # And an explicit exclusion still works for callers that want one.
-    excluded = _compare_contract_schema("eneco", "wallonia", "fixed", "power_fix")
+    excluded = _compare_contract_schema(
+        "eneco", "wallonia", "fixed", "power_fix", False
+    )
     excluded_ids = [
         o["value"]
         for o in excluded.schema[
@@ -4250,3 +4252,53 @@ def test_isolating_the_cache_clears_the_completeness_set() -> None:
         # What _ensure_historical_spots reads to decide whether to fetch.
         assert coord._complete_spot_days == set()
     assert coord._complete_spot_days == walked
+
+
+def test_compare_pickers_do_not_cross_the_professional_line() -> None:
+    """A professional card is published excluding VAT and bands the excise by
+    annual volume, so _resolve_snapshot grosses it at the entry's own rate --
+    21% against a residential 6% -- while its excise is a fifth of the
+    residential one. The row is neither the price the household would pay nor
+    a contract it could sign, and only the supplier's own "(pro)" label said
+    so."""
+    from custom_components.be_electricity_prices.compare_flow import (
+        _compare_contract_schema,
+        _compare_supplier_options,
+    )
+
+    def _offered(professional: bool) -> list[str]:
+        out: list[str] = []
+        for sup in _compare_supplier_options("flanders", "variable", professional):
+            schema = _compare_contract_schema(
+                sup["value"], "flanders", "variable", "", professional
+            )
+            selector = list(schema.schema.values())[0]
+            out += [o["value"] for o in selector.config["options"]]
+        return out
+
+    residential = _offered(False)
+    professional = _offered(True)
+
+    assert residential and professional
+    # The two sides partition the catalogue: nothing is lost, nothing doubled.
+    assert not set(residential) & set(professional)
+    assert "engie_pro_dynamic" in professional
+    assert "engie_pro_dynamic" not in residential
+    assert all(not c.startswith("engie_pro_") for c in residential)
+
+
+def test_compare_supplier_list_drops_a_segment_only_supplier() -> None:
+    """A supplier whose only in-region cards are professional must not reach
+    the contract picker either, or it renders an empty list."""
+    from custom_components.be_electricity_prices.compare_flow import (
+        _compare_contract_schema,
+        _compare_supplier_options,
+    )
+
+    for professional in (False, True):
+        for sup in _compare_supplier_options("flanders", "variable", professional):
+            schema = _compare_contract_schema(
+                sup["value"], "flanders", "variable", "", professional
+            )
+            selector = list(schema.schema.values())[0]
+            assert selector.config["options"], (sup["value"], professional)

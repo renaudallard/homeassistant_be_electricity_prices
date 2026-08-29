@@ -449,7 +449,7 @@ async def test_custom_fetch_stub_raises() -> None:
 
 
 def test_custom_excluded_from_compare_targets() -> None:
-    options = _compare_supplier_options(const.REGION_FLANDERS, "dynamic")
+    options = _compare_supplier_options(const.REGION_FLANDERS, "dynamic", False)
     assert const.SUPPLIER_CUSTOM not in {o["value"] for o in options}
 
 
@@ -487,7 +487,7 @@ def test_withdrawn_supplier_not_a_comparison_target() -> None:
     for region in (const.REGION_FLANDERS, const.REGION_WALLONIA):
         for kind in ("variable", "dynamic"):
             assert "dats24" not in {
-                o["value"] for o in _compare_supplier_options(region, kind)
+                o["value"] for o in _compare_supplier_options(region, kind, False)
             }
 
 
