@@ -38,6 +38,7 @@ import pytest
 from homeassistant import data_entry_flow
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.flow_schemas import (
@@ -569,7 +570,9 @@ async def test_compare_branch_quotes_against_other_supplier(
     from custom_components.be_electricity_prices.providers import EXTRACTORS
 
     cociter_ext = EXTRACTORS["cociter"]
-    fake_cociter = replace(cociter_ext, fetch=AsyncMock(return_value=other_snap))
+    fake_cociter = replace(
+        cociter_ext, fetch=AsyncMock(return_value=other_snap), probe=None
+    )
     with patch.dict(EXTRACTORS, {"cociter": fake_cociter}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         assert result["type"] == data_entry_flow.FlowResultType.MENU
@@ -671,7 +674,9 @@ async def test_compare_branch_static_to_dynamic_prompts_for_api_key(
         source_url="test://stub",
         publication_label="april 2026",
     )
-    fake = replace(EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap))
+    fake = replace(
+        EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
     with patch.dict(EXTRACTORS, {"cociter": fake}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -742,7 +747,9 @@ async def test_compare_branch_spot_injection_target_prompts_for_api_key(
         source_url="test://stub",
         publication_label="april 2026",
     )
-    fake = replace(EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap))
+    fake = replace(
+        EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
     with patch.dict(EXTRACTORS, {"cociter": fake}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -819,7 +826,9 @@ async def test_compare_does_not_mutate_live_historical_spots(
             0.06,
         ]
 
-    fake = replace(EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap))
+    fake = replace(
+        EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
     with (
         patch.dict(EXTRACTORS, {"cociter": fake}),
         patch.object(coord, "_ensure_historical_spots", _fake_ensure),
@@ -899,7 +908,9 @@ async def test_compare_branch_spot_injection_current_prompts_for_api_key(
         source_url="test://stub",
         publication_label="april 2026",
     )
-    fake = replace(EXTRACTORS["mega"], fetch=AsyncMock(return_value=other_snap))
+    fake = replace(
+        EXTRACTORS["mega"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
     with patch.dict(EXTRACTORS, {"mega": fake}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -1002,7 +1013,9 @@ async def _drive_compare(
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
 
-    fake = replace(EXTRACTORS[other_supplier], fetch=AsyncMock(return_value=other_snap))
+    fake = replace(
+        EXTRACTORS[other_supplier], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
     with patch.dict(EXTRACTORS, {other_supplier: fake}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -1816,7 +1829,9 @@ async def test_compare_solar_requires_volumes_without_an_injection_meter(
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
 
-    fake = replace(EXTRACTORS["mega"], fetch=AsyncMock(return_value=other_snap))
+    fake = replace(
+        EXTRACTORS["mega"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
     with patch.dict(EXTRACTORS, {"mega": fake}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -2013,7 +2028,9 @@ async def test_compare_solar_error_reshow_keeps_a_typed_volume(
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
 
-    fake = dc_replace(EXTRACTORS["mega"], fetch=AsyncMock(return_value=other_snap))
+    fake = dc_replace(
+        EXTRACTORS["mega"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
     with patch.dict(EXTRACTORS, {"mega": fake}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -3643,7 +3660,9 @@ async def test_compare_resolves_the_quote_through_the_shared_resolver(
         hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
     )
     other_snap = _stub_snapshot("cociter", "cociter_variable", 0.16)
-    fake = replace(EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap))
+    fake = replace(
+        EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
 
     seen: list[Any] = []
     real = snapshot_store._resolve_snapshot
@@ -3769,7 +3788,7 @@ async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
     assert month_mean is not None and month_mean > 0.05
 
     other = _stub_snapshot("eneco", "power_fix", 0.18)
-    fake = replace(EXTRACTORS["eneco"], fetch=AsyncMock(return_value=other))
+    fake = replace(EXTRACTORS["eneco"], fetch=AsyncMock(return_value=other), probe=None)
     with patch.dict(EXTRACTORS, {"eneco": fake}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -3882,7 +3901,9 @@ async def test_compare_branch_static_to_spot_monthly_prompts_for_api_key(
     )
     assert month_mean is not None and month_mean > 0.05  # month-to-date dominates
 
-    fake = replace(EXTRACTORS["energiebe"], fetch=AsyncMock(return_value=other_snap))
+    fake = replace(
+        EXTRACTORS["energiebe"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
     with patch.dict(EXTRACTORS, {"energiebe": fake}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -4637,7 +4658,9 @@ async def _compare_placeholders(
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
 
-    fake = replace(EXTRACTORS[supplier], fetch=AsyncMock(return_value=target_snapshot))
+    fake = replace(
+        EXTRACTORS[supplier], fetch=AsyncMock(return_value=target_snapshot), probe=None
+    )
     with patch.dict(EXTRACTORS, {supplier: fake}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -4905,3 +4928,109 @@ def test_golden_dicts_cover_every_template_token() -> None:
         _GOLDEN_ENTRY_RELOADING,
     ):
         assert set(golden) == tokens
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_quote_reuses_a_cached_card_on_reopen(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The quote goes through the shared policy, not extractor.fetch.
+
+    It was the last bare fetch outside the coordinator, which meant the page
+    paid a full download for a card a sibling entry already held, downloaded
+    it again on every reopen, and kept asking a supplier that had just failed
+    instead of backing off with everything else."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    target = _stub_snapshot("cociter", "cociter_variable", 0.16)
+    fetch = AsyncMock(return_value=target)
+    fake = replace(EXTRACTORS["cociter"], fetch=fetch, probe=None)
+
+    async def _open() -> dict[str, str]:
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_variable"}
+        )
+        if result["step_id"] == "compare_meter":
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"meter": "mono"}
+            )
+        assert result["step_id"] == "compare_result"
+        placeholders = result["description_placeholders"]
+        assert placeholders is not None
+        return dict(placeholders)
+
+    with patch.dict(EXTRACTORS, {"cociter": fake}):
+        first = await _open()
+        assert fetch.await_count == 1
+        second = await _open()
+
+    # Second open: the row was already in the shared cache and inside its TTL.
+    assert fetch.await_count == 1
+    # And it is the same quote, not a degraded one.
+    assert second["compare_annual"] == first["compare_annual"]
+    assert second["error"] == ""
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_quote_reports_a_sibling_backoff_without_fetching(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A supplier that just failed for another entry is not asked again. The
+    page says so rather than firing the same broken request, and the backoff
+    arm carries the sibling's reason with no exception of its own."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _shared_failed_fetches,
+    )
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    _shared_failed_fetches(hass)[("cociter", "cociter_variable", "wallonia")] = (
+        dt_util.utcnow(),
+        "supplier said no",
+        1,
+    )
+    fetch = AsyncMock(return_value=_stub_snapshot("cociter", "cociter_variable", 0.16))
+    fake = replace(EXTRACTORS["cociter"], fetch=fetch, probe=None)
+
+    with patch.dict(EXTRACTORS, {"cociter": fake}):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_variable"}
+        )
+        if result["step_id"] == "compare_meter":
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"meter": "mono"}
+            )
+
+    fetch.assert_not_awaited()
+    placeholders = result["description_placeholders"]
+    assert placeholders is not None
+    assert "supplier said no" in placeholders["error"]

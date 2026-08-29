@@ -1310,18 +1310,27 @@ class _CompareStepsMixin(OptionsFlow):
         # 1,421 c€/kWh instead of 1,139 at 60 000 kWh/yr, overstating the
         # alternative by about 169 EUR/yr. The user's own side comes off the
         # coordinator and IS resolved, so the comparison was biased.
-        from .snapshot_store import _resolve_snapshot
+        from .snapshot_store import _resolve_snapshot, fetch_shared
 
-        try:
-            other_snap = _resolve_snapshot(
-                quote_entry,
-                await other_extractor.fetch(
-                    session, self._compare[CONF_CONTRACT], region
-                ),
-            )
-        except Exception as err:  # noqa: BLE001
-            placeholders["error"] = f"could not fetch quote: {err}"
+        # Through the shared policy rather than extractor.fetch directly: this
+        # was the last bare fetch outside the coordinator, and it meant the
+        # page paid a full download for a card a sibling entry already held,
+        # re-downloaded on every reopen, and hammered a supplier that had just
+        # failed instead of backing off with everything else.
+        fetched = await fetch_shared(
+            self.hass,
+            session,
+            other_extractor,
+            self._compare[CONF_CONTRACT],
+            region,
+            supplier=self._compare[CONF_SUPPLIER],
+        )
+        if fetched.row is None:
+            # Includes the backoff arm, which carries a sibling's recent
+            # failure and no exception of its own.
+            placeholders["error"] = f"could not fetch quote: {fetched.error_message}"
         else:
+            other_snap = _resolve_snapshot(quote_entry, fetched.row.snapshot)
             if dso not in other_snap.dsos:
                 placeholders["error"] = (
                     f"{self._compare[CONF_SUPPLIER]} doesn't serve DSO {dso}"

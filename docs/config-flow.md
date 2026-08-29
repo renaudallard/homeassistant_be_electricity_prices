@@ -62,7 +62,7 @@ the "Shown when" column gives the gate.
 | `dso_tariff_mode` | `async_step_dso_tariff_mode` (`config_flow.py:442`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia AND the contract is not `tou_impact` (`config_flow.py:442`) |
 | `api_key` | `async_step_api_key` (`config_flow.py:308`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
 | `custom_energy` | `async_step_custom_energy` | Commodity formula (mode-dependent fields) | `CONF_CUSTOM_ENERGY_*`, `CONF_CUSTOM_YEARLY_FIXED_FEE` | Custom supplier only, after the energy/api-key step. The peak / off-peak energy boxes carry **no default** (`_add_custom_num(..., fallback=True)`): the pricing engine falls back to the single rate when they are absent, and a `vol.Optional` default is submitted verbatim when the user leaves the box alone, which wrote 0,00 into the entry and billed zero. They are shown for **both** `bi` and `dynamic` meters, matching `bi_capable` in `pricing.py:291`; gating on `bi` alone billed a fixed contract on a smart meter at the single rate for all 24 hours |
-| `capacity` | `async_step_capacity` (`config_flow.py:326`) | Peak source (sensor/fixed) + value | `CONF_CAPACITY_MODE`, `CONF_CAPACITY_PEAK_SENSOR`, `CONF_CAPACITY_FIXED_KW` | Region == Flanders (`config_flow.py:513`) |
+| `capacity` | `async_step_capacity` (`config_flow.py:326`) | Peak source (sensor/fixed) + value | `CONF_CAPACITY_MODE`, `CONF_CAPACITY_PEAK_SENSOR`, `CONF_CAPACITY_FIXED_KW` | Region == Flanders (`config_flow.py:326`) |
 | `connection_power` | `async_step_connection_power` (`config_flow.py:482`) | Brussels connection-power tier | `CONF_CONNECTION_KVA_TIER` | Region == Brussels (`config_flow.py:482`) |
 | `solar` | `async_step_solar` (`config_flow.py:342`) | Inverter kVA + regime | `CONF_SOLAR_KVA`, `CONF_SOLAR_REGIME` | Always |
 | `injection_api_key` | `async_step_injection_api_key` (`config_flow.py:379`) | ENTSO-E token (optional) | `CONF_API_KEY` | `_needs_injection_api_key` true (`config_flow.py:352`) |
@@ -396,7 +396,7 @@ Anything pre-filled stays editable (`strings.json:199`).
 | Supplier has no contract in region -> abort `supplier_region_unavailable` | `flow_prefill.py:235` | Region filtering deferred from the supplier step to here |
 | Dynamic/TOU/Impact contract forces `METER_DYNAMIC` | `flow_schemas.py:749` | Smart meter required; mixing bi-horaire network with TOU energy mis-bills |
 | `dso_tariff_mode` (incl. Impact) only in Wallonia | `config_flow.py:451` | Impact is CWaPE-only; other regions bill differently |
-| `capacity` step only in Flanders | `config_flow.py:513` | Only Flanders has the capaciteitstarief |
+| `capacity` step only in Flanders | `config_flow.py:326` | Only Flanders has the capaciteitstarief |
 | `connection_power` step only in Brussels | `config_flow.py:209` | Only Brussels charges the Brugel OSP fee |
 | Compensation regime only in Wallonia | `flow_prefill.py:169` | Avoids double-counting the Flemish capacity tariff |
 | Peak sensor restricted to power/apparent_power | `flow_schemas.py:673` | Issue #19: a kWh sensor would inflate the capacity bill |

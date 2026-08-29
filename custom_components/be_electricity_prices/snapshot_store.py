@@ -60,7 +60,6 @@ from .const import (
 )
 from .providers.base import (
     DsoOverlay,
-    ExtractorError,
     DynamicRates,
     EnergyRates,
     FixedRates,
@@ -252,7 +251,15 @@ async def fetch_shared(
     if probe_fn is not None:
         try:
             probe_key = await probe_fn(session, contract, region)
-        except (ExtractorError, asyncio.TimeoutError) as err:
+        except Exception as err:  # noqa: BLE001 - a probe is best-effort
+            # Any failure at all, not just ExtractorError and TimeoutError.
+            # The probe exists to SKIP work: falling back to the TTL path is
+            # always correct, so its failure must never be worse than not
+            # having a probe at all. Narrower here, this ran on a background
+            # tick where an unexpected error could surface; it now also runs
+            # on the compare page, where one would tear down a dialog the
+            # user is looking at, and on a sweep, where it would end the
+            # sweep at whichever row happened to hit it.
             _LOGGER.debug("probe failed for %s/%s: %s", supplier, contract, err)
             probe_key = None
 
