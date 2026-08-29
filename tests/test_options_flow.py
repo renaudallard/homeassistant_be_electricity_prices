@@ -4374,3 +4374,37 @@ def test_vintage_note_prints_no_stamp_when_the_older_card_has_no_label() -> None
     note = _vintage_note(older, "Bolt", newer, "Engie")
     assert note.startswith("Bolt's card is older")
     assert "()" not in note
+
+
+def test_month_indexed_side_is_labelled_as_last_months_index() -> None:
+    """A card whose rate IS the delivery month's index prints one computed
+    from the PREVIOUS month's and says so: 8,1% under in May and 15,4% over in
+    February on the 2026 cards' energy leg. Only the entry's own side is ever
+    re-resolved against the current month, and _cohort_energy_leg returns None
+    for any other contract by design, so a candidate is quoted a month stale
+    against a baseline that is not."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_quote import _card_caveats
+    from custom_components.be_electricity_prices.providers.base import (
+        SpotMonthlyRates,
+    )
+
+    taxes = SimpleNamespace(region_connection_fee_unavailable=False)
+    stale = SimpleNamespace(energy=SimpleNamespace(month_indexed=True), taxes=taxes)
+    notes = _card_caveats(stale, "OCTA+")
+    assert len(notes) == 1
+    assert "OCTA+" in notes[0] and "last month's index" in notes[0]
+
+    # A leg the cohort splice refreshed comes back as SpotMonthlyRates, which
+    # carries no month_indexed field at all -- that is what keeps the label
+    # off the side that did get the current month's mean.
+    assert "month_indexed" not in SpotMonthlyRates.__dataclass_fields__
+    refreshed = SimpleNamespace(
+        energy=SpotMonthlyRates(factor=1.0, base=0.0), taxes=taxes
+    )
+    assert _card_caveats(refreshed, "Cociter") == []
+
+    # A fixed card is not indexed on anything.
+    flat = SimpleNamespace(energy=SimpleNamespace(), taxes=taxes)
+    assert _card_caveats(flat, "Ecofix") == []

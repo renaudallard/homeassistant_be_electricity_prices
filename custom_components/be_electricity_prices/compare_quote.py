@@ -771,6 +771,19 @@ def _card_caveats(snapshot: Any, label: str) -> list[str]:
     supplier each caveat belongs to rather than hedging the whole quote.
     """
     out: list[str] = []
+    # A card whose rate IS the delivery month's index prints one computed from
+    # the PREVIOUS month's and says so, worth 8,1% under in May and 15,4% over
+    # in February on the energy leg of the 2026 cards. Only the entry's own
+    # side is ever re-resolved against the current month, and only when it has
+    # an ENTSO-E key: _cohort_energy_leg returns None for any other contract,
+    # by design, since an alternative has no signing history to price at. The
+    # refreshed leg comes back as SpotMonthlyRates and so carries no
+    # month_indexed flag, which is what keeps this off a side that did get it.
+    if getattr(getattr(snapshot, "energy", None), "month_indexed", False):
+        out.append(
+            f"{label}'s rate is the one printed on its card, computed on last "
+            "month's index"
+        )
     taxes = getattr(snapshot, "taxes", None)
     if taxes is not None and getattr(taxes, "region_connection_fee_unavailable", False):
         # The coordinator raises a repair issue for this on the user's own
