@@ -202,7 +202,10 @@
       "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Ga terug en kies een andere combinatie.",
       "already_configured": "Een andere invoer bevraagt al dezelfde combinatie (leverancier, contract, regio, DNB). Pas die invoer aan, of kies een andere combinatie. Een uitsluitend-nachtcircuit is de uitzondering: dat maakt u aan als een eigen extra invoer, dus het botst niet met uw hoofdinvoer.",
       "compare_no_alternative": "Geen andere leverancier of contract beschikbaar in jouw regio om mee te vergelijken.",
-      "compare_done": "Vergelijking voltooid - geen wijzigingen opgeslagen."
+      "compare_done": "Vergelijking voltooid - geen wijzigingen opgeslagen.",
+      "compare_all_no_alternatives": "Er wordt in uw gewest geen ander contract van dit type verkocht, dus er valt niets te rangschikken. De eenmalige vergelijking kan nog steeds een ander type contract berekenen.",
+      "compare_all_unknown_contract": "Het contract van deze invoer staat niet meer in de catalogus van de leverancier en kan dus niet naast de andere worden geplaatst. Kies het eerst opnieuw bij Instellingen bewerken.",
+      "compare_all_entry_reloading": "De invoer wordt nog geladen. Probeer het zo meteen opnieuw."
     },
     "error": {
       "invalid_api_key": "ENTSO-E heeft deze token geweigerd. Controleer de waarde op transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
@@ -218,7 +221,8 @@
         "title": "Belgische elektriciteitsprijzen",
         "menu_options": {
           "edit": "Instellingen wijzigen",
-          "compare": "Andere leverancier vergelijken (eenmalige offerte)"
+          "compare": "Andere leverancier vergelijken (eenmalige offerte)",
+          "compare_all": "Alle leveranciers vergelijken (rangschikking)"
         }
       },
       "edit": {
@@ -441,7 +445,17 @@
           "custom_tax_energy_fund_per_month": "Energiefonds (EUR/maand)",
           "custom_vat_rate": "Btw-tarief (bv. 0.06)"
         }
+      },
+      "compare_all_progress": {
+        "title": "Alternatieven berekenen"
+      },
+      "compare_all_result": {
+        "title": "Gerangschikte alternatieven",
+        "description": "Alle {group}-contracten die in {region} beschikbaar zijn, berekend met uw eigen instellingen. Uw eigen contract is gemarkeerd met *; de tweede kolom is het verschil met de goedkoopste.\n\n```\n{ranking}\n```\n\nSchattingen, geen offertes: elke regel berekent een volledig jaar tegen de vandaag gepubliceerde tarieven, met uw gemeten volumes. Er is niets opgeslagen. Bevestig om te sluiten."
       }
+    },
+    "progress": {
+      "sweeping": "{done} van {total} contracten berekend. De snelste kaarten worden eerst opgehaald, dus de traagste leveranciers komen als laatste."
     }
   },
   "selector": {

@@ -268,6 +268,18 @@ KIND_GROUP: Final[dict[str, str]] = {
     "tou_impact": KIND_GROUP_SLOT,
 }
 
+# How long the ranking page spends fetching before it renders what it has.
+# Not a timeout: a PDF parse runs in a worker thread and asyncio.wait_for
+# cancels the await rather than the thread, so nothing can cut one short. The
+# budget is checked BETWEEN candidates, which is the only place the sweep can
+# honestly stop, and the first candidate always runs however much it costs so
+# a slow supplier cannot produce an empty page.
+#
+# 120 s prices about 40 of the 51 Flanders static contracts on a Raspberry Pi
+# 4; the rest are named as still pending and finish from cache on the next
+# open. Longer would price more at the cost of a dialog that looks hung.
+COMPARE_SWEEP_BUDGET_S: Final = 120.0
+
 METER_TYPES: Final = (METER_MONO, METER_BI, METER_DYNAMIC, METER_EXCLUSIVE_NIGHT)
 
 # DSO-side billing mode, orthogonal to the supplier meter. Wallonia

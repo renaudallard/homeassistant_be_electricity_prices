@@ -41,14 +41,17 @@ argument for it.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Any, cast
 
+import asyncio
+
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlowResult, OptionsFlow
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.selector import (
@@ -66,6 +69,7 @@ from .providers.base import SpotMonthlyRates, SupplierSnapshot
 from .spot_stats import _injection_is_spp_indexed, _spp_weighting_enabled
 
 from .const import (
+    COMPARE_SWEEP_BUDGET_S,
     CONF_API_KEY,
     CONF_CONTRACT,
     CONF_DSO,
@@ -78,6 +82,7 @@ from .const import (
     CONF_WHATIF_CONSUMPTION_KWH,
     CONF_WHATIF_INJECTION_KWH,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
+    DOMAIN,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
     MEASURED_FULL_YEAR_DAYS,
@@ -93,14 +98,17 @@ from .const import (
 )
 from .energy_meters import _measured_hour_weights, _measured_kwh
 from .compare_quote import (
+    RankedRow,
     _annual_bill,
+    _annual_volume,
     _card_caveats,
     _compare_injection_credit,
     _consumption_weighted_spot,
-    _populate_charts,
-    _annual_volume,
     _covers_a_year,
+    _populate_charts,
+    _ranking_table,
     _read_total_kwh,
+    _row_label,
     _solar_note,
     _tou_weighted_per_kwh,
     _uncredited_note,
@@ -109,10 +117,12 @@ from .compare_quote import (
 )
 from .flow_schemas import (
     _compare_solar_schema,
+    _contract_group,
     _contract_has_spot_injection,
     _contract_is_professional,
     _contract_kind,
     _contracts_for,
+    _sweep_candidates,
     _validate_entsoe_key,
 )
 
@@ -628,6 +638,15 @@ class _CompareStepsMixin(OptionsFlow):
             err = await _validate_entsoe_key(self.hass, key)
             if err is None:
                 self._compare[CONF_API_KEY] = key
+                # Where to go next is stored rather than hardcoded, because
+                # the ranking needs the same prompt and the same live
+                # validation but returns to its own sweep. Defaults to the
+                # one-to-one result, so nothing about that path changes.
+                nxt: Callable[[], Awaitable[ConfigFlowResult]] | None = getattr(
+                    self, "_api_key_next_step", None
+                )
+                if nxt is not None:
+                    return await nxt()
                 return await self.async_step_compare_result()
             errors[CONF_API_KEY] = err
         return self.async_show_form(
@@ -996,9 +1015,16 @@ class _CompareStepsMixin(OptionsFlow):
             "current_contract": _label_for_contract(
                 current[CONF_SUPPLIER], current[CONF_CONTRACT]
             ),
-            "compare_supplier": _label_for_supplier(self._compare[CONF_SUPPLIER]),
+            # The compare side is looked up leniently because the ranking
+            # resolves the same household context with no single target: it
+            # has a whole cell of them and never reads this dict. Keyed access
+            # here would make the sweep fail on a placeholder it discards.
+            "compare_supplier": _label_for_supplier(
+                self._compare.get(CONF_SUPPLIER, "")
+            ),
             "compare_contract": _label_for_contract(
-                self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+                self._compare.get(CONF_SUPPLIER, ""),
+                self._compare.get(CONF_CONTRACT, ""),
             ),
             "current_per_kwh": "-",
             "compare_per_kwh": "-",
@@ -1691,3 +1717,284 @@ class _CompareStepsMixin(OptionsFlow):
             compare_label=_chart_labels(current, self._compare)[1],
         )
         return placeholders
+
+
+def _sweep_rows(hass: HomeAssistant, entry_id: str) -> dict[tuple[str, str], Any]:
+    """Snapshots this entry's sweep has already fetched, for the life of the
+    process.
+
+    Keyed by (supplier, contract) and holding the CARD rather than the priced
+    row, so reopening after changing a household setting re-prices from what
+    was already downloaded instead of re-downloading it. The expensive half of
+    a sweep is the fetch and the parse; the arithmetic on top is free.
+
+    Deliberately not the shared snapshot cache: that one is keyed by tuple and
+    shared between entries, and evicting it is the coordinator's business.
+    This is scratch belonging to one dialog.
+    """
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    store: dict[str, dict[tuple[str, str], Any]] = bucket.setdefault("sweep_rows", {})
+    return store.setdefault(entry_id, {})
+
+
+class _SweepStepsMixin(_CompareStepsMixin):
+    """The ranking page: every same-group contract in the region, sorted.
+
+    Subclasses ``_CompareStepsMixin`` rather than sitting beside it: the
+    sweep genuinely reuses its household resolution and its live-validated key
+    prompt, and inheriting says so where a sibling mixin would only work
+    because both happen to be mixed into the same flow.
+
+    Its MENU ENTRY is separate, because the two answer different questions. The one-to-one page explains a single pair
+    and has room to say why it crosses a kind boundary or quotes a different
+    meter; a ranked table has neither, so its candidates are narrower and its
+    output is one block of rows.
+
+    The sweep is budgeted rather than timed out. A PDF parse runs in a worker
+    thread and ``asyncio.wait_for`` cancels the await, not the thread, so
+    nothing here can cut one short; the clock is checked BETWEEN candidates,
+    which is the only place stopping is honest.
+    """
+
+    _sweep: dict[str, Any]
+    _sweep_task: asyncio.Task[Any] | None = None
+
+    async def async_step_compare_all(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Resolve the cell, then hand off to the sweep."""
+        current = self.config_entry.data
+        region = current[CONF_REGION]
+        group = _contract_group(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        if not group:
+            # The entry's contract has left the catalogue, so there is no
+            # group to rank it within. Distinct from an empty cell: nothing is
+            # missing from the market, we just cannot place this household.
+            return self.async_abort(reason="compare_all_unknown_contract")
+
+        candidates = _sweep_candidates(
+            region,
+            group,
+            _contract_is_professional(current[CONF_SUPPLIER], current[CONF_CONTRACT]),
+            current[CONF_CONTRACT],
+        )
+        if not candidates:
+            # A real answer, not a failure: a Brussels time-of-use household
+            # has exactly one slot contract in the region and it is theirs.
+            # Saying so is more use than an empty table.
+            return self.async_abort(reason="compare_all_no_alternatives")
+
+        # Cheapest card first, so a budget buys many rows before few. Ties
+        # broken on the label so the order is stable between opens and the
+        # table does not reshuffle when a user reopens to finish it.
+        candidates.sort(
+            key=lambda pair: (get_extractor(pair[0]).sweep_cost_s, pair[0], pair[1].id)
+        )
+        self._sweep = {
+            "region": region,
+            "group": group,
+            "candidates": [(supplier, c.id) for supplier, c in candidates],
+            "index": 0,
+            "rows": [],
+        }
+        self._sweep_task = None
+        if not hasattr(self, "_compare"):
+            self._compare = {}
+        return await self._sweep_start()
+
+    async def _sweep_start(self) -> ConfigFlowResult:
+        """Collect the ENTSO-E key once for the whole sweep, then begin.
+
+        Once, not per row: on the injection regime about eight in ten static
+        contracts carry a spot-indexed feed-in formula, so a per-target prompt
+        would interrupt the sweep at nearly every row. The one-to-one page
+        already owns the prompt and its live validation; this borrows both.
+        """
+        current = self.config_entry.data
+        candidates = self._sweep["candidates"]
+        needs_key = _effective_regime(current, {}) == SOLAR_REGIME_INJECTION and any(
+            _contract_has_spot_injection(supplier, contract)
+            for supplier, contract in candidates
+        )
+        needs_key = needs_key or any(
+            _contract_kind(supplier, contract) in SPOT_PRICED_CONTRACT_KINDS
+            for supplier, contract in candidates
+        )
+        if needs_key and not current.get(CONF_API_KEY):
+            self._api_key_next_step = self.async_step_compare_all_progress
+            return await self.async_step_compare_api_key()
+        return await self.async_step_compare_all_progress()
+
+    async def async_step_compare_all_progress(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Price one candidate per task, re-showing progress between them.
+
+        One task per candidate rather than one for the whole sweep, because
+        Home Assistant only re-renders a progress step when the step returns a
+        new result, and a step only returns when its task finishes. A single
+        task spanning the sweep could never move the counter.
+        """
+        sweep = self._sweep
+        if "household" not in sweep:
+            from .coordinator import BePricesCoordinator
+
+            coord = getattr(self.config_entry, "runtime_data", None)
+            if not isinstance(coord, BePricesCoordinator):
+                return self.async_abort(reason="compare_all_entry_reloading")
+            # Once for the whole sweep. This is the half that makes a ranking
+            # affordable: the meter reads, the recorder walk and the day-ahead
+            # window are O(1) in the number of rows, and asking every
+            # candidate up front is what lets the key be collected once.
+            sweep["household"] = await self._resolve_household(
+                coord,
+                candidates=sweep["candidates"],
+                meter=self.config_entry.data.get(CONF_METER, METER_MONO),
+            )
+        if self._sweep_task is not None:
+            if not self._sweep_task.done():
+                # Re-show the SAME task. Creating a second one here is the
+                # classic duplicate-task bug: the flow manager re-enters this
+                # step on every frontend poll.
+                return self._sweep_progress()
+            task, self._sweep_task = self._sweep_task, None
+            try:
+                sweep["rows"].append(task.result())
+            except Exception as err:  # noqa: BLE001 - one row, not the sweep
+                # A row that raised is still a row: dropping it would read as
+                # "not competitive". Recorded with its reason and moved past.
+                supplier, contract = sweep["candidates"][sweep["index"]]
+                sweep["rows"].append(
+                    RankedRow(
+                        label=_row_label(
+                            _label_for_supplier(supplier),
+                            _label_for_contract(supplier, contract),
+                        ),
+                        annual=None,
+                        status=f"could not be priced: {err}",
+                    )
+                )
+            sweep["index"] += 1
+
+        if sweep["index"] >= len(sweep["candidates"]) or self._sweep_spent():
+            return self.async_show_progress_done(next_step_id="compare_all_result")
+
+        supplier, contract = sweep["candidates"][sweep["index"]]
+        self._sweep_task = self.hass.async_create_task(
+            self._sweep_one(supplier, contract),
+            f"be_electricity_prices sweep {supplier}/{contract}",
+            # Not eagerly: an eager start runs the coroutine up to its first
+            # await inside the HTTP request the frontend is still waiting on.
+            eager_start=False,
+        )
+        return self._sweep_progress()
+
+    def _sweep_spent(self) -> bool:
+        """Whether the wall-clock budget is used up.
+
+        Checked between candidates only. The first candidate always runs, so a
+        supplier slower than the whole budget still produces one row rather
+        than an empty page.
+        """
+        started = self._sweep.get("started_at")
+        if started is None:
+            self._sweep["started_at"] = dt_util.utcnow()
+            return False
+        elapsed: float = (dt_util.utcnow() - started).total_seconds()
+        return elapsed >= COMPARE_SWEEP_BUDGET_S
+
+    def _sweep_progress(self) -> ConfigFlowResult:
+        sweep = self._sweep
+        return self.async_show_progress(
+            step_id="compare_all_progress",
+            progress_action="sweeping",
+            description_placeholders={
+                "done": str(sweep["index"]),
+                "total": str(len(sweep["candidates"])),
+            },
+            progress_task=self._sweep_task,
+        )
+
+    async def _sweep_one(self, supplier: str, contract: str) -> RankedRow:
+        """Fetch and price one candidate."""
+        from .snapshot_store import _resolve_snapshot, fetch_shared
+
+        label = _row_label(
+            _label_for_supplier(supplier), _label_for_contract(supplier, contract)
+        )
+        region = self._sweep["region"]
+        cached = _sweep_rows(self.hass, self.config_entry.entry_id)
+        snap = cached.get((supplier, contract))
+        if snap is None:
+            fetched = await fetch_shared(
+                self.hass,
+                async_get_clientsession(self.hass),
+                get_extractor(supplier),
+                contract,
+                region,
+                supplier=supplier,
+            )
+            if fetched.row is None:
+                return RankedRow(
+                    label=label,
+                    annual=None,
+                    status=fetched.error_message or "supplier unreachable",
+                )
+            snap = fetched.row.snapshot
+            cached[(supplier, contract)] = snap
+
+        hh = self._sweep["household"]
+        resolved = _resolve_snapshot(hh.quote_entry, snap)
+        if hh.dso not in resolved.dsos:
+            return RankedRow(
+                label=label, annual=None, status=f"does not serve DSO {hh.dso}"
+            )
+        per_kwh = _tou_weighted_per_kwh(
+            resolved,
+            hh.dso,
+            region,
+            dt_util.as_local(hh.now_utc),
+            await hh.spot_for(resolved),
+            hh.current_meter,
+            hh.dso_mode,
+            hour_weights=hh.hour_weights,
+        )
+        if per_kwh is None:
+            return RankedRow(label=label, annual=None, status="could not be priced")
+        annual = _annual_bill(
+            resolved,
+            hh.quote_entry,
+            hh.peak_kw,
+            per_kwh,
+            hh.annual_kwh,
+            hh.rolling_inj_kwh,
+            _compare_injection_credit(
+                resolved,
+                hh.quote_entry,
+                hh.spot_dict,
+                hh.avg_spot,
+                await hh.spp_spot_for(resolved, own=False),
+                hh.inj_hour_weights,
+            ),
+            meter=hh.current_meter,
+        )
+        return RankedRow(label=label, annual=annual)
+
+    async def async_step_compare_all_result(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Render the ranked table; submitting closes the dialog."""
+        if user_input is not None:
+            return self.async_abort(reason="compare_done")
+        sweep = self._sweep
+        deferred = len(sweep["candidates"]) - sweep["index"]
+        return self.async_show_form(
+            step_id="compare_all_result",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "region": sweep["region"],
+                "group": sweep["group"],
+                "ranking": _ranking_table(sweep["rows"], deferred=max(deferred, 0)),
+            },
+            last_step=True,
+        )

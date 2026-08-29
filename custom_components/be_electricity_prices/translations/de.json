@@ -202,7 +202,10 @@
       "supplier_region_unavailable": "Dieser Anbieter verkauft in der gewaehlten Region keinen Privathaushaltsstrom. Bitte zurueck und eine andere Kombination waehlen.",
       "already_configured": "Ein anderer Eintrag fragt bereits dieselbe Kombination (Lieferant, Vertrag, Region, Netzbetreiber) ab. Bearbeiten Sie diesen Eintrag oder wählen Sie eine andere Kombination. Der reine Nachtstromkreis ist die Ausnahme: Er wird als eigener zusätzlicher Eintrag angelegt und kollidiert daher nicht mit Ihrem Haupteintrag.",
       "compare_no_alternative": "Kein anderer Anbieter oder Vertrag in Ihrer Region zum Vergleich verfuegbar.",
-      "compare_done": "Vergleich abgeschlossen - keine Aenderungen gespeichert."
+      "compare_done": "Vergleich abgeschlossen - keine Aenderungen gespeichert.",
+      "compare_all_no_alternatives": "In Ihrer Region wird kein weiterer Vertrag dieser Art verkauft, es gibt also nichts zu ordnen. Der einmalige Vergleich kann weiterhin eine andere Vertragsart berechnen.",
+      "compare_all_unknown_contract": "Der Vertrag dieses Eintrags steht nicht mehr im Katalog des Anbieters und kann daher nicht eingeordnet werden. Waehlen Sie ihn zuerst unter Einstellungen bearbeiten neu aus.",
+      "compare_all_entry_reloading": "Der Eintrag wird noch geladen. Bitte gleich erneut versuchen."
     },
     "error": {
       "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Pruefen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
@@ -218,7 +221,8 @@
         "title": "Belgische Strompreise",
         "menu_options": {
           "edit": "Einstellungen bearbeiten",
-          "compare": "Anderen Lieferanten vergleichen (einmaliges Angebot)"
+          "compare": "Anderen Lieferanten vergleichen (einmaliges Angebot)",
+          "compare_all": "Alle Anbieter vergleichen (Rangliste)"
         }
       },
       "edit": {
@@ -441,7 +445,17 @@
           "custom_tax_energy_fund_per_month": "Energiefonds (EUR/Monat)",
           "custom_vat_rate": "MwSt.-Satz (z. B. 0.06)"
         }
+      },
+      "compare_all_progress": {
+        "title": "Alternativen werden berechnet"
+      },
+      "compare_all_result": {
+        "title": "Alternativen nach Preis",
+        "description": "Alle {group}-Vertraege, die in {region} verfuegbar sind, mit Ihren eigenen Einstellungen berechnet. Ihr eigener Vertrag ist mit * markiert; die zweite Spalte ist der Abstand zum guenstigsten.\n\n```\n{ranking}\n```\n\nSchaetzungen, keine Angebote: jede Zeile rechnet ein volles Jahr zu den heute veroeffentlichten Tarifen mit Ihren gemessenen Mengen. Es wurde nichts gespeichert. Zum Schliessen bestaetigen."
       }
+    },
+    "progress": {
+      "sweeping": "{done} von {total} Vertraegen berechnet. Die schnellsten Preisblaetter werden zuerst geholt, die langsamsten Anbieter kommen zuletzt."
     }
   },
   "selector": {

@@ -829,7 +829,7 @@ CWaPE) and `None` on Flemish SMR3 connections. The supplier-side forfait lives o
 publishes one. It is already TVAC (VAT-incl) and summed raw, never VAT-scaled
 (`fees.py:120-136`, `providers/base.py:497`).
 
-Regime semantics (`const.py:347-358`): `compensation` ("compteur qui tourne a
+Regime semantics (`const.py:359-370`): `compensation` ("compteur qui tourne a
 l'envers") applies only to installations certified before 2024-01-01 and stays
 valid until 2030-12-31; newer installations use the `injection` tariff (no per-kVA
 fee); Flemish digital meters are SMR3 from the start. The YTD counterpart

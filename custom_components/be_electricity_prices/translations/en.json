@@ -202,7 +202,10 @@
       "supplier_region_unavailable": "This supplier does not sell residential electricity in the selected region. Please go back and pick a different combination.",
       "already_configured": "Another entry already polls the same (supplier, contract, region, DSO) combination. Edit that entry instead, or pick a different combination. An exclusive-night circuit is the exception: it is set up as its own additional entry, so it does not clash with your main one.",
       "compare_no_alternative": "No other supplier or contract is available in your region to compare against.",
-      "compare_done": "Comparison complete - no changes saved."
+      "compare_done": "Comparison complete - no changes saved.",
+      "compare_all_no_alternatives": "No other contract of this kind is sold in your region, so there is nothing to rank. The one-off compare can still quote a different kind of contract.",
+      "compare_all_unknown_contract": "This entry's contract is no longer in the supplier's catalogue, so it cannot be placed against the others. Re-pick it under Edit settings first.",
+      "compare_all_entry_reloading": "The entry is still loading. Try again in a moment."
     },
     "error": {
       "invalid_api_key": "ENTSO-E rejected this token. Double-check the value at transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
@@ -218,7 +221,8 @@
         "title": "Belgian Electricity Prices",
         "menu_options": {
           "edit": "Edit settings",
-          "compare": "Compare another supplier (one-off quote)"
+          "compare": "Compare another supplier (one-off quote)",
+          "compare_all": "Compare every supplier (ranked)"
         }
       },
       "edit": {
@@ -441,7 +445,17 @@
           "custom_tax_energy_fund_per_month": "Energy fund (EUR/month)",
           "custom_vat_rate": "VAT rate (e.g. 0.06)"
         }
+      },
+      "compare_all_progress": {
+        "title": "Pricing the alternatives"
+      },
+      "compare_all_result": {
+        "title": "Ranked alternatives",
+        "description": "Every {group} contract available in {region}, priced against your own settings. Your own contract is marked with *; the second column is the gap to the cheapest.\n\n```\n{ranking}\n```\n\nEstimates, not quotes: each row prices a full year at today's published tariffs against your measured volumes. Nothing has been saved. Submit to close."
       }
+    },
+    "progress": {
+      "sweeping": "Priced {done} of {total} contracts. The cheapest cards are fetched first, so the slowest suppliers arrive last."
     }
   },
   "selector": {

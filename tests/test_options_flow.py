@@ -5160,3 +5160,165 @@ def test_sweep_cost_ordering_front_loads_the_cheap_cards() -> None:
     assert cheapest_first > registry_order
     # And the whole cell is reachable, so the budget is a pace, not a cap.
     assert priced_within(10**6, sorted(costs)) == len(rows)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_sweep_ranks_every_alternative_in_the_cell(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The ranking page end to end: menu -> sweep -> table."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    patched = {
+        sid: replace(
+            ext,
+            fetch=AsyncMock(return_value=_stub_snapshot(sid, "x", 0.16)),
+            probe=None,
+        )
+        for sid, ext in EXTRACTORS.items()
+    }
+    with patch.dict(EXTRACTORS, patched):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        assert "compare_all" in result["menu_options"]
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare_all"}
+        )
+        # The sweep runs as a chain of progress steps, one task per candidate.
+        for _ in range(400):
+            if result["type"] != data_entry_flow.FlowResultType.SHOW_PROGRESS:
+                break
+            await hass.async_block_till_done()
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"]
+            )
+
+    assert result["step_id"] == "compare_all_result", result
+    ph = result["description_placeholders"]
+    assert ph is not None
+    ranking = ph["ranking"]
+    assert ranking, "the table must not be empty"
+    # Numbered, cheapest first, and the household's own contract is not a row.
+    assert ranking.lstrip().startswith("1.")
+    assert "power_fix" not in ranking
+    # Every priced row is a real candidate of the household's own group.
+    assert ph["group"] == "static"
+    assert ph["region"] == "wallonia"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_sweep_never_starts_a_second_task_for_one_candidate(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The duplicate-task trap. The flow manager re-enters a progress step on
+    every frontend poll, so a step that creates a task without first checking
+    for a live one fires the same fetch repeatedly."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    started = 0
+
+    async def _slow_fetch(*_a: object, **_k: object) -> Any:
+        nonlocal started
+        started += 1
+        return _stub_snapshot("engie", "x", 0.16)
+
+    patched = {
+        sid: replace(ext, fetch=_slow_fetch, probe=None)
+        for sid, ext in EXTRACTORS.items()
+    }
+    with patch.dict(EXTRACTORS, patched):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare_all"}
+        )
+        assert result["type"] == data_entry_flow.FlowResultType.SHOW_PROGRESS
+        # Poll the SAME step repeatedly without letting the task finish.
+        for _ in range(5):
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"]
+            )
+        assert started <= 1, f"{started} fetches started for one candidate"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_sweep_aborts_when_the_region_holds_no_alternative(
+    hass: HomeAssistant,
+) -> None:
+    """A Brussels time-of-use household has exactly one slot contract in the
+    region and it is theirs. Saying so is more use than an empty table, and it
+    is a different message from the one-to-one page's."""
+    from tests import make_entry
+
+    entry = make_entry(
+        supplier="engie",
+        contract="engie_empower_flextime",
+        region="brussels",
+        dso="sibelga",
+        meter="dynamic",
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("engie", "engie_empower_flextime", 0.18)
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "compare_all"}
+    )
+    assert result["type"] == data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "compare_all_no_alternatives"
+
+
+def test_every_sweep_string_exists_in_all_five_files() -> None:
+    """A step description naming a token Home Assistant cannot resolve renders
+    the literal, and a missing translation renders the key. Both are silent."""
+    import json
+    import string
+    from pathlib import Path
+
+    base = Path("custom_components/be_electricity_prices")
+    files = ["strings.json"] + [
+        f"translations/{c}.json" for c in ("en", "fr", "nl", "de")
+    ]
+    wanted_steps = {"compare_all_progress", "compare_all_result"}
+    wanted_aborts = {
+        "compare_all_no_alternatives",
+        "compare_all_unknown_contract",
+        "compare_all_entry_reloading",
+    }
+    for name in files:
+        options = json.loads((base / name).read_text(encoding="utf-8"))["options"]
+        assert "compare_all" in options["step"]["init"]["menu_options"], name
+        assert wanted_steps <= set(options["step"]), name
+        assert wanted_aborts <= set(options["abort"]), name
+        assert "sweeping" in options["progress"], name
+        tokens = {
+            f
+            for _l, f, _s, _c in string.Formatter().parse(
+                options["step"]["compare_all_result"]["description"]
+            )
+            if f
+        }
+        assert tokens == {"region", "group", "ranking"}, (name, tokens)
+        prog = {
+            f
+            for _l, f, _s, _c in string.Formatter().parse(
+                options["progress"]["sweeping"]
+            )
+            if f
+        }
+        assert prog == {"done", "total"}, (name, prog)

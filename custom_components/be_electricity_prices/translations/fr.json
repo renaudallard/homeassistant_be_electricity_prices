@@ -202,7 +202,10 @@
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d'electricite residentielle dans la region selectionnee. Revenez en arriere et choisissez une autre combinaison.",
       "already_configured": "Une autre entrée interroge déjà la même combinaison (fournisseur, contrat, région, GRD). Modifiez cette entrée, ou choisissez une autre combinaison. Le circuit exclusif de nuit fait exception : il se configure comme une entrée supplémentaire distincte, sans entrer en conflit avec votre entrée principale.",
       "compare_no_alternative": "Aucun autre fournisseur ou contrat disponible dans votre region a comparer.",
-      "compare_done": "Comparaison terminee - aucune modification enregistree."
+      "compare_done": "Comparaison terminee - aucune modification enregistree.",
+      "compare_all_no_alternatives": "Aucun autre contrat de ce type n'est vendu dans votre region, il n'y a donc rien a classer. La comparaison ponctuelle peut toujours calculer un autre type de contrat.",
+      "compare_all_unknown_contract": "Le contrat de cette entree ne figure plus au catalogue du fournisseur, il ne peut donc pas etre situe par rapport aux autres. Re-selectionnez-le d'abord dans Modifier les parametres.",
+      "compare_all_entry_reloading": "L'entree est encore en cours de chargement. Reessayez dans un instant."
     },
     "error": {
       "invalid_api_key": "ENTSO-E a rejete ce jeton. Verifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
@@ -218,7 +221,8 @@
         "title": "Prix de l'electricite en Belgique",
         "menu_options": {
           "edit": "Modifier les parametres",
-          "compare": "Comparer un autre fournisseur (devis ponctuel)"
+          "compare": "Comparer un autre fournisseur (devis ponctuel)",
+          "compare_all": "Comparer tous les fournisseurs (classement)"
         }
       },
       "edit": {
@@ -441,7 +445,17 @@
           "custom_tax_energy_fund_per_month": "Fonds energie (EUR/mois)",
           "custom_vat_rate": "Taux de TVA (ex. 0.06)"
         }
+      },
+      "compare_all_progress": {
+        "title": "Calcul des alternatives"
+      },
+      "compare_all_result": {
+        "title": "Alternatives classees",
+        "description": "Tous les contrats {group} disponibles en {region}, calcules avec vos propres parametres. Votre contrat actuel est marque d'un * ; la deuxieme colonne est l'ecart avec le moins cher.\n\n```\n{ranking}\n```\n\nEstimations, pas des offres : chaque ligne calcule une annee complete aux tarifs publies aujourd'hui, avec vos volumes mesures. Rien n'a ete enregistre. Validez pour fermer."
       }
+    },
+    "progress": {
+      "sweeping": "{done} contrats sur {total} calcules. Les fiches les plus rapides sont recuperees en premier, donc les fournisseurs les plus lents arrivent en dernier."
     }
   },
   "selector": {

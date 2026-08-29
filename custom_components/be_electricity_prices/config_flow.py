@@ -91,7 +91,7 @@ from .flow_schemas import (
     _validate_entsoe_key,
     _MANUAL_RATE_KEYS,
 )
-from .compare_flow import _CompareStepsMixin
+from .compare_flow import _SweepStepsMixin
 from .flow_prefill import (
     _apply_energy_manager_capacity_default,
     _apply_energy_manager_defaults,
@@ -642,7 +642,7 @@ class BePricesConfigFlow(_WizardStepsMixin, ConfigFlow, domain=DOMAIN):
 # ---- OptionsFlow --------------------------------------------------------------
 
 
-class BePricesOptionsFlow(_WizardStepsMixin, _CompareStepsMixin, OptionsFlow):
+class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
     """Walk every config step pre-filled, save back to entry.data.
 
     Two top-level paths from the init menu: edit the existing entry
@@ -655,7 +655,7 @@ class BePricesOptionsFlow(_WizardStepsMixin, _CompareStepsMixin, OptionsFlow):
     ) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["edit", "compare"],
+            menu_options=["edit", "compare", "compare_all"],
         )
 
     _entry_step_id = "edit"
