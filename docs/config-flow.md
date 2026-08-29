@@ -552,6 +552,26 @@ table below is the authority on what the picker excludes.
 
 | Step | Method | Notes |
 | --- | --- | --- |
+
+### The ranking branch
+
+`_SweepStepsMixin` (`compare_flow.py:1743`) is a separate branch reached from a
+third menu entry. It subclasses `_CompareStepsMixin` because it reuses
+`_resolve_household` and the live-validated key prompt; only the menu entry and
+the steps are separate. `_sweep_candidates` (`flow_schemas.py:308`) narrows to
+the entry's own `KIND_GROUP`, region and professional segment, and drops the
+entry's own contract - the opposite of the one-to-one picker, which keeps it on
+purpose. An empty cell aborts `compare_all_no_alternatives`, which is an answer
+rather than a failure: a Brussels `tou` household has exactly one slot contract
+in the region and it is theirs.
+
+| Step | Method | Notes |
+| --- | --- | --- |
+| `compare_all` | `compare_flow.py:1765` | Resolves the cell and sorts it by `sweep_cost_s`, cheapest card first, so a wall-clock budget buys many rows before few |
+| `compare_all_progress` | `compare_flow.py:1839` | One `asyncio.Task` per candidate. HA re-renders a progress step only when the step returns a new result, and a step only returns when its task finishes, so one task for the whole sweep could never move the counter. The live task is re-shown before a new one is created, because the flow manager re-enters the step on every frontend poll |
+| `compare_all_result` | `compare_flow.py:1994` | One `{ranking}` token carrying the whole table, plus the opt-in for the year-to-date pass |
+| `compare_all_ytd` | `compare_flow.py:2027` | Second pass. A row prints a figure only where it replayed the same real archived months the baseline did (`archived_months_present`) |
+
 | `compare` | `compare_flow.py:409` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:173`): suppliers with at least one contract in the user's region **and the entry's own segment**, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
 | `compare_contract` | `compare_flow.py:319` | Contract picker via `_compare_contract_schema` (`compare_flow.py:206`), spans static and dynamic kinds but never crosses the residential/professional line: a pro card is published ex-VAT and bands the excise by annual volume, so `_resolve_snapshot` grosses it at the entry's own rate and the row is neither what the household would pay nor a contract it could sign. Excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
 | `compare_meter` | `compare_flow.py:355` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:216`) |
