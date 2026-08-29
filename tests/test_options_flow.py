@@ -4613,3 +4613,295 @@ def test_contract_group_is_empty_for_a_contract_that_left_the_catalogue() -> Non
     assert _contract_group("engie", "engie_empower_flextime") == "slot"
     assert _contract_group("eneco", "a_product_eneco_withdrew") == ""
     assert _contract_group("no_such_supplier", "whatever") == ""
+
+
+async def _compare_placeholders(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    *,
+    supplier: str,
+    contract: str,
+    target_snapshot: Any,
+    meter: str | None = "mono",
+    api_key: str | None = None,
+    solar_regime: str | None = None,
+) -> dict[str, str]:
+    """Drive the 1:1 compare branch to its result step and return every
+    placeholder it produced.
+
+    The whole dict, not a chosen field: this is the net under the split of
+    _build_compare_placeholders, and a refactor that silently drops or
+    reshapes a token is exactly what a per-field assertion misses.
+    """
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    fake = replace(EXTRACTORS[supplier], fetch=AsyncMock(return_value=target_snapshot))
+    with patch.dict(EXTRACTORS, {supplier: fake}):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": supplier}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": contract}
+        )
+        if result["step_id"] == "compare_meter":
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"meter": meter}
+            )
+        if result["step_id"] == "compare_solar":
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"],
+                {
+                    "solar_regime": solar_regime
+                    or entry.data.get("solar_regime", "none")
+                },
+            )
+        if result["step_id"] == "compare_api_key":
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"api_key": api_key or "test-token"}
+            )
+        assert result["step_id"] == "compare_result", result["step_id"]
+        placeholders = result["description_placeholders"]
+        assert placeholders is not None
+        return dict(placeholders)
+
+
+# Golden characterization of _build_compare_placeholders, captured on the tree
+# BEFORE the household/target split. Every token is asserted, not a chosen few:
+# the fifty-odd sibling compare tests each check one or two, which is exactly
+# what lets a refactor move money without any of them noticing. Written first
+# so it is a net rather than a rationalization; if a value here has to change,
+# the change belongs in its own commit with its own reason.
+_GOLDEN_BASE = {
+    "annual_chart": "  Eneco   ████████████████████ 1273 EUR\n  Cociter ███████████████████░ 1203 EUR",
+    "annual_kwh": "3500",
+    "card_note": "",
+    "compare_annual": "1202.75",
+    "compare_contract": "Cociter Tarif Variable",
+    "compare_per_kwh": "0.3265",
+    "compare_supplier": "Cociter",
+    "compare_ytd": "19.56",
+    "consumption_source": "default 3500 kWh - wire a kWh sensor for a measured estimate",
+    "current_annual": "1272.75",
+    "current_contract": "Eneco Zon & Wind Vast",
+    "current_per_kwh": "0.3465",
+    "current_supplier": "Eneco",
+    "current_ytd": "19.56",
+    "delta_annual": "-70.00",
+    "delta_ytd": "+0.00",
+    "error": "",
+    "meter_used": "mono",
+    "solar_note": "",
+    "ytd_chart": "  Eneco   ████████████████████ 20 EUR\n  Cociter ████████████████████ 20 EUR",
+    "ytd_injection_kwh": "-",
+    "ytd_kwh": "-",
+}
+
+_GOLDEN_DYNAMIC_TARGET = {
+    "annual_chart": "",
+    "annual_kwh": "3500",
+    "card_note": "",
+    "compare_annual": "-",
+    "compare_contract": "Cociter Tarif Dynamique",
+    "compare_per_kwh": "-",
+    "compare_supplier": "Cociter",
+    "compare_ytd": "-",
+    "consumption_source": "default 3500 kWh - wire a kWh sensor for a measured estimate",
+    "current_annual": "1272.75",
+    "current_contract": "Eneco Zon & Wind Vast",
+    "current_per_kwh": "0.3465",
+    "current_supplier": "Eneco",
+    "current_ytd": "-",
+    "delta_annual": "-",
+    "delta_ytd": "-",
+    "error": "compute failed",
+    "meter_used": "dynamic",
+    "solar_note": "",
+    "ytd_chart": "",
+    "ytd_injection_kwh": "-",
+    "ytd_kwh": "-",
+}
+
+_GOLDEN_METER_OVERRIDE = {
+    "annual_chart": "  Eneco   ████████████████████ 1273 EUR\n  Cociter ███████████████████░ 1203 EUR",
+    "annual_kwh": "3500",
+    "card_note": "",
+    "compare_annual": "1202.75",
+    "compare_contract": "Cociter Tarif Variable",
+    "compare_per_kwh": "0.3265",
+    "compare_supplier": "Cociter",
+    "compare_ytd": "19.56",
+    "consumption_source": "default 3500 kWh - wire a kWh sensor for a measured estimate",
+    "current_annual": "1272.75",
+    "current_contract": "Eneco Zon & Wind Vast",
+    "current_per_kwh": "0.3465",
+    "current_supplier": "Eneco",
+    "current_ytd": "19.56",
+    "delta_annual": "-70.00",
+    "delta_ytd": "+0.00",
+    "error": "",
+    "meter_used": "bi",
+    "solar_note": "",
+    "ytd_chart": "  Eneco   ████████████████████ 20 EUR\n  Cociter ████████████████████ 20 EUR",
+    "ytd_injection_kwh": "-",
+    "ytd_kwh": "-",
+}
+
+_GOLDEN_ENTRY_RELOADING = {
+    "annual_chart": "",
+    "annual_kwh": "3500",
+    "card_note": "",
+    "compare_annual": "-",
+    "compare_contract": "cociter_variable",
+    "compare_per_kwh": "-",
+    "compare_supplier": "cociter",
+    "compare_ytd": "-",
+    "consumption_source": "default (entry reloading)",
+    "current_annual": "-",
+    "current_contract": "power_fix",
+    "current_per_kwh": "-",
+    "current_supplier": "eneco",
+    "current_ytd": "-",
+    "delta_annual": "-",
+    "delta_ytd": "-",
+    "error": "current entry is reloading; try again in a moment",
+    "meter_used": "mono",
+    "solar_note": "",
+    "ytd_chart": "",
+    "ytd_injection_kwh": "-",
+    "ytd_kwh": "-",
+}
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_golden_placeholders_static_target(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The ordinary quote: static contract against static contract."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    assert (
+        await _compare_placeholders(
+            hass,
+            entry,
+            supplier="cociter",
+            contract="cociter_variable",
+            target_snapshot=_stub_snapshot("cociter", "cociter_variable", 0.16),
+        )
+        == _GOLDEN_BASE
+    )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_golden_placeholders_meter_override(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The target quoted on a meter the household is not on. Same money here,
+    because the stub card prints one rate and a bi meter splits nothing, but a
+    distinct path: the override reaches meter_used and must not leak onto the
+    household side."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    assert (
+        await _compare_placeholders(
+            hass,
+            entry,
+            supplier="cociter",
+            contract="cociter_variable",
+            target_snapshot=_stub_snapshot("cociter", "cociter_variable", 0.16),
+            meter="bi",
+        )
+        == _GOLDEN_METER_OVERRIDE
+    )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_golden_placeholders_dynamic_target_degrades(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A spot-priced target with no spot data reachable. The page keeps the
+    household's own figures and says so in `error` rather than printing a
+    number it cannot stand behind; the charts go empty rather than one-sided."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    from custom_components.be_electricity_prices.providers.base import DynamicRates
+    from tests import make_snapshot
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    target = make_snapshot(
+        supplier="cociter",
+        contract="cociter_dynamic",
+        energy=DynamicRates(factor=1.0, base=0.02),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    assert (
+        await _compare_placeholders(
+            hass,
+            entry,
+            supplier="cociter",
+            contract="cociter_dynamic",
+            target_snapshot=target,
+        )
+        == _GOLDEN_DYNAMIC_TARGET
+    )
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_golden_placeholders_entry_reloading(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The short-circuit taken when runtime_data is not a coordinator yet.
+    Every token still has to be populated or HA renders the raw literal, and
+    this is the path where that is easiest to forget."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    assert (
+        await _compare_placeholders(
+            hass,
+            entry,
+            supplier="cociter",
+            contract="cociter_variable",
+            target_snapshot=_stub_snapshot("cociter", "cociter_variable", 0.16),
+        )
+        == _GOLDEN_ENTRY_RELOADING
+    )
+
+
+def test_golden_dicts_cover_every_template_token() -> None:
+    """The golden dicts are only a net if they span the template. A token
+    added to strings.json without a default lands here first."""
+    import json
+    import string
+    from pathlib import Path
+
+    desc = json.loads(
+        Path("custom_components/be_electricity_prices/strings.json").read_text(
+            encoding="utf-8"
+        )
+    )["options"]["step"]["compare_result"]["description"]
+    tokens = {f for _lit, f, _spec, _conv in string.Formatter().parse(desc) if f}
+    for golden in (
+        _GOLDEN_BASE,
+        _GOLDEN_DYNAMIC_TARGET,
+        _GOLDEN_METER_OVERRIDE,
+        _GOLDEN_ENTRY_RELOADING,
+    ):
+        assert set(golden) == tokens
