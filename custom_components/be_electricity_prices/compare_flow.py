@@ -63,7 +63,7 @@ from homeassistant.helpers.selector import (
 
 from .providers import all_extractors, get as get_extractor
 from .providers.base import SpotMonthlyRates, SupplierSnapshot
-from .spot_stats import _spp_weighting_enabled
+from .spot_stats import _injection_is_spp_indexed, _spp_weighting_enabled
 
 from .const import (
     CONF_API_KEY,
@@ -841,20 +841,38 @@ class _CompareStepsMixin(OptionsFlow):
             )
             return spp_spot_resolved[0]
 
-        async def _spp_spot_for(snapshot: SupplierSnapshot | None) -> float | None:
-            """The SPP month mean, for a card indexed on it OR an entry that
-            opted into the weighting.
+        async def _spp_spot_for(
+            snapshot: SupplierSnapshot | None, *, own: bool
+        ) -> float | None:
+            """The SPP month mean, for a card indexed on it OR, on the
+            household's OWN side, an entry that opted into the weighting.
 
             Gating on the card flag alone silently excluded the one supplier
             the opt-in exists for: providers/custom.py never sets
             spp_indexed, because a hand-entered contract has no card to read
             it off, and the answer lives on the entry instead
             (CONF_CUSTOM_INJECTION_SPP_WEIGHTED). _spp_weighting_enabled is
-            the predicate the live tick already uses for exactly this
-            question, so use it here too rather than keeping a second, and
-            narrower, copy of the rule.
+            the predicate the live tick already uses for that question.
+
+            But its custom-opt-in route reads the ENTRY and never looks at
+            the snapshot, so asking it about a TARGET answered for the
+            household instead of for the card. A custom monthly entry with
+            the opt-in then re-priced every candidate's formula against
+            Belpex_SPP, including cards that name a different index: on a
+            real Eneco Power Fix shape the credit went from the card's
+            printed 0,0476 to -0,02296 EUR/kWh, a sign flip worth about
+            212 EUR a year at 3000 kWh exported.
+
+            So the opt-in applies to the side it was made on, and a foreign
+            card is judged only by what it prints. The custom supplier is
+            never a compare target (_compare_supplier_options drops it), so
+            no target can legitimately need the entry-side route.
             """
-            if not _spp_weighting_enabled(self.config_entry, snapshot):
+            if own:
+                enabled = _spp_weighting_enabled(self.config_entry, snapshot)
+            else:
+                enabled = _injection_is_spp_indexed(snapshot)
+            if not enabled:
                 return None
             return await _spp_month_spot()
 
@@ -1160,7 +1178,7 @@ class _CompareStepsMixin(OptionsFlow):
                     quote_entry,
                     spot_dict,
                     avg_spot,
-                    await _spp_spot_for(current_snapshot),
+                    await _spp_spot_for(current_snapshot, own=True),
                     inj_hour_weights,
                     raw_snapshot=raw_snapshot,
                 )
@@ -1177,7 +1195,7 @@ class _CompareStepsMixin(OptionsFlow):
                     quote_entry,
                     spot_dict,
                     avg_spot,
-                    await _spp_spot_for(other_snap),
+                    await _spp_spot_for(other_snap, own=False),
                     inj_hour_weights,
                 )
                 if compare_inj_price is None and rolling_inj_kwh > 0:
@@ -1226,7 +1244,7 @@ class _CompareStepsMixin(OptionsFlow):
                     self.config_entry,
                     spot_dict,
                     avg_spot,
-                    await _spp_spot_for(baseline_snapshot),
+                    await _spp_spot_for(baseline_snapshot, own=True),
                     inj_hour_weights,
                     raw_snapshot=raw_snapshot,
                 )

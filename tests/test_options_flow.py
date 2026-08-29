@@ -4408,3 +4408,110 @@ def test_month_indexed_side_is_labelled_as_last_months_index() -> None:
     # A fixed card is not indexed on anything.
     flat = SimpleNamespace(energy=SimpleNamespace(), taxes=taxes)
     assert _card_caveats(flat, "Ecofix") == []
+
+
+def test_spp_opt_in_does_not_reach_a_foreign_card() -> None:
+    """_spp_weighting_enabled has two ways in: the CARD indexes injection on
+    Belpex_SPP, or the expert custom monthly contract opted in by hand. The
+    second reads the ENTRY and never looks at the snapshot, so asking it about
+    a TARGET answered for the household instead of for the card.
+
+    A custom monthly entry with the opt-in then re-priced every candidate's
+    formula against Belpex_SPP, including cards naming a different index. On a
+    real Eneco Power Fix shape the credit went from the card's printed 0,0476
+    to -0,02296 EUR/kWh -- a sign flip, about 212 EUR a year at 3000 kWh
+    exported."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+    from custom_components.be_electricity_prices.spot_stats import (
+        _injection_is_spp_indexed,
+        _spp_weighting_enabled,
+    )
+
+    entry = SimpleNamespace(
+        data={
+            const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+            const.CONF_SUPPLIER: const.SUPPLIER_CUSTOM,
+            const.CONF_CONTRACT: const.CUSTOM_CONTRACT_MONTHLY,
+            const.CONF_CUSTOM_INJECTION_SPP_WEIGHTED: True,
+            const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_FORMULA,
+        }
+    )
+    foreign = SimpleNamespace(
+        energy=FixedRates(single=0.16),
+        injection=InjectionRates(
+            factor=0.84,
+            base=-0.028,
+            current=0.0476,
+            month_indexed=True,
+            spp_indexed=False,
+        ),
+    )
+
+    # The entry-side predicate still says yes about a card that is not ours,
+    # which is exactly why the target side must not consult it.
+    assert _spp_weighting_enabled(entry, foreign) is True
+    # The card-side predicate, which the target side uses instead, says no.
+    assert _injection_is_spp_indexed(foreign) is False
+
+    # And it still says yes for a card that really is SPP-indexed, so the
+    # narrowing does not cost a legitimate target its resolution.
+    spp_card = SimpleNamespace(
+        energy=FixedRates(single=0.16),
+        injection=InjectionRates(
+            factor=0.84, base=-0.028, current=0.0476, spp_indexed=True
+        ),
+    )
+    assert _injection_is_spp_indexed(spp_card) is True
+
+
+def test_spp_month_mean_would_invert_a_foreign_credit() -> None:
+    """Why the gate matters: branch 2 of _compare_injection_credit is not
+    itself gated on inj.spp_indexed, deliberately, because the custom
+    supplier's answer lives on the entry rather than on any card. So whatever
+    spp_spot the caller hands it is applied, and handing one to a card that
+    names a different index turns its credit negative."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+    )
+
+    foreign = SimpleNamespace(
+        energy=FixedRates(single=0.16),
+        injection=InjectionRates(
+            factor=0.84,
+            base=-0.028,
+            current=0.0476,
+            month_indexed=True,
+            spp_indexed=False,
+        ),
+    )
+    # The household this actually bites: a custom monthly entry on the
+    # injection regime that ticked the SPP box for its OWN formula.
+    entry = SimpleNamespace(
+        data={
+            const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+            const.CONF_SUPPLIER: const.SUPPLIER_CUSTOM,
+            const.CONF_CONTRACT: const.CUSTOM_CONTRACT_MONTHLY,
+            const.CONF_CUSTOM_INJECTION_SPP_WEIGHTED: True,
+            const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_FORMULA,
+        }
+    )
+
+    printed = _compare_injection_credit(foreign, entry, {}, 0.0950, None)
+    assert printed == pytest.approx(0.0476)
+
+    leaked = _compare_injection_credit(foreign, entry, {}, 0.0950, 0.0060)
+    assert leaked == pytest.approx(0.84 * 0.0060 - 0.028)
+    assert leaked < 0 < printed
