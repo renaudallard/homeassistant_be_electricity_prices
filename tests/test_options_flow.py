@@ -4516,3 +4516,100 @@ def test_spp_month_mean_would_invert_a_foreign_credit() -> None:
     assert leaked == pytest.approx(0.84 * 0.0060 - 0.028)
     assert printed is not None and leaked is not None
     assert leaked < 0 < printed
+
+
+def test_kind_group_is_total_over_tariff_kind() -> None:
+    """KIND_GROUP must answer for every kind the registry can produce. A kind
+    missing from it is not a wrong group, it is a household whose own contract
+    belongs to no group and whose ranking page cannot be built at all, so this
+    fails at the moment a new kind is added rather than in a user's dialog."""
+    from typing import get_args
+
+    from custom_components.be_electricity_prices.const import KIND_GROUP
+    from custom_components.be_electricity_prices.providers.base import TariffKind
+
+    assert set(KIND_GROUP) == set(get_args(TariffKind))
+    # Every registered contract resolves, which is the same claim from the
+    # other end: a kind reachable from the catalogue but absent here.
+    from custom_components.be_electricity_prices.providers import all_extractors
+
+    for ext in all_extractors():
+        for contract in ext.contracts:
+            assert contract.kind in KIND_GROUP, (ext.id, contract.id, contract.kind)
+
+
+def test_sweep_candidate_counts_per_cell() -> None:
+    """The 18 (region, group, segment) cells, pinned as data.
+
+    Not a tautology against the registry: these are the numbers the ranking's
+    cost model and its empty-page handling were designed around, so a new
+    supplier or a withdrawn product that moves a cell should surface here and
+    be re-costed deliberately rather than silently changing what a sweep does.
+    """
+    from custom_components.be_electricity_prices.flow_schemas import _sweep_candidates
+
+    expected = {
+        ("flanders", "static", False): 51,
+        ("flanders", "static", True): 20,
+        ("flanders", "spot", False): 26,
+        ("flanders", "spot", True): 3,
+        ("flanders", "slot", False): 2,
+        ("flanders", "slot", True): 1,
+        ("wallonia", "static", False): 49,
+        ("wallonia", "static", True): 20,
+        ("wallonia", "spot", False): 10,
+        ("wallonia", "spot", True): 3,
+        ("wallonia", "slot", False): 4,
+        ("wallonia", "slot", True): 1,
+        ("brussels", "static", False): 29,
+        ("brussels", "static", True): 20,
+        ("brussels", "spot", False): 4,
+        ("brussels", "spot", True): 3,
+        ("brussels", "slot", False): 1,
+        ("brussels", "slot", True): 1,
+    }
+    actual = {
+        (region, group, professional): len(
+            _sweep_candidates(region, group, professional, "")
+        )
+        for region in ("flanders", "wallonia", "brussels")
+        for group in ("static", "spot", "slot")
+        for professional in (False, True)
+    }
+    assert actual == expected
+
+
+def test_sweep_candidates_apply_every_condition() -> None:
+    """Region per contract, segment, group, no custom supplier, no supplier on
+    its way out, and the household's own contract dropped."""
+    from custom_components.be_electricity_prices.const import (
+        KIND_GROUP,
+        SUPPLIER_CUSTOM,
+    )
+    from custom_components.be_electricity_prices.flow_schemas import _sweep_candidates
+
+    rows = _sweep_candidates("flanders", "static", False, "power_fix")
+    ids = {contract.id for _supplier, contract in rows}
+
+    assert "power_fix" not in ids, "own contract must not be a candidate"
+    assert all(sup != SUPPLIER_CUSTOM for sup, _c in rows)
+    # dats24 is deprecated_until 2026-08-31 and must not be offered.
+    assert all(sup != "dats24" for sup, _c in rows)
+    for _sup, contract in rows:
+        assert "flanders" in contract.regions
+        assert contract.professional is False
+        assert KIND_GROUP[contract.kind] == "static"
+
+
+def test_contract_group_is_empty_for_a_contract_that_left_the_catalogue() -> None:
+    """_contract_kind returns '' for a stored contract no longer published, so
+    the meter step can still render. That empty string has no group, and the
+    ranking page must be told so rather than raising out of a lookup or
+    inventing a group the household is not on."""
+    from custom_components.be_electricity_prices.flow_schemas import _contract_group
+
+    assert _contract_group("eneco", "power_fix") == "static"
+    assert _contract_group("engie", "engie_dynamic") == "spot"
+    assert _contract_group("engie", "engie_empower_flextime") == "slot"
+    assert _contract_group("eneco", "a_product_eneco_withdrew") == ""
+    assert _contract_group("no_such_supplier", "whatever") == ""

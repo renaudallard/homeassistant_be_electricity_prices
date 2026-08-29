@@ -242,6 +242,32 @@ SMART_METER_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "tou", "tou_imp
 # flow fetch a spot before it can quote either side of a switch.
 SPOT_PRICED_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "spot_monthly")
 
+# The third partition of TariffKind, after the two above: which kinds may be
+# RANKED against one another. The ranking page sorts its rows on one annual
+# figure, and that figure only means the same thing down a column of contracts
+# shaped alike. A fixed rate is a contracted price; a spot row is a projection
+# of one year's spots onto next year's bill; a slot row prices by hour of day
+# and needs the meter to agree. Sorting the three together puts the least
+# certain number on top and calls it the cheapest. The 1:1 compare page
+# deliberately crosses these lines, because it explains one pair at a time and
+# has room to say why; a ranked table has neither.
+#
+# Keep this TOTAL over TariffKind. The comment on SMART_METER_CONTRACT_KINDS
+# above records what a partial copy of a kind set costs, and here a missing
+# kind is worse than a wrong meter: it is a household whose own contract
+# belongs to no group, whose page cannot be built at all.
+KIND_GROUP_STATIC: Final = "static"
+KIND_GROUP_SPOT: Final = "spot"
+KIND_GROUP_SLOT: Final = "slot"
+KIND_GROUP: Final[dict[str, str]] = {
+    "fixed": KIND_GROUP_STATIC,
+    "variable": KIND_GROUP_STATIC,
+    "dynamic": KIND_GROUP_SPOT,
+    "spot_monthly": KIND_GROUP_SPOT,
+    "tou": KIND_GROUP_SLOT,
+    "tou_impact": KIND_GROUP_SLOT,
+}
+
 METER_TYPES: Final = (METER_MONO, METER_BI, METER_DYNAMIC, METER_EXCLUSIVE_NIGHT)
 
 # DSO-side billing mode, orthogonal to the supplier meter. Wallonia

@@ -146,6 +146,7 @@ from .const import (
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
     DSO_TARIFF_MODES,
+    KIND_GROUP,
     METER_BI,
     METER_DYNAMIC,
     METER_EXCLUSIVE_NIGHT,
@@ -160,6 +161,7 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_NONE,
     SPOT_PRICED_CONTRACT_KINDS,
+    SUPPLIER_CUSTOM,
     VREG_CAPACITY_FLOOR_KW,
 )
 from .providers import get as get_extractor
@@ -301,6 +303,77 @@ def _contract_has_spot_injection(
     except ExtractorError:
         return False
     return any(c.id == contract_id and c.spot_indexed_injection for c in contracts)
+
+
+def _sweep_candidates(
+    region: str, group: str, professional: bool, own_contract: str
+) -> list[tuple[str, Contract]]:
+    """Every contract the ranking page may quote for this household.
+
+    The five conditions, and where each already existed for the 1:1 page:
+
+    * region, per CONTRACT and never ``SupplierExtractor.regions()``, which is
+      only the union across a supplier's products;
+    * not the expert custom supplier, which has no fetchable card and can only
+      ever be the current side of a quote;
+    * not a supplier on its way out of the market, since quoting a household
+      into a contract about to be transferred away is never useful;
+    * the same professional segment, for the reason
+      ``_compare_contract_schema`` gives at length;
+    * the same kind group, which is the one condition the 1:1 page does NOT
+      apply -- see ``KIND_GROUP``.
+
+    ``own_contract`` is dropped because a ranking is a list of alternatives.
+    That is the opposite of the 1:1 page, which keeps it on purpose so a
+    household can ask what its own contract would cost on another meter, and
+    the two are not in tension: the ranking's own row is printed from the
+    baseline the household is already being quoted against, not fetched again
+    as a candidate.
+
+    Returns ``(supplier_id, Contract)`` pairs, because a contract does not
+    carry its supplier and every caller needs both.
+    """
+    out: list[tuple[str, Contract]] = []
+    for ext in all_extractors():
+        if ext.id == SUPPLIER_CUSTOM or ext.deprecated_until is not None:
+            continue
+        for c in ext.contracts:
+            if region not in c.regions:
+                continue
+            if c.professional != professional:
+                continue
+            # Subscripted, not .get(): KIND_GROUP is total over TariffKind and
+            # a KeyError here is a new kind nobody grouped, which must fail
+            # loudly in CI rather than quietly drop every contract of it.
+            if KIND_GROUP[c.kind] != group:
+                continue
+            if c.id == own_contract:
+                continue
+            out.append((ext.id, c))
+    return out
+
+
+def _contract_group(supplier_id: str, contract_id: str) -> str:
+    """The household's own kind group, or '' when it cannot be resolved.
+
+    ``_contract_kind`` returns '' for an entry whose stored contract has left
+    the catalogue, deliberately, so the meter step can still render. That
+    empty string has no group, and the ranking page cannot be built for it:
+    answer '' here too and let the caller say so, rather than raising out of a
+    registry lookup or inventing a group the household is not on.
+
+    The stale SUPPLIER is a second case ``_contract_kind`` does not cover -- it
+    resolves the extractor first, and that raises for an id this build no
+    longer ships. Caught here rather than there, because widening
+    ``_contract_kind`` would change what every other caller sees for an entry
+    whose supplier is gone, and this is the only caller that needs an answer
+    rather than an exception.
+    """
+    try:
+        kind = _contract_kind(supplier_id, contract_id)
+    except ExtractorError:
+        return ""
+    return KIND_GROUP.get(kind, "")
 
 
 def _user_schema(defaults: dict[str, Any]) -> vol.Schema:
