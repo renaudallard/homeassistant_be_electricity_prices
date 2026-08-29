@@ -60,6 +60,7 @@ from .const import (
 )
 from .providers.base import (
     DsoOverlay,
+    ExtractorError,
     DynamicRates,
     EnergyRates,
     FixedRates,
@@ -134,6 +135,217 @@ class _SharedSnapshot:
     # suppliers without a probe path - those fall back to the time-based
     # TTL alone.
     probe_key: str | None = None
+
+
+@dataclass(frozen=True)
+class SharedFetch:
+    """What one trip through the shared-snapshot policy produced.
+
+    Deliberately does not raise. The coordinator wants a failed fetch to leave
+    the previous snapshot in place and turn into a Repairs card; a ranking
+    sweep wants it to print one row as unreachable and carry on with the next
+    contract. Neither is served by an exception unwinding the caller, so the
+    exception rides back as a value. It is the object rather than just its
+    text, because the coordinator classifies on the type -- transient against
+    unreadable -- and re-raises the ones it did not expect with their original
+    traceback.
+    """
+
+    row: _SharedSnapshot | None
+    # Which arm answered: shared | local | fetch | backoff | failed. The
+    # caller needs it because the arms are not interchangeable -- see
+    # ``probe_confirmed``.
+    source: str
+    probe_key: str | None
+    # A probe match said the card is current, not merely that the TTL has not
+    # expired. Only this is proof the supplier is reachable, which is why the
+    # local arm clears a stale error on it and not on a TTL hit.
+    probe_confirmed: bool
+    error: BaseException | None = None
+    error_message: str = ""
+    # Consecutive failures on this key, carried on the negative row so a lone
+    # transient timeout does not raise a repair issue on its own.
+    fail_count: int = 0
+
+
+def _row_is_fresh(
+    row: _SharedSnapshot,
+    probe_key: str | None,
+    now: datetime,
+    ttl: timedelta,
+) -> bool:
+    """Whether a cached row can be reused without re-fetching.
+
+    One rule for a sibling's row and for the caller's own: a probe key that
+    matches proves the supplier has not republished, and without a probe the
+    row stands until the TTL runs out. Two copies of this drifted apart once
+    already, which is what ``fetch_shared`` exists to prevent.
+    """
+    if probe_key is not None:
+        return row.probe_key == probe_key
+    return now - row.fetched_at < ttl
+
+
+def _adopted(
+    row: _SharedSnapshot, probe_key: str | None, now: datetime
+) -> _SharedSnapshot:
+    """The row to keep after adopting ``row``, restamped only if a probe said so.
+
+    A probe match means "checked just now, still current", so the age clock
+    restarts and the snapshot_age sensor reads honestly. A TTL match means only
+    that the row has not expired yet: restamping there would push the expiry
+    out on every tick and the supplier would never be re-fetched at all.
+    """
+    if probe_key is None:
+        return row
+    return _SharedSnapshot(snapshot=row.snapshot, fetched_at=now, probe_key=probe_key)
+
+
+async def fetch_shared(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: "SupplierExtractor",
+    contract: str,
+    region: str,
+    *,
+    supplier: str,
+    local: _SharedSnapshot | None = None,
+    force: bool = False,
+) -> SharedFetch:
+    """Resolve one supplier card through the shared cache, probe and lock.
+
+    The whole policy in one place: the cheap probe, a sibling's row, the
+    caller's own row, the negative-cache backoff, the per-key lock and the
+    fetch. It lives beside the caches it manipulates rather than on the
+    coordinator, because the coordinator is not the only thing that needs a
+    card any more -- a ranking sweep wants the same probe short-circuit, the
+    same lock and the same backoff, and a second implementation of them would
+    drift from this one the way the two freshness rules already had.
+
+    ``local`` is the caller's own copy, offered as a cache row of equal
+    standing and consulted after the shared one. It is what keeps this a
+    single policy: without it the coordinator has to keep its own freshness
+    rule and run its own probe.
+
+    ``supplier`` is the registry id, passed rather than read off the extractor
+    so the cache key is derived in exactly one place -- the caller that looked
+    the extractor up. Two derivations of this key would not fail loudly: they
+    would put the coordinator and the sweep in separate key spaces sharing
+    nothing, and the symptom is a cache that simply never hits.
+
+    ``force`` opts out of every adoption shortcut, for the user-facing refresh
+    service. Without it a sibling that re-seeded the shared cache between the
+    eviction and the next tick would silently satisfy the forced refresh.
+
+    Returns rather than raises; see ``SharedFetch``.
+    """
+    ttl = timedelta(hours=SNAPSHOT_REFRESH_HOURS)
+    now = dt_util.utcnow()
+    key = (supplier, contract, region)
+    cache = _shared_snapshots(hass)
+    failed = _shared_failed_fetches(hass)
+
+    # Cheap probe first. None means the supplier has no probe path or the
+    # probe failed; both fall through to the TTL-only flow.
+    probe_key: str | None = None
+    probe_fn = getattr(extractor, "probe", None)
+    if probe_fn is not None:
+        try:
+            probe_key = await probe_fn(session, contract, region)
+        except (ExtractorError, asyncio.TimeoutError) as err:
+            _LOGGER.debug("probe failed for %s/%s: %s", supplier, contract, err)
+            probe_key = None
+
+    confirmed = probe_key is not None
+
+    shared = cache.get(key)
+    if not force and shared is not None and _row_is_fresh(shared, probe_key, now, ttl):
+        row = _adopted(shared, probe_key, now)
+        cache[key] = row
+        return SharedFetch(row, "shared", probe_key, confirmed)
+
+    if not force and local is not None and _row_is_fresh(local, probe_key, now, ttl):
+        row = _adopted(local, probe_key, now)
+        # Seed the shared cache when this caller is the first to verify a
+        # disk-loaded row after a restart, so siblings adopt instead of each
+        # re-running its own probe. Re-use the previous probe key when this
+        # probe came back empty: probe-less suppliers stay None, and a
+        # transiently-failing probe keeps the last known key.
+        if cache.get(key) is None:
+            cache[key] = _SharedSnapshot(
+                snapshot=row.snapshot,
+                fetched_at=row.fetched_at,
+                probe_key=probe_key if probe_key is not None else local.probe_key,
+            )
+        return SharedFetch(row, "local", probe_key, confirmed)
+
+    # Negative cache: a sibling that just failed on this key means back off
+    # rather than refire the same broken request. ``force`` bypasses it, or the
+    # refresh service silently no-ops when a sibling failed in the window.
+    if not force:
+        last_fail = failed.get(key)
+        if (
+            last_fail is not None
+            and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
+        ):
+            return SharedFetch(
+                None, "backoff", probe_key, confirmed, None, last_fail[1], last_fail[2]
+            )
+
+    gen_at_entry = _tuple_generation(hass, key)
+    async with _shared_lock(hass, key):
+        shared = cache.get(key)
+        locked_now = dt_util.utcnow()
+        if (
+            not force
+            and shared is not None
+            and _row_is_fresh(shared, probe_key, locked_now, ttl)
+        ):
+            row = _adopted(shared, probe_key, locked_now)
+            cache[key] = row
+            return SharedFetch(row, "shared", probe_key, confirmed)
+        # Re-check the backoff under the lock so the second waiter does not
+        # repeat what the first just failed.
+        if not force:
+            last_fail = failed.get(key)
+            if (
+                last_fail is not None
+                and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
+            ):
+                return SharedFetch(
+                    None,
+                    "backoff",
+                    probe_key,
+                    confirmed,
+                    None,
+                    last_fail[1],
+                    last_fail[2],
+                )
+        try:
+            snap = await extractor.fetch(session, contract, region)
+            fetched_at = dt_util.utcnow()
+            row = _SharedSnapshot(
+                snapshot=snap, fetched_at=fetched_at, probe_key=probe_key
+            )
+            # Do not write the cache if the tuple was evicted mid-fetch (entry
+            # removed, or supplier swapped). The row is still useful to the
+            # caller for this tick.
+            if _tuple_generation(hass, key) == gen_at_entry:
+                cache[key] = row
+                failed.pop(key, None)
+            return SharedFetch(row, "fetch", probe_key, confirmed)
+        except Exception as err:  # noqa: BLE001 - handed back as a value
+            # Any failure populates the negative cache so siblings back off.
+            # The third field counts consecutive failures on this key so a lone
+            # transient timeout does not immediately raise a repair issue; it
+            # rides the shared row and resets the moment a fetch succeeds.
+            prev = failed.get(key)
+            fail_count = (prev[2] if prev is not None else 0) + 1
+            if _tuple_generation(hass, key) == gen_at_entry:
+                failed[key] = (dt_util.utcnow(), str(err), fail_count)
+            return SharedFetch(
+                None, "failed", probe_key, confirmed, err, str(err), fail_count
+            )
 
 
 def _shared_snapshots(

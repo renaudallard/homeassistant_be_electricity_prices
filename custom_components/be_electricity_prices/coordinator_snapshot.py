@@ -32,7 +32,6 @@ a probe key match where the supplier offers one, a TTL otherwise."""
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
 from .providers import get as get_extractor
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .providers._pdf import is_transient_fetch_error
@@ -50,14 +49,10 @@ from .providers.base import (
     ExtractorError,
 )
 from .snapshot_store import (
-    SNAPSHOT_REFRESH_HOURS,
-    _SHARED_FAILURE_TTL,
     _SharedSnapshot,
+    fetch_shared,
     _resolve_snapshot,
     _shared_failed_fetches,
-    _shared_lock,
-    _shared_snapshots,
-    _tuple_generation,
 )
 
 from datetime import datetime
@@ -154,43 +149,6 @@ class _SnapshotMixin:
         self._snapshot_raw = snap
         self._snapshot = None if snap is None else _resolve_snapshot(self.entry, snap)
 
-    def _adopt_shared(
-        self,
-        shared: _SharedSnapshot,
-        probe_key: str | None = None,
-        now: datetime | None = None,
-    ) -> None:
-        """Take a fresh shared snapshot as our own.
-
-        When the freshness decision came from a PROBE key rather than the
-        TTL, restamp ``fetched_at`` to now, exactly as the self-fresh branch
-        below does and for the same reason: the probe just verified the
-        supplier has not published a new card, so the snapshot is "checked
-        just now", not "fetched whenever the cold fetch happened".
-
-        This path is the one that runs in steady state. The shared row is
-        normally this coordinator's OWN row, written by its cold fetch, and
-        the shortcut is tried before the self-fresh branch, so leaving the
-        stamp alone pinned it at the cold-fetch instant for as long as the
-        supplier kept publishing the same card. Cards are monthly, so after
-        seven days every probe-based supplier raised a false "snapshot
-        stale" Repairs card, with `snapshot_age_hours` reading days while the
-        card had been verified minutes earlier. Restamp the shared row too so
-        siblings agree.
-
-        A TTL-based match must NOT restamp: that would reset the TTL clock on
-        every tick and a probe-less supplier would never be re-fetched.
-        """
-        self._set_snapshot(shared.snapshot)
-        if probe_key is not None and now is not None:
-            shared.fetched_at = now
-            self._snapshot_fetched_at = now
-        else:
-            self._snapshot_fetched_at = shared.fetched_at
-        self._snapshot_probe_key = shared.probe_key
-        self._last_error = ""
-        self._force_refresh = False
-
     async def _maybe_refresh_snapshot(self) -> None:
         """Run a cheap probe; only refetch the full PDF when it says so.
 
@@ -209,219 +167,103 @@ class _SnapshotMixin:
         same way: a probe-key match against a sibling coordinator's
         snapshot adopts it without doing any work.
         """
-        ttl = timedelta(hours=SNAPSHOT_REFRESH_HOURS)
-        now = dt_util.utcnow()
-
-        extractor = get_extractor(self.entry.data[CONF_SUPPLIER])
-        contract = self.entry.data[CONF_CONTRACT]
-        region = self.entry.data[CONF_REGION]
-        key = self._shared_key()
-        cache = _shared_snapshots(self.hass)
-
-        # Try a cheap probe first. None means the supplier has no probe
-        # path or the probe failed; we fall through to the TTL-only flow.
-        probe_key: str | None = None
-        probe_fn = getattr(extractor, "probe", None)
-        if probe_fn is not None:
-            try:
-                probe_key = await probe_fn(self._session, contract, region)
-            except (ExtractorError, asyncio.TimeoutError) as err:
-                _LOGGER.debug(
-                    "probe failed for %s/%s: %s",
-                    self.entry.data.get(CONF_SUPPLIER),
-                    contract,
-                    err,
-                )
-                probe_key = None
-
-        # Free, non-blocking shortcut: a sibling coordinator may have a
-        # fresh snapshot we can adopt directly.
-        shared = cache.get(key)
-        if shared is not None and self._shared_is_fresh(shared, probe_key, now, ttl):
-            self._adopt_shared(shared, probe_key, now)
-            return
-
-        # Our own snapshot may already be valid against this probe.
-        if self._snapshot is not None and self._self_is_fresh(probe_key, now, ttl):
-            if probe_key is not None:
-                # Probe verified the supplier hasn't published a new card,
-                # so refresh the snapshot_age sensor's clock to "just
-                # checked". The probe-less / probe-failed path keeps the
-                # original fetched_at; otherwise stamping it on every
-                # tick that passes the TTL check resets the TTL clock
-                # and the supplier is never re-fetched.
-                self._snapshot_fetched_at = now
-                # A successful probe also confirms the supplier is
-                # reachable again, so clear any stale failure left by an
-                # earlier transient fetch error. This path never
-                # re-fetches, so without it a single-entry install (no
-                # sibling to trigger _adopt_shared) would keep the "could
-                # not reach the supplier" Repairs card and _last_error
-                # until the published card changed. Emptying _last_error
-                # lets the caller's top-level clear drop the extractor
-                # issue; pop the negative-cache row so siblings stop
-                # backing off. Gated on probe_key is not None: a failed /
-                # absent probe is not proof of recovery.
-                self._last_error = ""
-                _shared_failed_fetches(self.hass).pop(key, None)
-            # Populate the shared cache when this tick is the first to
-            # verify a disk-loaded snapshot after restart. Without this
-            # every sibling on the same tuple would re-run its own
-            # probe / TTL check on every tick instead of adopting.
-            # Re-use the previous probe_key when the current probe
-            # came back empty (probe-less suppliers stay None; a
-            # transiently-failing probe keeps the last known key).
-            if (
-                cache.get(key) is None
-                and self._snapshot_raw is not None
-                and self._snapshot_fetched_at is not None
-            ):
-                cache[key] = _SharedSnapshot(
+        result = await fetch_shared(
+            self.hass,
+            self._session,
+            get_extractor(self.entry.data[CONF_SUPPLIER]),
+            self.entry.data[CONF_CONTRACT],
+            self.entry.data[CONF_REGION],
+            supplier=self.entry.data[CONF_SUPPLIER],
+            # Our own row is offered as a cache entry of equal standing, so the
+            # freshness rule lives in one place instead of here as well. Built
+            # from _snapshot_raw, never _snapshot: the resolved copy carries
+            # this entry's VAT preference, and seeding the shared cache from it
+            # would mis-price every sibling on the tuple.
+            local=(
+                _SharedSnapshot(
                     snapshot=self._snapshot_raw,
                     fetched_at=self._snapshot_fetched_at,
-                    probe_key=probe_key
-                    if probe_key is not None
-                    else self._snapshot_probe_key,
+                    probe_key=self._snapshot_probe_key,
                 )
+                if self._snapshot_raw is not None
+                and self._snapshot_fetched_at is not None
+                else None
+            ),
+            force=self._force_refresh,
+        )
+
+        if result.source == "backoff":
+            # A sibling failed on this tuple moments ago. Take its reason, so a
+            # cold-start coordinator reports the real failure rather than "cold
+            # start", and leave the snapshot alone.
+            self._last_error = result.error_message
             return
 
-        # Negative cache: if a sibling just failed on this same key,
-        # don't retry until _SHARED_FAILURE_TTL has elapsed. Propagate
-        # the sibling's error to ours so a cold-start coordinator sees
-        # the real failure reason instead of "cold start".
-        # ``async_force_refresh`` raises ``_force_refresh`` and clears
-        # *its own* view of the marker, but a sibling failing in the
-        # window between the clear and this tick re-populates the row;
-        # bypassing the short-circuit when ``_force_refresh`` is set
-        # keeps the user-facing refresh service from silently no-op'ing.
-        failed = _shared_failed_fetches(self.hass)
-        if not self._force_refresh:
-            last_fail = failed.get(key)
-            if (
-                last_fail is not None
-                and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
-            ):
-                self._last_error = last_fail[1]
-                return
-
-        gen_at_entry = _tuple_generation(self.hass, key)
-        async with _shared_lock(self.hass, key):
-            shared = cache.get(key)
-            locked_now = dt_util.utcnow()
-            if shared is not None and self._shared_is_fresh(
-                shared, probe_key, locked_now, ttl
-            ):
-                self._adopt_shared(shared, probe_key, locked_now)
-                return
-            # Re-check the negative cache under the lock so the second
-            # waiter doesn't repeat what the first just failed; same
-            # _force_refresh bypass as above.
-            if not self._force_refresh:
-                last_fail = failed.get(key)
-                if (
-                    last_fail is not None
-                    and dt_util.utcnow() - last_fail[0] < _SHARED_FAILURE_TTL
-                ):
-                    self._last_error = last_fail[1]
-                    return
-            try:
-                snap = await extractor.fetch(self._session, contract, region)
-                fetched_at = dt_util.utcnow()
-                # Don't write the shared cache if the tuple was evicted
-                # mid-fetch (entry removed or supplier swapped). Our
-                # local self._snapshot is still useful for this tick;
-                # if runtime_data was swapped, _save_persistent will
-                # skip the write.
-                if _tuple_generation(self.hass, key) == gen_at_entry:
-                    cache[key] = _SharedSnapshot(
-                        snapshot=snap, fetched_at=fetched_at, probe_key=probe_key
-                    )
-                    failed.pop(key, None)
-                self._set_snapshot(snap)
-                self._snapshot_fetched_at = fetched_at
-                self._snapshot_probe_key = probe_key
+        if result.source == "local" and result.row is not None:
+            # Our own row stood. Nothing to re-resolve: the snapshot already IS
+            # this entry's, and putting it back through _set_snapshot would
+            # resolve VAT a second time on every quiet tick. Only the clock
+            # moves, and only when a probe actually answered -- stamping it on
+            # a TTL match would push the expiry out every tick and the supplier
+            # would never be re-fetched at all.
+            self._snapshot_fetched_at = result.row.fetched_at
+            # Clearing a stale error here is gated on the probe for the same
+            # reason: a TTL match says our row has not expired, not that the
+            # supplier is reachable, and a failed or absent probe is not proof
+            # of recovery. Without this a single-entry install would keep a
+            # "could not reach the supplier" card until the published card
+            # changed; with it relaxed, one would clear while the supplier was
+            # still down.
+            if result.probe_confirmed:
                 self._last_error = ""
+                _shared_failed_fetches(self.hass).pop(self._shared_key(), None)
+            return
+
+        if result.row is not None:
+            self._set_snapshot(result.row.snapshot)
+            self._snapshot_fetched_at = result.row.fetched_at
+            self._snapshot_probe_key = result.row.probe_key
+            self._last_error = ""
+            _shared_failed_fetches(self.hass).pop(self._shared_key(), None)
+            if result.source == "fetch":
+                # Only a real fetch satisfies a forced refresh, and only a real
+                # fetch clears the extractor issue.
                 self._force_refresh = False
                 self._sync_extractor_issue(None)
-            except Exception as err:  # noqa: BLE001 - re-raised below for non-extractor types
-                # Any extractor failure (including unexpected aiohttp /
-                # parser exceptions) must populate the negative cache so
-                # sibling coordinators back off instead of refiring the
-                # same broken request on the next tick. The third tuple
-                # field counts consecutive failures on this key so a lone
-                # transient timeout doesn't immediately raise a repair
-                # issue; the count rides the shared row and resets the
-                # moment a fetch succeeds (failed.pop above).
-                prev = failed.get(key)
-                fail_count = (prev[2] if prev is not None else 0) + 1
-                if _tuple_generation(self.hass, key) == gen_at_entry:
-                    failed[key] = (dt_util.utcnow(), str(err), fail_count)
-                self._last_error = str(err)
-                # A transient network failure (timeout / reset / 5xx /
-                # anti-bot 403) usually recovers on the next tick, so defer
-                # its softer "could not reach the supplier" card until it
-                # has crossed the threshold. A parse error / 404 / non-PDF
-                # payload won't self-heal, so raise the actionable
-                # "extractor failed" card on the first failure.
-                transient = isinstance(
-                    err, asyncio.TimeoutError
-                ) or is_transient_fetch_error(str(err))
-                # A card with no text layer is a third case: it downloaded
-                # fine and no parser change can read it, so the user needs
-                # the workaround rather than a request to report a layout
-                # change. Derived from THIS download, so it stops by itself
-                # when the supplier goes back to publishing text.
-                unreadable = isinstance(err, CardNotReadableError)
-                if not transient:
-                    self._sync_extractor_issue(
-                        str(err), transient=False, unreadable=unreadable
-                    )
-                elif fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
-                    self._sync_extractor_issue(str(err), transient=True)
-                _LOGGER.warning(
-                    "snapshot refresh failed for %s/%s: %s; keeping cached"
-                    " (consecutive failure %d)",
-                    self.entry.data.get(CONF_SUPPLIER),
-                    self.entry.data.get(CONF_CONTRACT),
-                    err,
-                    fail_count,
-                )
-                if not isinstance(err, (ExtractorError, asyncio.TimeoutError)):
-                    raise
+            return
 
-    def _self_is_fresh(
-        self, probe_key: str | None, now: datetime, ttl: timedelta
-    ) -> bool:
-        """Whether our own snapshot can be reused without a refetch."""
-        if self._force_refresh:
-            return False
-        if probe_key is not None:
-            return self._snapshot_probe_key == probe_key
-        if self._snapshot_fetched_at is None:
-            return False
-        return now - self._snapshot_fetched_at < ttl
-
-    def _shared_is_fresh(
-        self,
-        shared: _SharedSnapshot,
-        probe_key: str | None,
-        now: datetime,
-        ttl: timedelta,
-    ) -> bool:
-        """Whether a sibling's shared snapshot can be adopted as-is.
-
-        ``async_force_refresh`` flips ``_force_refresh`` to opt the
-        coordinator out of every adoption shortcut: without this guard
-        a sibling that re-seeded the shared cache between the
-        ``_shared_snapshots.pop`` and the next tick would silently
-        satisfy the forced refresh, making the user-facing refresh
-        service a no-op on multi-entry installs.
-        """
-        if self._force_refresh:
-            return False
-        if probe_key is not None:
-            return shared.probe_key == probe_key
-        return now - shared.fetched_at < ttl
+        err = result.error
+        assert err is not None
+        self._last_error = result.error_message
+        # A transient network failure (timeout / reset / 5xx / anti-bot 403)
+        # usually recovers on the next tick, so defer its softer "could not
+        # reach the supplier" card until it has crossed the threshold. A parse
+        # error / 404 / non-PDF payload will not self-heal, so raise the
+        # actionable "extractor failed" card on the first failure.
+        transient = isinstance(err, asyncio.TimeoutError) or is_transient_fetch_error(
+            result.error_message
+        )
+        # A card with no text layer is a third case: it downloaded fine and no
+        # parser change can read it, so the user needs the workaround rather
+        # than a request to report a layout change. Derived from THIS download,
+        # so it stops by itself when the supplier publishes text again.
+        unreadable = isinstance(err, CardNotReadableError)
+        if not transient:
+            self._sync_extractor_issue(
+                result.error_message, transient=False, unreadable=unreadable
+            )
+        elif result.fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
+            self._sync_extractor_issue(result.error_message, transient=True)
+        _LOGGER.warning(
+            "snapshot refresh failed for %s/%s: %s; keeping cached"
+            " (consecutive failure %d)",
+            self.entry.data.get(CONF_SUPPLIER),
+            self.entry.data.get(CONF_CONTRACT),
+            result.error_message,
+            result.fail_count,
+        )
+        if not isinstance(err, (ExtractorError, asyncio.TimeoutError)):
+            raise err
 
     def _snapshot_age_hours(self) -> float:
         if self._snapshot_fetched_at is None:

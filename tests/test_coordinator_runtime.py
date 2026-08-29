@@ -1370,7 +1370,11 @@ async def test_probe_none_self_fresh_does_not_reset_fetched_at(
 
     # Simulate a post-restart state: snapshot loaded from disk, shared
     # cache (in-memory) empty. fetched_at is well within TTL.
-    coord._snapshot = _fake_snapshot()
+    # Both, the way _set_snapshot always writes them: the shared cache is
+    # seeded from the RAW card, so the freshness gate reads the raw one too.
+    snap = _fake_snapshot()
+    coord._snapshot = snap
+    coord._snapshot_raw = snap
     original_fetched_at = dt_util.utcnow() - timedelta(hours=12)
     coord._snapshot_fetched_at = original_fetched_at
 
@@ -1444,7 +1448,11 @@ async def test_probe_match_self_fresh_refreshes_fetched_at(
         {"fetch": staticmethod(AsyncMock()), "probe": staticmethod(_fake_probe)},
     )
 
-    coord._snapshot = _fake_snapshot()
+    # Both, the way _set_snapshot always writes them: the shared cache is
+    # seeded from the RAW card, so the freshness gate reads the raw one too.
+    snap = _fake_snapshot()
+    coord._snapshot = snap
+    coord._snapshot_raw = snap
     coord._snapshot_probe_key = "stable-key"
     old_fetched_at = dt_util.utcnow() - timedelta(hours=12)
     coord._snapshot_fetched_at = old_fetched_at

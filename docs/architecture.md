@@ -287,7 +287,7 @@ shared process-wide across config entries keyed by `(supplier, contract, region)
 shared rows are evicted on unload only when no sibling entry still references the tuple
 (`__init__.py:291`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
 (`coordinator.py:243`) and the user-facing "extractor failed" repair issue is raised only after
-the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator_snapshot.py:81`), so
+the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator_snapshot.py:76`), so
 a single transient CDN timeout does not false-alarm.
 
 The ENTSO-E spot curve is fetched only for contracts that need it: dynamic contracts, and the
