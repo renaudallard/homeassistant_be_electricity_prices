@@ -1719,6 +1719,9 @@ class _CompareStepsMixin(OptionsFlow):
         return placeholders
 
 
+_YTD_FIELD = "with_ytd"
+
+
 def _sweep_rows(hass: HomeAssistant, entry_id: str) -> dict[tuple[str, str], Any]:
     """Snapshots this entry's sweep has already fetched, for the life of the
     process.
@@ -1796,6 +1799,14 @@ class _SweepStepsMixin(_CompareStepsMixin):
             "candidates": [(supplier, c.id) for supplier, c in candidates],
             "index": 0,
             "rows": [],
+            # A row carries only its rendered label, so the year-to-date pass
+            # needs a way back to the contract that produced it.
+            "labels": {
+                _row_label(
+                    _label_for_supplier(supplier), _label_for_contract(supplier, c.id)
+                ): (supplier, c.id)
+                for supplier, c in candidates
+            },
         }
         self._sweep_task = None
         if not hasattr(self, "_compare"):
@@ -1983,14 +1994,28 @@ class _SweepStepsMixin(_CompareStepsMixin):
     async def async_step_compare_all_result(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Render the ranked table; submitting closes the dialog."""
+        """Render the ranked table; submitting closes the dialog.
+
+        The year-to-date column is offered here rather than computed with the
+        annual figures, because it is a different order of cost: every
+        archived month is another fetch and parse PER CANDIDATE, and inline it
+        would spend the whole budget on history and drop candidate rows. A
+        ranking over an incomplete candidate set is wrong rather than
+        unfinished, so the annual table is completed first and history is a
+        second, deliberate pass.
+        """
         if user_input is not None:
+            if user_input.get(_YTD_FIELD):
+                return await self.async_step_compare_all_ytd()
             return self.async_abort(reason="compare_done")
         sweep = self._sweep
         deferred = len(sweep["candidates"]) - sweep["index"]
+        schema: dict[Any, Any] = {}
+        if not sweep.get("ytd_done") and sweep["rows"]:
+            schema[vol.Optional(_YTD_FIELD, default=False)] = bool
         return self.async_show_form(
             step_id="compare_all_result",
-            data_schema=vol.Schema({}),
+            data_schema=vol.Schema(schema),
             description_placeholders={
                 "region": sweep["region"],
                 "group": sweep["group"],
@@ -1998,3 +2023,73 @@ class _SweepStepsMixin(_CompareStepsMixin):
             },
             last_step=True,
         )
+
+    async def async_step_compare_all_ytd(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Fill the year-to-date column, for the rows that can honestly carry one.
+
+        A row prints a figure only when it replayed the SAME real archived
+        months the household's own side did. ``fetch_for_month is not None``
+        is a property of the supplier and not of the contract: seventeen
+        candidates pass it and then have no month-addressable card, and the
+        year-to-date walk quietly substitutes the current one for every past
+        month. That prints 8,5% to 23,3% high next to a real figure, in a
+        column the user can sort, with nothing to tell the two apart.
+
+        A candidate is abandoned at the first month it cannot supply, so a
+        contract with no archive costs one month rather than eight.
+        """
+        from .snapshot_store import archived_months_present
+
+        sweep = self._sweep
+        hh = sweep["household"]
+        current = self.config_entry.data
+        today = hh.today_local
+        months = [date(today.year, m, 1) for m in range(1, today.month + 1)]
+
+        baseline = archived_months_present(
+            self.hass,
+            current[CONF_SUPPLIER],
+            current[CONF_CONTRACT],
+            sweep["region"],
+            months,
+        )
+        from .ytd_cost import _compute_current_year_cost
+
+        session = async_get_clientsession(self.hass)
+        cached = _sweep_rows(self.hass, self.config_entry.entry_id)
+        rows: list[RankedRow] = []
+        for row in sweep["rows"]:
+            pair = sweep["labels"].get(row.label)
+            snap = cached.get(pair) if pair is not None else None
+            if row.annual is None or pair is None or snap is None or not baseline:
+                rows.append(row)
+                continue
+            supplier, contract = pair
+            covered = archived_months_present(
+                self.hass, supplier, contract, sweep["region"], months
+            )
+            # Equal coverage, not merely "some": a row replaying nine of the
+            # baseline's twelve months is not a smaller figure in the same
+            # column, it is a different question answered in it.
+            if covered != baseline:
+                rows.append(row)
+                continue
+            try:
+                value = await _compute_current_year_cost(
+                    self.hass,
+                    session,
+                    get_extractor(supplier),
+                    snap,
+                    hh.quote_entry,
+                    contract_override=contract,
+                    billed_peak_kw=hh.peak_kw,
+                )
+            except Exception:  # noqa: BLE001 - one row loses its history
+                rows.append(row)
+                continue
+            rows.append(replace(row, ytd=value))
+        sweep["rows"] = rows
+        sweep["ytd_done"] = True
+        return await self.async_step_compare_all_result()

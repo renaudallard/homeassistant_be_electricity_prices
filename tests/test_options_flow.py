@@ -31,6 +31,7 @@ from custom_components.be_electricity_prices import snapshot_store
 
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -5322,3 +5323,50 @@ def test_every_sweep_string_exists_in_all_five_files() -> None:
             if f
         }
         assert prog == {"done", "total"}, (name, prog)
+
+
+def test_archived_months_present_ignores_a_proxied_month() -> None:
+    """`fetch_for_month is not None` is a property of the SUPPLIER. Seventeen
+    candidate contracts pass it and then have no month-addressable card - the
+    whole Bolt variable folder returns None before any I/O - and the
+    year-to-date walk substitutes the current card for every past month. That
+    prints 8,5-23,3% high next to a real figure, in a sortable column, with
+    nothing to tell the two apart.
+
+    A cached None IS that case, so it must not count as coverage."""
+    from datetime import date as _date
+
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
+        archived_months_present,
+    )
+
+    hass_stub = SimpleNamespace(data={})
+    months = [_date(2026, 1, 1), _date(2026, 2, 1), _date(2026, 3, 1)]
+    cache = _monthly_snapshots(hass_stub)  # type: ignore[arg-type]
+    snap = _stub_snapshot("bolt", "bolt_fix", 0.2)
+    cache[("bolt", "bolt_fix", "flanders", "2026-01")] = snap
+    cache[("bolt", "bolt_fix", "flanders", "2026-02")] = snap
+    # March had no month-addressable card: the walk cached the proxy marker.
+    cache[("bolt", "bolt_fix", "flanders", "2026-03")] = None
+
+    present = archived_months_present(
+        hass_stub,  # type: ignore[arg-type]
+        "bolt",
+        "bolt_fix",
+        "flanders",
+        months,
+    )
+    assert present == {(2026, 1), (2026, 2)}
+    # A contract the walk never touched has no coverage at all, rather than
+    # inheriting its supplier's.
+    assert (
+        archived_months_present(
+            hass_stub,  # type: ignore[arg-type]
+            "bolt",
+            "bolt_variable",
+            "flanders",
+            months,
+        )
+        == set()
+    )

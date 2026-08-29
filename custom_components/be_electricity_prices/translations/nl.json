@@ -451,7 +451,10 @@
       },
       "compare_all_result": {
         "title": "Gerangschikte alternatieven",
-        "description": "Alle {group}-contracten die in {region} beschikbaar zijn, berekend met uw eigen instellingen. Uw eigen contract is gemarkeerd met *; de tweede kolom is het verschil met de goedkoopste.\n\n```\n{ranking}\n```\n\nSchattingen, geen offertes: elke regel berekent een volledig jaar tegen de vandaag gepubliceerde tarieven, met uw gemeten volumes. Er is niets opgeslagen. Bevestig om te sluiten."
+        "description": "Alle {group}-contracten die in {region} beschikbaar zijn, berekend met uw eigen instellingen. Uw eigen contract is gemarkeerd met *; de tweede kolom is het verschil met de goedkoopste.\n\n```\n{ranking}\n```\n\nSchattingen, geen offertes: elke regel berekent een volledig jaar tegen de vandaag gepubliceerde tarieven, met uw gemeten volumes. Er is niets opgeslagen. Bevestig om te sluiten.",
+        "data": {
+          "with_ytd": "Ook het jaartotaal berekenen (trager: haalt de kaart van elke voorbije maand op)"
+        }
       }
     },
     "progress": {

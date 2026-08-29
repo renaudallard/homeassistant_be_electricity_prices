@@ -451,7 +451,10 @@
       },
       "compare_all_result": {
         "title": "Alternatives classees",
-        "description": "Tous les contrats {group} disponibles en {region}, calcules avec vos propres parametres. Votre contrat actuel est marque d'un * ; la deuxieme colonne est l'ecart avec le moins cher.\n\n```\n{ranking}\n```\n\nEstimations, pas des offres : chaque ligne calcule une annee complete aux tarifs publies aujourd'hui, avec vos volumes mesures. Rien n'a ete enregistre. Validez pour fermer."
+        "description": "Tous les contrats {group} disponibles en {region}, calcules avec vos propres parametres. Votre contrat actuel est marque d'un * ; la deuxieme colonne est l'ecart avec le moins cher.\n\n```\n{ranking}\n```\n\nEstimations, pas des offres : chaque ligne calcule une annee complete aux tarifs publies aujourd'hui, avec vos volumes mesures. Rien n'a ete enregistre. Validez pour fermer.",
+        "data": {
+          "with_ytd": "Calculer aussi le cumul depuis janvier (plus lent : recupere la fiche de chaque mois passe)"
+        }
       }
     },
     "progress": {

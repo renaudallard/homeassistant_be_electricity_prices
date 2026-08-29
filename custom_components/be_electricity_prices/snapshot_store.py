@@ -39,6 +39,7 @@ from __future__ import annotations
 import logging
 
 from dataclasses import dataclass
+from collections.abc import Sequence
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
@@ -544,6 +545,40 @@ def _monthly_lock(hass: HomeAssistant, key: tuple[str, str, str, str]) -> asynci
     if key not in locks:
         locks[key] = asyncio.Lock()
     return locks[key]
+
+
+def archived_months_present(
+    hass: HomeAssistant,
+    supplier: str,
+    contract: str,
+    region: str,
+    months: "Sequence[date]",
+) -> set[tuple[int, int]]:
+    """Which of ``months`` this contract has a REAL archived card for.
+
+    Read-only over the cache ``_snapshot_for_month`` already fills, so it costs
+    nothing beyond the walk that has happened anyway.
+
+    The distinction matters because ``fetch_for_month is not None`` is a
+    property of the SUPPLIER, not of the contract or the month, and seventeen
+    candidate contracts pass it and then have no month-addressable card:
+    Bolt's whole variable folder returns None before any I/O because its cards
+    carry a version suffix rather than a date, and the year-to-date path
+    silently substitutes the current card for every past month. That reads as
+    a real figure and is 8,5% to 23,3% out - against a row-to-row gap of about
+    16 EUR, enough to move a row several places in a column the user can sort,
+    with nothing on screen to tell the two kinds of row apart.
+
+    A month is present only when the cache holds an actual snapshot for it.
+    A cached ``None`` is the proxy case and is deliberately not counted.
+    """
+    cache = _monthly_snapshots(hass)
+    out: set[tuple[int, int]] = set()
+    for month in months:
+        key = (supplier, contract, region, f"{month.year:04d}-{month.month:02d}")
+        if cache.get(key) is not None:
+            out.add((month.year, month.month))
+    return out
 
 
 async def _snapshot_for_month(
