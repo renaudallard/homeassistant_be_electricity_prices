@@ -457,7 +457,8 @@
         "title": "Alternatives classees",
         "description": "Tous les contrats {group} disponibles en {region}, calcules avec vos propres parametres. Votre contrat actuel porte le badge YOUR CONTRACT ; chaque autre ligne se termine par l'ecart avec lui, un signe moins etant une economie.\n\n{ranking}\n\nEstimations, pas des offres : chaque ligne calcule une annee complete aux tarifs publies aujourd'hui, avec vos volumes mesures. Rien n'a ete enregistre. Validez pour fermer.",
         "data": {
-          "with_ytd": "Calculer aussi le cumul depuis janvier (plus lent : recupere la fiche de chaque mois passe)"
+          "with_ytd": "Calculer aussi le cumul depuis janvier (plus lent : recupere la fiche de chaque mois passe)",
+          "refresh": "Recalculer maintenant (environ deux minutes)"
         }
       }
     },

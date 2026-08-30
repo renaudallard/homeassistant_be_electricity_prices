@@ -733,7 +733,12 @@ def _eur(value: float) -> str:
     return f"{value:,.2f}".replace(",", " ").replace(".", ",")
 
 
-def _ranking_table(rows: Sequence[RankedRow], *, deferred: int = 0) -> str:
+def _ranking_table(
+    rows: Sequence[RankedRow],
+    *,
+    deferred: int = 0,
+    ran_at: datetime | None = None,
+) -> str:
     """The ranking, as wrapping markdown rather than an aligned block.
 
     It was a fixed-width table inside a code fence, which a Home Assistant
@@ -797,6 +802,17 @@ def _ranking_table(rows: Sequence[RankedRow], *, deferred: int = 0) -> str:
         out.append(
             f"{deferred} more not priced yet - reopen to finish; "
             "the slowest cards are left for last."
+        )
+    if ran_at is not None:
+        # A stored ranking has to date itself. Tariff cards move about once a
+        # month so a night-old table is almost always current, but a reader
+        # who just watched a supplier republish needs to know this one did
+        # not, and which of the two they are looking at.
+        out.append("")
+        out.append(
+            "Ranked "
+            + dt_util.as_local(ran_at).strftime("%d/%m at %H:%M")
+            + ". Tick the box to price it again now."
         )
     return "\n".join(out)
 

@@ -457,7 +457,8 @@
         "title": "Ranked alternatives",
         "description": "Every {group} contract available in {region}, priced against your own settings. Your own contract carries a YOUR CONTRACT badge; every other row ends with the difference against it, a minus being money saved.\n\n{ranking}\n\nEstimates, not quotes: each row prices a full year at today's published tariffs against your measured volumes. Nothing has been saved. Submit to close.",
         "data": {
-          "with_ytd": "Also compute year-to-date (slower: fetches each past month's card)"
+          "with_ytd": "Also compute year-to-date (slower: fetches each past month's card)",
+          "refresh": "Price it again now (takes about two minutes)"
         }
       }
     },

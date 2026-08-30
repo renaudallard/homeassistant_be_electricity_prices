@@ -457,7 +457,8 @@
         "title": "Gerangschikte alternatieven",
         "description": "Alle {group}-contracten die in {region} beschikbaar zijn, berekend met uw eigen instellingen. Uw eigen contract draagt de badge YOUR CONTRACT; elke andere regel eindigt met het verschil ten opzichte daarvan, waarbij een minteken een besparing is.\n\n{ranking}\n\nSchattingen, geen offertes: elke regel berekent een volledig jaar tegen de vandaag gepubliceerde tarieven, met uw gemeten volumes. Er is niets opgeslagen. Bevestig om te sluiten.",
         "data": {
-          "with_ytd": "Ook het jaartotaal berekenen (trager: haalt de kaart van elke voorbije maand op)"
+          "with_ytd": "Ook het jaartotaal berekenen (trager: haalt de kaart van elke voorbije maand op)",
+          "refresh": "Nu opnieuw berekenen (duurt ongeveer twee minuten)"
         }
       }
     },

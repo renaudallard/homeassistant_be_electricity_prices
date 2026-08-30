@@ -457,7 +457,8 @@
         "title": "Alternativen nach Preis",
         "description": "Alle {group}-Vertraege, die in {region} verfuegbar sind, mit Ihren eigenen Einstellungen berechnet. Ihr eigener Vertrag traegt das Abzeichen YOUR CONTRACT; jede andere Zeile endet mit dem Abstand dazu, wobei ein Minus eine Ersparnis ist.\n\n{ranking}\n\nSchaetzungen, keine Angebote: jede Zeile rechnet ein volles Jahr zu den heute veroeffentlichten Tarifen mit Ihren gemessenen Mengen. Es wurde nichts gespeichert. Zum Schliessen bestaetigen.",
         "data": {
-          "with_ytd": "Auch den Jahreswert berechnen (langsamer: holt das Preisblatt jedes vergangenen Monats)"
+          "with_ytd": "Auch den Jahreswert berechnen (langsamer: holt das Preisblatt jedes vergangenen Monats)",
+          "refresh": "Jetzt neu berechnen (dauert etwa zwei Minuten)"
         }
       }
     },

@@ -199,3 +199,85 @@ async def test_sensor_appears_only_when_the_option_is_on() -> None:
         lambda entities: added_off.extend(entities),  # type: ignore[arg-type]
     )
     assert not any(isinstance(e, PotentialSavingSensor) for e in added_off)
+
+
+async def test_dialog_shows_the_stored_ranking_without_sweeping(
+    hass: Any,
+) -> None:
+    """The point of the daily option: opening the page answers immediately
+    instead of moving the two-minute wait somewhere else. It must land on the
+    result step directly, never on a progress step."""
+    from homeassistant import data_entry_flow
+
+    from tests.test_options_flow import _make_entry, _real_coordinator, _stub_snapshot
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.18))
+    coord.daily_compare = _result()
+    entry.runtime_data = coord
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "compare_all"}
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "compare_all_result"
+    ranking = result["description_placeholders"]["ranking"]
+    # The stored rows, and the table dates itself so a reader can tell a
+    # night-old answer from one priced just now.
+    assert "Mega Online Fixed" in ranking
+    assert "Ranked " in ranking
+    # A stored ranking priced the whole cell, so nothing is reported pending.
+    assert "not priced yet" not in ranking
+
+
+async def test_refresh_box_reprices_instead_of_serving_the_stored_rows(
+    hass: Any,
+) -> None:
+    """Ticking refresh must actually sweep, not re-render what was stored."""
+    from dataclasses import replace
+    from unittest.mock import AsyncMock, patch
+
+    from homeassistant import data_entry_flow
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from tests.test_options_flow import _make_entry, _real_coordinator, _stub_snapshot
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.18))
+    coord.daily_compare = _result()
+    entry.runtime_data = coord
+
+    patched = {
+        sid: replace(
+            ext,
+            fetch=AsyncMock(return_value=_stub_snapshot(sid, "x", 0.16)),
+            probe=None,
+        )
+        for sid, ext in EXTRACTORS.items()
+    }
+    with patch.dict(EXTRACTORS, patched):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare_all"}
+        )
+        assert result["step_id"] == "compare_all_result"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"refresh": True}
+        )
+        # It really swept: a progress step is the proof, since the stored
+        # path never reaches one.
+        saw_progress = result["type"] is data_entry_flow.FlowResultType.SHOW_PROGRESS
+        for _ in range(400):
+            if result["type"] is not data_entry_flow.FlowResultType.SHOW_PROGRESS:
+                break
+            await hass.async_block_till_done()
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"]
+            )
+        assert saw_progress
+        assert result["step_id"] == "compare_all_result"
+        # Freshly priced rows, so the stored run's timestamp is gone.
+        assert "Ranked " not in result["description_placeholders"]["ranking"]

@@ -2068,6 +2068,7 @@ class _CompareStepsMixin(OptionsFlow):
 
 
 _YTD_FIELD = "with_ytd"
+_REFRESH_FIELD = "refresh"
 
 
 def _sweep_rows(
@@ -2141,6 +2142,17 @@ class _SweepStepsMixin(_CompareStepsMixin):
         if isinstance(sweep, str):
             return self.async_abort(reason=sweep)
         self._sweep = sweep
+        # An entry that ranks on a schedule already has the answer, so show it
+        # instead of making the reader watch the same two minutes again. This
+        # is the whole point of the daily option: the wait disappears rather
+        # than moving. The table says when it ran and offers to price again.
+        stored = getattr(
+            getattr(self.config_entry, "runtime_data", None), "daily_compare", None
+        )
+        if stored is not None and stored.rows:
+            self._sweep["rows"] = list(stored.rows)
+            self._sweep["ran_at"] = stored.ran_at
+            return await self.async_step_compare_all_result()
         self._sweep_task = None
         if not hasattr(self, "_compare"):
             self._compare = {}
@@ -2329,13 +2341,24 @@ class _SweepStepsMixin(_CompareStepsMixin):
         second, deliberate pass.
         """
         if user_input is not None:
+            if user_input.get(_REFRESH_FIELD):
+                # Drop the stored answer and sweep live. The cards themselves
+                # are still cached and probe-gated underneath, so asking again
+                # an hour later re-prices rather than re-downloads.
+                self._sweep["rows"] = []
+                self._sweep["index"] = 0
+                self._sweep.pop("ran_at", None)
+                return await self._sweep_start()
             if user_input.get(_YTD_FIELD):
                 return await self.async_step_compare_all_ytd()
             return self.async_abort(reason="compare_done")
         sweep = self._sweep
+        ran_at = sweep.get("ran_at")
         attempted = sum(1 for r in sweep["rows"] if not r.is_own)
         deferred = len(sweep["candidates"]) - attempted
         schema: dict[Any, Any] = {}
+        if ran_at is not None:
+            schema[vol.Optional(_REFRESH_FIELD, default=False)] = bool
         if not sweep.get("ytd_done") and sweep["rows"]:
             schema[vol.Optional(_YTD_FIELD, default=False)] = bool
         return self.async_show_form(
@@ -2344,7 +2367,14 @@ class _SweepStepsMixin(_CompareStepsMixin):
             description_placeholders={
                 "region": sweep["region"],
                 "group": sweep["group"],
-                "ranking": _ranking_table(sweep["rows"], deferred=max(deferred, 0)),
+                "ranking": _ranking_table(
+                    sweep["rows"],
+                    # A stored ranking priced the whole cell, so nothing is
+                    # pending; today's cell can differ from the night's if a
+                    # supplier came or went, which is not a deferred row.
+                    deferred=0 if ran_at is not None else max(deferred, 0),
+                    ran_at=ran_at,
+                ),
             },
             last_step=True,
         )
