@@ -241,21 +241,21 @@
         }
       },
       "compare_contract": {
-        "title": "Compare a contract",
+        "title": "Compare another supplier",
         "description": "Pick a contract from {supplier}. Both static and dynamic contracts are listed, so you can quote across contract kinds, and your own contract is listed too: pick it to ask what the same contract would cost with a different meter type or solar regime.",
         "data": {
           "contract": "Contract"
         }
       },
       "compare_meter": {
-        "title": "Compare a contract",
+        "title": "Compare another supplier",
         "description": "Meter type for the comparison. Defaults to your current entry's setting; change it to see what the bill would look like under a different billing mode (mono = single rate, bi = peak / off-peak).",
         "data": {
           "meter": "Meter type"
         }
       },
       "compare_solar": {
-        "title": "Compare a contract",
+        "title": "Compare another supplier",
         "description": "Solar regime for this quote. Pick a different one to see what you would pay under another metering arrangement; the regime your entry uses is preselected. Unlike the meter type this applies to both sides, because the regime belongs to your grid connection and not to the supplier. Nothing is saved. The two volume fields appear when no injection meter is wired to this entry: a meter that runs backwards reports consumption already netted against injection, which is not what the injection tariff bills, so enter your gross yearly figures from your inverter app or your annual meter readout.",
         "data": {
           "solar_regime": "Regime",
@@ -264,7 +264,7 @@
         }
       },
       "compare_api_key": {
-        "title": "Compare a contract",
+        "title": "Compare another supplier",
         "description": "The option you picked needs ENTSO-E day-ahead spot prices to quote: a contract priced off the spot (a dynamic one per slot, a monthly-indexed one on the delivery month's mean), or a contract whose solar injection is priced off the hourly spot (Cociter Variable on the injection regime). Paste an ENTSO-E API token so the quote can fetch the spot prices. The token is used only for the quote and is not saved.",
         "data": {
           "api_key": "ENTSO-E API key"
