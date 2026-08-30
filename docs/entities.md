@@ -111,6 +111,7 @@ pulls (all fields defined at `coordinator.py:756`).
 | Prosumer cost | `prosumer_cost` | - | MEASUREMENT | EUR | `prosumer_cost_eur` (compensation regime) |
 | Injection price | `injection_price` | - | MEASUREMENT | EUR/kWh | current slot of `injection_hourly`, else `injection_price_eur_per_kwh` (injection regime); also `today`/`tomorrow` arrays when the injection varies intra-day |
 | Contract end date | `contract_end_date` | timestamp | - | - | `entry.data[CONF_CONTRACT_END_DATE]` (a config value, not `CoordinatorData`; standalone `ContractEndDateSensor`). The same date is read by `projected_cost._contract_basis` to bound the projection's horizon; it changes no billed rate |
+| Potential yearly saving | `potential_saving` | MONETARY | - | EUR | `coordinator.daily_compare` (a `DailyCompare`, not `CoordinatorData`; standalone `PotentialSavingSensor`, created only when `CONF_DAILY_COMPARE`). `saving` = own minus the cheapest ALTERNATIVE, so a household already on the best card reads negative rather than zero. `available` is forced True: the value comes from the nightly sweep, not the hourly fetch |
 
 ### Current-slot selection and the nearest-slot guard
 
