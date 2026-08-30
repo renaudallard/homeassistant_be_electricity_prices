@@ -696,6 +696,11 @@ def _ranking_table(rows: Sequence[RankedRow], *, deferred: int = 0) -> str:
     The price leads each line so it survives a wrap: a long name pushes to the
     next line, the figure being compared does not.
 
+    No emphasis markers anywhere in a row. Bold and italics were reported
+    rendering as literal asterisks around the amounts, and a price wearing
+    stars reads worse than a plain one either way, so the row carries no
+    markup a renderer can leak.
+
     Rows that priced are sorted and numbered; rows that did not follow
     underneath saying why, because dropping them reads as "not competitive"
     and losing them silently is how a sweep looks complete when it is not.
@@ -718,9 +723,14 @@ def _ranking_table(rows: Sequence[RankedRow], *, deferred: int = 0) -> str:
     out: list[str] = []
     for n, row in enumerate(priced, 1):
         annual = row.annual if row.annual is not None else 0.0
-        line = f"{n}. **{_eur(annual)} EUR** - {row.label}"
+        line = f"{n}. {_eur(annual)} EUR - {row.label}"
         if row.is_own:
-            line += " *(your contract)*"
+            # Inline code, which the dialog paints as a filled band: in a
+            # list this long the row you are comparing everything against
+            # has to be findable without reading. Two words and no more,
+            # because inline code is monospace and does not wrap, which is
+            # what made the old fenced table scroll sideways.
+            line += " `YOUR CONTRACT`"
         elif own is not None:
             delta = annual - own
             # Signed, and the sign is the point: a minus is money saved.
@@ -732,12 +742,12 @@ def _ranking_table(rows: Sequence[RankedRow], *, deferred: int = 0) -> str:
     if unpriced:
         out.append("")
         for row in unpriced:
-            out.append(f"- {row.label} - *{row.status}*")
+            out.append(f"- {row.label} - {row.status}")
     if deferred:
         out.append("")
         out.append(
-            f"*{deferred} more not priced yet - reopen to finish; "
-            "the slowest cards are left for last.*"
+            f"{deferred} more not priced yet - reopen to finish; "
+            "the slowest cards are left for last."
         )
     return "\n".join(out)
 

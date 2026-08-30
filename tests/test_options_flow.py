@@ -5067,7 +5067,7 @@ def _ranked(table: str) -> list[tuple[str, float]]:
 
     out: list[tuple[str, float]] = []
     for line in table.splitlines():
-        m = _re.match(r"\d+\. \*\*([\d  ,]+) EUR\*\* - (.+?)(?: ·|$| \*\()", line)
+        m = _re.match(r"\d+\. ([\d  ,]+) EUR - (.+?)(?: ·|$| `)", line)
         if m:
             out.append(
                 (m.group(2), float(m.group(1).replace(" ", "").replace(",", ".")))
@@ -5098,7 +5098,10 @@ def test_ranking_table_keeps_every_row_visible_and_wraps() -> None:
     )
     rows = _ranked(table)
     assert [r[0] for r in rows] == ["Ecofix Flexy", "Eneco Zon & Wind Vast"]
-    assert "*(your contract)*" in table
+    assert "`YOUR CONTRACT`" in table
+    # No emphasis markers on a row: they were rendering as literal stars
+    # around the amounts.
+    assert "*" not in table
     assert any("card unreadable" in ln for ln in table.splitlines())
     assert "6 more not priced yet" in table
     # No code fence anywhere: that is what forced the horizontal scroll.
@@ -5867,8 +5870,9 @@ async def test_ranking_shows_your_own_contract_and_measures_against_it(
         assert placeholders is not None
         ranking = placeholders["ranking"]
 
-    assert "*(your contract)*" in ranking, ranking[:400]
-    own_line = next(ln for ln in ranking.splitlines() if "your contract" in ln)
+    assert "`YOUR CONTRACT`" in ranking, ranking[:400]
+    assert "*" not in ranking, ranking[:400]
+    own_line = next(ln for ln in ranking.splitlines() if "YOUR CONTRACT" in ln)
     assert "power_fix" not in ranking, "the own contract must not also be a candidate"
 
     rows = _ranked(ranking)
