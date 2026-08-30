@@ -458,7 +458,7 @@
       }
     },
     "progress": {
-      "sweeping": "{done} van {total} contracten berekend. De snelste kaarten worden eerst opgehaald, dus de traagste leveranciers komen als laatste."
+      "sweeping": "{priced} van {total} contracten berekend. De snelste kaarten worden eerst opgehaald: een pauze is een trage leverancier, geen blokkade.\n\n```\n{ranking}\n```"
     }
   },
   "selector": {

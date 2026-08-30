@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 from custom_components.be_electricity_prices import snapshot_store
+from custom_components.be_electricity_prices.compare_quote import RankedRow
 
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
@@ -5328,7 +5329,7 @@ def test_every_sweep_string_exists_in_all_five_files() -> None:
             )
             if f
         }
-        assert prog == {"done", "total"}, (name, prog)
+        assert prog == {"priced", "total", "ranking"}, (name, prog)
 
 
 def test_archived_months_present_ignores_a_proxied_month() -> None:
@@ -5700,3 +5701,113 @@ async def test_text_memo_is_shared_across_the_sweep_s_tasks() -> None:
     assert set(results) == {"listing"}
     # Concurrent tasks may race the first fetch, but nothing like six.
     assert len(calls) < 6, f"the memo was not shared across tasks: {len(calls)}"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_sweep_shows_the_table_while_it_is_still_filling(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A counter alone reads as hung. Cheapest-first puts the expensive cards
+    last, so the sweep reaches the high thirties quickly and then spends up to
+    45 s on one row; the rows already priced are shown so a pause looks like
+    one slow supplier rather than a broken dialog."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.compare_flow import (
+        _SweepStepsMixin,
+    )
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    patched = {
+        sid: replace(
+            ext,
+            fetch=AsyncMock(return_value=_stub_snapshot(sid, "x", 0.16)),
+            probe=None,
+        )
+        for sid, ext in EXTRACTORS.items()
+    }
+    # Every render the sweep produces, not only the ones the outer
+    # async_configure hands back: with instant stubs the flow manager runs the
+    # whole sweep inside one call, so polling the returned result observes a
+    # single frame of something the user sees dozens of.
+    seen_mid_sweep: list[str] = []
+    real_progress = _SweepStepsMixin._sweep_progress
+
+    def _spy(self: Any) -> Any:
+        out = real_progress(self)
+        ranking = (out.get("description_placeholders") or {}).get("ranking") or ""
+        if ranking:
+            seen_mid_sweep.append(ranking)
+        return out
+
+    with (
+        patch.dict(EXTRACTORS, patched),
+        patch.object(_SweepStepsMixin, "_sweep_progress", _spy),
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare_all"}
+        )
+        for _ in range(400):
+            if result["type"] != data_entry_flow.FlowResultType.SHOW_PROGRESS:
+                break
+            await hass.async_block_till_done()
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"]
+            )
+
+    assert seen_mid_sweep, "the progress step never carried a table"
+    # It grows as the sweep runs, rather than appearing only at the end.
+    assert len(seen_mid_sweep[-1].splitlines()) > len(seen_mid_sweep[0].splitlines()), (
+        "the table did not fill while the sweep ran"
+    )
+    # And it is ranked at every step, not appended in arrival order.
+    for table in seen_mid_sweep[1:]:
+        values = [
+            float(ln.split()[-1] if ln.split()[-1] != "-" else ln.split()[-2])
+            for ln in table.splitlines()
+            if ln.strip() and ln.strip()[0].isdigit()
+        ]
+        assert values == sorted(values), f"rows out of order mid-sweep:\n{table}"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_sweep_does_not_start_a_card_that_cannot_fit(hass: HomeAssistant) -> None:
+    """Asking only whether the budget is already spent let the sweep reach
+    110 s of a 120 s budget and then start a 45 s Bolt card, overrunning by
+    most of a minute with the counter frozen on one row - which from outside
+    is indistinguishable from stuck.
+
+    A candidate that cannot fit is skipped, and cheaper ones behind it are
+    still taken."""
+    from custom_components.be_electricity_prices.compare_flow import _SweepStepsMixin
+
+    flow = _SweepStepsMixin()
+    flow._sweep = {
+        "candidates": [
+            ("bolt", "bolt_fix"),  # 45.3s
+            ("engie", "engie_easy_fixed"),  # 0.3s
+        ],
+        "index": 0,
+        "rows": [RankedRow("already priced", 900.0)],
+        "started_at": dt_util.utcnow() - timedelta(seconds=110),
+    }
+    # 10s left: Bolt cannot fit, Engie can, so the cheap one is still taken.
+    assert flow._sweep_next_index() == 1
+
+    # With nothing priced yet the first candidate runs whatever it costs: a
+    # household whose whole cell is expensive gets a row, not an empty page.
+    flow._sweep["rows"] = []
+    assert flow._sweep_next_index() == 0
+
+    # And when nothing left fits, the sweep stops rather than overrunning.
+    flow._sweep["rows"] = [RankedRow("already priced", 900.0)]
+    flow._sweep["candidates"] = [("bolt", "bolt_fix")]
+    flow._sweep["index"] = 0
+    assert flow._sweep_next_index() is None

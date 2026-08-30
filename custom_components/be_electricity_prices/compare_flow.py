@@ -1925,9 +1925,12 @@ class _SweepStepsMixin(_CompareStepsMixin):
                 )
             sweep["index"] += 1
 
-        if sweep["index"] >= len(sweep["candidates"]) or self._sweep_spent():
+        nxt = self._sweep_next_index()
+        if nxt is None:
             return self.async_show_progress_done(next_step_id="compare_all_result")
-
+        # Anything skipped on the way here could not fit and is left pending.
+        sweep["skipped"] = sweep.get("skipped", 0) + (nxt - sweep["index"])
+        sweep["index"] = nxt
         supplier, contract = sweep["candidates"][sweep["index"]]
         self._sweep_task = self.hass.async_create_task(
             self._sweep_one(supplier, contract),
@@ -1938,28 +1941,70 @@ class _SweepStepsMixin(_CompareStepsMixin):
         )
         return self._sweep_progress()
 
-    def _sweep_spent(self) -> bool:
-        """Whether the wall-clock budget is used up.
-
-        Checked between candidates only. The first candidate always runs, so a
-        supplier slower than the whole budget still produces one row rather
-        than an empty page.
-        """
+    def _sweep_remaining_s(self) -> float:
+        """Seconds of budget left, starting the clock on first call."""
         started = self._sweep.get("started_at")
         if started is None:
             self._sweep["started_at"] = dt_util.utcnow()
-            return False
+            return COMPARE_SWEEP_BUDGET_S
         elapsed: float = (dt_util.utcnow() - started).total_seconds()
-        return elapsed >= COMPARE_SWEEP_BUDGET_S
+        return COMPARE_SWEEP_BUDGET_S - elapsed
+
+    def _sweep_next_index(self) -> int | None:
+        """The next candidate that FITS in what is left, or None to stop.
+
+        Asking only whether the budget is already spent is not enough, and
+        this is what made the page look hung. Cheapest-first puts the
+        expensive cards last, so the sweep would reach 110 s of a 120 s budget
+        and then start a 45 s Bolt card because the budget was not YET spent -
+        overrunning by most of a minute with the counter frozen on one row,
+        which from the outside is indistinguishable from stuck. Measured on
+        Wallonia: rows 1-37 cost 110 s together, then five TotalEnergies cards
+        at 12,8 s and six Bolt at 45,3 s.
+
+        So a candidate that cannot fit is skipped rather than started, and the
+        sweep keeps taking cheaper ones behind it. Skipped rows are reported
+        as still pending, exactly like the ones never reached.
+
+        The FIRST candidate always runs whatever it costs: a household whose
+        whole cell is expensive should get a row, not an empty page.
+        """
+        sweep = self._sweep
+        remaining = self._sweep_remaining_s()
+        for index in range(sweep["index"], len(sweep["candidates"])):
+            supplier, _contract = sweep["candidates"][index]
+            if not sweep["rows"]:
+                return index
+            if get_extractor(supplier).sweep_cost_s <= remaining:
+                return index
+        return None
 
     def _sweep_progress(self) -> ConfigFlowResult:
+        """Re-show the running sweep, with the table so far.
+
+        The counter alone is what made this feel hung: cheapest-first means
+        the tail is the expensive cards, so it races to the high thirties and
+        then sits on one row for up to 45 s with nothing moving. The rows are
+        already priced by then, so show them - the table fills and reorders as
+        each card lands, and a stall reads as one slow supplier rather than as
+        a broken dialog.
+
+        Home Assistant re-renders a progress step when its placeholders
+        change, and they change here because each candidate is its own task;
+        that is the whole reason the sweep is built one task per row.
+        """
         sweep = self._sweep
+        priced = sum(1 for r in sweep["rows"] if r.annual is not None)
         return self.async_show_progress(
             step_id="compare_all_progress",
             progress_action="sweeping",
             description_placeholders={
-                "done": str(sweep["index"]),
                 "total": str(len(sweep["candidates"])),
+                "priced": str(priced),
+                # Deferred is not reported mid-sweep: rows behind the current
+                # one are still candidates, and printing a pending count that
+                # only grows reads as failure rather than as progress.
+                "ranking": _ranking_table(sweep["rows"]),
             },
             progress_task=self._sweep_task,
         )
@@ -2088,7 +2133,7 @@ class _SweepStepsMixin(_CompareStepsMixin):
                 return await self.async_step_compare_all_ytd()
             return self.async_abort(reason="compare_done")
         sweep = self._sweep
-        deferred = len(sweep["candidates"]) - sweep["index"]
+        deferred = len(sweep["candidates"]) - len(sweep["rows"])
         schema: dict[Any, Any] = {}
         if not sweep.get("ytd_done") and sweep["rows"]:
             schema[vol.Optional(_YTD_FIELD, default=False)] = bool

@@ -458,7 +458,7 @@
       }
     },
     "progress": {
-      "sweeping": "{done} von {total} Vertraegen berechnet. Die schnellsten Preisblaetter werden zuerst geholt, die langsamsten Anbieter kommen zuletzt."
+      "sweeping": "{priced} von {total} Vertraegen berechnet. Die schnellsten Preisblaetter zuerst: eine Pause ist ein langsamer Anbieter, keine Blockade.\n\n```\n{ranking}\n```"
     }
   },
   "selector": {

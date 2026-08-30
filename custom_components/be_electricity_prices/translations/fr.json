@@ -458,7 +458,7 @@
       }
     },
     "progress": {
-      "sweeping": "{done} contrats sur {total} calcules. Les fiches les plus rapides sont recuperees en premier, donc les fournisseurs les plus lents arrivent en dernier."
+      "sweeping": "{priced} contrats sur {total} calcules. Les fiches les plus rapides sont recuperees en premier : une pause est un fournisseur lent, pas un blocage.\n\n```\n{ranking}\n```"
     }
   },
   "selector": {

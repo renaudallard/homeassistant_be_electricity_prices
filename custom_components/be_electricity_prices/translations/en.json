@@ -458,7 +458,7 @@
       }
     },
     "progress": {
-      "sweeping": "Priced {done} of {total} contracts. The cheapest cards are fetched first, so the slowest suppliers arrive last."
+      "sweeping": "Priced {priced} of {total} contracts. The cheapest cards are fetched first, so the slowest suppliers arrive last and a pause is one of them, not a stall.\n\n```\n{ranking}\n```"
     }
   },
   "selector": {
