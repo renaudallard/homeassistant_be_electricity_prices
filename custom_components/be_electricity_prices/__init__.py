@@ -51,6 +51,7 @@ from homeassistant.util import dt as dt_util
 
 from .backfill import backfill_if_missing, backfill_range
 from .const import (
+    CONF_DAILY_COMPARE,
     CONF_CONTRACT,
     CONF_CUSTOM_DSO_DISTRIBUTION_ECO,
     CONF_CUSTOM_DSO_DISTRIBUTION_MEDIUM,
@@ -58,6 +59,8 @@ from .const import (
     CONF_DSO_TARIFF_MODE,
     CONF_REGION,
     CONF_SUPPLIER,
+    DAILY_COMPARE_WINDOW_MINUTES,
+    DEFAULT_DAILY_COMPARE,
     DOMAIN,
     DSO_MODE_IMPACT,
     PLATFORMS,
@@ -272,6 +275,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
             second=rollover_second,
         )
     )
+
+    # Opt-in daily ranking. Spread with the same crc32-on-entry-id trick as
+    # the rollover above, but across the whole day rather than the first
+    # minute: this one fetches a tariff card from every supplier selling in
+    # the region, so two installs sharing a second is a burst on somebody
+    # else's server rather than a wasted one of ours. Salted so an entry does
+    # not land on a time correlated with its rollover second.
+    if entry.data.get(CONF_DAILY_COMPARE, DEFAULT_DAILY_COMPARE):
+        minute_of_day = (
+            zlib.crc32(b"daily-compare:" + entry.entry_id.encode())
+            % DAILY_COMPARE_WINDOW_MINUTES
+        )
+
+        async def _daily_compare(_now: datetime) -> None:
+            # Imported here rather than at module scope: compare_flow pulls in
+            # the whole options-flow branch, which setup has no other reason
+            # to load.
+            from .compare_flow import async_run_daily_compare
+
+            await async_run_daily_compare(hass, entry, coordinator)
+
+        entry.async_on_unload(
+            async_track_time_change(
+                hass,
+                _daily_compare,
+                hour=minute_of_day // 60,
+                minute=minute_of_day % 60,
+                second=0,
+            )
+        )
 
     # One-shot backfill: only fires when the recorder has no
     # statistics for current_price at the Jan 1 anchor, so a normal

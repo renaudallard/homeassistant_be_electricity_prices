@@ -324,6 +324,11 @@ class BePricesCoordinator(
         # parsed, which is what gets shared with sibling entries and
         # persisted - they may answer the VAT question differently.
         self._snapshot: SupplierSnapshot | None = None
+        # The last scheduled ranking, when the entry opted into one. Held on
+        # the coordinator rather than in hass.data because the sensor that
+        # publishes it is a CoordinatorEntity: setting this and asking for a
+        # listener update is the whole delivery path, with no dispatcher.
+        self.daily_compare: Any = None
         self._snapshot_raw: SupplierSnapshot | None = None
         self._snapshot_fetched_at: datetime | None = None
         self._snapshot_probe_key: str | None = None

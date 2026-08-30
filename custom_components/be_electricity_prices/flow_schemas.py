@@ -114,6 +114,7 @@ from .const import (
     CONF_DAY_INJECTION_KWH,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
+    CONF_DAILY_COMPARE,
     CONF_INCLUDE_VAT,
     CONF_INJECTION_KWH,
     CONF_MANUAL_ENERGY_BASE,
@@ -141,6 +142,7 @@ from .const import (
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_CONNECTION_KVA_TIER,
     DEFAULT_CUSTOM_VAT_RATE,
+    DEFAULT_DAILY_COMPARE,
     DEFAULT_INCLUDE_VAT,
     DSO_CHOICES,
     DSO_MODE_BI_HORAIRE,
@@ -1033,7 +1035,7 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
         domain="sensor",
         device_class="energy",
     )
-    fields = {}
+    fields: dict[Any, Any] = {}
     for conf in _METER_SENSOR_KEYS:
         stored = defaults.get(conf)
         # A stored entity id is a SUGGESTION, not a default. ha-form omits a
@@ -1047,6 +1049,15 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
             )
         else:
             fields[vol.Optional(conf)] = EntitySelector(kwh_selector)
+    # The last box on the last step, because it is the only one here that is
+    # not about wiring a meter: turn it on and the entry ranks every contract
+    # of its kind once a day and publishes the saving as a sensor.
+    fields[
+        vol.Optional(
+            CONF_DAILY_COMPARE,
+            default=bool(defaults.get(CONF_DAILY_COMPARE, DEFAULT_DAILY_COMPARE)),
+        )
+    ] = BooleanSelector()
     return vol.Schema(fields)
 
 

@@ -114,7 +114,8 @@
           "day_injection_kwh": "Injection jour (kWh)",
           "night_injection_kwh": "Injection nuit (kWh)",
           "consumption_kwh": "Consommation totale (kWh)",
-          "injection_kwh": "Injection totale (kWh)"
+          "injection_kwh": "Injection totale (kWh)",
+          "daily_compare": "Comparer tous les fournisseurs chaque jour"
         },
         "data_description": {
           "day_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
@@ -122,7 +123,8 @@
           "day_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
           "night_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
           "consumption_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
-          "injection_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter."
+          "injection_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
+          "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois."
         }
       },
       "custom_energy": {
@@ -379,7 +381,8 @@
           "day_injection_kwh": "Injection jour (kWh)",
           "night_injection_kwh": "Injection nuit (kWh)",
           "consumption_kwh": "Consommation totale (kWh)",
-          "injection_kwh": "Injection totale (kWh)"
+          "injection_kwh": "Injection totale (kWh)",
+          "daily_compare": "Comparer tous les fournisseurs chaque jour"
         },
         "data_description": {
           "day_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
@@ -387,7 +390,8 @@
           "day_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
           "night_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
           "consumption_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
-          "injection_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter."
+          "injection_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
+          "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois."
         }
       },
       "custom_energy": {

@@ -280,6 +280,18 @@ KIND_GROUP: Final[dict[str, str]] = {
 # open. Longer would price more at the cost of a dialog that looks hung.
 COMPARE_SWEEP_BUDGET_S: Final = 120.0
 
+# Opt-in daily ranking. Off by default on purpose: it fetches tariff cards
+# from suppliers the household has no relationship with, and that is a
+# decision to take rather than one an update makes for everybody.
+CONF_DAILY_COMPARE: Final = "daily_compare"
+DEFAULT_DAILY_COMPARE: Final = False
+
+# The scheduled sweep runs once a day at a minute derived from the entry id,
+# so installs land all over the clock instead of stampeding every supplier at
+# midnight. Derived rather than random: an install that runs at a different
+# time every day cannot be reasoned about when it fails.
+DAILY_COMPARE_WINDOW_MINUTES: Final = 24 * 60
+
 METER_TYPES: Final = (METER_MONO, METER_BI, METER_DYNAMIC, METER_EXCLUSIVE_NIGHT)
 
 # DSO-side billing mode, orthogonal to the supplier meter. Wallonia

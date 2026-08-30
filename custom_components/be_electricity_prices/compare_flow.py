@@ -41,6 +41,8 @@ argument for it.
 
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -100,6 +102,7 @@ from .const import (
 )
 from .energy_meters import _measured_hour_weights, _measured_kwh
 from .compare_quote import (
+    DailyCompare,
     RankedRow,
     _annual_bill,
     _annual_volume,
@@ -413,6 +416,35 @@ class _HouseholdQuote:
     export_rate_for: Any
 
 
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_run_daily_compare(
+    hass: HomeAssistant, entry: ConfigEntry, coord: Any
+) -> None:
+    """Run the scheduled ranking and publish it through the coordinator.
+
+    Swallows its own failures on purpose. This runs on a timer with nobody
+    watching, and a supplier that changed its site overnight must not take an
+    entry down with it: the ranking simply keeps yesterday's answer, which the
+    sensor timestamps, rather than the whole entry going unavailable over a
+    comparison nobody asked for at that moment.
+    """
+    engine = _SweepEngine(hass, entry, {})
+    try:
+        result = await engine.run_full_sweep(coord)
+    except Exception:  # noqa: BLE001 - a timer job, not a user action
+        _LOGGER.exception("Scheduled comparison failed for %s", entry.title)
+        return
+    if isinstance(result, str):
+        # No cell to rank, which is an answer rather than a fault: the entry's
+        # contract is the only one of its kind sold where it lives.
+        _LOGGER.debug("Scheduled comparison skipped for %s: %s", entry.title, result)
+        return
+    coord.daily_compare = result
+    coord.async_update_listeners()
+
+
 class _SweepEngine:
     """The pricing engine behind both comparison pages.
 
@@ -439,6 +471,107 @@ class _SweepEngine:
         self.hass = hass
         self.config_entry = config_entry
         self._compare = overrides
+
+    async def run_full_sweep(self, coord: Any) -> DailyCompare | str:
+        """Price the whole cell with nobody watching, or say why not.
+
+        No budget and no skipping, unlike the dialog. The wall-clock budget
+        exists because somebody is staring at a progress bar; a scheduled run
+        has all night, and stopping early would publish a ranking whose
+        cheapest row is merely the cheapest one that fitted.
+
+        Sequential rather than gathered, deliberately. Sixteen suppliers
+        fetched at once is a burst on sixteen servers to save a couple of
+        minutes nobody is waiting through, and the listing memo below only
+        pays off when candidates sharing a listing page run one after another.
+        """
+        sweep = self.build_sweep()
+        if isinstance(sweep, str):
+            return sweep
+        sweep["household"] = await self._resolve_household(
+            coord,
+            candidates=sweep["candidates"],
+            meter=self.config_entry.data.get(CONF_METER, METER_MONO),
+        )
+        rows: list[RankedRow] = []
+        own = await self._sweep_own_row(sweep["household"])
+        if own is not None:
+            rows.append(own)
+        for supplier, contract in sweep["candidates"]:
+            try:
+                rows.append(await self._sweep_one(sweep, supplier, contract))
+            except Exception as err:  # noqa: BLE001 - one row, not the sweep
+                # Same rule as the dialog: a row that raised is still a row,
+                # because dropping it would read as "not competitive".
+                rows.append(
+                    RankedRow(
+                        label=_row_label(
+                            _label_for_supplier(supplier),
+                            _label_for_contract(supplier, contract),
+                        ),
+                        annual=None,
+                        status=f"could not be priced: {err}",
+                    )
+                )
+        return DailyCompare(
+            rows=tuple(rows),
+            own=own.annual if own is not None else None,
+            priced=sum(1 for r in rows if r.annual is not None and not r.is_own),
+            total=len(sweep["candidates"]),
+            ran_at=dt_util.utcnow(),
+        )
+
+    def build_sweep(self) -> dict[str, Any] | str:
+        """The sweep state for this entry's cell, or why there is none.
+
+        Returns the reason string rather than raising, because the dialog
+        turns it into an abort and the scheduled run into a log line, and the
+        two disagree about what a missing cell means to the user.
+        """
+        current = self.config_entry.data
+        region = current[CONF_REGION]
+        group = _contract_group(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        if not group:
+            # The entry's contract has left the catalogue, so there is no
+            # group to rank it within. Distinct from an empty cell: nothing is
+            # missing from the market, we just cannot place this household.
+            return "compare_all_unknown_contract"
+
+        candidates = _sweep_candidates(
+            region,
+            group,
+            _contract_is_professional(current[CONF_SUPPLIER], current[CONF_CONTRACT]),
+            current[CONF_CONTRACT],
+        )
+        if not candidates:
+            # A real answer, not a failure: a Brussels time-of-use household
+            # has exactly one slot contract in the region and it is theirs.
+            # Saying so is more use than an empty table.
+            return "compare_all_no_alternatives"
+
+        # Cheapest card first, so a budget buys many rows before few. Ties
+        # broken on the label so the order is stable between opens and the
+        # table does not reshuffle when a user reopens to finish it.
+        candidates.sort(
+            key=lambda pair: (get_extractor(pair[0]).sweep_cost_s, pair[0], pair[1].id)
+        )
+        return {
+            "region": region,
+            "group": group,
+            "candidates": [(supplier, c.id) for supplier, c in candidates],
+            "index": 0,
+            "rows": [],
+            # One listing memo for the whole sweep; see _sweep_one.
+            "listings": {},
+            # A row carries only its rendered label, so the year-to-date pass
+            # needs a way back to the contract that produced it.
+            "labels": {
+                _row_label(
+                    _label_for_supplier(supplier), _label_for_contract(supplier, c.id)
+                ): (supplier, c.id)
+                for supplier, c in candidates
+            },
+        }
 
     async def _resolve_household(
         self,
@@ -2004,50 +2137,10 @@ class _SweepStepsMixin(_CompareStepsMixin):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Resolve the cell, then hand off to the sweep."""
-        current = self.config_entry.data
-        region = current[CONF_REGION]
-        group = _contract_group(current[CONF_SUPPLIER], current[CONF_CONTRACT])
-        if not group:
-            # The entry's contract has left the catalogue, so there is no
-            # group to rank it within. Distinct from an empty cell: nothing is
-            # missing from the market, we just cannot place this household.
-            return self.async_abort(reason="compare_all_unknown_contract")
-
-        candidates = _sweep_candidates(
-            region,
-            group,
-            _contract_is_professional(current[CONF_SUPPLIER], current[CONF_CONTRACT]),
-            current[CONF_CONTRACT],
-        )
-        if not candidates:
-            # A real answer, not a failure: a Brussels time-of-use household
-            # has exactly one slot contract in the region and it is theirs.
-            # Saying so is more use than an empty table.
-            return self.async_abort(reason="compare_all_no_alternatives")
-
-        # Cheapest card first, so a budget buys many rows before few. Ties
-        # broken on the label so the order is stable between opens and the
-        # table does not reshuffle when a user reopens to finish it.
-        candidates.sort(
-            key=lambda pair: (get_extractor(pair[0]).sweep_cost_s, pair[0], pair[1].id)
-        )
-        self._sweep = {
-            "region": region,
-            "group": group,
-            "candidates": [(supplier, c.id) for supplier, c in candidates],
-            "index": 0,
-            "rows": [],
-            # One listing memo for the whole sweep; see _sweep_one.
-            "listings": {},
-            # A row carries only its rendered label, so the year-to-date pass
-            # needs a way back to the contract that produced it.
-            "labels": {
-                _row_label(
-                    _label_for_supplier(supplier), _label_for_contract(supplier, c.id)
-                ): (supplier, c.id)
-                for supplier, c in candidates
-            },
-        }
+        sweep = self._engine.build_sweep()
+        if isinstance(sweep, str):
+            return self.async_abort(reason=sweep)
+        self._sweep = sweep
         self._sweep_task = None
         if not hasattr(self, "_compare"):
             self._compare = {}

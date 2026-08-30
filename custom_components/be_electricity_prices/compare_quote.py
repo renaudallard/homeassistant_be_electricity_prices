@@ -679,6 +679,55 @@ class RankedRow:
     is_own: bool = False
 
 
+@dataclass(frozen=True)
+class DailyCompare:
+    """The result of one scheduled ranking, as the sensor publishes it.
+
+    Holds the rows rather than a rendered table: the sensor exposes numbers
+    for automations to read and the dialog renders the same rows through
+    ``_ranking_table``, and formatting it here would give the two different
+    answers to the same question.
+
+    ``own`` is None on a cold entry whose own card has not resolved yet. The
+    ranking is still worth publishing then -- the alternatives rank against
+    each other -- but there is no saving to state, so the sensor reads unknown
+    rather than claiming zero.
+    """
+
+    rows: tuple[RankedRow, ...]
+    own: float | None
+    priced: int
+    total: int
+    ran_at: datetime
+
+    @property
+    def cheapest(self) -> RankedRow | None:
+        """The best-priced alternative, or None if nothing priced.
+
+        Excludes the household's own row: "the cheapest contract available to
+        you" is a question about the alternatives, and answering it with your
+        own contract when yours happens to win would report a saving of zero
+        against itself.
+        """
+        priced = [r for r in self.rows if r.annual is not None and not r.is_own]
+        if not priced:
+            return None
+        return min(priced, key=lambda r: r.annual if r.annual is not None else 0.0)
+
+    @property
+    def saving(self) -> float | None:
+        """Yearly euro the cheapest alternative would save, or None.
+
+        Negative is a real answer and is left signed: it means nothing on the
+        market beats what the household already has, which is what somebody
+        checking a comparison sensor most wants to be told.
+        """
+        best = self.cheapest
+        if best is None or best.annual is None or self.own is None:
+            return None
+        return self.own - best.annual
+
+
 def _eur(value: float) -> str:
     """A euro amount in the Belgian convention, comma for the decimal."""
     return f"{value:,.2f}".replace(",", " ").replace(".", ",")

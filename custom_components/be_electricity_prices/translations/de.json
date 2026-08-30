@@ -114,7 +114,8 @@
           "day_injection_kwh": "Einspeisung Tag (kWh)",
           "night_injection_kwh": "Einspeisung Nacht (kWh)",
           "consumption_kwh": "Gesamtverbrauch (kWh)",
-          "injection_kwh": "Gesamteinspeisung (kWh)"
+          "injection_kwh": "Gesamteinspeisung (kWh)",
+          "daily_compare": "Täglich alle Anbieter vergleichen"
         },
         "data_description": {
           "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
@@ -122,7 +123,8 @@
           "day_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
           "night_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
           "consumption_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
-          "injection_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen."
+          "injection_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
+          "daily_compare": "Standardmäßig aus. Einmal täglich, zu einer aus diesem Eintrag abgeleiteten festen Zeit, damit nicht alle Installationen gleichzeitig abrufen, wird jeder Vertrag Ihrer Art in Ihrer Region berechnet und die jährliche Ersparnis des besten als Sensor veröffentlicht. An den meisten Tagen kostet das nur einige Prüfungen, da Tarifkarten etwa monatlich neu veröffentlicht werden."
         }
       },
       "custom_energy": {
@@ -379,7 +381,8 @@
           "day_injection_kwh": "Einspeisung Tag (kWh)",
           "night_injection_kwh": "Einspeisung Nacht (kWh)",
           "consumption_kwh": "Gesamtverbrauch (kWh)",
-          "injection_kwh": "Gesamteinspeisung (kWh)"
+          "injection_kwh": "Gesamteinspeisung (kWh)",
+          "daily_compare": "Täglich alle Anbieter vergleichen"
         },
         "data_description": {
           "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
@@ -387,7 +390,8 @@
           "day_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
           "night_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
           "consumption_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
-          "injection_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen."
+          "injection_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
+          "daily_compare": "Standardmäßig aus. Einmal täglich, zu einer aus diesem Eintrag abgeleiteten festen Zeit, damit nicht alle Installationen gleichzeitig abrufen, wird jeder Vertrag Ihrer Art in Ihrer Region berechnet und die jährliche Ersparnis des besten als Sensor veröffentlicht. An den meisten Tagen kostet das nur einige Prüfungen, da Tarifkarten etwa monatlich neu veröffentlicht werden."
         }
       },
       "custom_energy": {

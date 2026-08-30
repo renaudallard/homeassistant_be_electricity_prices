@@ -114,7 +114,8 @@
           "day_injection_kwh": "Day injection (kWh)",
           "night_injection_kwh": "Night injection (kWh)",
           "consumption_kwh": "Total consumption (kWh)",
-          "injection_kwh": "Total injection (kWh)"
+          "injection_kwh": "Total injection (kWh)",
+          "daily_compare": "Compare every supplier daily"
         },
         "data_description": {
           "day_consumption_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
@@ -122,7 +123,8 @@
           "day_injection_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
           "night_injection_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
           "consumption_kwh": "Only used when the four registers above are empty: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb.",
-          "injection_kwh": "Only used when the four registers above are empty: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb."
+          "injection_kwh": "Only used when the four registers above are empty: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb.",
+          "daily_compare": "Off by default. Once a day, at a fixed time derived from this entry so installs do not all fetch at once, price every contract of your kind sold in your region and publish the yearly saving of the best one as a sensor. Most days this costs a handful of freshness checks, because tariff cards are republished about once a month."
         }
       },
       "custom_energy": {
@@ -379,7 +381,8 @@
           "day_injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::day_injection_kwh%]",
           "night_injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::night_injection_kwh%]",
           "consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::consumption_kwh%]",
-          "injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::injection_kwh%]"
+          "injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::injection_kwh%]",
+          "daily_compare": "[%key:component::be_electricity_prices::config::step::meters::data::daily_compare%]"
         },
         "data_description": {
           "day_consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::day_consumption_kwh%]",
@@ -387,7 +390,8 @@
           "day_injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::day_injection_kwh%]",
           "night_injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::night_injection_kwh%]",
           "consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::consumption_kwh%]",
-          "injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::injection_kwh%]"
+          "injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::injection_kwh%]",
+          "daily_compare": "[%key:component::be_electricity_prices::config::step::meters::data_description::daily_compare%]"
         }
       },
       "custom_energy": {
