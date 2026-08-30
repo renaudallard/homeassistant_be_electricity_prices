@@ -732,6 +732,9 @@
       },
       "contract_end_date": {
         "name": "Einddatum van het contract"
+      },
+      "potential_saving": {
+        "name": "Mogelijke jaarlijkse besparing"
       }
     },
     "binary_sensor": {

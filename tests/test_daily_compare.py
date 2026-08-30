@@ -1,0 +1,201 @@
+# Copyright (c) 2026, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+"""Tests for the opt-in daily supplier ranking and the sensor it feeds."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from types import SimpleNamespace
+from typing import Any
+
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.be_electricity_prices.compare_quote import (
+    DailyCompare,
+    RankedRow,
+)
+from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.coordinator import CoordinatorData
+from custom_components.be_electricity_prices.sensor import (
+    PotentialSavingSensor,
+    async_setup_entry,
+)
+from tests import make_entry
+
+_RAN_AT = datetime(2026, 8, 30, 3, 17, tzinfo=dt_util.UTC)
+
+
+def _result(**kw: Any) -> DailyCompare:
+    rows = kw.pop(
+        "rows",
+        (
+            RankedRow("Mega Online Fixed", 1102.75),
+            RankedRow("Eneco Zon & Wind Flex", 1272.75, is_own=True),
+            RankedRow("Luminus Comfy Fixed", 1310.20),
+            RankedRow("Ecofix Fix 1 jaar", None, None, "card not readable"),
+        ),
+    )
+    return DailyCompare(
+        rows=rows,
+        own=kw.pop("own", 1272.75),
+        priced=kw.pop("priced", 2),
+        total=kw.pop("total", 3),
+        ran_at=kw.pop("ran_at", _RAN_AT),
+    )
+
+
+def _coord(
+    entry: MockConfigEntry, result: DailyCompare | None = None
+) -> SimpleNamespace:
+    return SimpleNamespace(data=CoordinatorData(), entry=entry, daily_compare=result)
+
+
+def test_saving_is_measured_against_the_household_not_the_field() -> None:
+    """The saving is own minus cheapest ALTERNATIVE. Ranking the own row as
+    the cheapest and subtracting it from itself would report zero on exactly
+    the household that has nothing to gain, which is indistinguishable from
+    a sweep that failed."""
+    result = _result()
+    assert result.cheapest is not None
+    assert result.cheapest.label == "Mega Online Fixed"
+    assert result.saving == 1272.75 - 1102.75
+
+
+def test_own_row_is_never_offered_as_the_cheapest() -> None:
+    """A household already on the best contract in its region: the cheapest
+    ALTERNATIVE is the runner-up, and the saving goes negative to say so."""
+    result = _result(
+        rows=(
+            RankedRow("Eneco Zon & Wind Flex", 900.00, is_own=True),
+            RankedRow("Mega Online Fixed", 1102.75),
+        ),
+        own=900.00,
+    )
+    assert result.cheapest is not None
+    assert result.cheapest.label == "Mega Online Fixed"
+    assert result.saving == 900.00 - 1102.75
+    assert result.saving < 0
+
+
+def test_no_own_row_reports_unknown_rather_than_zero() -> None:
+    """A cold entry whose own card has not resolved has no baseline. Zero
+    would read as "nothing to save" when the truth is "not known yet"."""
+    result = _result(
+        rows=(RankedRow("Mega Online Fixed", 1102.75),),
+        own=None,
+    )
+    assert result.cheapest is not None
+    assert result.saving is None
+
+
+def test_nothing_priced_reports_unknown() -> None:
+    result = _result(rows=(RankedRow("Ecofix", None, None, "unreachable"),), own=1000.0)
+    assert result.cheapest is None
+    assert result.saving is None
+
+
+def test_sensor_publishes_the_saving_and_the_ranking() -> None:
+    entry = make_entry(daily_compare=True)
+    sensor = PotentialSavingSensor(_coord(entry, _result()))  # type: ignore[arg-type]
+    assert sensor.native_value == 170.0
+    attrs = sensor.extra_state_attributes
+    assert attrs["cheapest"] == "Mega Online Fixed"
+    assert attrs["cheapest_annual_eur"] == 1102.75
+    assert attrs["own_annual_eur"] == 1272.75
+    assert attrs["priced"] == 2
+    assert attrs["total"] == 3
+    assert attrs["last_run"] == _RAN_AT.isoformat()
+
+    # Cheapest first, and a row that could not be priced sorts last with its
+    # reason rather than being dropped: a missing row reads as "not
+    # competitive", which is the one thing it does not mean.
+    labels = [r["label"] for r in attrs["ranking"]]
+    assert labels[0] == "Mega Online Fixed"
+    assert labels[-1] == "Ecofix Fix 1 jaar"
+    assert attrs["ranking"][-1]["status"] == "card not readable"
+    assert attrs["ranking"][-1]["annual_eur"] is None
+    # The own row is flagged so a dashboard can pick it out.
+    assert [r["label"] for r in attrs["ranking"] if r["is_own"]] == [
+        "Eneco Zon & Wind Flex"
+    ]
+
+
+def test_sensor_reads_unknown_before_the_first_sweep() -> None:
+    entry = make_entry(daily_compare=True)
+    sensor = PotentialSavingSensor(_coord(entry, None))  # type: ignore[arg-type]
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes == {}
+
+
+def test_sensor_survives_a_failed_price_fetch() -> None:
+    """The ranking comes from the nightly sweep, not the hourly price fetch,
+    so an hour where the supplier was unreachable must not hide last night's
+    answer behind "unavailable"."""
+    entry = make_entry(daily_compare=True)
+    coord = _coord(entry, _result())
+    coord.last_update_success = False
+    sensor = PotentialSavingSensor(coord)  # type: ignore[arg-type]
+    assert sensor.available is True
+    assert sensor.native_value == 170.0
+
+
+def test_metadata_matches_conventions() -> None:
+    entry = make_entry(daily_compare=True)
+    sensor = PotentialSavingSensor(_coord(entry))  # type: ignore[arg-type]
+    assert sensor.device_class == SensorDeviceClass.MONETARY
+    assert sensor.translation_key == "potential_saving"
+    assert sensor.unique_id == f"{entry.entry_id}_potential_saving"
+    assert sensor.device_info is not None
+    assert (DOMAIN, entry.entry_id) in sensor.device_info["identifiers"]
+    # No state_class: a standing comparison is not metered, and a monthly
+    # mean of it would be meaningless in long-term statistics.
+    assert sensor.state_class is None
+
+
+async def test_sensor_appears_only_when_the_option_is_on() -> None:
+    on = make_entry(daily_compare=True)
+    on.runtime_data = _coord(on)
+    added: list[Any] = []
+    await async_setup_entry(
+        None,  # type: ignore[arg-type]
+        on,
+        lambda entities: added.extend(entities),  # type: ignore[arg-type]
+    )
+    assert sum(isinstance(e, PotentialSavingSensor) for e in added) == 1
+
+    # Default off: an entry that never opted in gets no sensor, and no daily
+    # fetching either.
+    off = make_entry()
+    off.runtime_data = _coord(off)
+    added_off: list[Any] = []
+    await async_setup_entry(
+        None,  # type: ignore[arg-type]
+        off,
+        lambda entities: added_off.extend(entities),  # type: ignore[arg-type]
+    )
+    assert not any(isinstance(e, PotentialSavingSensor) for e in added_off)

@@ -732,6 +732,9 @@
       },
       "contract_end_date": {
         "name": "Vertragsende"
+      },
+      "potential_saving": {
+        "name": "Mögliche jährliche Ersparnis"
       }
     },
     "binary_sensor": {

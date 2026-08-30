@@ -732,6 +732,9 @@
       },
       "contract_end_date": {
         "name": "Contract end date"
+      },
+      "potential_saving": {
+        "name": "Potential yearly saving"
       }
     },
     "binary_sensor": {

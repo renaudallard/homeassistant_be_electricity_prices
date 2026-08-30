@@ -47,6 +47,7 @@ from homeassistant.util import dt as dt_util
 from .binary_sensor import _has_tomorrow
 from .const import (
     CONF_CONTRACT_END_DATE,
+    CONF_DAILY_COMPARE,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
@@ -54,6 +55,7 @@ from .const import (
     RESOLUTION_HOURLY,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
+    DEFAULT_DAILY_COMPARE,
 )
 from .cohort import (
     _parse_iso_date,
@@ -536,6 +538,8 @@ async def async_setup_entry(
     end_date = _parse_iso_date(entry.data.get(CONF_CONTRACT_END_DATE))
     if end_date is not None:
         entities.append(ContractEndDateSensor(coordinator, end_date))
+    if entry.data.get(CONF_DAILY_COMPARE, DEFAULT_DAILY_COMPARE):
+        entities.append(PotentialSavingSensor(coordinator))
     async_add_entities(entities)
 
 
@@ -704,3 +708,82 @@ class ContractEndDateSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity
         # TIMESTAMP requires a tz-aware datetime; anchor the date at local
         # (Europe/Brussels) midnight.
         return dt_util.start_of_local_day(self._end_date)
+
+
+class PotentialSavingSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
+    """Yearly euro the cheapest alternative contract would save.
+
+    Created only for an entry that opted into the daily ranking. The state is
+    one number because a sensor state is capped at 255 characters and because
+    one number is what an automation can act on; the ranking behind it rides
+    in the attributes.
+
+    Negative is a real reading, not an error: it means nothing on the market
+    beats what this household already has, which is the answer somebody
+    watching a comparison sensor most wants to be given. Unknown means the
+    sweep has not run yet, or ran and could not price the household's own
+    contract, in which case there is no baseline to subtract from and
+    reporting zero would read as "no saving available".
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "potential_saving"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement = "EUR"
+    # No state_class. MONETARY with a measurement class asks the recorder for
+    # long-term statistics on a figure that is a standing comparison rather
+    # than something metered, and a mean of it over a month means nothing.
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator: BePricesCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_potential_saving"
+        self._attr_device_info = supplier_device_info(coordinator)
+
+    @property
+    def available(self) -> bool:
+        # Deliberately not the CoordinatorEntity default. This value comes
+        # from the daily sweep, not from the hourly price fetch, so a supplier
+        # fetch that failed this hour says nothing about whether last night's
+        # ranking is still worth showing.
+        return True
+
+    @property
+    def native_value(self) -> float | None:
+        result = self.coordinator.daily_compare
+        return None if result is None else result.saving
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """The ranking behind the number.
+
+        Rows are flattened to plain values rather than rendered, so the
+        dialog and an automation read the same figures. Kept to the label and
+        the two amounts: the attributes are written to the recorder on every
+        state change, and a full snapshot per row would be stored daily
+        forever to answer a question nobody asks of history.
+        """
+        result = self.coordinator.daily_compare
+        if result is None:
+            return {}
+        best = result.cheapest
+        return {
+            "own_annual_eur": result.own,
+            "cheapest": best.label if best is not None else None,
+            "cheapest_annual_eur": best.annual if best is not None else None,
+            "priced": result.priced,
+            "total": result.total,
+            "last_run": result.ran_at.isoformat(),
+            "ranking": [
+                {
+                    "label": row.label,
+                    "annual_eur": row.annual,
+                    "is_own": row.is_own,
+                    **({"status": row.status} if row.status else {}),
+                }
+                for row in sorted(
+                    result.rows,
+                    key=lambda r: (r.annual is None, r.annual or 0.0),
+                )
+            ],
+        }
