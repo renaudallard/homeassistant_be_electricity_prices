@@ -42,8 +42,8 @@ knowledge of contracts: the coordinator owns all of that and calls this client.
 
 | Constant | Value | Source |
 | --- | --- | --- |
-| `ENTSOE_BASE_URL` | `https://web-api.tp.entsoe.eu/api` | `const.py:389` |
-| `ENTSOE_BE_DOMAIN` | `10YBE----------2` (BE bidding zone EIC) | `const.py:390` |
+| `ENTSOE_BASE_URL` | `https://web-api.tp.entsoe.eu/api` | `const.py:401` |
+| `ENTSOE_BE_DOMAIN` | `10YBE----------2` (BE bidding zone EIC) | `const.py:402` |
 
 The client is constructed with the user's ENTSO-E API key and Home Assistant's
 shared `aiohttp` session (`api.py:69`). The key is passed on every request as
@@ -323,7 +323,7 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py:41`). Backfill is reached either automatically
 at setup or through the `backfill_statistics` service, wired in `__init__.py`
-(service handler `_async_backfill_service` at `__init__.py:651`, one-shot
+(service handler `_async_backfill_service` at `__init__.py:684`, one-shot
 scheduling at `__init__.py:238`). The service handler validates that a snapshot
 is loaded and raises a localized `ServiceValidationError` otherwise, matching the
 window services (`__init__.py:537`).
