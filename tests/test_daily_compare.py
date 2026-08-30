@@ -281,3 +281,36 @@ async def test_refresh_box_reprices_instead_of_serving_the_stored_rows(
         assert result["step_id"] == "compare_all_result"
         # Freshly priced rows, so the stored run's timestamp is gone.
         assert "Ranked " not in result["description_placeholders"]["ranking"]
+
+
+async def test_year_to_date_works_on_a_stored_ranking(hass: Any) -> None:
+    """The year-to-date box is offered on a stored ranking, so it has to work
+    there. The progress step used to be the only place the household was
+    resolved, and a stored ranking skips it: ticking the box raised
+    KeyError('household') on the one page whose whole job is to be slow but
+    correct."""
+    from homeassistant import data_entry_flow
+
+    from tests.test_options_flow import _make_entry, _real_coordinator, _stub_snapshot
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.18))
+    coord.daily_compare = _result()
+    entry.runtime_data = coord
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "compare_all"}
+    )
+    assert result["step_id"] == "compare_all_result"
+    # The box is on offer, so it must not blow up when ticked.
+    assert "with_ytd" in result["data_schema"].schema
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"with_ytd": True}
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "compare_all_result"
+    # Having run, the pass does not offer itself again.
+    assert "with_ytd" not in result["data_schema"].schema

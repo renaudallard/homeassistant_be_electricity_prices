@@ -2181,6 +2181,37 @@ class _SweepStepsMixin(_CompareStepsMixin):
             return await self.async_step_compare_api_key()
         return await self.async_step_compare_all_progress()
 
+    async def _ensure_household(self) -> str | None:
+        """Resolve the household half once, for whichever page needs it first.
+
+        Returns an abort reason, or None when the household is in hand.
+
+        The progress step used to be the only way in, so it owned this. A
+        ranking served from the schedule skips that step entirely, which left
+        the year-to-date pass as the first thing to read a household nobody
+        had resolved -- a KeyError on the one page whose whole job is to be
+        slow but correct.
+
+        Resolved once for the whole sweep whoever asks. This is the half that
+        makes a ranking affordable: the meter reads, the recorder walk and the
+        day-ahead window are O(1) in the number of rows, and asking every
+        candidate up front is what lets the key be collected once.
+        """
+        sweep = self._sweep
+        if "household" in sweep:
+            return None
+        from .coordinator import BePricesCoordinator
+
+        coord = getattr(self.config_entry, "runtime_data", None)
+        if not isinstance(coord, BePricesCoordinator):
+            return "compare_all_entry_reloading"
+        sweep["household"] = await self._engine._resolve_household(
+            coord,
+            candidates=sweep["candidates"],
+            meter=self.config_entry.data.get(CONF_METER, METER_MONO),
+        )
+        return None
+
     async def async_step_compare_all_progress(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -2193,20 +2224,9 @@ class _SweepStepsMixin(_CompareStepsMixin):
         """
         sweep = self._sweep
         if "household" not in sweep:
-            from .coordinator import BePricesCoordinator
-
-            coord = getattr(self.config_entry, "runtime_data", None)
-            if not isinstance(coord, BePricesCoordinator):
-                return self.async_abort(reason="compare_all_entry_reloading")
-            # Once for the whole sweep. This is the half that makes a ranking
-            # affordable: the meter reads, the recorder walk and the day-ahead
-            # window are O(1) in the number of rows, and asking every
-            # candidate up front is what lets the key be collected once.
-            sweep["household"] = await self._engine._resolve_household(
-                coord,
-                candidates=sweep["candidates"],
-                meter=self.config_entry.data.get(CONF_METER, METER_MONO),
-            )
+            reason = await self._ensure_household()
+            if reason is not None:
+                return self.async_abort(reason=reason)
             own = await self._engine._sweep_own_row(sweep["household"])
             if own is not None:
                 # Placed before the first candidate so the table has a
@@ -2398,6 +2418,9 @@ class _SweepStepsMixin(_CompareStepsMixin):
         from .snapshot_store import _snapshot_for_month, archived_months_present
         from .ytd_cost import _compute_current_year_cost
 
+        reason = await self._ensure_household()
+        if reason is not None:
+            return self.async_abort(reason=reason)
         sweep = self._sweep
         hh = sweep["household"]
         current = self.config_entry.data
