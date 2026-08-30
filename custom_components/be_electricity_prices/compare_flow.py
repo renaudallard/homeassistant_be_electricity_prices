@@ -413,268 +413,32 @@ class _HouseholdQuote:
     export_rate_for: Any
 
 
-class _CompareStepsMixin(OptionsFlow):
-    """The compare branch, mixed into BePricesOptionsFlow."""
+class _SweepEngine:
+    """The pricing engine behind both comparison pages.
 
-    _compare: dict[str, Any]
+    Holds only what pricing needs -- the household's entry, the hass it reads
+    its meters and recorder through, and the what-if overrides the dialog
+    collects -- so the same code prices a sweep the user is watching and one
+    running on a schedule with nobody watching. It is deliberately not a flow:
+    a scheduled sweep has no steps, no progress and no abort, and reaching
+    into ``OptionsFlow`` for ``config_entry`` would tie a background job to
+    flow-manager internals that move between releases.
 
-    async def async_step_compare(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        current = self.config_entry.data
-        current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
-        own_professional = _contract_is_professional(
-            current[CONF_SUPPLIER], current[CONF_CONTRACT]
-        )
-        if not hasattr(self, "_compare"):
-            self._compare = {}
-        if user_input is not None:
-            self._compare.update(user_input)
-            return await self.async_step_compare_contract()
-        options = _compare_supplier_options(
-            current[CONF_REGION], current_kind, own_professional
-        )
-        if not options:
-            return self.async_abort(reason="compare_no_alternative")
-        return self.async_show_form(
-            step_id="compare",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_SUPPLIER): SelectSelector(
-                        SelectSelectorConfig(
-                            options=options,
-                            mode=SelectSelectorMode.DROPDOWN,
-                            translation_key="supplier",
-                        )
-                    ),
-                }
-            ),
-        )
+    ``overrides`` is the dialog's ``_compare`` dict, shared by reference so a
+    what-if picked on one step is seen by the pricing on the next. A scheduled
+    sweep passes an empty one: there is no user to ask, so the entry's own
+    settings are the only answer.
+    """
 
-    async def async_step_compare_contract(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        current = self.config_entry.data
-        current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
-        own_professional = _contract_is_professional(
-            current[CONF_SUPPLIER], current[CONF_CONTRACT]
-        )
-        if user_input is not None:
-            self._compare.update(user_input)
-            return await self.async_step_compare_meter()
-        # The contract picker spans both static and dynamic kinds (the
-        # compare flow supports cross-kind quotes) and includes the user's
-        # OWN contract.
-        #
-        # It used to exclude it, on the grounds that quoting a contract
-        # against itself is a no-op. It is not: the meter and solar steps
-        # that follow default to the entry's own settings but can be changed,
-        # so picking your own contract answers "what would I pay on this same
-        # contract with a bi-hourly meter", or "on the injection tariff
-        # instead of compensation". Those are the two switches a household
-        # can actually make without changing supplier, and they were the only
-        # comparison the page could not do.
-        remaining = [
-            c
-            for c in _contracts_for(self._compare[CONF_SUPPLIER], current[CONF_REGION])
-            if c.professional == own_professional
-        ]
-        if not remaining:
-            return self.async_abort(reason="compare_no_alternative")
-        return self.async_show_form(
-            step_id="compare_contract",
-            description_placeholders={
-                "supplier": _label_for_supplier(self._compare[CONF_SUPPLIER])
-            },
-            data_schema=_compare_contract_schema(
-                self._compare[CONF_SUPPLIER],
-                current[CONF_REGION],
-                current_kind,
-                "",
-                own_professional,
-            ),
-        )
-
-    async def async_step_compare_meter(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Optionally override the meter type for the comparison.
-
-        Static contracts (fixed / variable) can be quoted at mono or
-        bi-hourly billing -- some users want to know "what would I pay
-        if I switched billing mode AND supplier". Dynamic / TOU
-        contracts skip this step: their distribution requires a smart
-        meter, picking bi-hourly would route distribution one way and
-        energy another.
-        """
-        if user_input is not None:
-            self._compare.update(user_input)
-            return await self.async_step_compare_solar()
-        other_kind = _contract_kind(
-            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
-        )
-        # Dynamic, TOU and TOU-Impact contracts all require a smart
-        # meter, so don't offer mono/bi for them -- matching the install
-        # flow's _meter_schema, which gates the same three kinds. (Mega
-        # Off-peak Impact is "tou_impact"; omitting it here let the
-        # compare flow show an impossible mono/bi meter for it.)
-        if other_kind in SMART_METER_CONTRACT_KINDS:
-            self._compare[CONF_METER] = METER_DYNAMIC
-            return await self.async_step_compare_solar()
-        current_meter = self.config_entry.data.get(CONF_METER, METER_MONO)
-        return self.async_show_form(
-            step_id="compare_meter",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_METER, default=current_meter): SelectSelector(
-                        SelectSelectorConfig(
-                            options=list(METER_TYPES),
-                            mode=SelectSelectorMode.LIST,
-                            translation_key="meter",
-                        )
-                    )
-                }
-            ),
-        )
-
-    async def async_step_compare_solar(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Optionally quote both sides under a different solar regime.
-
-        The regime is a property of the grid connection, not of the
-        supplier: two suppliers at one address are necessarily on the same
-        one. So unlike the meter type, which is a billing mode the target
-        contract can differ on, this override applies to BOTH sides. A
-        target-only version would fold hundreds of euros of connection-side
-        change into what reads as a supplier-vs-supplier delta.
-
-        Runs before ``_after_compare_meter`` because that step decides
-        whether the quote needs an ENTSO-E key, and on the injection regime
-        a spot-indexed feed-in needs one. Deciding that on the stored
-        regime would send a compensation entry quoting Cociter Variable
-        straight to the result page with no key and silently credit zero.
-
-        Skipped entirely for an entry with no solar, so the common case
-        gains no click.
-        """
-        current = self.config_entry.data
-        stored = current.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
-        if stored == SOLAR_REGIME_NONE and _kva(current) <= 0.0:
-            return await self._after_compare_meter()
-        # A netted register cannot be told apart from a gross one by
-        # reading it, so the volumes are asked for on the wiring that
-        # cannot supply them rather than on the reading that comes back.
-        from .energy_meters import _kwh_sensor_ids
-
-        day_id, night_id, total_id = _kwh_sensor_ids(self.config_entry, "injection")
-        ask_volumes = not ((day_id and night_id) or total_id)
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            picked = user_input.get(CONF_SOLAR_REGIME, stored)
-            typed = (
-                user_input.get(CONF_WHATIF_CONSUMPTION_KWH),
-                user_input.get(CONF_WHATIF_INJECTION_KWH),
-            )
-            if picked != stored and ask_volumes and any(v is None for v in typed):
-                # Refuse rather than quietly quoting the override off a
-                # possibly-netted register: the error names what is
-                # missing, where silently dropping the override would look
-                # exactly like the picker not working.
-                errors[CONF_WHATIF_CONSUMPTION_KWH] = "whatif_volumes_required"
-            else:
-                self._compare.update(user_input)
-                return await self._after_compare_meter()
-        # No {stored_regime} placeholder: the picker is a LIST selector with
-        # the entry's own regime preselected and translated, so naming it in
-        # prose would only interpolate an English label into the nl / fr / de
-        # descriptions.
-        return self.async_show_form(
-            step_id="compare_solar",
-            data_schema=_compare_solar_schema(
-                {**current, **(user_input or {})}, ask_volumes=ask_volumes
-            ),
-            errors=errors,
-        )
-
-    async def _after_compare_meter(self) -> ConfigFlowResult:
-        """Hand off to compare_result, prompting for an ENTSO-E key first
-        when either side needs spot data the user's current entry doesn't
-        already carry: a spot-priced target (dynamic per slot, spot-monthly
-        per delivery month), or (on the injection regime) a
-        spot-indexed-injection contract on EITHER side -- the target like
-        Cociter Variable, or the user's own keyless Cociter Variable entry
-        -- whose feed-in credit is priced off the hourly day-ahead. Keep
-        this symmetric with the compare_spot_injection check in
-        _build_compare_placeholders, which values both sides."""
-        current = self.config_entry.data
-        other_kind = _contract_kind(
-            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
-        )
-        needs_spot = other_kind in SPOT_PRICED_CONTRACT_KINDS or (
-            _effective_regime(current, self._compare) == SOLAR_REGIME_INJECTION
-            and (
-                _contract_has_spot_injection(
-                    self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
-                )
-                or _contract_has_spot_injection(
-                    current[CONF_SUPPLIER], current[CONF_CONTRACT]
-                )
-            )
-        )
-        if needs_spot and not current.get(CONF_API_KEY):
-            return await self.async_step_compare_api_key()
-        return await self.async_step_compare_result()
-
-    async def async_step_compare_api_key(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Compare against a dynamic (or spot-indexed-injection) target
-        needs an ENTSO-E key for the spot rate. Borrow the user's existing
-        key when their entry already has one (handled in
-        _after_compare_meter); otherwise prompt and validate against the
-        live endpoint before reaching the result page."""
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            key = user_input[CONF_API_KEY].strip()
-            err = await _validate_entsoe_key(self.hass, key)
-            if err is None:
-                self._compare[CONF_API_KEY] = key
-                # Where to go next is stored rather than hardcoded, because
-                # the ranking needs the same prompt and the same live
-                # validation but returns to its own sweep. Defaults to the
-                # one-to-one result, so nothing about that path changes.
-                nxt: Callable[[], Awaitable[ConfigFlowResult]] | None = getattr(
-                    self, "_api_key_next_step", None
-                )
-                if nxt is not None:
-                    return await nxt()
-                return await self.async_step_compare_result()
-            errors[CONF_API_KEY] = err
-        return self.async_show_form(
-            step_id="compare_api_key",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_API_KEY): TextSelector(
-                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
-                    )
-                }
-            ),
-            errors=errors,
-        )
-
-    async def async_step_compare_result(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        if user_input is not None:
-            return self.async_abort(reason="compare_done")
-        placeholders = await self._build_compare_placeholders()
-        return self.async_show_form(
-            step_id="compare_result",
-            data_schema=vol.Schema({}),
-            description_placeholders=placeholders,
-            last_step=True,
-        )
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        overrides: dict[str, Any],
+    ) -> None:
+        self.hass = hass
+        self.config_entry = config_entry
+        self._compare = overrides
 
     async def _resolve_household(
         self,
@@ -1205,6 +969,444 @@ class _CompareStepsMixin(OptionsFlow):
             export_rate_for=_export_rate_for,
         )
 
+    async def _sweep_own_row(self, hh: _HouseholdQuote) -> RankedRow | None:
+        """The household's own contract, priced from the card it already has.
+
+        Not a candidate and not re-fetched. ``_sweep_candidates`` drops it
+        because a ranking is a list of alternatives, but the row still belongs
+        in the table: it is what every gap is measured against, and it carries
+        the signing-rate and cohort splice the household is actually billed
+        on, which re-fetching it as though it were a stranger's card would
+        silently discard.
+
+        Returns None when the entry has no usable snapshot yet - a cold start
+        - in which case the table ranks the alternatives against each other
+        and simply has no "yours" row to point at.
+        """
+        current = self.config_entry.data
+        if hh.current_snapshot is None or hh.current_per_kwh is None:
+            return None
+        label = _row_label(
+            _label_for_supplier(current[CONF_SUPPLIER]),
+            _label_for_contract(current[CONF_SUPPLIER], current[CONF_CONTRACT]),
+        )
+        try:
+            annual = _annual_bill(
+                hh.current_snapshot,
+                hh.quote_entry,
+                hh.peak_kw,
+                hh.current_per_kwh,
+                hh.annual_kwh,
+                hh.rolling_inj_kwh,
+                _compare_injection_credit(
+                    hh.current_snapshot,
+                    hh.quote_entry,
+                    hh.spot_dict,
+                    hh.avg_spot,
+                    await hh.spp_spot_for(hh.current_snapshot, own=True),
+                    hh.inj_hour_weights,
+                    raw_snapshot=hh.raw_snapshot,
+                ),
+                export_per_kwh=hh.current_export_per_kwh,
+                meter=hh.current_meter,
+            )
+        except Exception:  # noqa: BLE001 - the alternatives are still useful
+            return None
+        return RankedRow(label=label, annual=annual, is_own=True)
+
+    async def _sweep_one(
+        self, sweep: dict[str, Any], supplier: str, contract: str
+    ) -> RankedRow:
+        """Fetch and price one candidate.
+
+        The sweep state is passed rather than held, so the same engine can
+        price a dialog's sweep and a scheduled one without either owning it.
+        """
+        from .snapshot_store import _resolve_snapshot, fetch_shared
+
+        label = _row_label(
+            _label_for_supplier(supplier), _label_for_contract(supplier, contract)
+        )
+        region = sweep["region"]
+        cached = _sweep_rows(self.hass, self.config_entry.entry_id, region)
+        snap = cached.get((region, supplier, contract))
+        if snap is None:
+            # Share one listing memo across every candidate in this sweep.
+            # Nine providers resolve a per-supplier listing page inside
+            # fetch() and pick one product out of it, so a Flanders static
+            # sweep would otherwise pull Mega's listing nine times, Engie's
+            # eight and Luminus's eight - about 3 MB and 25 round trips that
+            # buy nothing, spent out of a wall-clock budget that is measured
+            # in rows.
+            with memoise_text_fetches(sweep["listings"]):
+                fetched = await fetch_shared(
+                    self.hass,
+                    async_get_clientsession(self.hass),
+                    get_extractor(supplier),
+                    contract,
+                    region,
+                    supplier=supplier,
+                    # The sweep DOES adopt a cached card, unlike the one-off quote
+                    # above: it is pricing fifty rows against a wall-clock budget,
+                    # and re-downloading a card a sibling already holds is the
+                    # whole cost it is trying to avoid. Still read-only, so still
+                    # no negative-cache write.
+                    record_failure=False,
+                )
+            if fetched.row is None:
+                return RankedRow(
+                    label=label,
+                    annual=None,
+                    status=fetched.error_message or "supplier unreachable",
+                )
+            snap = fetched.row.snapshot
+            cached[(region, supplier, contract)] = snap
+
+        hh = sweep["household"]
+        kind = _contract_kind(supplier, contract)
+        # The three target-side adjustments the one-to-one page makes, which a
+        # ranking needs for exactly the same reasons. Left out, a sweep is a
+        # second pricing path that quietly disagrees with the first.
+        #
+        # METER: the household's own meter is the right default, because a
+        # ranking has no step to ask a what-if and the physical meter is a
+        # fact. But where the target's KIND forces one, that is not an
+        # override at all - it is the only meter the product is sold on, and
+        # quoting a dynamic card on a mono meter routes distribution through
+        # the bi-horaire split while the supplier bills energy by slot.
+        meter = (
+            METER_DYNAMIC if kind in SMART_METER_CONTRACT_KINDS else hh.current_meter
+        )
+        # DSO MODE: a Tarif Impact card carries three CWaPE band rates and no
+        # mono/bi structure, so the band schedule prices its energy whatever
+        # the household is on while the network leg and the Walloon terme fixe
+        # follow the mode. Quoting it on the household's own mode bands the
+        # energy and then bills the network off the standard columns.
+        dso_mode = DSO_MODE_IMPACT if kind == "tou_impact" else hh.dso_mode
+        target_entry = _quote_entry(self.config_entry, hh.regime, dso_mode)
+        resolved = _resolve_snapshot(target_entry, snap)
+        if hh.dso not in resolved.dsos:
+            return RankedRow(
+                label=label, annual=None, status=f"does not serve DSO {hh.dso}"
+            )
+        per_kwh = _tou_weighted_per_kwh(
+            resolved,
+            hh.dso,
+            region,
+            dt_util.as_local(hh.now_utc),
+            await hh.spot_for(resolved),
+            meter,
+            dso_mode,
+            hour_weights=hh.hour_weights,
+        )
+        if per_kwh is None:
+            return RankedRow(label=label, annual=None, status="could not be priced")
+        annual = _annual_bill(
+            resolved,
+            target_entry,
+            hh.peak_kw,
+            per_kwh,
+            hh.annual_kwh,
+            hh.rolling_inj_kwh,
+            _compare_injection_credit(
+                resolved,
+                target_entry,
+                hh.spot_dict,
+                hh.avg_spot,
+                await hh.spp_spot_for(resolved, own=False),
+                hh.inj_hour_weights,
+            ),
+            # EXPORT RATE: under compensation the bill nets consumption
+            # against injection, and each side has to be priced on its own
+            # hour-of-day shape or the netting values exported kWh at the
+            # hours the household draws them instead of the hours the panels
+            # produce. Omitted, a compensation row came out 23% low.
+            export_per_kwh=await hh.export_rate_for(resolved, meter, dso_mode),
+            meter=meter,
+        )
+        return RankedRow(label=label, annual=annual)
+
+
+class _CompareStepsMixin(OptionsFlow):
+    """The compare branch, mixed into BePricesOptionsFlow."""
+
+    _compare: dict[str, Any]
+    _engine_obj: _SweepEngine | None = None
+
+    @property
+    def _engine(self) -> _SweepEngine:
+        """The pricing engine for this dialog, built on first use.
+
+        Built lazily rather than in a constructor: the mixin has none, and
+        ``config_entry`` is an ``OptionsFlow`` property that is not resolvable
+        until the flow manager has set the handler. The overrides dict is
+        shared by reference, so a what-if collected on a later step is seen by
+        pricing that already holds the engine.
+        """
+        if not hasattr(self, "_compare"):
+            self._compare = {}
+        if self._engine_obj is None:
+            self._engine_obj = _SweepEngine(self.hass, self.config_entry, self._compare)
+        return self._engine_obj
+
+    async def async_step_compare(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        current = self.config_entry.data
+        current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        own_professional = _contract_is_professional(
+            current[CONF_SUPPLIER], current[CONF_CONTRACT]
+        )
+        if not hasattr(self, "_compare"):
+            self._compare = {}
+        if user_input is not None:
+            self._compare.update(user_input)
+            return await self.async_step_compare_contract()
+        options = _compare_supplier_options(
+            current[CONF_REGION], current_kind, own_professional
+        )
+        if not options:
+            return self.async_abort(reason="compare_no_alternative")
+        return self.async_show_form(
+            step_id="compare",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_SUPPLIER): SelectSelector(
+                        SelectSelectorConfig(
+                            options=options,
+                            mode=SelectSelectorMode.DROPDOWN,
+                            translation_key="supplier",
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_compare_contract(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        current = self.config_entry.data
+        current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        own_professional = _contract_is_professional(
+            current[CONF_SUPPLIER], current[CONF_CONTRACT]
+        )
+        if user_input is not None:
+            self._compare.update(user_input)
+            return await self.async_step_compare_meter()
+        # The contract picker spans both static and dynamic kinds (the
+        # compare flow supports cross-kind quotes) and includes the user's
+        # OWN contract.
+        #
+        # It used to exclude it, on the grounds that quoting a contract
+        # against itself is a no-op. It is not: the meter and solar steps
+        # that follow default to the entry's own settings but can be changed,
+        # so picking your own contract answers "what would I pay on this same
+        # contract with a bi-hourly meter", or "on the injection tariff
+        # instead of compensation". Those are the two switches a household
+        # can actually make without changing supplier, and they were the only
+        # comparison the page could not do.
+        remaining = [
+            c
+            for c in _contracts_for(self._compare[CONF_SUPPLIER], current[CONF_REGION])
+            if c.professional == own_professional
+        ]
+        if not remaining:
+            return self.async_abort(reason="compare_no_alternative")
+        return self.async_show_form(
+            step_id="compare_contract",
+            description_placeholders={
+                "supplier": _label_for_supplier(self._compare[CONF_SUPPLIER])
+            },
+            data_schema=_compare_contract_schema(
+                self._compare[CONF_SUPPLIER],
+                current[CONF_REGION],
+                current_kind,
+                "",
+                own_professional,
+            ),
+        )
+
+    async def async_step_compare_meter(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Optionally override the meter type for the comparison.
+
+        Static contracts (fixed / variable) can be quoted at mono or
+        bi-hourly billing -- some users want to know "what would I pay
+        if I switched billing mode AND supplier". Dynamic / TOU
+        contracts skip this step: their distribution requires a smart
+        meter, picking bi-hourly would route distribution one way and
+        energy another.
+        """
+        if user_input is not None:
+            self._compare.update(user_input)
+            return await self.async_step_compare_solar()
+        other_kind = _contract_kind(
+            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+        )
+        # Dynamic, TOU and TOU-Impact contracts all require a smart
+        # meter, so don't offer mono/bi for them -- matching the install
+        # flow's _meter_schema, which gates the same three kinds. (Mega
+        # Off-peak Impact is "tou_impact"; omitting it here let the
+        # compare flow show an impossible mono/bi meter for it.)
+        if other_kind in SMART_METER_CONTRACT_KINDS:
+            self._compare[CONF_METER] = METER_DYNAMIC
+            return await self.async_step_compare_solar()
+        current_meter = self.config_entry.data.get(CONF_METER, METER_MONO)
+        return self.async_show_form(
+            step_id="compare_meter",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_METER, default=current_meter): SelectSelector(
+                        SelectSelectorConfig(
+                            options=list(METER_TYPES),
+                            mode=SelectSelectorMode.LIST,
+                            translation_key="meter",
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_compare_solar(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Optionally quote both sides under a different solar regime.
+
+        The regime is a property of the grid connection, not of the
+        supplier: two suppliers at one address are necessarily on the same
+        one. So unlike the meter type, which is a billing mode the target
+        contract can differ on, this override applies to BOTH sides. A
+        target-only version would fold hundreds of euros of connection-side
+        change into what reads as a supplier-vs-supplier delta.
+
+        Runs before ``_after_compare_meter`` because that step decides
+        whether the quote needs an ENTSO-E key, and on the injection regime
+        a spot-indexed feed-in needs one. Deciding that on the stored
+        regime would send a compensation entry quoting Cociter Variable
+        straight to the result page with no key and silently credit zero.
+
+        Skipped entirely for an entry with no solar, so the common case
+        gains no click.
+        """
+        current = self.config_entry.data
+        stored = current.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
+        if stored == SOLAR_REGIME_NONE and _kva(current) <= 0.0:
+            return await self._after_compare_meter()
+        # A netted register cannot be told apart from a gross one by
+        # reading it, so the volumes are asked for on the wiring that
+        # cannot supply them rather than on the reading that comes back.
+        from .energy_meters import _kwh_sensor_ids
+
+        day_id, night_id, total_id = _kwh_sensor_ids(self.config_entry, "injection")
+        ask_volumes = not ((day_id and night_id) or total_id)
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            picked = user_input.get(CONF_SOLAR_REGIME, stored)
+            typed = (
+                user_input.get(CONF_WHATIF_CONSUMPTION_KWH),
+                user_input.get(CONF_WHATIF_INJECTION_KWH),
+            )
+            if picked != stored and ask_volumes and any(v is None for v in typed):
+                # Refuse rather than quietly quoting the override off a
+                # possibly-netted register: the error names what is
+                # missing, where silently dropping the override would look
+                # exactly like the picker not working.
+                errors[CONF_WHATIF_CONSUMPTION_KWH] = "whatif_volumes_required"
+            else:
+                self._compare.update(user_input)
+                return await self._after_compare_meter()
+        # No {stored_regime} placeholder: the picker is a LIST selector with
+        # the entry's own regime preselected and translated, so naming it in
+        # prose would only interpolate an English label into the nl / fr / de
+        # descriptions.
+        return self.async_show_form(
+            step_id="compare_solar",
+            data_schema=_compare_solar_schema(
+                {**current, **(user_input or {})}, ask_volumes=ask_volumes
+            ),
+            errors=errors,
+        )
+
+    async def _after_compare_meter(self) -> ConfigFlowResult:
+        """Hand off to compare_result, prompting for an ENTSO-E key first
+        when either side needs spot data the user's current entry doesn't
+        already carry: a spot-priced target (dynamic per slot, spot-monthly
+        per delivery month), or (on the injection regime) a
+        spot-indexed-injection contract on EITHER side -- the target like
+        Cociter Variable, or the user's own keyless Cociter Variable entry
+        -- whose feed-in credit is priced off the hourly day-ahead. Keep
+        this symmetric with the compare_spot_injection check in
+        _build_compare_placeholders, which values both sides."""
+        current = self.config_entry.data
+        other_kind = _contract_kind(
+            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+        )
+        needs_spot = other_kind in SPOT_PRICED_CONTRACT_KINDS or (
+            _effective_regime(current, self._compare) == SOLAR_REGIME_INJECTION
+            and (
+                _contract_has_spot_injection(
+                    self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+                )
+                or _contract_has_spot_injection(
+                    current[CONF_SUPPLIER], current[CONF_CONTRACT]
+                )
+            )
+        )
+        if needs_spot and not current.get(CONF_API_KEY):
+            return await self.async_step_compare_api_key()
+        return await self.async_step_compare_result()
+
+    async def async_step_compare_api_key(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Compare against a dynamic (or spot-indexed-injection) target
+        needs an ENTSO-E key for the spot rate. Borrow the user's existing
+        key when their entry already has one (handled in
+        _after_compare_meter); otherwise prompt and validate against the
+        live endpoint before reaching the result page."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            key = user_input[CONF_API_KEY].strip()
+            err = await _validate_entsoe_key(self.hass, key)
+            if err is None:
+                self._compare[CONF_API_KEY] = key
+                # Where to go next is stored rather than hardcoded, because
+                # the ranking needs the same prompt and the same live
+                # validation but returns to its own sweep. Defaults to the
+                # one-to-one result, so nothing about that path changes.
+                nxt: Callable[[], Awaitable[ConfigFlowResult]] | None = getattr(
+                    self, "_api_key_next_step", None
+                )
+                if nxt is not None:
+                    return await nxt()
+                return await self.async_step_compare_result()
+            errors[CONF_API_KEY] = err
+        return self.async_show_form(
+            step_id="compare_api_key",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_API_KEY): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    )
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_compare_result(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_abort(reason="compare_done")
+        placeholders = await self._build_compare_placeholders()
+        return self.async_show_form(
+            step_id="compare_result",
+            data_schema=vol.Schema({}),
+            description_placeholders=placeholders,
+            last_step=True,
+        )
+
     async def _build_compare_placeholders(self) -> dict[str, str]:
         """Fetch the picked supplier's snapshot and compute a side-by-side
         annual estimate against the user's current entry.
@@ -1253,7 +1455,7 @@ class _CompareStepsMixin(OptionsFlow):
             }
 
         meter = self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
-        hh = await self._resolve_household(
+        hh = await self._engine._resolve_household(
             coord,
             candidates=[(self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT])],
             meter=meter,
@@ -1895,12 +2097,12 @@ class _SweepStepsMixin(_CompareStepsMixin):
             # affordable: the meter reads, the recorder walk and the day-ahead
             # window are O(1) in the number of rows, and asking every
             # candidate up front is what lets the key be collected once.
-            sweep["household"] = await self._resolve_household(
+            sweep["household"] = await self._engine._resolve_household(
                 coord,
                 candidates=sweep["candidates"],
                 meter=self.config_entry.data.get(CONF_METER, METER_MONO),
             )
-            own = await self._sweep_own_row(sweep["household"])
+            own = await self._engine._sweep_own_row(sweep["household"])
             if own is not None:
                 # Placed before the first candidate so the table has a
                 # baseline from the very first render: every other row's gap
@@ -1941,7 +2143,7 @@ class _SweepStepsMixin(_CompareStepsMixin):
         sweep["index"] = nxt
         supplier, contract = sweep["candidates"][sweep["index"]]
         self._sweep_task = self.hass.async_create_task(
-            self._sweep_one(supplier, contract),
+            self._engine._sweep_one(sweep, supplier, contract),
             f"be_electricity_prices sweep {supplier}/{contract}",
             # Not eagerly: an eager start runs the coroutine up to its first
             # await inside the HTTP request the frontend is still waiting on.
@@ -2019,157 +2221,6 @@ class _SweepStepsMixin(_CompareStepsMixin):
             },
             progress_task=self._sweep_task,
         )
-
-    async def _sweep_own_row(self, hh: _HouseholdQuote) -> RankedRow | None:
-        """The household's own contract, priced from the card it already has.
-
-        Not a candidate and not re-fetched. ``_sweep_candidates`` drops it
-        because a ranking is a list of alternatives, but the row still belongs
-        in the table: it is what every gap is measured against, and it carries
-        the signing-rate and cohort splice the household is actually billed
-        on, which re-fetching it as though it were a stranger's card would
-        silently discard.
-
-        Returns None when the entry has no usable snapshot yet - a cold start
-        - in which case the table ranks the alternatives against each other
-        and simply has no "yours" row to point at.
-        """
-        current = self.config_entry.data
-        if hh.current_snapshot is None or hh.current_per_kwh is None:
-            return None
-        label = _row_label(
-            _label_for_supplier(current[CONF_SUPPLIER]),
-            _label_for_contract(current[CONF_SUPPLIER], current[CONF_CONTRACT]),
-        )
-        try:
-            annual = _annual_bill(
-                hh.current_snapshot,
-                hh.quote_entry,
-                hh.peak_kw,
-                hh.current_per_kwh,
-                hh.annual_kwh,
-                hh.rolling_inj_kwh,
-                _compare_injection_credit(
-                    hh.current_snapshot,
-                    hh.quote_entry,
-                    hh.spot_dict,
-                    hh.avg_spot,
-                    await hh.spp_spot_for(hh.current_snapshot, own=True),
-                    hh.inj_hour_weights,
-                    raw_snapshot=hh.raw_snapshot,
-                ),
-                export_per_kwh=hh.current_export_per_kwh,
-                meter=hh.current_meter,
-            )
-        except Exception:  # noqa: BLE001 - the alternatives are still useful
-            return None
-        return RankedRow(label=label, annual=annual, is_own=True)
-
-    async def _sweep_one(self, supplier: str, contract: str) -> RankedRow:
-        """Fetch and price one candidate."""
-        from .snapshot_store import _resolve_snapshot, fetch_shared
-
-        label = _row_label(
-            _label_for_supplier(supplier), _label_for_contract(supplier, contract)
-        )
-        region = self._sweep["region"]
-        cached = _sweep_rows(self.hass, self.config_entry.entry_id, region)
-        snap = cached.get((region, supplier, contract))
-        if snap is None:
-            # Share one listing memo across every candidate in this sweep.
-            # Nine providers resolve a per-supplier listing page inside
-            # fetch() and pick one product out of it, so a Flanders static
-            # sweep would otherwise pull Mega's listing nine times, Engie's
-            # eight and Luminus's eight - about 3 MB and 25 round trips that
-            # buy nothing, spent out of a wall-clock budget that is measured
-            # in rows.
-            with memoise_text_fetches(self._sweep["listings"]):
-                fetched = await fetch_shared(
-                    self.hass,
-                    async_get_clientsession(self.hass),
-                    get_extractor(supplier),
-                    contract,
-                    region,
-                    supplier=supplier,
-                    # The sweep DOES adopt a cached card, unlike the one-off quote
-                    # above: it is pricing fifty rows against a wall-clock budget,
-                    # and re-downloading a card a sibling already holds is the
-                    # whole cost it is trying to avoid. Still read-only, so still
-                    # no negative-cache write.
-                    record_failure=False,
-                )
-            if fetched.row is None:
-                return RankedRow(
-                    label=label,
-                    annual=None,
-                    status=fetched.error_message or "supplier unreachable",
-                )
-            snap = fetched.row.snapshot
-            cached[(region, supplier, contract)] = snap
-
-        hh = self._sweep["household"]
-        kind = _contract_kind(supplier, contract)
-        # The three target-side adjustments the one-to-one page makes, which a
-        # ranking needs for exactly the same reasons. Left out, a sweep is a
-        # second pricing path that quietly disagrees with the first.
-        #
-        # METER: the household's own meter is the right default, because a
-        # ranking has no step to ask a what-if and the physical meter is a
-        # fact. But where the target's KIND forces one, that is not an
-        # override at all - it is the only meter the product is sold on, and
-        # quoting a dynamic card on a mono meter routes distribution through
-        # the bi-horaire split while the supplier bills energy by slot.
-        meter = (
-            METER_DYNAMIC if kind in SMART_METER_CONTRACT_KINDS else hh.current_meter
-        )
-        # DSO MODE: a Tarif Impact card carries three CWaPE band rates and no
-        # mono/bi structure, so the band schedule prices its energy whatever
-        # the household is on while the network leg and the Walloon terme fixe
-        # follow the mode. Quoting it on the household's own mode bands the
-        # energy and then bills the network off the standard columns.
-        dso_mode = DSO_MODE_IMPACT if kind == "tou_impact" else hh.dso_mode
-        target_entry = _quote_entry(self.config_entry, hh.regime, dso_mode)
-        resolved = _resolve_snapshot(target_entry, snap)
-        if hh.dso not in resolved.dsos:
-            return RankedRow(
-                label=label, annual=None, status=f"does not serve DSO {hh.dso}"
-            )
-        per_kwh = _tou_weighted_per_kwh(
-            resolved,
-            hh.dso,
-            region,
-            dt_util.as_local(hh.now_utc),
-            await hh.spot_for(resolved),
-            meter,
-            dso_mode,
-            hour_weights=hh.hour_weights,
-        )
-        if per_kwh is None:
-            return RankedRow(label=label, annual=None, status="could not be priced")
-        annual = _annual_bill(
-            resolved,
-            target_entry,
-            hh.peak_kw,
-            per_kwh,
-            hh.annual_kwh,
-            hh.rolling_inj_kwh,
-            _compare_injection_credit(
-                resolved,
-                target_entry,
-                hh.spot_dict,
-                hh.avg_spot,
-                await hh.spp_spot_for(resolved, own=False),
-                hh.inj_hour_weights,
-            ),
-            # EXPORT RATE: under compensation the bill nets consumption
-            # against injection, and each side has to be priced on its own
-            # hour-of-day shape or the netting values exported kWh at the
-            # hours the household draws them instead of the hours the panels
-            # produce. Omitted, a compensation row came out 23% low.
-            export_per_kwh=await hh.export_rate_for(resolved, meter, dso_mode),
-            meter=meter,
-        )
-        return RankedRow(label=label, annual=annual)
 
     async def async_step_compare_all_result(
         self, user_input: dict[str, Any] | None = None
