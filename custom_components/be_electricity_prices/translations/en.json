@@ -451,14 +451,14 @@
       },
       "compare_all_result": {
         "title": "Ranked alternatives",
-        "description": "Every {group} contract available in {region}, priced against your own settings. Your own contract is marked with *; the second column is the gap to the cheapest.\n\n```\n{ranking}\n```\n\nEstimates, not quotes: each row prices a full year at today's published tariffs against your measured volumes. Nothing has been saved. Submit to close.",
+        "description": "Every {group} contract available in {region}, priced against your own settings. Your own contract is marked with *; the second column is the gap to the cheapest.\n\n{ranking}\n\nEstimates, not quotes: each row prices a full year at today's published tariffs against your measured volumes. Nothing has been saved. Submit to close.",
         "data": {
           "with_ytd": "Also compute year-to-date (slower: fetches each past month's card)"
         }
       }
     },
     "progress": {
-      "sweeping": "Priced {priced} of {total} contracts. The cheapest cards are fetched first, so the slowest suppliers arrive last and a pause is one of them, not a stall.\n\n```\n{ranking}\n```"
+      "sweeping": "Priced {priced} of {total} contracts. The cheapest cards are fetched first, so the slowest suppliers arrive last and a pause is one of them, not a stall.\n\n{ranking}"
     }
   },
   "selector": {

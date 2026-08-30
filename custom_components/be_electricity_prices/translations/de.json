@@ -451,14 +451,14 @@
       },
       "compare_all_result": {
         "title": "Alternativen nach Preis",
-        "description": "Alle {group}-Vertraege, die in {region} verfuegbar sind, mit Ihren eigenen Einstellungen berechnet. Ihr eigener Vertrag ist mit * markiert; die zweite Spalte ist der Abstand zum guenstigsten.\n\n```\n{ranking}\n```\n\nSchaetzungen, keine Angebote: jede Zeile rechnet ein volles Jahr zu den heute veroeffentlichten Tarifen mit Ihren gemessenen Mengen. Es wurde nichts gespeichert. Zum Schliessen bestaetigen.",
+        "description": "Alle {group}-Vertraege, die in {region} verfuegbar sind, mit Ihren eigenen Einstellungen berechnet. Ihr eigener Vertrag ist mit * markiert; die zweite Spalte ist der Abstand zum guenstigsten.\n\n{ranking}\n\nSchaetzungen, keine Angebote: jede Zeile rechnet ein volles Jahr zu den heute veroeffentlichten Tarifen mit Ihren gemessenen Mengen. Es wurde nichts gespeichert. Zum Schliessen bestaetigen.",
         "data": {
           "with_ytd": "Auch den Jahreswert berechnen (langsamer: holt das Preisblatt jedes vergangenen Monats)"
         }
       }
     },
     "progress": {
-      "sweeping": "{priced} von {total} Vertraegen berechnet. Die schnellsten Preisblaetter zuerst: eine Pause ist ein langsamer Anbieter, keine Blockade.\n\n```\n{ranking}\n```"
+      "sweeping": "{priced} von {total} Vertraegen berechnet. Die schnellsten Preisblaetter zuerst: eine Pause ist ein langsamer Anbieter, keine Blockade.\n\n{ranking}"
     }
   },
   "selector": {

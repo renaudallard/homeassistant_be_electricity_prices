@@ -5044,28 +5044,45 @@ async def test_a_failed_compare_quote_does_not_poison_the_shared_caches(
     assert _shared_failed_fetches(hass) == {}
 
 
-def test_row_label_dedupes_the_supplier_and_elides_the_middle() -> None:
+def test_row_label_dedupes_the_supplier() -> None:
     """Some suppliers put their own name in the product and some do not, so
     joining unconditionally reads as "Eneco Eneco Zon & Wind Vast" for half
-    the table. Elision is in the middle because these names disambiguate on
-    their tails: Agilior Online Green against Agilior Online."""
-    from custom_components.be_electricity_prices.compare_quote import (
-        _ROW_LABEL_WIDTH,
-        _row_label,
-    )
+    the table.
+
+    No truncation any more: the name used to be elided to a fixed width so
+    columns lined up inside a code fence, which cost exactly the tails these
+    names disambiguate on - Agilior Online GREEN against Agilior Online."""
+    from custom_components.be_electricity_prices.compare_quote import _row_label
 
     assert _row_label("Eneco", "Eneco Zon & Wind Vast") == "Eneco Zon & Wind Vast"
     assert _row_label("Bolt", "Fix") == "Bolt Fix"
     long = _row_label("Energy Knights", "Energy Knights Essentia Online Green")
-    assert len(long) == _ROW_LABEL_WIDTH
-    assert long.endswith("Online Green"), long
-    assert "…" in long
+    assert long == "Energy Knights Essentia Online Green"
+    assert "…" not in long
 
 
-def test_ranking_table_fits_and_keeps_every_row_visible() -> None:
+def _ranked(table: str) -> list[tuple[str, float]]:
+    """(label, annual) for each numbered row of a rendered ranking."""
+    import re as _re
+
+    out: list[tuple[str, float]] = []
+    for line in table.splitlines():
+        m = _re.match(r"\d+\. \*\*([\d  ,]+) EUR\*\* - (.+?)(?: ·|$| \*\()", line)
+        if m:
+            out.append(
+                (m.group(2), float(m.group(1).replace(" ", "").replace(",", ".")))
+            )
+    return out
+
+
+def test_ranking_table_keeps_every_row_visible_and_wraps() -> None:
     """A dropped row reads as "not competitive", which is the one thing it
     does not mean, so a row that failed to price leaves the numbered list for
-    a named block rather than disappearing."""
+    a named block rather than disappearing.
+
+    Emitted as wrapping markdown, not an aligned block: a Home Assistant
+    dialog renders a code fence monospace and never wraps, so 68 columns
+    meant scrolling sideways to read a row."""
     from custom_components.be_electricity_prices.compare_quote import (
         RankedRow,
         _ranking_table,
@@ -5073,44 +5090,34 @@ def test_ranking_table_fits_and_keeps_every_row_visible() -> None:
 
     table = _ranking_table(
         [
-            RankedRow("Eneco Zon & Wind Vast", 1141.50, 22.0, is_own=True),
-            RankedRow("Ecofix Flexy", 900.01, 19.5),
+            RankedRow("Eneco Zon & Wind Vast", 1141.50, is_own=True),
+            RankedRow("Ecofix Flexy", 900.01),
             RankedRow("Ecofix Motion", None, None, "card unreadable"),
         ],
         deferred=6,
     )
-    lines = table.splitlines()
-    # Cheapest first, whatever order they arrived in.
-    assert lines[0].strip().startswith("1. Ecofix Flexy")
-    # The household's own row is marked, and still ranked among the rest.
-    assert lines[1].startswith("*")
-    assert "Eneco" in lines[1]
-    # The unpriced row is present and says why.
-    assert any("card unreadable" in ln for ln in lines)
-    # And the deferred tail is named rather than silently missing.
-    assert any("6 more not priced yet" in ln for ln in lines)
-    # Ranked rows stay inside a terminal-ish width so columns line up.
-    ranked = [
-        ln for ln in lines if ln[:3].strip().rstrip(".").isdigit() or ln[:1] == "*"
-    ]
-    assert ranked and max(len(ln) for ln in ranked) <= 68
+    rows = _ranked(table)
+    assert [r[0] for r in rows] == ["Ecofix Flexy", "Eneco Zon & Wind Vast"]
+    assert "*(your contract)*" in table
+    assert any("card unreadable" in ln for ln in table.splitlines())
+    assert "6 more not priced yet" in table
+    # No code fence anywhere: that is what forced the horizontal scroll.
+    assert "```" not in table
 
 
-def test_ranking_table_drops_the_ytd_column_when_nothing_can_fill_it() -> None:
-    """A column of dashes is worse than no column: the archive engine and the
-    flat-rate engine would sit in adjacent rows saying nothing."""
+def test_ranking_row_carries_ytd_only_when_it_has_one() -> None:
+    """A row that cannot honestly carry a year-to-date figure says nothing
+    rather than printing a proxied number beside a real one."""
     from custom_components.be_electricity_prices.compare_quote import (
         RankedRow,
         _ranking_table,
     )
 
-    without = _ranking_table([RankedRow("A", 900.0), RankedRow("B", 950.0)])
-    with_one = _ranking_table([RankedRow("A", 900.0, 12.0), RankedRow("B", 950.0)])
-    assert all(len(ln.rstrip()) <= 59 for ln in without.splitlines())
-    # One row carrying a figure is enough to earn the column; the row that
-    # cannot fill it prints a dash rather than a wrong number.
-    assert "12.00" in with_one
-    assert any(ln.rstrip().endswith("-") for ln in with_one.splitlines())
+    table = _ranking_table([RankedRow("A", 900.0, 12.0), RankedRow("B", 950.0)])
+    lines = [ln for ln in table.splitlines() if ln.startswith(("1.", "2."))]
+    assert "YTD" in lines[0]
+    assert "YTD" not in lines[1]
+    assert "YTD" not in _ranking_table([RankedRow("A", 900.0)])
 
 
 def test_ranking_table_is_empty_for_no_rows() -> None:
@@ -5444,11 +5451,12 @@ async def test_sweep_and_one_to_one_agree_on_the_same_contract(
                 assert sweep_ph is not None
                 ranking = sweep_ph["ranking"]
 
-        row = next(ln for ln in ranking.splitlines() if "Cociter Tarif Variable" in ln)
-        swept = float(row.split()[-2] if row.split()[-1] == "-" else row.split()[-2])
+        swept = next(
+            v for label, v in _ranked(ranking) if "Cociter Tarif Variable" in label
+        )
         assert abs(swept - float(one["compare_annual"])) < 0.01, (
             f"regime={extra.get('solar_regime', 'none')}: "
-            f"sweep {swept} vs one-to-one {one['compare_annual']}\n{row}"
+            f"sweep {swept} vs one-to-one {one['compare_annual']}\n{ranking}"
         )
 
 
@@ -5769,11 +5777,7 @@ async def test_sweep_shows_the_table_while_it_is_still_filling(
     )
     # And it is ranked at every step, not appended in arrival order.
     for table in seen_mid_sweep[1:]:
-        values = [
-            float(ln.split()[-1] if ln.split()[-1] != "-" else ln.split()[-2])
-            for ln in table.splitlines()
-            if ln.strip() and ln.strip()[0].isdigit()
-        ]
+        values = [v for _label, v in _ranked(table)]
         assert values == sorted(values), f"rows out of order mid-sweep:\n{table}"
 
 
@@ -5811,3 +5815,82 @@ async def test_sweep_does_not_start_a_card_that_cannot_fit(hass: HomeAssistant) 
     flow._sweep["candidates"] = [("bolt", "bolt_fix")]
     flow._sweep["index"] = 0
     assert flow._sweep_next_index() is None
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_ranking_shows_your_own_contract_and_measures_against_it(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Your own contract is not a candidate - a ranking is a list of
+    alternatives - but it belongs in the table, because it is what every gap
+    is measured against and a ranking that never shows where you sit cannot
+    answer "should I switch".
+
+    It is priced from the card the entry already holds, not re-fetched: the
+    signing-rate and cohort splice the household is actually billed on would
+    be discarded by fetching it as though it were a stranger's card."""
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+    # Every candidate is cheaper than the household's own 0.18 card.
+    patched = {
+        sid: replace(
+            ext,
+            fetch=AsyncMock(return_value=_stub_snapshot(sid, "x", 0.16)),
+            probe=None,
+        )
+        for sid, ext in EXTRACTORS.items()
+    }
+    own_fetch = AsyncMock(return_value=_stub_snapshot("eneco", "power_fix", 0.18))
+    patched["eneco"] = replace(EXTRACTORS["eneco"], fetch=own_fetch, probe=None)
+
+    with patch.dict(EXTRACTORS, patched):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare_all"}
+        )
+        for _ in range(400):
+            if result["type"] != data_entry_flow.FlowResultType.SHOW_PROGRESS:
+                break
+            await hass.async_block_till_done()
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"]
+            )
+        placeholders = result["description_placeholders"]
+        assert placeholders is not None
+        ranking = placeholders["ranking"]
+
+    assert "*(your contract)*" in ranking, ranking[:400]
+    own_line = next(ln for ln in ranking.splitlines() if "your contract" in ln)
+    assert "power_fix" not in ranking, "the own contract must not also be a candidate"
+
+    rows = _ranked(ranking)
+    own_value = next(v for label, v in rows if label in own_line)
+    others = [(label, v) for label, v in rows if label not in own_line]
+    assert others, "no alternatives were priced"
+
+    # Every other row states its gap against the household's own figure, and a
+    # cheaper alternative reads as money saved rather than as a bare number.
+    for label, value in others:
+        line = next(ln for ln in ranking.splitlines() if label in ln)
+        gap = line.split("·")[1]
+        expected = value - own_value
+        if expected > 0:
+            assert gap.strip().startswith("+"), (label, line)
+        elif expected < 0:
+            assert gap.strip().startswith("-"), (label, line)
+        # A contract priced level with the household's own reads 0,00 and
+        # carries no sign, which is the honest rendering of no difference.
+        assert f"{abs(expected):,.2f}".replace(",", " ").replace(".", ",") in gap, (
+            label,
+            line,
+            expected,
+        )
+    assert any(v < own_value for _label, v in others), "no cheaper alternative"

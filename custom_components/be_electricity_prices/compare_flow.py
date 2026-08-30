@@ -1900,6 +1900,14 @@ class _SweepStepsMixin(_CompareStepsMixin):
                 candidates=sweep["candidates"],
                 meter=self.config_entry.data.get(CONF_METER, METER_MONO),
             )
+            own = await self._sweep_own_row(sweep["household"])
+            if own is not None:
+                # Placed before the first candidate so the table has a
+                # baseline from the very first render: every other row's gap
+                # is measured against it, and a ranking that never shows the
+                # household where it currently sits cannot answer "should I
+                # switch" at all.
+                sweep["rows"].append(own)
         if self._sweep_task is not None:
             if not self._sweep_task.done():
                 # Re-show the SAME task. Creating a second one here is the
@@ -1994,7 +2002,10 @@ class _SweepStepsMixin(_CompareStepsMixin):
         that is the whole reason the sweep is built one task per row.
         """
         sweep = self._sweep
-        priced = sum(1 for r in sweep["rows"] if r.annual is not None)
+        # Counted over CANDIDATES only. The household's own row rides in the
+        # same list so it can be ranked and compared against, but it was never
+        # fetched and counting it would report one more than the sweep did.
+        priced = sum(1 for r in sweep["rows"] if r.annual is not None and not r.is_own)
         return self.async_show_progress(
             step_id="compare_all_progress",
             progress_action="sweeping",
@@ -2008,6 +2019,51 @@ class _SweepStepsMixin(_CompareStepsMixin):
             },
             progress_task=self._sweep_task,
         )
+
+    async def _sweep_own_row(self, hh: _HouseholdQuote) -> RankedRow | None:
+        """The household's own contract, priced from the card it already has.
+
+        Not a candidate and not re-fetched. ``_sweep_candidates`` drops it
+        because a ranking is a list of alternatives, but the row still belongs
+        in the table: it is what every gap is measured against, and it carries
+        the signing-rate and cohort splice the household is actually billed
+        on, which re-fetching it as though it were a stranger's card would
+        silently discard.
+
+        Returns None when the entry has no usable snapshot yet - a cold start
+        - in which case the table ranks the alternatives against each other
+        and simply has no "yours" row to point at.
+        """
+        current = self.config_entry.data
+        if hh.current_snapshot is None or hh.current_per_kwh is None:
+            return None
+        label = _row_label(
+            _label_for_supplier(current[CONF_SUPPLIER]),
+            _label_for_contract(current[CONF_SUPPLIER], current[CONF_CONTRACT]),
+        )
+        try:
+            annual = _annual_bill(
+                hh.current_snapshot,
+                hh.quote_entry,
+                hh.peak_kw,
+                hh.current_per_kwh,
+                hh.annual_kwh,
+                hh.rolling_inj_kwh,
+                _compare_injection_credit(
+                    hh.current_snapshot,
+                    hh.quote_entry,
+                    hh.spot_dict,
+                    hh.avg_spot,
+                    await hh.spp_spot_for(hh.current_snapshot, own=True),
+                    hh.inj_hour_weights,
+                    raw_snapshot=hh.raw_snapshot,
+                ),
+                export_per_kwh=hh.current_export_per_kwh,
+                meter=hh.current_meter,
+            )
+        except Exception:  # noqa: BLE001 - the alternatives are still useful
+            return None
+        return RankedRow(label=label, annual=annual, is_own=True)
 
     async def _sweep_one(self, supplier: str, contract: str) -> RankedRow:
         """Fetch and price one candidate."""
@@ -2133,7 +2189,8 @@ class _SweepStepsMixin(_CompareStepsMixin):
                 return await self.async_step_compare_all_ytd()
             return self.async_abort(reason="compare_done")
         sweep = self._sweep
-        deferred = len(sweep["candidates"]) - len(sweep["rows"])
+        attempted = sum(1 for r in sweep["rows"] if not r.is_own)
+        deferred = len(sweep["candidates"]) - attempted
         schema: dict[Any, Any] = {}
         if not sweep.get("ytd_done") and sweep["rows"]:
             schema[vol.Optional(_YTD_FIELD, default=False)] = bool

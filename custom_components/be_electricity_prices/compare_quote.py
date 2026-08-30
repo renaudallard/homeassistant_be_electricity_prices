@@ -645,38 +645,21 @@ def _bar_chart(values: Sequence[tuple[str, float]], width: int = 20) -> str:
     return "\n".join(rows)
 
 
-# A ranked row is `  NN. label  annual  delta  ytd`, and 32 keeps that inside
-# 68 columns with every column present. Measured over the registry the widest
-# de-duplicated candidate label is 36 and only two exceed 32, so this elides
-# almost nothing today; it exists so a supplier with a long product name
-# cannot silently break the alignment of every other row.
-_ROW_LABEL_WIDTH = 32
-
-
-def _row_label(
-    supplier_label: str, contract_label: str, width: int = _ROW_LABEL_WIDTH
-) -> str:
-    """One row's name, de-duplicated against the supplier and elided to fit.
+def _row_label(supplier_label: str, contract_label: str) -> str:
+    """One row's name, de-duplicated against its supplier.
 
     Some suppliers put their own name in the product ("Eneco Zon & Wind Vast")
     and some do not ("Fix"), so joining unconditionally reads as "Eneco Eneco
     Zon & Wind Vast" for one half of the table and correctly for the other.
 
-    Elision is in the MIDDLE rather than at the end, because these names
-    disambiguate on their tails: Agilior Online GREEN against Agilior Online,
-    Plenty Fix against Plenty. Truncating the right cuts exactly the word that
-    tells two rows apart.
+    No truncation. The name used to be elided to a fixed width so columns
+    lined up inside a code fence, which cost exactly the tails these names
+    disambiguate on - Agilior Online GREEN against Agilior Online. The table
+    is wrapping markdown now, so the full name fits however narrow the screen.
     """
-    joined = (
-        contract_label
-        if contract_label.lower().startswith(supplier_label.lower())
-        else f"{supplier_label} {contract_label}"
-    )
-    if len(joined) <= width:
-        return joined
-    keep = width - 1
-    head = keep // 2
-    return joined[:head] + "\u2026" + joined[len(joined) - (keep - head) :]
+    if contract_label.lower().startswith(supplier_label.lower()):
+        return contract_label
+    return f"{supplier_label} {contract_label}"
 
 
 @dataclass(frozen=True)
@@ -696,18 +679,26 @@ class RankedRow:
     is_own: bool = False
 
 
+def _eur(value: float) -> str:
+    """A euro amount in the Belgian convention, comma for the decimal."""
+    return f"{value:,.2f}".replace(",", " ").replace(".", ",")
+
+
 def _ranking_table(rows: Sequence[RankedRow], *, deferred: int = 0) -> str:
-    """The ranked table, as one block, ready to drop into a single token.
+    """The ranking, as wrapping markdown rather than an aligned block.
 
-    One token rather than one per row: every token a step description names
-    must be populated or Home Assistant renders the literal, and a per-row
-    template would spread that obligation across five files.
+    It was a fixed-width table inside a code fence, which a Home Assistant
+    dialog renders monospace and never wraps: 68 columns meant scrolling
+    sideways to read a row, which on a phone makes the page unusable. Markdown
+    reflows to the dialog, so the same rows are readable at any width and the
+    contract names no longer have to be elided to keep columns aligned.
 
-    Rows that priced are sorted and numbered; rows that did not follow in a
-    named block underneath, because dropping them reads as "not competitive"
+    The price leads each line so it survives a wrap: a long name pushes to the
+    next line, the figure being compared does not.
+
+    Rows that priced are sorted and numbered; rows that did not follow
+    underneath saying why, because dropping them reads as "not competitive"
     and losing them silently is how a sweep looks complete when it is not.
-    The year-to-date column disappears entirely when nothing can fill it,
-    rather than printing a column of dashes.
     """
     priced = sorted(
         (r for r in rows if r.annual is not None),
@@ -717,33 +708,36 @@ def _ranking_table(rows: Sequence[RankedRow], *, deferred: int = 0) -> str:
     if not priced and not unpriced:
         return ""
 
-    show_ytd = any(r.ytd is not None for r in priced)
-    cheapest = priced[0].annual if priced else None
+    # Every gap is measured against the household's OWN contract, not against
+    # the cheapest row. "How much would I save by switching" is the question
+    # being asked; "how far is this from the best offer" is a different one
+    # the reader can already see from the order. The own row is in the list
+    # for the same reason: a ranking that does not show you where you
+    # currently sit cannot answer either question.
+    own = next((r.annual for r in priced if r.is_own), None)
     out: list[str] = []
     for n, row in enumerate(priced, 1):
         annual = row.annual if row.annual is not None else 0.0
-        # Against the cheapest, not against the household's own row: the
-        # question a ranking answers is what the best available deal costs,
-        # and the own row is in the list carrying the same comparison.
-        delta = annual - (cheapest if cheapest is not None else annual)
-        mark = "*" if row.is_own else " "
-        line = (
-            f"{mark}{n:2}. {row.label.ljust(_ROW_LABEL_WIDTH)}"
-            f"  {annual:8.2f}  {delta:+8.2f}"
-        )
-        if show_ytd:
-            line += f"  {row.ytd:8.2f}" if row.ytd is not None else f"  {'-':>8}"
+        line = f"{n}. **{_eur(annual)} EUR** - {row.label}"
+        if row.is_own:
+            line += " *(your contract)*"
+        elif own is not None:
+            delta = annual - own
+            # Signed, and the sign is the point: a minus is money saved.
+            line += f" · {'+' if delta > 0 else ''}{_eur(delta)}"
+        if row.ytd is not None:
+            line += f" · YTD {_eur(row.ytd)}"
         out.append(line)
 
     if unpriced:
         out.append("")
         for row in unpriced:
-            out.append(f"    {row.label.ljust(_ROW_LABEL_WIDTH)}  {row.status}")
+            out.append(f"- {row.label} - *{row.status}*")
     if deferred:
         out.append("")
         out.append(
-            f"    {deferred} more not priced yet - reopen to finish "
-            "(the slowest cards are left for last)"
+            f"*{deferred} more not priced yet - reopen to finish; "
+            "the slowest cards are left for last.*"
         )
     return "\n".join(out)
 
