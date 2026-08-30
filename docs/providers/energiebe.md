@@ -472,7 +472,7 @@ that does not match is skipped (not fatal); the eight-sub-area test is the safet
 
 ## valid_until
 
-`parse_valid_until` (`_pdf.py:947`) is the shared best-effort validity parser. energie.be's
+`parse_valid_until` (`_pdf.py:996`) is the shared best-effort validity parser. energie.be's
 card carries no month name inside a validity-keyword window (the "juli 2026" sits in the
 page header, not after "geldig"), so `valid_until` resolves to `None`. That is the
 documented "treat as available" fallback and is correct for a dynamic contract, whose

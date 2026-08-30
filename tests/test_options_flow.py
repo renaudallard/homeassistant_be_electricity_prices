@@ -5599,3 +5599,104 @@ async def test_sweep_scratch_is_region_keyed_and_evicted(hass: HomeAssistant) ->
     assert _sweep_rows(hass, "entry-1", "wallonia") == {}
     # And evicting an entry that never swept is not an error.
     evict_sweep_rows(hass, "entry-never-swept")
+
+
+async def test_text_memo_collapses_repeat_listing_fetches() -> None:
+    """Nine providers resolve a per-supplier listing inside fetch() and pick
+    one product out of it, so pricing a whole supplier re-downloads the same
+    page once per contract. A Flanders static sweep would pull Mega's listing
+    nine times, Engie's eight and Luminus's eight.
+
+    Opt-in and scoped: outside the block every caller still gets a live read,
+    because the coordinator and the one-off quote both want one."""
+    from custom_components.be_electricity_prices.providers import _pdf
+
+    calls: list[str] = []
+
+    class _Resp:
+        status = 200
+
+        def __init__(self, url: str) -> None:
+            self._url = url
+
+        async def text(self) -> str:
+            return f"body of {self._url}"
+
+        async def __aenter__(self) -> "_Resp":
+            return self
+
+        async def __aexit__(self, *_a: object) -> None:
+            return None
+
+    class _Session:
+        def get(self, url: str, **_kw: object) -> _Resp:
+            calls.append(url)
+            return _Resp(url)
+
+    session = _Session()
+
+    # Unmemoised: every call is a round trip, which is today's behaviour and
+    # must stay that way for the coordinator.
+    for _ in range(3):
+        await _pdf.fetch_text(session, "https://x/listing")  # type: ignore[arg-type]
+    assert len(calls) == 3
+
+    calls.clear()
+    store: dict[str, str] = {}
+    with _pdf.memoise_text_fetches(store):
+        bodies = [
+            await _pdf.fetch_text(session, "https://x/listing")  # type: ignore[arg-type]
+            for _ in range(9)
+        ]
+    assert len(calls) == 1, f"listing fetched {len(calls)} times inside the memo"
+    assert len(set(bodies)) == 1
+
+    # A second URL is still its own fetch, and the memo does not leak out.
+    calls.clear()
+    with _pdf.memoise_text_fetches(store):
+        await _pdf.fetch_text(session, "https://x/other")  # type: ignore[arg-type]
+    assert calls == ["https://x/other"]
+    calls.clear()
+    await _pdf.fetch_text(session, "https://x/listing")  # type: ignore[arg-type]
+    assert calls == ["https://x/listing"], "the memo leaked past its block"
+
+
+async def test_text_memo_is_shared_across_the_sweep_s_tasks() -> None:
+    """A sweep prices one candidate per asyncio.Task. A Task copies the
+    context at creation, which copies the reference and not the dict, so every
+    candidate must see what the first one fetched - which is the whole reason
+    the store is passed in rather than created inside the helper."""
+    import asyncio
+
+    from custom_components.be_electricity_prices.providers import _pdf
+
+    calls: list[str] = []
+
+    class _Resp:
+        status = 200
+
+        async def text(self) -> str:
+            return "listing"
+
+        async def __aenter__(self) -> "_Resp":
+            return self
+
+        async def __aexit__(self, *_a: object) -> None:
+            return None
+
+    class _Session:
+        def get(self, url: str, **_kw: object) -> _Resp:
+            calls.append(url)
+            return _Resp()
+
+    session = _Session()
+    store: dict[str, str] = {}
+
+    async def _one() -> str:
+        with _pdf.memoise_text_fetches(store):
+            return await _pdf.fetch_text(session, "https://x/listing")  # type: ignore[arg-type]
+
+    results = await asyncio.gather(*(asyncio.create_task(_one()) for _ in range(6)))
+    assert set(results) == {"listing"}
+    # Concurrent tasks may race the first fetch, but nothing like six.
+    assert len(calls) < 6, f"the memo was not shared across tasks: {len(calls)}"

@@ -114,7 +114,7 @@ proxy) in every soft-failure case:
 - `archive_validity_check` rejects the card as not covering the month
   (`cociter.py:169`).
 
-`archive_validity_check` (`_pdf.py:883-919`) is two-tier: if the parsed
+`archive_validity_check` (`_pdf.py:958-995`) is two-tier: if the parsed
 `valid_until` is present it must fall in the requested month; if it is missing
 it falls back to a textual month-name mention via `text_mentions_month`, using
 the French month names `_FR_MONTHS` (`cociter.py:82-85`). This guards against a
@@ -149,12 +149,12 @@ field to helper:
 | `taxes` | `_extract_taxes` | `cociter.py:566-612` |
 | `injection` | `_extract_injection` | `cociter.py:263-313` |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` | `cociter.py:271-291` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:947` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:996` |
 
-Shared numeric helpers: `to_float` (`_pdf.py:615-626`) parses Belgian decimals
+Shared numeric helpers: `to_float` (`_pdf.py:665-677`) parses Belgian decimals
 (`15,93`) and strips every Unicode space variant used as a thousands separator;
-`parse_sign` (`_pdf.py:660-667`) turns any hyphen/dash/Unicode-minus into
-`-1.0`; `SIGN_CHARS` (`_pdf.py:656`) is the character class of accepted sign
+`parse_sign` (`_pdf.py:710-721`) turns any hyphen/dash/Unicode-minus into
+`-1.0`; `SIGN_CHARS` (`_pdf.py:705`) is the character class of accepted sign
 glyphs. `fetch_pdf_text` (`_pdf.py:179-186`) downloads the PDF and extracts
 text with pypdf off the event loop.
 
@@ -405,7 +405,7 @@ comment:
   `base.py:166-206`). YTD statistics still aggregate to hourly.
 - **Split-glyph spellings.** pypdf can split "HOURLY" into `HOURL Y` and emit
   several apostrophe/quote/dash glyphs; the regexes tolerate all of these
-  (`cociter.py:319-331`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:656`).
+  (`cociter.py:319-331`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:705`).
 - **Injection has no indicative fallback.** `current=None` always; the credit
   is spot-only, gated on `spot_indexed_injection` (`cociter.py:663-671`).
   Losing the gate zeros or drifts the solar credit.

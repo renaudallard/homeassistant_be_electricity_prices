@@ -66,6 +66,7 @@ from homeassistant.helpers.selector import (
 )
 
 from .providers import all_extractors, get as get_extractor
+from .providers._pdf import memoise_text_fetches
 from .providers.base import SpotMonthlyRates, SupplierSnapshot
 from .spot_stats import _injection_is_spp_indexed, _spp_weighting_enabled
 
@@ -1834,6 +1835,8 @@ class _SweepStepsMixin(_CompareStepsMixin):
             "candidates": [(supplier, c.id) for supplier, c in candidates],
             "index": 0,
             "rows": [],
+            # One listing memo for the whole sweep; see _sweep_one.
+            "listings": {},
             # A row carries only its rendered label, so the year-to-date pass
             # needs a way back to the contract that produced it.
             "labels": {
@@ -1972,20 +1975,28 @@ class _SweepStepsMixin(_CompareStepsMixin):
         cached = _sweep_rows(self.hass, self.config_entry.entry_id, region)
         snap = cached.get((region, supplier, contract))
         if snap is None:
-            fetched = await fetch_shared(
-                self.hass,
-                async_get_clientsession(self.hass),
-                get_extractor(supplier),
-                contract,
-                region,
-                supplier=supplier,
-                # The sweep DOES adopt a cached card, unlike the one-off quote
-                # above: it is pricing fifty rows against a wall-clock budget,
-                # and re-downloading a card a sibling already holds is the
-                # whole cost it is trying to avoid. Still read-only, so still
-                # no negative-cache write.
-                record_failure=False,
-            )
+            # Share one listing memo across every candidate in this sweep.
+            # Nine providers resolve a per-supplier listing page inside
+            # fetch() and pick one product out of it, so a Flanders static
+            # sweep would otherwise pull Mega's listing nine times, Engie's
+            # eight and Luminus's eight - about 3 MB and 25 round trips that
+            # buy nothing, spent out of a wall-clock budget that is measured
+            # in rows.
+            with memoise_text_fetches(self._sweep["listings"]):
+                fetched = await fetch_shared(
+                    self.hass,
+                    async_get_clientsession(self.hass),
+                    get_extractor(supplier),
+                    contract,
+                    region,
+                    supplier=supplier,
+                    # The sweep DOES adopt a cached card, unlike the one-off quote
+                    # above: it is pricing fifty rows against a wall-clock budget,
+                    # and re-downloading a card a sibling already holds is the
+                    # whole cost it is trying to avoid. Still read-only, so still
+                    # no negative-cache write.
+                    record_failure=False,
+                )
             if fetched.row is None:
                 return RankedRow(
                     label=label,

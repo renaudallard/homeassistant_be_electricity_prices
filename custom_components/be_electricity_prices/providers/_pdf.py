@@ -33,7 +33,9 @@ import json
 import logging
 import re
 import unicodedata
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TypeVar
 from datetime import date
 from io import BytesIO
@@ -505,6 +507,41 @@ def vat_multiplier(
     return default
 
 
+# A caller that will GET the same listing many times in quick succession can
+# ask fetch_text to serve repeats from memory. Off by default: every existing
+# caller wants a live read, and a global time-based cache would quietly hand a
+# coordinator tick a stale page. This is opt-in, explicit, and scoped to the
+# block that entered it.
+_TEXT_MEMO: ContextVar[dict[str, str] | None] = ContextVar("_TEXT_MEMO", default=None)
+
+
+@contextmanager
+def memoise_text_fetches(store: dict[str, str]) -> Iterator[None]:
+    """Serve repeat text GETs of one URL from ``store`` inside this block.
+
+    Nine providers resolve a per-supplier listing page inside ``fetch()`` and
+    then pick one product out of it, so pricing a whole supplier re-downloads
+    the same page once per contract: a Flanders static sweep pulls Mega's
+    listing nine times, Engie's eight and Luminus's eight, about 3 MB and 25
+    round trips that buy nothing. Under a wall-clock budget that is rows the
+    user does not get.
+
+    ``store`` is passed in rather than created here so a caller can share one
+    memo across several tasks - an ``asyncio.Task`` copies the context at
+    creation, which copies the reference and not the dict, so every candidate
+    in a sweep sees what the first one fetched.
+
+    Deliberately not a TTL cache inside fetch_text: the coordinator and the
+    one-off quote both want a live read, and the failure mode of guessing a
+    TTL for them is a stale card nobody asked for.
+    """
+    token = _TEXT_MEMO.set(store)
+    try:
+        yield
+    finally:
+        _TEXT_MEMO.reset(token)
+
+
 async def fetch_text(
     session: aiohttp.ClientSession,
     url: str,
@@ -530,6 +567,12 @@ async def fetch_text(
     :func:`is_transient_fetch_error` taxonomy so transient failures
     retry uniformly.
     """
+    memo = _TEXT_MEMO.get()
+    # Keyed on the full request, not the bare URL: one endpoint answers
+    # different questions by query string (Frank's Sanity GROQ, for one).
+    memo_key = url if not params else f"{url}?{sorted(params.items())}"
+    if memo is not None and memo_key in memo:
+        return memo[memo_key]
     try:
         async with session.get(
             url,
@@ -539,7 +582,13 @@ async def fetch_text(
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
-            return await resp.text()
+            body = await resp.text()
+            # Only a success is memoised. A failure is re-attempted by the
+            # next caller, which is what the negative cache one layer up is
+            # for; caching it here would give it a second, untracked lifetime.
+            if memo is not None:
+                memo[memo_key] = body
+            return body
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(
             f"network error fetching {url}: {error_text(err)}"

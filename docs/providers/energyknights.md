@@ -100,7 +100,7 @@ default. The result is a 200 carrying about 480 KB of HTML, which is the same or
 magnitude as the 334 KB card, so no size heuristic can tell them apart.
 
 Nothing in this module inspects the payload, because it does not have to:
-`_fetch_validated_pdf_bytes` (`providers/_pdf.py:178`) checks the `%PDF` magic bytes and
+`_fetch_validated_pdf_bytes` (`providers/_pdf.py:180`) checks the `%PDF` magic bytes and
 raises `expected a PDF at <url>`, which `is_transient_fetch_error` correctly classes as
 **permanent**. Never add a size check here.
 
