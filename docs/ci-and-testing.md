@@ -512,13 +512,18 @@ under that cap, or the supplier is killed before it can report the drift the bud
 The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2713`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:2969`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:2978`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:2800`), with per-supplier overrides in
 `_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:2856`) for the known-large catalogues (Bolt,
 Ecofix, Engie, Mega, OCTA+, TotalEnergies) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py:2847`) for those same multi-fetch suppliers plus EBEM, Eneco and Luminus,
-which are slow per fetch rather than large. Note that `elapsed_s` is the sum of per-request
+(`scripts/live_check.py:2847`) for those same multi-fetch suppliers plus EBEM, Eneco, Energy Knights and
+Luminus, which are slow per fetch rather than large. That last group is the
+recurring one: each answers a residential line in seconds and a GitHub runner
+in minutes, for a byte-identical payload, so the alert reports where the run
+executed rather than anything about the cards. Energy Knights joined it on
+2026-08-31 (issue #75) purely because it was added after the others and
+inherited the 90s default. Note that `elapsed_s` is the sum of per-request
 durations, not true wallclock, so a supplier that fetches concurrently (Bolt fetches its six PDFs
 with `asyncio.gather`, `scripts/live_check.py:1060`) records the sum of its parallel fetches; the
 budgets are sized around that. The synthetic `_catalog` bucket is skipped in drift analysis because
@@ -527,7 +532,7 @@ budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see 
 false-firing drift alert means adjusting the override, not the code.
 
 A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:2944`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2956`). The
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:2965`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever

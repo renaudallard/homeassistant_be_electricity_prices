@@ -2901,6 +2901,15 @@ _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     # than on any change to the cards. Same shape as the bolt CDN and
     # the mega runner-IP block.
     "eneco": 150.0,
+    # Energy Knights is the same shape again, and was simply never sized: it
+    # arrived after these overrides were written and sat on the 90s default.
+    # From a residential line its six fetches sum to 2.89s with no failures;
+    # the 2026-08-30 run summed 53.0 / 73.3 / 84.8 / 90.1 / 91.5 / 120.9s
+    # across its six attempts for a byte-identical 2,010,065 payload every
+    # time, so the default fires on runner latency and not on the cards. Sized
+    # off the slow-day max rather than the one attempt the issue happens to
+    # report, which showed 1 failure where the run had 13 (issue #75).
+    "energyknights": 150.0,
     "engie": 260.0,
     # See the EBEM note above.
     "luminus": 210.0,
