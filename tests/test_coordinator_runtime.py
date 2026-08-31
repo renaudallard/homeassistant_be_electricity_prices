@@ -3785,3 +3785,140 @@ async def test_live_tick_never_bakes_an_spp_formula_against_the_energy_mean(
 
     # The card's printed indicative, not 0.60 * 0.1142 - 0.008 = 0.0605.
     assert data.injection_price_eur_per_kwh == pytest.approx(0.0343)
+
+
+def _dynamic_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "api_key": "test-token",
+        },
+    )
+
+
+async def test_spot_cache_survives_a_restart(hass: HomeAssistant, freezer: Any) -> None:
+    """The day-ahead curve must round-trip through the Store, so an ENTSO-E
+    outage spanning a Home Assistant restart still has something to price
+    with. _historical_spots cannot stand in: it is only ever filled up to
+    today, so it never carries tomorrow.
+
+    It is restored as a FALLBACK, not as an authority: _spot_cache_day stays
+    None so the first tick still fetches from ENTSO-E as usual."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coord
+    today = datetime(2026, 8, 31, 6, 0, tzinfo=UTC)
+    tomorrow = datetime(2026, 9, 1, 6, 0, tzinfo=UTC)
+    coord._spot_cache = {today: 0.12, tomorrow: 0.14}
+    coord._spot_cache_day = date(2026, 8, 31)
+    coord._spot_cache_includes_tomorrow = True
+
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+
+    assert saved["spot_cache"] == {today.isoformat(): 0.12, tomorrow.isoformat(): 0.14}
+
+    fresh = BePricesCoordinator(hass, entry)
+    with patch.object(fresh._store, "async_load", AsyncMock(return_value=saved)):
+        await fresh.async_load_persistent()
+
+    assert fresh._spot_cache == {today: 0.12, tomorrow: 0.14}, (
+        "restart must not lose the curve, tomorrow included"
+    )
+    assert fresh._spot_cache_day is None, (
+        "restored curve is a fallback; the first tick must still ask ENTSO-E"
+    )
+
+
+async def test_restored_spot_cache_drops_an_outlived_day(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A blob written before the day rolled over must not come back as the
+    current curve. Only today's and tomorrow's slots survive the load."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    stale = datetime(2026, 8, 29, 6, 0, tzinfo=UTC)
+    current = datetime(2026, 8, 31, 6, 0, tzinfo=UTC)
+    payload = {
+        "entry_supplier": "cociter",
+        "entry_contract": "cociter_dynamic",
+        "entry_region": "wallonia",
+        "spot_cache": {stale.isoformat(): 0.90, current.isoformat(): 0.12},
+    }
+    coord = BePricesCoordinator(hass, entry)
+    with patch.object(coord._store, "async_load", AsyncMock(return_value=payload)):
+        await coord.async_load_persistent()
+
+    assert coord._spot_cache == {current: 0.12}, (
+        "a curve from an earlier day must not be restored"
+    )
+
+
+async def test_fallback_spots_prefers_the_day_ahead_cache(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """_spot_cache is at the resolution the contract bills on; _historical_spots
+    is bucketed to the hour. When both cover today the fallback must return the
+    former alone -- blending them would price a quarter-hourly entry's slots off
+    two different day-ahead products."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    quarter = datetime(2026, 8, 31, 6, 15, tzinfo=UTC)
+    hour = datetime(2026, 8, 31, 6, 0, tzinfo=UTC)
+    coord._spot_cache = {quarter: 0.12}
+    coord._historical_spots = {hour: 0.99}
+
+    assert coord._fallback_spots() == {quarter: 0.12}
+
+
+async def test_fallback_spots_uses_persisted_history_on_a_cold_start(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The headline restart case: _spot_cache is empty because the process just
+    started, but the persisted year-to-date cache was restored before the first
+    tick and already holds today. The entry must price from it rather than go
+    unavailable."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hour = datetime(2026, 8, 31, 6, 0, tzinfo=UTC)
+    yesterday = datetime(2026, 8, 30, 6, 0, tzinfo=UTC)
+    coord._spot_cache = {}
+    coord._historical_spots = {yesterday: 0.99, hour: 0.12}
+
+    assert coord._fallback_spots() == {hour: 0.12}, (
+        "today's hours must come back, and only today's"
+    )
+
+
+async def test_fallback_spots_refuses_a_curve_that_cannot_price_today(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Nothing on hand covers today, so there is no honest answer. Returning
+    empty is what makes the caller fail the tick instead of showing a price
+    carried over from an earlier day."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    yesterday = datetime(2026, 8, 30, 6, 0, tzinfo=UTC)
+    coord._spot_cache = {yesterday: 0.90}
+    coord._historical_spots = {yesterday: 0.90}
+
+    assert coord._fallback_spots() == {}

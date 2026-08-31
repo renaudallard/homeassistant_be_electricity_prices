@@ -75,7 +75,7 @@ from .spot_stats import (
 from .projected_cost import (
     _compute_projected_year_cost,
 )
-from .coordinator_spots import _spot_is_sane
+from .coordinator_spots import _spot_is_sane, _spots_for_local_days
 from .ytd_cost import (
     _compute_current_year_cost,
 )
@@ -512,6 +512,38 @@ class BePricesCoordinator(
                     dropped_spots += 1
                     continue
                 self._historical_spot_quarters[when] = [float(q) for q in v]
+        # Today's (and tomorrow's) day-ahead curve, so an ENTSO-E outage that
+        # spans a restart still has something to price with. _historical_spots
+        # above cannot stand in for it: it is only ever filled up to today, so
+        # it never holds tomorrow, and it is bucketed to the hour, so it cannot
+        # give a quarter-hourly contract its own slots back.
+        #
+        # Restored as a FALLBACK only -- _spot_cache_day deliberately stays
+        # None, so the first tick still fetches from ENTSO-E as it always did
+        # and this is consulted only when that fetch fails. That also avoids
+        # adopting a partially-written curve as authoritative for the day.
+        cached_curve = stored.get("spot_cache")
+        if isinstance(cached_curve, dict) and not tuple_mismatch:
+            for k, v in cached_curve.items():
+                if not isinstance(k, str) or not isinstance(v, (int, float)):
+                    continue
+                try:
+                    when = datetime.fromisoformat(k)
+                except ValueError:
+                    continue
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=UTC)
+                if not _spot_is_sane(float(v)):
+                    dropped_spots += 1
+                    continue
+                self._spot_cache[when] = float(v)
+            # Drop whatever the blob outlived. Gating on load rather than on
+            # save keeps the rule in one place, and the cache is two days of
+            # slots at most either way.
+            local_today = dt_util.now().date()
+            self._spot_cache = _spots_for_local_days(
+                self._spot_cache, {local_today, local_today + timedelta(days=1)}
+            )
         if dropped_spots:
             _LOGGER.warning(
                 "Discarded %d cached day-ahead price(s) outside the publishable "
@@ -636,14 +668,16 @@ class BePricesCoordinator(
                 raise UpdateFailed(f"ENTSO-E auth: {err}") from err
             except EntsoeError as err:
                 # A transient ENTSO-E outage must not blank the entry: the
-                # last good day-ahead curve in _spot_cache is still usable
-                # for breakdown computation. Only fail if we have nothing
-                # cached either.
+                # last good day-ahead curve is still usable for breakdown
+                # computation, whether this session fetched it or it came
+                # back from the Store after a restart. Only fail when nothing
+                # on hand actually covers today -- _fallback_spots refuses a
+                # curve from an earlier day rather than pricing today off it.
                 self._last_error = f"ENTSO-E: {err}"
                 _LOGGER.warning("ENTSO-E refresh failed; serving cached spots: %s", err)
-                if not self._spot_cache:
+                spot_prices = self._fallback_spots()
+                if not spot_prices:
                     raise UpdateFailed(f"ENTSO-E: {err}") from err
-                spot_prices = dict(self._spot_cache)
         elif _injection_needs_spot(
             self._snapshot, self.entry
         ) or _injection_needs_month_spot(self._snapshot, self.entry):
@@ -660,7 +694,7 @@ class BePricesCoordinator(
                 _LOGGER.debug(
                     "injection spot fetch failed (energy unaffected): %s", err
                 )
-                spot_prices = dict(self._spot_cache) if self._spot_cache else {}
+                spot_prices = self._fallback_spots()
 
         # Refresh the Synergrid SPP profile when this entry's injection is
         # SPP-weighted: a card that indexes on Belpex_SPP, or a custom monthly
@@ -1133,6 +1167,10 @@ class BePricesCoordinator(
         if self._historical_spot_quarters:
             payload["historical_spot_quarters"] = {
                 h.isoformat(): v for h, v in self._historical_spot_quarters.items()
+            }
+        if self._spot_cache:
+            payload["spot_cache"] = {
+                h.isoformat(): v for h, v in self._spot_cache.items()
             }
         if self._spp_weights and self._spp_weights_year is not None:
             payload["spp_weights"] = {

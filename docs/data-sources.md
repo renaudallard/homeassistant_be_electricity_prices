@@ -82,7 +82,9 @@ Two exception types are defined (`api.py:58`, `api.py:62`):
 - `EntsoeAuthError`: the key was rejected or exhausted. The coordinator raises
   the "rotate your token" Repairs card on this.
 - `EntsoeError`: any transport or parsing failure. The coordinator keeps serving
-  cached spots on this rather than tearing the tick down.
+  cached spots on this rather than tearing the tick down, from the persisted
+  curve too, so an outage spanning a restart is survivable. It tears the tick
+  down only when no cache on hand still covers today.
 
 Two subtleties are load-bearing:
 
@@ -267,7 +269,7 @@ A malformed `price.amount` or `position` raises `EntsoeError`
 constructs a fresh `EntsoeClient` per call (`api.py:66`,
 `coordinator_spots.py:280`). Two paths use it:
 
-- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:356`). Windows the request
+- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:371`). Windows the request
   on the local (Europe/Brussels) day so a 00:00 to 02:00 local query does not
   drop yesterday's UTC tail; anchors both endpoints on local midnight converted
   to UTC so the fetched window matches the actual local-day hour count, which
@@ -278,8 +280,12 @@ constructs a fresh `EntsoeClient` per call (`api.py:66`,
   actually carries, not what was requested, so a pre-publication tick that came
   back with today only will retry tomorrow on the next hourly tick
   (`coordinator_spots.py:280`, `coordinator_spots.py:388`). `quarter_hourly` is derived from
-  the loaded snapshot's energy kind (`coordinator_spots.py:376`).
-- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:192`).
+  the loaded snapshot's energy kind (`coordinator_spots.py:376`). The curve is
+  persisted under the `spot_cache` payload key, but restored as a fallback only:
+  `_spot_cache_day` stays `None` across a restart, so the first tick still
+  fetches, and slots that no longer cover today or tomorrow are dropped on load.
+  `_fallback_spots` is what reads it when a fetch fails.
+- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:207`).
   Ensures `self._historical_spots` covers every hour of the local days in a range,
   fetching only the missing spans. It considers a day "present" when at least 20
   of its 24 hours are cached (`coordinator_spots.py:350`), tolerating both the

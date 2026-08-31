@@ -102,6 +102,21 @@ _SPOT_SANE_MAX = 5.0
 _CacheValue = TypeVar("_CacheValue")
 
 
+def _spots_for_local_days(
+    spots: Mapping[datetime, float], days: set[date]
+) -> dict[datetime, float]:
+    """Keep only the slots whose LOCAL day is one of ``days``.
+
+    Slot keys are UTC, but what makes a curve current is the Brussels day it
+    prices, so the day is resolved locally before it is compared.
+    """
+    return {
+        slot: value
+        for slot, value in spots.items()
+        if dt_util.as_local(slot).date() in days
+    }
+
+
 def _drop_hours_before(cache: dict[datetime, _CacheValue], cutoff: datetime) -> None:
     """Delete every hour older than ``cutoff`` from ``cache``, in place.
 
@@ -403,6 +418,29 @@ class _SpotsMixin:
             dt_util.as_local(h).date() == tomorrow for h in prices
         )
         return prices
+
+    def _fallback_spots(self) -> dict[datetime, float]:
+        """The best still-valid curve to price with when ENTSO-E is down.
+
+        Prefers this entry's own day-ahead cache: it is at the resolution the
+        contract bills on, and it is the only thing that ever holds tomorrow.
+        Falls back to the persisted year-to-date cache, which is hourly. The
+        two are never merged -- a quarter-hourly entry topped up with hourly
+        means would price its slots off two different day-ahead products.
+
+        Only today's and tomorrow's slots survive, and a source that cannot
+        price today is skipped outright rather than contributing what it has,
+        so a curve left over from an earlier day is never served as the
+        current one. Returning empty is a real answer: the caller fails the
+        tick instead of pricing off a stale number.
+        """
+        local_today = dt_util.now().date()
+        wanted = {local_today, local_today + timedelta(days=1)}
+        for source in (self._spot_cache, self._historical_spots):
+            if not any(dt_util.as_local(slot).date() == local_today for slot in source):
+                continue
+            return _spots_for_local_days(source, wanted)
+        return {}
 
     def _billable_spots(
         self, extra_spots: dict[datetime, float]
