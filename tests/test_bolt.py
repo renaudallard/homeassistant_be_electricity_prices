@@ -1046,3 +1046,49 @@ def test_a_card_without_the_impact_block_gains_no_bands() -> None:
     assert energy.impact_pic is None
     assert energy.impact_medium is None
     assert energy.impact_eco is None
+
+
+# ---- the federal energy contribution, abolished August 2026 ----------------------
+
+_DASHED_CONTRIBUTION = (
+    "Droit d’accise spécial (c€/kwh) (c€/kWh) 5\n 4,876\n 4,876\n 4,876\n\n"
+    "Contribution sur l’énergie (c€/kWh)\n -\n -\n -\n\n"
+    "Redevance de raccordement (c€/kWh) 6 7 - 0,075 -\n"
+)
+
+
+def test_dashed_contribution_row_reads_as_zero() -> None:
+    """Belgium abolished the federal energy contribution in August 2026. Bolt
+    kept the row and replaced its rates with "-", one per region, while the
+    excise beside it absorbed the levy. Reading three dashes as "no values"
+    raised, and every Bolt contract in all three regions stopped pricing
+    (issue #78)."""
+    excise, contribution, _connection = bolt_mod._extract_taxes(
+        _DASHED_CONTRIBUTION, "wallonia"
+    )
+    assert contribution == 0.0
+    assert excise == pytest.approx(0.04876)
+
+
+def test_a_contribution_row_that_vanished_still_raises() -> None:
+    """Narrowness guard. A dash is the card saying zero; an absent row is
+    layout drift, and pricing that as zero is how a card that changed shape
+    bills several c€/kWh short behind a passing extractor."""
+    without = _DASHED_CONTRIBUTION.replace(
+        "Contribution sur l’énergie (c€/kWh)\n -\n -\n -\n\n", ""
+    )
+    with pytest.raises(ExtractorError, match="Contribution sur l'énergie"):
+        bolt_mod._extract_taxes(without, "wallonia")
+
+
+def test_a_dashed_excise_row_still_raises() -> None:
+    """The tolerance is scoped to the contribution on purpose: that is the
+    levy that was actually abolished. The excise is never zero, so the same
+    leniency there would turn a real layout change into a silent under-bill."""
+    dashed_excise = (
+        "Droit d’accise spécial (c€/kwh)\n -\n -\n -\n\n"
+        "Contribution sur l’énergie (c€/kWh)\n 0,20\n 0,20\n 0,20\n\n"
+        "Redevance de raccordement (c€/kWh) 6 7 - 0,075 -\n"
+    )
+    with pytest.raises(ExtractorError, match="Droit d'accise"):
+        bolt_mod._extract_taxes(dashed_excise, "wallonia")

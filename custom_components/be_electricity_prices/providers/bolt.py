@@ -982,6 +982,38 @@ def _three_col_row(text: str, label: str) -> tuple[str, str, str] | None:
     return nums[-3], nums[-2], nums[-1]
 
 
+def _row_is_explicit_zero(text: str, label: str) -> bool:
+    """True when the row exists but prints a dash in each of its three columns.
+
+    Belgium abolished the federal energy contribution in August 2026. Bolt did
+    not drop the row, it kept the label and replaced the rates with "-", one
+    per region, while the excise beside it absorbed the levy.
+
+    A dash is the card SAYING zero. That is a different fact from a row whose
+    values could not be read, which is layout drift, and only the first may be
+    priced silently: reading a missing row as zero is how a card that changed
+    shape bills several c\u20ac/kWh short behind a passing extractor. So this
+    answers a narrower question than :func:`_three_col_row` and the caller
+    keeps raising for everything else.
+    """
+    m = re.search(label, text)
+    if m is None:
+        return False
+    rest = text[m.end() :].replace("\u2028", "\n")
+    values: list[str] = []
+    for n, line in enumerate(rest.split("\n")):
+        # Skip the remainder of the label's own line: it carries the unit
+        # ("(c\u20ac/kWh)"), which is neither a value nor a new row.
+        if n == 0:
+            continue
+        if re.match(r"\s*[^\W\d_]", line):
+            break
+        token = line.strip()
+        if token:
+            values.append(token)
+    return len(values) >= 3 and all(v in {"-", "\u2013", "\u2014"} for v in values)
+
+
 def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
     """Return (federal_excise, energy_contribution, region_connection_fee).
 
@@ -1003,7 +1035,13 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
     if excise_row is None:
         raise ExtractorError("Bolt: 'Droit d'accise spécial' row not found")
     if contribution_row is None:
-        raise ExtractorError("Bolt: 'Contribution sur l'énergie' row not found")
+        # Scoped to THIS row on purpose. The energy contribution is the levy
+        # that was actually abolished, so a dash there is a rate; the excise
+        # above is never zero, so the same tolerance would turn a real layout
+        # change into a silent under-bill.
+        if not _row_is_explicit_zero(text, r"Contribution sur l['’]énergie"):
+            raise ExtractorError("Bolt: 'Contribution sur l'énergie' row not found")
+        contribution_row = ("0", "0", "0")
     # Connection fee row prints footnote refs ahead of the values, as bare
     # integers on a current card and as parenthesised stars on an archived
     # pre-redesign one:
