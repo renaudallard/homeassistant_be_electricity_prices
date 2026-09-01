@@ -122,7 +122,7 @@ captured so ordering stays numeric (comment `ecopower.py:145`).
 ### Probe (freshness key)
 
 `probe()` (`ecopower.py:239-254`) HEADs the relevant price page and returns its `Last-Modified`
-header via `head_freshness_key` (`_pdf.py:416`). The gbs contract probes `_PRICE_PAGE`, the dbs
+header via `head_freshness_key` (`_pdf.py:424`). The gbs contract probes `_PRICE_PAGE`, the dbs
 contract probes `_DBS_PAGE`. The page returns a stable `Last-Modified` (server-side cache key), so
 a HEAD round-trip detects a publication. On transport error or a missing header the helper returns
 `None` and the coordinator's time-based TTL takes over (probe is not `None` for Ecopower; only its
@@ -138,7 +138,7 @@ possible.
 - **gbs** (`ecopower.py:202`): scrape `_PRICE_PAGE`, find the `_CARD_RE` matches whose month
   equals the requested one and whose URL is not an `inschatting` preview, take the highest stamp
   among them (a month can carry both a bare and a dated card), download and
-  `parse_snapshot`. Then `archive_validity_check` (`_pdf.py:957`) cross-checks that the parsed card
+  `parse_snapshot`. Then `archive_validity_check` (`_pdf.py:965`) cross-checks that the parsed card
   actually covers the requested month, using Dutch month names (`_NL_MONTHS`, `ecopower.py:107-107`)
   for the textual fallback when `valid_until` is absent. This guards against the CDN serving the
   current card under a historical URL and mis-billing past consumption at current rates. Returns
@@ -170,8 +170,8 @@ Two pure parsers, both exposed for unit tests:
   tax block layout is identical, so it reuses `_extract_taxes`; only energy, DSO and injection
   parsers differ.
 
-Both operate on layout-preserving pdfplumber text (`extract_pdf_text_layout`, `_pdf.py:313`;
-fetched via `fetch_pdf_text_layout`, `_pdf.py:403`). pdfplumber is required because the cards use
+Both operate on layout-preserving pdfplumber text (`extract_pdf_text_layout`, `_pdf.py:321`;
+fetched via `fetch_pdf_text_layout`, `_pdf.py:411`). pdfplumber is required because the cards use
 rotated multi-column DSO and tax tables that a plain text extractor drops. Fixture tests read the
 same layout text through `fixture_text(name, layout=True)` (`test_ecopower.py:55-56`).
 
@@ -183,7 +183,7 @@ same layout text through `fixture_text(name, layout=True)` (`test_ecopower.py:55
 | `dsos` | `_extract_dsos` (`ecopower.py:470`) | `_extract_dbs_dsos` (`ecopower.py:557`) |
 | `taxes` | `_extract_taxes` (`ecopower.py:623`) | same helper reused |
 | `injection` | `_extract_injection` (`ecopower.py:758`) | `_extract_dbs_injection` (`ecopower.py:835`) |
-| `valid_until` | `parse_valid_until` (`_pdf.py:996`) | same |
+| `valid_until` | `parse_valid_until` (`_pdf.py:1004`) | same |
 | `publication_label` | passed in (`YYYY-MM`) | passed in |
 
 ### Energy parsing
@@ -214,7 +214,7 @@ parse time, and carrying a variable cost without a live spot is what `VariableRa
   engine feeds the spot in EUR/kWh (`0,00102 × MWh = 1.02 × kWh`).
 - The multiplication glyph is `×` (U+00D7); the regex accepts `[×xX*]` in case a re-render swaps
   it.
-- The additive base sign is parsed through `SIGN_CHARS` / `parse_sign` (`_pdf.py:709`,
+- The additive base sign is parsed through `SIGN_CHARS` / `parse_sign` (`_pdf.py:717`,
   `_pdf.py:532`) so a punctuation drift (hyphen vs en-dash vs U+2212) never flips the sign
   silently.
 - Values stay HTVA; `vat_rate=0.06` scales them later. They are NOT pre-scaled.

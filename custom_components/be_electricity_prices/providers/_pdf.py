@@ -220,6 +220,14 @@ async def _fetch_validated_pdf_bytes(
         raise ExtractorError(
             f"expected a PDF at {url}, payload starts with {payload[:80]!r}"
         )
+    # Strip the BOM the validator above deliberately tolerates. Accepting it
+    # there only keeps the download from being rejected; the bytes still have
+    # to parse, and pdfplumber cannot read them -- it fails a BOM-prefixed
+    # file with "No /Root object! - Is this really a PDF?", which reads like a
+    # corrupt card rather than three stray bytes. pypdf recovers on its own,
+    # so the two aligned/layout variants are the ones this protects.
+    if payload.startswith(b"\xef\xbb\xbf"):
+        payload = payload[3:]
     return payload
 
 

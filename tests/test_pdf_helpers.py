@@ -618,3 +618,29 @@ def test_a_real_card_is_never_mistaken_for_an_image_only_one() -> None:
         for path in sorted(FIXTURES.glob("*.pdf"))
     )
     assert smallest > 4 * _MIN_TEXT_LAYER_CHARS
+
+
+async def test_bom_prefixed_pdf_is_stripped_before_parsing() -> None:
+    """`_is_pdf_payload` tolerates a leading UTF-8 BOM so a publisher that
+    prepends one is not rejected as "not a PDF". Tolerating it is only half
+    the job: pdfplumber cannot parse those bytes and fails them with
+    "No /Root object! - Is this really a PDF?", which reads like a corrupt
+    card rather than three stray bytes. pypdf recovers on its own, so the
+    aligned/layout variants are the ones that need this.
+    """
+    body = b"\xef\xbb\xbf%PDF-1.7\nrest of the document"
+    session = _FakeBodySession(body)
+    out = await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
+    assert out.startswith(b"%PDF"), "the BOM must not reach the parser"
+    assert out == body[3:]
+
+
+async def test_a_pdf_without_a_bom_is_returned_untouched() -> None:
+    """The strip must key on the BOM, not run unconditionally: taking three
+    bytes off an ordinary card would corrupt every supplier at once."""
+    body = b"%PDF-1.7\nrest of the document"
+    session = _FakeBodySession(body)
+    assert (
+        await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
+        == body
+    )
