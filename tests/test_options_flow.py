@@ -3732,7 +3732,7 @@ def test_region_mismatch_is_a_form_error_not_an_abort() -> None:
 
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """A monthly-indexed contract bills one flat rate per delivery month.
 
@@ -3768,6 +3768,10 @@ async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
     )
     entry.runtime_data = _real_coordinator(hass, entry, own)
 
+    # Pinned mid-month: the month-to-date window below runs from the 1st up to
+    # today, so on the 1st it is empty and the "month-to-date dominates" check
+    # reads today's day-ahead window alone.
+    freezer.move_to("2026-08-14 12:00:00+02:00")
     now_local = dt_util.now()
     month_start = now_local.replace(
         day=1, hour=0, minute=0, second=0, microsecond=0
@@ -3824,7 +3828,7 @@ async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
 
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_branch_static_to_spot_monthly_prompts_for_api_key(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """A spot-monthly target needs a spot just as much as a dynamic one.
 
@@ -3878,6 +3882,10 @@ async def test_compare_branch_static_to_spot_monthly_prompts_for_api_key(
     # the delivery-month mean and the day-ahead mean must not be confusable.
     from datetime import timedelta
 
+    # Pinned mid-month: the month-to-date window below runs from the 1st up to
+    # today, so on the 1st it is empty and the "month-to-date dominates" check
+    # reads today's day-ahead window alone.
+    freezer.move_to("2026-08-14 12:00:00+02:00")
     now_local = dt_util.now()
     month_start = now_local.replace(
         day=1, hour=0, minute=0, second=0, microsecond=0
