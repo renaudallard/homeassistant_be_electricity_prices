@@ -51,7 +51,10 @@ jobs:
           # the same version as test.yml so a breaking HA-core release
           # can't flip the daily live-check red while the integration
           # itself still works against the version users actually run.
-          pip install pypdf pdfplumber aiohttp homeassistant==2026.2.3
+          # defusedxml is required because api.py imports it at module
+          # level, and the spot-fallback check loads api.py for the
+          # client it exercises.
+          pip install pypdf pdfplumber aiohttp defusedxml homeassistant==2026.2.3
 
       - name: Run live check (retries up to ~1 h on extractor failure)
         id: check

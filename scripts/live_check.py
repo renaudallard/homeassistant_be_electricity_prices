@@ -53,7 +53,7 @@ from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TypeVar
+from typing import Any, TypeVar
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -141,6 +141,13 @@ def _load_providers() -> dict[str, types.ModuleType]:
     _is_transient_fetch_error = pdf.is_transient_fetch_error
     _fetch_text = pdf.fetch_text
     _EXTRACTOR_ERROR = base.ExtractorError
+    # The integration is loaded under a synthetic ``be_pkg`` package, so a
+    # plain ``import custom_components...`` does NOT work here: it raises
+    # ModuleNotFoundError, and the first version of the spot-fallback check
+    # did exactly that and never ran.
+    api = _load("be_pkg.api", PKG / "api.py")
+    global _ENERGY_CHARTS_CLIENT
+    _ENERGY_CHARTS_CLIENT = api.EnergyChartsClient
     loaded = {
         supplier: _load(
             f"be_pkg.providers.{supplier}", PKG / "providers" / f"{supplier}.py"
@@ -253,6 +260,11 @@ _DEPRECATED_UNTIL: dict[str, date] = {}
 # probe catches ONLY this, so a page that will not load stays a pass while a
 # renamed symbol or a changed signature surfaces as a failure.
 _EXTRACTOR_ERROR: type[Exception] = RuntimeError
+# Bound by _load_providers to api.EnergyChartsClient. The spot-fallback check
+# exercises OUR client rather than the endpoint alone, so an upstream that
+# changes shape under it fails here instead of silently at a user's next
+# ENTSO-E outage.
+_ENERGY_CHARTS_CLIENT: Any = None
 
 
 # Per-supplier fetch-time (summed per-request durations) + bytes-received
@@ -1681,8 +1693,6 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
     its shape rather than its values: a full local day of slots, all inside
     the publishable band, on whichever grid the auction cleared on.
     """
-    from custom_components.be_electricity_prices.api import EnergyChartsClient
-
     # Brussels explicitly, as elsewhere in this script: run standalone, HA's
     # dt_util default time zone is UTC, and asking it for "local midnight"
     # would slice 22 hours out of the middle of two Belgian days.
@@ -1699,7 +1709,7 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
         tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=brussels
     ).astimezone(UTC)
     try:
-        prices = await EnergyChartsClient(session).fetch_day_ahead(start, end)
+        prices = await _ENERGY_CHARTS_CLIENT(session).fetch_day_ahead(start, end)
     except Exception as err:  # noqa: BLE001 - any failure is the finding
         _record(label, False, f"{type(err).__name__}: {err}", kind="catalog")
         return
@@ -2837,10 +2847,22 @@ async def _run() -> int:
             # a card we still resolve.
             try:
                 await _check_card_freshness(session, modules)
-                await _check_spot_fallback(session)
             except Exception as err:  # noqa: BLE001
                 _record(
                     "_freshness: probe crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                    kind="catalog",
+                )
+            # Its own try, so a failure here is reported as ITS failure. Folded
+            # into the block above, the first version of this check crashed and
+            # was filed as "_freshness: probe crashed", which named a check that
+            # had in fact completed.
+            try:
+                await _check_spot_fallback(session)
+            except Exception as err:  # noqa: BLE001
+                _record(
+                    "spot/fallback: check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                     kind="catalog",
