@@ -518,13 +518,24 @@ async def fetch_day_ahead_or_fallback(
     except EntsoeAuthError:
         raise
     except EntsoeError as err:
+        primary = err
         _LOGGER.debug("ENTSO-E unavailable (%s); trying the keyless fallback", err)
 
-    prices = await EnergyChartsClient(session).fetch_day_ahead(
-        period_start, period_end, quarter_hourly=quarter_hourly
-    )
+    # Both messages travel together from here on. When the fallback fails too
+    # this is what reaches last_error and the log, and the ENTSO-E half is the
+    # half that explains the outage -- reporting only "energy-charts: non-JSON
+    # response" for a day ENTSO-E spent returning 503 sends the reader after
+    # the wrong service entirely.
+    try:
+        prices = await EnergyChartsClient(session).fetch_day_ahead(
+            period_start, period_end, quarter_hourly=quarter_hourly
+        )
+    except EntsoeError as err:
+        raise EntsoeError(f"ENTSO-E: {primary}; fallback: {err}") from err
     if not prices:
         # Nothing usable from either side. Raise rather than return empty so
         # the caller's existing EntsoeError path decides what to degrade to.
-        raise EntsoeError("ENTSO-E unavailable and the fallback returned no prices")
+        raise EntsoeError(
+            f"ENTSO-E: {primary}; fallback returned no prices for the window"
+        )
     return prices, "energy-charts"

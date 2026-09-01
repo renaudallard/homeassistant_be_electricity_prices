@@ -4003,3 +4003,44 @@ async def test_spot_source_records_which_source_answered(
 
     assert prices == {slot: 0.12}
     assert coord._spot_source == "energy-charts"
+
+
+async def test_backfill_falling_back_does_not_relabel_the_live_price(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """spot_source describes the curve current_price was built from.
+
+    _ensure_historical_spots runs AFTER _fetch_spot_prices in the tick, so if
+    the backfill is allowed to write the field, one historical chunk that had
+    to fall back relabels a live price ENTSO-E served perfectly well. The
+    year-to-date replay and the live curve are answered independently and can
+    legitimately come from different sources.
+    """
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    # The live curve came from the source of record.
+    coord._spot_source = "entsoe"
+
+    async def _backfill_fell_back(
+        _key: str,
+        _session: Any,
+        start: datetime,
+        _end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> tuple[dict[datetime, float], str]:
+        return {start + timedelta(hours=h): 0.10 for h in range(24)}, "energy-charts"
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _backfill_fell_back,
+    ):
+        await coord._ensure_historical_spots(date(2026, 8, 20), date(2026, 8, 21))
+
+    assert coord._spot_source == "entsoe", (
+        "the backfill's source must not overwrite the live curve's"
+    )

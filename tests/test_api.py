@@ -523,3 +523,36 @@ def test_key_validation_does_not_use_the_fallback() -> None:
     body = source[start : source.index("\ndef ", start)]
     assert "EntsoeClient(" in body
     assert "fetch_day_ahead_or_fallback" not in body
+
+
+async def test_double_failure_names_both_causes() -> None:
+    """When the fallback fails too, the ENTSO-E half is the half that explains
+    the outage. Reporting only the fallback's complaint for a day ENTSO-E
+    spent returning 503 sends whoever reads last_error after the wrong
+    service."""
+    session = _FakeSession(
+        entsoe=EntsoeError("x"), fallback_body="end must be >= start"
+    )
+    with pytest.raises(EntsoeError) as excinfo:
+        await fetch_day_ahead_or_fallback(
+            "key",
+            session,  # type: ignore[arg-type]
+            datetime(2026, 8, 30, 22, 0, tzinfo=UTC),
+            datetime(2026, 8, 31, 22, 0, tzinfo=UTC),
+        )
+    msg = str(excinfo.value)
+    assert "ENTSO-E" in msg and "fallback" in msg
+
+
+async def test_empty_fallback_window_still_names_the_entsoe_cause() -> None:
+    """Same reasoning for a fallback that answers cleanly with nothing."""
+    session = _FakeSession(
+        entsoe=EntsoeError("x"), fallback_body='{"unix_seconds": [], "price": []}'
+    )
+    with pytest.raises(EntsoeError, match="ENTSO-E"):
+        await fetch_day_ahead_or_fallback(
+            "key",
+            session,  # type: ignore[arg-type]
+            datetime(2026, 8, 30, 22, 0, tzinfo=UTC),
+            datetime(2026, 8, 31, 22, 0, tzinfo=UTC),
+        )

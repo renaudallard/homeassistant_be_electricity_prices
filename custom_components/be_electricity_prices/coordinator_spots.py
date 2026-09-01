@@ -312,15 +312,20 @@ class _SpotsMixin:
                 start_utc = dt_util.start_of_local_day(chunk_start).astimezone(UTC)
                 end_utc = dt_util.start_of_local_day(chunk_end).astimezone(UTC)
                 try:
-                    prices, source = await fetch_day_ahead_or_fallback(
+                    # The source is deliberately discarded here.
+                    # ``_spot_source`` describes the curve current_price was
+                    # built from, and this runs AFTER the live fetch in the
+                    # tick: letting the backfill write it would relabel a
+                    # live ENTSO-E price because one historical chunk had to
+                    # fall back. The two are answered independently and may
+                    # legitimately come from different sources.
+                    prices, _source = await fetch_day_ahead_or_fallback(
                         api_key,
                         self._session,
                         start_utc,
                         end_utc,
                         quarter_hourly=quarter_hourly,
                     )
-                    if source != "entsoe":
-                        self._spot_source = source
                 except (EntsoeError, EntsoeAuthError) as err:
                     _LOGGER.warning(
                         "ENTSO-E historical fetch failed for %s..%s: %s",
@@ -408,9 +413,21 @@ class _SpotsMixin:
         # them (Engie Dynamic); everyone else gets the hourly aggregate.
         snap = self._snapshot
         quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
+        previous_source = self._spot_source
         prices, self._spot_source = await fetch_day_ahead_or_fallback(
             api_key, self._session, start, end, quarter_hourly=quarter_hourly
         )
+        if self._spot_source != previous_source:
+            # Log the TRANSITION, not the state. A fallback that answers
+            # raises no error and blanks nothing, so without this the entry
+            # silently changes where its prices come from and the only trace
+            # is the sensor attribute. Logging every tick instead would mean
+            # 37 identical warnings for the outage that prompted this.
+            _LOGGER.warning(
+                "day-ahead source changed from %s to %s",
+                previous_source,
+                self._spot_source,
+            )
         self._spot_cache = prices
         self._spot_cache_day = local_today
         # Flag what the response actually carries, not what we asked
