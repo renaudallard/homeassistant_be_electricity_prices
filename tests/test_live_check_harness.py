@@ -1333,3 +1333,48 @@ def test_sweep_cost_reporting_is_silent_without_a_measurement() -> None:
         "failed_s": 0.0,
     }
     lc._record_sweep_cost("bolt", 5.0)
+
+
+def test_a_withdrawn_suppliers_fetch_failure_does_not_gate_ci(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The allowance used to cover only the staleness question. Everything
+    else still filed: DATS 24 left residential on 2026-08-31 and its August
+    card 404ed the next morning, opening an extractor-broken issue that named
+    a supplier which no longer sells electricity (issue #78). A supplier past
+    its own date cannot fail in a way this repository can fix.
+    """
+    monkeypatch.setitem(lc._DEPRECATED_UNTIL, "dats24", date(2026, 8, 31))
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(date(2026, 9, 1)))
+    lc._record(
+        "dats24/dats24_groen_variabel/flanders: fetch",
+        False,
+        "ExtractorError: HTTP 404 fetching https://example.invalid/aug.pdf",
+    )
+    (check,) = lc.CHECKS
+    assert check.expected
+    assert lc._extractor_regressions(lc.CHECKS) == []
+
+
+def test_a_withdrawing_supplier_still_fails_on_its_last_day(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Narrowness guard. Up to and including its final day the supplier is
+    still trading, so a fetch failure then is a real break worth filing."""
+    monkeypatch.setitem(lc._DEPRECATED_UNTIL, "dats24", date(2026, 8, 31))
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(date(2026, 8, 31)))
+    lc._record("dats24/x/flanders: fetch", False, "ExtractorError: HTTP 500")
+    (check,) = lc.CHECKS
+    assert not check.expected
+    assert lc._extractor_regressions(lc.CHECKS) != []
+
+
+def test_a_live_suppliers_failure_is_untouched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A supplier with no withdrawal date must be unaffected, and a label
+    carrying no supplier prefix must not be parsed into one."""
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(date(2026, 9, 1)))
+    lc._record("bolt/bolt_variable/flanders: parse", False, "ExtractorError: boom")
+    lc._record("spot/fallback: check crashed", False, "RuntimeError: boom")
+    assert all(not c.expected for c in lc.CHECKS)

@@ -528,6 +528,8 @@ _WITHDRAWN_MARKER = "SupplierWithdrawn"
 
 
 def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
+    if not ok:
+        detail = _mark_if_withdrawn(label, detail)
     CHECKS.append(
         Check(
             label=label,
@@ -538,6 +540,33 @@ def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> 
             and detail.startswith((_UNREADABLE_MARKER, _WITHDRAWN_MARKER)),
         )
     )
+
+
+def _mark_if_withdrawn(label: str, detail: str) -> str:
+    """Prefix the withdrawal marker when this check's supplier has left.
+
+    ``_expect_card_period`` already allowed for a supplier past its own
+    ``deprecated_until``, but only for the staleness question. Everything else
+    still filed: DATS 24 left residential on 2026-08-31 and its August card
+    404ed the next morning, which opened an extractor-broken issue naming a
+    supplier that no longer sells electricity (issue #78).
+
+    Marking here rather than at each of the six fetch call sites keeps the one
+    rule in one place, and it keys on the supplier segment of the label so a
+    check with no supplier prefix is untouched.
+    """
+    if detail.startswith((_UNREADABLE_MARKER, _WITHDRAWN_MARKER)):
+        return detail
+    supplier = label.split("/", 1)[0]
+    withdrawn = _DEPRECATED_UNTIL.get(supplier)
+    if withdrawn is None:
+        return detail
+    # Up to and including its last day the supplier is still trading, so a
+    # failure then is a real one. The allowance starts the day after, and
+    # ends by itself when the supplier is removed.
+    if datetime.now(ZoneInfo("Europe/Brussels")).date() <= withdrawn:
+        return detail
+    return f"{_WITHDRAWN_MARKER}: {detail}"
 
 
 def _expect(label: str, condition: bool, detail: str = "") -> bool:
@@ -2726,11 +2755,19 @@ def _render_report(
     pass_count = sum(1 for c in checks if c.ok)
     regressions = [c for c in checks if not c.ok and not c.expected]
     expected = [c for c in checks if not c.ok and c.expected]
+    # Two different reasons a failure is expected, and they need different
+    # explanations: a page-image card can come back, a supplier that has left
+    # the market cannot. Reporting a withdrawal under "unreadable cards" would
+    # tell the reader to go looking for a text layer.
+    unreadable = [c for c in expected if c.detail.startswith(_UNREADABLE_MARKER)]
+    withdrawn = [c for c in expected if c.detail.startswith(_WITHDRAWN_MARKER)]
     headline = f"# Live extractor check — {pass_count} pass, {len(regressions)} fail"
-    if expected:
+    if unreadable:
         # Say it in the headline. A run that reads "0 fail" while the table
         # below lists failing rows reads like a bug in the harness.
-        headline += f", {len(expected)} unreadable (expected)"
+        headline += f", {len(unreadable)} unreadable (expected)"
+    if withdrawn:
+        headline += f", {len(withdrawn)} withdrawn (expected)"
     rows.append(headline)
     rows.append("")
     if regressions:
@@ -2742,7 +2779,7 @@ def _render_report(
             detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
             rows.append(f"| `{c.label}` | {detail} |")
         rows.append("")
-    if expected:
+    if unreadable:
         rows.append("## Unreadable cards (expected, not a regression)")
         rows.append("")
         rows.append(
@@ -2756,7 +2793,25 @@ def _render_report(
         rows.append("")
         rows.append("| Check | Detail |")
         rows.append("| --- | --- |")
-        for c in expected:
+        for c in unreadable:
+            detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
+            rows.append(f"| `{c.label}` | {detail} |")
+        rows.append("")
+    if withdrawn:
+        rows.append("## Withdrawn suppliers (expected, not a regression)")
+        rows.append("")
+        rows.append(
+            "These suppliers are past their own `deprecated_until`: they have "
+            "left the residential market, so their cards stop being published "
+            "and eventually stop resolving at all. Nothing in this repository "
+            "can fix that. Affected entries raise the supplier-deprecated "
+            "Repairs card naming the successor. These rows do not fail the "
+            "run, and they go away when the supplier is removed."
+        )
+        rows.append("")
+        rows.append("| Check | Detail |")
+        rows.append("| --- | --- |")
+        for c in withdrawn:
             detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
             rows.append(f"| `{c.label}` | {detail} |")
         rows.append("")
