@@ -37,6 +37,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.frank import (
+    _CARD_SELECT,
     _matches_suffix,
     parse_snapshot,
 )
@@ -367,4 +368,52 @@ def test_matches_suffix_slim_accepts_both_sl_and_full_word() -> None:
     )
     assert not _matches_suffix(
         "Frank Energie Tariefkaart Elektriciteit Dynamisch Slim Juni 2026.pdf", None
+    )
+
+
+# ---- the September 2026 filename rename ------------------------------------------
+
+
+def test_card_selector_does_not_key_on_the_elektriciteit_token() -> None:
+    """Frank dropped "Elektriciteit" from the September 2026 filenames:
+
+        Frank Energie Tariefkaart Elektriciteit Dynamisch HV  Augustus 2026.pdf
+        Frank Energie Tariefkaart Dynamisch HV September 2026.pdf
+
+    Every lookup filtered the CMS on "*Elektriciteit Dynamisch*", so from
+    September the query matched nothing newer than August and all five tiers
+    silently served the previous month's card - a live mis-price, and one the
+    probe could not see either, because its own key came from the same query.
+    """
+    assert "Elektriciteit" not in _CARD_SELECT
+    assert 'match "*Dynamisch*"' in _CARD_SELECT
+
+
+def test_card_selector_excludes_gas() -> None:
+    """The same release renamed "Gas ZTP" to "Gas", so the gas cards are no
+    longer separated from the electricity ones by their own token. Matching
+    "Dynamisch" alone would adopt a future "Gas Dynamisch" card as an
+    electricity tier, so gas is excluded explicitly."""
+    assert '!(originalFilename match "*Gas*")' in _CARD_SELECT
+
+
+def test_matches_suffix_handles_the_september_naming() -> None:
+    """The rename only moved the filter; the tier mapping reads the word after
+    "Dynamisch" and must land on the same tiers under the new names."""
+    assert _matches_suffix(
+        "Frank Energie Tariefkaart Dynamisch September 2026.pdf", None
+    )
+    assert _matches_suffix(
+        "Frank Energie Tariefkaart Dynamisch HV September 2026.pdf", "HV"
+    )
+    assert _matches_suffix(
+        "Frank Energie Tariefkaart Dynamisch SL September 2026.pdf", "SL"
+    )
+    # The standard tier still must not swallow a suffixed card.
+    assert not _matches_suffix(
+        "Frank Energie Tariefkaart Dynamisch HV September 2026.pdf", None
+    )
+    # ... nor a suffixed tier the bare card.
+    assert not _matches_suffix(
+        "Frank Energie Tariefkaart Dynamisch September 2026.pdf", "HV"
     )

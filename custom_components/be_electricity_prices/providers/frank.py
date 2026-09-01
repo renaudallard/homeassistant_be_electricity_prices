@@ -86,6 +86,21 @@ _LOGGER = logging.getLogger(__name__)
 
 _SANITY_API = "https://8navd656.api.sanity.io/v2023-01-01/data/query/production-be"
 
+# The GROQ predicate every lookup filters on. Frank dropped the "Elektriciteit"
+# token from the September 2026 filenames ("... Tariefkaart Elektriciteit
+# Dynamisch HV Augustus 2026" became "... Tariefkaart Dynamisch HV September
+# 2026"), which left a filter keyed on it matching nothing newer than August
+# and every tier quietly serving the previous month's card. Matching on
+# "Dynamisch" alone is what survives that rename; gas is excluded explicitly
+# rather than relied on to keep its own naming, since the same release
+# renamed "Gas ZTP" to "Gas" and a future "Gas Dynamisch" would otherwise be
+# picked up as an electricity card.
+_CARD_SELECT = (
+    '*[_type=="sanity.fileAsset"'
+    ' && originalFilename match "*Dynamisch*"'
+    ' && !(originalFilename match "*Gas*")'
+)
+
 # Frank prints the month title-cased ("Januari"); keep a title tuple for
 # indexing and the header regex, plus a lowercase set for membership.
 _NL_MONTHS = NL_MONTHS
@@ -171,18 +186,16 @@ async def _resolve_pdf_url(
     if target_month is not None:
         month_name = _NL_MONTHS_TITLE[target_month.month - 1]
         q = (
-            '*[_type=="sanity.fileAsset"'
-            ' && originalFilename match "*Elektriciteit Dynamisch*"'
-            f' && originalFilename match "*{month_name}*"'
-            f' && originalFilename match "*{target_month.year}*"'
-            "]{originalFilename,url,_createdAt}"
+            _CARD_SELECT
+            + f' && originalFilename match "*{month_name}*"'
+            + f' && originalFilename match "*{target_month.year}*"'
+            + "]{originalFilename,url,_createdAt}"
         )
     else:
         q = (
-            '*[_type=="sanity.fileAsset"'
-            ' && originalFilename match "*Elektriciteit Dynamisch*"'
-            "]{originalFilename,url,_createdAt}"
-            " | order(_createdAt desc)[0..29]"
+            _CARD_SELECT
+            + "]{originalFilename,url,_createdAt}"
+            + " | order(_createdAt desc)[0..29]"
         )
 
     rows = await _sanity_query(session, q)
@@ -249,11 +262,7 @@ async def probe(
 ) -> str | None:
     if contract_id not in _VALID_IDS:
         return None
-    q = (
-        '*[_type=="sanity.fileAsset"'
-        ' && originalFilename match "*Elektriciteit Dynamisch*"'
-        "] | order(_createdAt desc)[0]{_createdAt}"
-    )
+    q = _CARD_SELECT + "] | order(_createdAt desc)[0]{_createdAt}"
     try:
         rows = await _sanity_query(session, q)
     except ExtractorError:
@@ -267,17 +276,16 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Surface the dynamic tiers visible in Frank Energie's Sanity CMS.
 
     Each tier publishes one PDF per month named
-    "... Elektriciteit Dynamisch[ <suffix>] <Month> <Year>". Map the word
+    "... Tariefkaart Dynamisch[ <suffix>] <Month> <Year>". Map the word
     after "Dynamisch" back to our contract id - a bare month name is the
     standard tier - and surface an unrecognised suffix as
     ``frank_dynamic_<suffix>`` so the catalog drift detector flags a new
     tier instead of silently ignoring it.
     """
     q = (
-        '*[_type=="sanity.fileAsset"'
-        ' && originalFilename match "*Elektriciteit Dynamisch*"'
-        "]{originalFilename,_createdAt}"
-        " | order(_createdAt desc)[0..59]"
+        _CARD_SELECT
+        + "]{originalFilename,_createdAt}"
+        + " | order(_createdAt desc)[0..59]"
     )
     try:
         rows = await _sanity_query(session, q)

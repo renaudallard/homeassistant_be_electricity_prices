@@ -1867,8 +1867,10 @@ async def _check_card_freshness(
         # resolved URL is a content hash carrying no month at all, so the
         # served stamp is the parsed LABEL. The advertised side is a
         # deliberately loose GROQ with no filename predicate, scanned for a
-        # Dutch month word -- the "Elektriciteit" token the extractor keys
-        # on is exactly the layer that went blind before.
+        # Dutch month word. Keeping it loose is what caught the September
+        # 2026 rename: the extractor filtered on an "Elektriciteit" token
+        # Frank dropped, and a check sharing that predicate would have gone
+        # green while every tier served August's card.
         pattern = (
             r"(?m)^(?=.*dynamis).*?((?:januari|februari|maart|april|mei|juni|juli|"
             r"augustus|september|oktober|november|december)\s+20\d{2}"
