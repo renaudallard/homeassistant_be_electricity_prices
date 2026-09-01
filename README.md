@@ -77,7 +77,7 @@ publication and how to parse it.
 | **Cociter** | Tarif Variable (BELIX) · Tarif Dynamique (quarter-hourly BELPEX) | [`providers/cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) — monthly cards `RCVar_YMR_Coop-YYMM-fr.pdf` / `RCDyn_SM3_Coop-YYMM-fr.pdf`. Walloon citizen cooperative, **Wallonia only** |
 | **DATS 24** *(withdrawn 2026-08-31)* | Elektriciteit Groen Variabel (BE_spotRLP-indexed monthly) | [`providers/dats24.py`](./custom_components/be_electricity_prices/providers/dats24.py) — one PDF per month on the Colruyt Group CDN, month spelled in the filename (`api.colruytgroup.com/api/static/dats24/parameters/site/<YYYY>/ELEK/NL/... Versie <MM> <YYYY>.pdf`), falling back one month while the new card is unpublished. Colruyt subsidiary; Flanders + Wallonia. Single product covers mono / bi / exclusive-night meter rates and includes the BE_spotSPP injection formula. **DATS 24 is leaving residential energy supply: contracts transfer automatically to EnergyVision on 31 August 2026**, so switch the entry to **EnergyVision**, which covers both regions. Existing entries keep pricing normally until that date and raise a Repairs card telling you where the contract is going. After it, the card changes to the past tense and the entry stops updating; the usual "could not reach the supplier" alert is suppressed, because by then the card simply is not published any more and that is expected rather than a fault — see [docs/providers/dats24.md](./docs/providers/dats24.md). |
 | **EBEM** | Groen Variabel (BelpexRLP0 monthly, mono / bi / excl. night) · Groen B@sic+ (BelpexRLP0 monthly, single rate, online-only) · Groen Dyn@mic (Belpex 15-min, SMR3) | [`providers/ebem.py`](./custom_components/be_electricity_prices/providers/ebem.py) — Mol/Geel-area Flemish supplier (Ebem bvba). Monthly cards linked from `ebem.be/tarieven/` under opaque Umbraco media-hash URLs; the provider scrapes the listing each fetch and supports `fetch_for_month` against the public archive (≥ 6 months back), so past consumption bills at each month's actual rates. Variabel + B@sic+ share the `elek` PDF; Dyn@mic has its own. Flanders only. |
-| **Ecofix** ⚠️ *(August 2026 card unreadable)* | Motion (quarter-hourly Belpex 15M) · Motion Online (same formula, online-only) · Flexy (BELPEX-RLP-M monthly variable) | [`providers/ecofix.py`](./custom_components/be_electricity_prices/providers/ecofix.py) — stable URLs at `portal.ecofixgp.be/docs/prices/current/EL_Ecofix_<PRODUCT>_NL.pdf`, overwrite-in-place each month. One PDF carries Flanders + Wallonia overlays (no Brussels). Parsed via `pdfplumber` for the column-major Wallonia DSO table. **Broken since the August 2026 card** — see the note below. |
+| **Ecofix** ⚠️ *(August and September 2026 cards unreadable)* | Motion (quarter-hourly Belpex 15M) · Motion Online (same formula, online-only) · Flexy (BELPEX-RLP-M monthly variable) | [`providers/ecofix.py`](./custom_components/be_electricity_prices/providers/ecofix.py) — stable URLs at `portal.ecofixgp.be/docs/prices/current/EL_Ecofix_<PRODUCT>_NL.pdf`, overwrite-in-place each month. One PDF carries Flanders + Wallonia overlays (no Brussels). Parsed via `pdfplumber` for the column-major Wallonia DSO table. **Broken since the August 2026 card**, and the September card repeats it — see the note below. |
 | **Ecopower** | Groene Burgerstroom (50% fixed + 50% Belpex DA, indexed monthly) · Dynamische Burgerstroom *(quarter-hourly EPEX DA)* | [`providers/ecopower.py`](./custom_components/be_electricity_prices/providers/ecopower.py) — Groene Burgerstroom from the monthly cards at `ecopower.be/groene-stroom/prijs-nieuw`; Dynamische Burgerstroom from the `dbs` card at `ecopower.be/groene-stroom/dynamische-burgerstroom` (`afname = 1,02 × EPEX DA + 4 €/MWh`, `injectie = 0,98 × EPEX DA − 15 €/MWh`). Flanders cooperative, Flanders only. Cards are HTVA so `vat_rate=0.06`. |
 | **Eneco** | Zon & Wind Vast · Zon & Wind Flex · Zon & Wind Dynamisch | [`providers/eneco.py`](./custom_components/be_electricity_prices/providers/eneco.py) — monthly cards `cdn.eneco.be/downloads/nl/general/tk/BC_032_<NNNNNN>_NL_ENECO_POWER_<FIX\|FLEX\|DYNAMIC>.pdf` resolved from the public listing page each fetch (issue number rotates monthly), no Brussels; Vast and Flex cover Flanders + Wallonia, Dynamisch is Flanders only |
 | **energie.be** | Dynamisch *(quarter-hourly EPEX)* · Variabel *(monthly Belpex_RLP)* · Vast | [`providers/energiebe.py`](./custom_components/be_electricity_prices/providers/energiebe.py) — the dynamic residential card is served at the document API `energie-production-api.azurewebsites.net/api/v1/data/document?key=DynamicTariffs` (302-redirects to the current month's Azure blob); the variable card has no document key and its current PDF is named by `www.energie.be/api/v1/data/contracts`. Both parsed via `pdfplumber`. Flanders only; on the dynamic card only the residential block is read, and both print Belpex in c€/kWh so the spot factor is not scaled by 10. Variabel is billed as a **monthly-indexed** contract (see the highlight above) because the card prints only the VNR forecast of its index, not the realised month rate. Vast is a flat rate, so its energy leg needs no ENTSO-E key, but its card carries the same Belpex_SPP injection formula and settles on it, so a key is offered (and skippable) to credit the feed-in on the realized month rather than the card's printed forecast. |
@@ -92,15 +92,36 @@ publication and how to parse it.
 | **Expert: custom formula** *(no public card)* | Dynamic (`factor × spot + base`) · Monthly average (`factor × monthly-mean spot + base`) · Fixed / manual rate | [`providers/custom.py`](./custom_components/be_electricity_prices/providers/custom.py) — an escape hatch for suppliers with **no public, machine-resolvable tariff card** (see below). Not scraped: you type the commodity formula and all regulated DSO + tax values, and the coordinator builds the snapshot from your config entry. |
 
 > [!WARNING]
-> **Ecofix: the August 2026 card cannot be read automatically — but you can
-> still price the contract, see the workaround below.** Ecofix regenerated its
-> tariff PDFs as page images: every page of every product is now one full-page
+> **Ecofix: the August and September 2026 cards cannot be read automatically
+> — but you can still price the contract, see the workaround below.** Ecofix
+> regenerated its tariff PDFs as page images: every page of every product is one full-page
 > image covering 99.9% of the sheet, in both the NL and FR editions. The pages
 > carrying the **DSO network tables and the tax block hold no text at all** —
 > only the month name. Those are most of a Belgian all-in price, so no snapshot
 > can be assembled and the extractor fails loud rather than billing an
 > incomplete figure. `current/` is overwrite-in-place and Ecofix publishes no
 > dated archive, so there is no text-era card to fall back to.
+>
+> **The September 2026 cards repeat it.** All three were republished on 31
+> August 2026 at 11:19 GMT and are still page images, so this has now survived a
+> month boundary and looks like a change to their publishing pipeline rather
+> than a one-off accident. Measured on the same three files, against the copies
+> committed here when Ecofix was added in May:
+>
+> | Card | 2 May 2026 | 31 August 2026 |
+> | --- | ---: | ---: |
+> | `EL_Ecofix_Flexy_NL.pdf` | 5 pages, 11 851 chars | 5 pages, 344 chars |
+> | `EL_Ecofix_Motion_NL.pdf` | 5 pages, 11 406 chars | 5 pages, 174 chars |
+> | `EL_Ecofix_Motion_Online_NL.pdf` | 4 pages, 8 400 chars | 4 pages, 158 chars |
+>
+> The page counts are unchanged and only the text layer is gone. The PDF
+> metadata shows the producing tool changed from Canva to pypdf, which is what a
+> rasterise-and-reassemble step in a publishing pipeline looks like.
+>
+> **Ecofix has been contacted** about this, with the figures above, asking them
+> to export the cards with their text layer again. Nothing here needs to change
+> if they do: the integration decides from the card it just downloaded, so
+> support resumes on the next refresh with no update on your side.
 >
 > The extractor will not OCR them. Reading dense numeric tables printed with
 > Belgian comma decimals is where OCR is least reliable, and a single misread

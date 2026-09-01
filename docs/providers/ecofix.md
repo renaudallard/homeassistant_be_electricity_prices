@@ -20,9 +20,10 @@ Related reading:
 ## Overview
 
 > [!WARNING]
-> **Broken since the August 2026 card: the PDFs are page images.** Every page of
-> every product is now a single full-page image covering 99.9% of the sheet, in
-> both the NL and FR editions. Measured on the August cards:
+> **Broken since the August 2026 card, and the September card repeats it: the
+> PDFs are page images.** Every page of every product is now a single full-page
+> image covering 99.9% of the sheet, in both the NL and FR editions. Measured on
+> the August cards:
 >
 > | card | page 1 | pages 2-5 |
 > | --- | --- | --- |
@@ -38,6 +39,28 @@ Related reading:
 > Motion   (0,1000 x Belpex 15M) + 1,1020    inj (0,0884 x Belpex 15M) - 0,5000
 > Flexy    (BELPEX-RLP-M * 0,1020) + 1,2000  inj (BELPEX-SPP-M * 0,0884) - 0,5000
 > ```
+>
+> **September 2026 changed nothing.** All three NL cards were republished on 31
+> August 2026 at 11:19 GMT and came back as page images again, so the shape has
+> now survived a month boundary. Against the copies committed here when the
+> supplier was added, `tests/fixtures/ecofix_*.pdf` (2 May 2026, `Producer:
+> Canva`), the whole-document totals are:
+>
+> | card | 2 May 2026 | 31 August 2026 |
+> | --- | ---: | ---: |
+> | `EL_Ecofix_Flexy_NL` | 5 pages, 11 851 chars | 5 pages, 344 chars |
+> | `EL_Ecofix_Motion_NL` | 5 pages, 11 406 chars | 5 pages, 174 chars |
+> | `EL_Ecofix_Motion_Online_NL` | 4 pages, 8 400 chars | 4 pages, 158 chars |
+>
+> Same page counts, about 97% of the text gone, and `Producer` changed from
+> Canva to pypdf with the creation dates dropped. That is what a
+> rasterise-and-reassemble step added to a publishing pipeline looks like, which
+> is why this reads as a pipeline change rather than a one-month accident.
+>
+> Ecofix has been contacted with these figures, asking them to export the cards
+> with their text layer again. No change here is needed if they do: the
+> unreadable signal is derived per fetch, not from a stored flag, so support
+> resumes on the next refresh.
 >
 > What is gone is the whole regulated side — the DSO network tables and the tax
 > block — which is most of a Belgian all-in price, so `parse_snapshot` fails
