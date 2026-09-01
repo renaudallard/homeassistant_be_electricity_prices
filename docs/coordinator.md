@@ -46,7 +46,7 @@ await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
 `entry.runtime_data` is assigned *after* `async_config_entry_first_refresh` returns (`__init__.py:177`). During that very first refresh `runtime_data` is HA's `UNDEFINED` sentinel, not this coordinator. Two guards depend on this:
 
-- `_save_persistent` reads `runtime_data` defensively (`coordinator.py:1096`) and only skips the write when it has been explicitly assigned to a *different* `BePricesCoordinator`. It must not skip during first refresh (when the attribute is `UNDEFINED`), or the first snapshot would never persist.
+- `_save_persistent` reads `runtime_data` defensively (`coordinator.py:1104`) and only skips the write when it has been explicitly assigned to a *different* `BePricesCoordinator`. It must not skip during first refresh (when the attribute is `UNDEFINED`), or the first snapshot would never persist.
 - `async_unload_entry` (`__init__.py:322`) reads `runtime_data` with `getattr(..., None)` and an `isinstance` check, because a setup that raised before line 172 leaves the sentinel in place; a bare `is not None` test would pass and then `AttributeError` on `._supplier_tuple`, masking the real setup failure.
 
 Never read `entry.runtime_data` as "this coordinator" during first refresh.
@@ -55,8 +55,8 @@ Never read `entry.runtime_data` as "this coordinator" during first refresh.
 
 `__init__` snapshots two things at construction time so later reload races resolve correctly:
 
-- `self._supplier_tuple` (`coordinator.py:881`): the `(supplier, contract, region)` triple frozen at build time. `async_unload_entry` (`__init__.py:322`) and `_save_persistent` (`coordinator.py:1096`) target this *original* tuple even after an OptionsFlow edit has mutated `entry.data`, because HA mutates `entry.data` before firing the reload.
-- `self._entry_data_signature` (`coordinator.py:890`): a `frozenset` of every `entry.data` item, built by `_compute_data_signature` (`coordinator.py:983`). `_async_options_updated` (`__init__.py:417`) compares it against the current entry to skip a needless reload when only `entry.options` changed (an OptionsFlow no-op `options = {}` finalize). Every load-bearing field lives in `entry.data`, so an options-only delta is safe to ignore.
+- `self._supplier_tuple` (`coordinator.py:881`): the `(supplier, contract, region)` triple frozen at build time. `async_unload_entry` (`__init__.py:322`) and `_save_persistent` (`coordinator.py:1104`) target this *original* tuple even after an OptionsFlow edit has mutated `entry.data`, because HA mutates `entry.data` before firing the reload.
+- `self._entry_data_signature` (`coordinator.py:890`): a `frozenset` of every `entry.data` item, built by `_compute_data_signature` (`coordinator.py:991`). `_async_options_updated` (`__init__.py:417`) compares it against the current entry to skip a needless reload when only `entry.options` changed (an OptionsFlow no-op `options = {}` finalize). Every load-bearing field lives in `entry.data`, so an options-only delta is safe to ignore.
 
 Other important instance fields set in `__init__`:
 
@@ -68,13 +68,14 @@ Other important instance fields set in `__init__`:
 | `_spot_cache`, `_spot_cache_day`, `_spot_cache_includes_tomorrow` | today/tomorrow ENTSO-E curve cache; the curve itself is persisted as an outage fallback, the two markers are not | 337-339 |
 | `_historical_spots` | UTC-hour -> EUR/kWh for past hours, replayed for YTD; persisted | 343 |
 | `_historical_spot_quarters` | the same hours -> their individual 15-minute slots, for a floored feed-in formula only; persisted | 349 |
+| `daily_compare` | the last scheduled supplier ranking; persisted, so the potential-saving sensor keeps its figure across a restart instead of reading unknown until the next nightly sweep | 336 |
 | `_short_spot_days` | past days whose last spot fetch came back short of 20 h | 361 |
 | `_peak_kw`, `_peak_month` | Flanders monthly capacity peak (rolling max) | 368-369 |
 | `_last_error` | last human-readable failure, surfaced in `last_error` and Repairs | 374 |
 
 ### 1.4 Restoring from disk
 
-`async_load_persistent` (`coordinator.py:398`) runs before the first refresh and rehydrates `self._snapshot`, `_snapshot_fetched_at`, `_snapshot_probe_key`, the monthly peak, `_historical_spots` and `_historical_spot_quarters` from the Store. An hour carrying any impossible quarter loses the whole list, not the offending slot, because a short list would silently re-weight the hour's mean; its hourly value stays if that passed its own check, so the hour prices energy as it always did and credits feed-in off the mean the slots refine. Neither `STORAGE_VERSION` nor `_SNAPSHOT_SCHEMA_VERSION` moved for the new key: a version mismatch discards the whole blob, the load path reads named keys and ignores unknown ones, and a missing key simply refills. Two guards apply:
+`async_load_persistent` (`coordinator.py:398`) runs before the first refresh and rehydrates `self._snapshot`, `_snapshot_fetched_at`, `_snapshot_probe_key`, the monthly peak, `_historical_spots`, `_historical_spot_quarters` and `daily_compare` from the Store. An hour carrying any impossible quarter loses the whole list, not the offending slot, because a short list would silently re-weight the hour's mean; its hourly value stays if that passed its own check, so the hour prices energy as it always did and credits feed-in off the mean the slots refine. Neither `STORAGE_VERSION` nor `_SNAPSHOT_SCHEMA_VERSION` moved for the new key: a version mismatch discards the whole blob, the load path reads named keys and ignores unknown ones, and a missing key simply refills. Two guards apply:
 
 - **Tuple mismatch** (`coordinator.py:982`): if the persisted blob's stamped `(supplier, contract, region)` differs from the current entry, the snapshot and the historical spots are discarded (the peak is supplier-agnostic and kept). This handles a slow tick that saved a pre-OptionsFlow blob after the reload swapped the entry.
 - **Corrupt blob** (`coordinator.py:992`): a `KeyError`/`ValueError`/`TypeError` while decoding drops the cached snapshot and logs a warning; the next refresh repopulates.
@@ -83,7 +84,7 @@ Loading an offline boot from disk lets the entry serve last-known prices before 
 
 ## 2. The refresh path
 
-The base class calls `_async_update_data` (`coordinator.py:576`) every tick. It wraps `_update_body` (`coordinator.py:613`) and, on `UpdateFailed`, refreshes the stale-snapshot Repairs placeholder with the current `_last_error` before re-raising (`coordinator.py:613`). The body runs these steps in order.
+The base class calls `_async_update_data` (`coordinator.py:584`) every tick. It wraps `_update_body` (`coordinator.py:621`) and, on `UpdateFailed`, refreshes the stale-snapshot Repairs placeholder with the current `_last_error` before re-raising (`coordinator.py:621`). The body runs these steps in order.
 
 ```
 _update_body (coordinator.py:566)
@@ -285,7 +286,7 @@ The current-slot sensors (`current_price`, `energy_component`, `network_componen
 
 ## 5. Slot selection and the live price table
 
-`_build_hourly` (`coordinator.py:996`) builds the UTC-keyed `hourly` table:
+`_build_hourly` (`coordinator.py:1004`) builds the UTC-keyed `hourly` table:
 
 - **Dynamic** (`coordinator.py:826`): one breakdown per spot returned by ENTSO-E; the table's resolution follows the spot grid (15-minute for quarter-hourly suppliers).
 - **Static/TOU/Impact** (`coordinator.py:887`): iterate UTC from local midnight to the start of the day after tomorrow, one slot per clock hour, so DST seams keep the wall-clock gap correct (47 slots spring-forward, 49 fall-back, 48 otherwise). The local-midnight anchor makes `today_min`/`today_max`/`today_average` cover the full local day rather than "now to midnight".
@@ -359,7 +360,7 @@ A reading below midnight's is a reset when the meter published a `last_reset` la
 
 ### 7.2 Injection credit and regime math
 
-Per-regime day math is documented at `ytd_cost.py:320`. For `compensation` the injection nets 1:1 against consumption (per band when bi) and the YTD energy term is clamped at zero at the end (`ytd_cost.py:488`): surplus injection past consumption is forfeited by most Walloon suppliers, and the clamp happens once over the whole YTD so a day of over-injection can offset a later high-consumption day. For `injection` each side uses its own rate and the total can dip negative; the running `current_year_cost` value dipping day-over-day is why the sensor is `TOTAL`, not `TOTAL_INCREASING` (`sensor.py:449`). The pre-clamp energy term is exported to the `energy_ytd_raw_eur` attribute (via the optional `breakdown` out-dict `_compute_current_year_cost` fills on the live tick), alongside the YTD/today kWh totals and the fees floor, so a sensor resting on the compensation zero-floor (negative raw energy, value `= fees_ytd_eur`) can be told apart from a stalled meter input (a today kWh that never grows). The historical injection rate is chosen by `_historical_injection_rate` (`coordinator.py:858`), which mirrors the live priority (per-slot TOU, then `factor*spot+base`, then the monthly `current`) so the YTD credit and the live `injection_price` sensor never diverge.
+Per-regime day math is documented at `ytd_cost.py:320`. For `compensation` the injection nets 1:1 against consumption (per band when bi) and the YTD energy term is clamped at zero at the end (`ytd_cost.py:488`): surplus injection past consumption is forfeited by most Walloon suppliers, and the clamp happens once over the whole YTD so a day of over-injection can offset a later high-consumption day. For `injection` each side uses its own rate and the total can dip negative; the running `current_year_cost` value dipping day-over-day is why the sensor is `TOTAL`, not `TOTAL_INCREASING` (`sensor.py:449`). The pre-clamp energy term is exported to the `energy_ytd_raw_eur` attribute (via the optional `breakdown` out-dict `_compute_current_year_cost` fills on the live tick), alongside the YTD/today kWh totals and the fees floor, so a sensor resting on the compensation zero-floor (negative raw energy, value `= fees_ytd_eur`) can be told apart from a stalled meter input (a today kWh that never grows). The historical injection rate is chosen by `_historical_injection_rate` (`coordinator.py:866`), which mirrors the live priority (per-slot TOU, then `factor*spot+base`, then the monthly `current`) so the YTD credit and the live `injection_price` sensor never diverge.
 
 ### 7.3 Why YTD stays hourly for quarter-hourly contracts
 
@@ -443,11 +444,11 @@ Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`snapshot_store.py:100`
 
 ### 9.1 Forcing a refresh
 
-`async_force_refresh` (`coordinator.py:923`) backs the `be_electricity_prices.refresh` service (`__init__.py:362`). It sets the one-shot `_force_refresh` flag (honoured by `_self_is_fresh` and `_shared_is_fresh`), clears the spot cache, and pops the shared snapshot and negative-fetch rows so a sibling on the same tuple also re-fetches. It **also drops this tuple's per-month archive rows** via `_drop_monthly_rows` (`coordinator.py:923`): the YTD walk runs Jan 1 through today inclusive, so the current delivery month sits in that cache too, with no TTL. Without the drop, a supplier that re-issues the current month's card under the same month (Eneco publishes corrected volumes) went on being billed from the first card fetched for the life of the HA process, and this service — whose whole purpose is picking up a corrected card — could not clear it. It intentionally keeps `self._snapshot`/`_snapshot_fetched_at` so a transient failure during the forced refresh doesn't blank the entry. `reset_monthly_peak` (`coordinator.py:923`), behind the diagnostic Reset-peak button, drops `_peak_kw` and persists immediately.
+`async_force_refresh` (`coordinator.py:931`) backs the `be_electricity_prices.refresh` service (`__init__.py:362`). It sets the one-shot `_force_refresh` flag (honoured by `_self_is_fresh` and `_shared_is_fresh`), clears the spot cache, and pops the shared snapshot and negative-fetch rows so a sibling on the same tuple also re-fetches. It **also drops this tuple's per-month archive rows** via `_drop_monthly_rows` (`coordinator.py:931`): the YTD walk runs Jan 1 through today inclusive, so the current delivery month sits in that cache too, with no TTL. Without the drop, a supplier that re-issues the current month's card under the same month (Eneco publishes corrected volumes) went on being billed from the first card fetched for the life of the HA process, and this service — whose whole purpose is picking up a corrected card — could not clear it. It intentionally keeps `self._snapshot`/`_snapshot_fetched_at` so a transient failure during the forced refresh doesn't blank the entry. `reset_monthly_peak` (`coordinator.py:931`), behind the diagnostic Reset-peak button, drops `_peak_kw` and persists immediately.
 
 ## 10. Persistence
 
-`_save_persistent` (`coordinator.py:1096`) writes `entry_supplier`/`entry_contract`/`entry_region` (the frozen `_supplier_tuple`, not live `entry.data`), the peak, the serialized snapshot, and `historical_spots` pruned to the current YTD window. Two guards prevent a slow tick from clobbering a reloaded entry's state:
+`_save_persistent` (`coordinator.py:1104`) writes `entry_supplier`/`entry_contract`/`entry_region` (the frozen `_supplier_tuple`, not live `entry.data`), the peak, the serialized snapshot, and `historical_spots` pruned to the current YTD window. Two guards prevent a slow tick from clobbering a reloaded entry's state:
 
 - **Identity guard** (`coordinator.py:948`): skip when `runtime_data` is a *different* coordinator (must not skip during first refresh, when it is `UNDEFINED`).
 - **Tuple guard** (`coordinator.py:968`): skip when live `entry.data` has drifted from `_supplier_tuple` (the OptionsFlow window where `entry.data` changed but `runtime_data` is still swapping).

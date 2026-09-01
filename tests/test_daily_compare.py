@@ -30,8 +30,10 @@ from __future__ import annotations
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -314,3 +316,75 @@ async def test_year_to_date_works_on_a_stored_ranking(hass: Any) -> None:
     assert result["step_id"] == "compare_all_result"
     # Having run, the pass does not offer itself again.
     assert "with_ytd" not in result["data_schema"].schema
+
+
+async def test_the_sweep_persists_its_ranking_at_once(
+    hass: HomeAssistant,
+) -> None:
+    """The sweep runs once a day and takes minutes. Left for the next hourly
+    tick to write, a restart inside that window threw away a ranking that had
+    just been built."""
+    from custom_components.be_electricity_prices.compare_flow import (
+        async_run_daily_compare,
+    )
+
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    saved: list[str] = []
+
+    class _Coord:
+        daily_compare: Any = None
+
+        def async_update_listeners(self) -> None:
+            saved.append("published")
+
+        async def _save_persistent(self) -> None:
+            saved.append("persisted")
+
+    coord = _Coord()
+    ranking = _result(
+        rows=(RankedRow(label="Mine", annual=1400.0, is_own=True),), own=1400.0
+    )
+    with patch(
+        "custom_components.be_electricity_prices.compare_flow._SweepEngine"
+    ) as engine:
+        engine.return_value.run_full_sweep = AsyncMock(return_value=ranking)
+        await async_run_daily_compare(hass, entry, coord)
+
+    assert coord.daily_compare is ranking
+    assert saved == ["published", "persisted"]
+
+
+async def test_a_failed_save_does_not_undo_the_published_ranking(
+    hass: HomeAssistant,
+) -> None:
+    """The ranking is live in this session either way and the next tick writes
+    it again, so a Store that will not write must not cost the run its
+    result."""
+    from custom_components.be_electricity_prices.compare_flow import (
+        async_run_daily_compare,
+    )
+
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+
+    class _Coord:
+        daily_compare: Any = None
+
+        def async_update_listeners(self) -> None:
+            return None
+
+        async def _save_persistent(self) -> None:
+            raise OSError("disk full")
+
+    coord = _Coord()
+    ranking = _result(
+        rows=(RankedRow(label="Mine", annual=1400.0, is_own=True),), own=1400.0
+    )
+    with patch(
+        "custom_components.be_electricity_prices.compare_flow._SweepEngine"
+    ) as engine:
+        engine.return_value.run_full_sweep = AsyncMock(return_value=ranking)
+        await async_run_daily_compare(hass, entry, coord)
+
+    assert coord.daily_compare is ranking

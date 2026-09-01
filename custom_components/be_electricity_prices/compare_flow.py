@@ -443,6 +443,15 @@ async def async_run_daily_compare(
         return
     coord.daily_compare = result
     coord.async_update_listeners()
+    # Persist now rather than waiting for the next hourly tick to carry it.
+    # The sweep runs once a day, so a restart inside that window would lose a
+    # ranking that had just cost a couple of minutes of fetching to build.
+    # Failing to write must not undo the publish above: the ranking is live in
+    # this session either way, and the next tick saves it again.
+    try:
+        await coord._save_persistent()
+    except Exception:  # noqa: BLE001 - a timer job, not a user action
+        _LOGGER.exception("Could not persist the ranking for %s", entry.title)
 
 
 class _SweepEngine:

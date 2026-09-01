@@ -4044,3 +4044,133 @@ async def test_backfill_falling_back_does_not_relabel_the_live_price(
     assert coord._spot_source == "entsoe", (
         "the backfill's source must not overwrite the live curve's"
     )
+
+
+def _ranking(ran_at: datetime) -> Any:
+    from custom_components.be_electricity_prices.compare_quote import (
+        DailyCompare,
+        RankedRow,
+    )
+
+    return DailyCompare(
+        rows=(
+            RankedRow(label="Mine", annual=1400.0, ytd=900.0, is_own=True),
+            RankedRow(label="Cheaper", annual=1150.0, ytd=740.0),
+            RankedRow(label="Unpriced", annual=None, status="card unreadable"),
+        ),
+        own=1400.0,
+        priced=2,
+        total=3,
+        ran_at=ran_at,
+    )
+
+
+async def test_potential_saving_survives_a_restart(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The ranking is produced once a day by a sweep that takes minutes. Held
+    only in memory it was gone at the next restart, and the sensor read
+    unknown until the following night's run."""
+    freezer.move_to("2026-09-01 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coord
+    ran_at = datetime(2026, 9, 1, 3, 17, tzinfo=UTC)
+    coord.daily_compare = _ranking(ran_at)
+
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+
+    fresh = BePricesCoordinator(hass, entry)
+    assert fresh.daily_compare is None, "a cold coordinator starts empty"
+    with patch.object(fresh._store, "async_load", AsyncMock(return_value=saved)):
+        await fresh.async_load_persistent()
+
+    restored = fresh.daily_compare
+    assert restored is not None
+    assert restored.saving == pytest.approx(250.0)
+    assert restored.ran_at == ran_at
+    assert restored.priced == 2 and restored.total == 3
+    # Every field, including the ones the sensor never shows: the options page
+    # re-serves these rows, and a row short of a field it reads is what
+    # crashed that page once before.
+    assert [r.ytd for r in restored.rows] == [900.0, 740.0, None]
+    assert [r.status for r in restored.rows] == ["", "", "card unreadable"]
+    assert [r.is_own for r in restored.rows] == [True, False, False]
+
+
+async def test_a_ranking_for_a_different_contract_is_not_restored(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A ranking is priced against the household's own contract. After a
+    supplier swap it compares them to one they no longer hold, and the sensor
+    reads as a live figure either way, so it must not come back."""
+    freezer.move_to("2026-09-01 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coord
+    coord.daily_compare = _ranking(datetime(2026, 9, 1, 3, 17, tzinfo=UTC))
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+
+    saved["entry_supplier"] = "eneco"  # the swap the gate exists for
+    fresh = BePricesCoordinator(hass, entry)
+    with patch.object(fresh._store, "async_load", AsyncMock(return_value=saved)):
+        await fresh.async_load_persistent()
+
+    assert fresh.daily_compare is None
+
+
+async def test_a_half_written_ranking_is_dropped_whole(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A ranking is a comparison between its rows. Restoring the readable half
+    would re-rank the household against a subset and name a cheapest that only
+    won because its rivals were dropped."""
+    freezer.move_to("2026-09-01 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    blob = {
+        "entry_supplier": entry.data["supplier"],
+        "entry_contract": entry.data["contract"],
+        "entry_region": entry.data["region"],
+        "daily_compare": {
+            "ran_at": "2026-09-01T03:17:00+00:00",
+            "own": 1400.0,
+            "priced": 2,
+            "total": 3,
+            "rows": [
+                {
+                    "label": "Mine",
+                    "annual": 1400.0,
+                    "ytd": None,
+                    "status": "",
+                    "is_own": True,
+                },
+                {
+                    "label": "Cheaper",
+                    "annual": "not-a-number",
+                    "ytd": None,
+                    "status": "",
+                    "is_own": False,
+                },
+            ],
+        },
+    }
+    with patch.object(coord._store, "async_load", AsyncMock(return_value=blob)):
+        await coord.async_load_persistent()
+
+    assert coord.daily_compare is None

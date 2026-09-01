@@ -562,6 +562,14 @@ class BePricesCoordinator(
                 dropped_spots,
                 self.entry.title,
             )
+        # Same tuple gate as the snapshot and the spots: a ranking is priced
+        # against the household's own contract, so one computed before an
+        # OptionsFlow swap compares them to a contract they no longer hold.
+        # That is worse than showing nothing, because the sensor reads as a
+        # live figure either way.
+        stored_compare = stored.get("daily_compare")
+        if isinstance(stored_compare, dict) and not tuple_mismatch:
+            self.daily_compare = _daily_compare_from_dict(stored_compare)
         # The SPP profile is the same national curve regardless of supplier, so
         # it is restored irrespective of the entry-tuple gate above.
         spp = stored.get("spp_weights")
@@ -1183,6 +1191,8 @@ class BePricesCoordinator(
             payload["spot_cache"] = {
                 h.isoformat(): v for h, v in self._spot_cache.items()
             }
+        if self.daily_compare is not None:
+            payload["daily_compare"] = _daily_compare_to_dict(self.daily_compare)
         if self._spp_weights and self._spp_weights_year is not None:
             payload["spp_weights"] = {
                 "year": self._spp_weights_year,
@@ -1197,3 +1207,99 @@ class BePricesCoordinator(
 
 
 # ---- snapshot serialization for the HA Store ----------------------------------
+
+
+# ---- daily-comparison serialization -------------------------------------------
+
+
+def _daily_compare_to_dict(result: Any) -> dict[str, Any]:
+    """Flatten one scheduled ranking for the Store.
+
+    Read off the object rather than imported and isinstance-checked, because
+    ``compare_quote`` reaches back into this module and importing it at module
+    scope would close an import cycle. Every ``RankedRow`` field is written,
+    the ones the sensor never shows included: the options page re-serves these
+    rows to skip a two-minute sweep, and a row restored short of a field it
+    reads is the shape that crashed that page once already.
+    """
+    return {
+        "ran_at": result.ran_at.isoformat(),
+        "own": result.own,
+        "priced": result.priced,
+        "total": result.total,
+        "rows": [
+            {
+                "label": row.label,
+                "annual": row.annual,
+                "ytd": row.ytd,
+                "status": row.status,
+                "is_own": row.is_own,
+            }
+            for row in result.rows
+        ],
+    }
+
+
+def _daily_compare_from_dict(blob: dict[str, Any]) -> Any | None:
+    """Rebuild a ranking from the Store, or ``None`` if it is not intact.
+
+    All or nothing on purpose. A ranking is a comparison between its rows, so
+    restoring the readable half would silently re-rank the household against a
+    subset and name a "cheapest" that only won because its rivals were
+    dropped. There is no partial answer worth publishing here.
+
+    No age limit. The sweep already keeps serving yesterday's ranking when a
+    run fails, the sensor states ``last_run`` beside the figure, and the next
+    scheduled run replaces it, so an old ranking is a dated answer rather than
+    a wrong one.
+    """
+    from .compare_quote import DailyCompare, RankedRow
+
+    ran_at_raw = blob.get("ran_at")
+    if not isinstance(ran_at_raw, str):
+        return None
+    try:
+        ran_at = datetime.fromisoformat(ran_at_raw)
+    except ValueError:
+        return None
+    if ran_at.tzinfo is None:
+        ran_at = ran_at.replace(tzinfo=UTC)
+    own = blob.get("own")
+    if own is not None and not isinstance(own, (int, float)):
+        return None
+    priced, total = blob.get("priced"), blob.get("total")
+    if not isinstance(priced, int) or not isinstance(total, int):
+        return None
+    raw_rows = blob.get("rows")
+    if not isinstance(raw_rows, list):
+        return None
+    rows: list[Any] = []
+    for raw in raw_rows:
+        if not isinstance(raw, dict):
+            return None
+        label, annual = raw.get("label"), raw.get("annual")
+        ytd, status, is_own = raw.get("ytd"), raw.get("status", ""), raw.get("is_own")
+        if not isinstance(label, str) or not isinstance(status, str):
+            return None
+        if annual is not None and not isinstance(annual, (int, float)):
+            return None
+        if ytd is not None and not isinstance(ytd, (int, float)):
+            return None
+        if not isinstance(is_own, bool):
+            return None
+        rows.append(
+            RankedRow(
+                label=label,
+                annual=None if annual is None else float(annual),
+                ytd=None if ytd is None else float(ytd),
+                status=status,
+                is_own=is_own,
+            )
+        )
+    return DailyCompare(
+        rows=tuple(rows),
+        own=None if own is None else float(own),
+        priced=priced,
+        total=total,
+        ran_at=ran_at,
+    )
