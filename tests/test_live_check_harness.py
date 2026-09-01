@@ -1378,3 +1378,58 @@ def test_a_live_suppliers_failure_is_untouched(
     lc._record("bolt/bolt_variable/flanders: parse", False, "ExtractorError: boom")
     lc._record("spot/fallback: check crashed", False, "RuntimeError: boom")
     assert all(not c.expected for c in lc.CHECKS)
+
+
+@pytest.mark.parametrize(
+    ("today", "valid_until", "fails", "note"),
+    [
+        pytest.param(
+            date(2026, 9, 1),
+            date(2026, 8, 31),
+            False,
+            "1st of the month, card ran to the end of last month",
+            id="grace-first-day",
+        ),
+        pytest.param(
+            date(2026, 9, 5),
+            date(2026, 8, 31),
+            False,
+            "last day of the grace window",
+            id="grace-last-day",
+        ),
+        pytest.param(
+            date(2026, 9, 6),
+            date(2026, 8, 31),
+            True,
+            "past the window, the supplier really is late",
+            id="past-the-window",
+        ),
+        pytest.param(
+            date(2026, 9, 1),
+            date(2026, 6, 30),
+            True,
+            "expired in JUNE: stale, and the allowance must not hide it",
+            id="stale-since-june",
+        ),
+    ],
+)
+def test_expiry_check_forgives_only_a_card_that_just_lapsed(
+    today: date,
+    valid_until: date,
+    fails: bool,
+    note: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The card-period lag check already forgave a supplier publishing a few
+    days late; the expiry check did not, so on the 1st of every month every
+    card written to run to the end of the previous month failed. Seven did on
+    2026-09-01. The allowance is scoped to a card that lapsed at the end of
+    LAST month so it cannot cover one that has been stale since June."""
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(today))
+    lc._expect_card_period(
+        "cociter/cociter_variable",
+        "cociter_variable",
+        _snap("2026-08", valid_until),
+    )
+    expired = [c for c in lc.CHECKS if c.label.endswith("card has not expired")]
+    assert bool(expired) is fails, note

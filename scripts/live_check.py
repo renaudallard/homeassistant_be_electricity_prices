@@ -2486,11 +2486,25 @@ def _expect_card_period(prefix: str, contract_id: str, snap: object) -> None:
 
     valid_until = getattr(snap, "valid_until", None)
     if valid_until is not None and valid_until < today:
-        _expect(
-            f"{prefix}: card has not expired",
-            False,
-            f"{marker}valid_until {valid_until} passed on {today}",
+        # The lag check below forgives a supplier that has not published yet
+        # in the first few days of a month; this one did not, so on the 1st
+        # every card written to run to the end of the previous month tripped
+        # it. Seven did on 2026-09-01 (Cociter, EnergyVision, Mega pro),
+        # which is a monthly false alarm, not a signal.
+        #
+        # Scoped to a card that expired at the END OF LAST MONTH: one that
+        # lapsed earlier really is stale and keeps failing, so the allowance
+        # cannot hide a card that has been rotting since June.
+        last_month_end = today.replace(day=1) - timedelta(days=1)
+        just_published_late = (
+            today.day <= _PERIOD_GRACE_DAYS and valid_until >= last_month_end
         )
+        if not just_published_late:
+            _expect(
+                f"{prefix}: card has not expired",
+                False,
+                f"{marker}valid_until {valid_until} passed on {today}",
+            )
 
     label = str(getattr(snap, "publication_label", "") or "")
     parsed = _label_month(label)
