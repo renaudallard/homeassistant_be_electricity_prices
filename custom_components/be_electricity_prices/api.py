@@ -33,6 +33,8 @@ requirements.
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 import math
 import re
 from datetime import UTC, datetime, timedelta
@@ -46,13 +48,22 @@ from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped
 
 import aiohttp
 
-from .const import ENTSOE_BASE_URL, ENTSOE_BE_DOMAIN
+from homeassistant.util import dt as dt_util
+
+from .const import (
+    ENERGY_CHARTS_BE_ZONE,
+    ENERGY_CHARTS_URL,
+    ENTSOE_BASE_URL,
+    ENTSOE_BE_DOMAIN,
+)
 from .providers._pdf import error_text
 
 _NS = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
 
 # Strip the credential from any error text that may surface to the user.
 _TOKEN_RE = re.compile(r"(securityToken=)[^&\s'\"]+")
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class EntsoeAuthError(Exception):
@@ -369,3 +380,151 @@ def _resolution_to_timedelta(resolution: str) -> timedelta | None:
     if resolution == "PT30M":
         return timedelta(minutes=30)
     return None
+
+
+# ---- keyless day-ahead fallback ----------------------------------------------
+
+
+class EnergyChartsClient:
+    """Keyless BE day-ahead client, used only when ENTSO-E is unreachable.
+
+    Same contract as ``EntsoeClient.fetch_day_ahead``: slot-start (UTC) ->
+    EUR/kWh, aggregated to the hour unless ``quarter_hourly``. The upstream
+    publishes EUR/MWh on whatever grid the auction cleared on, so a pre-2025
+    range comes back hourly and a current one quarter-hourly, exactly as the
+    ENTSO-E path already handles.
+
+    Unlike ENTSO-E this returns ONE series, never a PT60M and a PT15M for the
+    same period, so there is no resolution-blending hazard to guard against
+    here -- the hour is simply the mean of whatever slots fall inside it.
+    """
+
+    def __init__(self, session: aiohttp.ClientSession) -> None:
+        self._session = session
+
+    async def fetch_day_ahead(
+        self,
+        period_start: datetime,
+        period_end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> dict[datetime, float]:
+        """Fetch BE day-ahead prices in EUR/kWh for the given UTC window."""
+        # The endpoint windows on the LOCAL (Brussels) day and takes plain
+        # dates, inclusive at both ends. Callers hand us local-midnight
+        # anchored UTC instants, so resolve the local days they span and
+        # trim the response back to the exact window afterwards. `end` is
+        # exclusive for us, so step back inside it before taking its date.
+        start_day = dt_util.as_local(period_start).date()
+        end_day = dt_util.as_local(period_end - timedelta(seconds=1)).date()
+        if end_day < start_day:
+            return {}
+        params = {
+            "bzn": ENERGY_CHARTS_BE_ZONE,
+            "start": start_day.isoformat(),
+            "end": end_day.isoformat(),
+        }
+        try:
+            async with self._session.get(
+                ENERGY_CHARTS_URL,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                if resp.status >= 400:
+                    body = await resp.text()
+                    raise EntsoeError(f"energy-charts HTTP {resp.status}: {body[:200]}")
+                payload = await resp.text()
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise EntsoeError(f"energy-charts: {error_text(err)}") from err
+
+        return await asyncio.to_thread(
+            _parse_energy_charts, payload, period_start, period_end, quarter_hourly
+        )
+
+
+def _parse_energy_charts(
+    body: str,
+    period_start: datetime,
+    period_end: datetime,
+    quarter_hourly: bool,
+) -> dict[datetime, float]:
+    """Parse an energy-charts /price payload into slot-start -> EUR/kWh.
+
+    A range the upstream holds no data for answers 200 with a PLAIN-TEXT body
+    ("end must be >= start"), not JSON and not an error status, so the decode
+    failure is the only thing standing between that and an uncaught exception
+    out of the coordinator tick.
+    """
+    try:
+        doc = json.loads(body)
+    except json.JSONDecodeError as err:
+        raise EntsoeError(f"energy-charts: non-JSON response: {body[:120]!r}") from err
+    if not isinstance(doc, dict):
+        raise EntsoeError("energy-charts: response was not an object")
+    seconds = doc.get("unix_seconds")
+    prices = doc.get("price")
+    if not isinstance(seconds, list) or not isinstance(prices, list):
+        raise EntsoeError("energy-charts: response carried no price series")
+
+    # Bucket per slot, then mean. Same shape as the ENTSO-E parser so the
+    # two sources are interchangeable to every caller.
+    sums: dict[datetime, float] = {}
+    counts: dict[datetime, int] = {}
+    for raw_when, raw_price in zip(seconds, prices):
+        if not isinstance(raw_when, (int, float)) or not isinstance(
+            raw_price, (int, float)
+        ):
+            # A gap is published as null. Skipping leaves the slot absent,
+            # which every caller already reads as "no data for that slot".
+            continue
+        when = datetime.fromtimestamp(float(raw_when), UTC)
+        if not period_start <= when < period_end:
+            # The request is day-granular, so the response overhangs the
+            # asked-for window whenever it does not start at local midnight.
+            continue
+        slot = (
+            when if quarter_hourly else when.replace(minute=0, second=0, microsecond=0)
+        )
+        sums[slot] = sums.get(slot, 0.0) + float(raw_price) / 1000.0
+        counts[slot] = counts.get(slot, 0) + 1
+    return {slot: sums[slot] / counts[slot] for slot in sums}
+
+
+async def fetch_day_ahead_or_fallback(
+    api_key: str,
+    session: aiohttp.ClientSession,
+    period_start: datetime,
+    period_end: datetime,
+    *,
+    quarter_hourly: bool = False,
+) -> tuple[dict[datetime, float], str]:
+    """Day-ahead prices plus the source that supplied them.
+
+    ENTSO-E stays the source of record; energy-charts answers only when
+    ENTSO-E could not. An ``EntsoeAuthError`` is deliberately NOT caught: a
+    rejected or exhausted token has to keep raising its Repairs card, and
+    quietly papering over it with a keyless source is how an entry runs for
+    months on a credential its owner never renews.
+
+    Not used by the config flow's key check. That check exists to tell an
+    invalid key from an unreachable server, and a fallback that answered for
+    it would let a user finalise an entry whose key never worked.
+    """
+    client = EntsoeClient(api_key, session)
+    try:
+        return await client.fetch_day_ahead(
+            period_start, period_end, quarter_hourly=quarter_hourly
+        ), "entsoe"
+    except EntsoeAuthError:
+        raise
+    except EntsoeError as err:
+        _LOGGER.debug("ENTSO-E unavailable (%s); trying the keyless fallback", err)
+
+    prices = await EnergyChartsClient(session).fetch_day_ahead(
+        period_start, period_end, quarter_hourly=quarter_hourly
+    )
+    if not prices:
+        # Nothing usable from either side. Raise rather than return empty so
+        # the caller's existing EntsoeError path decides what to degrade to.
+        raise EntsoeError("ENTSO-E unavailable and the fallback returned no prices")
+    return prices, "energy-charts"

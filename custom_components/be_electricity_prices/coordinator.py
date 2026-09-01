@@ -188,6 +188,11 @@ class CoordinatorData:
     # fall back to "treat as valid".
     snapshot_valid_until: date | None = None
     last_error: str = ""
+    # Which source supplied the day-ahead curve behind these prices:
+    # "entsoe" (source of record) or "energy-charts" (the keyless fallback,
+    # used only while ENTSO-E is unreachable). Not an error, so deliberately
+    # kept out of last_error, which drives the staleness Repairs card.
+    spot_source: str = "entsoe"
     # This month's running peak, as measured. NOT floored at the regulated
     # minimum: it is a measurement, and the floor is a billing rule that
     # belongs on the quantity below.
@@ -340,6 +345,11 @@ class BePricesCoordinator(
         # snapshot until the next successful fetch lands.
         self._force_refresh = False
         self._spot_cache: dict[datetime, float] = {}
+        # Which source last supplied the live curve: "entsoe" normally,
+        # "energy-charts" when the keyless fallback answered for it. Surfaced
+        # on current_price so a user can tell a fallback price from a
+        # source-of-record one rather than having to trust it blindly.
+        self._spot_source: str = "entsoe"
         self._spot_cache_day: date | None = None
         self._spot_cache_includes_tomorrow = False
         # UTC-hour -> EUR/kWh spot prices for past hours, used to
@@ -888,6 +898,7 @@ class BePricesCoordinator(
             snapshot_stale=stale,
             snapshot_valid_until=self._snapshot.valid_until,
             last_error=self._last_error,
+            spot_source=self._spot_source,
             monthly_peak_kw=self._peak_kw,
             monthly_peak_month=self._peak_month,
             capacity_billed_peak_kw=billed_peak,

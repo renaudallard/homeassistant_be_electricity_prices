@@ -37,7 +37,7 @@ below map onto these three layers plus the taxes:
 ```
 
 `all_in = (energy + distribution + transport + levies) * (1 + VAT)`
-(README.md:222). The coordinator selects one `contract` and one `dso` sub-area
+(README.md:223). The coordinator selects one `contract` and one `dso` sub-area
 per config entry (`providers/base.py:478`).
 
 ## Terms
@@ -47,8 +47,8 @@ per config entry (`providers/base.py:478`).
 | AIEG | Small Walloon DSO, one of the five Wallonia distribution operators offered in the config flow. The source carries only the key and display label, not a spelled-out name. | `const.py:58`, `const.py:113` |
 | AIESH | Small Walloon DSO (Association Intercommunale d'Electricite du Sud-Hainaut). | `const.py:59`, `const.py:114` |
 | ArchivedSnapshotFetcher | Optional per-supplier callable that fetches the published card for a specific `(year, month)` so past consumption bills at that month's real rate; returns `None` when the supplier has no accessible archive (overwrite-in-place or API-only suppliers). | `providers/base.py:525`, `providers/base.py:547` |
-| all-in price | The single EUR/kWh the integration exposes: energy + distribution + transport + levies, times (1 + VAT). VAT spreads uniformly so the three component sensors sum to `current_price`. | README.md:222, README.md:233 |
-| Belpex / eSpot_15 / EPEX / EPEX DA | Names Belgian suppliers print for the wholesale day-ahead spot their dynamic formula multiplies. The integration always sources this curve from ENTSO-E, not the branded feed; the labels are only documentation of what a card references. | `providers/base.py:148`, README.md:225 |
+| all-in price | The single EUR/kWh the integration exposes: energy + distribution + transport + levies, times (1 + VAT). VAT spreads uniformly so the three component sensors sum to `current_price`. | README.md:223, README.md:234 |
+| Belpex / eSpot_15 / EPEX / EPEX DA | Names Belgian suppliers print for the wholesale day-ahead spot their dynamic formula multiplies. The integration always sources this curve from ENTSO-E, not the branded feed; the labels are only documentation of what a card references. | `providers/base.py:148`, README.md:228 |
 | bi-hourly meter (`METER_BI`) | Meter with two registers, peak (day) and off-peak (night). Drives the `peak` / `offpeak` energy and distribution columns. | `const.py:215`, `providers/base.py:110` |
 | billing grid (quarter-hourly vs hourly) | The time resolution a contract is billed on. `DynamicRates.quarter_hourly` selects it: hourly by default (Eneco, Frank, Luminus, Mega, TotalEnergies), native 15-minute for suppliers whose cards multiply the 15-minute spot (Bolt Dynamisch, Cociter, EBEM, Ecofix, Ecopower Dynamische Burgerstroom, energie.be, Energy Knights Agilior Online, EnergyVision, Engie, OCTA+). YTD billing stays hourly because HA only retains hourly long-term statistics. | `providers/base.py:143`, `providers/base.py:147` |
 | Brugel | Brussels energy regulator. Sets the OSP annual fee tiers carried on the Sibelga overlay. | `const.py:183`, `providers/base.py:365` |
@@ -56,7 +56,7 @@ per config entry (`providers/base.py:478`).
 | capacity tariff | Flanders-only network charge: `billed_peak_kw * capacity_eur_per_kw_year / 12`, where `billed_peak_kw` is `mean(max(monthly_peak, VREG_CAPACITY_FLOOR_KW))` over the last 12 months and one monthly peak is the highest quarter-hour offtake of that month (the floor applies per month, before the mean)`. | `const.py:343`, `providers/base.py:363`, README.md:54 |
 | compensation regime (`SOLAR_REGIME_COMPENSATION`) | Walloon "compteur qui tourne a l'envers": injection nets against consumption. Only for installs certified before 2024-01-01, valid until 2030-12-31. Adds the DSO prosumer fee (per kVA) and, for some suppliers, a supplier PV forfait. | `const.py:376`, `const.py:376` |
 | Contract | A dataclass for one product a supplier sells: `id`, `label`, `kind` (a `TariffKind`), the `regions` it is published in, and `spot_indexed_injection`. | `providers/base.py:95` |
-| current_year_cost | Sensor: running bill since Jan 1, computed from HA's recorder per day (fixed/variable) or per hour (TOU/dynamic/spot-monthly), with per-month archived cards and pro-rated annual fees. | README.md:56, README.md:255 |
+| current_year_cost | Sensor: running bill since Jan 1, computed from HA's recorder per day (fixed/variable) or per hour (TOU/dynamic/spot-monthly), with per-month archived cards and pro-rated annual fees. | README.md:56, README.md:256 |
 | projected_year_cost | Sensor: roughly what a year on this contract costs, priced in one pass at today's tariffs against the entry's own metered yearly volume. An indication, not a forecast. No value when the rate is a formula over an index that does not exist yet, nor for a netted meter with too little feed-in history to net a year against. | README.md, `Always created` table |
 | CWaPE | Walloon energy regulator. Defines the Tarif Impact 3-band hour-of-day schedule and the compensation-regime transition dates. | `const.py:169`, `providers/base.py:338` |
 | CWaPE bands (pic / medium / eco) | The three hour-of-day bands of Tarif Impact, every day of the week: pic 17:00-22:00 (highest), medium 07:00-11:00 + 22:00-01:00, eco 01:00-07:00 + 11:00-17:00 (lowest). Both the energy side (`ImpactRates`) and the DSO side (`DsoOverlay.distribution_pic/medium/eco`) carry them. | `providers/base.py:345`, `providers/base.py:345` |
@@ -66,9 +66,9 @@ per config entry (`providers/base.py:478`).
 | DSO overlay | The `DsoOverlay` for the one sub-area a snapshot's `dsos` dict is keyed by the user's `CONF_DSO`; the coordinator picks it and feeds `compute_breakdown`. | `providers/base.py:727`, `providers/base.py:727` |
 | DSO tariff mode (`CONF_DSO_TARIFF_MODE`) | DSO-side billing mode orthogonal to the meter type: `simple`, `bi_horaire`, or `impact` (Wallonia only). Falls back automatically when the DSO publishes no Impact rates. | `const.py:302`, `const.py:302` |
 | dynamic contract (`DynamicRates`, kind `dynamic`) | Energy = `factor * spot + base` per price slot against the ENTSO-E BE day-ahead spot. Requires an ENTSO-E API key. | `providers/base.py:204`, README.md:50 |
-| dynamic meter (`METER_DYNAMIC`) | Smart-meter mode where consumption is priced against the live spot / hour-of-day; dynamic and TOU contracts lock the meter picker to this. | `const.py:216`, README.md:308 |
+| dynamic meter (`METER_DYNAMIC`) | Smart-meter mode where consumption is priced against the live spot / hour-of-day; dynamic and TOU contracts lock the meter picker to this. | `const.py:216`, README.md:309 |
 | energy contribution | Federal levy (cotisation energie), EUR/kWh, part of the tax overlay. | `providers/base.py:465` |
-| energy fund | Flemish Energiefonds, billed as EUR/month (not per kWh); 0 outside Flanders and 0 for domiciled Flemish customers. | `providers/base.py:510`, README.md:254 |
+| energy fund | Flemish Energiefonds, billed as EUR/month (not per kWh); 0 outside Flanders and 0 for domiciled Flemish customers. | `providers/base.py:510`, README.md:255 |
 | ENTSO-E day-ahead spot | The Belgian day-ahead wholesale price from the ENTSO-E Transparency Platform, the `spot` term in every dynamic and spot-indexed-injection formula. Fetched from `ENTSOE_BASE_URL` for BE domain `ENTSOE_BE_DOMAIN`. | `const.py:402`, `const.py:402` |
 | EnergyRates | Union of the six energy-formula dataclasses a snapshot can carry: `FixedRates | VariableRates | DynamicRates | TimeOfUseRates | ImpactRates | SpotMonthlyRates`. | `providers/base.py:257` |
 | exclusive-night circuit (`METER_EXCLUSIVE_NIGHT`) | A separate meter that only registers during DSO off-peak hours (electric water heater, night-storage heater), billed at the supplier's `exclusive_night` rate. Configured as a second config entry. | `const.py:223`, `const.py:223` |
@@ -81,7 +81,7 @@ per config entry (`providers/base.py:478`).
 | Fluvius sub-areas (8) | Antwerpen, Halle-Vilvoorde, Imewo, Intergem (Midden-Vlaanderen), Iveka (Kempen), Limburg, West, Zenne-Dijle. Stored verbatim in `CONF_DSO`, so the keys are stable forever. | `const.py:145`, `const.py:145` |
 | injection (feed-in) | Solar energy fed back to the grid; compensated via `InjectionRates`. Residential injection is exempt from VAT, so its values are NEVER VAT-inclusive regardless of the consumption snapshot's `vat_rate`; professional cards tax it at 21% and set `vat_applies`, which makes `apply_vat` gross the injection rates too. | `providers/base.py:812`, `providers/base.py:812` |
 | InjectionRates | Injection compensation dataclass: a monthly `current` indicative and/or the hourly `factor * spot + base` formula, plus optional per-TOU-slot triplet. Values may go negative at low spot. | `providers/base.py:135`, `providers/base.py:135` |
-| injection regime (`SOLAR_REGIME_INJECTION`) | Post-2024 Walloon installs and Flemish smart meters: each injected kWh is credited at the supplier's own injection price. Creates the `injection_price` sensor. | `const.py:377`, README.md:359 |
+| injection regime (`SOLAR_REGIME_INJECTION`) | Post-2024 Walloon installs and Flemish smart meters: each injected kWh is credited at the supplier's own injection price. Creates the `injection_price` sensor. | `const.py:377`, README.md:360 |
 | ImpactRates | Wallonia Tarif Impact energy dataclass, three rates on the CWaPE `pic`/`medium`/`eco` bands (no weekend exception). Requires an SMR3 meter and DSO Impact opt-in. | `providers/base.py:365` |
 | meter types | The four `CONF_METER` values: `mono`, `bi`, `dynamic`, `exclusive_night`. | `const.py:177`, `const.py:177` |
 | mono meter (`METER_MONO`) | Single-register meter, one rate around the clock (`single`). | `const.py:214`, `providers/base.py:108` |
@@ -117,7 +117,7 @@ per config entry (`providers/base.py:478`).
 | TimeOfUseRates (kind `tou`) | Three-slot hour-of-day energy contract (peak / transition / offpeak) with a product-dependent `weekend_rule`. Requires an SMR3 meter. | `providers/base.py:284` |
 | TOU slots (peak / transition / offpeak) | The weekday TOU schedule shared across products: peak 07:00-11:00 + 17:00-22:00, transition 11:00-17:00 + 22:00-01:00, offpeak 01:00-07:00. | `providers/base.py:198` |
 | transport | High-voltage transmission (TSO) charge in EUR/kWh on the DSO overlay, part of the network component. | `providers/base.py:322` |
-| TSO (transmission system operator) | Elia, the operator of the Belgian high-voltage grid whose transmission charge is the `transport` term. Distinct from the DSO (local distribution). | `providers/base.py:510`, README.md:251 |
+| TSO (transmission system operator) | Elia, the operator of the Belgian high-voltage grid whose transmission charge is the `transport` term. Distinct from the DSO (local distribution). | `providers/base.py:510`, README.md:252 |
 | TTL | Time-based cache expiry (24 h) used for suppliers with no usable probe (DATS 24, energie.be, Engie, Luminus). | README.md:209, `providers/base.py:516` |
 | TVAC / VAT convention (`vat_rate`) | TVAC = "TVA comprise" (VAT included). `vat_rate = 0.0` means the snapshot's prices are ALREADY VAT-inclusive (the convention for cards that print TVAC, e.g. Cociter, Eneco); a snapshot shipping ex-VAT numbers sets the rate explicitly (e.g. Ecopower cards are HTVA so `0.06`). Per-kWh values are then grossed in `_finalize_breakdown`, and the fixed/annual fees, which no pricing path grosses, are baked by `apply_vat`. | `pricing.py:532`, `providers/base.py:812`, README.md:166 |
 | variable contract (`VariableRates`, kind `variable`) | Monthly-reindexed EUR/kWh: `current` effective rate, optional `peak`/`offpeak`/`exclusive_night`, a `formula` string, and `yearly_fixed_fee`. | `providers/base.py:112` |

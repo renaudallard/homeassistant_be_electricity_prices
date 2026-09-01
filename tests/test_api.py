@@ -27,6 +27,8 @@
 
 from __future__ import annotations
 
+import json
+import pathlib
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
@@ -39,6 +41,8 @@ from custom_components.be_electricity_prices.api import (
     EntsoeError,
     _parse_iso_utc,
     _MAX_PERIOD_SLOTS,
+    _parse_energy_charts,
+    fetch_day_ahead_or_fallback,
     parse_day_ahead_xml,
 )
 
@@ -362,3 +366,160 @@ def test_out_of_range_point_position_cannot_blow_the_slot_cap() -> None:
     assert len(parsed) <= _MAX_PERIOD_SLOTS(timedelta(minutes=60))
     # The legitimate leading point still parses.
     assert parsed[datetime(2026, 4, 29, 22, 0, tzinfo=UTC)] == pytest.approx(0.010)
+
+
+# ---- keyless day-ahead fallback --------------------------------------------------
+
+
+class _Resp:
+    def __init__(self, status: int, body: str) -> None:
+        self.status = status
+        self._body = body
+
+    async def text(self) -> str:
+        return self._body
+
+
+class _CM:
+    def __init__(self, resp: _Resp | None = None, exc: Exception | None = None) -> None:
+        self._resp = resp
+        self._exc = exc
+
+    async def __aenter__(self) -> _Resp:
+        if self._exc is not None:
+            raise self._exc
+        assert self._resp is not None
+        return self._resp
+
+    async def __aexit__(self, *_: object) -> bool:
+        return False
+
+
+class _FakeSession:
+    """Dispatches on URL so one session can serve both legs of the fallback."""
+
+    def __init__(self, entsoe: Exception, fallback_body: str) -> None:
+        self._entsoe = entsoe
+        self._fallback_body = fallback_body
+
+    def get(self, url: str, **_: object) -> _CM:
+        if "entsoe" in url:
+            if isinstance(self._entsoe, EntsoeAuthError):
+                # A rejected token is an HTTP 401 on the wire.
+                return _CM(resp=_Resp(401, ""))
+            return _CM(exc=aiohttp.ClientError("503 Service Unavailable"))
+        return _CM(resp=_Resp(200, self._fallback_body))
+
+
+def test_energy_charts_converts_mwh_to_kwh_and_aggregates_to_the_hour() -> None:
+    """Same contract as the ENTSO-E parser: EUR/kWh keyed by slot start, and
+    an hour is the mean of the quarters inside it. Verified against the NEMO's
+    own published aggregates, which are plain means of their quarters."""
+    body = json.dumps(
+        {
+            "unix_seconds": [1788127200, 1788128100, 1788129000, 1788129900],
+            "price": [200.0, 100.0, 100.0, 0.0],
+        }
+    )
+    start = datetime(2026, 8, 30, 22, 0, tzinfo=UTC)
+    end = datetime(2026, 8, 31, 22, 0, tzinfo=UTC)
+
+    hourly = _parse_energy_charts(body, start, end, False)
+    assert hourly == {datetime(2026, 8, 30, 22, 0, tzinfo=UTC): 0.1}
+
+    quarters = _parse_energy_charts(body, start, end, True)
+    assert quarters[datetime(2026, 8, 30, 22, 0, tzinfo=UTC)] == 0.2
+    assert quarters[datetime(2026, 8, 30, 22, 45, tzinfo=UTC)] == 0.0
+
+
+def test_energy_charts_rejects_a_plain_text_body() -> None:
+    """A range the upstream holds no data for answers 200 with a PLAIN-TEXT
+    body ("end must be >= start"), not JSON and not an error status. Without
+    the decode guard that is an uncaught exception out of the coordinator
+    tick instead of the EntsoeError its caller already handles."""
+    with pytest.raises(EntsoeError, match="non-JSON"):
+        _parse_energy_charts(
+            "end must be >= start",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 2, tzinfo=UTC),
+            False,
+        )
+
+
+def test_energy_charts_skips_a_null_slot_rather_than_zeroing_it() -> None:
+    """A gap is published as null. Dropping the slot leaves it absent, which
+    every caller reads as "no data"; coercing it to 0.0 would bill a free
+    hour."""
+    body = json.dumps(
+        {"unix_seconds": [1788127200, 1788128100], "price": [100.0, None]}
+    )
+    out = _parse_energy_charts(
+        body, datetime(2026, 1, 1, tzinfo=UTC), datetime(2030, 1, 1, tzinfo=UTC), True
+    )
+    assert len(out) == 1
+
+
+def test_energy_charts_trims_the_response_to_the_requested_window() -> None:
+    """The request is day-granular but the window is not, so the response
+    overhangs it whenever it does not start at local midnight."""
+    body = json.dumps(
+        {"unix_seconds": [1788127200, 1788130800], "price": [100.0, 200.0]}
+    )
+    out = _parse_energy_charts(
+        body,
+        datetime(2026, 8, 30, 23, 0, tzinfo=UTC),
+        datetime(2026, 8, 31, 22, 0, tzinfo=UTC),
+        True,
+    )
+    assert list(out) == [datetime(2026, 8, 30, 23, 0, tzinfo=UTC)]
+
+
+async def test_fallback_answers_when_entsoe_is_unreachable() -> None:
+    """A transient ENTSO-E failure hands over to the keyless source, and the
+    caller is told which one answered."""
+    body = json.dumps({"unix_seconds": [1788127200], "price": [100.0]})
+    session = _FakeSession(entsoe=EntsoeError("503"), fallback_body=body)
+    prices, source = await fetch_day_ahead_or_fallback(
+        "key",
+        session,  # type: ignore[arg-type]
+        datetime(2026, 8, 30, 22, 0, tzinfo=UTC),
+        datetime(2026, 8, 31, 22, 0, tzinfo=UTC),
+    )
+    assert source == "energy-charts"
+    assert prices == {datetime(2026, 8, 30, 22, 0, tzinfo=UTC): 0.1}
+
+
+async def test_fallback_never_masks_a_rejected_key() -> None:
+    """EntsoeAuthError must propagate. A rejected or exhausted token has to
+    keep raising its Repairs card: answering from a keyless source instead is
+    how an entry runs for months on a credential nobody renews."""
+    session = _FakeSession(entsoe=EntsoeAuthError("rejected"), fallback_body="{}")
+    with pytest.raises(EntsoeAuthError):
+        await fetch_day_ahead_or_fallback(
+            "key",
+            session,  # type: ignore[arg-type]
+            datetime(2026, 8, 30, 22, 0, tzinfo=UTC),
+            datetime(2026, 8, 31, 22, 0, tzinfo=UTC),
+        )
+
+
+def test_key_validation_does_not_use_the_fallback() -> None:
+    """The config flow's key check must keep calling EntsoeClient directly.
+
+    Its whole job is to tell an invalid key from an unreachable server. A
+    fallback answering for it would report a dead token as working and let a
+    user finalise an entry whose every refresh then fails -- the failure would
+    surface days later as a Repairs card nobody connects to setup.
+
+    Asserted on the source rather than by driving the flow because what is
+    under test is which client the function reaches for, and a behavioural
+    test would pass just as well if someone swapped it for the wrapper and
+    ENTSO-E happened to be up.
+    """
+    source = pathlib.Path(
+        "custom_components/be_electricity_prices/flow_schemas.py"
+    ).read_text()
+    start = source.index("async def _validate_entsoe_key")
+    body = source[start : source.index("\ndef ", start)]
+    assert "EntsoeClient(" in body
+    assert "fetch_day_ahead_or_fallback" not in body

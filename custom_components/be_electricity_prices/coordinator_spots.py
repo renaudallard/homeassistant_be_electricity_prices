@@ -40,8 +40,8 @@ import logging
 
 from .api import (
     EntsoeAuthError,
-    EntsoeClient,
     EntsoeError,
+    fetch_day_ahead_or_fallback,
 )
 from .const import (
     CONF_API_KEY,
@@ -162,6 +162,7 @@ class _SpotsMixin:
     _historical_spot_quarters: dict[datetime, list[float]]
     _spot_cache: dict[datetime, float]
     _spot_cache_day: date | None
+    _spot_source: str
     _spot_cache_includes_tomorrow: bool
     _short_spot_days: dict[date, datetime]
     _spp_weights: Any
@@ -292,7 +293,6 @@ class _SpotsMixin:
             missing_ranges.append((range_start, cur))
         if not missing_ranges:
             return
-        client = EntsoeClient(api_key, self._session)
         # ``quarter_hourly`` asks for the same grid the contract settles on,
         # exactly as the live fetch does. ENTSO-E publishes Belgium as two
         # products, a PT60M and a PT15M series for the same delivery period,
@@ -312,9 +312,15 @@ class _SpotsMixin:
                 start_utc = dt_util.start_of_local_day(chunk_start).astimezone(UTC)
                 end_utc = dt_util.start_of_local_day(chunk_end).astimezone(UTC)
                 try:
-                    prices = await client.fetch_day_ahead(
-                        start_utc, end_utc, quarter_hourly=quarter_hourly
+                    prices, source = await fetch_day_ahead_or_fallback(
+                        api_key,
+                        self._session,
+                        start_utc,
+                        end_utc,
+                        quarter_hourly=quarter_hourly,
                     )
+                    if source != "entsoe":
+                        self._spot_source = source
                 except (EntsoeError, EntsoeAuthError) as err:
                     _LOGGER.warning(
                         "ENTSO-E historical fetch failed for %s..%s: %s",
@@ -386,7 +392,6 @@ class _SpotsMixin:
         ):
             return self._spot_cache
 
-        client = EntsoeClient(api_key, self._session)
         # Anchor both endpoints on local midnight so the fetched UTC
         # window matches the actual local-day hour count. A naive
         # ``end = start + timedelta(days=N)`` adds 24 UTC hours and
@@ -403,7 +408,9 @@ class _SpotsMixin:
         # them (Engie Dynamic); everyone else gets the hourly aggregate.
         snap = self._snapshot
         quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
-        prices = await client.fetch_day_ahead(start, end, quarter_hourly=quarter_hourly)
+        prices, self._spot_source = await fetch_day_ahead_or_fallback(
+            api_key, self._session, start, end, quarter_hourly=quarter_hourly
+        )
         self._spot_cache = prices
         self._spot_cache_day = local_today
         # Flag what the response actually carries, not what we asked

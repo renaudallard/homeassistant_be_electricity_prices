@@ -401,6 +401,20 @@ VREG_CAPACITY_FLOOR_KW: Final = 2.5
 ENTSOE_BASE_URL: Final = "https://web-api.tp.entsoe.eu/api"
 ENTSOE_BE_DOMAIN: Final = "10YBE----------2"
 
+# Keyless day-ahead fallback for the Belgian bidding zone, used only when
+# ENTSO-E itself is unreachable. Fraunhofer ISE's energy-charts republishes
+# the cleared SDAC result; for BE the series is CC BY 4.0 from
+# Bundesnetzagentur | SMARD.de, and that attribution is a licence condition,
+# not a courtesy (it is carried in the README and the sensor attribution).
+# Verified against Nord Pool, the NEMO that ran the auction: identical on
+# every one of the 96 daily slots across four days, negative prices included.
+ENERGY_CHARTS_URL: Final = "https://api.energy-charts.info/price"
+ENERGY_CHARTS_BE_ZONE: Final = "BE"
+ENERGY_CHARTS_ATTRIBUTION: Final = (
+    "Day-ahead fallback: energy-charts.info, CC BY 4.0 from "
+    "Bundesnetzagentur | SMARD.de"
+)
+
 # Spot-price grid resolution. ENTSO-E publishes the Belgian day-ahead
 # curve at 15-minute granularity since the SDAC 15-min MTU go-live
 # (2025-10-01). The integration aggregates to hourly by default and keeps

@@ -49,7 +49,7 @@ from collections.abc import Awaitable, Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
@@ -1673,6 +1673,53 @@ async def _check_mega_professional(
     )
 
 
+async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
+    """The keyless day-ahead fallback still answers for Belgium.
+
+    This is the one source that has to work on the day ENTSO-E does not, so
+    leaving it unexercised until then is how it rots unnoticed. Checked on
+    its shape rather than its values: a full local day of slots, all inside
+    the publishable band, on whichever grid the auction cleared on.
+    """
+    from custom_components.be_electricity_prices.api import EnergyChartsClient
+
+    # Brussels explicitly, as elsewhere in this script: run standalone, HA's
+    # dt_util default time zone is UTC, and asking it for "local midnight"
+    # would slice 22 hours out of the middle of two Belgian days.
+    label = "spot/fallback: energy-charts serves the Belgian day-ahead"
+    brussels = ZoneInfo("Europe/Brussels")
+    today = datetime.now(brussels).date()
+    tomorrow = today + timedelta(days=1)
+    # Local midnight to local midnight, so a DST day is still one whole day
+    # (adding 24 UTC hours to the start would cut or overrun it by an hour).
+    start = datetime(today.year, today.month, today.day, tzinfo=brussels).astimezone(
+        UTC
+    )
+    end = datetime(
+        tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=brussels
+    ).astimezone(UTC)
+    try:
+        prices = await EnergyChartsClient(session).fetch_day_ahead(start, end)
+    except Exception as err:  # noqa: BLE001 - any failure is the finding
+        _record(label, False, f"{type(err).__name__}: {err}", kind="catalog")
+        return
+    # 23/24/25 hours: a DST boundary day is a real local day, not a fault.
+    if not 23 <= len(prices) <= 25:
+        _record(
+            label, False, f"got {len(prices)} hourly slots for today", kind="catalog"
+        )
+        return
+    bad = [v for v in prices.values() if not -1.0 <= v <= 5.0]
+    _record(
+        label,
+        not bad,
+        f"{len(bad)} slot(s) outside the publishable band, e.g. {bad[:3]}"
+        if bad
+        else "",
+        kind="catalog",
+    )
+
+
 async def _check_card_freshness(
     session: aiohttp.ClientSession, modules: dict[str, types.ModuleType]
 ) -> None:
@@ -2790,6 +2837,7 @@ async def _run() -> int:
             # a card we still resolve.
             try:
                 await _check_card_freshness(session, modules)
+                await _check_spot_fallback(session)
             except Exception as err:  # noqa: BLE001
                 _record(
                     "_freshness: probe crashed",

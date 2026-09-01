@@ -64,7 +64,7 @@ periodEnd    = YYYYMMDDhhmm  (UTC)
 securityToken = <api key>
 ```
 
-`_fmt` (`api.py:342`) converts the caller's datetimes to UTC and formats them as
+`_fmt` (`api.py:353`) converts the caller's datetimes to UTC and formats them as
 `%Y%m%d%H%M`, the compact stamp ENTSO-E expects. The request carries a 30-second
 total timeout (`api.py:111`).
 
@@ -86,6 +86,42 @@ Two exception types are defined (`api.py:58`, `api.py:62`):
   curve too, so an outage spanning a restart is survivable. It tears the tick
   down only when no cache on hand still covers today.
 
+### The keyless fallback
+
+`fetch_day_ahead_or_fallback` (`api.py:493`) tries ENTSO-E first and, on
+`EntsoeError` only, re-asks `EnergyChartsClient` (`api.py:388`). It returns the
+prices *and* the source that supplied them, which reaches the `current_price`
+sensor as `spot_source`.
+
+Three properties are load-bearing:
+
+- **`EntsoeAuthError` is deliberately not caught.** A rejected or exhausted
+  token has to keep raising its Repairs card; answering from a keyless source
+  instead is how an entry runs for months on a credential nobody renews.
+- **The config flow's key check does not use it** (`flow_schemas.py:901` calls
+  `EntsoeClient` directly). That check exists to tell an invalid key from an
+  unreachable server, and a fallback answering for it would let a user finalise
+  an entry whose key never worked. A test asserts on the source of that
+  function to keep it that way.
+- **One series, so no blending hazard.** ENTSO-E publishes BE as a PT60M *and*
+  a PT15M series for the same period and the parser must not mix them;
+  energy-charts returns whichever grid the auction cleared on and nothing else,
+  so an hour is simply the mean of the slots inside it.
+
+The endpoint takes plain dates on the local (Brussels) day, inclusive at both
+ends, so the client resolves the local days the UTC window spans and trims the
+response back afterwards. A range it holds no data for answers **200 with a
+plain-text body** (`end must be >= start`), not JSON, which the parser rejects
+as `EntsoeError` rather than letting a decode error escape. Gaps arrive as
+`null` and are skipped, leaving the slot absent -- which every caller already
+reads as "no data" -- rather than coerced to a free hour.
+
+Measured before adoption: identical to Nord Pool (the NEMO that ran the
+auction) on all 96 daily slots across four days including days with 7 and 25
+negative slots; 100 slots on the DST fall-back day and 92 on spring-forward;
+a full month in one request with zero nulls; history back to 2023, which is
+what lets it serve the year-to-date backfill as well as the live curve.
+
 Two subtleties are load-bearing:
 
 - `TimeoutError` is caught explicitly alongside `aiohttp.ClientError`
@@ -97,8 +133,8 @@ Two subtleties are load-bearing:
 - Credential redaction. `aiohttp` client errors stringify with the full request
   URL, which carries `securityToken=<api_key>`, and that message reaches
   user-visible surfaces (the `current_price` `last_error` attribute, the
-  `snapshot_stale` Repairs card, the HA log). `_redact` (`api.py:73`) replaces
-  the literal key and applies `_TOKEN_RE` (`api.py:55`) to scrub the token from
+  `snapshot_stale` Repairs card, the HA log). `_redact` (`api.py:84`) replaces
+  the literal key and applies `_TOKEN_RE` (`api.py:64`) to scrub the token from
   any URL text before the error is raised.
 
 ### Why `defusedxml`
@@ -117,7 +153,7 @@ stdlib parser the payload expands and parsing continues, so a test written
 against an external entity would have passed either way and proved nothing.
 `defusedxml` rejects hostile constructs with `DefusedXmlException`, which is not
 a `ParseError` subclass, so `parse_day_ahead_xml` catches it separately and wraps
-it as `EntsoeError` (`api.py:62`) so a hostile payload surfaces as a categorised
+it as `EntsoeError` (`api.py:73`) so a hostile payload surfaces as a categorised
 error instead of an unhandled exception out of the coordinator tick.
 
 ### The SPP download never touches the loop
@@ -149,13 +185,13 @@ runtime always requests a window that includes today, and the BE zone always
 publishes today's curve, so a document carrying zero matching data really means
 the request was refused. `parse_day_ahead_xml` detects the acknowledgement root
 (`api.py:180`) and raises `EntsoeAuthError` with a best-effort reason extracted
-from the document's `Reason` block by `_ack_reason` (`api.py:325`).
+from the document's `Reason` block by `_ack_reason` (`api.py:336`).
 
 ### Resolution handling: PT60M vs PT15M and aggregation
 
 ENTSO-E publishes the Belgian curve at 15-minute granularity since the SDAC
 15-minute MTU go-live (2025-10-01; see the note at `const.py:268`). The parser
-handles three resolutions via `_resolution_to_timedelta` (`api.py:364`):
+handles three resolutions via `_resolution_to_timedelta` (`api.py:375`):
 
 | Token | Step |
 | --- | --- |
@@ -238,13 +274,13 @@ sub-hour slot, with the explicit positions used as a floor (`api.py:231`).
 
 ### Timezone handling
 
-`_parse_iso_utc` (`api.py:346`) parses each `timeInterval` boundary with
+`_parse_iso_utc` (`api.py:357`) parses each `timeInterval` boundary with
 `datetime.fromisoformat` (after normalising a trailing `Z`). A44 timestamps are
 UTC by spec, but if a document ever omits the zone, a naive value is treated as
 UTC rather than the HA host's local time (`api.py:352`). Everything in this
 module works in UTC; conversion to Europe/Brussels local time (and the DST-aware
 day boundaries) happens in the coordinator and backfill, never here. A malformed
-timestamp is wrapped as `EntsoeError` (`api.py:62`) so the coordinator keeps
+timestamp is wrapped as `EntsoeError` (`api.py:73`) so the coordinator keeps
 serving cached spots instead of the `ValueError` escaping uncategorised.
 
 ### Unit conversion and return shape
@@ -266,10 +302,10 @@ A malformed `price.amount` or `position` raises `EntsoeError`
 ### How the coordinator drives this client (caching and dedup)
 
 `api.py` itself is stateless. All caching lives in the coordinator, which
-constructs a fresh `EntsoeClient` per call (`api.py:66`,
+constructs a fresh `EntsoeClient` per call (`api.py:77`,
 `coordinator_spots.py:280`). Two paths use it:
 
-- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:371`). Windows the request
+- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:377`). Windows the request
   on the local (Europe/Brussels) day so a 00:00 to 02:00 local query does not
   drop yesterday's UTC tail; anchors both endpoints on local midnight converted
   to UTC so the fetched window matches the actual local-day hour count, which
@@ -285,7 +321,7 @@ constructs a fresh `EntsoeClient` per call (`api.py:66`,
   `_spot_cache_day` stays `None` across a restart, so the first tick still
   fetches, and slots that no longer cover today or tomorrow are dropped on load.
   `_fallback_spots` is what reads it when a fetch fails.
-- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:207`).
+- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:208`).
   Ensures `self._historical_spots` covers every hour of the local days in a range,
   fetching only the missing spans. It considers a day "present" when at least 20
   of its 24 hours are cached (`coordinator_spots.py:350`), tolerating both the

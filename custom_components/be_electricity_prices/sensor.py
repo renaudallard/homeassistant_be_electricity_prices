@@ -46,6 +46,7 @@ from homeassistant.util import dt as dt_util
 
 from .binary_sensor import _has_tomorrow
 from .const import (
+    ENERGY_CHARTS_ATTRIBUTION,
     CONF_CONTRACT_END_DATE,
     CONF_DAILY_COMPARE,
     CONF_REGION,
@@ -625,6 +626,15 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
                 "snapshot_age_hours": round(data.snapshot_age_hours, 2),
                 "snapshot_stale": data.snapshot_stale,
                 "last_error": data.last_error,
+                "spot_source": data.spot_source,
+                # CC BY 4.0 obliges us to credit the fallback's source
+                # wherever its data is shown, so the credit rides with the
+                # prices and appears only while the fallback is in use.
+                **(
+                    {"attribution": ENERGY_CHARTS_ATTRIBUTION}
+                    if data.spot_source == "energy-charts"
+                    else {}
+                ),
                 "cheapest_4h_today": cheapest,
                 "most_expensive_4h_today": most_expensive,
                 "today": today,

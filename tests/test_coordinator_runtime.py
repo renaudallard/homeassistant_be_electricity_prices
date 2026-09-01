@@ -70,6 +70,28 @@ def _entry() -> MockConfigEntry:
     return make_entry()
 
 
+def _as_fallback(fake_fetch: Any) -> Any:
+    """Adapt a ``fetch_day_ahead``-shaped fake to the wrapper's signature.
+
+    The coordinator calls ``fetch_day_ahead_or_fallback`` now, not the client
+    directly, so presenting the fake as the ENTSO-E leg keeps each test
+    controlling exactly what it did before -- and keeps the real keyless
+    fallback off the network when the fake raises.
+    """
+
+    async def _wrapper(
+        _api_key: str,
+        _session: Any,
+        start: datetime,
+        end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> tuple[dict[datetime, float], str]:
+        return await fake_fetch(start, end, quarter_hourly=quarter_hourly), "entsoe"
+
+    return _wrapper
+
+
 async def test_ensure_historical_spots_anchors_on_local_day(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -102,9 +124,10 @@ async def test_ensure_historical_spots_anchors_on_local_day(
         return {}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-    ) as mock_client_cls:
-        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _as_fallback(_fake_fetch),
+    ):
         await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
 
     assert captured
@@ -204,9 +227,10 @@ async def test_ensure_historical_spots_requests_the_contract_grid(
             return {}
 
         with patch(
-            "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-        ) as cls:
-            cls.return_value.fetch_day_ahead = _fake_fetch
+            "custom_components.be_electricity_prices.coordinator_spots"
+            ".fetch_day_ahead_or_fallback",
+            _as_fallback(_fake_fetch),
+        ):
             await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
         return seen
 
@@ -260,9 +284,10 @@ async def test_ensure_historical_spots_stores_quarters_by_hour(
         return dict(ramp)
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-    ) as cls:
-        cls.return_value.fetch_day_ahead = _fake_fetch
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _as_fallback(_fake_fetch),
+    ):
         await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
 
     assert [k for k in coord._historical_spots if k.minute or k.second] == []
@@ -324,9 +349,10 @@ async def test_ensure_historical_spots_caches_quarters_for_a_floored_entry(
         return dict(ramp)
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-    ) as cls:
-        cls.return_value.fetch_day_ahead = _fake_fetch
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _as_fallback(_fake_fetch),
+    ):
         await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
 
     assert coord._historical_spot_quarters[hour] == [0.05, 0.15, 0.25, 0.35]
@@ -405,9 +431,10 @@ async def test_quarters_are_dropped_when_the_entry_stops_needing_them(
         coord._historical_spots = {hour: 0.20}
         coord._complete_spot_days = {date(2026, 1, 1)}
         with patch(
-            "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-        ) as cls:
-            cls.return_value.fetch_day_ahead = AsyncMock(return_value={})
+            "custom_components.be_electricity_prices.coordinator_spots"
+            ".fetch_day_ahead_or_fallback",
+            _as_fallback(AsyncMock(return_value={})),
+        ):
             await coord._ensure_historical_spots(
                 date(2026, 1, 1), date(2026, 1, 1), api_key
             )
@@ -458,9 +485,10 @@ async def test_a_complete_hourly_day_is_refetched_when_its_quarters_are_missing(
             }
 
         with patch(
-            "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-        ) as cls:
-            cls.return_value.fetch_day_ahead = _fake_fetch
+            "custom_components.be_electricity_prices.coordinator_spots"
+            ".fetch_day_ahead_or_fallback",
+            _as_fallback(_fake_fetch),
+        ):
             await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
             after_fill = calls
             # Now that the quarters are cached the day is covered again.
@@ -511,9 +539,10 @@ async def test_ensure_historical_spots_skips_permanently_short_day(
         return {start + timedelta(hours=h): 0.05 for h in range(5)}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-    ) as mock_client_cls:
-        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _as_fallback(_fake_fetch),
+    ):
         await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
         first = len(calls)
         assert date(2026, 1, 1) in coord._short_spot_days
@@ -561,9 +590,10 @@ async def test_ensure_historical_spots_backs_off_after_a_rejected_key(
             raise exc
 
         with patch(
-            "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-        ) as mock_client_cls:
-            mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+            "custom_components.be_electricity_prices.coordinator_spots"
+            ".fetch_day_ahead_or_fallback",
+            _as_fallback(_fake_fetch),
+        ):
             await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
             first = calls
             assert first > 0
@@ -605,9 +635,10 @@ async def test_ensure_historical_spots_records_and_skips_complete_days(
         return {start + timedelta(hours=h): 0.05 for h in range(24)}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-    ) as mock_client_cls:
-        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _as_fallback(_fake_fetch),
+    ):
         # First pass fetches to fill the empty day.
         await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
         assert len(calls) == 1
@@ -703,9 +734,10 @@ async def test_fetch_spot_prices_window_covers_local_day_on_dst_fallback(
         return {}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-    ) as mock_client_cls:
-        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _as_fallback(_fake_fetch),
+    ):
         await coord._fetch_spot_prices()
 
     # Local Oct 25 00:00 CEST = Oct 24 22:00 UTC; local Oct 26 00:00 CET
@@ -756,18 +788,20 @@ async def test_fetch_spot_prices_tomorrow_flag_follows_response_content(
     # Pre-publication tick: response carries today only -> flag stays
     # False so the next tick will retry.
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-    ) as mock_client_cls:
-        mock_client_cls.return_value.fetch_day_ahead = _fake_pre
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _as_fallback(_fake_pre),
+    ):
         await coord._fetch_spot_prices()
     assert coord._spot_cache_includes_tomorrow is False
 
     # The False flag forces the cache check to miss on the next call,
     # mirroring the next hourly coordinator tick.
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-    ) as mock_client_cls:
-        mock_client_cls.return_value.fetch_day_ahead = _fake_post
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _as_fallback(_fake_post),
+    ):
         await coord._fetch_spot_prices()
     assert coord._spot_cache_includes_tomorrow is True
 
@@ -780,9 +814,10 @@ async def test_fetch_spot_prices_tomorrow_flag_follows_response_content(
         return {}
 
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-    ) as mock_client_cls:
-        mock_client_cls.return_value.fetch_day_ahead = _fake_should_not_run
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _as_fallback(_fake_should_not_run),
+    ):
         result = await coord._fetch_spot_prices()
     assert fetch_calls == 0
     assert result == today_plus_tomorrow
@@ -820,9 +855,10 @@ async def test_fetch_spot_prices_uses_quarter_hourly_for_quarter_contract(
         energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True)
     )
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-    ) as mock_client_cls:
-        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _as_fallback(_fake_fetch),
+    ):
         await coord._fetch_spot_prices()
     assert captured["quarter_hourly"] is True
 
@@ -833,9 +869,10 @@ async def test_fetch_spot_prices_uses_quarter_hourly_for_quarter_contract(
         energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=False)
     )
     with patch(
-        "custom_components.be_electricity_prices.coordinator_spots.EntsoeClient"
-    ) as mock_client_cls:
-        mock_client_cls.return_value.fetch_day_ahead = _fake_fetch
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _as_fallback(_fake_fetch),
+    ):
         await coord._fetch_spot_prices()
     assert captured["quarter_hourly"] is False
 
@@ -3928,3 +3965,41 @@ async def test_fallback_spots_refuses_a_curve_that_cannot_price_today(
     coord._historical_spots = {yesterday: 0.90}
 
     assert coord._fallback_spots() == {}
+
+
+async def test_spot_source_records_which_source_answered(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The coordinator must carry the provenance of the curve it priced with.
+
+    A fallback price is still a real price, but a user has to be able to tell
+    it from a source-of-record one without reading the log, so it rides out to
+    the current_price sensor as spot_source rather than being folded into
+    last_error (which drives the staleness Repairs card)."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    assert coord._spot_source == "entsoe", "defaults to the source of record"
+
+    slot = datetime(2026, 8, 31, 6, 0, tzinfo=UTC)
+
+    async def _fallback_answered(
+        _key: str,
+        _session: Any,
+        _start: datetime,
+        _end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> tuple[dict[datetime, float], str]:
+        return {slot: 0.12}, "energy-charts"
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots"
+        ".fetch_day_ahead_or_fallback",
+        _fallback_answered,
+    ):
+        prices = await coord._fetch_spot_prices()
+
+    assert prices == {slot: 0.12}
+    assert coord._spot_source == "energy-charts"
