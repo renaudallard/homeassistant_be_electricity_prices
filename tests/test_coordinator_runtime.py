@@ -1685,11 +1685,17 @@ async def test_supply_ended_uses_the_local_date_not_utc(
 
 
 async def test_deprecated_supplier_issue_names_the_successor_in_both_regions(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """DATS 24 sold in Flanders and Wallonia, and EnergyVision is modelled in
     both, so a Walloon entry gets routed too. Before the Walloon card was
-    added this named a supplier the contract step then refused."""
+    added this named a supplier the contract step then refused.
+
+    What is under test is the regional successor routing, not the tense, so
+    the clock is pinned before DATS 24's end date. Without that this flips to
+    the ``_ended`` variant on 2026-09-01, exactly as the sibling coverage of
+    the two wordings warns."""
+    freezer.move_to("2026-08-06 12:00:00+02:00")
     for region in ("flanders", "wallonia"):
         entry = make_entry(
             supplier="dats24", contract="dats24_groen_variabel", region=region
