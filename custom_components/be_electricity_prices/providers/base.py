@@ -177,9 +177,9 @@ class VariableRates:
     formula_base_exclusive_night: float | None = None
     # Contractual ceiling on the ENERGY component, per meter type, on the same
     # basis as the rates above (TVAC on a residential card, HTVA on a
-    # professional one). Mega Cap is the product: "vous payez le minimum entre
-    # les prix variables mensuels et ce plafond", guaranteed a year from the
-    # start of supply. None on every card that caps nothing.
+    # professional one). Mega Cap was the product, retired in September 2026;
+    # the parser keys off the card's "plafond" sentence, not off the product.
+    # None on every card that caps nothing, which is all of them today.
     ceiling_single: float | None = None
     ceiling_peak: float | None = None
     ceiling_offpeak: float | None = None
@@ -257,7 +257,7 @@ class SpotMonthlyRates:
     factor_exclusive_night: float | None = None
     base_exclusive_night: float | None = None
     # The signing cohort's contractual ceiling on the ENERGY component, per
-    # meter. Mega Cap is the product, and its cap is cohort-scoped: "Le plafond
+    # meter. Mega Cap was the product, and its cap is cohort-scoped: "Le plafond
     # et la formule tarifaire sont garantis pour une duree de 1 an a compter du
     # debut de la fourniture ... valables pour tout contrat signe en 08/2026".
     # Converting a Cap cohort to this kind without carrying them dropped the

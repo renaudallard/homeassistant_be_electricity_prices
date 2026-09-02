@@ -30,7 +30,7 @@ Mega publishes monthly tariff cards under predictable filenames at:
     https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-<REGION>-<MMYYYY>-<SUFFIX>.pdf
 
 The MMYYYY rolls every month and the product SUFFIX (e.g. ``Smart0104``,
-``Smart2204-Fixed``, ``Cap0104``) carries an internal launch-date code
+``Smart2204-Fixed``, ``Cosy1306``) carries an internal launch-date code
 that drifts when Mega launches new product variants. To resolve a stable
 ``(contract, region)`` pair to its current PDF without hardcoding any
 suffix, the extractor scrapes the public listing page at
@@ -44,7 +44,7 @@ regional editions differ only by the ``-B2C-<REGION>-`` filename
 segment; parse_snapshot then re-checks the card's own region header so a
 wrong guess fails loud instead of mis-pricing.
 
-All eleven residential electricity products are registered. Mega
+All ten residential electricity products are registered. Mega
 serves all three regions (Flanders, Wallonia, Brussels) for every
 product except Off-peak Impact, which is Wallonia-only because it
 requires the CWaPE Tarif réseau IMPACT plus an SMR3 smart meter
@@ -204,7 +204,14 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         regions=frozenset({REGION_WALLONIA}),
     ),
     _ContractDef("mega_dynamic", "Mega Dynamic", "dynamic", "Dynamic"),
-    _ContractDef("mega_cap", "Mega Cap", "variable", "Mega Cap"),
+    # Mega discontinued "Mega Cap" (the "prix variable plafonne" product)
+    # with the September 2026 cards, residential and B2B together: the
+    # listing dropped the product block in all three regions and the CDN
+    # answers its September filename with the HTML stub it serves for a card
+    # it never published, while August's is still there. Only the tariff-type
+    # filter button is left on the listing, with no product behind it. Same
+    # treatment as Zen Fixed above; discover() re-surfaces it if Mega revives
+    # the product.
     # The professional editions. Mega publishes these to the same CDN but
     # never links them from the public listing, so they are addressed by
     # building the filename. Online Flex, Off-peak Flex and Off-peak Impact
@@ -270,14 +277,6 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "Dynamic",
         segment="B2B",
         file_family="Dynamic",
-    ),
-    _ContractDef(
-        "mega_pro_cap",
-        "Mega Cap (pro)",
-        "variable",
-        "Mega Cap",
-        segment="B2B",
-        file_family="Cap",
     ),
     _ContractDef(
         "mega_pro_zen_fixed",
@@ -520,10 +519,10 @@ async def _archive_pdf_url(
     target_mm = f"{year_month.month:02d}"
     historical_mmyyyy = f"{target_mm}{year_month.year}"
     new_url = mmyyyy_re.sub(f"-{historical_mmyyyy}-", current_url, count=1)
-    # Cap0106 -> Cap0105, Online0106-Fixed -> Online0105-Fixed, Cosy1306 ->
-    # Cosy1305. A product whose publication day varies month to month
-    # resolves to the CDN's HTML stub, which the PDF magic-byte check
-    # rejects, so the walk falls back to the proxy rather than mis-billing.
+    # Online0106-Fixed -> Online0105-Fixed, Cosy1306 -> Cosy1305. A product
+    # whose publication day varies month to month resolves to the CDN's HTML
+    # stub, which the PDF magic-byte check rejects, so the walk falls back to
+    # the proxy rather than mis-billing.
     prefix, sep, tail = new_url.partition(f"-{historical_mmyyyy}-")
     if sep:
         tail = re.sub(

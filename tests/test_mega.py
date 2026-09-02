@@ -69,8 +69,13 @@ def test_mega_is_registered() -> None:
     # with a B2B edition it did not have before.
     assert "mega_offpeak_fixed" in contract_ids
     assert "mega_pro_offpeak_fixed" in contract_ids
-    # Eleven residential products, plus the nine professional editions.
-    assert len(contract_ids) == 20
+    # Mega Cap was discontinued with the September 2026 cards, residential and
+    # B2B together: no listing block in any region and the CDN serves its HTML
+    # stub for the September filename of both editions.
+    assert "mega_cap" not in contract_ids
+    assert "mega_pro_cap" not in contract_ids
+    # Ten residential products, plus the eight professional editions.
+    assert len(contract_ids) == 18
 
 
 def test_listing_url_finder_picks_electricity_for_region() -> None:

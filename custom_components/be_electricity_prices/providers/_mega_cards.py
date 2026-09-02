@@ -352,10 +352,13 @@ _CEILING_RE = re.compile(
 def _energy_price_ceiling(text: str) -> dict[str, float]:
     """Per-meter ceiling on the energy component, in EUR/kWh.
 
-    Mega Cap is the one product that caps what the commodity can cost: "la
+    Mega Cap was the one product that capped what the commodity can cost: "la
     composante energie facturee est limitee a un plafond de ... vous payez le
     minimum entre les prix variables mensuels et ce plafond", guaranteed a
-    year from the start of supply. The card prints the four meter columns on
+    year from the start of supply. It was retired in September 2026; this
+    keys off the sentence rather than off the product, so it stays and costs
+    nothing until a card prints one again. The card prints the four meter
+    columns on
     the same basis as its rates, TVAC on the residential edition and HTVA on
     the professional one, so nothing here has to know which it is reading.
 

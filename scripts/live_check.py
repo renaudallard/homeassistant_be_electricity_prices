@@ -2223,7 +2223,7 @@ _INJECTION_SHAPE: dict[str, str] = {
     "totalenergies_mydrive": "month",
     "totalenergies_myessential": "month",
     "totalenergies_myessential_fixed": "month",
-    # Every Mega variable ("Flex" / Cap) and Impact card states "le prix de
+    # Every Mega variable ("Flex") and Impact card states "le prix de
     # rachat ... est indexe mensuellement ... pondere par le SPP (publie par
     # Synergrid), sur le mois de fourniture ... : Epex SPP * 0,85 - 2,2
     # c€/kWh", while the commodity leg indexes on the RLP mean. The printed
@@ -2233,11 +2233,9 @@ _INJECTION_SHAPE: dict[str, str] = {
     "mega_online_flex": "spp",
     "mega_cosy_flex": "spp",
     "mega_offpeak_flex": "spp",
-    "mega_cap": "spp",
     "mega_offpeak_impact_var": "spp",
     "mega_pro_smart_flex": "spp",
     "mega_pro_cosy_flex": "spp",
-    "mega_pro_cap": "spp",
     # Luminus non-dynamic cards say "Votre tarif sera indexe tous les mois. La
     # valeur Belpex du mois en cours n'est connue qu'a la fin du mois. Les prix
     # affiches sont calcules sur la base de la derniere valeur Belpex connue

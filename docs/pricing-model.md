@@ -284,12 +284,14 @@ spot, which is the 0.6.7 mis-credit and is silent.
 
 ### Contractual price ceilings
 
-Mega Cap is the one product that caps what the commodity can cost: *"la
+Mega Cap was the one product that capped what the commodity can cost: *"la
 composante energie facturee est limitee a un plafond de ... vous payez le
 minimum entre les prix variables mensuels et ce plafond"*, per meter, and
-guaranteed a year from the start of supply. `VariableRates` carries the four
-`ceiling_*` columns and `energy_eur_per_kwh` takes the `min()` of the routed
-rate and the routed ceiling.
+guaranteed a year from the start of supply. Mega retired it in September 2026
+and no card in the registry prints the sentence today, but the clamp is driven
+by the card rather than by the product, so it applies again the day one does.
+`VariableRates` carries the four `ceiling_*` columns and `energy_eur_per_kwh`
+takes the `min()` of the routed rate and the routed ceiling.
 
 Per SLOT, not on a mean: a ceiling is a `min()`, so clamping a monthly or
 annual average would let an expensive month shelter under a cheap one, which is

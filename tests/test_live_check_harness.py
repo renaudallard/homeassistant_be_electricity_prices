@@ -744,7 +744,7 @@ def test_mega_professional_check_covers_every_contract_region(
             if r in c.regions
         ]
     )
-    assert session.calls == expected == 27
+    assert session.calls == expected == 24
 
 
 def test_mega_professional_transport_failure_is_not_a_publication_signal() -> None:
