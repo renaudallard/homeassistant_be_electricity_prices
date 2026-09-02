@@ -747,6 +747,40 @@ def test_mega_professional_check_covers_every_contract_region(
     assert session.calls == expected == 24
 
 
+def test_catalog_baseline_ignores_editions_the_listing_never_shows() -> None:
+    """A professional edition must not vouch for a residential product.
+
+    Mega and Bolt advertise only their residential cards, and a B2B edition
+    reuses the residential product name (Mega) or folder/slug (Bolt). Counting
+    the professional contracts in the baseline is what kept the catalog diff
+    quiet when Mega dropped Zen Fixed from the listing for the August 2026
+    card and put it back in September: mega_pro_zen_fixed carried the name
+    throughout, so neither the loss nor the return was ever a new product.
+
+    Stubbed rather than run against the real registry, because every product
+    name Mega sells to businesses is sold residentially too today -- the two
+    baselines are identical until the day they are not, which is the day this
+    matters.
+    """
+    mega = SimpleNamespace(
+        _CONTRACTS=(
+            SimpleNamespace(product_name="Smart Fixed", professional=False),
+            SimpleNamespace(product_name="Smart Fixed", professional=True),
+            SimpleNamespace(product_name="Zen Fixed", professional=True),
+        )
+    )
+    assert lc._CATALOG_BASELINES["mega"](mega) == {"Smart Fixed"}  # type: ignore[arg-type]
+
+    bolt = SimpleNamespace(
+        _CONTRACTS=(
+            SimpleNamespace(folder="go", slug="fix", professional=False),
+            SimpleNamespace(folder="go", slug="fix", professional=True),
+            SimpleNamespace(folder="pro", slug="only", professional=True),
+        )
+    )
+    assert lc._CATALOG_BASELINES["bolt"](bolt) == {"go/fix"}  # type: ignore[arg-type]
+
+
 def test_mega_professional_transport_failure_is_not_a_publication_signal() -> None:
     """A dead network is not Mega failing to publish, and the extractor rows
     already report a real break."""

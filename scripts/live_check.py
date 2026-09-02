@@ -1295,32 +1295,45 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
             _validate_snapshot(prefix, cid, snap)
 
 
+# Each supplier's registered identifier set, in the shape its own
+# ``discover()`` returns, derived from the provider module so the CI baseline
+# cannot silently drift away from the code.
+#
+# The baseline has to cover exactly what that supplier's discovery surface
+# enumerates, no more. Mega and Bolt advertise only their RESIDENTIAL cards
+# (Bolt's discover filters on the ``res`` segment, Mega's listing carries only
+# B2C hrefs), while a professional edition of the same product reuses the
+# residential product name or slug. Counting the professional contracts here
+# let a B2B card vouch for a product that had left the residential listing:
+# Mega dropped Zen Fixed from the listing in August 2026 and put it back in
+# September, and the diff stayed quiet through both because mega_pro_zen_fixed
+# carried the name the whole time. Engie is not filtered on purpose -- its
+# surface is the public sitemap, which does not split by segment.
+_CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
+    "mega": lambda m: {c.product_name for c in m._CONTRACTS if not c.professional},
+    "bolt": lambda m: {
+        f"{c.folder}/{c.slug}" for c in m._CONTRACTS if not c.professional
+    },
+    "engie": lambda m: {c.family for c in m._CONTRACTS},
+    "luminus": lambda m: {c.slug for c in m._CONTRACTS},
+    "eneco": lambda m: set(m._CONTRACT_SLUGS),
+    "totalenergies": lambda m: {c.slug for c in m._CONTRACTS},
+    "octaplus": lambda m: {c.slug for c in m._CONTRACTS},
+    "cociter": lambda m: set(m._DISCOVER_FAMILIES.values()),
+    "ebem": lambda m: {c.contract_id for c in m._CONTRACTS},
+    "ecofix": lambda m: {c.contract_id for c in m._CONTRACTS},
+    "ecopower": lambda m: set(m.DISCOVER_IDS),
+    "dats24": lambda m: {m._CONTRACT_ID},
+    "frank": lambda m: {t[0] for t in m._TIERS},
+    "energyvision": lambda m: set(m.DISCOVER_IDS),
+    "energyknights": lambda m: set(m.DISCOVER_IDS),
+}
+
+
 async def _check_catalogs(
     session: aiohttp.ClientSession, modules: dict[str, types.ModuleType]
 ) -> None:
-    """Run each supplier's ``discover()`` and surface any new product ids.
-
-    ``known`` is each supplier's registered identifier set, derived from
-    the provider module in the same shape ``discover()`` returns, so the
-    CI baseline can't silently drift away from the code.
-    """
-    known: dict[str, set[str]] = {
-        "mega": {c.product_name for c in modules["mega"]._CONTRACTS},
-        "bolt": {f"{c.folder}/{c.slug}" for c in modules["bolt"]._CONTRACTS},
-        "engie": {c.family for c in modules["engie"]._CONTRACTS},
-        "luminus": {c.slug for c in modules["luminus"]._CONTRACTS},
-        "eneco": set(modules["eneco"]._CONTRACT_SLUGS),
-        "totalenergies": {c.slug for c in modules["totalenergies"]._CONTRACTS},
-        "octaplus": {c.slug for c in modules["octaplus"]._CONTRACTS},
-        "cociter": set(modules["cociter"]._DISCOVER_FAMILIES.values()),
-        "ebem": {c.contract_id for c in modules["ebem"]._CONTRACTS},
-        "ecofix": {c.contract_id for c in modules["ecofix"]._CONTRACTS},
-        "ecopower": set(modules["ecopower"].DISCOVER_IDS),
-        "dats24": {modules["dats24"]._CONTRACT_ID},
-        "frank": {t[0] for t in modules["frank"]._TIERS},
-        "energyvision": set(modules["energyvision"].DISCOVER_IDS),
-        "energyknights": set(modules["energyknights"].DISCOVER_IDS),
-    }
+    """Run each supplier's ``discover()`` and surface any new product ids."""
     for name, mod in modules.items():
         discover = getattr(mod, "discover", None)
         if discover is None:
@@ -1356,7 +1369,8 @@ async def _check_catalogs(
                 kind="catalog",
             )
             continue
-        new_ids = sorted(discovered - known.get(name, set()))
+        baseline = _CATALOG_BASELINES.get(name)
+        new_ids = sorted(discovered - (baseline(mod) if baseline else set()))
         _record(
             f"{name}/catalog: no new products at supplier",
             not new_ids,
