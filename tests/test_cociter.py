@@ -40,6 +40,7 @@ from tests import make_text_session, fixture_text
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
+    ImpactRates,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.cociter import (
@@ -52,7 +53,11 @@ def test_cociter_is_registered() -> None:
     assert "cociter" in EXTRACTORS
     assert EXTRACTORS["cociter"].label == "Cociter"
     contract_ids = {c.id for c in EXTRACTORS["cociter"].contracts}
-    assert contract_ids == {"cociter_variable", "cociter_dynamic"}
+    assert contract_ids == {
+        "cociter_variable",
+        "cociter_variable_impact",
+        "cociter_dynamic",
+    }
 
 
 def test_variable_extracts_indicative_rates() -> None:
@@ -105,6 +110,121 @@ def test_variable_extracts_supplier_prosumer_forfait() -> None:
         "2026-04",
     )
     assert snap.supplier_prosumer_eur_per_kva_year == pytest.approx(37.10)
+
+
+def test_trihoraire_extracts_the_three_impact_bands() -> None:
+    """The September 2026 trihoraire card prints one BELIX formula per CWaPE
+    band, so the energy leg is ImpactRates and not a variable rate with an
+    Impact overlay. Rates are the card's own indicatives (TVAC)."""
+    snap = parse_snapshot(
+        fixture_text("cociter_vai_2609.pdf"),
+        "cociter_variable_impact",
+        "test://vai",
+        "2026-09",
+    )
+    assert isinstance(snap.energy, ImpactRates)
+    assert snap.energy.pic == pytest.approx(0.190079)
+    assert snap.energy.medium == pytest.approx(0.162663)
+    assert snap.energy.eco == pytest.approx(0.135248)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(53.0)
+    # (0,1 x BELIX + 5) c€/kWh + 6% VAT -> factor 0.1 * 1.06 * 10, base
+    # 5 * 1.06 / 100. Same conversion as the variable card's mono row.
+    assert snap.energy.pic_factor == pytest.approx(1.06)
+    assert snap.energy.medium_factor == pytest.approx(0.848)
+    assert snap.energy.eco_factor == pytest.approx(0.636)
+    for base in (
+        snap.energy.pic_base,
+        snap.energy.medium_base,
+        snap.energy.eco_base,
+    ):
+        assert base == pytest.approx(0.053)
+    # The coefficients resolve to the printed indicative at the BELIX the card
+    # quotes (129,32 EUR/MWh), which is what catches a x10 or a VAT slip.
+    pic_factor, pic_base = snap.energy.pic_factor, snap.energy.pic_base
+    assert pic_factor is not None and pic_base is not None
+    assert pic_factor * 0.12932 + pic_base == pytest.approx(snap.energy.pic, abs=1e-6)
+
+
+def test_trihoraire_band_miss_is_fatal() -> None:
+    """Every band is mandatory: defaulting one to another's rate would bill a
+    third of the day at the wrong price, silently."""
+    raw = fixture_text("cociter_vai_2609.pdf")
+    with pytest.raises(ExtractorError):
+        parse_snapshot(
+            raw.replace("Heures MEDIUM", "Heures MIDDLE"),
+            "cociter_variable_impact",
+            "test://vai",
+            "2026-09",
+        )
+
+
+def test_trihoraire_dso_row_is_five_columns() -> None:
+    """The trihoraire card drops the mono/bi columns outright: its row is
+    terme fixe | PIC | MEDIUM | ECO | exclusif nuit, and there is no prosumer
+    column beside them."""
+    snap = parse_snapshot(
+        fixture_text("cociter_vai_2609.pdf"),
+        "cociter_variable_impact",
+        "test://vai",
+        "2026-09",
+    )
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    aieg = snap.dsos["aieg"]
+    assert aieg.data_management_per_year == pytest.approx(19.49)
+    assert aieg.distribution_pic == pytest.approx(0.1508)
+    assert aieg.distribution_medium == pytest.approx(0.0982)
+    assert aieg.distribution_eco == pytest.approx(0.0456)
+    assert aieg.distribution_exclusive_night == pytest.approx(0.0666)
+    assert aieg.transport == pytest.approx(0.0274252)
+    assert aieg.prosumer_eur_per_kva_year is None
+    # No mono column exists on this card; the field is filled with the PIC
+    # rate, which nothing reads because the contract always bills on the
+    # Impact bands.
+    assert aieg.distribution_single == pytest.approx(0.1508)
+    # The supplier-side forfait IS printed, unlike on the dynamic card.
+    assert snap.supplier_prosumer_eur_per_kva_year == pytest.approx(37.10)
+
+
+def test_trihoraire_layout_is_chosen_by_the_card_title() -> None:
+    """The five-number row is not distinguishable by counting: the six-number
+    pattern matches it by running past the end of the line, since the last row
+    is followed by the "3." of the taxes heading, and it lands PIC on the mono
+    rate. Take the title away and that is exactly what happens - which is why
+    the layout is chosen by the card's own "prix variable trihoraire" title
+    before anything counts columns.
+    """
+    from custom_components.be_electricity_prices.providers.cociter import (
+        _extract_dsos,
+    )
+
+    raw = fixture_text("cociter_vai_2609.pdf")
+    proper = _extract_dsos(raw)
+    assert proper["aieg"].distribution_pic == pytest.approx(0.1508)
+
+    untitled = _extract_dsos(raw.replace("prix variable trihoraire", "prix variable"))
+    assert set(untitled) == {"rew"}
+    assert untitled["rew"].distribution_pic is None
+    assert untitled["rew"].distribution_single == pytest.approx(0.1711)
+
+
+def test_trihoraire_injection_is_the_variable_card_formula() -> None:
+    """Same injection block as the variable card: a BELPEX formula with no
+    printed indicative, so the credit needs a spot the three-band energy leg
+    never fetches, and the contract carries spot_indexed_injection."""
+    snap = parse_snapshot(
+        fixture_text("cociter_vai_2609.pdf"),
+        "cociter_variable_impact",
+        "test://vai",
+        "2026-09",
+    )
+    assert snap.injection is not None
+    assert snap.injection.current is None
+    assert snap.injection.factor == pytest.approx(0.97)
+    assert snap.injection.base == pytest.approx(-0.021)
+    contracts = {c.id: c for c in EXTRACTORS["cociter"].contracts}
+    assert contracts["cociter_variable_impact"].spot_indexed_injection is True
+    assert contracts["cociter_variable_impact"].kind == "tou_impact"
+    assert contracts["cociter_variable_impact"].regions == frozenset({"wallonia"})
 
 
 def test_dynamic_has_no_prosumer_rate() -> None:

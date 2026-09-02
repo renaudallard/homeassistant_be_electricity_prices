@@ -443,7 +443,7 @@ threshold, negative cache) stays in one place. It returns an empty dict when no
 spot is needed (static energy with a monthly or no injection). The gate is
 `isinstance(snap.energy, DynamicRates) or _injection_needs_spot(snap, entry)`
 (`backfill.py:312`): a static-energy contract whose injection is itself
-spot-indexed (Cociter Variable) still needs spots so its feed-in credit lands in
+spot-indexed (either Cociter variable card) still needs spots so its feed-in credit lands in
 the backfilled rows and no sum-chain step appears at the backfill-to-live seam.
 It feeds `_ensure_historical_spots` local dates (`dt_util.as_local(...).date()`,
 `backfill.py:323`) to match the live coordinator's local-day anchoring.

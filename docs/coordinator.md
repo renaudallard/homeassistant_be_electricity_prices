@@ -167,7 +167,7 @@ Spots are fetched only for two shapes, and the dispatch reads the *effective*
 (cohort-spliced) energy `priced.energy`, not `self._snapshot.energy`:
 
 1. **Dynamic or spot-monthly energy** (`isinstance(priced.energy, (DynamicRates, SpotMonthlyRates))`, `coordinator.py:573`): dynamic prices each slot at `factor*spot + base`, spot-monthly bills a flat `factor*mean + base` off the month's mean, so both need a spot and share the hard-fail path. `_fetch_spot_prices` is called; `EntsoeAuthError` raises `UpdateFailed` and sets the `entsoe_auth_failed` Repairs issue (`api.py:69`), while a transient `EntsoeError` degrades to `_fallback_spots` and only fails the tick if that comes back empty (`coordinator_spots.py:446`). `_fallback_spots` prefers `_spot_cache` (the contract's own resolution, and the only cache that ever holds tomorrow) and falls back to `_historical_spots` (hourly), never merging the two -- a quarter-hourly entry topped up with hourly means would price its slots off two different day-ahead products. A source that cannot price today is skipped outright, so a curve from an earlier day is never served as the current one.
-2. **Spot-indexed injection on a static-energy contract** (`_injection_needs_spot`, `injection.py:94`): here the energy is priced without a spot, so a spot failure must not tear the entry down. The fetch is soft: on any ENTSO-E error it falls back to the cached curve, then to no injection price (`injection.py:94`). This is the Cociter Variable case (see section 8).
+2. **Spot-indexed injection on a static-energy contract** (`_injection_needs_spot`, `injection.py:94`): here the energy is priced without a spot, so a spot failure must not tear the entry down. The fetch is soft: on any ENTSO-E error it falls back to the cached curve, then to no injection price (`injection.py:94`). This is the Cociter variable-card case (see section 8).
 
 `_ensure_historical_spots` runs immediately after these branches and BEFORE the
 delivery-month mean is taken. That ordering is load-bearing: `_monthly_spot_mean`
@@ -374,7 +374,7 @@ Belgian residential injection is VAT-exempt, so `InjectionRates` values are neve
 |-------|--------|-------------------|---------|
 | (a) monthly-indicative only | `current` set, no usable `factor`/`base` for pricing | the printed `current` value, no spot | Ecofix Flexy, Engie/Luminus/Mega fixed and variable |
 | (b) hourly `factor*spot+base` | `factor`+`base`, energy is dynamic | `factor*spot+base` at the current slot | Engie, Luminus, Mega, OCTA+, TotalEnergies dynamic |
-| (c) spot-indexed on static energy | `factor`+`base`, `current is None`, energy NOT dynamic | `factor*spot+base`, but the energy path fetches no spot | Cociter Variable |
+| (c) spot-indexed on static energy | `factor`+`base`, `current is None`, energy NOT dynamic | `factor*spot+base`, but the energy path fetches no spot | Cociter Variable, Cociter Variable Trihoraire |
 | (d) month-indexed formula | `current` + `factor`/`base` + `spp_indexed` or `month_indexed` | `factor*month_mean+base` for the DELIVERY month, `current` only while that mean is unpublished | DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex, energie.be, Energy Knights Essentia, EnergyVision fixed |
 
 Shape (d) is what several cards used to be read as shape (a). They print a

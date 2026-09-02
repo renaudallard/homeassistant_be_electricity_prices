@@ -780,7 +780,7 @@ async def _check_cociter(
     session: aiohttp.ClientSession, cociter: types.ModuleType
 ) -> None:
     expected_dso_keys = _WALLONIA_DSO_KEYS
-    for cid in ("cociter_variable", "cociter_dynamic"):
+    for cid in ("cociter_variable", "cociter_variable_impact", "cociter_dynamic"):
         prefix = f"cociter/{cid}"
         try:
             snap = await _fetch_with_retry(
@@ -805,6 +805,19 @@ async def _check_cociter(
             snap.taxes.wallonia_renewables > 0,
             detail=str(snap.taxes),
         )
+        if cid in ("cociter_variable", "cociter_variable_impact"):
+            # The supplier-side PV forfait, 37,10 EUR/kVA/an TVAC, billed on
+            # top of the DSO prosumer tariff. The variable parser raises when
+            # it is missing; the trihoraire one returns None, because its DSO
+            # table has already dropped the prosumer column and a card that
+            # drops the forfait too would be an editorial change rather than a
+            # layout drift. This is where that change has to surface, or a
+            # compensation-regime entry silently loses ~185 EUR/yr on 5 kVA.
+            _expect(
+                f"{prefix}: supplier PV forfait present",
+                snap.supplier_prosumer_eur_per_kva_year is not None,
+                detail=str(snap.supplier_prosumer_eur_per_kva_year),
+            )
         _validate_snapshot(prefix, cid, snap)
 
 
@@ -1932,11 +1945,11 @@ async def _check_card_freshness(
 
     cociter = modules.get("cociter")
     if cociter is not None:
-        for family, contract_id in (
-            ("variable", "cociter_variable"),
-            ("dynamic", "cociter_dynamic"),
+        for family, contract_id, head in (
+            ("variable", "cociter_variable", "RCVar_YMR"),
+            ("trihoraire", "cociter_variable_impact", "RCVaI_YMR"),
+            ("dynamic", "cociter_dynamic", "RCDyn_SM3"),
         ):
-            head = "RCVar_YMR" if family == "variable" else "RCDyn_SM3"
             # \d{2,8} with optional dashed groups, so a dashed or widened
             # date is visible; the extractor pins an exact 4-digit YYMM.
             pattern = (

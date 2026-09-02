@@ -29,6 +29,8 @@ Cociter publishes monthly tariff cards under predictable filenames at
 https://www.cociter.be/electricite/cartes-tarifaires/:
 
     RCVar_YMR_Coop-YYMM-fr.pdf   - variable contract (BELIX-indexed)
+    RCVaI_YMR_Coop-YYMM-fr.pdf   - variable trihoraire, BELIX-indexed on the
+                                   three CWaPE Impact bands (first card: 09/2026)
     RCDyn_SM3_Coop-YYMM-fr.pdf   - dynamic contract (quarter-hourly BELPEX)
 
 YYMM is e.g. ``2604`` for April 2026. Each card includes the energy
@@ -70,6 +72,7 @@ from .base import (
     DynamicRates,
     EnergyRates,
     ExtractorError,
+    ImpactRates,
     InjectionRates,
     SupplierExtractor,
     SupplierSnapshot,
@@ -99,6 +102,12 @@ _VAR_RE = re.compile(
 _DYN_RE = re.compile(
     r'href="(https?://[^"]*RCDyn_SM3_Coop-(\d{4})-fr(?:-\d+)?\.pdf)"', re.IGNORECASE
 )
+# The trihoraire family differs from the variable one by a single letter
+# (RCVaI against RCVar), which no amount of case folding can confuse: the
+# patterns are IGNORECASE and "i" is still not "r".
+_VAI_RE = re.compile(
+    r'href="(https?://[^"]*RCVaI_YMR_Coop-(\d{4})-fr(?:-\d+)?\.pdf)"', re.IGNORECASE
+)
 
 # Cociter prints one row per Wallonian DSO it serves; the labels are the
 # uppercase strings that anchor each row in the PDF (case-sensitive). The
@@ -120,6 +129,7 @@ assert set(_DSO_KEY.values()) == set(WALLONIA_DSO_KEYS), (
 
 _CONTRACT_PATTERNS: dict[str, re.Pattern[str]] = {
     "cociter_variable": _VAR_RE,
+    "cociter_variable_impact": _VAI_RE,
     "cociter_dynamic": _DYN_RE,
 }
 
@@ -224,6 +234,7 @@ async def probe(
 # Family prefix on Cociter's listing -> our registry contract id.
 _DISCOVER_FAMILIES = {
     "RCVar_YMR": "cociter_variable",
+    "RCVaI_YMR": "cociter_variable_impact",
     "RCDyn_SM3": "cociter_dynamic",
 }
 
@@ -269,7 +280,7 @@ def parse_snapshot(
 
 
 def _extract_supplier_prosumer(text: str, contract_id: str) -> float | None:
-    """Cociter Variable's supplier-side compensation-regime PV forfait.
+    """Cociter's supplier-side compensation-regime PV forfait.
 
     The variable card bills, on top of the DSO "Tarif prosumer" column, a
     supplier forfait "Forfait panneaux photovoltaiques (en regime de
@@ -282,11 +293,21 @@ def _extract_supplier_prosumer(text: str, contract_id: str) -> float | None:
     DSO prosumer column header is the bare "(EUR/kVA/an)"). Every Cociter
     variable card prints it, so a miss is a layout drift; raise rather than
     silently drop it, the same way the injection and tax parsers fail loud.
+
+    The trihoraire card prints the same forfait, so it is read there too, but
+    a miss is NOT fatal on that one. It is a September 2026 product with a
+    single card published so far, and its DSO table already drops the prosumer
+    column the forfait sits beside, so a later edition dropping the forfait
+    with it is a plausible editorial change rather than a layout drift. The
+    live check asserts it is present, which is where that belongs: CI notices
+    while an entry keeps pricing.
     """
-    if contract_id != "cociter_variable":
+    if contract_id not in ("cociter_variable", "cociter_variable_impact"):
         return None
     match = re.search(r"([\d,]+)\s*€/kVA/an\s*TVAC", text)
     if not match:
+        if contract_id == "cociter_variable_impact":
+            return None
         raise ExtractorError("could not parse Cociter compensation-regime PV forfait")
     return to_float(match.group(1))
 
@@ -389,6 +410,73 @@ def _belix_band_coefficients(text: str) -> dict[str, tuple[float, float]]:
     return out
 
 
+# The trihoraire card announces itself in its own title, "Carte tarifaire (1)
+# septembre 2026 a prix variable trihoraire". Discriminating on that rather
+# than on the absence of a header the other two cards carry: an old edition
+# wording "Bihoraire" differently must not be read as this layout, whose DSO
+# row has one column FEWER and would silently map PIC onto the mono rate.
+_TRIHORAIRE_CARD_RE = re.compile(r"prix\s+variable\s+trihoraire", re.IGNORECASE)
+
+# The three CWaPE Impact bands, as the trihoraire card labels them. It also
+# prints a "Compteur exclusif nuit" row carrying the ECO formula, which is
+# deliberately not parsed: ImpactRates has no exclusive-night slot, and a
+# tou_impact contract only offers the dynamic (SMR3) meter in the config flow,
+# so a dedicated night circuit cannot be configured on one.
+_IMPACT_BANDS: tuple[tuple[str, str], ...] = (
+    ("pic", r"Heures PIC"),
+    ("medium", r"Heures MEDIUM"),
+    ("eco", r"Heures ECO"),
+)
+
+
+def _impact_energy(text: str, yearly_fee: float) -> ImpactRates:
+    """The trihoraire card: one BELIX formula per CWaPE Impact band.
+
+    Each row is the variable card's mono row three times over -- "Heures PIC
+    (0,1 x BELIX + 5) + 6% TVA 129,32 19,0079 c€/kWh" -- so the conversion is
+    the same: the coefficients print c€/kWh against a BELIX in EUR/MWh, giving
+    the factor a x10 and the base a /100, with the VAT printed outside the
+    parens landing on both.
+
+    Every band is mandatory. Defaulting one to another's rate would bill a
+    third of the day wrong, and a card selling a three-band product with a
+    band missing is a layout drift, so this fails loud like the injection,
+    tax and transport parsers.
+    """
+    rates: dict[str, float] = {}
+    coefficients: dict[str, float | None] = {}
+    formulas: list[str] = []
+    for band, label in _IMPACT_BANDS:
+        indicative = re.search(label + r"[^\n]*?(\d+,\d+)\s*c€/kWh", text)
+        if indicative is None:
+            raise ExtractorError(
+                f"could not parse Cociter trihoraire {band} indicative rate"
+            )
+        rates[band] = to_float(indicative.group(1)) / 100.0
+        row = re.search(label + _BELIX_ROW_TAIL, text)
+        if row is None:
+            coefficients[f"{band}_factor"] = None
+            coefficients[f"{band}_base"] = None
+            continue
+        vat_mult = 1.0 + to_float(row.group(4)) / 100.0
+        coefficients[f"{band}_factor"] = to_float(row.group(1)) * vat_mult * 10.0
+        coefficients[f"{band}_base"] = (
+            parse_sign(row.group(2)) * to_float(row.group(3)) * vat_mult / 100.0
+        )
+        formulas.append(
+            f"{band}: ({row.group(1)} x BELIX {row.group(2)} {row.group(3)}) "
+            f"c€/kWh + {row.group(4)}% VAT"
+        )
+    return ImpactRates(
+        pic=rates["pic"],
+        medium=rates["medium"],
+        eco=rates["eco"],
+        yearly_fixed_fee=yearly_fee,
+        formula="; ".join(formulas) or None,
+        **coefficients,
+    )
+
+
 def _extract_energy(text: str, contract_id: str) -> EnergyRates:
     yearly_fee_match = re.search(r"(\d+,\d+)\s*€/an\s*\n?\s*TVAC", text)
     if yearly_fee_match is None:
@@ -397,6 +485,9 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
         # injection / tax / forfait parsers rather than default to 0.
         raise ExtractorError("Cociter: yearly fixed fee (abonnement) row not found")
     yearly_fee = to_float(yearly_fee_match.group(1))
+
+    if contract_id == "cociter_variable_impact":
+        return _impact_energy(text, yearly_fee)
 
     if contract_id == "cociter_variable":
         mono = re.search(r"Compteur monohoraire[^\n]*?(\d+,\d+)\s*c€/kWh", text)
@@ -513,15 +604,25 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     The dynamic (SMR3) card has 8, with the prosumer column replaced by
     three Tarif Impact columns (PIC / MEDIUM / ECO) since SMR3 dispenses
     with the compensation regime.
+    The trihoraire card has 5, and is the one layout that is not an
+    extension of the others: it drops the mono/bi columns outright for
+        yearly | pic | medium | eco | uitsl_nacht
+    since an Impact customer is billed on the Impact network tariff and on
+    nothing else. It is picked out by the card's own title, before anything
+    counts columns -- the six-number pattern below MATCHES a trihoraire row
+    by running past the end of the line (the last row is followed by the "3."
+    of the taxes heading), and it maps PIC onto the mono rate when it does.
 
-    The first 6 columns are positionally identical between the two cards,
-    but column 6 means different things. We discriminate by looking for
-    the literal table header "Tarif prosumer" in the document - this is
-    robust against future column additions and avoids the previous
+    The first 6 columns are positionally identical between the variable and
+    dynamic cards, but column 6 means different things. We discriminate by
+    looking for the literal table header "Tarif prosumer" in the document -
+    this is robust against future column additions and avoids the previous
     end-of-line anchor that would silently lose the prosumer value if a
     7th column were ever added to the variable card.
     """
     transport = _extract_transport(text)
+    if _TRIHORAIRE_CARD_RE.search(text):
+        return _extract_impact_dsos(text, transport)
     has_prosumer_column = "Tarif prosumer" in text
     out: dict[str, DsoOverlay] = {}
     for label in _DSO_LABELS:
@@ -553,6 +654,48 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=to_float(row.group(1)),
             prosumer_eur_per_kva_year=prosumer_rate,
         )
+    return out
+
+
+def _extract_impact_dsos(text: str, transport: float) -> dict[str, DsoOverlay]:
+    """The trihoraire card's five-column distribution table.
+
+    Anchored at both ends of the line, unlike the other two layouts: a row of
+    exactly five numbers is what tells this table apart from the six the
+    variable card prints, so a loose tail would read the first number of
+    whatever follows as a sixth column.
+
+    ``distribution_single`` has no source on this card and is filled with the
+    PIC rate. Nothing reads it: the contract is registered ``tou_impact``, the
+    config flow forces the Impact network mode on those in Wallonia (the only
+    region Cociter sells in), and the compare page does the same, so the band
+    triplet decides every hour. It is the highest of the three so that a path
+    that somehow reached it would over-bill visibly rather than under-bill
+    quietly.
+    """
+    out: dict[str, DsoOverlay] = {}
+    for label in _DSO_LABELS:
+        row = re.search(
+            rf"^{label}\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s*$",
+            text,
+            re.MULTILINE,
+        )
+        if not row:
+            continue
+        pic = to_float(row.group(2)) / 100.0
+        out[_DSO_KEY[label]] = DsoOverlay(
+            distribution_single=pic,
+            distribution_exclusive_night=to_float(row.group(5)) / 100.0,
+            distribution_pic=pic,
+            distribution_medium=to_float(row.group(3)) / 100.0,
+            distribution_eco=to_float(row.group(4)) / 100.0,
+            transport=transport,
+            data_management_per_year=to_float(row.group(1)),
+        )
+    if not out:
+        # An empty overlay is not a soft failure: it bills the whole network
+        # leg at zero, which is a bigger error than the card being offline.
+        raise ExtractorError("Cociter: trihoraire distribution table not found")
     return out
 
 
@@ -668,6 +811,17 @@ EXTRACTOR = SupplierExtractor(
             regions=_COCITER_REGIONS,
             # Variable energy, but the injection is an hourly BELPEX
             # formula with no fixed indicative -> needs an ENTSO-E spot.
+            spot_indexed_injection=True,
+        ),
+        Contract(
+            id="cociter_variable_impact",
+            label="Cociter Tarif Variable Trihoraire",
+            kind="tou_impact",
+            regions=_COCITER_REGIONS,
+            # Same card family as the variable one, same injection block:
+            # an hourly BELPEX formula with no printed indicative, so the
+            # feed-in credit needs an ENTSO-E spot the three-band energy
+            # leg never fetches.
             spot_indexed_injection=True,
         ),
         Contract(

@@ -163,8 +163,9 @@ the `Contract`s it sells (`providers/base.py:64`), each carrying a `TariffKind`
 | `spot_monthly` | Flat monthly rate `factor x monthly_mean(spot) + base` | `SpotMonthlyRates` (`providers/base.py:228`) | energie.be Variabel and Energy Knights Essentia Online (both Belpex_RLP) and the expert custom monthly-average mode; the coordinator averages the ENTSO-E spot cache per delivery month. Needs an ENTSO-E key. Distinct from `variable`, which reads a rate the card already resolved: this kind is for cards that name the index but publish only a forecast of it. |
 
 A `Contract` also carries the `regions` it is actually published in (some products 404 outside
-their home region) and `spot_indexed_injection` (`providers/base.py:95`), a flag for the one
-non-dynamic case (Cociter Variable) where pricing the injection still needs an ENTSO-E spot.
+their home region) and `spot_indexed_injection` (`providers/base.py:95`), a flag for the
+non-dynamic cards (the two Cociter variable ones, every Bolt fixed and variable card, and
+every month-indexed card) where pricing the injection still needs an ENTSO-E spot.
 
 One registry entry is not scraped: the expert **custom** supplier
 (`providers/custom.py`, `SUPPLIER_CUSTOM`), an escape hatch for products with no public tariff
@@ -291,7 +292,7 @@ the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordin
 a single transient CDN timeout does not false-alarm.
 
 The ENTSO-E spot curve is fetched only for contracts that need it: dynamic contracts, and the
-spot-indexed-injection case (Cociter Variable on the injection regime). Static, variable, and TOU
+spot-indexed-injection case (the Cociter variable cards on the injection regime). Static, variable, and TOU
 contracts never touch ENTSO-E for their consumption price.
 
 ## Adding a new supplier

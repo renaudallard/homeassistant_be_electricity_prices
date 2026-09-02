@@ -598,7 +598,7 @@ carrying a branch that cannot run.
 | --- | --- | --- | --- |
 | (a) Monthly indicative | `current` set | No | Ecofix Flexy, the fixed and variable cards that publish a realized rate |
 | (b) Hourly formula | `factor` + `base` set | Yes | Dynamic contracts (Engie, Luminus, Mega, OCTA+, TotalEnergies) |
-| (c) Spot-indexed on a static-energy card | `factor` + `base` set, energy NOT dynamic, and either `current is None` or the card flags `slot_indexed` | Yes | Cociter Variable, every Bolt fixed and variable card |
+| (c) Spot-indexed on a static-energy card | `factor` + `base` set, energy NOT dynamic, and either `current is None` or the card flags `slot_indexed` | Yes | Cociter Variable and Variable Trihoraire, every Bolt fixed and variable card |
 | (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed` | A monthly MEAN, not an hourly spot | DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex, energie.be, Energy Knights Essentia, EnergyVision fixed (both regions) |
 
 Shape (d) resolves through `_spp_injection_spot`, which is the one place that
@@ -620,8 +620,8 @@ importantly, stops the month coefficients being read as shape (b).
 
 Shape (c) is the subtle one: the energy contract is Variable (no spot needed for
 energy) but the injection prices off the hourly BELPEX, so pricing the credit
-still needs an ENTSO-E spot. It arrives two ways. Cociter Variable prints no
-indicative at all, so the absent `current` is the tell. Bolt prints one and its
+still needs an ENTSO-E spot. It arrives two ways. Both Cociter variable cards
+print no indicative at all, so the absent `current` is the tell. Bolt prints one and its
 own footnotes call it an illustration of a per-quarter-hour settlement, so the
 card is flagged `slot_indexed` and the formula wins over the printed figure;
 `current` survives only as the fallback for an entry with no ENTSO-E key. Every

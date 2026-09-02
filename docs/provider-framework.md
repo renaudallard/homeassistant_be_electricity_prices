@@ -183,10 +183,10 @@ filled in rather than a scraped card.
 | `label` | `str` | required | Human-facing product name. |
 | `kind` | `TariffKind` | required | One of `"fixed"`, `"variable"`, `"dynamic"`, `"tou"`, `"tou_impact"`, `"spot_monthly"` (`providers/base.py:53`). Selects which `EnergyRates` variant the snapshot carries. |
 | `regions` | `frozenset[str]` | all three | Regions the product is actually published in. Defaults to `{flanders, wallonia, brussels}`; extractors override per-contract for products that 404 outside their home region (for example TotalEnergies Impact is Wallonia-only). |
-| `spot_indexed_injection` | `bool` | `False` | `True` when a non-dynamic product's injection is a per-hour spot formula with no printed monthly indicative (Cociter Variable). Pricing the injection then needs an ENTSO-E spot even though the energy side is variable, so the config flow offers the API-key step on the injection regime. Dynamic contracts already collect the key via their energy formula and leave this `False`. |
+| `spot_indexed_injection` | `bool` | `False` | `True` when a non-dynamic product's injection is a per-hour spot formula with no printed monthly indicative (both Cociter variable cards). Pricing the injection then needs an ENTSO-E spot even though the energy side is variable, so the config flow offers the API-key step on the injection regime. Dynamic contracts already collect the key via their energy formula and leave this `False`. |
 
-`spot_indexed_injection` is a load-bearing invariant: shape (c) injection (only
-Cociter Variable today) must have the spot wired through the live, backfill, and
+`spot_indexed_injection` is a load-bearing invariant: shape (c) injection (the two
+Cociter variable cards today) must have the spot wired through the live, backfill, and
 compare paths, all gated on this flag, or the injection credit drifts.
 
 ### FixedRates
@@ -606,8 +606,8 @@ Grounded in the protocol above, a minimal new PDF provider looks like this:
 1. Create `providers/<supplier>.py`.
 2. Declare the products as `Contract` instances, one per product, with the right
    `kind`. Set `regions` if the product is not sold in all three regions; set
-   `spot_indexed_injection=True` only for the Cociter-Variable shape (variable
-   energy but per-hour spot injection).
+   `spot_indexed_injection=True` only for the Cociter-Variable shape (static or
+   three-band energy but per-hour spot injection).
 3. Implement `async def fetch(session, contract_id, region) -> SupplierSnapshot`.
    Use the `_pdf.py` helpers: `fetch_pdf_text` (or the layout/aligned variants
    for rotated or column-major cards), `to_float` / `parse_sign` / `SIGN_CHARS`

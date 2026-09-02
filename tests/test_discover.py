@@ -211,8 +211,14 @@ def test_octaplus_discover_matches_registry() -> None:
 def test_cociter_discover_returns_known_family_ids() -> None:
     session = _FakeSession(_read("cociter.html"))
     discovered = _run(cociter_mod.discover(session))
-    # Cociter maps known family prefixes back to registry contract ids.
-    assert discovered == {"cociter_variable", "cociter_dynamic"}
+    # Cociter maps known family prefixes back to registry contract ids. The
+    # trihoraire family is one letter from the variable one (RCVaI / RCVar),
+    # so a fold that treated them as the same would show up right here.
+    assert discovered == {
+        "cociter_variable",
+        "cociter_variable_impact",
+        "cociter_dynamic",
+    }
 
 
 def test_ebem_discover_matches_registry() -> None:

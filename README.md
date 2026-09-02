@@ -74,7 +74,7 @@ publication and how to parse it.
 | Supplier | Contracts | Source |
 | --- | --- | --- |
 | **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Dynamisch *(quarter-hourly Belpex)* · Bolt Plenty Variable · Bolt Online · Bolt Plenty Online · all seven as **pro** contracts | [`providers/bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) — card URLs under `files.boltenergie.be/pricelists/<fix\|var>/`: fixed cards roll monthly by `<YYYYMM>`, variable and dynamic cards carry a version suffix Bolt bumps in place, read off the `boltenergie.be/fr/listes-des-prix` listing on every fetch (superseded versions stay served and still parse). Parsed via `pdfplumber` (rotated columns + Unicode line-separators). Bolt Dynamisch reads the same variable card and applies its printed `Belpex × factor + base` formula to the 15-minute spot. |
-| **Cociter** | Tarif Variable (BELIX) · Tarif Dynamique (quarter-hourly BELPEX) | [`providers/cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) — monthly cards `RCVar_YMR_Coop-YYMM-fr.pdf` / `RCDyn_SM3_Coop-YYMM-fr.pdf`. Walloon citizen cooperative, **Wallonia only** |
+| **Cociter** | Tarif Variable (BELIX) · Tarif Variable Trihoraire *(BELIX on the CWaPE 3-band schedule)* · Tarif Dynamique (quarter-hourly BELPEX) | [`providers/cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) — monthly cards `RCVar_YMR_Coop-YYMM-fr.pdf` / `RCVaI_YMR_Coop-YYMM-fr.pdf` / `RCDyn_SM3_Coop-YYMM-fr.pdf`. Walloon citizen cooperative, **Wallonia only** |
 | **DATS 24** *(withdrawn 2026-08-31)* | Elektriciteit Groen Variabel (BE_spotRLP-indexed monthly) | [`providers/dats24.py`](./custom_components/be_electricity_prices/providers/dats24.py) — one PDF per month on the Colruyt Group CDN, month spelled in the filename (`api.colruytgroup.com/api/static/dats24/parameters/site/<YYYY>/ELEK/NL/... Versie <MM> <YYYY>.pdf`), falling back one month while the new card is unpublished. Colruyt subsidiary; Flanders + Wallonia. Single product covers mono / bi / exclusive-night meter rates and includes the BE_spotSPP injection formula. **DATS 24 is leaving residential energy supply: contracts transfer automatically to EnergyVision on 31 August 2026**, so switch the entry to **EnergyVision**, which covers both regions. Existing entries keep pricing normally until that date and raise a Repairs card telling you where the contract is going. After it, the card changes to the past tense and the entry stops updating; the usual "could not reach the supplier" alert is suppressed, because by then the card simply is not published any more and that is expected rather than a fault — see [docs/providers/dats24.md](./docs/providers/dats24.md). |
 | **EBEM** | Groen Variabel (BelpexRLP0 monthly, mono / bi / excl. night) · Groen B@sic+ (BelpexRLP0 monthly, single rate, online-only) · Groen Dyn@mic (Belpex 15-min, SMR3) | [`providers/ebem.py`](./custom_components/be_electricity_prices/providers/ebem.py) — Mol/Geel-area Flemish supplier (Ebem bvba). Monthly cards linked from `ebem.be/tarieven/` under opaque Umbraco media-hash URLs; the provider scrapes the listing each fetch and supports `fetch_for_month` against the public archive (≥ 6 months back), so past consumption bills at each month's actual rates. Variabel + B@sic+ share the `elek` PDF; Dyn@mic has its own. Flanders only. |
 | **Ecofix** ⚠️ *(August and September 2026 cards unreadable)* | Motion (quarter-hourly Belpex 15M) · Motion Online (same formula, online-only) · Flexy (BELPEX-RLP-M monthly variable) | [`providers/ecofix.py`](./custom_components/be_electricity_prices/providers/ecofix.py) — stable URLs at `portal.ecofixgp.be/docs/prices/current/EL_Ecofix_<PRODUCT>_NL.pdf`, overwrite-in-place each month. One PDF carries Flanders + Wallonia overlays (no Brussels). Parsed via `pdfplumber` for the column-major Wallonia DSO table. **Broken since the August 2026 card**, and the September card repeats it — see the note below. |
@@ -330,17 +330,17 @@ formula** supplier, which has no card and asks for the whole set.
 4. **Meter type** — *mono* (single rate), *bi* (peak / off-peak),
    *dynamic* (smart meter), or *exclusive-night circuit* (a separate
    meter; see the section below). Dynamic, TOU (Engie Empower Flextime,
-   Luminus SmartFlex) and Impact contracts (Mega Off-peak Impact, OCTA+
-   Fixed Impact) lock the picker to *dynamic* — the SMR3
-   meter is required to bill by hour-of-day.
-5. **DSO billing mode** *(Wallonia only, and skipped for the two contracts sold on the CWaPE bands — Mega Off-peak Impact and OCTA+ Fixed Impact, which are locked to Tarif Impact)* — *Simple* / *Bi-horaire* / *Tarif Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
+   Luminus SmartFlex) and Impact contracts (Cociter Tarif Variable
+   Trihoraire, Mega Off-peak Impact, OCTA+ Fixed Impact) lock the picker to
+   *dynamic* — the SMR3 meter is required to bill by hour-of-day.
+5. **DSO billing mode** *(Wallonia only, and skipped for the three contracts sold on the CWaPE bands — Cociter Tarif Variable Trihoraire, Mega Off-peak Impact and OCTA+ Fixed Impact, which are locked to Tarif Impact)* — *Simple* / *Bi-horaire* / *Tarif Impact*. Tarif Impact uses the CWaPE 3-band hour-of-day rates and
    requires a smart meter; Simple and Bi-horaire follow the existing
    meter convention.
 6. **ENTSO-E API key** *(dynamic and monthly-indexed contracts, both of
    which price the commodity off spot; also offered on the injection
    regime for a contract whose injection is itself index-linked, which is
    most static cards and not the handful it once was — every Bolt card and
-   Cociter Variable index it per hour, while energie.be Vast and most of the
+   both Cociter variable cards index it per hour, while energie.be Vast and most of the
    rest index it on a monthly mean)* — validated against the real ENTSO-E endpoint at
    submission; bad keys are rejected before the entry is saved. If ENTSO-E is
    *unreachable* rather than rejecting the key, setup no longer dead-ends: the
@@ -438,9 +438,9 @@ supplier's monthly-average formula), which is where the setup flow asks
 for it as a mandatory, validated field.
 It is optional everywhere else, but two features use it when present: an
 injection tariff that is itself index-linked — the hourly-spot shape
-(Cociter Variable, every Bolt fixed and variable card) and the
-monthly-mean shape (energie.be Vast on Belpex_SPP, and most other static
-cards), 61 contracts across 14 suppliers between them, and the
+(Cociter Variable and Variable Trihoraire, every Bolt fixed and variable
+card) and the monthly-mean shape (energie.be Vast on Belpex_SPP, and most
+other static cards), 60 contracts across 14 suppliers between them, and the
 signing-cohort re-price of a variable contract, which resolves the current
 month's mean spot. Both stay off without a key rather than failing the
 entry — the injection price goes unavailable, and the cohort re-price keeps
@@ -530,8 +530,8 @@ opens a three-option menu:
   settings held fixed for an apples-to-apples comparison. **Static
   ↔ dynamic crossings are allowed**: the flow prompts for an ENTSO-E
   API key when a side needs spot data (a dynamic or monthly-indexed
-  contract, or an index-linked-injection target like Cociter Variable or
-  energie.be Vast on the injection regime) and your current entry doesn't already carry
+  contract, or an index-linked-injection target like the Cociter variable
+  cards or energie.be Vast on the injection regime) and your current entry doesn't already carry
   one. That prompt is skippable: a quote is a one-off, so leaving it blank
   still shows you every other line of the comparison rather than stopping
   you on a page you may have no token for. Static
@@ -932,8 +932,8 @@ series:
 
 The bars can dip below zero at low spot, where you pay to inject. The
 sensor only publishes those arrays on contracts whose injection actually
-varies during the day (every dynamic contract, Cociter Variable, every
-Bolt fixed and variable card, and Engie Empower Flextime); a flat or
+varies during the day (every dynamic contract, both Cociter variable cards,
+every Bolt fixed and variable card, and Engie Empower Flextime); a flat or
 monthly-indexed injection has no curve to draw, so the chart comes up
 empty.
 

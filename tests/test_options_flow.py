@@ -4625,7 +4625,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("wallonia", "static", True): 19,
         ("wallonia", "spot", False): 10,
         ("wallonia", "spot", True): 3,
-        ("wallonia", "slot", False): 4,
+        ("wallonia", "slot", False): 5,
         ("wallonia", "slot", True): 1,
         ("brussels", "static", False): 29,
         ("brussels", "static", True): 19,
