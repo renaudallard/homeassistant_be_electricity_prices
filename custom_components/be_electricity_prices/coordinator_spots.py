@@ -64,6 +64,7 @@ from .synergrid import (
     fetch_spp_weights,
 )
 
+import asyncio
 from collections.abc import Iterator, Mapping
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -189,6 +190,7 @@ class _SpotsMixin:
     _spot_source: str
     _spot_cache_includes_tomorrow: bool
     _spot_day_retry_at: dict[date, datetime]
+    _spot_fetch_lock: asyncio.Lock
     _spp_weights: Any
     _spp_fetched_at: datetime | None
     _spp_failed_at: datetime | None
@@ -232,9 +234,28 @@ class _SpotsMixin:
     async def _ensure_historical_spots(
         self, start: date, end: date, api_key: str | None = None
     ) -> None:
+        """Cover ``[start, end]`` in the historical spot cache, one walk at a
+        time.
+
+        Three callers reach the walk from outside the coordinator tick: the
+        statistics backfill, the compare page, and the deferred year-fill a
+        fresh install schedules. Nothing serialised them, so two could walk
+        the same empty cache at once and each fetch what the other was already
+        fetching -- wasted round-trips against a rate-limited source, and on a
+        fresh install exactly when the cache is emptiest and the walk longest.
+        Whichever gets there second finds the days present and returns without
+        a request.
+        """
+        async with self._spot_fetch_lock:
+            await self._walk_historical_spots(start, end, api_key)
+
+    async def _walk_historical_spots(
+        self, start: date, end: date, api_key: str | None = None
+    ) -> None:
         """Make sure ``self._historical_spots`` covers every hour of the
         local days in ``[start, end]``, fetching missing ranges from
-        ENTSO-E.
+        ENTSO-E and passing whatever it could not answer to the keyless
+        fallback in one request (``_fill_spots_from_fallback``).
 
         ``api_key`` overrides the entry's key, letting the compare flow
         backfill spots for a spot-indexed target with a key the user typed

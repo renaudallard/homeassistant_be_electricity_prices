@@ -250,7 +250,7 @@ optional injection key behaves the same way.
 The blank check comes first for that reason: while ENTSO-E is down *every* key
 validates as `"cannot_connect"`, an empty one included, so without it the menu
 would offer to store `""`. That is the one value nothing downstream recovers from.
-`_fetch_spot_prices` (`coordinator_spots.py:520`) raises `missing ENTSO-E API key`
+`_fetch_spot_prices` (`coordinator_spots.py:541`) raises `missing ENTSO-E API key`
 before `fetch_day_ahead_or_fallback` is ever called, so an entry holding an empty
 key never reaches the keyless energy-charts source that a merely *wrong* key would
 have been priced from until ENTSO-E came back to reject it. The step answers

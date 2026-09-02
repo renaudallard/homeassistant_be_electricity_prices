@@ -80,6 +80,7 @@ from .ytd_cost import (
     _compute_current_year_cost,
 )
 
+import asyncio
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
@@ -362,6 +363,18 @@ class BePricesCoordinator(
         # _injection_needs_spot_quarters. Empty for every other entry, which
         # is what keeps the persisted blob the size it always was.
         self._historical_spot_quarters: dict[datetime, list[float]] = {}
+        # Serialises the historical spot walk. Two callers reach it from
+        # outside the tick -- the statistics backfill and the compare page --
+        # and on a fresh install the deferred year-fill below runs beside
+        # them. Without this they walk the same empty cache at the same time
+        # and each fetches what the other is already fetching, which is how a
+        # rate-limited source gets asked twice for one window.
+        self._spot_fetch_lock = asyncio.Lock()
+        # True until the year's spots have been fetched once, off the setup
+        # path. See _update_body: the first tick fetches only the month it
+        # cannot do without, because that tick is what the config flow's final
+        # step is waiting on.
+        self._year_spots_deferred = True
         # Synergrid solar production profile: hourly weights keyed by UTC
         # (month, day, hour), for SPP-weighted custom injection. Persisted so a
         # restart doesn't force a fresh 52 MB download; refreshed monthly (the
@@ -753,9 +766,33 @@ class BePricesCoordinator(
             or _injection_needs_month_spot(self._snapshot, self.entry)
         ):
             today_local = dt_util.now().date()
-            await self._ensure_historical_spots(
-                date(today_local.year, 1, 1), today_local
-            )
+            if self._year_spots_deferred:
+                # FIRST tick only, and it is the one the user is watching:
+                # async_config_entry_first_refresh runs inside setup, which the
+                # config flow's final step waits on, so a cold cache spent that
+                # step fetching 35 week-chunks -- minutes of a spinner on a
+                # fresh install, and far longer while ENTSO-E was down.
+                #
+                # Fetch the current month here, because the monthly mean below
+                # is computed for this month and nothing else can stand in for
+                # it, then fill the rest of the year in the background. What
+                # the deferral costs is the year-to-date's past hours on this
+                # one tick: they bill their network and tax legs and forfeit
+                # only the energy term, exactly as a cold cache already does,
+                # and the refresh the fill requests puts them back.
+                self._year_spots_deferred = False
+                await self._ensure_historical_spots(
+                    date(today_local.year, today_local.month, 1), today_local
+                )
+                self.entry.async_create_background_task(
+                    self.hass,
+                    self._fill_year_spots(),
+                    f"{DOMAIN}_year_spots_{self.entry.entry_id}",
+                )
+            else:
+                await self._ensure_historical_spots(
+                    date(today_local.year, 1, 1), today_local
+                )
 
         monthly_mean: float | None = None
         if isinstance(priced.energy, SpotMonthlyRates) or _injection_needs_month_spot(
@@ -929,6 +966,34 @@ class BePricesCoordinator(
             projected_year_cost_eur=projected_year_cost,
             projection_diagnostics=projection_breakdown or None,
         )
+
+    async def _fill_year_spots(self) -> None:
+        """Fetch the rest of the year's spots, off the setup path.
+
+        Scheduled by the first tick, which fetched only the current month so
+        that setup -- and with it the config flow's final step -- did not wait
+        on 35 week-chunks. Runs as an entry-tied background task, so unloading
+        the entry cancels it and the user can walk away from a fresh install
+        mid-backfill without leaving a fetch running.
+
+        Failures need no handling here: _ensure_historical_spots logs what it
+        could not fetch and leaves those hours absent, which every reader
+        already treats as "no data".
+
+        The refresh is what puts the year-to-date's past hours back into the
+        sensor, since the tick that scheduled this one priced them without
+        their energy term -- so it is only asked for when the walk actually
+        found something. A restart runs this too, and there the persisted
+        cache already covers the year: nothing is fetched, nothing changed,
+        and an extra full tick per entry per restart would buy nothing.
+        """
+        today = dt_util.now().date()
+        before = (len(self._historical_spots), len(self._historical_spot_quarters))
+        await self._ensure_historical_spots(date(today.year, 1, 1), today)
+        after = (len(self._historical_spots), len(self._historical_spot_quarters))
+        if self._unloaded or after == before:
+            return
+        await self.async_request_refresh()
 
     async def async_force_refresh(self, clear_history: bool = False) -> None:
         """Force the next coordinator tick to re-fetch the supplier.

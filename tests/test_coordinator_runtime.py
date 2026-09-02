@@ -3697,7 +3697,11 @@ async def test_spot_monthly_mean_waits_for_the_historical_spot_fill(
     ):
         await coord._update_body()
 
-    assert order[: order.index("mean") + 1].count("fill") == 1, (
+    # A fill has to precede the first mean. Counting them would pin something
+    # else: the first tick deliberately fills twice, the delivery month inline
+    # and the rest of the year from a background task, and only the first of
+    # those has to beat the mean.
+    assert order.index("fill") < order.index("mean"), (
         f"the spot cache must be filled before the month mean is taken, got {order}"
     )
 
@@ -4169,6 +4173,78 @@ async def test_a_window_neither_source_could_serve_is_not_re_walked_hourly(
         assert attempts["entsoe"] > first["entsoe"], (
             "a three-hour hold has to expire, the servers do come back"
         )
+
+
+async def test_the_first_tick_fetches_the_month_not_the_year(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """async_config_entry_first_refresh runs inside setup, and setup is what
+    the config flow's final step waits on. A cold cache spent that step
+    fetching 35 week-chunks, which is minutes of spinner on a fresh install
+    and far longer while ENTSO-E was down.
+
+    The first tick fetches only the delivery month, which the monthly mean
+    computed right after cannot do without, and schedules the rest of the year
+    as a background task. Every later tick asks for the whole year again, which
+    with a warm cache costs nothing.
+    """
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=DynamicRates(factor=1.0, base=0.01))
+
+    windows: list[tuple[date, date]] = []
+    scheduled: list[Any] = []
+
+    async def _fill(start: date, end: date, api_key: str | None = None) -> None:
+        windows.append((start, end))
+        # Stand in for what the walk would have cached, so the deferred fill
+        # can tell "I fetched a year" from "the cache was already warm".
+        coord._historical_spots[datetime(2026, 1, 1, len(windows), tzinfo=UTC)] = 0.1
+
+    def _capture_task(_hass: Any, coro: Any, _name: str) -> Any:
+        scheduled.append(coro)
+        return None
+
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
+    coord._ensure_historical_spots = _fill  # type: ignore[method-assign]
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord._store, "async_save", AsyncMock()),
+        patch.object(entry, "async_create_background_task", _capture_task),
+    ):
+        await coord._update_body()
+        assert windows == [(date(2026, 8, 1), date(2026, 8, 31))], (
+            "the tick setup waits on must not walk back to 1 January"
+        )
+        assert len(scheduled) == 1, "the rest of the year is deferred, not dropped"
+
+        # What was deferred is the whole year, and it asks for a refresh so the
+        # past hours the first tick could not price land in the sensor.
+        coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+        await scheduled[0]
+        assert windows[-1] == (date(2026, 1, 1), date(2026, 8, 31))
+        coord.async_request_refresh.assert_awaited_once()
+
+        # A restart runs the same fill against a cache the Store already
+        # warmed. Nothing is fetched, so nothing asks for an extra full tick.
+        coord.async_request_refresh.reset_mock()
+        coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+        await coord._fill_year_spots()
+        coord.async_request_refresh.assert_not_awaited()
+
+        # And the deferral is once per coordinator, not once per tick.
+        await coord._update_body()
+        assert windows[-1] == (date(2026, 1, 1), date(2026, 8, 31))
+        assert len(scheduled) == 1
 
 
 def _ranking(ran_at: datetime) -> Any:

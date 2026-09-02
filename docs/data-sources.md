@@ -333,7 +333,7 @@ A malformed `price.amount` or `position` raises `EntsoeError`
 constructs a fresh `EntsoeClient` per call (`api.py:77`,
 `coordinator_spots.py:280`). Two paths use it:
 
-- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:520`). Windows the request
+- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:541`). Windows the request
   on the local (Europe/Brussels) day so a 00:00 to 02:00 local query does not
   drop yesterday's UTC tail; anchors both endpoints on local midnight converted
   to UTC so the fetched window matches the actual local-day hour count, which
@@ -349,7 +349,7 @@ constructs a fresh `EntsoeClient` per call (`api.py:77`,
   `_spot_cache_day` stays `None` across a restart, so the first tick still
   fetches, and slots that no longer cover today or tomorrow are dropped on load.
   `_fallback_spots` is what reads it when a fetch fails.
-- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:232`).
+- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:234`).
   Ensures `self._historical_spots` covers every hour of the local days in a range,
   fetching only the missing spans. It considers a day "present" when at least 20
   of its 24 hours are cached (`coordinator_spots.py:350`), tolerating both the
