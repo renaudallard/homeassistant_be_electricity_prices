@@ -36,8 +36,20 @@ tracks six:
 | `energyknights_agilis_green` | Agilis Online Green | as above | as above, plus the green adder |
 | `energyknights_essentia_green` | Essentia Online Green | as above | as above, plus the green adder |
 
-Agilior and Agilis are the same card on different settlement grids; the only thing
-separating them in the parsed snapshot is `DynamicRates.quarter_hourly`. Essentia Online
+Agilior and Agilis are the same card design on different settlement grids (two separate
+PDFs, one slug each); the only thing separating them in the parsed snapshot is
+`DynamicRates.quarter_hourly`.
+
+That flag and the `index` token are independent fields, and only the card decides which
+is right. `_extract_rows` (`energyknights.py:654`) already refuses a card whose printed
+index differs from the declared one, but nothing tied that to the flag the coordinator
+actually bills on, so a product declared on `Belpex_15` with the flag left off would
+parse clean and silently price a 15-minute contract on hourly slots. A module-level
+assertion (`energyknights.py:327`) now pins the pairing against
+`_QUARTER_HOURLY_INDICES`. It fails on an unknown token paired with the flag as well as
+on a mismatched pair: a new 15-minute index has to be classified by someone who has read
+the card, since defaulting it either way is the same mistake facing in one direction or
+the other. Essentia Online
 is also the contractual fallback for both: page 3 of every dynamic card says that
 consumption Fluvius cannot deliver quarter values for is billed "volgens het variabele
 tarief (Essentia Online) dat van toepassing is in dezelfde tariefmaand".

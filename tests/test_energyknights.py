@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 import pytest
 
@@ -858,3 +859,77 @@ def test_all_six_products_are_registered() -> None:
         assert contract.spot_indexed_injection is False
     # Optima has no twin here because Optima itself is out of scope.
     assert "energyknights_optima_green" not in contracts
+
+
+def test_settlement_index_and_quarter_hourly_flag_agree() -> None:
+    """``index`` and ``quarter_hourly`` are separate fields and only the card
+    decides. ``_extract_rows`` checks the index against what the card prints,
+    but nothing tied that to the flag the coordinator actually bills on, so a
+    product declared on Belpex_15 with the flag left off would parse clean and
+    silently price a 15-minute contract on hourly slots.
+    """
+    import dataclasses
+
+    from custom_components.be_electricity_prices.providers.energyknights import (
+        _CONTRACTS,
+        _QUARTER_HOURLY_INDICES,
+    )
+
+    def mispaired(contracts: tuple[Any, ...]) -> tuple[str, ...]:
+        return tuple(
+            c.contract_id
+            for c in contracts
+            if c.quarter_hourly != (c.index.casefold() in _QUARTER_HOURLY_INDICES)
+        )
+
+    assert mispaired(_CONTRACTS) == ()
+
+    # The mistake being guarded: a quarter-hourly index, flag forgotten.
+    forgot = tuple(
+        dataclasses.replace(c, quarter_hourly=False)
+        if c.contract_id == "energyknights_agilior"
+        else c
+        for c in _CONTRACTS
+    )
+    assert mispaired(forgot) == ("energyknights_agilior",)
+
+    # And its mirror, which bills an hourly contract on quarter slots.
+    overset = tuple(
+        dataclasses.replace(c, quarter_hourly=True)
+        if c.contract_id == "energyknights_agilis"
+        else c
+        for c in _CONTRACTS
+    )
+    assert mispaired(overset) == ("energyknights_agilis",)
+
+    # A new 15-minute token nobody has classified fails too, rather than
+    # defaulting to hourly: whoever adds it has to have read the card.
+    unknown = tuple(
+        dataclasses.replace(c, index="Belpex_15M")
+        if c.contract_id == "energyknights_agilior"
+        else c
+        for c in _CONTRACTS
+    )
+    assert mispaired(unknown) == ("energyknights_agilior",)
+
+
+def test_the_declared_indices_match_the_live_card_grammar() -> None:
+    """Pins what the cards actually print, so a rename shows up here rather
+    than as a silent grid change. Verified against the September 2026 cards:
+    Agilior settles on `Belpex_15 * 1 + 12`, Agilis on `Belpex_h * 1 + 12`.
+    """
+    from custom_components.be_electricity_prices.providers.energyknights import (
+        _CONTRACTS,
+    )
+
+    by_id = {c.contract_id: c for c in _CONTRACTS}
+    assert by_id["energyknights_agilior"].index == "Belpex_15"
+    assert by_id["energyknights_agilis"].index == "Belpex_h"
+    assert by_id["energyknights_essentia"].index == "BelpexRLP"
+    assert by_id["energyknights_essentia"].credit_index == "BelpexSPP"
+    # The green twins are the same products with one extra row.
+    for stem in ("agilior", "agilis", "essentia"):
+        plain = by_id[f"energyknights_{stem}"]
+        green = by_id[f"energyknights_{stem}_green"]
+        assert green.index == plain.index
+        assert green.quarter_hourly == plain.quarter_hourly

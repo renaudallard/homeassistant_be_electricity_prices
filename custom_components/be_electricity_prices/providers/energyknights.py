@@ -324,6 +324,30 @@ DISCOVER_IDS: frozenset[str] = frozenset(
 )
 assert {c.slug for c in _CONTRACTS} <= DISCOVER_IDS
 
+# Index tokens that settle per quarter hour. Listed rather than inferred from
+# the flag, because the two are independent fields and only the card decides:
+# ``index`` is checked against what the card prints (_extract_rows), while
+# ``quarter_hourly`` is what the coordinator bills on, and nothing tied them
+# together. A product declared on Belpex_15 with the flag left off would parse
+# clean and silently bill a 15-minute contract on hourly slots.
+_QUARTER_HOURLY_INDICES = frozenset({"belpex_15"})
+
+# Deliberately fails on an UNKNOWN token paired with the flag, not just on a
+# mismatched pair. A new 15-minute index has to be classified here by someone
+# who has read the card; defaulting it to hourly is the mis-pricing this
+# exists to prevent, and defaulting it to quarter-hourly is the same mistake
+# facing the other way.
+_MISPAIRED_INDEX = tuple(
+    c.contract_id
+    for c in _CONTRACTS
+    if c.quarter_hourly != (c.index.casefold() in _QUARTER_HOURLY_INDICES)
+)
+assert not _MISPAIRED_INDEX, (
+    f"Energy Knights: {_MISPAIRED_INDEX} declare a settlement index and a "
+    f"quarter_hourly flag that disagree; known 15-minute indices are "
+    f"{sorted(_QUARTER_HOURLY_INDICES)}"
+)
+
 # Accept both decimal separators: a dot-decimal re-render must not truncate a
 # mandatory value to its integer part (matches the sibling extractors).
 _NUM = NUM_NO_THOUSANDS
