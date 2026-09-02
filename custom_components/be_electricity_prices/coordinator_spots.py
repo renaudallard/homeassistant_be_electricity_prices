@@ -39,7 +39,9 @@ from datetime import UTC, timedelta
 import logging
 
 from .api import (
+    EnergyChartsClient,
     EntsoeAuthError,
+    EntsoeClient,
     EntsoeError,
     fetch_day_ahead_or_fallback,
 )
@@ -62,7 +64,7 @@ from .synergrid import (
     fetch_spp_weights,
 )
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 import aiohttp
@@ -115,6 +117,18 @@ def _spots_for_local_days(
         for slot, value in spots.items()
         if dt_util.as_local(slot).date() in days
     }
+
+
+def _dates_in(start: date, end: date) -> Iterator[date]:
+    """Every date in the half-open range ``[start, end)``.
+
+    Half-open because that is the shape every chunk in the historical walk
+    carries: ``chunk_end`` is the first day the chunk does NOT cover.
+    """
+    day = start
+    while day < end:
+        yield day
+        day += timedelta(days=1)
 
 
 def _drop_hours_before(cache: dict[datetime, _CacheValue], cutoff: datetime) -> None:
@@ -300,6 +314,18 @@ class _SpotsMixin:
         # the flag here silently took the hourly product, so a quarter-hourly
         # contract's whole replay was priced off a different auction than its
         # live bill.
+        #
+        # ENTSO-E answers first, week by week; everything it could not answer
+        # is collected and handed to the keyless fallback in ONE request at the
+        # end. Asking the fallback per chunk, which is what routing every chunk
+        # through fetch_day_ahead_or_fallback did, cannot work: energy-charts
+        # rate-limits /price to two requests per MINUTE per client IP, so the
+        # moment ENTSO-E went down a 35-chunk year got two chunks answered and
+        # 33 HTTP 429s. That endpoint windows on plain dates with no length
+        # limit, so the whole year is one request either way.
+        entsoe = EntsoeClient(api_key, self._session)
+        unanswered: list[tuple[date, date]] = []
+        primary: EntsoeError | None = None
         for r_start, r_end in missing_ranges:
             chunk_start = r_start
             while chunk_start < r_end:
@@ -312,72 +338,155 @@ class _SpotsMixin:
                 start_utc = dt_util.start_of_local_day(chunk_start).astimezone(UTC)
                 end_utc = dt_util.start_of_local_day(chunk_end).astimezone(UTC)
                 try:
-                    # The source is deliberately discarded here.
-                    # ``_spot_source`` describes the curve current_price was
-                    # built from, and this runs AFTER the live fetch in the
-                    # tick: letting the backfill write it would relabel a
-                    # live ENTSO-E price because one historical chunk had to
-                    # fall back. The two are answered independently and may
-                    # legitimately come from different sources.
-                    prices, _source = await fetch_day_ahead_or_fallback(
-                        api_key,
-                        self._session,
-                        start_utc,
-                        end_utc,
-                        quarter_hourly=quarter_hourly,
+                    prices = await entsoe.fetch_day_ahead(
+                        start_utc, end_utc, quarter_hourly=quarter_hourly
                     )
-                except (EntsoeError, EntsoeAuthError) as err:
+                except EntsoeAuthError as err:
+                    # This class covers a rejected key, an exhausted daily
+                    # quota, and a window ENTSO-E acknowledges with no
+                    # matching data, which for a PAST chunk can simply mean
+                    # the data does not exist. None of the three is fixed
+                    # by asking again in an hour, and a failed fetch leaves
+                    # each day exactly as short as it was, so with no marker
+                    # the whole year is re-pulled on every hourly tick and
+                    # logs a warning per chunk for as long as the entry
+                    # exists. Mark this chunk's stable past days so the TTL
+                    # backs that off to twice a day. Today and yesterday
+                    # stay unmarked, their data is still landing.
+                    #
+                    # No fallback either: a credential the owner has to renew
+                    # must keep raising its Repairs card rather than being
+                    # quietly papered over by a keyless source.
                     _LOGGER.warning(
                         "ENTSO-E historical fetch failed for %s..%s: %s",
                         chunk_start,
                         chunk_end,
                         err,
                     )
-                    if isinstance(err, EntsoeAuthError):
-                        # This class covers a rejected key, an exhausted daily
-                        # quota, and a window ENTSO-E acknowledges with no
-                        # matching data, which for a PAST chunk can simply mean
-                        # the data does not exist. None of the three is fixed
-                        # by asking again in an hour, and a failed fetch leaves
-                        # each day exactly as short as it was, so with no marker
-                        # the whole year is re-pulled on every hourly tick and
-                        # logs a warning per chunk for as long as the entry
-                        # exists. Mark this chunk's stable past days so the TTL
-                        # backs that off to twice a day. Today and yesterday
-                        # stay unmarked, their data is still landing. A plain
-                        # EntsoeError is a timeout or a 5xx, which the next tick
-                        # should retry promptly rather than sit out the TTL.
-                        day = chunk_start
-                        while day < chunk_end:
-                            if day < stable_before:
-                                self._short_spot_days[day] = now
-                            day += timedelta(days=1)
-                    chunk_start = chunk_end
-                    continue
-                # Stored by clock hour whichever grid came back: the
-                # recorder only keeps hourly consumption, so an hour is the
-                # finest thing the replay can ever price. An entry whose
-                # feed-in formula is floored keeps the hour's own slots too,
-                # because that formula is not linear and its mean does not
-                # price it.
-                self._historical_spots.update(_bucket_spots_by_hour(prices))
-                if want_quarters:
-                    self._historical_spot_quarters.update(
-                        _group_spot_quarters_by_hour(prices)
+                    for day in _dates_in(chunk_start, chunk_end):
+                        if day < stable_before:
+                            self._short_spot_days[day] = now
+                except EntsoeError as err:
+                    # A timeout or a 5xx. Not logged per chunk: one warning
+                    # naming the whole span replaces up to 52 identical ones,
+                    # and the fallback below may well answer for it anyway.
+                    primary = err
+                    unanswered.append((chunk_start, chunk_end))
+                else:
+                    self._merge_spot_window(prices, want_quarters)
+                    self._remark_spot_days(
+                        chunk_start, chunk_end, want_quarters, now, stable_before
                     )
-                # Mark stable past days that are STILL short after this
-                # fetch so the next ticks skip them until the TTL expires;
-                # clear the marker for any day that is now complete.
-                day = chunk_start
-                while day < chunk_end:
-                    ds_utc = dt_util.start_of_local_day(day).astimezone(UTC)
-                    got = self._cached_spot_hours(ds_utc, want_quarters)
-                    if got < 20 and day < stable_before:
-                        self._short_spot_days[day] = now
-                    else:
-                        self._short_spot_days.pop(day, None)
-                    day += timedelta(days=1)
                 chunk_start = chunk_end
+        if unanswered:
+            await self._fill_spots_from_fallback(
+                unanswered, primary, want_quarters, quarter_hourly, now, stable_before
+            )
+
+    def _merge_spot_window(
+        self, prices: dict[datetime, float], want_quarters: bool
+    ) -> None:
+        """Merge one fetched window into the historical caches.
+
+        Stored by clock hour whichever grid came back: the recorder only keeps
+        hourly consumption, so an hour is the finest thing the replay can ever
+        price. An entry whose feed-in formula is floored keeps the hour's own
+        slots too, because that formula is not linear and its mean does not
+        price it.
+        """
+        self._historical_spots.update(_bucket_spots_by_hour(prices))
+        if want_quarters:
+            self._historical_spot_quarters.update(_group_spot_quarters_by_hour(prices))
+
+    def _remark_spot_days(
+        self,
+        start: date,
+        end: date,
+        want_quarters: bool,
+        now: datetime,
+        stable_before: date,
+    ) -> None:
+        """Refresh the short-day markers over ``[start, end)`` after a fetch.
+
+        Mark stable past days that are STILL short so the next ticks skip them
+        until the TTL expires; clear the marker for any day that is now
+        complete.
+        """
+        for day in _dates_in(start, end):
+            ds_utc = dt_util.start_of_local_day(day).astimezone(UTC)
+            got = self._cached_spot_hours(ds_utc, want_quarters)
+            if got < 20 and day < stable_before:
+                self._short_spot_days[day] = now
+            else:
+                self._short_spot_days.pop(day, None)
+
+    async def _fill_spots_from_fallback(
+        self,
+        unanswered: list[tuple[date, date]],
+        primary: EntsoeError | None,
+        want_quarters: bool,
+        quarter_hourly: bool,
+        now: datetime,
+        stable_before: date,
+    ) -> None:
+        """Fill the chunks ENTSO-E could not answer, in one keyless request.
+
+        One request spanning them all, never one per chunk: energy-charts
+        limits /price to two requests per minute per client IP and takes plain
+        dates with no length cap, so a whole year costs exactly one call and
+        about 0,4 MB.
+
+        The response is filtered back to the days that actually failed. The
+        span runs from the first failed chunk to the last and may cover chunks
+        ENTSO-E did answer; those hours are the source of record, and
+        overwriting them with a second source's view of the same auction is a
+        difference nobody asked for.
+
+        ``_spot_source`` is deliberately left alone. It describes the curve
+        current_price was built from, and this runs AFTER the live fetch in the
+        tick: letting the backfill write it would relabel a live ENTSO-E price
+        because one historical chunk had to fall back. The two are answered
+        independently and may legitimately come from different sources.
+        """
+        span_start = min(start for start, _ in unanswered)
+        span_end = max(end for _, end in unanswered)
+        start_utc = dt_util.start_of_local_day(span_start).astimezone(UTC)
+        end_utc = dt_util.start_of_local_day(span_end).astimezone(UTC)
+        try:
+            prices = await EnergyChartsClient(self._session).fetch_day_ahead(
+                start_utc, end_utc, quarter_hourly=quarter_hourly
+            )
+        except EntsoeError as err:
+            # Both messages travel together: the ENTSO-E half is the half that
+            # explains the outage, and reporting only the fallback's own error
+            # sends the reader after the wrong service entirely.
+            _LOGGER.warning(
+                "historical spot fetch failed for %s..%s: ENTSO-E: %s; fallback: %s",
+                span_start,
+                span_end,
+                primary,
+                err,
+            )
+            return
+        if not prices:
+            _LOGGER.warning(
+                "historical spot fetch failed for %s..%s: ENTSO-E: %s; "
+                "fallback returned no prices for the window",
+                span_start,
+                span_end,
+                primary,
+            )
+            return
+        failed_days = {
+            day for start, end in unanswered for day in _dates_in(start, end)
+        }
+        self._merge_spot_window(
+            _spots_for_local_days(prices, failed_days), want_quarters
+        )
+        for chunk_start, chunk_end in unanswered:
+            self._remark_spot_days(
+                chunk_start, chunk_end, want_quarters, now, stable_before
+            )
 
     async def _fetch_spot_prices(self) -> dict[datetime, float]:
         api_key = self.entry.data.get(CONF_API_KEY)

@@ -107,6 +107,21 @@ Three properties are load-bearing:
   a PT15M series for the same period and the parser must not mix them;
   energy-charts returns whichever grid the auction cleared on and nothing else,
   so an hour is simply the mean of the slots inside it.
+- **The historical walk does not use it per chunk.** `/price` is rate-limited
+  to **two requests per minute per client IP** (token bucket, burst 2). The
+  walk chunks by week because ENTSO-E wants it that way, and routing every
+  chunk through `fetch_day_ahead_or_fallback` therefore asked the fallback 35
+  times for a year-to-date backfill: two chunks answered and the rest came back
+  HTTP 429 the moment ENTSO-E went down. `_ensure_historical_spots` instead
+  drives `EntsoeClient` directly, collects the chunks it could not answer, and
+  makes ONE fallback request spanning them
+  (`coordinator_spots.py:_fill_spots_from_fallback`) -- the endpoint takes
+  plain dates with no length cap, so a full year is 0,4 MB in a single call.
+  The response is filtered back to the days that actually failed, so hours
+  ENTSO-E did serve keep the source of record rather than being overwritten
+  with a second source's view of the same auction. The live single-window
+  fetch still goes through `fetch_day_ahead_or_fallback`, where per-call
+  fallback is exactly right.
 
 The endpoint takes plain dates on the local (Brussels) day, inclusive at both
 ends, so the client resolves the local days the UTC window spans and trims the
@@ -305,7 +320,7 @@ A malformed `price.amount` or `position` raises `EntsoeError`
 constructs a fresh `EntsoeClient` per call (`api.py:77`,
 `coordinator_spots.py:280`). Two paths use it:
 
-- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:382`). Windows the request
+- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:491`). Windows the request
   on the local (Europe/Brussels) day so a 00:00 to 02:00 local query does not
   drop yesterday's UTC tail; anchors both endpoints on local midnight converted
   to UTC so the fetched window matches the actual local-day hour count, which
@@ -321,7 +336,7 @@ constructs a fresh `EntsoeClient` per call (`api.py:77`,
   `_spot_cache_day` stays `None` across a restart, so the first tick still
   fetches, and slots that no longer cover today or tomorrow are dropped on load.
   `_fallback_spots` is what reads it when a fetch fails.
-- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:208`).
+- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:222`).
   Ensures `self._historical_spots` covers every hour of the local days in a range,
   fetching only the missing spans. It considers a day "present" when at least 20
   of its 24 hours are cached (`coordinator_spots.py:350`), tolerating both the
