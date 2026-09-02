@@ -27,9 +27,9 @@ Related docs:
 
 | Class | Base | Role |
 | --- | --- | --- |
-| `_WizardStepsMixin` | - | The shared step chain (`async_step_contract` through `async_step_meters`) plus the branch helpers (`config_flow.py:412`) |
-| `BePricesConfigFlow` | `_WizardStepsMixin, ConfigFlow` | Install-time flow; entry step `async_step_user`, finalizes with `async_create_entry` (`config_flow.py:620`) |
-| `BePricesOptionsFlow` | `_WizardStepsMixin, OptionsFlow` | Post-install; menu -> `edit` (re-runs the chain pre-filled) or `compare` (throwaway quote) (`config_flow.py:645`) |
+| `_WizardStepsMixin` | - | The shared step chain (`async_step_contract` through `async_step_meters`) plus the branch helpers (`config_flow.py:483`) |
+| `BePricesConfigFlow` | `_WizardStepsMixin, ConfigFlow` | Install-time flow; entry step `async_step_user`, finalizes with `async_create_entry` (`config_flow.py:691`) |
+| `BePricesOptionsFlow` | `_WizardStepsMixin, OptionsFlow` | Post-install; menu -> `edit` (re-runs the chain pre-filled) or `compare` (throwaway quote) (`config_flow.py:716`) |
 
 Both flows walk the *same* chain: `supplier/region -> contract -> (signed_rate) ->
 dso -> meter ->
@@ -39,7 +39,7 @@ dso -> meter ->
 the expert custom supplier. Only the entry step and `_finalize` differ. The
 mixin's docstring at `flow_prefill.py:214` states the invariant: `_after_meter` is
 overridden in `BePricesConfigFlow` to add the install-time unique-id reject, and
-`_finalize` is abstract (`config_flow.py:575` raises `NotImplementedError`).
+`_finalize` is abstract (`config_flow.py:646` raises `NotImplementedError`).
 
 The OptionsFlow pre-fills every field with the current value, so a user can change
 anything post-install (including supplier, contract, and region). On finalize it
@@ -54,22 +54,22 @@ the "Shown when" column gives the gate.
 
 | Step id | Method | Asks | Writes | Shown when / branch |
 | --- | --- | --- | --- | --- |
-| `user` | `async_step_user` (`config_flow.py:620`) | Supplier, region | `CONF_SUPPLIER`, `CONF_REGION` | Always (install entry step) |
-| `contract` | `async_step_contract` (`config_flow.py:190`) | Contract (region-filtered), optional start / end date | `CONF_CONTRACT`, `CONF_CONTRACT_START_DATE`, `CONF_CONTRACT_END_DATE` | Always. A supplier/region mismatch is now caught on the step where BOTH are chosen (`_region_mismatch_error`) and re-shows that form with `supplier_region_unavailable` on the supplier field, instead of aborting a step later and discarding every other edit made in the same options run; rejects a future start or an end not after the start |
-| `signed_rate` | `async_step_signed_rate` (`config_flow.py:243`) | The rate actually signed at: single / peak / offpeak / exclusive night, or spot factor / base, plus the yearly fee | The 6 `CONF_MANUAL_*` keys (`_MANUAL_RATE_KEYS`) | `_needs_manual_rate` true (`config_flow.py:215`): a start date is set on a fixed, dynamic or spot-monthly contract of a non-custom supplier (the two spot-priced kinds sign a coefficient pair, so they get the factor / base boxes; fixed gets the rate boxes). Offered whether or not the supplier archives past cards, because what is typed wins over the archived card |
-| `dso` | `async_step_dso` (`config_flow.py:260`) | Distribution operator | `CONF_DSO` | Always |
-| `meter` | `async_step_meter` (`config_flow.py:271`) | Meter type | `CONF_METER` | Always; option list narrows by contract kind |
-| `dso_tariff_mode` | `async_step_dso_tariff_mode` (`config_flow.py:442`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia AND the contract is not `tou_impact` (`config_flow.py:442`) |
-| `api_key` | `async_step_api_key` (`config_flow.py:308`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
+| `user` | `async_step_user` (`config_flow.py:691`) | Supplier, region | `CONF_SUPPLIER`, `CONF_REGION` | Always (install entry step) |
+| `contract` | `async_step_contract` (`config_flow.py:197`) | Contract (region-filtered), optional start / end date | `CONF_CONTRACT`, `CONF_CONTRACT_START_DATE`, `CONF_CONTRACT_END_DATE` | Always. A supplier/region mismatch is now caught on the step where BOTH are chosen (`_region_mismatch_error`) and re-shows that form with `supplier_region_unavailable` on the supplier field, instead of aborting a step later and discarding every other edit made in the same options run; rejects a future start or an end not after the start |
+| `signed_rate` | `async_step_signed_rate` (`config_flow.py:250`) | The rate actually signed at: single / peak / offpeak / exclusive night, or spot factor / base, plus the yearly fee | The 6 `CONF_MANUAL_*` keys (`_MANUAL_RATE_KEYS`) | `_needs_manual_rate` true (`config_flow.py:222`): a start date is set on a fixed, dynamic or spot-monthly contract of a non-custom supplier (the two spot-priced kinds sign a coefficient pair, so they get the factor / base boxes; fixed gets the rate boxes). Offered whether or not the supplier archives past cards, because what is typed wins over the archived card |
+| `dso` | `async_step_dso` (`config_flow.py:267`) | Distribution operator | `CONF_DSO` | Always |
+| `meter` | `async_step_meter` (`config_flow.py:278`) | Meter type | `CONF_METER` | Always; option list narrows by contract kind |
+| `dso_tariff_mode` | `async_step_dso_tariff_mode` (`config_flow.py:513`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia AND the contract is not `tou_impact` (`config_flow.py:513`) |
+| `api_key` | `async_step_api_key` (`config_flow.py:375`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
 | `custom_energy` | `async_step_custom_energy` | Commodity formula (mode-dependent fields) | `CONF_CUSTOM_ENERGY_*`, `CONF_CUSTOM_YEARLY_FIXED_FEE` | Custom supplier only, after the energy/api-key step. The peak / off-peak energy boxes carry **no default** (`_add_custom_num(..., fallback=True)`): the pricing engine falls back to the single rate when they are absent, and a `vol.Optional` default is submitted verbatim when the user leaves the box alone, which wrote 0,00 into the entry and billed zero. They are shown for **both** `bi` and `dynamic` meters, matching `bi_capable` in `pricing.py:291`; gating on `bi` alone billed a fixed contract on a smart meter at the single rate for all 24 hours |
-| `capacity` | `async_step_capacity` (`config_flow.py:326`) | Peak source (sensor/fixed) + value | `CONF_CAPACITY_MODE`, `CONF_CAPACITY_PEAK_SENSOR`, `CONF_CAPACITY_FIXED_KW` | Region == Flanders (`config_flow.py:326`) |
-| `connection_power` | `async_step_connection_power` (`config_flow.py:482`) | Brussels connection-power tier | `CONF_CONNECTION_KVA_TIER` | Region == Brussels (`config_flow.py:482`) |
-| `solar` | `async_step_solar` (`config_flow.py:342`) | Inverter kVA + regime | `CONF_SOLAR_KVA`, `CONF_SOLAR_REGIME` | Always |
-| `injection_api_key` | `async_step_injection_api_key` (`config_flow.py:379`) | ENTSO-E token (optional) | `CONF_API_KEY` | `_needs_injection_api_key` true (`config_flow.py:352`) |
+| `capacity` | `async_step_capacity` (`config_flow.py:395`) | Peak source (sensor/fixed) + value | `CONF_CAPACITY_MODE`, `CONF_CAPACITY_PEAK_SENSOR`, `CONF_CAPACITY_FIXED_KW` | Region == Flanders (`config_flow.py:395`) |
+| `connection_power` | `async_step_connection_power` (`config_flow.py:553`) | Brussels connection-power tier | `CONF_CONNECTION_KVA_TIER` | Region == Brussels (`config_flow.py:553`) |
+| `solar` | `async_step_solar` (`config_flow.py:411`) | Inverter kVA + regime | `CONF_SOLAR_KVA`, `CONF_SOLAR_REGIME` | Always |
+| `injection_api_key` | `async_step_injection_api_key` (`config_flow.py:448`) | ENTSO-E token (optional) | `CONF_API_KEY` | `_needs_injection_api_key` true (`config_flow.py:421`) |
 | `custom_injection` | `async_step_custom_injection` | Injection formula (flat / spot / monthly-mean, floor; plus an SPP-weighted toggle on the monthly-average mode) | `CONF_CUSTOM_INJECTION_*` | Custom supplier on the injection regime |
 | `custom_dso` | `async_step_custom_dso` | Hand-entered DSO overlay (region/meter-relevant fields) | `CONF_CUSTOM_DSO_*` | Custom supplier only. The `distribution_peak` / `distribution_offpeak` / `distribution_exclusive_night` boxes carry **no default**, for the same reason as the energy ones: they all fall back to `distribution_single`, so a submitted 0,00 zeroes the network leg. The bi-hourly pair is shown for **both** `bi` and `dynamic` meters, matching `pricing.network_eur_per_kwh` (`pricing.py:562`), which routes both through that split when the DSO mode is not `simple`. A dynamic / TOU contract forces `METER_DYNAMIC`, so gating on `bi` alone left those entries unable to supply the rates their own network leg bills on. The Walloon CWaPE **Impact triplet** (`pic` / `medium` / `eco`) carries no default for a sharper version of the same reason: `network_eur_per_kwh` takes the Impact branch as soon as all three are non-None, so a defaulted 0,00 does not fall back to the single rate, it bills **no distribution at all** in every band and every hour. A Walloon Impact entry that filled in only `distribution_single` lost 0,1198 EUR/kWh, about EUR 419/yr at 3500 kWh, across the live tick, the year-to-date walk, the backfill and the compare quote, and raised no Repairs card because `_sync_impact_gap_issue` tests for `None` and a stored zero is not `None`. Entries that already hold the zeros are cleared by `_migrate_zeroed_custom_impact_bands` at setup, which drops an **all-zero** triplet only: a genuine tariff has no zero bands, and a partly filled one is the user's own data |
 | `custom_tax` | `async_step_custom_tax` | Hand-entered taxes/levies + VAT rate | `CONF_CUSTOM_TAX_*`, `CONF_CUSTOM_VAT_RATE` | Custom supplier only |
-| `meters` | `async_step_meters` (`config_flow.py:412`) | kWh sensors (registers or totals) | 6 `CONF_*_KWH` keys | Always (final step, then `_finalize`). Rejects a **half-wired day/night pair** with `register_pair_incomplete` on the night field: the coordinator needs both halves or neither (`_resolve_daily_kwh`, `_hourly_consumption_sensors`), and one half alone silently collapsed `current_year_cost` to the fees-only floor with no error, repair or visible log line |
+| `meters` | `async_step_meters` (`config_flow.py:483`) | kWh sensors (registers or totals) | 6 `CONF_*_KWH` keys | Always (final step, then `_finalize`). Rejects a **half-wired day/night pair** with `register_pair_incomplete` on the night field: the coordinator needs both halves or neither (`_resolve_daily_kwh`, `_hourly_consumption_sensors`), and one half alone silently collapsed `current_year_cost` to the fees-only floor with no error, repair or visible log line |
 
 ### Flow diagram
 
@@ -118,9 +118,9 @@ the "Shown when" column gives the gate.
 ```
 
 The branch helpers that join the conditional steps back into the main line are all
-in the mixin: `_after_meter` (`config_flow.py:453`), `_after_dso_tariff_mode`
-(`config_flow.py:501`), `_after_api_key` (`config_flow.py:511`), `_before_solar`
-(`config_flow.py:493`), and `_after_solar` (`config_flow.py:365`).
+in the mixin: `_after_meter` (`config_flow.py:524`), `_after_dso_tariff_mode`
+(`config_flow.py:501`), `_after_api_key` (`config_flow.py:582`), `_before_solar`
+(`config_flow.py:493`), and `_after_solar` (`config_flow.py:434`).
 
 ## Step details and the billing constraint behind each branch
 
@@ -145,7 +145,7 @@ Schema `_user_schema` (`flow_schemas.py:381`). Two dropdowns:
 - Region: the `REGIONS` tuple (`const.py:43`), rendered with `translation_key="region"`
   so `selector.region.options` in `strings.json:393` supplies the localized labels.
 
-`async_step_user` seeds `self._data = {}` on first entry (`config_flow.py:620`).
+`async_step_user` seeds `self._data = {}` on first entry (`config_flow.py:691`).
 The OptionsFlow's `edit` step seeds instead from `{**entry.data, **entry.options}`
 (`config_flow.py:355`), which is why every later step can pre-fill.
 
@@ -206,7 +206,7 @@ Schema `_dso_tariff_mode_schema` (`flow_schemas.py:596`), default `DSO_MODE_BI_H
 Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:306`),
 `translation_key="dso_tariff_mode"`.
 
-Reached only when region is Wallonia (`_after_meter`, `config_flow.py:453`). Tarif
+Reached only when region is Wallonia (`_after_meter`, `config_flow.py:524`). Tarif
 Impact is the CWaPE 3-band hour-of-day distribution tariff (PIC 17-22, MEDIUM 7-11
 + 22-1, ECO 1-7 + 11-17, per `strings.json:52`) and needs a smart meter. Outside
 Wallonia only `simple`/`bi_horaire` are meaningful and the coordinator falls back
@@ -228,6 +228,23 @@ the flow proceeds:
 - `"cannot_connect"` on transport/parse error *and* on an HTTP 200 that comes back
   as an empty `Acknowledgement_MarketDocument` with no `TimeSeries`.
 
+The two outcomes are handled differently, because only one of them is the user's to
+fix. `"invalid_api_key"` keeps the user on the form: ENTSO-E answered and refused the
+token. `"cannot_connect"` diverts to the `api_key_unreachable` **menu**
+(`config_flow.py:325`), which offers *Check the key again* and *Continue without
+verifying*, in that order. ENTSO-E was unreachable for over a day at the end of August
+2026 and nobody could add a contract meanwhile (discussion #77): while the platform is
+down there is no way to tell a good key from a bad one, so blocking setup only punishes
+the user for someone else's outage.
+
+It is a menu rather than a silent pass because the user is choosing to finish setup on
+a key nothing has verified, and that choice should be theirs and visible. Continuing
+stores the key as typed; the coordinator validates it for real on the first refresh and
+raises the existing `entsoe_auth_failed` Repairs card if it was wrong. A re-check that
+comes back `"invalid_api_key"` returns to the form with that error rather than leaving
+a *continue anyway* the user should not take. Both key steps share the path, so the
+optional injection key behaves the same way.
+
 The validator queries a 24h window anchored on yesterday (`flow_schemas.py:639`): a
 quota-exhausted token returns 200 plus an empty acknowledgement, and the BE bidding
 zone effectively never goes a full local day with no publication, so an empty 24h
@@ -239,7 +256,7 @@ strings map to `config.error.invalid_api_key` / `config.error.cannot_connect`
 ### `capacity`: Flanders capacity-tariff peak source
 
 Schema `_capacity_schema` (`flow_schemas.py:932`). Reached from `_after_api_key` or
-`_after_dso_tariff_mode` when region is Flanders (`config_flow.py:501`, `:507`).
+`_after_dso_tariff_mode` when region is Flanders (`config_flow.py:572`, `:507`).
 Fields:
 
 - `CONF_CAPACITY_MODE`: `sensor` (default) or `fixed`, `translation_key="capacity_mode"`.
@@ -286,7 +303,7 @@ Schema `_connection_power_schema` (`flow_schemas.py:615`), default
 `DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:344`). Options are the four
 residential tiers `CONNECTION_KVA_TIERS` (`const.py:325`): `le1_44`, `le6`,
 `le9_6`, `le13`, `translation_key="connection_kva_tier"`. Reached from
-`_before_solar` when region is Brussels (`config_flow.py:493`). Brussels bills a
+`_before_solar` when region is Brussels (`config_flow.py:564`). Brussels bills a
 Brugel OSP (Obligations de Service Public) annual fee scaled by contractual
 connection power, so the tier is asked before solar. Every band the card prints
 is offered, not just the four at or below 13 kVA: a 3x400 V / 25 A residential
@@ -316,7 +333,7 @@ falls back to `SOLAR_REGIME_NONE` (`const.py:375`).
 ### `injection_api_key`: optional ENTSO-E token for spot-indexed injection
 
 Schema is inline (`config_flow.py:139`), an *optional* `PASSWORD` field. The gate is
-`_needs_injection_api_key` (`config_flow.py:352`), which is true when all of:
+`_needs_injection_api_key` (`config_flow.py:421`), which is true when all of:
 
 1. `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION`,
 2. no `CONF_API_KEY` was already collected (dynamic energy would have collected it),
@@ -421,7 +438,7 @@ consumption and drove the YTD negative instead of resting on the fees-only floor
 
 ### Unique id and duplicate rejection
 
-The unique id is built by `_unique_id_for` (`config_flow.py:579`): the string
+The unique id is built by `_unique_id_for` (`config_flow.py:650`): the string
 `supplier:contract:region:dso`, **plus the meter for an exclusive-night circuit**.
 On install, `BePricesConfigFlow._after_meter` (`config_flow.py:430`) sets it after
 the meter step and calls `_abort_if_unique_id_configured`; the same tuple already
@@ -460,12 +477,12 @@ stale stored value never renders as an invalid pre-selection:
 
 ## Options flow
 
-`BePricesOptionsFlow` (`config_flow.py:645`) opens on `async_step_init`
+`BePricesOptionsFlow` (`config_flow.py:716`) opens on `async_step_init`
 (`config_flow.py:343`) with a two-item menu (`async_show_menu`):
 
 | Menu option | Step | Effect |
 | --- | --- | --- |
-| `edit` | `async_step_edit` (`config_flow.py:666`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
+| `edit` | `async_step_edit` (`config_flow.py:737`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
 | `compare` | `async_step_compare` (`compare_flow.py:1294`) | One-off quote against another supplier; nothing saved |
 
 Menu labels live in `options.step.init.menu_options` (`strings.json:193`).
@@ -483,7 +500,7 @@ kind-dependent meter narrowing and every region branch re-evaluate against the
 edited values, so changing region from Flanders to Wallonia mid-edit drops the
 capacity step and adds the `dso_tariff_mode` step on the next pass.
 
-`_finalize` (`config_flow.py:575`):
+`_finalize` (`config_flow.py:646`):
 
 1. Recomputes the unique id from the edited tuple and aborts `already_configured`
    on collision with another entry (`config_flow.py:377`).

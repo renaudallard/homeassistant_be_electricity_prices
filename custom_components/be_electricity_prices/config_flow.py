@@ -147,6 +147,12 @@ class _WizardStepsMixin:
     """
 
     _data: dict[str, Any]
+    # An API key ENTSO-E could not confirm because it was unreachable, held
+    # only for the length of the menu that offers to re-check it. Bare
+    # annotations: a valued class attribute would be shared across flows, and
+    # a key typed in one setup must never reappear in the next.
+    _pending_key: str
+    _pending_key_step: str
     # The translation key of this flow's entry step. It stays per-flow because
     # the two are separate strings: config.step.user and options.step.edit.
     _entry_step_id = "user"
@@ -156,6 +162,7 @@ class _WizardStepsMixin:
 
         def async_show_form(self, **kwargs: Any) -> ConfigFlowResult: ...
         def async_abort(self, **kwargs: Any) -> ConfigFlowResult: ...
+        def async_show_menu(self, **kwargs: Any) -> ConfigFlowResult: ...
 
     def _seed_data(self) -> dict[str, Any]:
         """What ``_data`` starts as. Install starts empty; the OptionsFlow
@@ -305,6 +312,66 @@ class _WizardStepsMixin:
             step_id="professional", data_schema=_professional_schema(self._data)
         )
 
+    async def _offer_unverified_key(self, key: str, came_from: str) -> ConfigFlowResult:
+        """Stash a key ENTSO-E could not confirm and offer a way forward.
+
+        A rejected key and an unreachable ENTSO-E are different answers and
+        only the first is the user's problem. Blocking setup on the second
+        makes a platform outage look like a bad key, and ENTSO-E was down for
+        over a day at the end of August 2026 with nobody able to add a
+        contract in the meantime (discussion #77).
+
+        Deliberately a menu rather than a silent pass. The user is choosing to
+        finish setup on a key nothing has verified, so the choice is put in
+        front of them with the re-check offered first; if the key really is
+        bad, the coordinator's own auth Repairs card says so on the first
+        refresh.
+        """
+        self._pending_key = key
+        self._pending_key_step = came_from
+        return await self.async_step_api_key_unreachable()
+
+    async def async_step_api_key_unreachable(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002 - menu
+    ) -> ConfigFlowResult:
+        return self.async_show_menu(
+            step_id="api_key_unreachable",
+            menu_options=["api_key_recheck", "api_key_unverified"],
+        )
+
+    async def async_step_api_key_recheck(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002 - menu
+    ) -> ConfigFlowResult:
+        """Ask ENTSO-E again, for a user who would rather wait than proceed."""
+        err = await _validate_entsoe_key(self.hass, self._pending_key)
+        if err is None:
+            return await self._accept_pending_key()
+        if err == "cannot_connect":
+            return await self.async_step_api_key_unreachable()
+        # Still reachable and the key was refused after all: that IS the
+        # user's problem, so put them back on the form with the real error
+        # rather than leaving them a "continue anyway" they should not take.
+        return self.async_show_form(
+            step_id=self._pending_key_step,
+            data_schema=_api_key_schema(self._data),
+            errors={CONF_API_KEY: err},
+        )
+
+    async def async_step_api_key_unverified(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002 - menu
+    ) -> ConfigFlowResult:
+        """Accept the key unverified and carry on with setup."""
+        return await self._accept_pending_key()
+
+    async def _accept_pending_key(self) -> ConfigFlowResult:
+        self._data[CONF_API_KEY] = self._pending_key
+        if self._pending_key_step == "injection_api_key":
+            return await self.async_step_meters()
+        return await self._after_api_key()
+
     async def async_step_api_key(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -316,6 +383,8 @@ class _WizardStepsMixin:
                 user_input[CONF_API_KEY] = key
                 self._data.update(user_input)
                 return await self._after_api_key()
+            if err == "cannot_connect":
+                return await self._offer_unverified_key(key, "api_key")
             errors[CONF_API_KEY] = err
         return self.async_show_form(
             step_id="api_key",
@@ -396,6 +465,8 @@ class _WizardStepsMixin:
             if err is None:
                 self._data[CONF_API_KEY] = key
                 return await self.async_step_meters()
+            if err == "cannot_connect":
+                return await self._offer_unverified_key(key, "injection_api_key")
             errors[CONF_API_KEY] = err
         return self.async_show_form(
             step_id="injection_api_key",

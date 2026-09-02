@@ -88,6 +88,14 @@
           "api_key": "ENTSO-E API-sleutel"
         }
       },
+      "api_key_unreachable": {
+        "title": "ENTSO-E is niet bereikbaar",
+        "description": "Uw API-sleutel kon niet worden gecontroleerd omdat het ENTSO-E Transparency Platform momenteel niet antwoordt. Dat betekent niet dat de sleutel fout is: ENTSO-E kan een dag of langer onbereikbaar zijn, en zolang dat duurt valt een goede sleutel niet van een foute te onderscheiden.\n\nU kunt straks opnieuw controleren, of doorgaan en de sleutel laten controleren bij de eerste prijsverversing. Blijkt hij toch geweigerd, dan verschijnt er een reparatiemelding en kunt u hem alsnog corrigeren.",
+        "menu_options": {
+          "api_key_recheck": "Sleutel opnieuw controleren",
+          "api_key_unverified": "Doorgaan zonder controle"
+        }
+      },
       "capacity": {
         "title": "Capaciteitstarief (Vlaanderen)",
         "description": "Kies bij voorkeur de maandpieksensor van je meter (DSMR 5B publiceert \"Maximum demand current month\"), dat is de kwartierpiek die Fluvius aanrekent. Een gewone vermogenssensor wordt elk uur bemonsterd en benadert die alleen. Of gebruik een vaste waarde.",

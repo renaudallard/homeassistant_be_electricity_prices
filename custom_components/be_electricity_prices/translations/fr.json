@@ -88,6 +88,14 @@
           "api_key": "Cle API ENTSO-E"
         }
       },
+      "api_key_unreachable": {
+        "title": "ENTSO-E est injoignable",
+        "description": "Votre clé API n'a pas pu être vérifiée car la plateforme ENTSO-E Transparency ne répond pas actuellement. Cela ne veut pas dire que la clé est incorrecte : ENTSO-E connaît des pannes d'une journée ou plus, et pendant ce temps il est impossible de distinguer une clé valide d'une clé invalide.\n\nVous pouvez réessayer dans un instant, ou continuer et laisser la clé être vérifiée lors du premier rafraîchissement des prix. Si elle est finalement refusée, un avis de réparation vous le signalera et vous pourrez la corriger.",
+        "menu_options": {
+          "api_key_recheck": "Vérifier à nouveau la clé",
+          "api_key_unverified": "Continuer sans vérifier"
+        }
+      },
       "capacity": {
         "title": "Tarif capacitaire (Flandre)",
         "description": "Preferez le capteur de pic mensuel du compteur (DSMR 5B publie \"Maximum demand current month\"), soit le pic quart-horaire reellement facture par Fluvius. Un simple capteur de puissance est echantillonne chaque heure et ne fait que l'approcher. Ou une valeur fixe.",

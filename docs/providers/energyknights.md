@@ -216,7 +216,7 @@ the same direction (below), the known RLP-weighting residual `README.md` already
 discloses for the EBEM / Eneco / Mega cohorts.
 
 `spot_monthly` is in `SPOT_PRICED_CONTRACT_KINDS` (`const.py:243`), which routes the
-config flow through `async_step_api_key` (`config_flow.py:308`) with a `vol.Required`
+config flow through `async_step_api_key` (`config_flow.py:375`) with a `vol.Required`
 field validated live against ENTSO-E. So the coefficients always resolve, at the cost
 that a user without a key cannot add this contract at all: they reach a password field
 with no skip and the only exit is closing the dialog. That is exactly energie.be

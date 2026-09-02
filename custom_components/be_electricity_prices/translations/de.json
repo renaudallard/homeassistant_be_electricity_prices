@@ -88,6 +88,14 @@
           "api_key": "ENTSO-E API-Schluessel"
         }
       },
+      "api_key_unreachable": {
+        "title": "ENTSO-E ist nicht erreichbar",
+        "description": "Ihr API-Schlüssel konnte nicht geprüft werden, weil die ENTSO-E Transparency Platform derzeit nicht antwortet. Das bedeutet nicht, dass der Schlüssel falsch ist: ENTSO-E hat Ausfälle von einem Tag oder länger, und solange lässt sich ein gültiger Schlüssel nicht von einem ungültigen unterscheiden.\n\nSie können es gleich erneut versuchen oder fortfahren und den Schlüssel bei der ersten Preisaktualisierung prüfen lassen. Wird er doch abgelehnt, weist Sie eine Reparaturmeldung darauf hin und Sie können ihn dann korrigieren.",
+        "menu_options": {
+          "api_key_recheck": "Schlüssel erneut prüfen",
+          "api_key_unverified": "Ohne Prüfung fortfahren"
+        }
+      },
       "capacity": {
         "title": "Kapazitaetstarif (Flandern)",
         "description": "Bevorzugen Sie den Monatsspitzen-Sensor des Zaehlers (DSMR 5B liefert \"Maximum demand current month\"), also die Viertelstundenspitze, die Fluvius abrechnet. Ein einfacher Leistungssensor wird stuendlich abgetastet und ist nur eine Naeherung. Oder festen Wert waehlen.",

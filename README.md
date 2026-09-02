@@ -342,7 +342,14 @@ formula** supplier, which has no card and asks for the whole set.
    most static cards and not the handful it once was — every Bolt card and
    Cociter Variable index it per hour, while energie.be Vast and most of the
    rest index it on a monthly mean)* — validated against the real ENTSO-E endpoint at
-   submission; bad keys are rejected before the entry is saved. For the
+   submission; bad keys are rejected before the entry is saved. If ENTSO-E is
+   *unreachable* rather than rejecting the key, setup no longer dead-ends: the
+   wizard says so and offers to check again or to continue without verifying.
+   ENTSO-E has outages lasting a day or more, and while one is running there is
+   no way to tell a good key from a bad one, so blocking setup would only punish
+   you for their downtime. A key accepted that way is checked for real on the
+   first price refresh, and the usual repair notice appears if it turns out to
+   be rejected. For the
    injection case it is optional and skippable: leave it blank to finish
    setup, and the injection price simply stays unavailable until you add
    a key via Reconfigure.

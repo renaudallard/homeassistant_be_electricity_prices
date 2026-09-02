@@ -88,6 +88,14 @@
           "api_key": "ENTSO-E API key"
         }
       },
+      "api_key_unreachable": {
+        "title": "ENTSO-E could not be reached",
+        "description": "Your API key could not be verified because the ENTSO-E Transparency Platform is not answering right now. This does not mean the key is wrong: ENTSO-E has outages lasting a day or more, and during one there is no way to tell a good key from a bad one.\n\nYou can check again in a moment, or continue and let the key be verified on the first price refresh. If it turns out to be rejected, a repair notice will tell you so and you can correct it then.",
+        "menu_options": {
+          "api_key_recheck": "Check the key again",
+          "api_key_unverified": "Continue without verifying"
+        }
+      },
       "capacity": {
         "title": "Capacity tariff (Flanders)",
         "description": "Prefer your meter's own monthly peak sensor (DSMR 5B publishes \"Maximum demand current month\"), which is the quarter-hour peak Fluvius actually bills. A plain power sensor is sampled hourly and only approximates it. Or use a fixed value.",
