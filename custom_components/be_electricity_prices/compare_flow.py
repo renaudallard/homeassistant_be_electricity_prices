@@ -1506,35 +1506,51 @@ class _CompareStepsMixin(OptionsFlow):
         needs an ENTSO-E key for the spot rate. Borrow the user's existing
         key when their entry already has one (handled in
         _after_compare_meter); otherwise prompt and validate against the
-        live endpoint before reaching the result page."""
+        live endpoint before reaching the result page.
+
+        Skippable, like the injection key step: a comparison is a one-off
+        quote, so a user without a token should still see every other line
+        of it rather than be stopped at a page they cannot get past. Blank
+        leaves the key unset, and every reader of it already falls back to
+        the entry's own key with ``or``.
+        """
         errors: dict[str, str] = {}
         if user_input is not None:
-            key = user_input[CONF_API_KEY].strip()
+            # Same idiom as the injection key step: a blanked password field
+            # can be absent from user_input rather than present and empty.
+            key = (user_input.get(CONF_API_KEY) or "").strip()
+            if not key:
+                return await self._after_compare_api_key()
             err = await _validate_entsoe_key(self.hass, key)
             if err is None:
                 self._compare[CONF_API_KEY] = key
-                # Where to go next is stored rather than hardcoded, because
-                # the ranking needs the same prompt and the same live
-                # validation but returns to its own sweep. Defaults to the
-                # one-to-one result, so nothing about that path changes.
-                nxt: Callable[[], Awaitable[ConfigFlowResult]] | None = getattr(
-                    self, "_api_key_next_step", None
-                )
-                if nxt is not None:
-                    return await nxt()
-                return await self.async_step_compare_result()
+                return await self._after_compare_api_key()
             errors[CONF_API_KEY] = err
         return self.async_show_form(
             step_id="compare_api_key",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_API_KEY): TextSelector(
+                    vol.Optional(CONF_API_KEY, default=""): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.PASSWORD)
                     )
                 }
             ),
             errors=errors,
         )
+
+    async def _after_compare_api_key(self) -> ConfigFlowResult:
+        """Where the key step goes once it is done, keyed or not.
+
+        Stored rather than hardcoded, because the ranking needs the same
+        prompt but returns to its own sweep. Defaults to the one-to-one
+        result, so nothing about that path changes.
+        """
+        nxt: Callable[[], Awaitable[ConfigFlowResult]] | None = getattr(
+            self, "_api_key_next_step", None
+        )
+        if nxt is not None:
+            return await nxt()
+        return await self.async_step_compare_result()
 
     async def async_step_compare_result(
         self, user_input: dict[str, Any] | None = None

@@ -378,14 +378,26 @@ class _WizardStepsMixin:
         errors: dict[str, str] = {}
         if user_input is not None:
             key = user_input[CONF_API_KEY].strip()
-            err = await _validate_entsoe_key(self.hass, key)
-            if err is None:
-                user_input[CONF_API_KEY] = key
-                self._data.update(user_input)
-                return await self._after_api_key()
-            if err == "cannot_connect":
-                return await self._offer_unverified_key(key, "api_key")
-            errors[CONF_API_KEY] = err
+            if not key:
+                # A blank field must not reach the validator. While ENTSO-E is
+                # unreachable every answer is "cannot_connect", so the empty
+                # string would be offered the unverified branch and stored, and
+                # an empty key is the one value nothing recovers from:
+                # _fetch_spot_prices raises "missing ENTSO-E API key" before
+                # fetch_day_ahead_or_fallback runs, so the keyless
+                # energy-charts source is never even tried. A typed-but-wrong
+                # key at least prices the entry off the fallback until ENTSO-E
+                # is back to reject it.
+                errors[CONF_API_KEY] = "empty_api_key"
+            else:
+                err = await _validate_entsoe_key(self.hass, key)
+                if err is None:
+                    user_input[CONF_API_KEY] = key
+                    self._data.update(user_input)
+                    return await self._after_api_key()
+                if err == "cannot_connect":
+                    return await self._offer_unverified_key(key, "api_key")
+                errors[CONF_API_KEY] = err
         return self.async_show_form(
             step_id="api_key",
             data_schema=_api_key_schema(self._data),

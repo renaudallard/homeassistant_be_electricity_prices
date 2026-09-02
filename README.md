@@ -349,7 +349,10 @@ formula** supplier, which has no card and asks for the whole set.
    no way to tell a good key from a bad one, so blocking setup would only punish
    you for their downtime. A key accepted that way is checked for real on the
    first price refresh, and the usual repair notice appears if it turns out to
-   be rejected. For the
+   be rejected. Blank is not one of the answers here: the field is rejected
+   on the spot, without asking ENTSO-E, because a dynamic contract has no
+   price at all without a key. It is also the one value the keyless fallback
+   cannot rescue, since the entry never gets as far as trying it. For the
    injection case it is optional and skippable: leave it blank to finish
    setup, and the injection price simply stays unavailable until you add
    a key via Reconfigure.
@@ -529,7 +532,9 @@ opens a three-option menu:
   API key when a side needs spot data (a dynamic or monthly-indexed
   contract, or an index-linked-injection target like Cociter Variable or
   energie.be Vast on the injection regime) and your current entry doesn't already carry
-  one. Static
+  one. That prompt is skippable: a quote is a one-off, so leaving it blank
+  still shows you every other line of the comparison rather than stopping
+  you on a page you may have no token for. Static
   contracts also let you
   override the meter type (mono / bi) so you can quote *what if I
   were on bi-hourly billing under supplier X*. The result page lists

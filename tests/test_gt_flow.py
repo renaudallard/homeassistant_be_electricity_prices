@@ -69,14 +69,16 @@ async def test_where_the_flow_lands(
     print(f"LANDED {sid}:{contract.id} kind={contract.kind} -> {landed}")
     if expect_key:
         assert landed == "api_key", (sid, contract.id, landed)
-        # Required + validated: an empty submission is rejected, not skipped.
+        # Required: an empty submission is rejected, not skipped, and the
+        # step answers that itself without asking ENTSO-E.
         with patch(
             "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
             return_value="invalid_api_key",
-        ):
+        ) as validate:
             result = await cfg(flow, {const.CONF_API_KEY: ""})
         assert result["step_id"] == "api_key"
-        assert result["errors"] == {const.CONF_API_KEY: "invalid_api_key"}
+        assert result["errors"] == {const.CONF_API_KEY: "empty_api_key"}
+        validate.assert_not_called()
     else:
         assert landed != "api_key", (sid, contract.id, landed)
 
@@ -130,6 +132,30 @@ async def test_unreachable_entsoe_offers_a_choice_instead_of_blocking(
     # The re-check is offered FIRST: continuing unverified is the fallback,
     # not the default.
     assert result["menu_options"] == ["api_key_recheck", "api_key_unverified"]
+
+
+async def test_an_empty_key_is_never_offered_the_unverified_branch(
+    hass: HomeAssistant,
+) -> None:
+    """The escape hatch above must not launder a blank field into stored data.
+
+    With ENTSO-E down every key validates as "cannot_connect", empty ones
+    included, so without the guard the menu would appear and store "". That
+    is the one value the coordinator cannot degrade from: _fetch_spot_prices
+    refuses it before fetch_day_ahead_or_fallback runs, so the entry never
+    even reaches the keyless energy-charts source that a wrong key would
+    have been priced from.
+    """
+    cfg, flow = await _to_api_key_step(hass)
+    with patch(
+        "custom_components.be_electricity_prices.config_flow._validate_entsoe_key",
+        return_value="cannot_connect",
+    ) as validate:
+        result = await cfg(flow, {const.CONF_API_KEY: "   "})
+    assert result["type"] == "form", result
+    assert result["step_id"] == "api_key"
+    assert result["errors"] == {const.CONF_API_KEY: "empty_api_key"}
+    validate.assert_not_called()
 
 
 async def test_a_rejected_key_still_blocks(hass: HomeAssistant) -> None:

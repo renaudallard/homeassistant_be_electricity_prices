@@ -200,6 +200,7 @@
     },
     "error": {
       "invalid_api_key": "ENTSO-E rejected this token. Double-check the value at transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Enter your ENTSO-E token. This contract is priced on the day-ahead market, so it cannot be set up without one. Get it at transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "Could not reach ENTSO-E to verify the token. Check your network and try again.",
       "start_date_in_future": "The contract start date cannot be in the future.",
       "end_before_start": "The contract end date must be after the start date.",
@@ -219,6 +220,7 @@
     },
     "error": {
       "invalid_api_key": "[%key:component::be_electricity_prices::config::error::invalid_api_key%]",
+      "empty_api_key": "[%key:component::be_electricity_prices::config::error::empty_api_key%]",
       "cannot_connect": "[%key:component::be_electricity_prices::config::error::cannot_connect%]",
       "start_date_in_future": "[%key:component::be_electricity_prices::config::error::start_date_in_future%]",
       "end_before_start": "[%key:component::be_electricity_prices::config::error::end_before_start%]",

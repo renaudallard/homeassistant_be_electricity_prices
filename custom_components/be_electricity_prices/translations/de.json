@@ -200,6 +200,7 @@
     },
     "error": {
       "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Pruefen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Geben Sie Ihren ENTSO-E Token ein. Dieser Vertrag wird am Day-Ahead-Markt bepreist und laesst sich ohne Token nicht einrichten. Sie erhalten ihn auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprueft werden. Pruefen Sie Ihr Netzwerk und versuchen Sie es erneut.",
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
@@ -219,6 +220,7 @@
     },
     "error": {
       "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Pruefen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Geben Sie Ihren ENTSO-E Token ein. Dieser Vertrag wird am Day-Ahead-Markt bepreist und laesst sich ohne Token nicht einrichten. Sie erhalten ihn auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprueft werden. Pruefen Sie Ihr Netzwerk und versuchen Sie es erneut.",
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",

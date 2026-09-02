@@ -646,14 +646,12 @@ async def test_compare_branch_supplier_picker_lists_all_in_region(
     assert dynamic_ids == static_ids
 
 
-@pytest.mark.usefixtures("enable_custom_integrations")
-async def test_compare_branch_static_to_dynamic_prompts_for_api_key(
-    hass: HomeAssistant,
-) -> None:
-    """A static-contract user comparing against a dynamic contract
-    needs an ENTSO-E spot for the dynamic side. When their entry has
-    no api_key yet, the compare flow detours through compare_api_key
-    after the contract pick (meter is auto-locked to dynamic)."""
+def _static_to_dynamic_compare(hass: HomeAssistant) -> tuple[Any, Any]:
+    """A static entry and a patched cociter_dynamic target to compare it to.
+
+    Returns the entry and the not-yet-entered EXTRACTORS patch, so the caller
+    keeps the fake extractor in place for as long as it drives the flow.
+    """
     from dataclasses import replace
 
     from custom_components.be_electricity_prices.providers import EXTRACTORS
@@ -679,31 +677,73 @@ async def test_compare_branch_static_to_dynamic_prompts_for_api_key(
     fake = replace(
         EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap), probe=None
     )
-    with patch.dict(EXTRACTORS, {"cociter": fake}):
-        result = await hass.config_entries.options.async_init(entry.entry_id)
-        result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"next_step_id": "compare"}
-        )
-        assert result["step_id"] == "compare"
-        result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"supplier": "cociter"}
-        )
-        assert result["step_id"] == "compare_contract"
-        result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"contract": "cociter_dynamic"}
-        )
-        # Dynamic locks the meter to dynamic and skips compare_meter,
-        # then routes to compare_api_key because the static entry has
-        # no saved api_key. The solar what-if step sits in between: it is
-        # shown for a dynamic target too, so the key gate can see the
-        # regime the quote will actually be priced on.
-        result = await _pass_compare_solar(hass, entry, result)
-        assert result["step_id"] == "compare_api_key"
+    return entry, patch.dict(EXTRACTORS, {"cociter": fake})
+
+
+async def _drive_to_compare_api_key(hass: HomeAssistant, entry: Any) -> Any:
+    """Walk the compare branch as far as the ENTSO-E key prompt."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "compare"}
+    )
+    assert result["step_id"] == "compare"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "cociter"}
+    )
+    assert result["step_id"] == "compare_contract"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "cociter_dynamic"}
+    )
+    # Dynamic locks the meter to dynamic and skips compare_meter, then routes
+    # to compare_api_key because the static entry has no saved api_key. The
+    # solar what-if step sits in between: it is shown for a dynamic target
+    # too, so the key gate can see the regime the quote will be priced on.
+    result = await _pass_compare_solar(hass, entry, result)
+    assert result["step_id"] == "compare_api_key"
+    return result
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_branch_static_to_dynamic_prompts_for_api_key(
+    hass: HomeAssistant,
+) -> None:
+    """A static-contract user comparing against a dynamic contract
+    needs an ENTSO-E spot for the dynamic side. When their entry has
+    no api_key yet, the compare flow detours through compare_api_key
+    after the contract pick (meter is auto-locked to dynamic)."""
+    entry, extractors = _static_to_dynamic_compare(hass)
+    with extractors:
+        result = await _drive_to_compare_api_key(hass, entry)
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"api_key": "valid-token"}
         )
         # _validate_entsoe_key is auto-bypassed by the test fixture; the
         # next step is the result page.
+        assert result["step_id"] == "compare_result"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_api_key_is_skippable_when_left_blank(
+    hass: HomeAssistant,
+) -> None:
+    """Blank means skip, like the injection key step, and asks ENTSO-E nothing.
+
+    A comparison is a one-off quote, so a user without a token should still
+    see every other line of it rather than be stopped on a page they cannot
+    get past. Before this the step was Required and always validated, which
+    while ENTSO-E is unreachable meant a cannot_connect the user could do
+    nothing about.
+    """
+    entry, extractors = _static_to_dynamic_compare(hass)
+    with extractors:
+        result = await _drive_to_compare_api_key(hass, entry)
+        with patch(
+            "custom_components.be_electricity_prices.compare_flow._validate_entsoe_key",
+            side_effect=AssertionError("a blank key must not be validated"),
+        ):
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"api_key": "   "}
+            )
         assert result["step_id"] == "compare_result"
 
 
