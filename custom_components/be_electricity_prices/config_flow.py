@@ -103,6 +103,7 @@ from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
+    CONF_YTD_FROM_CONTRACT_START,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     DSO_MODE_IMPACT,
@@ -212,6 +213,13 @@ class _WizardStepsMixin:
                     if key not in user_input:
                         self._data.pop(key, None)
                 self._data.update(user_input)
+                # The year-to-date window can only start at a date the entry
+                # actually holds. Dropping the flag with the date keeps a
+                # stored True from silently waiting to take effect if a start
+                # date is ever added back, which would move the bill for a
+                # reason the user had long forgotten agreeing to.
+                if not self._data.get(CONF_CONTRACT_START_DATE):
+                    self._data.pop(CONF_YTD_FROM_CONTRACT_START, None)
                 return await self._after_contract()
         return self.async_show_form(
             step_id="contract",

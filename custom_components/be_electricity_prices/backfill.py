@@ -91,7 +91,7 @@ from .cohort import (
 )
 from .coordinator import (
     BePricesCoordinator,
-    local_year_start,
+    ytd_window_reset,
 )
 from .energy_meters import (
     _hourly_consumption_sensors,
@@ -177,17 +177,21 @@ def _floor_to_hour_utc(when: datetime) -> datetime:
 
 
 def _normalize_window(
-    start: datetime | date | None, end: datetime | date | None
+    start: datetime | date | None,
+    end: datetime | date | None,
+    default_start: datetime,
 ) -> tuple[datetime, datetime]:
     """Return aware UTC [start_utc, end_utc) clamped to whole-hour buckets.
 
-    The default window is [Jan 1 00:00 local, current hour). End is
+    The default window is [``default_start``, current hour), which the caller
+    resolves from the entry: local 1 January for almost everyone, the contract
+    start date for an entry that bills its year-to-date from there. End is
     exclusive so we don't write a row for the in-progress hour the
     live coordinator is about to fill itself.
     """
     now_local = dt_util.now()
     if start is None:
-        start_local = local_year_start(now_local)
+        start_local = default_start
     elif isinstance(start, datetime):
         start_local = (
             start
@@ -905,12 +909,15 @@ async def _backfill_cost_sensor(
         unit_of_measurement="EUR",
     )
     async_import_statistics(hass, metadata, rows)
-    _seed_short_term_sum(hass, metadata, rows[-1])
+    _seed_short_term_sum(hass, metadata, rows[-1], ytd_window_reset(entry))
     return {sid: len(rows)}
 
 
 def _seed_short_term_sum(
-    hass: HomeAssistant, metadata: StatisticMetaData, last: StatisticData
+    hass: HomeAssistant,
+    metadata: StatisticMetaData,
+    last: StatisticData,
+    last_reset: datetime,
 ) -> None:
     """Continue the imported ``sum`` chain into the live one.
 
@@ -929,8 +936,11 @@ def _seed_short_term_sum(
     as well as ``state`` and ``sum``: the compiler reads all three off that
     row, and a row without one looks like a fresh cycle against the sensor's
     own Jan-1 ``last_reset``, which takes the meter-reset branch and adds the
-    whole live reading on top of the resumed sum instead of the delta. Match
-    the sensor's ``last_reset_fn`` exactly (local Jan 1 of the current year).
+    whole live reading on top of the resumed sum instead of the delta.
+    ``last_reset`` is passed in rather than computed here so it can only ever
+    be what the caller resolved through ``ytd_window_reset``, which is the same
+    function the sensor's ``last_reset_fn`` is: local Jan 1, or the contract
+    start date on an entry that bills its year-to-date from there.
 
     Best effort: a recorder that refuses the write leaves the seam, which is
     no worse than not trying, so it must never take the backfill down with it.
@@ -946,7 +956,7 @@ def _seed_short_term_sum(
         **last,
         # Must be the SAME instant the current_year_cost sensor reports as its
         # last_reset, or the compiler takes the meter-reset branch.
-        "last_reset": local_year_start(),
+        "last_reset": last_reset,
     }
     try:
         get_instance(hass).async_import_statistics(
@@ -982,7 +992,7 @@ async def backfill_range(
     if coordinator._snapshot is None:
         raise RuntimeError("supplier snapshot not loaded; refresh the entry first")
 
-    start_utc, end_utc = _normalize_window(start, end)
+    start_utc, end_utc = _normalize_window(start, end, ytd_window_reset(entry))
     if start_utc >= end_utc:
         return {"rows_written": 0, "sensors": {}, "range": [None, None]}
 
@@ -1005,33 +1015,35 @@ async def backfill_range(
     # cost window was then empty and the service reported success having
     # written 8760 price rows and zero cost rows.
     cost_anchor_utc = _floor_to_hour_utc(
-        local_year_start(dt_util.as_local(end_utc - timedelta(hours=1)))
+        ytd_window_reset(entry, dt_util.as_local(end_utc - timedelta(hours=1)))
     )
-    # A window that ends on or before 1 January of the CURRENT year rebuilds a
-    # past year's cost, and that year's series would sit immediately before the
-    # current year's in the same statistic id. The recorder renders change as
+    # A window that ends on or before the CURRENT accumulation window's start
+    # (1 January, or the contract start date on an entry that bills from it)
+    # rebuilds cost the sensor never accumulates there, and that series would
+    # sit immediately before the current one in the same statistic id. The recorder renders change as
     # (sum - prev_sum) and ignores last_reset on imported rows even when it is
     # set (measured: a boundary row carrying the new year's last_reset still
     # reported change = -1197), so the join would paint roughly minus one
     # annual bill onto the Energy dashboard's Cost card at 1 January.
     #
     # There is no representation that avoids it while the cost sum restarts at
-    # each 1 January, so skip the cost leg rather than corrupt the card. The
+    # the window start, so skip the cost leg rather than corrupt the card. The
     # price series carry no sum, cross no boundary, and are still rebuilt over
     # the whole requested window, which is most of what a past-year request is
     # for. Report the skip: silently writing zero cost rows here is the bug
     # this window used to have.
-    this_year_anchor_utc = _floor_to_hour_utc(local_year_start())
+    this_year_anchor_utc = _floor_to_hour_utc(ytd_window_reset(entry))
     skip_cost = end_utc <= this_year_anchor_utc
     if skip_cost:
         _LOGGER.warning(
-            "backfill for %s covers %s..%s, which ends on or before 1 January of "
-            "the current year: rebuilding the cost sensor there would paint a "
-            "large negative cost onto the Energy dashboard at the year boundary, "
-            "so only the price sensors were rebuilt",
+            "backfill for %s covers %s..%s, which ends on or before %s, where "
+            "the cost sensor starts accumulating: rebuilding the cost sensor "
+            "there would paint a large negative cost onto the Energy dashboard "
+            "at the boundary, so only the price sensors were rebuilt",
             entry.entry_id,
             start_utc.isoformat(),
             end_utc.isoformat(),
+            this_year_anchor_utc.isoformat(),
         )
     if clear and not skip_cost and start_utc > cost_anchor_utc:
         # clear=True wipes the WHOLE series (clear_statistics is
@@ -1165,13 +1177,13 @@ async def backfill_if_missing(
         )
         return None
     now_local = dt_util.now()
-    jan1_local = local_year_start(now_local)
-    jan1_utc = jan1_local.astimezone(UTC)
-    if await _existing_stat_window(hass, sid, jan1_utc):
+    anchor_local = ytd_window_reset(entry, now_local)
+    anchor_utc = anchor_local.astimezone(UTC)
+    if await _existing_stat_window(hass, sid, anchor_utc):
         _LOGGER.debug(
             "backfill skipped: statistics already present at %s for %s",
-            jan1_utc.isoformat(),
+            anchor_utc.isoformat(),
             sid,
         )
         return None
-    return await backfill_range(hass, entry, jan1_local, now_local)
+    return await backfill_range(hass, entry, anchor_local, now_local)

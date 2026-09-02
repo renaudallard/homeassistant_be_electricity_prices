@@ -15,11 +15,13 @@
         "data": {
           "contract": "Vertrag",
           "contract_start_date": "Vertragsbeginn (optional)",
-          "contract_end_date": "Vertragsende (optional)"
+          "contract_end_date": "Vertragsende (optional)",
+          "ytd_from_contract_start": "Jahreskosten ab Vertragsbeginn abrechnen"
         },
         "data_description": {
           "contract_start_date": "Das Datum, an dem Ihr Vertrag begonnen hat. Bei einem Festpreisvertrag wird damit der bei Vertragsabschluss festgelegte Tarif statt des aktuellen Tarifblatts verwendet, sofern der Anbieter ein Archiv alter Tarifblätter führt. Leer lassen, um immer das aktuelle Tarifblatt zu verwenden.",
-          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den voraussichtlichen Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif."
+          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den voraussichtlichen Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
+          "ytd_from_contract_start": "Standardmässig zählen die Jahreskosten ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
         }
       },
       "signed_rate": {
@@ -292,11 +294,13 @@
         "data": {
           "contract": "Vertrag",
           "contract_start_date": "Vertragsbeginn (optional)",
-          "contract_end_date": "Vertragsende (optional)"
+          "contract_end_date": "Vertragsende (optional)",
+          "ytd_from_contract_start": "Jahreskosten ab Vertragsbeginn abrechnen"
         },
         "data_description": {
           "contract_start_date": "Das Datum, an dem Ihr Vertrag begonnen hat. Bei einem Festpreisvertrag wird damit der bei Vertragsabschluss festgelegte Tarif statt des aktuellen Tarifblatts verwendet, sofern der Anbieter ein Archiv alter Tarifblätter führt. Leer lassen, um immer das aktuelle Tarifblatt zu verwenden.",
-          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den voraussichtlichen Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif."
+          "contract_end_date": "Das Datum, an dem Ihr Vertrag endet. Wird als Zeitstempel-Sensor bereitgestellt, damit eine Automatisierung Sie an die Verlängerung erinnern kann, und von den voraussichtlichen Jahreskosten genutzt, um anzugeben, welcher Teil des Jahres noch unter diesem Vertrag läuft. Es ändert keinen abgerechneten Tarif.",
+          "ytd_from_contract_start": "Standardmässig zählen die Jahreskosten ab dem 1. Januar, unabhängig davon, wer Sie damals belieferte. Aktivieren Sie dies, um stattdessen am oben angegebenen Vertragsbeginn zu starten, sodass der Betrag nur diesen Vertrag abdeckt. Die Gebühren werden über denselben Zeitraum anteilig berechnet, und der Wert sinkt beim ersten Mal, wenn dies greift. Betrifft nur das erste Kalenderjahr des Vertrags; ab dem folgenden 1. Januar sind beide gleich."
         }
       },
       "signed_rate": {

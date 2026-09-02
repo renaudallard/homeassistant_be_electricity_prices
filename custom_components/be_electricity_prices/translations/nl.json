@@ -15,11 +15,13 @@
         "data": {
           "contract": "Contract",
           "contract_start_date": "Startdatum van het contract (optioneel)",
-          "contract_end_date": "Einddatum van het contract (optioneel)"
+          "contract_end_date": "Einddatum van het contract (optioneel)",
+          "ytd_from_contract_start": "Reken het jaartotaal vanaf de startdatum van het contract"
         },
         "data_description": {
           "contract_start_date": "De datum waarop uw contract is gestart. Voor een vast contract wordt hiermee het tarief gebruikt dat u bij ondertekening hebt vastgelegd in plaats van de huidige tariefkaart, voor zover de leverancier een archief van oude kaarten bijhoudt. Laat leeg om altijd de huidige kaart te gebruiken.",
-          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de verwachte jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief."
+          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de verwachte jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief.",
+          "ytd_from_contract_start": "Standaard telt de jaarkost vanaf 1 januari, ongeacht wie u toen leverde. Vink dit aan om te starten op de startdatum van het contract hierboven, zodat het bedrag alleen dit contract dekt. Vaste kosten worden over dezelfde periode pro rata berekend, en de waarde daalt de eerste keer dat dit van toepassing is. Geldt alleen voor het eerste kalenderjaar van het contract; vanaf de volgende 1 januari zijn beide gelijk."
         }
       },
       "signed_rate": {
@@ -292,11 +294,13 @@
         "data": {
           "contract": "Contract",
           "contract_start_date": "Startdatum van het contract (optioneel)",
-          "contract_end_date": "Einddatum van het contract (optioneel)"
+          "contract_end_date": "Einddatum van het contract (optioneel)",
+          "ytd_from_contract_start": "Reken het jaartotaal vanaf de startdatum van het contract"
         },
         "data_description": {
           "contract_start_date": "De datum waarop uw contract is gestart. Voor een vast contract wordt hiermee het tarief gebruikt dat u bij ondertekening hebt vastgelegd in plaats van de huidige tariefkaart, voor zover de leverancier een archief van oude kaarten bijhoudt. Laat leeg om altijd de huidige kaart te gebruiken.",
-          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de verwachte jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief."
+          "contract_end_date": "De datum waarop uw contract afloopt. Wordt als tijdstempelsensor beschikbaar gesteld zodat een automatisering u aan verlenging kan herinneren, en wordt door de verwachte jaarkost gebruikt om aan te geven welk deel van het jaar nog onder dit contract valt. Het wijzigt geen enkel gefactureerd tarief.",
+          "ytd_from_contract_start": "Standaard telt de jaarkost vanaf 1 januari, ongeacht wie u toen leverde. Vink dit aan om te starten op de startdatum van het contract hierboven, zodat het bedrag alleen dit contract dekt. Vaste kosten worden over dezelfde periode pro rata berekend, en de waarde daalt de eerste keer dat dit van toepassing is. Geldt alleen voor het eerste kalenderjaar van het contract; vanaf de volgende 1 januari zijn beide gelijk."
         }
       },
       "signed_rate": {

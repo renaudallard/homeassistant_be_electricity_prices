@@ -3356,6 +3356,64 @@ async def test_options_flow_signed_rate_step_for_fixed_with_start_date(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_ytd_window_flag_needs_a_start_date(
+    hass: HomeAssistant,
+) -> None:
+    """The flag round-trips beside a start date, and is dropped without one.
+
+    A stored True with no date would sit inert until a start date was added
+    back at some later edit, and then move the bill for a reason the user had
+    long forgotten agreeing to.
+    """
+    entry = _make_entry()  # eneco / power_fix (fixed) / wallonia
+    entry.add_to_hass(hass)
+
+    async def _finish(result: Any, **contract: Any) -> None:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "power_fix", **contract}
+        )
+        if result["step_id"] == "signed_rate":
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {}
+            )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"dso": "ores"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"dso_tariff_mode": "simple"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {}
+        )
+        assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    await _finish(
+        result, contract_start_date="2026-06-30", ytd_from_contract_start=True
+    )
+    assert entry.data["contract_start_date"] == "2026-06-30"
+    assert entry.data["ytd_from_contract_start"] is True
+
+    # Blank the date on a second pass: the flag goes with it.
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    await _finish(result, ytd_from_contract_start=True)
+    assert "contract_start_date" not in entry.data
+    assert "ytd_from_contract_start" not in entry.data
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_no_signed_rate_step_without_start_date(
     hass: HomeAssistant,
 ) -> None:

@@ -53,6 +53,7 @@ from .cohort import (
     _cohort_energy_leg,
     _effective_snapshot_for_month,
     _month_snapshot_cache,
+    ytd_window_start,
 )
 from .const import (
     CONF_CONTRACT,
@@ -138,12 +139,25 @@ async def _walk_ytd_months(
     contract: str | None = None,
 ) -> AsyncIterator[tuple[SupplierSnapshot, date, int, int]]:
     """Yield ``(snap_m, month_first, days_in_full_month, days_in_ytd)``
-    for each month from Jan 1 of today's year up through today.
+    for each month from the year-to-date window start up through today.
 
     Centralises the per-month walk shared by every YTD accumulator so
     the proration formula and the per-month archive lookup stay in one
     place. ``snap_m`` falls back to the current snapshot for months
     with no archive (see :func:`_snapshot_for_month`).
+
+    The window starts at 1 January unless the entry bills from its contract
+    start date, and the walk starts at whichever it is: ``days_in_ytd`` for
+    the first month then counts from that day rather than from the 1st, so
+    every fee this feeds -- the annual standing charges, the Walloon prosumer
+    fee, the Flemish capacity term -- prorates over the days the contract
+    actually covers. Without that a contract signed on 30 June still billed
+    twelve months of standing charges against six months of energy, which is
+    a worse number than the one the option was turned on to fix.
+
+    ``month_first`` and ``days_in_full_month`` stay the calendar month's, not
+    the window's: they address the month's archived card and divide a MONTHLY
+    fee, and neither of those is about how much of the month was billed.
 
     ``contract`` overrides the entry's stored contract id; the
     OptionsFlow compare path uses this to walk months for an
@@ -151,7 +165,7 @@ async def _walk_ytd_months(
     """
     region = entry.data.get(CONF_REGION, "")
     contract = contract or entry.data[CONF_CONTRACT]
-    cur = date(today.year, 1, 1)
+    cur = ytd_window_start(entry, today)
     while cur <= today:
         month_first = date(cur.year, cur.month, 1)
         snap_m = await _effective_snapshot_for_month(
@@ -348,9 +362,9 @@ async def _ytd_hourly_energy(
     if not cons_ids and not inj_ids:
         return None
 
-    jan1 = date(today.year, 1, 1)
-    cons_per_hour = await _sum_hourly_kwh(hass, cons_ids, jan1, today)
-    inj_per_hour = await _sum_hourly_kwh(hass, inj_ids, jan1, today)
+    window_start = ytd_window_start(entry, today)
+    cons_per_hour = await _sum_hourly_kwh(hass, cons_ids, window_start, today)
+    inj_per_hour = await _sum_hourly_kwh(hass, inj_ids, window_start, today)
     # Statistics only carry the last COMPILED hour, so top today up from the
     # live meters the way the per-day branch has since 0.11.9. Without this
     # every hourly-billed contract stepped once an hour at best and froze
@@ -545,8 +559,8 @@ async def _ytd_spot_injection_credit(
     inj_ids = _hourly_injection_sensors(entry)
     if not inj_ids:
         return 0.0
-    jan1 = date(today.year, 1, 1)
-    per_hour = await _sum_hourly_kwh(hass, inj_ids, jan1, today)
+    window_start = ytd_window_start(entry, today)
+    per_hour = await _sum_hourly_kwh(hass, inj_ids, window_start, today)
     # Topped up from the live meter, exactly as both sibling paths do: the
     # daily branch through _recorder_daily_kwh and the hourly branch through
     # its own two _top_up_today_hourly calls. Without it the consumption leg
@@ -709,7 +723,7 @@ async def _compute_current_year_cost(
     )
     eff_energy = snapshot.energy if cohort_energy is None else cohort_energy
 
-    jan1 = date(today.year, 1, 1)
+    window_start = ytd_window_start(entry, today)
 
     static_fees = await _ytd_static_fees(
         hass, session, extractor, snapshot, entry, today, contract=contract, meter=meter
@@ -890,7 +904,7 @@ async def _compute_current_year_cost(
     # shared helper fall back to the card's indicative when it is missing.
     day_spp: dict[tuple[int, int, bool], float | None] = {}
     day_bucket = _bucket_by_local_month(historical_spots) if historical_spots else {}
-    for day in _days_through(jan1, today):
+    for day in _days_through(window_start, today):
         bundle = await _resolve_month(date(day.year, day.month, 1))
         if bundle is None:
             # Dynamic / TOU month: no stable rate to apply for any of

@@ -43,6 +43,7 @@ from .coordinator_spots import _SpotsMixin
 
 from .cohort import (
     _cohort_energy_leg,
+    ytd_window_start,
 )
 from .fees import (
     _compute_capacity,
@@ -281,6 +282,26 @@ def local_year_start(when: datetime | None = None) -> datetime:
     """
     return (when or dt_util.now()).replace(
         month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+
+
+def ytd_window_reset(entry: ConfigEntry, when: datetime | None = None) -> datetime:
+    """Local midnight of the day ``current_year_cost`` accumulates from.
+
+    The datetime form of :func:`cohort.ytd_window_start`, and it inherits the
+    cross-file invariant spelled out above: ``_seed_short_term_sum`` must hand
+    the recorder the SAME instant the sensor publishes as ``last_reset``, or
+    the cost compiler takes the meter-reset branch and adds the whole window's
+    reading on top of the resumed sum. Both sides call this, which is what
+    keeps them from drifting apart.
+
+    Equal to ``local_year_start`` for every entry that has not opted into
+    billing from its contract start date, which is all of them by default.
+    """
+    now = when or dt_util.now()
+    start = ytd_window_start(entry, now.date())
+    return now.replace(
+        month=start.month, day=start.day, hour=0, minute=0, second=0, microsecond=0
     )
 
 
@@ -766,6 +787,10 @@ class BePricesCoordinator(
             or _injection_needs_month_spot(self._snapshot, self.entry)
         ):
             today_local = dt_util.now().date()
+            # An entry billing from its contract start date has no use for a
+            # spot before it: nothing prices those hours, so fetching them is
+            # the one thing issue #84 asked not to happen.
+            spots_from = ytd_window_start(self.entry, today_local)
             if self._year_spots_deferred:
                 # FIRST tick only, and it is the one the user is watching:
                 # async_config_entry_first_refresh runs inside setup, which the
@@ -782,7 +807,8 @@ class BePricesCoordinator(
                 # and the refresh the fill requests puts them back.
                 self._year_spots_deferred = False
                 await self._ensure_historical_spots(
-                    date(today_local.year, today_local.month, 1), today_local
+                    max(spots_from, date(today_local.year, today_local.month, 1)),
+                    today_local,
                 )
                 self.entry.async_create_background_task(
                     self.hass,
@@ -790,9 +816,7 @@ class BePricesCoordinator(
                     f"{DOMAIN}_year_spots_{self.entry.entry_id}",
                 )
             else:
-                await self._ensure_historical_spots(
-                    date(today_local.year, 1, 1), today_local
-                )
+                await self._ensure_historical_spots(spots_from, today_local)
 
         monthly_mean: float | None = None
         if isinstance(priced.energy, SpotMonthlyRates) or _injection_needs_month_spot(
@@ -989,7 +1013,7 @@ class BePricesCoordinator(
         """
         today = dt_util.now().date()
         before = (len(self._historical_spots), len(self._historical_spot_quarters))
-        await self._ensure_historical_spots(date(today.year, 1, 1), today)
+        await self._ensure_historical_spots(ytd_window_start(self.entry, today), today)
         after = (len(self._historical_spots), len(self._historical_spot_quarters))
         if self._unloaded or after == before:
             return

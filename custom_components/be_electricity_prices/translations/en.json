@@ -15,11 +15,13 @@
         "data": {
           "contract": "Contract",
           "contract_start_date": "Contract start date (optional)",
-          "contract_end_date": "Contract end date (optional)"
+          "contract_end_date": "Contract end date (optional)",
+          "ytd_from_contract_start": "Bill the year-to-date from the contract start date"
         },
         "data_description": {
           "contract_start_date": "The date your contract started. For a fixed contract this prices you at the rate you locked in at signing instead of today's rate sheet, where the supplier keeps an archive of past cards. Leave blank to always use the current card.",
-          "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew, and used by the projected year cost to say how much of the year is still under this contract. It changes no billed rate."
+          "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew, and used by the projected year cost to say how much of the year is still under this contract. It changes no billed rate.",
+          "ytd_from_contract_start": "By default the year-to-date cost counts from 1 January, whoever supplied you then. Tick this to start it at the contract start date above instead, so the figure covers only this contract. Fees are pro-rated over the same window, and the value drops the first time it applies. Only affects the contract's first calendar year; from the next 1 January the two are the same."
         }
       },
       "signed_rate": {
@@ -292,11 +294,13 @@
         "data": {
           "contract": "Contract",
           "contract_start_date": "Contract start date (optional)",
-          "contract_end_date": "Contract end date (optional)"
+          "contract_end_date": "Contract end date (optional)",
+          "ytd_from_contract_start": "Bill the year-to-date from the contract start date"
         },
         "data_description": {
           "contract_start_date": "The date your contract started. For a fixed contract this prices you at the rate you locked in at signing instead of today's rate sheet, where the supplier keeps an archive of past cards. Leave blank to always use the current card.",
-          "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew, and used by the projected year cost to say how much of the year is still under this contract. It changes no billed rate."
+          "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew, and used by the projected year cost to say how much of the year is still under this contract. It changes no billed rate.",
+          "ytd_from_contract_start": "By default the year-to-date cost counts from 1 January, whoever supplied you then. Tick this to start it at the contract start date above instead, so the figure covers only this contract. Fees are pro-rated over the same window, and the value drops the first time it applies. Only affects the contract's first calendar year; from the next 1 January the two are the same."
         }
       },
       "signed_rate": {

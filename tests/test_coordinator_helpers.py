@@ -3440,6 +3440,151 @@ async def test_ytd_static_fees_honours_meter_override(hass: HomeAssistant) -> No
     assert fee_override == pytest.approx(35.04)
 
 
+# ---- ytd_window_start (issue #84) ---------------------------------------------
+
+
+def test_ytd_window_starts_at_jan_1_unless_the_entry_opted_out() -> None:
+    """The option is off for every entry that predates it, and the key is
+    simply absent there, so the default has to be 1 January without the entry
+    carrying anything at all. A start date on its own must not move the window
+    either: it is read for the signing-month card, and re-pricing a year on the
+    strength of it would move the bill for people who never asked."""
+    from custom_components.be_electricity_prices.cohort import ytd_window_start
+
+    today = date(2026, 9, 3)
+    jan1 = date(2026, 1, 1)
+
+    assert ytd_window_start(MockConfigEntry(domain=DOMAIN, data={}), today) == jan1
+    dated = MockConfigEntry(domain=DOMAIN, data={"contract_start_date": "2026-06-30"})
+    assert ytd_window_start(dated, today) == jan1
+    flag_only = MockConfigEntry(domain=DOMAIN, data={"ytd_from_contract_start": True})
+    assert ytd_window_start(flag_only, today) == jan1
+
+
+def test_ytd_window_starts_at_the_contract_date_but_never_leaves_the_year() -> None:
+    """Opted in, the window starts at the contract start date.
+
+    Clamped to 1 January though: the sensor is a TOTAL whose last_reset the
+    recorder uses to bucket one period per calendar year, and a window reaching
+    into a previous year would have the compiler see a reset that never
+    happened and add a year's reading on top. So a contract signed in an
+    earlier year bills from 1 January exactly as it does today, and the option
+    only ever changes the contract's first calendar year.
+    """
+    from custom_components.be_electricity_prices.cohort import ytd_window_start
+
+    opted_in = MockConfigEntry(
+        domain=DOMAIN,
+        data={"contract_start_date": "2026-06-30", "ytd_from_contract_start": True},
+    )
+    assert ytd_window_start(opted_in, date(2026, 9, 3)) == date(2026, 6, 30)
+    # Same entry, next year: back to 1 January.
+    assert ytd_window_start(opted_in, date(2027, 2, 1)) == date(2027, 1, 1)
+
+    # A date in an earlier year never reaches back either.
+    old = MockConfigEntry(
+        domain=DOMAIN,
+        data={"contract_start_date": "2019-03-04", "ytd_from_contract_start": True},
+    )
+    assert ytd_window_start(old, date(2026, 9, 3)) == date(2026, 1, 1)
+
+
+async def test_ytd_fees_prorate_over_the_contract_window(hass: HomeAssistant) -> None:
+    """A contract signed on 30 June must not bill twelve months of standing
+    charges against six months of energy. The month walk starts at the window,
+    so the first month counts only the days from the start date onwards and
+    every fee this feeds prorates over the days the contract actually covers.
+    """
+    snap = make_snapshot(
+        energy=VariableRates(current=0.16, yearly_fixed_fee=365.0), dsos={}
+    )
+    base = {"meter": "mono", "dso": "", "contract": "x", "region": ""}
+    from_jan = MockConfigEntry(domain=DOMAIN, data=dict(base))
+    from_contract = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **base,
+            "contract_start_date": "2026-07-01",
+            "ytd_from_contract_start": True,
+        },
+    )
+
+    async def _snap_for_month(*_a: Any, **_k: Any) -> Any:
+        return snap
+
+    with patch(
+        "custom_components.be_electricity_prices.ytd_cost"
+        "._effective_snapshot_for_month",
+        new=_snap_for_month,
+    ):
+        whole_year = await _ytd_static_fees(
+            hass,
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            snap,
+            from_jan,
+            date(2026, 12, 31),
+        )
+        half_year = await _ytd_static_fees(
+            hass,
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            snap,
+            from_contract,
+            date(2026, 12, 31),
+        )
+    # 365 EUR/year at 1 EUR/day: the full year, then 1 July to 31 December.
+    assert whole_year == pytest.approx(365.0)
+    assert half_year == pytest.approx(184.0)
+
+
+def test_the_sensor_and_the_backfill_seed_resolve_the_same_reset() -> None:
+    """The load-bearing invariant of the whole option.
+
+    ``_seed_short_term_sum`` hands the recorder a ``last_reset`` and the
+    sensor publishes one, and the cost compiler reads both: if they disagree
+    it takes the meter-reset branch and adds the whole window's reading on top
+    of the resumed sum instead of the delta. That was already true when both
+    were 1 January; making the instant per-entry is exactly the kind of change
+    that lets them drift, so pin that both sides go through the one function.
+    """
+    import inspect
+
+    from custom_components.be_electricity_prices import backfill, sensor
+    from custom_components.be_electricity_prices.coordinator import ytd_window_reset
+
+    every = (
+        *sensor.SENSORS,
+        *sensor.PROSUMER_SENSORS,
+        *sensor.INJECTION_SENSORS,
+        *sensor.FEE_SENSORS,
+        *sensor.CAPACITY_SENSORS,
+    )
+    desc = next(d for d in every if d.key == "current_year_cost")
+    assert desc.last_reset_fn is ytd_window_reset, (
+        "the sensor must publish the window helper's answer, not its own"
+    )
+    seed_call = inspect.getsource(backfill._backfill_cost_sensor)
+    assert "ytd_window_reset(entry)" in seed_call, (
+        "the backfill seed must resolve the reset through the same helper"
+    )
+
+    # And the answer moves with the entry, which is the part that is new.
+    opted_out = MockConfigEntry(domain=DOMAIN, data={})
+    opted_in = MockConfigEntry(
+        domain=DOMAIN,
+        data={"contract_start_date": "2026-06-30", "ytd_from_contract_start": True},
+    )
+    brussels = ZoneInfo("Europe/Brussels")
+    when = datetime(2026, 9, 3, 14, 30, tzinfo=brussels)
+    assert ytd_window_reset(opted_out, when) == datetime(
+        2026, 1, 1, 0, 0, tzinfo=brussels
+    )
+    assert ytd_window_reset(opted_in, when) == datetime(
+        2026, 6, 30, 0, 0, tzinfo=brussels
+    )
+
+
 def test_brussels_osp_fee_selects_configured_tier() -> None:
     from custom_components.be_electricity_prices.fees import _brussels_osp_fee
     from custom_components.be_electricity_prices.providers.base import DsoOverlay

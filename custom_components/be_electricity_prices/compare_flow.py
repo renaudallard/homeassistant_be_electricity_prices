@@ -72,6 +72,7 @@ from .providers._pdf import memoise_text_fetches
 from .providers.base import SpotMonthlyRates, SupplierSnapshot
 from .spot_stats import _injection_is_spp_indexed, _spp_weighting_enabled
 
+from .cohort import ytd_window_start
 from .const import (
     COMPARE_SWEEP_BUDGET_S,
     CONF_API_KEY,
@@ -329,6 +330,30 @@ def _effective_regime(current: Mapping[str, Any], compare: Mapping[str, Any]) ->
     return str(compare.get(CONF_SOLAR_REGIME, stored))
 
 
+def _months_billed(start: date, today: date) -> float:
+    """Months' worth of a MONTHLY fee billed over ``[start, today]``.
+
+    Each month contributes the fraction of itself that falls inside the
+    window, which is what ``_ytd_prosumer`` and ``_ytd_capacity`` sum per
+    month, so one number serves the compare page's prosumer and capacity legs
+    alike. Counting whole elapsed months instead was equivalent while every
+    window began on 1 January; it is not once a window can begin mid-month.
+    """
+    total = 0.0
+    cur = start
+    while cur <= today:
+        first = date(cur.year, cur.month, 1)
+        next_first = (
+            date(cur.year + 1, 1, 1)
+            if cur.month == 12
+            else date(cur.year, cur.month + 1, 1)
+        )
+        billed_to = min(next_first - timedelta(days=1), today)
+        total += ((billed_to - cur).days + 1) / (next_first - first).days
+        cur = next_first
+    return total
+
+
 def _quote_entry(
     entry: ConfigEntry, regime: str, dso_mode: str | None = None
 ) -> ConfigEntry:
@@ -391,7 +416,9 @@ class _HouseholdQuote:
     overridden: bool
     now_utc: datetime
     today_local: date
-    jan1: date
+    # First day the year-to-date covers: 1 January, or the contract start
+    # date on an entry that bills its year-to-date from there.
+    ytd_from: date
     fee_proration: float
     month_proration: float
     spot_dict: dict[datetime, float]
@@ -635,32 +662,33 @@ class _SweepEngine:
 
         now_utc = dt_util.utcnow()
         today_local = dt_util.now().date()
-        jan1 = today_local.replace(month=1, day=1)
+        # The same window current_year_cost accumulates over: 1 January, or the
+        # contract start date on an entry that bills from it. The archive path
+        # below runs _compute_current_year_cost, which resolves this itself off
+        # entry.data, so reading it here is what keeps the simple model -- and
+        # the kWh figure printed beside both -- telling the same story as the
+        # sensor on the page rather than a January one.
+        ytd_from = ytd_window_start(self.config_entry, today_local)
         # 364, not 365: energy_meters._recorder_rows anchors end_dt on the next
         # local midnight, so the window is end-inclusive and today counts. The
         # old arithmetic read 366 buckets under a "365 days" label.
         year_ago = today_local - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1)
-        # Inclusive of today: leap years -> 366. Compute via
-        # (Jan 1 next year - Jan 1 this year) so today=Feb 29 doesn't
-        # raise (year+1 has no Feb 29).
-        days_in_year = (date(today_local.year + 1, 1, 1) - jan1).days
-        days_elapsed = (today_local - jan1).days + 1
+        # Inclusive of today: leap years -> 366. Computed off 1 January whatever
+        # the window is: it is the denominator of an ANNUAL fee, so it stays a
+        # year even when only part of one has been billed.
+        days_in_year = (
+            date(today_local.year + 1, 1, 1) - date(today_local.year, 1, 1)
+        ).days
+        days_elapsed = (today_local - ytd_from).days + 1
         fee_proration = days_elapsed / days_in_year
         # The prosumer fee and the Flanders capacity tariff are both billed
         # per-month in the live sensor and backfill (each month's charge
         # prorated by its OWN days), not by the uniform days_in_year fraction,
-        # so mirror that: every completed month counts as 1 plus the elapsed
-        # fraction of the current one. _ytd_prosumer and _ytd_capacity sum
-        # exactly this, which is why one number serves both.
-        first_of_month = today_local.replace(day=1)
-        next_month = date(
-            today_local.year + today_local.month // 12,
-            today_local.month % 12 + 1,
-            1,
-        )
-        month_proration = (today_local.month - 1) + today_local.day / (
-            next_month - first_of_month
-        ).days
+        # so mirror that: sum each month's billed days over its own length.
+        # _ytd_prosumer and _ytd_capacity sum exactly this, which is why one
+        # number serves both -- and summing it rather than counting whole
+        # months is what carries a window that starts mid-month.
+        month_proration = _months_billed(ytd_from, today_local)
         spot_dict: dict[datetime, float] = (
             dict(coord._spot_cache) if coord._spot_cache else {}
         )
@@ -854,7 +882,9 @@ class _SweepEngine:
         # regime, and zeroing the volume there would un-net a compensation
         # baseline (or drop an injection credit) and quote the user's own
         # contract as costing more than it does.
-        ytd_kwh = await _read_total_kwh(self.hass, self.config_entry, jan1, today_local)
+        ytd_kwh = await _read_total_kwh(
+            self.hass, self.config_entry, ytd_from, today_local
+        )
         rolling_inj_kwh = 0.0
         ytd_inj_kwh = 0.0
         inj_full_year = False
@@ -872,7 +902,7 @@ class _SweepEngine:
                 self.hass, self.config_entry, year_ago, today_local, side="injection"
             )
             y = await _read_total_kwh(
-                self.hass, self.config_entry, jan1, today_local, side="injection"
+                self.hass, self.config_entry, ytd_from, today_local, side="injection"
             )
             rolling_inj_kwh = measured_inj.kwh if measured_inj.kwh > 0 else 0.0
             inj_full_year = _covers_a_year(measured_inj.days_with_data)
@@ -1086,7 +1116,7 @@ class _SweepEngine:
             overridden=overridden,
             now_utc=now_utc,
             today_local=today_local,
-            jan1=jan1,
+            ytd_from=ytd_from,
             fee_proration=fee_proration,
             month_proration=month_proration,
             spot_dict=spot_dict,
@@ -1629,7 +1659,7 @@ class _CompareStepsMixin(OptionsFlow):
         overridden = hh.overridden
         now_utc = hh.now_utc
         today_local = hh.today_local
-        jan1 = hh.jan1
+        ytd_from = hh.ytd_from
         fee_proration = hh.fee_proration
         month_proration = hh.month_proration
         spot_dict = hh.spot_dict
@@ -1990,7 +2020,7 @@ class _CompareStepsMixin(OptionsFlow):
                     # into the same dicts rather than rebinding them.
                     with _borrowed_spot_cache(coord, isolate=True):
                         await coord._ensure_historical_spots(
-                            jan1, today_local, borrowed
+                            ytd_from, today_local, borrowed
                         )
                         hist_spots = dict(coord._historical_spots)
                         hist_quarters = dict(coord._historical_spot_quarters)

@@ -40,6 +40,7 @@ relies on, because the defect lives in how HA compiles, not in what we write.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -59,6 +60,20 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
 )
 
 from custom_components.be_electricity_prices.backfill import _seed_short_term_sum
+from custom_components.be_electricity_prices.coordinator import ytd_window_reset
+
+
+def jan1_reset() -> datetime:
+    """The instant both halves of the seam have to agree on.
+
+    Resolved through the production helper rather than spelled out again here.
+    The seam only works while the seed and the sensor's ``last_reset`` are the
+    same function's answer, so a test that recomputed it by hand would keep
+    passing through exactly the divergence it exists to catch.
+    """
+    entry = SimpleNamespace(data={})
+    return ytd_window_reset(entry)  # type: ignore[arg-type]
+
 
 SID = "sensor.be_current_year_cost"
 
@@ -83,12 +98,10 @@ async def _run(hass: HomeAssistant, *, seed: bool) -> list[tuple]:
     ]
     async_import_statistics(hass, meta, rows)
     if seed:
-        _seed_short_term_sum(hass, meta, rows[-1])
+        _seed_short_term_sum(hass, meta, rows[-1], jan1_reset())
     await async_wait_recording_done(hass)
 
-    jan1 = dt_util.now().replace(
-        month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-    )
+    jan1 = jan1_reset()
     attrs = {
         "device_class": "monetary",
         "state_class": "total",

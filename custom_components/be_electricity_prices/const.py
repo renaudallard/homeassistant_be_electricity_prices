@@ -156,6 +156,20 @@ CONF_CONTRACT: Final = "contract"
 CONF_CONTRACT_START_DATE: Final = "contract_start_date"
 CONF_CONTRACT_END_DATE: Final = "contract_end_date"
 
+# Whether current_year_cost accumulates from the contract start date instead
+# of 1 January. Off by default and absent from every entry that predates it,
+# because turning it on lowers the figure: a contract signed on 30 June bills
+# six months, not twelve, and the months before it were somebody else's
+# contract. Only meaningful beside CONF_CONTRACT_START_DATE, and the flow pops
+# it when no start date is stored.
+#
+# The window is still clamped to 1 January of the current year (see
+# ytd_window_start), so this only changes the contract's FIRST calendar year.
+# Past that, "since the contract started" and "since 1 January" would diverge
+# by whole years, and the sensor is a TOTAL the recorder buckets per calendar
+# year -- a window reaching back into last year does not survive that.
+CONF_YTD_FROM_CONTRACT_START: Final = "ytd_from_contract_start"
+
 # Optional manual signing-rate override, offered on the config flow when a
 # start date is set on a fixed / dynamic contract. Used as the cohort energy
 # leg when the supplier keeps no archive of the signing month (or the archive

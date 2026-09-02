@@ -15,11 +15,13 @@
         "data": {
           "contract": "Contrat",
           "contract_start_date": "Date de début du contrat (facultatif)",
-          "contract_end_date": "Date de fin du contrat (facultatif)"
+          "contract_end_date": "Date de fin du contrat (facultatif)",
+          "ytd_from_contract_start": "Facturer le cumul annuel à partir de la date de début du contrat"
         },
         "data_description": {
           "contract_start_date": "La date de début de votre contrat. Pour un contrat fixe, la facturation utilise le tarif bloqué à la signature au lieu de la grille actuelle, lorsque le fournisseur conserve une archive des anciennes cartes tarifaires. Laissez vide pour toujours utiliser la carte actuelle.",
-          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler, et utilisée par le coût annuel projeté pour indiquer quelle part de l'année reste couverte par ce contrat. Elle ne modifie aucun tarif facturé."
+          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler, et utilisée par le coût annuel projeté pour indiquer quelle part de l'année reste couverte par ce contrat. Elle ne modifie aucun tarif facturé.",
+          "ytd_from_contract_start": "Par défaut le coût cumulé de l'année compte à partir du 1er janvier, quel qu'ait été votre fournisseur à ce moment. Cochez cette case pour le faire démarrer à la date de début du contrat ci-dessus, afin que le montant ne couvre que ce contrat. Les frais sont calculés au prorata sur la même période, et la valeur baisse la première fois que cela s'applique. N'a d'effet que sur la première année civile du contrat ; à partir du 1er janvier suivant, les deux sont identiques."
         }
       },
       "signed_rate": {
@@ -292,11 +294,13 @@
         "data": {
           "contract": "Contrat",
           "contract_start_date": "Date de début du contrat (facultatif)",
-          "contract_end_date": "Date de fin du contrat (facultatif)"
+          "contract_end_date": "Date de fin du contrat (facultatif)",
+          "ytd_from_contract_start": "Facturer le cumul annuel à partir de la date de début du contrat"
         },
         "data_description": {
           "contract_start_date": "La date de début de votre contrat. Pour un contrat fixe, la facturation utilise le tarif bloqué à la signature au lieu de la grille actuelle, lorsque le fournisseur conserve une archive des anciennes cartes tarifaires. Laissez vide pour toujours utiliser la carte actuelle.",
-          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler, et utilisée par le coût annuel projeté pour indiquer quelle part de l'année reste couverte par ce contrat. Elle ne modifie aucun tarif facturé."
+          "contract_end_date": "La date de fin de votre contrat. Exposée comme capteur d'horodatage pour qu'une automatisation puisse vous rappeler de renouveler, et utilisée par le coût annuel projeté pour indiquer quelle part de l'année reste couverte par ce contrat. Elle ne modifie aucun tarif facturé.",
+          "ytd_from_contract_start": "Par défaut le coût cumulé de l'année compte à partir du 1er janvier, quel qu'ait été votre fournisseur à ce moment. Cochez cette case pour le faire démarrer à la date de début du contrat ci-dessus, afin que le montant ne couvre que ce contrat. Les frais sont calculés au prorata sur la même période, et la valeur baisse la première fois que cela s'applique. N'a d'effet que sur la première année civile du contrat ; à partir du 1er janvier suivant, les deux sont identiques."
         }
       },
       "signed_rate": {

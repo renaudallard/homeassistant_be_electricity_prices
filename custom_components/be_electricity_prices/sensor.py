@@ -64,8 +64,8 @@ from .cohort import (
 from .coordinator import (
     BePricesCoordinator,
     CoordinatorData,
-    local_year_start,
     supplier_device_info,
+    ytd_window_reset,
 )
 from .pricing import PriceBreakdown, breakdown_row, slot_start
 
@@ -79,7 +79,10 @@ class BePriceSensorDescription(SensorEntityDescription):
     """Sensor description with a pure value extractor."""
 
     value_fn: Callable[[CoordinatorData], float | None]
-    last_reset_fn: Callable[[], datetime] | None = None
+    # Takes the entry: current_year_cost's reset instant is per-entry now,
+    # since an entry can bill from its contract start date instead of 1
+    # January.
+    last_reset_fn: Callable[[ConfigEntry], datetime] | None = None
 
 
 def _current_slot_value(
@@ -441,7 +444,9 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         # annual fees, with injection netted per regime. Always numeric;
         # missing meter inputs collapse to the fees-only floor so the
         # sensor never goes ``unknown``. ``TOTAL`` with ``last_reset``
-        # pinned to Jan 1 local lets the long-term-statistics engine
+        # pinned to local midnight of the window start -- Jan 1, or the
+        # contract start date on an entry that bills from it -- lets the
+        # long-term-statistics engine
         # bucket each calendar year as its own period; the value can
         # dip day-over-day on heavy-injection days under the
         # compensation regime, which rules out ``TOTAL_INCREASING``.
@@ -453,7 +458,7 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         native_unit_of_measurement="EUR",
         suggested_display_precision=2,
         value_fn=lambda d: d.current_year_cost_eur,
-        last_reset_fn=local_year_start,
+        last_reset_fn=ytd_window_reset,
     ),
     BePriceSensorDescription(
         key="projected_year_cost",
@@ -598,7 +603,7 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
     @property
     def last_reset(self) -> datetime | None:
         fn = self.entity_description.last_reset_fn
-        return fn() if fn is not None else None
+        return fn(self.coordinator.entry) if fn is not None else None
 
     @property
     def native_value(self) -> float | None:

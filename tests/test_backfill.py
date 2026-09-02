@@ -227,10 +227,15 @@ def test_energy_and_injection_gates_agree_on_a_thin_closed_month() -> None:
     )
 
 
-def test_normalize_window_defaults_to_jan1_through_now() -> None:
+_JAN1_2026 = datetime(2026, 1, 1, 0, 0, tzinfo=BRUSSELS)
+
+
+def test_normalize_window_defaults_to_the_start_the_caller_resolved() -> None:
+    """backfill_range passes ytd_window_reset(entry), which is 1 January for
+    every entry that has not opted into billing from its contract start."""
     fixed_now = datetime(2026, 5, 4, 13, 30, tzinfo=BRUSSELS)
     with patch.object(dt_util, "now", return_value=fixed_now):
-        start_utc, end_utc = bf._normalize_window(None, None)
+        start_utc, end_utc = bf._normalize_window(None, None, _JAN1_2026)
     assert start_utc == datetime(2026, 1, 1, 0, 0, tzinfo=BRUSSELS).astimezone(UTC)
     # End is floored to the top of the current hour, exclusive of the
     # in-progress hour.
@@ -241,7 +246,7 @@ def test_normalize_window_treats_naive_datetime_as_local_tz() -> None:
     naive = datetime(2026, 3, 1, 6, 0)  # no tzinfo
     fixed_now = datetime(2026, 5, 4, 13, 30, tzinfo=BRUSSELS)
     with patch.object(dt_util, "now", return_value=fixed_now):
-        start_utc, _ = bf._normalize_window(naive, None)
+        start_utc, _ = bf._normalize_window(naive, None, _JAN1_2026)
     expected = naive.replace(tzinfo=BRUSSELS).astimezone(UTC)
     assert start_utc == expected
 
@@ -1271,12 +1276,13 @@ def test_normalize_window_clamps_a_future_end_to_now() -> None:
     upper bound, so a mistyped year was enough. The None default already
     stopped at now; an explicit end gets the same bound."""
     now = dt_util.now()
-    _start, end = bf._normalize_window(None, now + timedelta(days=365))
+    default_start = bf.ytd_window_reset(SimpleNamespace(data={}))  # type: ignore[arg-type]
+    _start, end = bf._normalize_window(None, now + timedelta(days=365), default_start)
     assert end <= bf._floor_to_hour_utc(now)
 
     # A past end is untouched.
     past = now - timedelta(days=30)
-    _start, end = bf._normalize_window(None, past)
+    _start, end = bf._normalize_window(None, past, default_start)
     assert end == bf._floor_to_hour_utc(past)
 
 

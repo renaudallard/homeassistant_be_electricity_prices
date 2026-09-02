@@ -78,6 +78,7 @@ from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
+    CONF_YTD_FROM_CONTRACT_START,
     CONF_CUSTOM_DSO_BRUSSELS_OSP,
     CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR,
     CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR,
@@ -440,6 +441,16 @@ def _add_contract_date_fields(fields: dict[Any, Any], defaults: dict[str, Any]) 
             )
         else:
             fields[vol.Optional(key)] = date_selector
+    # Sits with the dates because it is meaningless without a start date, and
+    # this is the only step that collects one. A plain default (rather than a
+    # suggested_value) is right here: an unticked box DOES reach user_input as
+    # False, so there is nothing to clear and nothing to re-inject.
+    fields[
+        vol.Optional(
+            CONF_YTD_FROM_CONTRACT_START,
+            default=bool(defaults.get(CONF_YTD_FROM_CONTRACT_START, False)),
+        )
+    ] = BooleanSelector()
 
 
 def _validate_contract_dates(user_input: dict[str, Any]) -> dict[str, str]:

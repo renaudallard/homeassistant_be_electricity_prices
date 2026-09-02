@@ -50,6 +50,7 @@ from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
+    CONF_YTD_FROM_CONTRACT_START,
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT,
     CONF_MANUAL_ENERGY_FACTOR,
@@ -104,6 +105,36 @@ def _contract_start_month(entry: ConfigEntry) -> date | None:
     if d is None:
         return None
     return date(d.year, d.month, 1)
+
+
+def ytd_window_start(entry: ConfigEntry, today: date) -> date:
+    """First day ``current_year_cost`` accumulates from, for ``today``'s year.
+
+    1 January unless the entry opted into billing from its contract start date
+    (CONF_YTD_FROM_CONTRACT_START) and carries one, in which case the later of
+    the two. Everything that walks the year-to-date reads this: the per-hour
+    and per-day energy walks, the fee proration, the historical spot fetch,
+    the statistics backfill, and the ``last_reset`` the sensor publishes.
+
+    Clamped to 1 January of ``today``'s year rather than returning the raw
+    start date. The sensor is a TOTAL whose ``last_reset`` the recorder uses
+    to bucket one period per calendar year, and a window reaching back into a
+    previous year does not survive that: the compiler would see a reset that
+    never happened and add a year's reading on top. So a contract signed in an
+    earlier year is billed from 1 January exactly as it is today, and the
+    option only changes the contract's first calendar year.
+
+    Lives here rather than beside ``local_year_start`` in coordinator.py
+    because ytd_cost imports cohort and coordinator imports ytd_cost; the
+    other direction is a cycle.
+    """
+    jan1 = date(today.year, 1, 1)
+    if not entry.data.get(CONF_YTD_FROM_CONTRACT_START):
+        return jan1
+    start = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
+    if start is None:
+        return jan1
+    return max(jan1, start)
 
 
 def _manual_energy_leg(
