@@ -370,10 +370,12 @@ class BePricesCoordinator(
         self._spp_weights_year: int | None = None
         self._spp_fetched_at: datetime | None = None
         self._spp_failed_at: datetime | None = None
-        # Stable past days whose last spot fetch still came back short of
-        # 20 hours, with the attempt time, so we don't re-fetch them every
-        # tick (see _SHORT_SPOT_DAY_TTL).
-        self._short_spot_days: dict[date, datetime] = {}
+        # Stable past days the spot walk should not ask for again yet, each
+        # holding the instant it may be retried at. Written when a fetch left
+        # the day short of 20 hours (_SHORT_SPOT_DAY_TTL) and when both
+        # sources refused the window outright (_SPOT_OUTAGE_TTL, shorter --
+        # the data exists, the servers were down).
+        self._spot_day_retry_at: dict[date, datetime] = {}
         # Local days already confirmed to hold >= 20 cached spot hours. Within
         # a calendar year spots are only ever added, so a complete day stays
         # complete; caching the set lets the per-tick coverage scan skip the
@@ -966,7 +968,7 @@ class BePricesCoordinator(
             # bad hour behind.
             self._historical_spot_quarters.clear()
             self._complete_spot_days.clear()
-            self._short_spot_days.clear()
+            self._spot_day_retry_at.clear()
         self._spot_cache = {}
         self._spot_cache_day = None
         self._spot_cache_includes_tomorrow = False

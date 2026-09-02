@@ -550,7 +550,7 @@ async def test_ensure_historical_spots_skips_permanently_short_day(
     with _patch_spot_fetch(_fake_fetch):
         await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
         first = len(calls)
-        assert date(2026, 1, 1) in coord._short_spot_days
+        assert date(2026, 1, 1) in coord._spot_day_retry_at
         # Second call within the TTL must not re-fetch the short day.
         await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 1))
         assert len(calls) == first
@@ -566,9 +566,14 @@ async def test_ensure_historical_spots_backs_off_after_a_rejected_key(
     A failed fetch leaves each day exactly as short as it was, and the
     short-day marker was only written after a SUCCESSFUL fetch, so a revoked
     token or an exhausted daily quota re-requested every week-chunk of the
-    year on every hourly tick and logged a warning for each. A transient
-    failure keeps retrying promptly: it is the auth class that will still be
-    refusing an hour from now."""
+    year on every hourly tick and logged a warning for each.
+
+    The two classes still part company at the fallback. A rejected credential
+    has to keep raising its Repairs card, so the keyless source is never asked
+    for it; a timeout or a 5xx is exactly what that source is there for, and
+    the days come back filled with nothing left to retry. A window NEITHER
+    source could serve is held by the shorter outage TTL instead --
+    test_a_window_neither_source_could_serve_is_not_re_walked_hourly."""
     freezer.move_to("2026-06-29 12:00:00+02:00")
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -583,28 +588,49 @@ async def test_ensure_historical_spots_backs_off_after_a_rejected_key(
     )
     entry.add_to_hass(hass)
 
-    async def _refuse(exc: Exception) -> int:
+    async def _keyless_answered(
+        _self: Any,
+        start: datetime,
+        end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> dict[datetime, float]:
+        hours = int((end - start).total_seconds() // 3600)
+        return {start + timedelta(hours=h): 0.05 for h in range(hours)}
+
+    async def _refuse(exc: Exception) -> tuple[int, bool]:
+        """Re-fetches on the next tick, and whether the keyless leg filled it."""
         coord = BePricesCoordinator(hass, entry)
         calls = 0
 
-        async def _fake_fetch(
-            start: datetime, end: datetime, *, quarter_hourly: bool = False
+        async def _entsoe_refuses(
+            _self: Any,
+            start: datetime,
+            end: datetime,
+            *,
+            quarter_hourly: bool = False,
         ) -> dict[datetime, float]:
             nonlocal calls
             calls += 1
             raise exc
 
-        with _patch_spot_fetch(_fake_fetch):
+        with (
+            patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _entsoe_refuses),
+            patch(_SPOTS + ".EnergyChartsClient.fetch_day_ahead", _keyless_answered),
+        ):
             await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
             first = calls
             assert first > 0
             await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
-        return calls - first
+        return calls - first, bool(coord._historical_spots)
 
-    assert await _refuse(EntsoeAuthError("rejected")) == 0
-    # A timeout or a 5xx may well be gone by the next tick, so those days are
-    # left unmarked and the year is retried rather than left unpriced for 12 h.
-    assert await _refuse(EntsoeError("timeout")) > 0
+    refetched, filled = await _refuse(EntsoeAuthError("rejected"))
+    assert refetched == 0, "a revoked token must not re-pull the year every tick"
+    assert not filled, "and must not be papered over by the keyless source"
+
+    refetched, filled = await _refuse(EntsoeError("timeout"))
+    assert filled, "a 5xx is what the keyless source is there for"
+    assert refetched == 0, "a filled day is not short, so there is nothing to retry"
 
 
 async def test_ensure_historical_spots_records_and_skips_complete_days(
@@ -2569,7 +2595,7 @@ async def test_force_refresh_clears_the_price_history_on_request(
         datetime(2026, 3, 1, 10, 0, tzinfo=UTC): [62.5] * 4
     }
     coord._complete_spot_days = {date(2026, 3, 1)}
-    coord._short_spot_days = {date(2026, 2, 2): datetime(2026, 2, 2, tzinfo=UTC)}
+    coord._spot_day_retry_at = {date(2026, 2, 2): datetime(2026, 2, 2, tzinfo=UTC)}
     coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
 
     await coord.async_force_refresh(clear_history=True)
@@ -2579,7 +2605,7 @@ async def test_force_refresh_clears_the_price_history_on_request(
     # it leaves half the bad hour behind.
     assert coord._historical_spot_quarters == {}
     assert coord._complete_spot_days == set()
-    assert coord._short_spot_days == {}
+    assert coord._spot_day_retry_at == {}
 
 
 async def test_load_persistent_drops_an_impossible_cached_spot(
@@ -4083,6 +4109,66 @@ async def test_the_keyless_fallback_answers_the_whole_span_in_one_request(
     assert keyless_windows[0][1] == entsoe_windows[-1][1]
     # And the year is actually filled, not merely requested.
     assert len(coord._historical_spots) > 5000
+
+
+async def test_a_window_neither_source_could_serve_is_not_re_walked_hourly(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A double outage used to re-pull the whole year on every tick.
+
+    Only an EntsoeAuthError marked its days, so a 5xx from ENTSO-E with the
+    fallback rate-limited behind it left every day exactly as short as it was
+    and nothing recorded the attempt: the next hourly tick walked all 35
+    chunks again, and the one after that, for as long as the outage lasted.
+    """
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    attempts = {"entsoe": 0, "keyless": 0}
+
+    async def _entsoe_is_down(
+        _self: Any,
+        _start: datetime,
+        _end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> dict[datetime, float]:
+        attempts["entsoe"] += 1
+        raise EntsoeError("ENTSO-E HTTP 503")
+
+    async def _keyless_is_rate_limited(
+        _self: Any,
+        _start: datetime,
+        _end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> dict[datetime, float]:
+        attempts["keyless"] += 1
+        raise EntsoeError("energy-charts HTTP 429: Too Many Requests")
+
+    with (
+        patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _entsoe_is_down),
+        patch(_SPOTS + ".EnergyChartsClient.fetch_day_ahead", _keyless_is_rate_limited),
+    ):
+        await coord._ensure_historical_spots(date(2026, 8, 1), date(2026, 8, 20))
+        first = dict(attempts)
+        # Same tick shape an hour later, still inside the outage TTL.
+        freezer.move_to("2026-08-31 10:00:00+02:00")
+        await coord._ensure_historical_spots(date(2026, 8, 1), date(2026, 8, 20))
+        assert attempts == first, "the next tick must not re-walk a held window"
+
+        # Today and yesterday are never held back: their data is still landing.
+        assert date(2026, 8, 31) not in coord._spot_day_retry_at
+        assert date(2026, 8, 30) not in coord._spot_day_retry_at
+
+        # And the hold expires rather than lasting the day.
+        freezer.move_to("2026-08-31 12:30:00+02:00")
+        await coord._ensure_historical_spots(date(2026, 8, 1), date(2026, 8, 20))
+        assert attempts["entsoe"] > first["entsoe"], (
+            "a three-hour hold has to expire, the servers do come back"
+        )
 
 
 def _ranking(ran_at: datetime) -> Any:

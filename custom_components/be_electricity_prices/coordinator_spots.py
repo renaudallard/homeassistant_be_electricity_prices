@@ -78,10 +78,20 @@ from .providers.base import SupplierSnapshot
 # Some past days genuinely have < 20 of 24 hourly day-ahead points at
 # ENTSO-E (source gaps). Without a marker, _ensure_historical_spots
 # re-pulls a whole week-chunk for such a day on every hourly tick for
-# the rest of the year. Record the last attempt per stable past day and
-# skip it for this long; 12 h re-attempts twice a day in case the data
-# lands late, without hammering the rate-limited endpoint hourly.
+# the rest of the year. Record a "do not retry before" instant per stable
+# past day and skip it until then; 12 h re-attempts twice a day in case the
+# data lands late, without hammering the rate-limited endpoint hourly.
 _SHORT_SPOT_DAY_TTL = timedelta(hours=12)
+
+# The shorter backoff, used when BOTH sources refused a window rather than
+# when one answered short. The data exists and the servers will come back, so
+# holding the days for half a day would leave the year-to-date missing an
+# energy term long after the outage cleared. Three hours is short enough to
+# heal the same day and long enough to matter: with no marker at all a
+# year-long window re-walked all 35 of its ENTSO-E chunks on EVERY hourly
+# tick for as long as the outage lasted, so a three-day platform outage came
+# to some 2500 requests that could not have succeeded.
+_SPOT_OUTAGE_TTL = timedelta(hours=3)
 
 # The Synergrid ex-ante SPP profile is revised within the year, so re-fetch the
 # 52 MB workbook at most this often (weights survive restarts via the Store).
@@ -178,7 +188,7 @@ class _SpotsMixin:
     _spot_cache_day: date | None
     _spot_source: str
     _spot_cache_includes_tomorrow: bool
-    _short_spot_days: dict[date, datetime]
+    _spot_day_retry_at: dict[date, datetime]
     _spp_weights: Any
     _spp_fetched_at: datetime | None
     _spp_failed_at: datetime | None
@@ -290,13 +300,9 @@ class _SpotsMixin:
                 # anyway; caching it just skips the scan next tick.
                 if present >= 20:
                     self._complete_spot_days.add(cur)
-            last_attempt = self._short_spot_days.get(cur)
-            recently_short = (
-                present < 20
-                and last_attempt is not None
-                and now - last_attempt < _SHORT_SPOT_DAY_TTL
-            )
-            if present < 20 and not recently_short:
+            retry_at = self._spot_day_retry_at.get(cur)
+            backing_off = present < 20 and retry_at is not None and now < retry_at
+            if present < 20 and not backing_off:
                 if range_start is None:
                     range_start = cur
             elif range_start is not None:
@@ -363,13 +369,17 @@ class _SpotsMixin:
                         chunk_end,
                         err,
                     )
-                    for day in _dates_in(chunk_start, chunk_end):
-                        if day < stable_before:
-                            self._short_spot_days[day] = now
+                    self._defer_spot_days(
+                        [(chunk_start, chunk_end)],
+                        stable_before,
+                        now + _SHORT_SPOT_DAY_TTL,
+                    )
                 except EntsoeError as err:
-                    # A timeout or a 5xx. Not logged per chunk: one warning
-                    # naming the whole span replaces up to 52 identical ones,
-                    # and the fallback below may well answer for it anyway.
+                    # A timeout or a 5xx. Not logged and not marked per chunk:
+                    # one warning naming the whole span replaces up to 52
+                    # identical ones, and the fallback below may well answer
+                    # for it. Only a chunk NEITHER source could serve is held
+                    # back, and by the shorter outage TTL.
                     primary = err
                     unanswered.append((chunk_start, chunk_end))
                 else:
@@ -416,9 +426,26 @@ class _SpotsMixin:
             ds_utc = dt_util.start_of_local_day(day).astimezone(UTC)
             got = self._cached_spot_hours(ds_utc, want_quarters)
             if got < 20 and day < stable_before:
-                self._short_spot_days[day] = now
+                self._spot_day_retry_at[day] = now + _SHORT_SPOT_DAY_TTL
             else:
-                self._short_spot_days.pop(day, None)
+                self._spot_day_retry_at.pop(day, None)
+
+    def _defer_spot_days(
+        self,
+        chunks: list[tuple[date, date]],
+        stable_before: date,
+        until: datetime,
+    ) -> None:
+        """Hold every stable past day in ``chunks`` back until ``until``.
+
+        Today and yesterday are deliberately left unmarked whatever happened:
+        their data is still landing, and a day that is short because it is not
+        published yet has to be asked for again on the next tick.
+        """
+        for start, end in chunks:
+            for day in _dates_in(start, end):
+                if day < stable_before:
+                    self._spot_day_retry_at[day] = until
 
     async def _fill_spots_from_fallback(
         self,
@@ -467,6 +494,7 @@ class _SpotsMixin:
                 primary,
                 err,
             )
+            self._defer_spot_days(unanswered, stable_before, now + _SPOT_OUTAGE_TTL)
             return
         if not prices:
             _LOGGER.warning(
@@ -476,6 +504,7 @@ class _SpotsMixin:
                 span_end,
                 primary,
             )
+            self._defer_spot_days(unanswered, stable_before, now + _SPOT_OUTAGE_TTL)
             return
         failed_days = {
             day for start, end in unanswered for day in _dates_in(start, end)
