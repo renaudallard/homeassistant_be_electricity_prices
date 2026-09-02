@@ -74,3 +74,21 @@ def _force_brussels_timezone(request: pytest.FixtureRequest) -> Iterator[None]:
         yield
     finally:
         dt_util.set_default_time_zone(orig)
+
+
+@pytest.fixture(autouse=True)
+def _clear_energy_charts_cooldown() -> Iterator[None]:
+    """Start every test with the keyless source's rate-limit cooldown clear.
+
+    The cooldown a 429 imposes is module state, because the limit it tracks is
+    per client IP rather than per entry. Left standing it would leak out of the
+    test that tripped it and make the next test's fallback refuse to fetch,
+    which reads as an unrelated failure in whichever test happened to run next.
+    """
+    from custom_components.be_electricity_prices import api
+
+    api._energy_charts_retry_at = None
+    try:
+        yield
+    finally:
+        api._energy_charts_retry_at = None

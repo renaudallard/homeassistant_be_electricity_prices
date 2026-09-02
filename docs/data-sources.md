@@ -88,8 +88,8 @@ Two exception types are defined (`api.py:58`, `api.py:62`):
 
 ### The keyless fallback
 
-`fetch_day_ahead_or_fallback` (`api.py:493`) tries ENTSO-E first and, on
-`EntsoeError` only, re-asks `EnergyChartsClient` (`api.py:388`). It returns the
+`fetch_day_ahead_or_fallback` (`api.py:555`) tries ENTSO-E first and, on
+`EntsoeError` only, re-asks `EnergyChartsClient` (`api.py:425`). It returns the
 prices *and* the source that supplied them, which reaches the `current_price`
 sensor as `spot_source`.
 
@@ -122,6 +122,19 @@ Three properties are load-bearing:
   with a second source's view of the same auction. The live single-window
   fetch still goes through `fetch_day_ahead_or_fallback`, where per-call
   fallback is exactly right.
+
+**The rate limit is honoured, not assumed.** A 429 carries `Retry-After` (an
+integer count of seconds; measured `retry-after: 29`), and the endpoint asks
+clients to obey the header rather than assume a fixed rate, because the limit
+is tuned down under load. `_retry_after` (`api.py:408`) reads it, defaulting to
+60 s for anything unusable -- absent, an HTTP-date, a negative -- rather than
+to zero, and capping at 15 minutes so a hostile or mistaken value cannot park
+the source for the year. Until the cooldown expires `fetch_day_ahead` refuses
+without sending a request: a request inside the window cannot succeed, and it
+is itself what the server counts. The cooldown is MODULE state
+(`api.py:394`), because the limit is per client IP: every config entry on the
+host, and the compare page, share one bucket, so an instance-level cooldown
+would have the second entry walk into the 429 the first one just earned.
 
 The endpoint takes plain dates on the local (Brussels) day, inclusive at both
 ends, so the client resolves the local days the UTC window spans and trims the

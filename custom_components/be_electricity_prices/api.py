@@ -385,6 +385,43 @@ def _resolution_to_timedelta(resolution: str) -> timedelta | None:
 # ---- keyless day-ahead fallback ----------------------------------------------
 
 
+# When the keyless endpoint may be asked again, or None while it is clear.
+#
+# Module-level, not per client or per entry, because the limit it tracks is
+# per client IP: every config entry on this host, plus the compare page, share
+# one bucket. An instance-level cooldown would have the second entry walk
+# straight into the 429 the first one just earned, and learn nothing from it.
+_energy_charts_retry_at: datetime | None = None
+
+# What to wait when a 429 arrives without a usable Retry-After. Measured, the
+# endpoint does send one (an integer count of seconds), so this is the belt to
+# that braces: anything other than a sane number falls back to a minute rather
+# than to zero, which would retry straight into the limit.
+_ENERGY_CHARTS_FALLBACK_COOLDOWN = timedelta(seconds=60)
+
+# Refuse a Retry-After longer than this. The header is a hint from a server we
+# do not control, and a wild value (or a units mix-up) would otherwise park the
+# fallback for the rest of the year.
+_ENERGY_CHARTS_MAX_COOLDOWN = timedelta(minutes=15)
+
+
+def _retry_after(value: str | None) -> timedelta:
+    """How long a 429's ``Retry-After`` asks us to wait.
+
+    RFC 9110 allows a delay in seconds or an HTTP-date; energy-charts sends
+    seconds (measured: ``retry-after: 29``). Anything else -- absent, a date,
+    a negative, nonsense -- takes the fallback wait, and the whole thing is
+    capped so a hostile or mistaken value cannot park the source indefinitely.
+    """
+    try:
+        seconds = int((value or "").strip())
+    except ValueError:
+        return _ENERGY_CHARTS_FALLBACK_COOLDOWN
+    if seconds <= 0:
+        return _ENERGY_CHARTS_FALLBACK_COOLDOWN
+    return min(timedelta(seconds=seconds), _ENERGY_CHARTS_MAX_COOLDOWN)
+
+
 class EnergyChartsClient:
     """Keyless BE day-ahead client, used only when ENTSO-E is unreachable.
 
@@ -409,7 +446,25 @@ class EnergyChartsClient:
         *,
         quarter_hourly: bool = False,
     ) -> dict[datetime, float]:
-        """Fetch BE day-ahead prices in EUR/kWh for the given UTC window."""
+        """Fetch BE day-ahead prices in EUR/kWh for the given UTC window.
+
+        Honours the rate limit the endpoint publishes. A 429 carries a
+        ``Retry-After``, and the documentation asks clients to obey it rather
+        than assume a fixed rate, because the limit is tuned down under load.
+        Until it expires this refuses without a request: sending one anyway
+        cannot succeed, and every attempt inside the window is what the server
+        is counting.
+        """
+        global _energy_charts_retry_at
+
+        now = dt_util.utcnow()
+        if _energy_charts_retry_at is not None:
+            if now < _energy_charts_retry_at:
+                wait = (_energy_charts_retry_at - now).total_seconds()
+                raise EntsoeError(
+                    f"energy-charts: rate limited, not retrying for {wait:.0f}s"
+                )
+            _energy_charts_retry_at = None
         # The endpoint windows on the LOCAL (Brussels) day and takes plain
         # dates, inclusive at both ends. Callers hand us local-midnight
         # anchored UTC instants, so resolve the local days they span and
@@ -430,6 +485,13 @@ class EnergyChartsClient:
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
+                if resp.status == 429:
+                    cooldown = _retry_after(resp.headers.get("Retry-After"))
+                    _energy_charts_retry_at = now + cooldown
+                    raise EntsoeError(
+                        "energy-charts HTTP 429: rate limited, "
+                        f"waiting {cooldown.total_seconds():.0f}s"
+                    )
                 if resp.status >= 400:
                     body = await resp.text()
                     raise EntsoeError(f"energy-charts HTTP {resp.status}: {body[:200]}")

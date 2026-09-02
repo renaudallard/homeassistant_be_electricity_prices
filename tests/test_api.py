@@ -35,13 +35,16 @@ from unittest.mock import MagicMock
 import aiohttp
 import pytest
 
+from custom_components.be_electricity_prices import api
 from custom_components.be_electricity_prices.api import (
+    EnergyChartsClient,
     EntsoeAuthError,
     EntsoeClient,
     EntsoeError,
     _parse_iso_utc,
     _MAX_PERIOD_SLOTS,
     _parse_energy_charts,
+    _retry_after,
     fetch_day_ahead_or_fallback,
     parse_day_ahead_xml,
 )
@@ -372,9 +375,12 @@ def test_out_of_range_point_position_cannot_blow_the_slot_cap() -> None:
 
 
 class _Resp:
-    def __init__(self, status: int, body: str) -> None:
+    def __init__(
+        self, status: int, body: str, headers: dict[str, str] | None = None
+    ) -> None:
         self.status = status
         self._body = body
+        self.headers = headers or {}
 
     async def text(self) -> str:
         return self._body
@@ -556,3 +562,58 @@ async def test_empty_fallback_window_still_names_the_entsoe_cause() -> None:
             datetime(2026, 8, 30, 22, 0, tzinfo=UTC),
             datetime(2026, 8, 31, 22, 0, tzinfo=UTC),
         )
+
+
+def test_retry_after_reads_the_header_and_refuses_a_wild_one() -> None:
+    """The endpoint sends an integer count of seconds (measured: 29).
+
+    Everything else takes the fallback wait rather than zero, which would
+    retry straight back into the limit, and the whole thing is capped: the
+    header is a hint from a server we do not control, and a units mix-up
+    would otherwise park the keyless source for the rest of the year.
+    """
+    assert _retry_after("29") == timedelta(seconds=29)
+    assert _retry_after(" 29 ") == timedelta(seconds=29)
+    # Absent, an HTTP-date, nonsense, or a value that cannot be waited.
+    assert _retry_after(None) == timedelta(seconds=60)
+    assert _retry_after("Wed, 02 Sep 2026 17:06:41 GMT") == timedelta(seconds=60)
+    assert _retry_after("") == timedelta(seconds=60)
+    assert _retry_after("0") == timedelta(seconds=60)
+    assert _retry_after("-5") == timedelta(seconds=60)
+    assert _retry_after("86400") == timedelta(minutes=15)
+
+
+async def test_a_429_stops_the_next_request_being_sent_at_all() -> None:
+    """The endpoint asks clients to honour Retry-After rather than assume a
+    fixed rate, because it tunes the limit down under load. A request sent
+    inside that window cannot succeed and is itself what the server counts,
+    so the cooldown is enforced before the socket, not after the response."""
+
+    class _Limited:
+        def __init__(self) -> None:
+            self.requests = 0
+
+        def get(self, _url: str, **_: object) -> _CM:
+            self.requests += 1
+            return _CM(resp=_Resp(429, "Too Many Requests", {"Retry-After": "29"}))
+
+    session = _Limited()
+    client = EnergyChartsClient(session)  # type: ignore[arg-type]
+    start = datetime(2026, 8, 30, 22, 0, tzinfo=UTC)
+    end = datetime(2026, 8, 31, 22, 0, tzinfo=UTC)
+
+    with pytest.raises(EntsoeError, match="429"):
+        await client.fetch_day_ahead(start, end)
+    assert session.requests == 1
+
+    # A second entry on the same host shares the bucket, so it shares the
+    # cooldown: a fresh client must not walk into the 429 the first one earned.
+    with pytest.raises(EntsoeError, match="rate limited"):
+        await EnergyChartsClient(session).fetch_day_ahead(start, end)  # type: ignore[arg-type]
+    assert session.requests == 1, "the held request must never reach the wire"
+
+    # And it lifts on its own once the window the server named has passed.
+    api._energy_charts_retry_at = datetime(2020, 1, 1, tzinfo=UTC)
+    with pytest.raises(EntsoeError, match="429"):
+        await client.fetch_day_ahead(start, end)
+    assert session.requests == 2
