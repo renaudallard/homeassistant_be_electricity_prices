@@ -224,9 +224,11 @@ left is empty, and otherwise validated live against the ENTSO-E day-ahead endpoi
 by `_validate_entsoe_key` (`flow_schemas.py:901`) before the flow proceeds:
 
 - returns `None` on success,
-- `"invalid_api_key"` when ENTSO-E returns 401 (`EntsoeAuthError`),
-- `"cannot_connect"` on transport/parse error *and* on an HTTP 200 that comes back
-  as an empty `Acknowledgement_MarketDocument` with no `TimeSeries`.
+- `"invalid_api_key"` when ENTSO-E returns 401, *and* on an HTTP 200 that comes
+  back as an empty `Acknowledgement_MarketDocument` with no `TimeSeries`, which
+  `parse_day_ahead_xml` also raises `EntsoeAuthError` for,
+- `"cannot_connect"` on transport/parse error, and on a document that parses but
+  covers none of the requested window.
 
 The two outcomes are handled differently, because only one of them is the user's to
 fix. `"invalid_api_key"` keeps the user on the form: ENTSO-E answered and refused the
@@ -257,14 +259,17 @@ have been priced from until ENTSO-E came back to reject it. The step answers
 The validator queries a 24h window anchored on yesterday (`flow_schemas.py:639`): a
 quota-exhausted token returns 200 plus an empty acknowledgement, and the BE bidding
 zone effectively never goes a full local day with no publication, so an empty 24h
-response reliably means "key not usable" (quota or maintenance). This blocks the
-user from finalizing an entry that would fail on its first refresh. The two error
-strings map to `config.error.invalid_api_key` / `config.error.cannot_connect`,
-and the blank one to `config.error.empty_api_key` (`strings.json:170`).
+response reliably means "key not usable" (quota or maintenance). That is why the
+empty acknowledgement is grouped with the refusal rather than with the outage: it
+keeps the user on the form instead of offering them the continue-anyway menu, and
+so blocks them from finalizing an entry that would fail on its first refresh. The
+two error strings map to `config.error.invalid_api_key` /
+`config.error.cannot_connect`, and the blank one to `config.error.empty_api_key`
+(`strings.json:170`).
 
 ### `capacity`: Flanders capacity-tariff peak source
 
-Schema `_capacity_schema` (`flow_schemas.py:932`). Reached from `_after_api_key` or
+Schema `_capacity_schema` (`flow_schemas.py:942`). Reached from `_after_api_key` or
 `_after_dso_tariff_mode` when region is Flanders (`config_flow.py:584`, `:507`).
 Fields:
 
@@ -323,7 +328,7 @@ straight to solar (`config_flow.py:206` comment).
 
 ### `solar`: inverter kVA + regime
 
-Schema `_solar_schema` (`flow_schemas.py:1084`). Fields:
+Schema `_solar_schema` (`flow_schemas.py:1094`). Fields:
 
 - `CONF_SOLAR_KVA`: `NumberSelector` box 0-50 step 0.1, default 0.0 (0 means no
   panels, no prosumer cost; `const.py:230`).
@@ -360,7 +365,7 @@ until a key is added via Reconfigure. A typed key is validated by
 
 ### `meters`: cumulative kWh sensors (current-year cost)
 
-Schema `_meters_schema` (`flow_schemas.py:1017`). All six fields are optional
+Schema `_meters_schema` (`flow_schemas.py:1027`). All six fields are optional
 `EntitySelector`s restricted to `device_class="energy"` (`flow_schemas.py:727`) so a
 power/temperature/unitless sensor cannot be read as raw kWh. A stored entity id is
 rendered as a `description={"suggested_value": ...}`, never a `default`: ha-form
@@ -648,7 +653,7 @@ a cold sweep takes; cards move about monthly.
 | `compare` | `compare_flow.py:409` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:178`): suppliers with at least one contract in the user's region **and the entry's own segment**, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
 | `compare_contract` | `compare_flow.py:319` | Contract picker via `_compare_contract_schema` (`compare_flow.py:211`), spans static and dynamic kinds but never crosses the residential/professional line: a pro card is published ex-VAT and bands the excise by annual volume, so `_resolve_snapshot` grosses it at the entry's own rate and the row is neither what the household would pay nor a contract it could sign. Excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
 | `compare_meter` | `compare_flow.py:355` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:216`) |
-| `compare_solar` | `compare_flow.py:397` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:1112`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:1064`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
+| `compare_solar` | `compare_flow.py:397` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:1122`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:1074`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
 | `compare_api_key` | `compare_flow.py:486` | Shown when `_after_compare_meter` (`compare_flow.py:1473`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved. Skippable like `injection_api_key`: a blank submission asks ENTSO-E nothing and goes straight on, since a quote is a one-off and every reader of the key falls back to the entry's own with `or` |
 | `compare_result` | `compare_flow.py:514` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:1568`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
 

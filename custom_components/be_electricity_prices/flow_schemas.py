@@ -902,16 +902,26 @@ async def _validate_entsoe_key(hass: HomeAssistant, api_key: str) -> str | None:
     """Test the ENTSO-E key with a day-ahead query.
 
     Returns ``None`` on success, ``"invalid_api_key"`` when ENTSO-E
-    rejects the token, or ``"cannot_connect"`` for transport / parse
-    errors and for HTTP 200 responses that come back as an
-    Acknowledgement_MarketDocument with no TimeSeries. Use a 24h
-    window anchored on yesterday: a quota-exhausted token returns
-    HTTP 200 + an empty Acknowledgement, and the BE bidding zone
-    rarely (never, in practice) goes a full local day with no
-    publication, so an empty 24h response really does mean "the
-    server can't fulfil the request" - whether quota or maintenance,
-    the right answer is "key not usable" rather than letting the
-    user finalise an entry that fails on first refresh.
+    rejects the token, and ``"cannot_connect"`` for transport / parse
+    errors and for a document that parses but covers none of the
+    window.
+
+    An HTTP 200 carrying an Acknowledgement_MarketDocument with no
+    TimeSeries counts as a rejection, not as unreachable:
+    parse_day_ahead_xml raises EntsoeAuthError for that root element,
+    so it lands on ``"invalid_api_key"`` and keeps the user on the
+    form. Use a 24h window anchored on yesterday, which is what makes
+    that safe: a quota-exhausted token returns exactly that empty
+    Acknowledgement, and the BE bidding zone rarely (never, in
+    practice) goes a full local day with no publication, so an empty
+    24h response really does mean the token is not usable - whether
+    quota or maintenance, better than letting the user finalise an
+    entry that fails on first refresh.
+
+    A blank key never gets this far. The step that requires one
+    rejects an empty field itself, and the two that treat it as
+    optional skip without calling, so an empty string here would be a
+    caller's bug rather than an answer ENTSO-E gave.
     """
     session = async_get_clientsession(hass)
     client = EntsoeClient(api_key, session)
