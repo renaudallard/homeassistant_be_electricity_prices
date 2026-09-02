@@ -62,9 +62,9 @@ def test_mega_is_registered() -> None:
     assert "mega_smart_fixed" in contract_ids
     assert "mega_smart_flex" in contract_ids
     assert "mega_dynamic" in contract_ids
-    # Zen Fixed was discontinued in August 2026 (listing block dropped in all
-    # three regions; Wallonia resolves to the CDN's HTML stub).
-    assert "mega_zen_fixed" not in contract_ids
+    # Zen Fixed was off the residential listing for the August 2026 card only
+    # and came back for September, in all three regions.
+    assert "mega_zen_fixed" in contract_ids
     # Off-peak Fixed was pulled in July 2026 and came back for the August card,
     # with a B2B edition it did not have before.
     assert "mega_offpeak_fixed" in contract_ids
@@ -74,8 +74,8 @@ def test_mega_is_registered() -> None:
     # stub for the September filename of both editions.
     assert "mega_cap" not in contract_ids
     assert "mega_pro_cap" not in contract_ids
-    # Ten residential products, plus the eight professional editions.
-    assert len(contract_ids) == 18
+    # Eleven residential products, plus the eight professional editions.
+    assert len(contract_ids) == 19
 
 
 def test_listing_url_finder_picks_electricity_for_region() -> None:
@@ -768,9 +768,10 @@ def test_pro_contracts_are_registered_and_flagged() -> None:
     # Online Flex and the Off-peak family have no B2B card.
     assert "mega_pro_online_flex" not in contracts
     assert "mega_pro_offpeak_flex" not in contracts
-    # Zen Fixed is retired residentially but still published for business.
+    # Zen Fixed kept its B2B card through the month its residential edition
+    # was off the listing; both are registered again.
     assert "mega_pro_zen_fixed" in contracts
-    assert "mega_zen_fixed" not in contracts
+    assert "mega_zen_fixed" in contracts
 
 
 def test_pro_pdf_url_is_built_not_scraped() -> None:

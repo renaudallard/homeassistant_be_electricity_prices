@@ -44,7 +44,7 @@ regional editions differ only by the ``-B2C-<REGION>-`` filename
 segment; parse_snapshot then re-checks the card's own region header so a
 wrong guess fails loud instead of mis-pricing.
 
-All ten residential electricity products are registered. Mega
+All eleven residential electricity products are registered. Mega
 serves all three regions (Flanders, Wallonia, Brussels) for every
 product except Off-peak Impact, which is Wallonia-only because it
 requires the CWaPE Tarif réseau IMPACT plus an SMR3 smart meter
@@ -176,12 +176,13 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef(
         "mega_smart_flex", "Mega Smart Flex (2 years)", "variable", "Smart Flex"
     ),
-    # Mega discontinued "Zen Fixed" (August 2026): the listing dropped the
-    # product block in all three regions at once, so the sibling-region
-    # rewrite below has nothing to borrow from. The card is not simply
-    # mislaid - Wallonia resolves to the CDN's HTML stub, i.e. it was never
-    # published there this month. discover() re-surfaces it if Mega revives
-    # it. Same treatment as "Off-peak Fixed" below.
+    # Mega dropped "Zen Fixed" from the residential listing for the August
+    # 2026 card and put it back for September, in all three regions, on the
+    # ordinary fixed path with no parser change. Its B2B edition never went
+    # away, which is why the catalog diff stayed quiet through the gap: the
+    # professional contract carries the same product_name and covered the
+    # listing entry for it.
+    _ContractDef("mega_zen_fixed", "Mega Zen Fixed (3 years)", "fixed", "Zen Fixed"),
     _ContractDef("mega_online_fixed", "Mega Online Fixed", "fixed", "Online Fixed"),
     _ContractDef("mega_online_flex", "Mega Online Flex", "variable", "Online Flex"),
     _ContractDef("mega_cosy_fixed", "Mega Cosy Fixed", "fixed", "Cosy Fixed"),
@@ -216,8 +217,8 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     # never links them from the public listing, so they are addressed by
     # building the filename. Online Flex, Off-peak Flex and Off-peak Impact
     # have no B2B card; Off-peak Fixed gained one when it returned in August
-    # 2026, and Zen Fixed has one even though Mega retired the residential
-    # edition that month.
+    # 2026, and Zen Fixed kept its own through the month its residential
+    # edition was off the listing.
     _ContractDef(
         "mega_pro_offpeak_fixed",
         "Mega Off-peak Fixed (pro)",

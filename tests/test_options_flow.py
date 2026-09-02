@@ -4615,19 +4615,19 @@ def test_sweep_candidate_counts_per_cell() -> None:
     from custom_components.be_electricity_prices.flow_schemas import _sweep_candidates
 
     expected = {
-        ("flanders", "static", False): 50,
+        ("flanders", "static", False): 51,
         ("flanders", "static", True): 19,
         ("flanders", "spot", False): 26,
         ("flanders", "spot", True): 3,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,
-        ("wallonia", "static", False): 48,
+        ("wallonia", "static", False): 49,
         ("wallonia", "static", True): 19,
         ("wallonia", "spot", False): 10,
         ("wallonia", "spot", True): 3,
         ("wallonia", "slot", False): 4,
         ("wallonia", "slot", True): 1,
-        ("brussels", "static", False): 28,
+        ("brussels", "static", False): 29,
         ("brussels", "static", True): 19,
         ("brussels", "spot", False): 4,
         ("brussels", "spot", True): 3,
