@@ -52,6 +52,12 @@ requires the CWaPE Tarif réseau IMPACT plus an SMR3 smart meter
 purpose, same reasoning as Engie/Luminus (regulated CREG tariff,
 auto-assigned, no DSO breakdown).
 
+Ten professional editions are registered alongside them, all addressed by
+built filename rather than by scraping: Mega links only the SME pair from
+the listing, and the resolver pins the B2C segment, so even those two are
+built. The listing entry still matters for discovery, which is what
+``_ContractDef.advertised`` records.
+
 The Dynamic formula uses a different convention than Engie/Luminus:
 ``Day Ahead Epex Spot * 1.05 + 1.35 c€/kWh`` where the spot is already
 in c€/kWh and the result is TVAC, so factor and base are scaled
@@ -163,10 +169,22 @@ class _ContractDef:
     segment: str = "B2C"
     file_family: str = ""  # "Smart", "Cosy", "Dynamic", ...
     file_variant: str = ""  # "-Fixed" or empty
+    # True for a professional card Mega DOES link from the public listing,
+    # which the SME pair is and no other B2B card is. It only affects
+    # discovery: the catalog baseline counts advertised products, so an
+    # unlisted B2B edition cannot vouch for a product name the listing shows
+    # (that is what hid Zen Fixed's return), while a listed one has to, or it
+    # is reported as new every day.
+    b2b_listed: bool = False
 
     @property
     def professional(self) -> bool:
         return self.segment == "B2B"
+
+    @property
+    def advertised(self) -> bool:
+        """Whether Mega's public listing links this product's card."""
+        return not self.professional or self.b2b_listed
 
 
 _CONTRACTS: tuple[_ContractDef, ...] = (
@@ -287,6 +305,31 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         segment="B2B",
         file_family="Zen",
         file_variant="-Fixed",
+    ),
+    # "Carte tarifaire PME", the small-business pair Mega added for the
+    # September 2026 cards. They are the only professional cards it links
+    # from the public listing, hence b2b_listed, and they have no
+    # residential edition at all. The filenames follow the same grammar as
+    # every other B2B card, with -ND on both variants.
+    _ContractDef(
+        "mega_pro_sme_fixed",
+        "Mega SME Fixed (pro)",
+        "fixed",
+        "SME Fixed",
+        segment="B2B",
+        file_family="SME",
+        file_variant="-ND-Fixed",
+        b2b_listed=True,
+    ),
+    _ContractDef(
+        "mega_pro_sme_flex",
+        "Mega SME Flex (pro)",
+        "variable",
+        "SME Flex",
+        segment="B2B",
+        file_family="SME",
+        file_variant="-ND",
+        b2b_listed=True,
     ),
 )
 

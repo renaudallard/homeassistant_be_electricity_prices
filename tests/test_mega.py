@@ -74,8 +74,8 @@ def test_mega_is_registered() -> None:
     # stub for the September filename of both editions.
     assert "mega_cap" not in contract_ids
     assert "mega_pro_cap" not in contract_ids
-    # Eleven residential products, plus the eight professional editions.
-    assert len(contract_ids) == 19
+    # Eleven residential products, plus the ten professional editions.
+    assert len(contract_ids) == 21
 
 
 def test_listing_url_finder_picks_electricity_for_region() -> None:
@@ -772,6 +772,12 @@ def test_pro_contracts_are_registered_and_flagged() -> None:
     # was off the listing; both are registered again.
     assert "mega_pro_zen_fixed" in contracts
     assert "mega_zen_fixed" in contracts
+    # The SME pair is business-only: no residential edition exists, and they
+    # are the only B2B cards Mega links from its public listing.
+    assert contracts["mega_pro_sme_fixed"].professional is True
+    assert contracts["mega_pro_sme_flex"].professional is True
+    assert "mega_sme_fixed" not in contracts
+    assert "mega_sme_flex" not in contracts
 
 
 def test_pro_pdf_url_is_built_not_scraped() -> None:

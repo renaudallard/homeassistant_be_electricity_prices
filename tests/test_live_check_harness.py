@@ -744,32 +744,42 @@ def test_mega_professional_check_covers_every_contract_region(
             if r in c.regions
         ]
     )
-    assert session.calls == expected == 24
+    assert session.calls == expected == 30
 
 
 def test_catalog_baseline_ignores_editions_the_listing_never_shows() -> None:
     """A professional edition must not vouch for a residential product.
 
-    Mega and Bolt advertise only their residential cards, and a B2B edition
-    reuses the residential product name (Mega) or folder/slug (Bolt). Counting
-    the professional contracts in the baseline is what kept the catalog diff
-    quiet when Mega dropped Zen Fixed from the listing for the August 2026
-    card and put it back in September: mega_pro_zen_fixed carried the name
-    throughout, so neither the loss nor the return was ever a new product.
+    Bolt advertises only its residential cards, and so does Mega apart from
+    the SME pair, while a B2B edition reuses the residential product name
+    (Mega) or folder/slug (Bolt). Counting every professional contract in the
+    baseline is what kept the catalog diff quiet when Mega dropped Zen Fixed
+    from the listing for the August 2026 card and put it back in September:
+    mega_pro_zen_fixed carried the name throughout, so neither the loss nor
+    the return was ever a new product. Counting none of them is wrong in the
+    other direction, which the SME row below is.
 
-    Stubbed rather than run against the real registry, because every product
-    name Mega sells to businesses is sold residentially too today -- the two
-    baselines are identical until the day they are not, which is the day this
-    matters.
+    Stubbed rather than run against the real registry, because the shapes that
+    matter -- a product sold only to businesses and only advertised there, and
+    one sold to both -- are one contract apart in the registry and identical in
+    the baseline until the day they are not.
     """
     mega = SimpleNamespace(
         _CONTRACTS=(
-            SimpleNamespace(product_name="Smart Fixed", professional=False),
-            SimpleNamespace(product_name="Smart Fixed", professional=True),
-            SimpleNamespace(product_name="Zen Fixed", professional=True),
+            SimpleNamespace(product_name="Smart Fixed", advertised=True),
+            # The B2B edition of the same product, and one whose residential
+            # edition has left the listing: neither is advertised.
+            SimpleNamespace(product_name="Smart Fixed", advertised=False),
+            SimpleNamespace(product_name="Zen Fixed", advertised=False),
+            # A professional card Mega DOES link from the listing: leaving it
+            # out reports it as a new product every day.
+            SimpleNamespace(product_name="SME Flex", advertised=True),
         )
     )
-    assert lc._CATALOG_BASELINES["mega"](mega) == {"Smart Fixed"}  # type: ignore[arg-type]
+    assert lc._CATALOG_BASELINES["mega"](mega) == {  # type: ignore[arg-type]
+        "Smart Fixed",
+        "SME Flex",
+    }
 
     bolt = SimpleNamespace(
         _CONTRACTS=(

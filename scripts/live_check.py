@@ -1313,17 +1313,19 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
 # cannot silently drift away from the code.
 #
 # The baseline has to cover exactly what that supplier's discovery surface
-# enumerates, no more. Mega and Bolt advertise only their RESIDENTIAL cards
-# (Bolt's discover filters on the ``res`` segment, Mega's listing carries only
-# B2C hrefs), while a professional edition of the same product reuses the
-# residential product name or slug. Counting the professional contracts here
-# let a B2B card vouch for a product that had left the residential listing:
-# Mega dropped Zen Fixed from the listing in August 2026 and put it back in
-# September, and the diff stayed quiet through both because mega_pro_zen_fixed
-# carried the name the whole time. Engie is not filtered on purpose -- its
-# surface is the public sitemap, which does not split by segment.
+# enumerates, no more. Bolt advertises only its RESIDENTIAL cards (its discover
+# filters on the ``res`` segment), and so does Mega apart from the SME pair,
+# while a professional edition of the same product reuses the residential
+# product name or slug. Counting every professional contract here let a B2B
+# card vouch for a product that had left the residential listing: Mega dropped
+# Zen Fixed from the listing in August 2026 and put it back in September, and
+# the diff stayed quiet through both because mega_pro_zen_fixed carried the
+# name the whole time. Mega's own ``advertised`` says which side a contract is
+# on, since its SME cards ARE linked from the listing and have to be counted or
+# they report as new every day. Engie is not filtered on purpose -- its surface
+# is the public sitemap, which does not split by segment.
 _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
-    "mega": lambda m: {c.product_name for c in m._CONTRACTS if not c.professional},
+    "mega": lambda m: {c.product_name for c in m._CONTRACTS if c.advertised},
     "bolt": lambda m: {
         f"{c.folder}/{c.slug}" for c in m._CONTRACTS if not c.professional
     },
@@ -2263,6 +2265,7 @@ _INJECTION_SHAPE: dict[str, str] = {
     "mega_offpeak_impact_var": "spp",
     "mega_pro_smart_flex": "spp",
     "mega_pro_cosy_flex": "spp",
+    "mega_pro_sme_flex": "spp",
     # Luminus non-dynamic cards say "Votre tarif sera indexe tous les mois. La
     # valeur Belpex du mois en cours n'est connue qu'a la fin du mois. Les prix
     # affiches sont calcules sur la base de la derniere valeur Belpex connue
