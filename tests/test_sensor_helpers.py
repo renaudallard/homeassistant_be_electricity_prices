@@ -288,34 +288,68 @@ def test_the_recorded_attributes_stay_under_the_recorder_cap() -> None:
     warning and stores NONE of them, so an over-cap dict silently costs the
     small diagnostic keys their history. The bulky curves are excluded before
     that measurement is taken, which is exactly why they may carry 96 rows a
-    day, so this measures the remainder that is not excluded and would be the
-    thing to break if a future attribute were added without excluding it.
+    day.
+
+    Two things are checked, and the per-key one is the point. Measuring only
+    the total passes until the remainder happens to cross 16 KB, so a single
+    unexcluded curve of ~10 KB slips through it while being precisely the
+    mistake this guards against. Every bulky key has to be excluded on its own
+    account, whatever the ones beside it currently weigh.
+
+    Read off the SENSOR rather than a hand-written copy of what it publishes.
+    A literal here agrees with the sensor only for as long as somebody
+    remembers to update both, which is the moment the test exists to survive.
     """
+    from types import SimpleNamespace
+
     from homeassistant.components.recorder.db_schema import MAX_STATE_ATTRS_BYTES
 
-    from custom_components.be_electricity_prices.sensor import BePriceSensor
+    from custom_components.be_electricity_prices.sensor import SENSORS, BePriceSensor
 
     prices = [0.1234 + i / 10000 for i in range(96)]
     data = _quarter_today_data(prices)
-    today, tomorrow = _split_today_tomorrow(data)
-    cheapest, expensive = _today_ranked(data, 4)
-    attrs = {
-        "snapshot_publication": "2026-09",
-        "snapshot_age_hours": 3.5,
-        "snapshot_stale": False,
-        "last_error": "",
-        "spot_source": "energy-charts",
-        "attribution": "CC BY 4.0 from Bundesnetzagentur | SMARD.de",
-        "cheapest_4h_today": cheapest,
-        "most_expensive_4h_today": expensive,
-        "today": today,
-        # The fixture publishes today only; tomorrow's curve lands at ~13:00
-        # and is the same shape, so stand it in to size the real worst case.
-        "tomorrow": tomorrow or today,
-    }
+    # The fixture publishes today only; tomorrow's curve lands at ~13:00 and is
+    # the same shape, so stand it in to size the real worst case.
+    tomorrow = {slot + timedelta(days=1): bd for slot, bd in data.hourly.items()}
+    data = replace(
+        data,
+        hourly={**data.hourly, **tomorrow},
+        spot_source="energy-charts",
+        snapshot_publication="2026-09",
+        last_error="",
+    )
+    sensor = BePriceSensor(
+        SimpleNamespace(  # type: ignore[arg-type]
+            data=data,
+            entry=SimpleNamespace(entry_id="x", data={}, title="t"),
+            last_update_success=True,
+        ),
+        next(d for d in SENSORS if d.key == "current_price"),
+    )
+    attrs = sensor.extra_state_attributes
+    # The fixture really did produce the two-day quarter-hourly worst case.
+    assert len(attrs["today"]) == 96
+    assert len(attrs["tomorrow"]) == 96
+
     # A full two-day 15-minute curve is genuinely too big to record, which is
-    # why these keys are excluded rather than merely large.
+    # why the bulky keys are excluded rather than merely large.
     assert len(json.dumps(attrs).encode()) > MAX_STATE_ATTRS_BYTES
+
+    # Anything that could swallow the budget on its own must be excluded on
+    # its own. 1 KB is well above every scalar the sensor publishes and well
+    # below one day's curve, so it separates the two classes without pinning
+    # either to its current size.
+    bulky = {
+        key
+        for key, value in attrs.items()
+        if len(json.dumps({key: value}).encode()) > 1024
+    }
+    assert bulky, "the fixture stopped producing a bulky attribute to test"
+    assert bulky <= BePriceSensor._unrecorded_attributes, (
+        f"{sorted(bulky - BePriceSensor._unrecorded_attributes)} would be "
+        f"recorded; add them to _unrecorded_attributes or the state goes "
+        f"over the {MAX_STATE_ATTRS_BYTES} byte cap and stores NO attributes"
+    )
 
     recorded = {
         k: v for k, v in attrs.items() if k not in BePriceSensor._unrecorded_attributes
