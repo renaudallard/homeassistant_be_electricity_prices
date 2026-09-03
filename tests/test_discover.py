@@ -471,3 +471,33 @@ def test_discover_returns_empty_on_http_error() -> None:
     # Energy Knights and EnergyVision both scrape a listing page.
     assert _run(energyknights_mod.discover(session)) == set()
     assert _run(energyvision_mod.discover(session)) == set()
+
+
+def test_readme_counts_the_spot_indexed_injection_contracts_correctly() -> None:
+    """The README's index-linked feed-in figure must match the registry.
+
+    Same class of failure as the discover tests above, and it has bitten:
+    the number went from 61 to 60 in the commit that ADDED a contract
+    carrying the flag, so it was wrong by two the moment it was written and
+    nothing noticed. Derived here rather than trusted, since the sentence is
+    what tells a reader whether an ENTSO-E key buys them anything.
+    """
+    import re
+    from pathlib import Path
+
+    from custom_components.be_electricity_prices.providers import all_extractors
+
+    suppliers = {
+        extractor.label: ids
+        for extractor in all_extractors()
+        if (ids := [c.id for c in extractor.contracts if c.spot_indexed_injection])
+    }
+    contracts = sum(len(ids) for ids in suppliers.values())
+
+    readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
+    found = re.search(r"(\d+) contracts across (\d+) suppliers", readme)
+    assert found is not None, "the README sentence naming the counts is gone"
+    assert (int(found[1]), int(found[2])) == (contracts, len(suppliers)), (
+        f"README says {found[0]}; the registry has {contracts} contracts "
+        f"across {len(suppliers)} suppliers: {sorted(suppliers)}"
+    )

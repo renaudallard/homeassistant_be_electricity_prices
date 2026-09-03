@@ -440,7 +440,7 @@ It is optional everywhere else, but two features use it when present: an
 injection tariff that is itself index-linked — the hourly-spot shape
 (Cociter Variable and Variable Trihoraire, every Bolt fixed and variable
 card) and the monthly-mean shape (energie.be Vast on Belpex_SPP, and most
-other static cards), 60 contracts across 14 suppliers between them, and the
+other static cards), 61 contracts across 14 suppliers between them, and the
 signing-cohort re-price of a variable contract, which resolves the current
 month's mean spot. Both stay off without a key rather than failing the
 entry — the injection price goes unavailable, and the cohort re-price keeps
