@@ -858,7 +858,14 @@ async def _compute_current_year_cost(
             )
         return hourly_energy + fees
 
-    daily_kwh = await _resolve_daily_kwh(hass, entry, today, start=window_start)
+    # The EFFECTIVE meter, not the entry's. The comparison page quotes a
+    # target contract on a meter the household need not have, and the band
+    # split has to follow the rate about to be applied: on the mono branch a
+    # totals sensor puts the whole day in d_cons, which the bi branch below
+    # then bills at the peak rate for every kWh of the year.
+    daily_kwh = await _resolve_daily_kwh(
+        hass, entry, today, start=window_start, meter=meter
+    )
     if daily_kwh is None:
         # No meter inputs at all - fees-only floor.
         return fees

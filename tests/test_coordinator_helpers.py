@@ -2480,6 +2480,62 @@ async def test_year_cost_recorder_driven_mono_no_solar(
     assert cost == pytest.approx(expected)
 
 
+async def test_year_cost_meter_override_splits_a_totals_sensor_into_bands(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A bi-hourly what-if over a mono household bills the day/night blend.
+
+    The comparison page quotes a target contract on a meter the household
+    need not have, so the pricing branch follows meter_override. The band
+    split has to follow it too: read on the mono branch, a totals sensor puts
+    the whole day in d_cons, and the bi branch then charges the peak rate for
+    every kWh of the year instead of the blend.
+    """
+
+    freezer.move_to("2026-01-03 12:00:00+01:00")
+    snap = _yearly_snapshot()  # single 0.18, peak 0.20, offpeak 0.16
+    entry = _yearly_entry(
+        meter="mono",
+        solar_regime="none",
+        consumption_kwh="sensor.cons",
+        day_consumption_kwh=None,
+        night_consumption_kwh=None,
+        day_injection_kwh=None,
+        night_injection_kwh=None,
+    )
+    today = dt_util.now().date()
+    days = _days_through(date(today.year, 1, 1), today)
+    with _patch_recorder_per_entity({"sensor.cons": {d: 10.0 for d in days}}):
+        as_mono = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+        )
+        as_bi = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            meter_override="bi",
+        )
+    assert as_mono is not None and as_bi is not None
+    # Fees are identical across the two runs, so the gap is pure energy.
+    peak_all_in, offpeak_all_in, single_all_in = 0.4065, 0.3465, 0.3765
+    blend = 0.0
+    for day in days:
+        d_ratio, n_ratio = energy_meters._default_band_ratio_for(day, "wallonia")
+        blend += 10.0 * (d_ratio * peak_all_in + n_ratio * offpeak_all_in)
+    mono_energy = 10.0 * len(days) * single_all_in
+    assert as_bi - as_mono == pytest.approx(blend - mono_energy)
+    # And specifically NOT the whole year at the peak rate, which is what a
+    # mono split billed through the bi branch produces.
+    all_peak = 10.0 * len(days) * peak_all_in
+    assert as_bi - as_mono != pytest.approx(all_peak - mono_energy)
+
+
 async def test_year_cost_compensation_clamps_when_inj_exceeds_cons(
     hass: HomeAssistant, freezer: Any
 ) -> None:

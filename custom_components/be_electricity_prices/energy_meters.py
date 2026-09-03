@@ -70,6 +70,7 @@ from .const import (
     METER_MONO,
 )
 from .pricing import (
+    MeterType,
     is_offpeak,
 )
 
@@ -569,8 +570,17 @@ async def _resolve_daily_kwh(
     entry: ConfigEntry,
     today: date,
     start: date | None = None,
+    meter: MeterType | None = None,
 ) -> dict[date, tuple[float, float, float, float]] | None:
     """Per-day (day_cons, night_cons, day_inj, night_inj) from recorder.
+
+    ``meter`` overrides the entry's own meter type, and must be the meter the
+    caller is about to BILL these kWh at. The comparison page quotes a target
+    contract on a meter the household does not have ("what if I moved to a
+    bi-hourly meter?"), and the split has to follow the rate that will be
+    applied to it: a totals sensor left on the mono branch puts the whole day
+    in the peak slot, and a caller billing peak / offpeak then charges every
+    kWh of the year at the peak rate.
 
     ``start`` is the first day to read, defaulting to 1 January. The
     year-to-date caller passes the window it actually bills, which for an
@@ -605,12 +615,14 @@ async def _resolve_daily_kwh(
     Returns ``None`` when neither side has any meter inputs at all
     or when either side has an uncovered partial register wiring.
     """
-    meter = entry.data.get(CONF_METER, METER_MONO)
+    meter = meter or entry.data.get(CONF_METER, METER_MONO)
     region = entry.data.get(CONF_REGION, "")
     window_start = start or date(today.year, 1, 1)
     # Keyed on the entry DATA this reads, never on the entry object: the
     # compare page passes a proxy carrying only .data, and reaching for an
-    # entry_id here would break that page from a distance.
+    # entry_id here would break that page from a distance. The EFFECTIVE
+    # meter goes in rather than the entry's, so one sweep can memoise the
+    # household on its own meter and on a what-if meter side by side.
     memo = _METER_MEMO.get()
     key = (
         "daily",
