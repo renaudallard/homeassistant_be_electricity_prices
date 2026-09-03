@@ -295,9 +295,19 @@ def _contract_has_spot_injection(
     supplier_id: str | None, contract_id: str | None
 ) -> bool:
     """True when the chosen contract's injection is a per-hour spot
-    formula needing an ENTSO-E key even though the energy isn't dynamic
-    (Cociter Variable). Resolved from the registry's
-    ``Contract.spot_indexed_injection`` flag.
+    formula needing an ENTSO-E key even though the energy isn't dynamic.
+    Resolved from the registry's ``Contract.spot_indexed_injection`` flag.
+
+    This used to name Cociter Variable as the only such card, and went on
+    naming it long after most of the static range across a dozen suppliers
+    had gained the flag. Deliberately no count here: the number moves
+    whenever a card is registered, and the one figure worth stating is in
+    the README, where a test derives it from this same flag.
+
+    Two shapes carry it, and ``_injection_needs_spot`` is what tells them
+    apart: a card with no printed indicative (``current is None``), which
+    loses its whole credit without a key, and one whose indicative the card
+    labels an illustration (``slot_indexed``), which falls back to it.
     """
     if not supplier_id or not contract_id:
         return False
