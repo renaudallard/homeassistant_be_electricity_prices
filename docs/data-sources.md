@@ -88,7 +88,7 @@ Two exception types are defined (`api.py:58`, `api.py:62`):
 
 ### The keyless fallback
 
-`fetch_day_ahead_or_fallback` (`api.py:555`) tries ENTSO-E first and, on
+`fetch_day_ahead_or_fallback` (`api.py:568`) tries ENTSO-E first and, on
 `EntsoeError` only, re-asks `EnergyChartsClient` (`api.py:425`). It returns the
 prices *and* the source that supplied them, which reaches the `current_price`
 sensor as `spot_source`.
@@ -107,6 +107,17 @@ Three properties are load-bearing:
   a PT15M series for the same period and the parser must not mix them;
   energy-charts returns whichever grid the auction cleared on and nothing else,
   so an hour is simply the mean of the slots inside it.
+- **It rejects the same non-finite points the XML parser does.** `json.loads`
+  accepts the `NaN` / `Infinity` / `-Infinity` literals by default and overflows
+  a long numeric literal such as `1e400` to `inf`, so without a `math.isfinite`
+  test a malformed response reaches the spot cache as a real-looking number.
+  Since the two sources are interchangeable to every caller, the value then
+  spreads exactly as `parse_day_ahead_xml` warns: through `factor*spot + base`,
+  through `_mean_of_month` into a spot-monthly contract's whole flat rate, and
+  through the backfill into recorder statistics, which outlive the response.
+  `_spot_is_sane` does not catch it, since that runs only when the cache is
+  restored from disk. Skipped rather than raised, matching the rule for a
+  `null` gap: one unusable point costs its own slot, not the whole window.
 - **The historical walk does not use it per chunk.** `/price` is rate-limited
   to **two requests per minute per client IP** (token bucket, burst 2). The
   walk chunks by week because ENTSO-E wants it that way, and routing every

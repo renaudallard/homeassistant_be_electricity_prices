@@ -465,6 +465,46 @@ def test_energy_charts_skips_a_null_slot_rather_than_zeroing_it() -> None:
     assert len(out) == 1
 
 
+@pytest.mark.parametrize(
+    ("label", "body"),
+    [
+        ("nan price", '{"unix_seconds":[1788127200],"price":[NaN]}'),
+        ("inf price", '{"unix_seconds":[1788127200],"price":[Infinity]}'),
+        ("-inf price", '{"unix_seconds":[1788127200],"price":[-Infinity]}'),
+        # Not a hostile literal: a plausible upstream typo, and the case that
+        # actually matters, since json overflows it to inf rather than failing.
+        ("overflowing literal", '{"unix_seconds":[1788127200],"price":[1e400]}'),
+        # The timestamp side too: datetime.fromtimestamp raises ValueError on
+        # NaN and OverflowError on inf, neither of which the caller catches.
+        ("nan timestamp", '{"unix_seconds":[NaN],"price":[100.0]}'),
+    ],
+)
+def test_energy_charts_rejects_a_non_finite_point(label: str, body: str) -> None:
+    """The keyless fallback has to reject what the XML parser rejects.
+
+    json.loads accepts NaN / Infinity / -Infinity by default, so a malformed
+    response reached the spot cache as a real-looking number. The two sources
+    are interchangeable to every caller, and from the cache the value spreads
+    into factor*spot + base, into a spot-monthly contract's whole flat rate
+    through _mean_of_month, and into recorder statistics through the backfill,
+    where it outlives the response.
+    """
+    out = _parse_energy_charts(
+        body, datetime(2026, 1, 1, tzinfo=UTC), datetime(2030, 1, 1, tzinfo=UTC), True
+    )
+    assert out == {}, label
+
+
+def test_energy_charts_drops_only_the_bad_point_not_the_window() -> None:
+    """Skipped rather than raised, matching the rule for a null slot: one
+    unusable point costs its own slot, not every good one beside it."""
+    body = '{"unix_seconds":[1788127200,1788128100],"price":[NaN,100.0]}'
+    out = _parse_energy_charts(
+        body, datetime(2026, 1, 1, tzinfo=UTC), datetime(2030, 1, 1, tzinfo=UTC), True
+    )
+    assert list(out.values()) == [0.1]
+
+
 def test_energy_charts_trims_the_response_to_the_requested_window() -> None:
     """The request is day-granular but the window is not, so the response
     overhangs it whenever it does not start at local midnight."""

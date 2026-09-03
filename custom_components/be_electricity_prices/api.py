@@ -539,6 +539,19 @@ def _parse_energy_charts(
             # A gap is published as null. Skipping leaves the slot absent,
             # which every caller already reads as "no data for that slot".
             continue
+        if not math.isfinite(raw_when) or not math.isfinite(raw_price):
+            # json.loads accepts the NaN / Infinity / -Infinity literals by
+            # default, and overflows a long numeric literal like 1e400 to inf,
+            # so a malformed price reaches the cache as a real-looking number.
+            # The XML parser rejects these (see parse_day_ahead_xml) and this
+            # one has to as well, because the two sources are interchangeable
+            # to every caller downstream: the value spreads through
+            # factor*spot + base, through _mean_of_month into a spot-monthly
+            # contract's whole flat rate, and through the backfill into
+            # recorder statistics, which outlive the response that carried it.
+            # Skipped rather than raised, matching the rule one line up: an
+            # unusable point costs its own slot, not the whole window.
+            continue
         when = datetime.fromtimestamp(float(raw_when), UTC)
         if not period_start <= when < period_end:
             # The request is day-granular, so the response overhangs the
