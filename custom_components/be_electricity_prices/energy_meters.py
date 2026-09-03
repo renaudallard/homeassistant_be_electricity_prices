@@ -506,9 +506,19 @@ async def _recorder_daily_band_ratio(
 
 
 async def _resolve_daily_kwh(
-    hass: HomeAssistant, entry: ConfigEntry, today: date
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    today: date,
+    start: date | None = None,
 ) -> dict[date, tuple[float, float, float, float]] | None:
     """Per-day (day_cons, night_cons, day_inj, night_inj) from recorder.
+
+    ``start`` is the first day to read, defaulting to 1 January. The
+    year-to-date caller passes the window it actually bills, which for an
+    entry billing from its contract start date is later than 1 January: the
+    days outside it are not only fetched for nothing, they are summed into
+    the ``consumption_ytd_kwh`` and ``days_seen`` attributes, which then
+    describe a different period from the cost printed beside them.
 
     Each side (consumption, injection) is resolved independently from
     one of three configurations:
@@ -538,7 +548,7 @@ async def _resolve_daily_kwh(
     """
     meter = entry.data.get(CONF_METER, METER_MONO)
     region = entry.data.get(CONF_REGION, "")
-    jan1 = date(today.year, 1, 1)
+    window_start = start or date(today.year, 1, 1)
     out: dict[date, list[float]] = {}
 
     async def _side(
@@ -558,22 +568,22 @@ async def _resolve_daily_kwh(
             return False
         if day_id and night_id:
             for day, kwh in (
-                await _recorder_daily_kwh(hass, day_id, jan1, today)
+                await _recorder_daily_kwh(hass, day_id, window_start, today)
             ).items():
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[slot_day] += kwh
             for day, kwh in (
-                await _recorder_daily_kwh(hass, night_id, jan1, today)
+                await _recorder_daily_kwh(hass, night_id, window_start, today)
             ).items():
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[slot_night] += kwh
             return True
         if not total_id:
             return True  # nothing wired on this side; contributes zero
-        per_day = await _recorder_daily_kwh(hass, total_id, jan1, today)
+        per_day = await _recorder_daily_kwh(hass, total_id, window_start, today)
         if meter in ("bi", "dynamic"):
             ratios = await _recorder_daily_band_ratio(
-                hass, total_id, jan1, today, region
+                hass, total_id, window_start, today, region
             )
             for day, total in per_day.items():
                 d_ratio, n_ratio = ratios.get(day, _default_band_ratio_for(day, region))

@@ -509,7 +509,12 @@ async def _ytd_hourly_energy(
         # shrinks with it: the pair reads a confident 100% while hundreds of
         # hours are missing entirely. Comparing against elapsed is the only
         # way that failure is visible from the sensor.
-        elapsed = dt_util.now() - dt_util.start_of_local_day(date(today.year, 1, 1))
+        #
+        # Measured from the WINDOW, not from 1 January. hours_seen counts the
+        # window's buckets, so an entry billing from its contract start date
+        # was reporting 1560 hours seen against 5892 elapsed and inviting its
+        # owner to go looking for a recorder fault that was not there.
+        elapsed = dt_util.now() - dt_util.start_of_local_day(window_start)
         breakdown["hours_elapsed"] = float(int(elapsed.total_seconds() // 3600))
         breakdown["consumption_ytd_kwh"] = sum(cons_per_hour.values())
         breakdown["injection_ytd_kwh"] = sum(inj_per_hour.values())
@@ -853,7 +858,7 @@ async def _compute_current_year_cost(
             )
         return hourly_energy + fees
 
-    daily_kwh = await _resolve_daily_kwh(hass, entry, today)
+    daily_kwh = await _resolve_daily_kwh(hass, entry, today, start=window_start)
     if daily_kwh is None:
         # No meter inputs at all - fees-only floor.
         return fees
@@ -989,7 +994,10 @@ async def _compute_current_year_cost(
         # static branch reported no coverage at all, so a gap here was
         # invisible even in principle.
         breakdown["days_seen"] = float(len(daily_kwh))
-        breakdown["days_elapsed"] = float((today - date(today.year, 1, 1)).days + 1)
+        # Both sides of the pair span the window the walk covered. Counting
+        # elapsed from 1 January against days the meter read from the contract
+        # start is a coverage gap that is not there.
+        breakdown["days_elapsed"] = float((today - window_start).days + 1)
         breakdown["injection_ytd_kwh"] = sum(r[2] + r[3] for r in daily_kwh.values())
         today_kwh = daily_kwh.get(today, (0.0, 0.0, 0.0, 0.0))
         breakdown["consumption_today_kwh"] = today_kwh[0] + today_kwh[1]

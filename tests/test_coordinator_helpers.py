@@ -3545,6 +3545,80 @@ async def test_ytd_fees_prorate_over_the_contract_window(hass: HomeAssistant) ->
     assert half_year == pytest.approx(184.0)
 
 
+async def test_the_ytd_attributes_describe_the_window_they_bill(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The coverage pair and the kWh totals have to span the billed window.
+
+    Both anchors stayed on 1 January when the window became configurable, and
+    they fail in opposite directions. The static branch read the meter from
+    1 January and summed all of it into consumption_ytd_kwh beside a cost that
+    covered only the window, so the sensor implied 0,147 EUR/kWh on a card
+    charging 0,18. The hourly branch counted hours_seen over the window and
+    hours_elapsed over the year, which the README tells the reader means the
+    recorder has lost hundreds of hours and will not heal on its own.
+
+    The invariant that catches both: cost and consumption must describe the
+    same period, so the rate they imply cannot move with the window.
+    """
+    freezer.move_to("2026-09-03 12:00:00+02:00")
+    snap = make_snapshot(
+        energy=FixedRates(single=0.18, yearly_fixed_fee=65.0),
+        taxes=TaxOverlay(
+            federal_excise=0.0, energy_contribution=0.0, energy_fund_eur_per_month=2.5
+        ),
+    )
+    base = {
+        "supplier": "test",
+        "contract": "test",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "mono",
+        "solar_regime": "none",
+        "consumption_kwh": "sensor.cons",
+    }
+
+    async def _one_kwh_a_day(
+        _hass: Any, _eid: str, start: date, end: date
+    ) -> dict[date, float]:
+        out: dict[date, float] = {}
+        day = start
+        while day <= end:
+            out[day] = 1.0
+            day = date.fromordinal(day.toordinal() + 1)
+        return out
+
+    rates: list[float] = []
+    for extra in (
+        {},
+        {"contract_start_date": "2026-07-01", "ytd_from_contract_start": True},
+    ):
+        bd: dict[str, float] = {}
+        with patch(
+            "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+            _one_kwh_a_day,
+        ):
+            cost = await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                _stub_extractor(),
+                snap,
+                MockConfigEntry(domain=DOMAIN, data={**base, **extra}),
+                breakdown=bd,
+            )
+        # Every figure spans the same window as the cost.
+        assert cost is not None
+        assert bd["days_seen"] == bd["days_elapsed"]
+        assert bd["consumption_ytd_kwh"] == bd["days_seen"]
+        rates.append(cost / bd["consumption_ytd_kwh"])
+
+    assert rates[0] == pytest.approx(rates[1]), (
+        "the rate the attributes imply must not move with the billing window"
+    )
+    # And the two windows really are different, or the check above is vacuous.
+    assert rates[0] > 0
+
+
 def test_the_sensor_and_the_backfill_seed_resolve_the_same_reset() -> None:
     """The load-bearing invariant of the whole option.
 
