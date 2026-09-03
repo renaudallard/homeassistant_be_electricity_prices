@@ -507,7 +507,9 @@ opens a three-option menu:
   figure only when it replayed the *same* real archived months your own side
   did — a supplier that keeps no month-addressable card would otherwise reuse
   today's card for January and print a confident number that is up to 23% out.
-  Nothing is saved.
+  A contract whose feed-in tariff is indexed on the spot price likewise prints
+  a figure only where the day-ahead history to credit it is on hand, since that
+  credit is dropped whole rather than estimated. Nothing is saved.
   A tick box on the last setup step, **off by default**, runs the whole ranking
   **once a day in the background** instead of on demand. It publishes a
   **Potential yearly saving** sensor — the euro a year the cheapest alternative

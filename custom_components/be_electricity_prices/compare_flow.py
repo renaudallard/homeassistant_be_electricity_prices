@@ -72,6 +72,7 @@ from .energy_meters import memoise_meter_reads
 from .providers._pdf import memoise_text_fetches
 from .providers.base import SpotMonthlyRates, SupplierSnapshot
 from .spot_stats import _injection_is_spp_indexed, _spp_weighting_enabled
+from .injection import _injection_needs_spot
 
 from .cohort import ytd_window_start
 from .const import (
@@ -386,6 +387,28 @@ def _quote_entry(
     return cast(ConfigEntry, _QuoteEntry({**entry.data, **overrides}))
 
 
+def _needs_missing_spots(
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    spots: Mapping[datetime, float],
+) -> bool:
+    """Whether this card's feed-in needs spots the caller does not have.
+
+    A static-energy card whose INJECTION is spot-indexed is not caught by
+    the contract-kind test, which describes the energy leg only. The
+    year-to-date engine drops such a credit whole rather than approximating
+    it (``_ytd_spot_injection_credit`` returns 0.0 on an empty cache), so a
+    row priced without spots is a solar household's bill with no solar in
+    it, printed beside rows that have theirs.
+
+    Judged on the SNAPSHOT's own energy kind through
+    ``_injection_needs_spot``, never on the effective one: a
+    cohort-respliced contract whose injection genuinely is month-indexed
+    would otherwise be swept in and lose a figure it could have carried.
+    """
+    return not spots and _injection_needs_spot(snapshot, entry)
+
+
 def _kva(data: Mapping[str, Any]) -> float:
     """Configured inverter capacity, 0.0 when unset or unparseable."""
     try:
@@ -509,7 +532,9 @@ class _SweepEngine:
         self.config_entry = config_entry
         self._compare = overrides
 
-    async def fill_ytd_column(self, sweep: dict[str, Any]) -> list[RankedRow]:
+    async def fill_ytd_column(
+        self, sweep: dict[str, Any], coord: Any
+    ) -> list[RankedRow]:
         """Fill the year-to-date column, for rows that can honestly carry one.
 
         A row prints a figure only when it replayed the SAME real archived
@@ -528,6 +553,12 @@ class _SweepEngine:
         the options page, and nothing stored the result, so the figure existed
         for as long as that page was open and nowhere afterwards.
 
+        ``coord`` supplies the historical spot cache. The archive engine
+        credits a spot-indexed feed-in per hour off it, so a pass without it
+        prices those rows with NO credit at all rather than a slightly wrong
+        one, and that includes the household's own row, which is where it
+        stops agreeing with the current_year_cost sensor next to it.
+
         Returns the rows; never raises for one row's sake, and every row it
         cannot price honestly comes back exactly as it went in.
         """
@@ -538,9 +569,11 @@ class _SweepEngine:
         # pass was making N+1 identical recorder queries over the whole year,
         # nightly and unattended on hardware that is often a Pi.
         with memoise_meter_reads({}):
-            return await self._fill_ytd_column(sweep)
+            return await self._fill_ytd_column(sweep, coord)
 
-    async def _fill_ytd_column(self, sweep: dict[str, Any]) -> list[RankedRow]:
+    async def _fill_ytd_column(
+        self, sweep: dict[str, Any], coord: Any
+    ) -> list[RankedRow]:
         """The pass itself; see :meth:`fill_ytd_column`, which memoises it."""
         from .snapshot_store import _snapshot_for_month, archived_months_present
         from .ytd_cost import _compute_current_year_cost
@@ -554,8 +587,19 @@ class _SweepEngine:
         # fallback the walk needs, and _compute_current_year_cost is what
         # fills every month of the cache read below.
         session = async_get_clientsession(self.hass)
+        # The spots the archive engine credits a per-hour feed-in off. Read
+        # rather than fetched: the coordinator already maintains a year of
+        # them for any entry whose own pricing needs them, they are the
+        # Belgian day-ahead and so supplier-independent, and a year-long
+        # ENTSO-E fetch does not belong in a timer job. A household that
+        # needs none leaves this empty, and the gate below is what keeps
+        # that from printing an uncredited figure.
+        hist_spots = dict(getattr(coord, "_historical_spots", {}) or {})
+        hist_quarters = dict(getattr(coord, "_historical_spot_quarters", {}) or {})
         own_ytd: float | None = None
-        if hh.current_snapshot is not None:
+        if hh.current_snapshot is not None and not _needs_missing_spots(
+            hh.current_snapshot, hh.quote_entry, hist_spots
+        ):
             with contextlib.suppress(Exception):
                 own_ytd = await _compute_current_year_cost(
                     self.hass,
@@ -563,6 +607,8 @@ class _SweepEngine:
                     get_extractor(current[CONF_SUPPLIER]),
                     hh.current_snapshot,
                     hh.quote_entry,
+                    historical_spots=hist_spots,
+                    spot_quarters=hist_quarters,
                     billed_peak_kw=hh.peak_kw,
                 )
         baseline = archived_months_present(
@@ -595,11 +641,20 @@ class _SweepEngine:
             supplier, contract = pair
             # Spot-priced kinds are excluded for the same reason the
             # one-to-one page excludes them: the archive engine bills each
-            # past hour at factor*spot+base and needs the historical spot
-            # cache, which this pass does not carry. Called without it the
-            # energy leg silently vanishes -- measured 33,7% low on a dynamic
-            # card -- in a column the table sorts.
+            # past hour at factor*spot+base and needs a historical spot for
+            # every hour of the year, which the cache below is not required
+            # to hold. Called without it the energy leg silently vanishes --
+            # measured 33,7% low on a dynamic card -- in a column the table
+            # sorts.
             if _contract_kind(supplier, contract) in SPOT_PRICED_CONTRACT_KINDS:
+                rows.append(row)
+                continue
+            # A static card can still carry a spot-indexed FEED-IN, which the
+            # kind above does not describe: the energy is fixed and only the
+            # injection is indexed. Without spots that credit is not
+            # approximated, it is dropped whole, so the row would print a
+            # solar household's bill with no solar in it.
+            if _needs_missing_spots(snap, hh.quote_entry, hist_spots):
                 rows.append(row)
                 continue
             # January first, and BEFORE asking about coverage. The coverage
@@ -635,6 +690,8 @@ class _SweepEngine:
                     snap,
                     hh.quote_entry,
                     contract_override=contract,
+                    historical_spots=hist_spots,
+                    spot_quarters=hist_quarters,
                     billed_peak_kw=hh.peak_kw,
                 )
             except Exception:  # noqa: BLE001 - one row loses its history
@@ -704,7 +761,7 @@ class _SweepEngine:
         # leave the annual figures standing rather than cost the whole sweep.
         sweep["rows"] = rows
         try:
-            rows = await self.fill_ytd_column(sweep)
+            rows = await self.fill_ytd_column(sweep, coord)
         except Exception:  # noqa: BLE001 - the annual ranking still stands
             _LOGGER.exception(
                 "Year-to-date column failed for %s; publishing annual only",
@@ -2623,9 +2680,16 @@ class _SweepStepsMixin(_CompareStepsMixin):
         The pass itself lives on the engine, because the scheduled sweep runs
         the same one: see ``_SweepEngine.fill_ytd_column``.
         """
+        from .coordinator import BePricesCoordinator
+
         reason = await self._ensure_household()
         if reason is not None:
             return self.async_abort(reason=reason)
-        self._sweep["rows"] = await self._engine.fill_ytd_column(self._sweep)
+        # The same coordinator _ensure_household just resolved, for its spot
+        # cache: the pass credits a spot-indexed feed-in off it.
+        coord = getattr(self.config_entry, "runtime_data", None)
+        if not isinstance(coord, BePricesCoordinator):
+            return self.async_abort(reason="compare_all_entry_reloading")
+        self._sweep["rows"] = await self._engine.fill_ytd_column(self._sweep, coord)
         self._sweep["ytd_done"] = True
         return await self.async_step_compare_all_result()

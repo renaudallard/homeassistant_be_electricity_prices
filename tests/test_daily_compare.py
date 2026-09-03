@@ -43,6 +43,7 @@ from custom_components.be_electricity_prices.compare_quote import (
     RankedRow,
 )
 from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.pricing import MeterType
 from custom_components.be_electricity_prices.coordinator import CoordinatorData
 from custom_components.be_electricity_prices.sensor import (
     PotentialSavingSensor,
@@ -76,6 +77,14 @@ def _coord(
     entry: MockConfigEntry, result: DailyCompare | None = None
 ) -> SimpleNamespace:
     return SimpleNamespace(data=CoordinatorData(), entry=entry, daily_compare=result)
+
+
+def _coord_with_spots(spots: dict[datetime, float]) -> SimpleNamespace:
+    """The only thing the year-to-date pass asks a coordinator for."""
+    return SimpleNamespace(
+        _historical_spots=spots,
+        _historical_spot_quarters={},
+    )
 
 
 def test_saving_is_measured_against_the_household_not_the_field() -> None:
@@ -224,13 +233,99 @@ async def test_the_own_row_carries_the_year_to_date_it_is_compared_against(
         patch.object(cf, "get_extractor", return_value=object()),
         patch.object(cf, "_sweep_rows", return_value={}),
     ):
-        rows = await engine.fill_ytd_column(sweep)
+        rows = await engine.fill_ytd_column(sweep, _coord_with_spots({}))
 
     by_label = {r.label: r for r in rows}
     assert by_label["Eneco Zon & Wind Flex"].ytd == 708.11
     # The alternative still answers to the coverage gate, which an empty
     # baseline closes: no archived months, no figure.
     assert by_label["Mega Online Fixed"].ytd is None
+
+
+async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
+    hass: HomeAssistant,
+) -> None:
+    """A spot-indexed feed-in is dropped whole, not approximated, without them.
+
+    _ytd_spot_injection_credit returns 0.0 on an empty cache, so a row priced
+    without spots is a solar household's bill with no solar in it. The
+    one-to-one page has always passed them; this pass did not, which put the
+    household's OWN row at odds with its current_year_cost sensor.
+    """
+    from custom_components.be_electricity_prices import compare_flow as cf
+
+    spots = {datetime(2026, 1, 1, 5, tzinfo=dt_util.UTC): 0.08}
+    seen: dict[str, Any] = {}
+
+    async def _capture(*args: Any, **kw: Any) -> float:
+        seen.update(kw)
+        return 708.11
+
+    entry = MockConfigEntry(domain=DOMAIN, data={"supplier": "eneco", "contract": "x"})
+    entry.add_to_hass(hass)
+    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    sweep = {
+        "region": "wallonia",
+        "rows": [RankedRow(label="Eneco Zon & Wind Flex", annual=1272.75, is_own=True)],
+        "labels": {},
+        "household": SimpleNamespace(
+            today_local=dt_util.now().date(),
+            current_snapshot=object(),
+            quote_entry=entry,
+            peak_kw=4.0,
+        ),
+    }
+    with (
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            _capture,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_store"
+            ".archived_months_present",
+            return_value=[],
+        ),
+        patch.object(cf, "get_extractor", return_value=object()),
+        patch.object(cf, "_sweep_rows", return_value={}),
+    ):
+        await engine.fill_ytd_column(sweep, _coord_with_spots(spots))
+
+    assert seen["historical_spots"] == spots
+    assert seen["spot_quarters"] == {}
+
+
+async def test_a_row_needing_spots_that_are_absent_prints_no_figure(
+    hass: HomeAssistant,
+) -> None:
+    """Better no figure than a solar bill with the solar silently missing.
+
+    The contract-kind test above describes the ENERGY leg only, so a static
+    card whose injection alone is spot-indexed walks straight past it.
+    """
+    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices.providers.base import InjectionRates
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"supplier": "cociter", "contract": "x", "solar_regime": "injection"},
+    )
+    entry.add_to_hass(hass)
+    snap = SimpleNamespace(
+        injection=InjectionRates(current=None, factor=1.0, base=0.0),
+        energy=SimpleNamespace(),
+    )
+    # Needs spots and has none: no figure.
+    assert cf._needs_missing_spots(snap, entry, {}) is True  # type: ignore[arg-type]
+    # The same card once the cache holds something.
+    spots = {datetime(2026, 1, 1, tzinfo=dt_util.UTC): 0.08}
+    assert cf._needs_missing_spots(snap, entry, spots) is False  # type: ignore[arg-type]
+    # A printed monthly indicative needs no spot at all.
+    monthly = SimpleNamespace(
+        injection=InjectionRates(current=0.05, factor=1.0, base=0.0),
+        energy=SimpleNamespace(),
+    )
+    assert cf._needs_missing_spots(monthly, entry, {}) is False  # type: ignore[arg-type]
 
 
 async def test_the_pass_reads_the_meter_once_for_every_candidate(
@@ -328,16 +423,30 @@ async def test_the_memo_key_separates_households_that_must_not_share(
         # The same question again is the memo's whole purpose.
         await _resolve_daily_kwh(hass, _entry(), today)
         assert len(calls) == 1
-        # Every dimension the answer turns on is a different question.
-        for over, kw in (
-            ({"consumption_kwh": "sensor.b"}, {}),
-            ({"meter": "bi"}, {}),
-            ({"region": "flanders"}, {}),
-            ({}, {"start": date(2026, 7, 1)}),
-        ):
+        # Every dimension the answer turns on is a different question, and
+        # the meter is one of them whether it comes from the entry or from
+        # the override a comparison quotes a target contract on.
+        cases: tuple[tuple[dict[str, Any], date | None, MeterType | None], ...] = (
+            ({"consumption_kwh": "sensor.b"}, None, None),
+            ({"meter": "bi"}, None, None),
+            ({"region": "flanders"}, None, None),
+            ({}, date(2026, 7, 1), None),
+            ({}, None, "exclusive_night"),
+        )
+        for over, start, meter in cases:
             before = len(calls)
-            await _resolve_daily_kwh(hass, _entry(**over), today, **kw)
-            assert len(calls) > before, f"{over or kw} must not hit the memo"
+            await _resolve_daily_kwh(hass, _entry(**over), today, start, meter=meter)
+            assert len(calls) > before, (
+                f"{over or start or meter} must not hit the memo"
+            )
+
+        # ...and the key is on the EFFECTIVE meter, so an override that lands
+        # where another entry's own meter already did shares its answer. That
+        # is the point of keying on the meter rather than on where it came
+        # from: the band split, and so the recorder work, is identical.
+        before = len(calls)
+        await _resolve_daily_kwh(hass, _entry(), today, meter="bi")
+        assert len(calls) == before
 
 
 def test_sensor_reads_unknown_before_the_first_sweep() -> None:
@@ -565,8 +674,10 @@ async def test_the_scheduled_sweep_fills_the_year_to_date_column(
     engine = _SweepEngine(hass, entry, {})  # type: ignore[arg-type]
     priced = RankedRow(label="Mega Online Fixed", annual=1102.75)
 
-    async def _fake_fill(_self: Any, sweep: Any) -> list[RankedRow]:
-        # The pass sees the rows the sweep just priced, and enriches them.
+    async def _fake_fill(_self: Any, sweep: Any, coord: Any) -> list[RankedRow]:
+        # The pass sees the rows the sweep just priced, and enriches them,
+        # and it is handed the coordinator whose spot cache it credits from.
+        assert coord is not None
         assert [r.label for r in sweep["rows"]] == ["Mega Online Fixed"]
         return [
             RankedRow(label=r.label, annual=r.annual, ytd=612.40) for r in sweep["rows"]

@@ -570,6 +570,7 @@ async def _resolve_daily_kwh(
     entry: ConfigEntry,
     today: date,
     start: date | None = None,
+    *,
     meter: MeterType | None = None,
 ) -> dict[date, tuple[float, float, float, float]] | None:
     """Per-day (day_cons, night_cons, day_inj, night_inj) from recorder.
