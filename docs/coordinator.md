@@ -264,8 +264,8 @@ The curve is persisted under the `spot_cache` payload key and restored beside `h
 
 | Key | Type | Meaning | Read by |
 |-----|------|---------|---------|
-| `hourly` | `dict[datetime, PriceBreakdown]` | UTC-keyed price table (48-ish slots covering today+tomorrow); keys are hour or quarter-hour boundaries per `resolution` | current/next/today/tomorrow price sensors and window services; `tomorrow_prices_available` binary sensor (`sensor.py:268`, `binary_sensor.py:67`) |
-| `resolution` | `str` | `RESOLUTION_HOURLY` or `RESOLUTION_QUARTER`; slot width of `hourly` keys | slot truncation in `sensor.py:268`; window sizing in `__init__.py:559` |
+| `hourly` | `dict[datetime, PriceBreakdown]` | UTC-keyed price table (48-ish slots covering today+tomorrow); keys are hour or quarter-hour boundaries per `resolution` | current/next/today/tomorrow price sensors and window services; `tomorrow_prices_available` binary sensor (`sensor.py:272`, `binary_sensor.py:67`) |
+| `resolution` | `str` | `RESOLUTION_HOURLY` or `RESOLUTION_QUARTER`; slot width of `hourly` keys | slot truncation in `sensor.py:272`; window sizing in `__init__.py:559` |
 | `snapshot_publication` | `str` | supplier's publication label for the current card | `current_price` sensor attribute (`sensor.py:594`) |
 | `snapshot_age_hours` | `float` | hours since `_snapshot_fetched_at` (`inf` if never) | `current_price` sensor attribute (`sensor.py:595`) |
 | `snapshot_stale` | `bool` | True when age > 7 days | `current_price` sensor attribute (`sensor.py:596`) |

@@ -182,15 +182,19 @@ def _avg_breakdown(bds: list[PriceBreakdown]) -> PriceBreakdown:
 
 
 def _hourly_view(data: CoordinatorData) -> dict[datetime, PriceBreakdown]:
-    """Hourly-resolution view of the price table.
+    """Hourly-resolution view of the price table, for the ranked lists.
 
-    Returns ``data.hourly`` unchanged for hourly contracts. For a
-    quarter-hourly contract it averages each hour's four slots into one
-    breakdown so the bulky ``today`` / ``tomorrow`` / ranked list
-    attributes stay hourly: a full 15-minute curve (~192 rows) would
-    blow past HA's 16 KB per-state-attribute recorder limit. The scalar
-    today/tomorrow min/max/avg sensors keep the native resolution; only
-    these list attributes are downsampled.
+    Returns ``data.hourly`` unchanged for hourly contracts; for a
+    quarter-hourly one it averages each hour's four slots into one breakdown.
+
+    Only ``cheapest_4h_today`` / ``most_expensive_4h_today`` read this, and
+    they read it because they are counted in HOURS. Ranking the native slots
+    and taking four of them would quietly turn "the cheapest four hours" into
+    the cheapest one, which is not what either name says.
+
+    The ``today`` / ``tomorrow`` curves do NOT come through here. They carry
+    whatever grid the contract settles on, which is the whole curve a battery
+    or an EV schedule needs to plan against.
     """
     if data.resolution == RESOLUTION_HOURLY:
         return data.hourly
@@ -318,32 +322,22 @@ def _split_hourly_today_tomorrow(
 def _split_today_tomorrow(
     data: CoordinatorData,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Group the cached hourly breakdowns into today and tomorrow buckets.
+    """Group the cached breakdowns into today and tomorrow buckets.
 
-    Both lists are returned in chronological order. Hours outside the
-    today/tomorrow window (typically there are none) are dropped.
+    At the grid the contract settles on: 24 rows per day on an hourly
+    contract, 96 on a quarter-hourly one. Both lists are returned in
+    chronological order, and slots outside the today/tomorrow window
+    (typically there are none) are dropped.
+
+    These used to be averaged down to hourly on the grounds that ~192 rows
+    would exceed HA's 16 KB per-state-attribute limit. They would, but that
+    limit never applied here: both keys are in ``_unrecorded_attributes``, and
+    the recorder strips excluded attributes BEFORE it measures
+    (``db_schema.shared_attrs_bytes_from_event``). So the downsampling bought
+    nothing and cost the one thing a 15-minute contract is chosen for, which
+    is knowing which quarter is cheap.
     """
-    return _split_hourly_today_tomorrow(_hourly_view(data), breakdown_row)
-
-
-def _injection_hourly_view(data: CoordinatorData) -> dict[datetime, float]:
-    """Hourly-resolution view of the per-slot injection prices.
-
-    Returns ``data.injection_hourly`` unchanged for hourly contracts. For a
-    quarter-hourly contract it averages each hour's four slots into one value
-    so the ``today`` / ``tomorrow`` attribute stays hourly (a full 15-minute
-    curve would blow past HA's 16 KB per-state-attribute recorder limit).
-    Averaging the already-floored quarter rates is exact for the linear
-    ``factor * spot + base`` formula and a deliberate approximation for a
-    floored quarter-hourly contract.
-    """
-    if data.resolution == RESOLUTION_HOURLY:
-        return data.injection_hourly
-    buckets: dict[datetime, list[float]] = {}
-    for slot, rate in data.injection_hourly.items():
-        hour = slot.replace(minute=0, second=0, microsecond=0)
-        buckets.setdefault(hour, []).append(rate)
-    return {hour: sum(rates) / len(rates) for hour, rates in buckets.items()}
+    return _split_hourly_today_tomorrow(data.hourly, breakdown_row)
 
 
 def _split_injection_today_tomorrow(
@@ -351,12 +345,18 @@ def _split_injection_today_tomorrow(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Group the per-slot injection prices into today and tomorrow buckets.
 
-    Each bucket is a chronological list of ``{start, injection}`` rows. Both
-    are empty for a contract whose injection doesn't vary intra-day (the
-    coordinator emits no ``injection_hourly`` for it).
+    Each bucket is a chronological list of ``{start, injection}`` rows, at the
+    grid the contract settles on. Both are empty for a contract whose
+    injection doesn't vary intra-day (the coordinator emits no
+    ``injection_hourly`` for it).
+
+    Publishing the slots rather than an hourly mean of them also retires an
+    approximation. A floored feed-in formula is convex, so the mean of four
+    floored quarter rates is not the rate of their mean, and the hourly row
+    this used to show was the former while the credit is earned per slot.
     """
     return _split_hourly_today_tomorrow(
-        _injection_hourly_view(data),
+        data.injection_hourly,
         lambda local, rate: {"start": local.isoformat(), "injection": round(rate, 6)},
     )
 
@@ -558,6 +558,14 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
     # them out of the recorder (HA stores state attributes by default) so
     # they don't bloat the long-term database; they are live display
     # helpers, not history.
+    #
+    # This is also what lets today / tomorrow carry a quarter-hourly
+    # contract's own 96 rows per day. HA's only attribute size cap,
+    # MAX_STATE_ATTRS_BYTES (16 KB), is applied by the recorder AFTER it
+    # drops the keys named here (db_schema.shared_attrs_bytes_from_event
+    # builds exclude_attrs, filters, and only then measures), so an excluded
+    # attribute is never weighed against it. Anything ADDED here that is not
+    # excluded has to fit: the recorded remainder currently runs about 6 KB.
     # snapshot_age_hours rises ~1/hour and last_error is diagnostic, so
     # recording them would write a fresh states row every tick even for a flat
     # contract whose price never moves; keep them out of history too.

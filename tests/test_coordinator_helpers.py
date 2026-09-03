@@ -61,7 +61,6 @@ from custom_components.be_electricity_prices.const import (
     CONF_REGION,
     CONF_SUPPLIER,
     DOMAIN,
-    RESOLUTION_QUARTER,
 )
 from custom_components.be_electricity_prices.cohort import (
     _cohort_energy_from_archived,
@@ -786,16 +785,16 @@ def test_injection_needs_spot_quarters_truth_table() -> None:
     assert not _injection_needs_spot_quarters(_snap(quarter_energy, None), inj_regime)
 
 
-def test_replayed_hour_rate_equals_the_live_hourly_view() -> None:
+def test_replayed_hour_rate_equals_the_mean_of_the_published_slots() -> None:
     """The whole point of caching the quarters: the replayed hour must equal
-    what the injection_price sensor puts on its own hourly row.
+    the slots the injection_price sensor publishes.
 
-    The sensor averages the already floored per-slot rates to fit the 16 KB
-    attribute limit, so a replay that floors the hour mean instead put the
-    year-to-date credit below the number the user is looking at."""
-    from custom_components.be_electricity_prices.coordinator import CoordinatorData
-    from custom_components.be_electricity_prices.sensor import _injection_hourly_view
-
+    The recorder only keeps hourly consumption, so the year-to-date credit is
+    earned per hour whatever the sensor shows; a replay that floored the hour
+    mean instead of averaging the floored slots put that credit below the
+    numbers the user is looking at. The sensor now publishes the slots
+    themselves rather than an hourly mean of them, so this is the invariant
+    that ties the two together."""
     inj = InjectionRates(factor=1.0, base=0.0, current=None, floor_at_zero=True)
     energy = DynamicRates(factor=1.0, base=0.0, quarter_hourly=True)
     hour = datetime(2026, 6, 15, 10, tzinfo=UTC)
@@ -806,10 +805,18 @@ def test_replayed_hour_rate_equals_the_live_hourly_view() -> None:
         for slot, spot in slots.items()
         if (rate := _injection_price_for_slot(inj, energy, spot, slot)) is not None
     }
-    data = CoordinatorData(injection_hourly=live, resolution=RESOLUTION_QUARTER)
-    assert _injection_hourly_view(data)[hour] == pytest.approx(
-        _historical_injection_rate(inj, sum(quarters) / 4, quarters=quarters)
-    )
+    assert len(live) == 4, "all four slots must reach the sensor"
+    # These four rates are exactly what the attribute now carries, one row per
+    # slot rather than one averaged row per hour, so their mean is the number
+    # the replay has to land on.
+    mean_spot = sum(quarters) / 4
+    replayed = _historical_injection_rate(inj, mean_spot, quarters=quarters)
+    floored_mean = _historical_injection_rate(inj, mean_spot)
+    assert replayed is not None and floored_mean is not None
+    assert sum(live.values()) / len(live) == pytest.approx(replayed)
+    # Flooring the hour's mean spot instead is the mistake this guards against:
+    # the formula is convex, so that is strictly the smaller number.
+    assert floored_mean < replayed
 
 
 def test_injection_varies_intraday_true_for_spot_and_tou() -> None:

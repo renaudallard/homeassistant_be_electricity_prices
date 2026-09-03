@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -42,7 +43,6 @@ from custom_components.be_electricity_prices.sensor import (
     _current,
     _current_injection,
     _hourly_view,
-    _injection_hourly_view,
     _split_injection_today_tomorrow,
     _split_today_tomorrow,
     _today_avg,
@@ -252,19 +252,75 @@ def test_current_hourly_still_tolerates_within_the_hour() -> None:
 
 def test_hourly_view_downsamples_quarter_to_hourly_mean() -> None:
     # 96 quarter slots collapse to 24 hour keys, each the mean of its
-    # four quarters: hour 0 = mean(0, 1, 2, 3) = 1.5.
+    # four quarters: hour 0 = mean(0, 1, 2, 3) = 1.5. Only the ranked lists
+    # read this now, and they read it because they are counted in HOURS:
+    # ranking the native slots and taking four would turn "the cheapest four
+    # hours" into the cheapest one.
     prices = [float(i) for i in range(96)]
     view = _hourly_view(_quarter_today_data(prices))
     assert len(view) == 24
     assert view[min(view)].all_in == pytest.approx(1.5)
 
 
-def test_split_today_tomorrow_stays_hourly_for_quarter_contract() -> None:
-    # The bulky today/tomorrow attribute curve must stay hourly even on a
-    # 15-minute contract so it stays under HA's 16 KB attribute cap.
+def test_split_today_tomorrow_keeps_the_contract_grid() -> None:
+    """A 15-minute contract publishes its 96 slots, not 24 hourly means.
+
+    These were averaged down on the grounds that ~192 rows would exceed HA's
+    16 KB attribute cap. They would, but the cap never applied: both keys are
+    in _unrecorded_attributes, and the recorder strips excluded attributes
+    before it measures. Downsampling cost the one thing a quarter-hourly
+    contract is chosen for, which is knowing which quarter is cheap.
+    """
     prices = [float(i) for i in range(96)]
     today, _tomorrow = _split_today_tomorrow(_quarter_today_data(prices))
-    assert len(today) == 24
+    assert len(today) == 96
+    assert [row["all_in"] for row in today[:4]] == [0.0, 1.0, 2.0, 3.0]
+
+    # An hourly contract is untouched: same 24 rows it always had.
+    hourly_today, _ = _split_today_tomorrow(_today_data([0.10] * 24))
+    assert len(hourly_today) == 24
+
+
+def test_the_recorded_attributes_stay_under_the_recorder_cap() -> None:
+    """What the recorder stores has to fit in MAX_STATE_ATTRS_BYTES.
+
+    A state whose attributes exceed it is not truncated: the recorder logs a
+    warning and stores NONE of them, so an over-cap dict silently costs the
+    small diagnostic keys their history. The bulky curves are excluded before
+    that measurement is taken, which is exactly why they may carry 96 rows a
+    day, so this measures the remainder that is not excluded and would be the
+    thing to break if a future attribute were added without excluding it.
+    """
+    from homeassistant.components.recorder.db_schema import MAX_STATE_ATTRS_BYTES
+
+    from custom_components.be_electricity_prices.sensor import BePriceSensor
+
+    prices = [0.1234 + i / 10000 for i in range(96)]
+    data = _quarter_today_data(prices)
+    today, tomorrow = _split_today_tomorrow(data)
+    cheapest, expensive = _today_ranked(data, 4)
+    attrs = {
+        "snapshot_publication": "2026-09",
+        "snapshot_age_hours": 3.5,
+        "snapshot_stale": False,
+        "last_error": "",
+        "spot_source": "energy-charts",
+        "attribution": "CC BY 4.0 from Bundesnetzagentur | SMARD.de",
+        "cheapest_4h_today": cheapest,
+        "most_expensive_4h_today": expensive,
+        "today": today,
+        # The fixture publishes today only; tomorrow's curve lands at ~13:00
+        # and is the same shape, so stand it in to size the real worst case.
+        "tomorrow": tomorrow or today,
+    }
+    # A full two-day 15-minute curve is genuinely too big to record, which is
+    # why these keys are excluded rather than merely large.
+    assert len(json.dumps(attrs).encode()) > MAX_STATE_ATTRS_BYTES
+
+    recorded = {
+        k: v for k, v in attrs.items() if k not in BePriceSensor._unrecorded_attributes
+    }
+    assert len(json.dumps(recorded).encode()) < MAX_STATE_ATTRS_BYTES
 
 
 def test_tomorrow_aggregations_return_none_before_publication() -> None:
@@ -419,25 +475,18 @@ def test_injection_price_tracks_the_quarter_slot(freezer: Any) -> None:
     assert _current_injection(data) == pytest.approx(0.030)  # the 07:30 quarter
 
 
-def test_injection_hourly_view_downsamples_quarter_to_hourly_mean() -> None:
-    today_midnight = _fixed_today_local()
-    inj: dict[datetime, float] = {}
-    # Hour 0's four quarters average to 0.03; the rest are flat.
-    for i, v in enumerate([0.00, 0.02, 0.04, 0.06]):
-        inj[dt_util.as_utc(today_midnight + timedelta(minutes=15 * i))] = v
-    data = CoordinatorData(injection_hourly=inj, resolution=RESOLUTION_QUARTER)
-    view = _injection_hourly_view(data)
-    assert len(view) == 1
-    assert view[min(view)] == pytest.approx(0.03)
+def test_split_injection_keeps_the_contract_grid() -> None:
+    """The feed-in curve publishes its slots too, for the same reason.
 
-
-def test_split_injection_stays_hourly_for_quarter_contract() -> None:
-    # A 15-minute injection curve (96 today slots) must collapse to 24 hourly
-    # rows so the attribute stays under HA's 16 KB cap.
+    And it retires an approximation while it is at it: a floored feed-in
+    formula is convex, so the mean of four floored quarter rates is not the
+    rate of their mean, and the hourly row this used to show was the former
+    while the credit is earned per slot.
+    """
     today_midnight = _fixed_today_local()
     inj: dict[datetime, float] = {}
     for i in range(96):
         inj[dt_util.as_utc(today_midnight + timedelta(minutes=15 * i))] = 0.05
     data = CoordinatorData(injection_hourly=inj, resolution=RESOLUTION_QUARTER)
     today, _tomorrow = _split_injection_today_tomorrow(data)
-    assert len(today) == 24
+    assert len(today) == 96

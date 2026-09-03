@@ -51,7 +51,7 @@ class BePriceSensorDescription(SensorEntityDescription):
     last_reset_fn: Callable[[], datetime] | None = None
 ```
 
-`native_value` (`sensor.py:609`) calls `value_fn(coordinator.data)` and then
+`native_value` (`sensor.py:617`) calls `value_fn(coordinator.data)` and then
 rounds to `suggested_display_precision + 2` decimals (or 6 when no precision is
 set). The extra two decimals beyond what the UI shows exist to strip
 float-representation noise (for example `0.35322099999999995`) that the recorder
@@ -73,7 +73,7 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 | `CAPACITY_SENSORS` (2) | `sensor.py:485` | `CONF_REGION == REGION_FLANDERS` |
 | `PROSUMER_SENSORS` (1) | `sensor.py:403` | `solar_kva > 0` and `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` |
 | `INJECTION_SENSORS` (1) | `sensor.py:414` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
-| `ContractEndDateSensor` (1) | `sensor.py:692` | `CONF_CONTRACT_END_DATE` is set |
+| `ContractEndDateSensor` (1) | `sensor.py:700` | `CONF_CONTRACT_END_DATE` is set |
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
@@ -147,7 +147,7 @@ The today/tomorrow scalar sensors (`_bucket`, `sensor.py:154`) reduce over every
 slot whose local date matches, so on a quarter-hourly contract they operate at
 native 15-minute resolution.
 
-The three tomorrow sensors go through `_tomorrow_bucket` (`sensor.py:216`),
+The three tomorrow sensors go through `_tomorrow_bucket` (`sensor.py:220`),
 which returns `None` unless `_has_tomorrow(data)` holds. Reusing the binary
 sensor's own predicate rather than repeating its `snapshot_valid_until` check
 makes the invariant exact: a `tomorrow_*` sensor has a value precisely when
@@ -162,7 +162,7 @@ issue.
 ### extra_state_attributes
 
 `current_price` always carries extra attributes, and `injection_price` carries
-`today`/`tomorrow` arrays when its injection varies intra-day (`sensor.py:305`);
+`today`/`tomorrow` arrays when its injection varies intra-day (`sensor.py:309`);
 every other sensor returns `{}`.
 
 #### `current_price`
@@ -184,15 +184,25 @@ The payload:
 rounded to 6 decimals, `pricing.py:400`). `cheapest_4h_today` /
 `most_expensive_4h_today` rows are `{start, price}` (`sensor.py:276`).
 
-Quarter-hourly vs hourly payloads: the `today`, `tomorrow`, `cheapest_4h_today`
-and `most_expensive_4h_today` attributes are always hourly. `_hourly_view`
-(`sensor.py:175`) returns `data.hourly` unchanged for an hourly contract but for
-a quarter-hourly contract averages each hour's four slots into one breakdown.
-A full 15-minute curve (~192 rows) would exceed HA's 16 KB per-state-attribute
-recorder limit. Only these list attributes are downsampled; the scalar
-today/tomorrow min/max/avg sensors keep native resolution.
+Quarter-hourly vs hourly payloads: `today` and `tomorrow` carry the grid the
+contract settles on, 96 rows a day on a quarter-hourly one. `cheapest_4h_today`
+and `most_expensive_4h_today` stay hourly through `_hourly_view`
+(`sensor.py:175`), which averages each hour's four slots into one breakdown --
+they are counted in HOURS, and ranking the native slots and taking four would
+turn "the cheapest four hours" into the cheapest one.
 
-`_today_ranked` (`sensor.py:251`) guarantees the cheapest and dearest lists are
+The curves were hourly too until 0.18.3, on the stated grounds that ~192 rows
+would exceed HA's 16 KB per-state-attribute recorder limit. They do exceed it,
+but the limit never applied to them: `MAX_STATE_ATTRS_BYTES` is enforced by the
+recorder in `db_schema.shared_attrs_bytes_from_event`, which builds
+`exclude_attrs` from the entity's `_unrecorded_attributes`, filters the dict
+and only THEN measures what is left. Both keys have been in that set all along,
+so they were never weighed against the cap. What the cap does still bound is
+the recorded remainder, which runs about 6 KB; a test measures both halves so
+a future attribute added without excluding it fails loudly rather than costing
+every other attribute its history (an over-cap state stores none of them).
+
+`_today_ranked` (`sensor.py:255`) guarantees the cheapest and dearest lists are
 disjoint (cheapest take their share first) and breaks price ties on the hour so
 the result is deterministic across reloads. Gotcha for automation authors: on a
 flat tariff where every hour rounds to the same all-in price the tie-break makes
@@ -210,17 +220,22 @@ hours ahead of time (`_split_injection_today_tomorrow`). The coordinator fills
 every dynamic contract and both Cociter variable cards (spot-indexed `factor*spot+base`),
 plus Engie Empower Flextime (a fixed TOU schedule). A flat or monthly-indexed
 contract emits no array, so both lists come back empty and the sensor returns
-`{}`. The same quarter->hour downsampling as `current_price` applies through
-`_injection_hourly_view`, and `tomorrow` fills in once the day-ahead publishes
-(~13:00 CET), like the consumption array.
+`{}`. The rows carry the contract's own grid, like `current_price`, and
+`tomorrow` fills in once the day-ahead publishes (~13:00 CET), like the
+consumption array.
+
+Publishing the slots rather than an hourly mean of them also retired an
+approximation. A floored feed-in formula is convex, so the mean of four floored
+quarter rates is not the rate of their mean, and the hourly row the sensor used
+to show was the former while the credit is earned per slot. The year-to-date
+replay still averages the floored quarters per hour, because the recorder only
+keeps hourly consumption, and a test pins that the replayed hour equals the
+mean of exactly the slots the sensor now publishes.
 
 `data.injection_hourly` is also where the sensor's own state comes from for
-those contracts (`_current_injection`), read at native resolution rather than
-through the downsampled `_injection_hourly_view`. On an hourly contract that
-normally makes the state the `today` row for the current hour; on a
-quarter-hourly one the state is the live quarter while the rows stay hourly
-means, so the two differ by design. They also differ on an hour with no row at
-all, where the nearest-slot guard substitutes a neighbour. What no longer happens is the state sitting
+those contracts (`_current_injection`). That makes the state the `today` row for
+the slot the clock is in, on either grid. The two still differ on a slot with no
+row at all, where the nearest-slot guard substitutes a neighbour. What no longer happens is the state sitting
 on a slot the clock has already left: it used to replay the coordinator tick's
 scalar while the array had moved on (issue #44).
 
@@ -260,7 +275,7 @@ statistics setup, documented in its source comment:
 - `state_class=TOTAL` (not `TOTAL_INCREASING`): under the compensation regime a
   heavy-injection day can lower the running total day-over-day, which
   `TOTAL_INCREASING` forbids.
-- `last_reset` (`sensor.py:604`) is pinned to Jan 1 00:00 local via
+- `last_reset` (`sensor.py:612`) is pinned to Jan 1 00:00 local via
   `last_reset_fn`, so long-term statistics bucket each calendar year separately.
 
 The value is always numeric: missing meter inputs collapse to the fees-only
