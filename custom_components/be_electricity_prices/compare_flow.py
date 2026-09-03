@@ -543,9 +543,10 @@ class _SweepEngine:
         # fallback the walk needs, and _compute_current_year_cost is what
         # fills every month of the cache read below.
         session = async_get_clientsession(self.hass)
+        own_ytd: float | None = None
         if hh.current_snapshot is not None:
             with contextlib.suppress(Exception):
-                await _compute_current_year_cost(
+                own_ytd = await _compute_current_year_cost(
                     self.hass,
                     session,
                     get_extractor(current[CONF_SUPPLIER]),
@@ -563,6 +564,18 @@ class _SweepEngine:
         cached = _sweep_rows(self.hass, self.config_entry.entry_id, sweep["region"])
         rows: list[RankedRow] = []
         for row in sweep["rows"]:
+            if row.is_own:
+                # The own row is the column's whole point: every other figure
+                # is only readable against it. It never carried one, because
+                # the candidate list drops the household's own contract by
+                # design ("a ranking is a list of alternatives"), so its label
+                # is absent from the label map and the lookup below skipped
+                # it. The number was being computed right above and discarded.
+                #
+                # No coverage gate on this one: the baseline IS its coverage,
+                # so there is nothing for it to disagree with.
+                rows.append(row if own_ytd is None else replace(row, ytd=own_ytd))
+                continue
             pair = sweep["labels"].get(row.label)
             snap = cached.get((sweep["region"], *pair)) if pair is not None else None
             if row.annual is None or pair is None or snap is None or not baseline:

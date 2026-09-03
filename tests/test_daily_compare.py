@@ -176,6 +176,62 @@ def test_the_ranking_carries_the_year_to_date_and_is_not_recorded() -> None:
     assert "cheapest_annual_eur" not in PotentialSavingSensor._unrecorded_attributes
 
 
+async def test_the_own_row_carries_the_year_to_date_it_is_compared_against(
+    hass: HomeAssistant,
+) -> None:
+    """Every other year-to-date figure is only readable against this one.
+
+    The own row never carried it: the candidate list drops the household's own
+    contract by design, so its label is absent from the label map the pass
+    looks rows up in, and it fell through the same branch as a row that could
+    not be priced. The number was being computed at the top of the pass, to
+    warm the month cache, and thrown away.
+    """
+    from custom_components.be_electricity_prices import compare_flow as cf
+
+    entry = MockConfigEntry(domain=DOMAIN, data={"supplier": "eneco", "contract": "x"})
+    entry.add_to_hass(hass)
+    engine = cf._SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    own = RankedRow(label="Eneco Zon & Wind Flex", annual=1272.75, is_own=True)
+    other = RankedRow(label="Mega Online Fixed", annual=1102.75)
+    sweep = {
+        "region": "wallonia",
+        "rows": [own, other],
+        # The own label is deliberately NOT here, exactly as build_sweep
+        # leaves it: that is the condition the bug lived in.
+        "labels": {"Mega Online Fixed": ("mega", "online_fixed")},
+        "household": SimpleNamespace(
+            today_local=dt_util.now().date(),
+            current_snapshot=object(),
+            quote_entry=entry,
+            peak_kw=4.0,
+        ),
+    }
+
+    # The pass imports these inside the function, so they patch at the source.
+    with (
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost"
+            "._compute_current_year_cost",
+            AsyncMock(return_value=708.11),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.snapshot_store"
+            ".archived_months_present",
+            return_value=[],
+        ),
+        patch.object(cf, "get_extractor", return_value=object()),
+        patch.object(cf, "_sweep_rows", return_value={}),
+    ):
+        rows = await engine.fill_ytd_column(sweep)
+
+    by_label = {r.label: r for r in rows}
+    assert by_label["Eneco Zon & Wind Flex"].ytd == 708.11
+    # The alternative still answers to the coverage gate, which an empty
+    # baseline closes: no archived months, no figure.
+    assert by_label["Mega Online Fixed"].ytd is None
+
+
 def test_sensor_reads_unknown_before_the_first_sweep() -> None:
     entry = make_entry(daily_compare=True)
     sensor = PotentialSavingSensor(_coord(entry, None))  # type: ignore[arg-type]
