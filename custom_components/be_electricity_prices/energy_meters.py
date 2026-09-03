@@ -34,7 +34,9 @@ from __future__ import annotations
 
 import logging
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC
 from datetime import date
@@ -390,6 +392,49 @@ async def _recorder_hourly_kwh(
     return out
 
 
+# Repeat reads of the SAME meter window inside one block. Opt-in and scoped,
+# never a global TTL cache: the coordinator tick and the one-off quote both
+# want a live read, and guessing a TTL for them is how a stale meter reaches
+# a bill.
+# Every entry key that changes what _resolve_daily_kwh reads. Spelled here
+# from the constants this module already imports: the same tuple exists in
+# flow_schemas as _METER_SENSOR_KEYS, but importing that would close a cycle
+# on a leaf module.
+_MEMO_METER_KEYS: tuple[str, ...] = (
+    CONF_DAY_CONSUMPTION_KWH,
+    CONF_NIGHT_CONSUMPTION_KWH,
+    CONF_DAY_INJECTION_KWH,
+    CONF_NIGHT_INJECTION_KWH,
+    CONF_CONSUMPTION_KWH,
+    CONF_INJECTION_KWH,
+)
+
+_METER_MEMO: ContextVar[dict[Any, Any] | None] = ContextVar("_METER_MEMO", default=None)
+
+
+@contextmanager
+def memoise_meter_reads(store: dict[Any, Any]) -> Iterator[None]:
+    """Serve repeat reads of one meter window from ``store`` inside this block.
+
+    The comparison sweep prices N contracts against ONE household, and the
+    household's metered kWh is the same for all of them: it depends on the
+    entry and the window, never on the supplier being priced. Without this the
+    year-to-date pass re-read the recorder over the whole window once per
+    candidate, N+1 identical queries in a job that runs nightly and unattended
+    on hardware that is often a Pi.
+
+    ``store`` is passed in rather than created here for the same reason
+    ``memoise_text_fetches`` does it: an ``asyncio.Task`` copies the context at
+    creation, which copies the reference and not the dict, so tasks under one
+    sweep share what the first of them read.
+    """
+    token = _METER_MEMO.set(store)
+    try:
+        yield
+    finally:
+        _METER_MEMO.reset(token)
+
+
 async def _sum_hourly_kwh(
     hass: HomeAssistant,
     entity_ids: Iterable[str],
@@ -398,16 +443,30 @@ async def _sum_hourly_kwh(
 ) -> dict[datetime, float]:
     """Per-UTC-hour kWh summed across ``entity_ids`` into one dict.
 
+    Served from the memo inside a ``memoise_meter_reads`` block, keyed on
+    exactly the arguments that decide the answer.
+
     A house with several consumption (or injection) sensors totals them
     hour by hour; used by the live YTD cost, the injection-credit and the
     backfill accrual so the binning is written once.
     """
+    ids = tuple(entity_ids)
+    memo = _METER_MEMO.get()
+    key = ("hourly", ids, start, end)
+    if memo is not None and key in memo:
+        # A copy: callers merge today's live top-up into what they get back,
+        # and handing two of them the same dict would have the second read
+        # the first one's additions.
+        return dict(memo[key])
+    entity_ids = ids
     out: dict[datetime, float] = {}
     for entity_id in entity_ids:
         for utc_hour, kwh in (
             await _recorder_hourly_kwh(hass, entity_id, start, end)
         ).items():
             out[utc_hour] = out.get(utc_hour, 0.0) + kwh
+    if memo is not None:
+        memo[key] = dict(out)
     return out
 
 
@@ -549,6 +608,21 @@ async def _resolve_daily_kwh(
     meter = entry.data.get(CONF_METER, METER_MONO)
     region = entry.data.get(CONF_REGION, "")
     window_start = start or date(today.year, 1, 1)
+    # Keyed on the entry DATA this reads, never on the entry object: the
+    # compare page passes a proxy carrying only .data, and reaching for an
+    # entry_id here would break that page from a distance.
+    memo = _METER_MEMO.get()
+    key = (
+        "daily",
+        meter,
+        region,
+        tuple(entry.data.get(k) for k in _MEMO_METER_KEYS),
+        window_start,
+        today,
+    )
+    if memo is not None and key in memo:
+        cached = memo[key]
+        return None if cached is None else dict(cached)
     out: dict[date, list[float]] = {}
 
     async def _side(
@@ -611,11 +685,17 @@ async def _resolve_daily_kwh(
         slot_night=3,
     )
     if not (cons_ok and inj_ok):
-        return None
-    if not out:
-        return None
-
-    return {day: (r[0], r[1], r[2], r[3]) for day, r in out.items()}
+        resolved = None
+    elif not out:
+        resolved = None
+    else:
+        resolved = {day: (r[0], r[1], r[2], r[3]) for day, r in out.items()}
+    if memo is not None:
+        # None is memoised too: "this household has no usable meter wiring"
+        # costs the same recorder round trips to establish as a reading does,
+        # and it does not change between two candidates either.
+        memo[key] = None if resolved is None else dict(resolved)
+    return resolved
 
 
 def _default_band_ratio_for(day: date, region: str) -> tuple[float, float]:

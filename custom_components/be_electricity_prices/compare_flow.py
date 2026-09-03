@@ -68,6 +68,7 @@ from homeassistant.helpers.selector import (
 )
 
 from .providers import all_extractors, get as get_extractor
+from .energy_meters import memoise_meter_reads
 from .providers._pdf import memoise_text_fetches
 from .providers.base import SpotMonthlyRates, SupplierSnapshot
 from .spot_stats import _injection_is_spp_indexed, _spp_weighting_enabled
@@ -530,6 +531,17 @@ class _SweepEngine:
         Returns the rows; never raises for one row's sake, and every row it
         cannot price honestly comes back exactly as it went in.
         """
+        # One meter read for the whole pass. The household's metered kWh is
+        # the same for every candidate -- it depends on the entry and the
+        # window, never on the supplier being priced -- but
+        # _compute_current_year_cost reads it afresh on every call, so the
+        # pass was making N+1 identical recorder queries over the whole year,
+        # nightly and unattended on hardware that is often a Pi.
+        with memoise_meter_reads({}):
+            return await self._fill_ytd_column(sweep)
+
+    async def _fill_ytd_column(self, sweep: dict[str, Any]) -> list[RankedRow]:
+        """The pass itself; see :meth:`fill_ytd_column`, which memoises it."""
         from .snapshot_store import _snapshot_for_month, archived_months_present
         from .ytd_cost import _compute_current_year_cost
 
@@ -537,7 +549,6 @@ class _SweepEngine:
         current = self.config_entry.data
         today = hh.today_local
         months = [date(today.year, m, 1) for m in range(1, today.month + 1)]
-
         # The household's own side sets the standard, so it is walked first -
         # again, before anything asks about coverage. Its own snapshot is the
         # fallback the walk needs, and _compute_current_year_cost is what

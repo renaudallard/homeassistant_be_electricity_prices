@@ -27,7 +27,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import inspect
+from datetime import date, datetime
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -230,6 +231,113 @@ async def test_the_own_row_carries_the_year_to_date_it_is_compared_against(
     # The alternative still answers to the coverage gate, which an empty
     # baseline closes: no archived months, no figure.
     assert by_label["Mega Online Fixed"].ytd is None
+
+
+async def test_the_pass_reads_the_meter_once_for_every_candidate(
+    hass: HomeAssistant,
+) -> None:
+    """The household's kWh does not depend on the supplier being priced.
+
+    _compute_current_year_cost re-reads the recorder on every call and nothing
+    memoised it, so pricing N candidates against one household made N+1
+    identical full-window queries in a job that runs nightly and unattended.
+    """
+    from custom_components.be_electricity_prices import compare_flow as cf
+    from custom_components.be_electricity_prices.energy_meters import (
+        _sum_hourly_kwh,
+        memoise_meter_reads,
+    )
+
+    reads: list[tuple[Any, ...]] = []
+
+    async def _counting_recorder(
+        _hass: Any, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        reads.append((entity_id, start, end))
+        return {}
+
+    target = (
+        "custom_components.be_electricity_prices.energy_meters._recorder_hourly_kwh"
+    )
+    ids = ["sensor.cons"]
+    start, end = date(2026, 1, 1), date(2026, 9, 3)
+
+    # Without the memo, every caller hits the recorder.
+    with patch(target, _counting_recorder):
+        for _ in range(5):
+            await _sum_hourly_kwh(hass, ids, start, end)
+    assert len(reads) == 5
+
+    # Inside one, the first read answers the rest.
+    reads.clear()
+    with patch(target, _counting_recorder), memoise_meter_reads({}):
+        for _ in range(5):
+            await _sum_hourly_kwh(hass, ids, start, end)
+    assert len(reads) == 1, f"expected one recorder read, got {len(reads)}"
+
+    # A different window is a different question and is still read.
+    reads.clear()
+    with patch(target, _counting_recorder), memoise_meter_reads({}):
+        await _sum_hourly_kwh(hass, ids, start, end)
+        await _sum_hourly_kwh(hass, ids, date(2026, 7, 1), end)
+    assert len(reads) == 2
+
+    # And the pass turns the memo on rather than leaving it to a caller.
+    assert "memoise_meter_reads" in inspect.getsource(cf._SweepEngine.fill_ytd_column)
+
+
+async def test_the_memo_key_separates_households_that_must_not_share(
+    hass: HomeAssistant,
+) -> None:
+    """A memo is only safe while its key names everything the answer depends on.
+
+    The daily reader's answer turns on the meter type, the region and the six
+    sensor ids, all read off entry.data, plus the window. Keyed short of any
+    of those, a sweep would hand one household's kWh to another's pricing,
+    which is the one way this optimisation could reach a bill.
+    """
+    from custom_components.be_electricity_prices.energy_meters import (
+        _resolve_daily_kwh,
+        memoise_meter_reads,
+    )
+
+    calls: list[str] = []
+
+    async def _counting(
+        _hass: Any, entity_id: str, start: date, _end: date
+    ) -> dict[date, float]:
+        calls.append(entity_id)
+        return {start: 1.0}
+
+    def _entry(**over: Any) -> MockConfigEntry:
+        return MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                "meter": "mono",
+                "region": "wallonia",
+                "consumption_kwh": "sensor.a",
+                **over,
+            },
+        )
+
+    today = date(2026, 9, 3)
+    target = "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh"
+    with patch(target, _counting), memoise_meter_reads({}):
+        await _resolve_daily_kwh(hass, _entry(), today)
+        assert len(calls) == 1
+        # The same question again is the memo's whole purpose.
+        await _resolve_daily_kwh(hass, _entry(), today)
+        assert len(calls) == 1
+        # Every dimension the answer turns on is a different question.
+        for over, kw in (
+            ({"consumption_kwh": "sensor.b"}, {}),
+            ({"meter": "bi"}, {}),
+            ({"region": "flanders"}, {}),
+            ({}, {"start": date(2026, 7, 1)}),
+        ):
+            before = len(calls)
+            await _resolve_daily_kwh(hass, _entry(**over), today, **kw)
+            assert len(calls) > before, f"{over or kw} must not hit the memo"
 
 
 def test_sensor_reads_unknown_before_the_first_sweep() -> None:
