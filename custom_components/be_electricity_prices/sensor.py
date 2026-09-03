@@ -751,6 +751,14 @@ class PotentialSavingSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity
 
     _attr_has_entity_name = True
     _attr_translation_key = "potential_saving"
+    # The ranking is a live table, not history: it is replaced wholesale by
+    # each nightly run, and a snapshot of every row stored daily forever
+    # answers a question nobody asks of history. Excluding it also takes it
+    # out of the 16 KB attribute cap, which the recorder applies to what is
+    # left AFTER the exclusions, so the table can carry a figure per row
+    # without the small keys beside it losing their history to an over-cap
+    # state (which stores none of its attributes at all).
+    _unrecorded_attributes = frozenset({"ranking"})
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "EUR"
     # No state_class. MONETARY with a measurement class asks the recorder for
@@ -781,10 +789,15 @@ class PotentialSavingSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity
         """The ranking behind the number.
 
         Rows are flattened to plain values rather than rendered, so the
-        dialog and an automation read the same figures. Kept to the label and
-        the two amounts: the attributes are written to the recorder on every
-        state change, and a full snapshot per row would be stored daily
-        forever to answer a question nobody asks of history.
+        dialog and an automation read the same figures.
+
+        ``ytd_eur`` is what each contract would have cost this household since
+        1 January, on the same real archived months its own side replayed, and
+        it is absent from a row that could not answer that honestly rather
+        than carrying a figure computed against a different set of months. It
+        used to exist only on the options page while that page was open; the
+        nightly sweep fills it now, and ``ranking`` is unrecorded so carrying
+        it costs no database.
         """
         result = self.coordinator.daily_compare
         if result is None:
@@ -802,6 +815,7 @@ class PotentialSavingSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity
                     "label": row.label,
                     "annual_eur": row.annual,
                     "is_own": row.is_own,
+                    **({"ytd_eur": row.ytd} if row.ytd is not None else {}),
                     **({"status": row.status} if row.status else {}),
                 }
                 for row in sorted(

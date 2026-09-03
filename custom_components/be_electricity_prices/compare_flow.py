@@ -508,6 +508,129 @@ class _SweepEngine:
         self.config_entry = config_entry
         self._compare = overrides
 
+    async def fill_ytd_column(self, sweep: dict[str, Any]) -> list[RankedRow]:
+        """Fill the year-to-date column, for rows that can honestly carry one.
+
+        A row prints a figure only when it replayed the SAME real archived
+        months the household's own side did. ``fetch_for_month is not None``
+        is a property of the supplier and not of the contract: seventeen
+        candidates pass it and then have no month-addressable card, and the
+        year-to-date walk quietly substitutes the current one for every past
+        month. That prints 8,5% to 23,3% high next to a real figure, in a
+        column the user can sort, with nothing to tell the two apart.
+
+        A candidate is abandoned at the first month it cannot supply, so a
+        contract with no archive costs one month rather than eight.
+
+        On the engine rather than in the dialog step because the scheduled
+        sweep runs it too: the column was reachable only by clicking through
+        the options page, and nothing stored the result, so the figure existed
+        for as long as that page was open and nowhere afterwards.
+
+        Returns the rows; never raises for one row's sake, and every row it
+        cannot price honestly comes back exactly as it went in.
+        """
+        from .snapshot_store import _snapshot_for_month, archived_months_present
+        from .ytd_cost import _compute_current_year_cost
+
+        hh = sweep["household"]
+        current = self.config_entry.data
+        today = hh.today_local
+        months = [date(today.year, m, 1) for m in range(1, today.month + 1)]
+
+        # The household's own side sets the standard, so it is walked first -
+        # again, before anything asks about coverage. Its own snapshot is the
+        # fallback the walk needs, and _compute_current_year_cost is what
+        # fills every month of the cache read below.
+        session = async_get_clientsession(self.hass)
+        if hh.current_snapshot is not None:
+            with contextlib.suppress(Exception):
+                await _compute_current_year_cost(
+                    self.hass,
+                    session,
+                    get_extractor(current[CONF_SUPPLIER]),
+                    hh.current_snapshot,
+                    hh.quote_entry,
+                    billed_peak_kw=hh.peak_kw,
+                )
+        baseline = archived_months_present(
+            self.hass,
+            current[CONF_SUPPLIER],
+            current[CONF_CONTRACT],
+            sweep["region"],
+            months,
+        )
+        cached = _sweep_rows(self.hass, self.config_entry.entry_id, sweep["region"])
+        rows: list[RankedRow] = []
+        for row in sweep["rows"]:
+            pair = sweep["labels"].get(row.label)
+            snap = cached.get((sweep["region"], *pair)) if pair is not None else None
+            if row.annual is None or pair is None or snap is None or not baseline:
+                rows.append(row)
+                continue
+            supplier, contract = pair
+            # Spot-priced kinds are excluded for the same reason the
+            # one-to-one page excludes them: the archive engine bills each
+            # past hour at factor*spot+base and needs the historical spot
+            # cache, which this pass does not carry. Called without it the
+            # energy leg silently vanishes -- measured 33,7% low on a dynamic
+            # card -- in a column the table sorts.
+            if _contract_kind(supplier, contract) in SPOT_PRICED_CONTRACT_KINDS:
+                rows.append(row)
+                continue
+            # January first, and BEFORE asking about coverage. The coverage
+            # cache is only ever written by this walk, so checking it up front
+            # answers "nothing is covered" for every candidate and the whole
+            # pass becomes a no-op that hides its own checkbox. One month is
+            # also the cheap reject: a contract with no month-addressable card
+            # costs one fetch here rather than a full year of them.
+            try:
+                await _snapshot_for_month(
+                    self.hass,
+                    session,
+                    get_extractor(supplier),
+                    contract,
+                    sweep["region"],
+                    months[0],
+                    snap,
+                    hh.quote_entry,
+                )
+            except Exception:  # noqa: BLE001 - one row loses its history
+                rows.append(row)
+                continue
+            if not archived_months_present(
+                self.hass, supplier, contract, sweep["region"], months[:1]
+            ):
+                rows.append(row)
+                continue
+            try:
+                value = await _compute_current_year_cost(
+                    self.hass,
+                    session,
+                    get_extractor(supplier),
+                    snap,
+                    hh.quote_entry,
+                    contract_override=contract,
+                    billed_peak_kw=hh.peak_kw,
+                )
+            except Exception:  # noqa: BLE001 - one row loses its history
+                rows.append(row)
+                continue
+            # Coverage is judged AFTER the walk, which is what filled the
+            # cache. Equal to the baseline's, not merely non-empty: a row
+            # replaying nine of the baseline's twelve months is not a smaller
+            # figure in the same column, it is a different question answered
+            # in it, and the walk quietly proxies the current card for the
+            # months it could not fetch.
+            covered = archived_months_present(
+                self.hass, supplier, contract, sweep["region"], months
+            )
+            if covered != baseline:
+                rows.append(row)
+                continue
+            rows.append(replace(row, ytd=value))
+        return rows
+
     async def run_full_sweep(self, coord: Any) -> DailyCompare | str:
         """Price the whole cell with nobody watching, or say why not.
 
@@ -549,6 +672,20 @@ class _SweepEngine:
                         status=f"could not be priced: {err}",
                     )
                 )
+        # The year-to-date column, which used to be reachable only by clicking
+        # through the options page and was stored nowhere afterwards. A
+        # scheduled run is the right place for it: the pass replays a year per
+        # candidate, and this is the run with all night and no progress bar.
+        # Wrapped because it is an extra, not the ranking: a failure here must
+        # leave the annual figures standing rather than cost the whole sweep.
+        sweep["rows"] = rows
+        try:
+            rows = await self.fill_ytd_column(sweep)
+        except Exception:  # noqa: BLE001 - the annual ranking still stands
+            _LOGGER.exception(
+                "Year-to-date column failed for %s; publishing annual only",
+                self.config_entry.title,
+            )
         return DailyCompare(
             rows=tuple(rows),
             own=own.annual if own is not None else None,
@@ -2457,122 +2594,14 @@ class _SweepStepsMixin(_CompareStepsMixin):
     async def async_step_compare_all_ytd(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Fill the year-to-date column, for the rows that can honestly carry one.
+        """Fill the year-to-date column, then show the table.
 
-        A row prints a figure only when it replayed the SAME real archived
-        months the household's own side did. ``fetch_for_month is not None``
-        is a property of the supplier and not of the contract: seventeen
-        candidates pass it and then have no month-addressable card, and the
-        year-to-date walk quietly substitutes the current one for every past
-        month. That prints 8,5% to 23,3% high next to a real figure, in a
-        column the user can sort, with nothing to tell the two apart.
-
-        A candidate is abandoned at the first month it cannot supply, so a
-        contract with no archive costs one month rather than eight.
+        The pass itself lives on the engine, because the scheduled sweep runs
+        the same one: see ``_SweepEngine.fill_ytd_column``.
         """
-        from .snapshot_store import _snapshot_for_month, archived_months_present
-        from .ytd_cost import _compute_current_year_cost
-
         reason = await self._ensure_household()
         if reason is not None:
             return self.async_abort(reason=reason)
-        sweep = self._sweep
-        hh = sweep["household"]
-        current = self.config_entry.data
-        today = hh.today_local
-        months = [date(today.year, m, 1) for m in range(1, today.month + 1)]
-
-        # The household's own side sets the standard, so it is walked first -
-        # again, before anything asks about coverage. Its own snapshot is the
-        # fallback the walk needs, and _compute_current_year_cost is what
-        # fills every month of the cache read below.
-        session = async_get_clientsession(self.hass)
-        if hh.current_snapshot is not None:
-            with contextlib.suppress(Exception):
-                await _compute_current_year_cost(
-                    self.hass,
-                    session,
-                    get_extractor(current[CONF_SUPPLIER]),
-                    hh.current_snapshot,
-                    hh.quote_entry,
-                    billed_peak_kw=hh.peak_kw,
-                )
-        baseline = archived_months_present(
-            self.hass,
-            current[CONF_SUPPLIER],
-            current[CONF_CONTRACT],
-            sweep["region"],
-            months,
-        )
-        cached = _sweep_rows(self.hass, self.config_entry.entry_id, sweep["region"])
-        rows: list[RankedRow] = []
-        for row in sweep["rows"]:
-            pair = sweep["labels"].get(row.label)
-            snap = cached.get((sweep["region"], *pair)) if pair is not None else None
-            if row.annual is None or pair is None or snap is None or not baseline:
-                rows.append(row)
-                continue
-            supplier, contract = pair
-            # Spot-priced kinds are excluded for the same reason the
-            # one-to-one page excludes them: the archive engine bills each
-            # past hour at factor*spot+base and needs the historical spot
-            # cache, which this pass does not carry. Called without it the
-            # energy leg silently vanishes -- measured 33,7% low on a dynamic
-            # card -- in a column the table sorts.
-            if _contract_kind(supplier, contract) in SPOT_PRICED_CONTRACT_KINDS:
-                rows.append(row)
-                continue
-            # January first, and BEFORE asking about coverage. The coverage
-            # cache is only ever written by this walk, so checking it up front
-            # answers "nothing is covered" for every candidate and the whole
-            # pass becomes a no-op that hides its own checkbox. One month is
-            # also the cheap reject: a contract with no month-addressable card
-            # costs one fetch here rather than a full year of them.
-            try:
-                await _snapshot_for_month(
-                    self.hass,
-                    session,
-                    get_extractor(supplier),
-                    contract,
-                    sweep["region"],
-                    months[0],
-                    snap,
-                    hh.quote_entry,
-                )
-            except Exception:  # noqa: BLE001 - one row loses its history
-                rows.append(row)
-                continue
-            if not archived_months_present(
-                self.hass, supplier, contract, sweep["region"], months[:1]
-            ):
-                rows.append(row)
-                continue
-            try:
-                value = await _compute_current_year_cost(
-                    self.hass,
-                    session,
-                    get_extractor(supplier),
-                    snap,
-                    hh.quote_entry,
-                    contract_override=contract,
-                    billed_peak_kw=hh.peak_kw,
-                )
-            except Exception:  # noqa: BLE001 - one row loses its history
-                rows.append(row)
-                continue
-            # Coverage is judged AFTER the walk, which is what filled the
-            # cache. Equal to the baseline's, not merely non-empty: a row
-            # replaying nine of the baseline's twelve months is not a smaller
-            # figure in the same column, it is a different question answered
-            # in it, and the walk quietly proxies the current card for the
-            # months it could not fetch.
-            covered = archived_months_present(
-                self.hass, supplier, contract, sweep["region"], months
-            )
-            if covered != baseline:
-                rows.append(row)
-                continue
-            rows.append(replace(row, ytd=value))
-        sweep["rows"] = rows
-        sweep["ytd_done"] = True
+        self._sweep["rows"] = await self._engine.fill_ytd_column(self._sweep)
+        self._sweep["ytd_done"] = True
         return await self.async_step_compare_all_result()

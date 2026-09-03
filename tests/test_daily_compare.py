@@ -147,6 +147,35 @@ def test_sensor_publishes_the_saving_and_the_ranking() -> None:
     ]
 
 
+def test_the_ranking_carries_the_year_to_date_and_is_not_recorded() -> None:
+    """The nightly sweep fills a year-to-date figure per row, and it has to
+    reach somewhere a user can read it.
+
+    It used to exist only on the options page while that page was open: the
+    scheduled sweep never computed it, the dialog that did never stored what
+    it computed, and the sensor dropped the field even when it was set. All
+    three had to change together for the number to be visible at all.
+    """
+    rows = (
+        RankedRow("Mega Online Fixed", 1102.75, ytd=612.40),
+        RankedRow("Eneco Zon & Wind Flex", 1272.75, ytd=708.11, is_own=True),
+        # No archive deep enough to answer honestly: the column stays absent
+        # rather than carrying a figure built on different months.
+        RankedRow("Luminus Comfy Fixed", 1310.20),
+    )
+    entry = make_entry(daily_compare=True)
+    sensor = PotentialSavingSensor(_coord(entry, _result(rows=rows)))  # type: ignore[arg-type]
+    ranking = sensor.extra_state_attributes["ranking"]
+    assert [r.get("ytd_eur") for r in ranking] == [612.40, 708.11, None]
+
+    # And the table stays out of the recorder. It is replaced wholesale every
+    # night, so storing a snapshot of every row daily forever answers nothing,
+    # and excluding it is also what keeps the small keys beside it safe from
+    # the 16 KB cap, which an over-cap state would cost their history entirely.
+    assert "ranking" in PotentialSavingSensor._unrecorded_attributes
+    assert "cheapest_annual_eur" not in PotentialSavingSensor._unrecorded_attributes
+
+
 def test_sensor_reads_unknown_before_the_first_sweep() -> None:
     entry = make_entry(daily_compare=True)
     sensor = PotentialSavingSensor(_coord(entry, None))  # type: ignore[arg-type]
@@ -353,6 +382,79 @@ async def test_the_sweep_persists_its_ranking_at_once(
 
     assert coord.daily_compare is ranking
     assert saved == ["published", "persisted"]
+
+
+async def test_the_scheduled_sweep_fills_the_year_to_date_column(
+    hass: HomeAssistant,
+) -> None:
+    """The column was reachable only by clicking through the options page.
+
+    The scheduled run is the right place for a pass that replays a year per
+    candidate: it is the one with all night and nobody watching a progress
+    bar, which is the same argument run_full_sweep's own docstring makes for
+    doing the expensive thing there.
+    """
+    from custom_components.be_electricity_prices.compare_flow import _SweepEngine
+
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    engine = _SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    priced = RankedRow(label="Mega Online Fixed", annual=1102.75)
+
+    async def _fake_fill(_self: Any, sweep: Any) -> list[RankedRow]:
+        # The pass sees the rows the sweep just priced, and enriches them.
+        assert [r.label for r in sweep["rows"]] == ["Mega Online Fixed"]
+        return [
+            RankedRow(label=r.label, annual=r.annual, ytd=612.40) for r in sweep["rows"]
+        ]
+
+    with (
+        patch.object(
+            _SweepEngine,
+            "build_sweep",
+            return_value={"candidates": [("mega", "x")], "rows": []},
+        ),
+        patch.object(_SweepEngine, "_resolve_household", AsyncMock(return_value=None)),
+        patch.object(_SweepEngine, "_sweep_own_row", AsyncMock(return_value=None)),
+        patch.object(_SweepEngine, "_sweep_one", AsyncMock(return_value=priced)),
+        patch.object(_SweepEngine, "fill_ytd_column", _fake_fill),
+    ):
+        result = await engine.run_full_sweep(_coord(entry))
+    assert not isinstance(result, str)
+    assert [r.ytd for r in result.rows] == [612.40]
+
+
+async def test_a_failed_year_to_date_pass_keeps_the_annual_ranking(
+    hass: HomeAssistant,
+) -> None:
+    """The column is an extra, not the ranking. A pass that raises must leave
+    the annual figures standing rather than cost the whole night's sweep,
+    which async_run_daily_compare would otherwise discard wholesale."""
+    from custom_components.be_electricity_prices.compare_flow import _SweepEngine
+
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    engine = _SweepEngine(hass, entry, {})  # type: ignore[arg-type]
+    priced = RankedRow(label="Mega Online Fixed", annual=1102.75)
+
+    async def _boom(_self: Any, sweep: Any) -> list[RankedRow]:
+        raise RuntimeError("archive went away mid-pass")
+
+    with (
+        patch.object(
+            _SweepEngine,
+            "build_sweep",
+            return_value={"candidates": [("mega", "x")], "rows": []},
+        ),
+        patch.object(_SweepEngine, "_resolve_household", AsyncMock(return_value=None)),
+        patch.object(_SweepEngine, "_sweep_own_row", AsyncMock(return_value=None)),
+        patch.object(_SweepEngine, "_sweep_one", AsyncMock(return_value=priced)),
+        patch.object(_SweepEngine, "fill_ytd_column", _boom),
+    ):
+        result = await engine.run_full_sweep(_coord(entry))
+    assert not isinstance(result, str)
+    assert [r.annual for r in result.rows] == [1102.75]
+    assert [r.ytd for r in result.rows] == [None]
 
 
 async def test_a_failed_save_does_not_undo_the_published_ranking(
