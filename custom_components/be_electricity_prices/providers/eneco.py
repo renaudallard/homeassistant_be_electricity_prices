@@ -146,7 +146,7 @@ _WS = r"[\s\xa0]"
 async def fetch(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Eneco's PDF covers every region in one document.
+    region: str,
 ) -> SupplierSnapshot:
     """Fetch and parse the Eneco tariff card for ``contract_id``."""
     if contract_id not in _CONTRACT_SLUGS:
@@ -158,13 +158,13 @@ async def fetch(
             f"Eneco listing page did not advertise a PDF for {contract_id!r}"
         )
     text = await fetch_pdf_text(session, url)
-    return parse_snapshot(text, contract_id, url)
+    return parse_snapshot(text, contract_id, url, region)
 
 
 async def fetch_for_month(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # noqa: ARG001 - Eneco's PDF covers every region in one document.
+    region: str,
     year_month: date,
 ) -> SupplierSnapshot | None:
     """Fetch the Eneco card for a specific (year, month).
@@ -198,7 +198,7 @@ async def fetch_for_month(
         except ExtractorError:
             continue
         try:
-            snap = parse_snapshot(text, contract_id, url)
+            snap = parse_snapshot(text, contract_id, url, region)
         except ExtractorError:
             continue
         result = archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
@@ -274,8 +274,15 @@ def _resolve_url(listing_html: str, contract_id: str) -> str | None:
     return None
 
 
-def parse_snapshot(text: str, contract_id: str, source_url: str) -> SupplierSnapshot:
-    """Parse already-extracted PDF text. Exposed for unit tests."""
+def parse_snapshot(
+    text: str, contract_id: str, source_url: str, region: str
+) -> SupplierSnapshot:
+    """Parse already-extracted PDF text. Exposed for unit tests.
+
+    ``region`` reaches the tax overlay only: one card serves both regions and
+    the Flemish energy fund is the single row on it a Walloon customer does
+    not pay.
+    """
     if contract_id not in _CONTRACT_SLUGS:
         raise ExtractorError(f"unknown Eneco contract {contract_id!r}")
     return SupplierSnapshot(
@@ -283,7 +290,7 @@ def parse_snapshot(text: str, contract_id: str, source_url: str) -> SupplierSnap
         contract=contract_id,
         energy=_extract_energy(text, contract_id),
         dsos=_extract_dsos(text),
-        taxes=_extract_taxes(text),
+        taxes=_extract_taxes(text, region),
         source_url=source_url,
         publication_label=_extract_publication_month(text),
         valid_until=parse_valid_until(text),
@@ -500,7 +507,7 @@ def _find_fluvius_row(text: str, label: str) -> DsoOverlay | None:
     )
 
 
-def _extract_taxes(text: str) -> TaxOverlay:
+def _extract_taxes(text: str, region: str) -> TaxOverlay:
     tier_match = re.search(
         rf"(?:Verbruik tussen{_WS}*\n*{_WS}*0{_WS}+en{_WS}+3\.000{_WS}+kWh|Alle verbruik){_WS}*\n*{_WS}*"
         + _NUM
@@ -542,9 +549,19 @@ def _extract_taxes(text: str) -> TaxOverlay:
         raise ExtractorError(
             "could not parse Eneco Walloon connection fee (Aansluitingsvergoeding)"
         )
-    fund = re.search(
-        rf"Standaard tarief{_WS}*\n{_WS}*\(domicilieadres\){_WS}+{_NUM}",
-        text,
+    # Flanders only, gated here rather than at billing time: the table is
+    # headed "Bijdrage Energiefonds (Vlaanderen)" but rides on the one card
+    # Eneco serves to both regions, and fees.py bills 12 x this field with no
+    # region check of its own. Every issue since January 2025 prints 0,00 in
+    # the domiciled low-voltage cell, so nothing is mis-billed today; the gate
+    # is what keeps a Walloon entry right the month that changes.
+    fund = (
+        re.search(
+            rf"Standaard tarief{_WS}*\n{_WS}*\(domicilieadres\){_WS}+{_NUM}",
+            text,
+        )
+        if region == REGION_FLANDERS
+        else None
     )
     return TaxOverlay(
         federal_excise=excise,

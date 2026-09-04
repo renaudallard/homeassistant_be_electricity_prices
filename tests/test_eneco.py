@@ -36,7 +36,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
+from custom_components.be_electricity_prices.const import (
+    FLUVIUS_KEYS,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
+)
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
@@ -63,7 +67,9 @@ def test_power_dynamic_offered_in_flanders_only() -> None:
 
 
 def test_fix_extracts_energy_block() -> None:
-    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(
+        fixture_text("eneco_fix.pdf"), "power_fix", "test://fix", REGION_FLANDERS
+    )
     assert isinstance(snap.energy, FixedRates)
     assert snap.energy.single == pytest.approx(0.1865)
     assert snap.energy.peak == pytest.approx(0.2055)
@@ -73,7 +79,9 @@ def test_fix_extracts_energy_block() -> None:
 
 
 def test_fix_extracts_dso_overlay() -> None:
-    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(
+        fixture_text("eneco_fix.pdf"), "power_fix", "test://fix", REGION_FLANDERS
+    )
     aieg = snap.dsos["aieg"]
     assert aieg.distribution_single == pytest.approx(0.1087)
     assert aieg.distribution_peak == pytest.approx(0.1205)
@@ -93,12 +101,16 @@ def test_fix_extracts_dso_overlay() -> None:
 def test_fix_fluvius_has_no_prosumer_rate() -> None:
     # Flemish digital meter rows print "-" for the prosumer column - SMR3
     # connections don't sit under the compensation regime.
-    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(
+        fixture_text("eneco_fix.pdf"), "power_fix", "test://fix", REGION_FLANDERS
+    )
     assert snap.dsos["fluvius_antwerpen"].prosumer_eur_per_kva_year is None
 
 
 def test_fix_extracts_all_fluvius_sub_areas() -> None:
-    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(
+        fixture_text("eneco_fix.pdf"), "power_fix", "test://fix", REGION_FLANDERS
+    )
     expected_keys = set(FLUVIUS_KEYS)
     assert expected_keys <= set(snap.dsos)
 
@@ -122,7 +134,9 @@ def test_fix_extracts_all_fluvius_sub_areas() -> None:
 
 
 def test_fix_fluvius_sub_areas_have_distinct_rates() -> None:
-    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(
+        fixture_text("eneco_fix.pdf"), "power_fix", "test://fix", REGION_FLANDERS
+    )
     rates = {
         key: snap.dsos[key].distribution_single
         for key in snap.dsos
@@ -140,11 +154,30 @@ def test_missing_connection_fee_is_fatal() -> None:
         "Aansluitingsvergoeding elektriciteit", "REMOVED"
     )
     with pytest.raises(eneco_mod.ExtractorError, match="connection fee"):
-        parse_snapshot(text, "power_fix", "test://fix")
+        parse_snapshot(text, "power_fix", "test://fix", REGION_FLANDERS)
+
+
+def test_energy_fund_is_flanders_only() -> None:
+    """The Energiefonds table is headed "(Vlaanderen)" but rides on the one
+    card Eneco serves to both regions, and fees.py bills 12 x the field with
+    no region check of its own. Every issue published so far prints 0,00 in
+    the domiciled low-voltage cell, so the real rate has to be patched in:
+    against the real fixture both regions read 0,00 and the test proves
+    nothing.
+    """
+    text = fixture_text("eneco_fix.pdf").replace(
+        "(domicilieadres) 0,00", "(domicilieadres) 7,77"
+    )
+    flanders = parse_snapshot(text, "power_fix", "test://fix", REGION_FLANDERS)
+    wallonia = parse_snapshot(text, "power_fix", "test://fix", REGION_WALLONIA)
+    assert flanders.taxes.energy_fund_eur_per_month == pytest.approx(7.77)
+    assert wallonia.taxes.energy_fund_eur_per_month == 0.0
 
 
 def test_fix_extracts_taxes() -> None:
-    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(
+        fixture_text("eneco_fix.pdf"), "power_fix", "test://fix", REGION_FLANDERS
+    )
     assert snap.taxes.federal_excise == pytest.approx(0.050329)
     assert snap.taxes.energy_contribution == pytest.approx(0.002042)
     # Both regional rates are populated from the PDF; the pricing engine
@@ -173,14 +206,19 @@ def test_fix_extracts_taxes() -> None:
 
 def test_august_card_drops_the_energy_contribution_row() -> None:
     snap = parse_snapshot(
-        fixture_text("eneco_flex_aug26.pdf"), "power_flex", "test://fix"
+        fixture_text("eneco_flex_aug26.pdf"),
+        "power_flex",
+        "test://fix",
+        REGION_FLANDERS,
     )
     assert snap.taxes.federal_excise == pytest.approx(0.048760)
     assert snap.taxes.energy_contribution == pytest.approx(0.0)
 
 
 def test_flex_extracts_current_monthly_rate() -> None:
-    snap = parse_snapshot(fixture_text("eneco_flex.pdf"), "power_flex", "test://flex")
+    snap = parse_snapshot(
+        fixture_text("eneco_flex.pdf"), "power_flex", "test://flex", REGION_FLANDERS
+    )
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.current == pytest.approx(0.1390)
     assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
@@ -194,7 +232,7 @@ def test_flex_yearly_fee_survives_extra_header_line() -> None:
     text = fixture_text("eneco_flex.pdf").replace(
         "DAG NACHT", "DAG NACHT\nEXTRA HEADER LINE", 1
     )
-    snap = parse_snapshot(text, "power_flex", "test://flex")
+    snap = parse_snapshot(text, "power_flex", "test://flex", REGION_FLANDERS)
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
 
@@ -216,7 +254,9 @@ def test_num_parses_thousands_grouped_and_four_digit_values() -> None:
 
 
 def test_dynamic_extracts_factor_and_base() -> None:
-    snap = parse_snapshot(fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
+    snap = parse_snapshot(
+        fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn", REGION_FLANDERS
+    )
     assert isinstance(snap.energy, DynamicRates)
     # PDF formula: (0.102 x BELPEX-H_eur_per_mwh + 1) x 1.06  c€/kWh
     # ENTSO-E client gives spot in EUR/kWh, so the integration uses:
@@ -232,7 +272,9 @@ def test_dynamic_extracts_factor_and_base() -> None:
 
 
 def test_dynamic_publication_label_present() -> None:
-    snap = parse_snapshot(fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
+    snap = parse_snapshot(
+        fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn", REGION_FLANDERS
+    )
     assert snap.publication_label  # non-empty
 
 
@@ -247,12 +289,16 @@ def test_extracts_valid_until_from_geldig_line() -> None:
         ("eneco_flex.pdf", "power_flex"),
         ("eneco_dyn.pdf", "power_dynamic"),
     ):
-        snap = parse_snapshot(fixture_text(fixture), contract, f"test://{fixture}")
+        snap = parse_snapshot(
+            fixture_text(fixture), contract, f"test://{fixture}", REGION_FLANDERS
+        )
         assert snap.valid_until == date(2026, 4, 30), fixture
 
 
 def test_fix_extracts_injection_rates() -> None:
-    snap = parse_snapshot(fixture_text("eneco_fix.pdf"), "power_fix", "test://fix")
+    snap = parse_snapshot(
+        fixture_text("eneco_fix.pdf"), "power_fix", "test://fix", REGION_FLANDERS
+    )
     inj = snap.injection
     assert inj is not None
     # Power Fix prints "Maandprijs 4,76 c/kWh" and a MONTHLY Belpex-injectie
@@ -267,7 +313,9 @@ def test_fix_extracts_injection_rates() -> None:
 
 
 def test_flex_extracts_injection_rates() -> None:
-    snap = parse_snapshot(fixture_text("eneco_flex.pdf"), "power_flex", "test://flex")
+    snap = parse_snapshot(
+        fixture_text("eneco_flex.pdf"), "power_flex", "test://flex", REGION_FLANDERS
+    )
     inj = snap.injection
     assert inj is not None
     # Power Flex settles injection on the monthly Belpex-injectie. It surfaces
@@ -281,7 +329,9 @@ def test_flex_extracts_injection_rates() -> None:
 
 
 def test_dynamic_extracts_injection_rates() -> None:
-    snap = parse_snapshot(fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn")
+    snap = parse_snapshot(
+        fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn", REGION_FLANDERS
+    )
     inj = snap.injection
     assert inj is not None
     # Power Dynamic formula: "0,1 X BELPEX-H -1,188". No "Maandprijs" - falls
@@ -306,7 +356,7 @@ def test_injection_survives_valorisatie_suffix_drop() -> None:
             "AFNAME EN INJECTIE / VALORISATIE", "AFNAME EN INJECTIE"
         )
         assert "VALORISATIE" not in text, fixture
-        snap = parse_snapshot(text, contract, f"test://{fixture}")
+        snap = parse_snapshot(text, contract, f"test://{fixture}", REGION_FLANDERS)
         assert snap.injection is not None, fixture
         assert snap.injection.current == pytest.approx(expected), fixture
 
@@ -384,7 +434,9 @@ def test_flex_extracts_cohort_coefficients() -> None:
     so a signing cohort can be re-priced against the monthly mean. Applying them
     to the card's stated last-known index (96,8502 EUR/MWh) reproduces the
     printed monthly indicative."""
-    snap = parse_snapshot(fixture_text("eneco_flex.pdf"), "power_flex", "test://flex")
+    snap = parse_snapshot(
+        fixture_text("eneco_flex.pdf"), "power_flex", "test://flex", REGION_FLANDERS
+    )
     assert isinstance(snap.energy, VariableRates)
     # (0,102 X BELPEX-RLP-M + 3,237) incl 6% VAT:
     # factor 0,102 * 1.06 * 10, base 3,237 * 1.06 / 100.
@@ -415,7 +467,7 @@ def test_fix_and_flex_credit_the_delivery_month_not_the_printed_indicative() -> 
     )
 
     snap = parse_snapshot(
-        fixture_text("eneco_flex_aug26.pdf"), "power_flex", "flanders"
+        fixture_text("eneco_flex_aug26.pdf"), "power_flex", "flanders", REGION_FLANDERS
     )
     inj = snap.injection
     assert inj is not None
@@ -437,7 +489,9 @@ def test_fix_and_flex_credit_the_delivery_month_not_the_printed_indicative() -> 
     assert baked.injection.current == pytest.approx(0.080649, abs=1e-6)
 
     # Power Dynamic keeps its HOURLY index and is untouched.
-    dyn = parse_snapshot(fixture_text("eneco_dyn.pdf"), "power_dynamic", "flanders")
+    dyn = parse_snapshot(
+        fixture_text("eneco_dyn.pdf"), "power_dynamic", "flanders", REGION_FLANDERS
+    )
     assert dyn.injection is not None
     assert dyn.injection.month_indexed is False
     assert _injection_is_spot_formula(dyn.injection, dyn.energy) is True
