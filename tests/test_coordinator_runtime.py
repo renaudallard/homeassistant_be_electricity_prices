@@ -36,6 +36,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
@@ -46,6 +47,9 @@ from custom_components.be_electricity_prices.api import (
     EntsoeError,
 )
 from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.providers.base import (
+    CardNotReadableError,
+)
 from custom_components.be_electricity_prices.coordinator import (
     BePricesCoordinator,
 )
@@ -53,10 +57,12 @@ from custom_components.be_electricity_prices.coordinator_issues import (
     _successor_for,
 )
 from custom_components.be_electricity_prices.snapshot_store import (
+    _SNAPSHOT_SCHEMA_VERSION,
     _monthly_snapshots,
     _shared_failed_fetches,
     _shared_lock,
     _shared_snapshots,
+    _snapshot_to_dict,
     evict_shared_caches,
 )
 from custom_components.be_electricity_prices.providers.base import (
@@ -1804,11 +1810,25 @@ async def test_unreadable_cards_swap_the_extractor_failed_card(
     failed_id = f"extractor_failed_{entry.entry_id}"
     unreachable_id = f"extractor_unreachable_{entry.entry_id}"
     unreadable_id = f"extractor_unreadable_{entry.entry_id}"
+    no_prices_id = f"extractor_unreadable_no_prices_{entry.entry_id}"
 
+    # With no snapshot in hand there is nothing to drift, so the card that
+    # warns about drift is the wrong one: the entry gets the no-prices twin.
+    coord._sync_extractor_issue("card has no text layer", unreadable=True)
+    issue = registry.async_get_issue(DOMAIN, no_prices_id)
+    assert issue is not None
+    assert issue.translation_key == "extractor_unreadable_no_prices"
+    assert registry.async_get_issue(DOMAIN, unreadable_id) is None
+    assert registry.async_get_issue(DOMAIN, failed_id) is None
+
+    # With a cached card still being served, the drift warning is the right
+    # one, and raising it clears the twin.
+    coord._set_snapshot(make_snapshot())
     coord._sync_extractor_issue("card has no text layer", unreadable=True)
     issue = registry.async_get_issue(DOMAIN, unreadable_id)
     assert issue is not None
     assert issue.translation_key == "extractor_unreadable"
+    assert registry.async_get_issue(DOMAIN, no_prices_id) is None
     assert registry.async_get_issue(DOMAIN, failed_id) is None
 
     # A timeout is still a timeout, and raising it clears the unreadable
@@ -1827,7 +1847,7 @@ async def test_unreadable_cards_swap_the_extractor_failed_card(
     assert registry.async_get_issue(DOMAIN, unreadable_id) is None
 
     coord._sync_extractor_issue(None)
-    for issue_id in (failed_id, unreachable_id, unreadable_id):
+    for issue_id in (failed_id, unreachable_id, unreadable_id, no_prices_id):
         assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
@@ -1865,9 +1885,13 @@ async def test_a_textless_card_fetch_reaches_the_unreadable_repairs_card(
         await coord._maybe_refresh_snapshot()
 
     registry = ir.async_get(hass)
-    issue = registry.async_get_issue(DOMAIN, f"extractor_unreadable_{entry.entry_id}")
+    # This coordinator has never held a snapshot, so the card that lands is
+    # the no-prices twin rather than the drift warning.
+    issue = registry.async_get_issue(
+        DOMAIN, f"extractor_unreadable_no_prices_{entry.entry_id}"
+    )
     assert issue is not None
-    assert issue.translation_key == "extractor_unreadable"
+    assert issue.translation_key == "extractor_unreadable_no_prices"
     # and NOT the card that asks the user to report a layout change
     assert (
         registry.async_get_issue(DOMAIN, f"extractor_failed_{entry.entry_id}") is None
@@ -2187,6 +2211,7 @@ _REPAIR_ISSUE_KINDS = (
     "extractor_failed",
     "extractor_unreachable",
     "extractor_unreadable",
+    "extractor_unreadable_no_prices",
     "entsoe_auth_failed",
     "supplier_deprecated",
     "exclusive_night_rate_missing",
@@ -4375,3 +4400,203 @@ async def test_a_half_written_ranking_is_dropped_whole(
         await coord.async_load_persistent()
 
     assert coord.daily_compare is None
+
+
+def _stale_blob(schema_version: int) -> dict[str, Any]:
+    """A persisted snapshot stamped at an OLD schema, as a real cache holds it.
+
+    Built through the production serialiser and then stripped of three
+    ``InjectionRates`` fields that postdate v16 (``spp_indexed`` v21,
+    ``month_indexed`` v27, ``slot_indexed`` v35), so it loads the way a genuine
+    old blob does: the missing keys come back at their dataclass defaults.
+    Hand-writing the body instead would pin a field list that is not the thing
+    under test, and would go stale the next time a field is added.
+    """
+    blob = _snapshot_to_dict(
+        make_snapshot(supplier="ecofix", contract="ecofix_flexy"),
+        datetime(2026, 8, 2, 6, 0, tzinfo=UTC),
+        "jul-etag",
+        schema_version=schema_version,
+    )
+    blob["injection"] = {
+        k: v
+        for k, v in (blob["injection"] or {}).items()
+        if k not in ("spp_indexed", "month_indexed", "slot_indexed")
+    }
+    return blob
+
+
+async def _load_then_fetch_an_unreadable_card(
+    hass: HomeAssistant, coord: BePricesCoordinator, blob: dict[str, Any]
+) -> None:
+    """Restore ``blob`` from the store, then run a fetch that finds page images."""
+
+    async def _textless_fetch(*args: Any, **kwargs: Any) -> None:
+        raise CardNotReadableError(
+            "card has no text layer: 348 characters across 5 page(s)"
+        )
+
+    async def _fake_load() -> dict[str, Any]:
+        return {
+            "entry_supplier": coord.entry.data["supplier"],
+            "entry_contract": coord.entry.data["contract"],
+            "entry_region": coord.entry.data["region"],
+            "snapshot": blob,
+        }
+
+    with patch.object(coord._store, "async_load", new=_fake_load):
+        await coord.async_load_persistent()
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_textless_fetch),
+    ):
+        await coord._maybe_refresh_snapshot()
+
+
+async def test_an_unreadable_card_replays_the_schema_rejected_snapshot(
+    hass: HomeAssistant,
+) -> None:
+    """A supplier that went to page images has no next fetch to heal with.
+
+    The schema gate is right in every other case: it is how a parser fix
+    reaches a cached user. But it assumes a re-fetch exists, and for a card
+    published as images there is none, so discarding the blob left every
+    Ecofix entry with no prices at all from the first restart after 0.11.32.
+    """
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    await _load_then_fetch_an_unreadable_card(hass, coord, _stale_blob(16))
+
+    assert coord._snapshot is not None, "the rejected card must be replayed"
+    assert coord._snapshot_fetched_at == datetime(2026, 8, 2, 6, 0, tzinfo=UTC), (
+        "the replayed card keeps the age it was fetched at, so snapshot_age "
+        "reads honestly and the 7-day stale card still fires"
+    )
+    assert coord._snapshot_probe_key == "jul-etag"
+    assert coord._snapshot_schema_version == 16, (
+        "the replayed card is written back under its own version, so a later "
+        "parser fix can still invalidate it"
+    )
+
+
+async def test_a_blob_below_the_replay_floor_is_still_refused(
+    hass: HomeAssistant,
+) -> None:
+    """v16 is the floor, and the number is load-bearing rather than decorative.
+
+    Before v16 the stored blob held the card as PRICED, so replaying one
+    through _resolve_snapshot would gross a professional entry's rates by its
+    VAT rate a second time. A pre-v16 blob is not stale, it is wrong.
+    """
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _DEGRADED_MIN_SCHEMA_VERSION,
+    )
+
+    assert _DEGRADED_MIN_SCHEMA_VERSION == 16
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    await _load_then_fetch_an_unreadable_card(hass, coord, _stale_blob(15))
+
+    assert coord._snapshot is None
+
+
+async def test_a_replayed_entry_restamps_the_blob_once_the_card_is_readable(
+    hass: HomeAssistant,
+) -> None:
+    """Recovery must not leave the entry writing v16 for ever.
+
+    Without resetting the stamp in _set_snapshot, an entry that replayed once
+    would keep persisting the old version even after its supplier went back to
+    publishing text, and its own cache would be rejected on every boot.
+    """
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    await _load_then_fetch_an_unreadable_card(hass, coord, _stale_blob(16))
+    assert coord._snapshot_schema_version == 16
+
+    async def _readable_fetch(*args: Any, **kwargs: Any) -> Any:
+        return make_snapshot(supplier="ecofix", contract="ecofix_flexy")
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_readable_fetch),
+    ):
+        coord._force_refresh = True
+        await coord._maybe_refresh_snapshot()
+
+    assert coord._snapshot_schema_version == _SNAPSHOT_SCHEMA_VERSION
+    assert coord._stale_snapshot is None
+
+
+async def test_an_unreadable_card_sets_a_new_entry_up_with_no_prices(
+    hass: HomeAssistant,
+) -> None:
+    """Asking again does not turn page images into text.
+
+    ConfigEntryNotReady parks the entry in SETUP_RETRY with no entities at all
+    and nothing ever gets it out, so a brand-new Ecofix entry was unusable and
+    silent. Set up anyway: the entities exist, read unavailable, and the
+    Repairs card explains the workaround.
+    """
+
+    async def _textless_fetch(*args: Any, **kwargs: Any) -> None:
+        raise CardNotReadableError(
+            "card has no text layer: 348 characters across 5 page(s)"
+        )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_textless_fetch),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.LOADED
+    states = [
+        hass.states.get(eid)
+        for domain in ("sensor", "binary_sensor", "button")
+        for eid in hass.states.async_entity_ids(domain)
+    ]
+    assert states, "the entry must still create its entities"
+    assert all(s is not None and s.state in ("unavailable", "unknown") for s in states)
+
+    registry = ir.async_get(hass)
+    assert (
+        registry.async_get_issue(
+            DOMAIN, f"extractor_unreadable_no_prices_{entry.entry_id}"
+        )
+        is not None
+    )
+
+
+async def test_a_transient_cold_start_failure_still_retries_setup(
+    hass: HomeAssistant,
+) -> None:
+    """The guard above must not swallow every cold-start failure.
+
+    A timeout on the first fetch is exactly what ConfigEntryNotReady is for,
+    and HA's retry is what recovers it.
+    """
+
+    async def _timeout_fetch(*args: Any, **kwargs: Any) -> None:
+        raise TimeoutError
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_timeout_fetch),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is False
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_RETRY

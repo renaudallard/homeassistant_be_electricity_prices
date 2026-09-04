@@ -1169,6 +1169,18 @@ async def backfill_if_missing(
             entry.entry_id,
         )
         return None
+    if runtime._snapshot is None:
+        # An entry can now be LOADED with no snapshot at all, because a
+        # supplier publishing page images is not worth retrying setup over.
+        # backfill_range raises for that, which is right for the service call
+        # a user asked for and wrong for this fire-and-forget task: the
+        # exception is never retrieved and lands in the log as a traceback on
+        # every restart.
+        _LOGGER.debug(
+            "backfill skipped: no supplier snapshot for %s",
+            entry.entry_id,
+        )
+        return None
     sid = _stat_id(hass, entry, "current_price")
     if sid is None:
         _LOGGER.debug(

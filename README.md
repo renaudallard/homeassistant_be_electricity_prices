@@ -158,10 +158,17 @@ publication and how to parse it.
 > month.
 >
 > Existing Ecofix entries keep serving their last good snapshot and raise a
-> Repairs card; they simply cannot pick up new months. July's card parsed
-> normally, so this is an unintended regression in Ecofix's document generator
-> rather than a deliberate format change, and the real fix is upstream: nothing
-> restores the automatic path until they publish a text PDF again.
+> Repairs card; they simply cannot pick up new months. That state now survives
+> a restart and an upgrade: a cached card is normally discarded when a newer
+> release parses more out of it, which is how a parser fix reaches an existing
+> user, but for a supplier whose card can never be read again there is no next
+> fetch to heal with, so the rejected card is replayed rather than dropped. An
+> entry with no cached card at all, a brand-new one, still sets up, with every
+> sensor unavailable and a Repairs card pointing at the Custom (expert)
+> workaround. July's card parsed normally, so this is an unintended regression
+> in Ecofix's document generator rather than a deliberate format change, and
+> the real fix is upstream: nothing restores the automatic path until they
+> publish a text PDF again.
 
 Adding another supplier is a self-contained PR: drop a new module under
 [`custom_components/be_electricity_prices/providers/`](./custom_components/be_electricity_prices/providers/),
@@ -634,6 +641,11 @@ successful refresh:
   pages carry no text layer, so no parser change here can read it (Ecofix
   since the August 2026 card). Cached prices keep serving, and it clears
   by itself the moment the supplier publishes a readable card.
+- **`extractor_unreadable_no_prices_<entry>`** — the same unreadable card
+  on an entry with no cached one to stand in: a brand-new entry, or one
+  whose cache predates the card-as-parsed change. Every sensor on it reads
+  unavailable until the supplier publishes a readable card, so the card
+  points at the Custom (expert) supplier rather than warning about drift.
 - **`exclusive_night_rate_missing_<entry>`** — the entry is on an
   exclusive-night meter but the supplier's DSO table prints neither an
   exclusive-night nor an off-peak distribution rate, so the night circuit

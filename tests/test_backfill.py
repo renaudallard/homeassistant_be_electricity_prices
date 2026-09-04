@@ -43,6 +43,7 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import backfill as bf
+from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.providers.base import (
     FixedRates,
@@ -1413,3 +1414,31 @@ async def test_a_cociter_keyed_entry_backfills_its_energy_leg(
     # The point is that the cohort leg is consulted at all: it decides whether
     # spots are needed, and it used to be skipped entirely without a start date.
     assert coordinator._ensure_historical_spots.await_count >= 0
+
+
+async def test_backfill_if_missing_skips_when_there_is_no_snapshot(
+    hass: HomeAssistant,
+) -> None:
+    """The fire-and-forget backfill must not raise on a snapshotless entry.
+
+    An unreadable card now leaves the entry loaded with no snapshot, and
+    backfill_range raises for that. Nothing retrieves this task's exception,
+    so it landed in the log as a traceback on every restart.
+    """
+    entry = _entry()
+    entry.add_to_hass(hass)
+    _register_sensors(hass, entry, ["current_price"])
+    # A REAL coordinator, not the SimpleNamespace stand-in the neighbouring
+    # tests use: the isinstance guard above the new one would swallow that
+    # and the test would pass without ever reaching the code it pins.
+    coordinator = BePricesCoordinator(hass, entry)
+    assert coordinator._snapshot is None
+    entry.runtime_data = coordinator
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with patch(
+        "homeassistant.components.recorder.get_instance",
+        return_value=instance,
+    ):
+        assert await bf.backfill_if_missing(hass, entry) is None

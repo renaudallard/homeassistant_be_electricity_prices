@@ -65,6 +65,7 @@ from .snapshot_store import (
     _drop_monthly_rows,
     _shared_failed_fetches,
     _shared_snapshots,
+    _SNAPSHOT_SCHEMA_VERSION,
     _snapshot_from_dict,
     _snapshot_to_dict,
 )
@@ -359,6 +360,17 @@ class BePricesCoordinator(
         self._snapshot_raw: SupplierSnapshot | None = None
         self._snapshot_fetched_at: datetime | None = None
         self._snapshot_probe_key: str | None = None
+        # Which schema the snapshot in hand was parsed under, and what
+        # _save_persistent stamps back. Only a replayed blob ever moves it off
+        # the running version; see _replay_stale_snapshot.
+        self._snapshot_schema_version = _SNAPSHOT_SCHEMA_VERSION
+        # The blob async_load_persistent had to reject, kept rather than
+        # dropped so _replay_stale_snapshot can fall back on it.
+        self._stale_snapshot: dict[str, Any] | None = None
+        # Whether the last fetch this coordinator ran itself came back with a
+        # card that carries no text layer. Set per fetch, never per supplier:
+        # it stops being true the moment readable cards return.
+        self._card_unreadable = False
         # Set by async_force_refresh; cleared on the next successful
         # extractor fetch. Acts as an out-of-band signal to bypass both
         # the probe-based and TTL-based freshness paths in
@@ -431,6 +443,16 @@ class BePricesCoordinator(
         # successor coordinator after a reload.
         self._unloaded = False
 
+    @property
+    def card_unreadable(self) -> bool:
+        """Whether this entry's supplier publishes its card as page images.
+
+        Read by ``async_setup_entry`` to decide that a failed first refresh is
+        not worth retrying. Derived from the last fetch this coordinator ran,
+        so it clears by itself the moment the supplier publishes text again.
+        """
+        return self._card_unreadable
+
     async def async_load_persistent(self) -> None:
         """Restore the latest snapshot + monthly peak from HA Store."""
         stored = await self._store.async_load()
@@ -475,6 +497,12 @@ class BePricesCoordinator(
                 self._set_snapshot(None)
                 self._snapshot_fetched_at = None
                 self._snapshot_probe_key = None
+                # Hold on to the rejected blob. For a supplier whose card can
+                # still be fetched the next _set_snapshot drops it again and
+                # this costs one dict; for one publishing page images there is
+                # no next fetch, and dropping it here is what took every
+                # Ecofix entry off the air on the first restart after 0.11.32.
+                self._stale_snapshot = snap
         elif tuple_mismatch:
             _LOGGER.info(
                 "discarding cached snapshot for %s: stored %s differs from "
@@ -1265,6 +1293,7 @@ class BePricesCoordinator(
                 self._snapshot_raw,
                 self._snapshot_fetched_at,
                 self._snapshot_probe_key,
+                schema_version=self._snapshot_schema_version,
             )
         # Prune in memory (not just in the serialized copy) so a coordinator
         # running across a year boundary doesn't retain the prior year's

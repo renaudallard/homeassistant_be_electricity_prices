@@ -49,7 +49,10 @@ from .providers.base import (
     ExtractorError,
 )
 from .snapshot_store import (
+    _DEGRADED_MIN_SCHEMA_VERSION,
+    _SNAPSHOT_SCHEMA_VERSION,
     _SharedSnapshot,
+    _snapshot_from_dict,
     fetch_shared,
     _resolve_snapshot,
     _shared_failed_fetches,
@@ -94,6 +97,9 @@ class _SnapshotMixin:
     _snapshot_raw: SupplierSnapshot | None
     _snapshot_fetched_at: datetime | None
     _snapshot_probe_key: str | None
+    _snapshot_schema_version: int
+    _stale_snapshot: dict[str, Any] | None
+    _card_unreadable: bool
     _last_error: str | None
     _supplier_tuple: tuple[str, str, str]
 
@@ -148,6 +154,66 @@ class _SnapshotMixin:
         """
         self._snapshot_raw = snap
         self._snapshot = None if snap is None else _resolve_snapshot(self.entry, snap)
+        # Every snapshot that reaches here was parsed by the running extractor,
+        # so this is what _save_persistent stamps. _replay_stale_snapshot is
+        # the one caller that overrides it afterwards, and it has to: without
+        # this reset an entry that had replayed once would keep writing v16
+        # even after its supplier went back to publishing text, and its cache
+        # would be rejected on every boot from then on.
+        self._snapshot_schema_version = _SNAPSHOT_SCHEMA_VERSION
+        # A snapshot in hand supersedes the blob the schema gate rejected, so a
+        # healthy entry that upgraded across a bump does not carry it for the
+        # life of the coordinator. async_load_persistent assigns
+        # _stale_snapshot after its own _set_snapshot(None), so the load path
+        # still keeps what it rejected.
+        self._stale_snapshot = None
+
+    def _replay_stale_snapshot(self) -> None:
+        """Serve the blob the schema gate rejected, because nothing can replace it.
+
+        Only ever reached when the card downloaded fine and carries no text
+        layer, which no amount of parser work can read, so the choice is this
+        months-old card or no prices at all. The gate is right in every other
+        case and stays: it is how a parser fix reaches a cached user, and it
+        only becomes a trap when there is no fetch left to heal with.
+
+        Refused below ``_DEGRADED_MIN_SCHEMA_VERSION``, where the stored fields
+        do not mean what they say any more. Above it the replayed card is
+        stale, not misread: it keeps the timestamp it was fetched at, so
+        snapshot_age reads honestly and the 7-day stale card fires on its own,
+        and it is written back under its own schema version so a later parser
+        fix can still invalidate it.
+        """
+        blob = self._stale_snapshot
+        if blob is None:
+            return
+        try:
+            snap = _snapshot_from_dict(
+                blob, min_schema_version=_DEGRADED_MIN_SCHEMA_VERSION
+            )
+            fetched_at = datetime.fromisoformat(blob["_cached_at"])
+        except (KeyError, ValueError, TypeError) as err:
+            _LOGGER.warning(
+                "cannot replay the cached snapshot for %s: %s",
+                self.entry.entry_id,
+                err,
+            )
+            self._stale_snapshot = None
+            return
+        self._set_snapshot(snap)
+        self._snapshot_fetched_at = fetched_at
+        cached_probe = blob.get("_probe_key")
+        self._snapshot_probe_key = (
+            cached_probe if isinstance(cached_probe, str) else None
+        )
+        self._snapshot_schema_version = int(blob.get("_schema_version", 1))
+        _LOGGER.warning(
+            "%s publishes its tariff card as page images; serving the cached "
+            "card of %s (schema v%d) rather than no prices at all",
+            self.entry.data.get(CONF_SUPPLIER),
+            fetched_at.date().isoformat(),
+            self._snapshot_schema_version,
+        )
 
     async def _maybe_refresh_snapshot(self) -> None:
         """Run a cheap probe; only refetch the full PDF when it says so.
@@ -167,6 +233,10 @@ class _SnapshotMixin:
         same way: a probe-key match against a sibling coordinator's
         snapshot adopts it without doing any work.
         """
+        # Cleared per attempt, not per supplier, for the same reason
+        # CardNotReadableError is raised per download: a supplier that goes
+        # back to publishing text has to stop being unreadable on its own.
+        self._card_unreadable = False
         result = await fetch_shared(
             self.hass,
             self._session,
@@ -254,6 +324,13 @@ class _SnapshotMixin:
         # than a request to report a layout change. Derived from THIS download,
         # so it stops by itself when the supplier publishes text again.
         unreadable = isinstance(err, CardNotReadableError)
+        self._card_unreadable = unreadable
+        if unreadable and self._snapshot is None:
+            # Nothing left to keep serving. The blob the schema gate rejected
+            # on load is the only card this entry will ever have, so replay it
+            # here, before the repair below picks which of the two unreadable
+            # cards to raise.
+            self._replay_stale_snapshot()
         if not transient:
             self._sync_extractor_issue(
                 result.error_message, transient=False, unreadable=unreadable

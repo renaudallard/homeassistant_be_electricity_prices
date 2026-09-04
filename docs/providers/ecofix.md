@@ -62,6 +62,15 @@ Related reading:
 > unreadable signal is derived per fetch, not from a stored flag, so support
 > resumes on the next refresh.
 >
+> Until then an existing entry keeps serving the last card it managed to parse,
+> across restarts and across an integration upgrade. The schema gate would
+> normally throw that card away so a newer parser could re-read it, which is how
+> a parser fix reaches an existing user; here there is no next fetch to heal
+> with, so `_replay_stale_snapshot` puts the rejected card back rather than
+> leaving the entry with nothing. A brand-new entry has no card to replay, so it
+> sets up with every sensor unavailable and the `extractor_unreadable_no_prices`
+> Repairs card pointing at the Custom (expert) supplier.
+>
 > What is gone is the whole regulated side — the DSO network tables and the tax
 > block — which is most of a Belgian all-in price, so `parse_snapshot` fails
 > loud rather than assembling a partial card. There is no fallback: `current/`

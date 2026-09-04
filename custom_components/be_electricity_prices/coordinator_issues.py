@@ -311,7 +311,8 @@ class _IssuesMixin:
         failed_id = f"extractor_failed_{self.entry.entry_id}"
         unreachable_id = f"extractor_unreachable_{self.entry.entry_id}"
         unreadable_id = f"extractor_unreadable_{self.entry.entry_id}"
-        all_ids = (failed_id, unreachable_id, unreadable_id)
+        no_prices_id = f"extractor_unreadable_no_prices_{self.entry.entry_id}"
+        all_ids = (failed_id, unreachable_id, unreadable_id, no_prices_id)
         # A supplier past its supply end date has stopped publishing, so the
         # fetch failing is the expected outcome and not news. Reporting it
         # stacks an alarming "could not reach the supplier" card on top of
@@ -324,6 +325,12 @@ class _IssuesMixin:
             return
         if transient:
             raise_id, translation_key = unreachable_id, "extractor_unreachable"
+        elif unreadable and self._snapshot is None:
+            # Two different situations wearing one name. An entry with a cached
+            # card keeps pricing off it and needs to be told the figures drift;
+            # an entry with none has every sensor unavailable and no drift to
+            # warn about, so it needs the workaround and nothing else.
+            raise_id, translation_key = no_prices_id, "extractor_unreadable_no_prices"
         elif unreadable:
             raise_id, translation_key = unreadable_id, "extractor_unreadable"
         else:

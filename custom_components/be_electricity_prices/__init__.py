@@ -33,7 +33,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -218,7 +218,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     _migrate_zeroed_custom_impact_bands(hass, entry)
     coordinator = BePricesCoordinator(hass, entry)
     await coordinator.async_load_persistent()
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryNotReady:
+        # A card published as page images does not become readable by asking
+        # again, so ConfigEntryNotReady parks the entry in SETUP_RETRY with no
+        # entities at all and nothing ever gets it out. Set up regardless: the
+        # entities exist and read unavailable, the Repairs card explains the
+        # workaround, and the entry stays reconfigurable. Every other
+        # cold-start failure keeps the retry, which is what it is for.
+        if not coordinator.card_unreadable:
+            raise
 
     entry.runtime_data = coordinator
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
@@ -399,6 +409,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
         "extractor_failed",
         "extractor_unreachable",
         "extractor_unreadable",
+        "extractor_unreadable_no_prices",
         "entsoe_auth_failed",
         "supplier_deprecated",
         "exclusive_night_rate_missing",

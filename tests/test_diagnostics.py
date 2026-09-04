@@ -344,3 +344,27 @@ async def test_diagnostics_returns_placeholder_when_runtime_data_undefined(
     # Don't assign runtime_data: HA returns UNDEFINED for unset attributes.
     dump = await async_get_config_entry_diagnostics(hass, entry)
     assert dump == {"status": "coordinator_not_ready"}
+
+
+async def test_diagnostics_returns_placeholder_when_there_is_no_snapshot(
+    hass: HomeAssistant,
+) -> None:
+    """An entry can now be LOADED with no price table at all.
+
+    A supplier publishing page images is not worth retrying setup over, so the
+    entry stays up with unavailable sensors. Raising on coordinator.data here
+    would block the very bug report the user is trying to file.
+    """
+    entry = _entry_with_data()
+    entry.add_to_hass(hass)
+    entry.runtime_data = SimpleNamespace(
+        _historical_spots={},
+        _historical_spot_quarters={},
+        data=None,
+        _last_error="card has no text layer: 348 characters across 5 page(s)",
+    )
+    dump = await async_get_config_entry_diagnostics(hass, entry)
+    assert dump == {
+        "status": "no_snapshot",
+        "last_error": "card has no text layer: 348 characters across 5 page(s)",
+    }

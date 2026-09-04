@@ -649,6 +649,10 @@
       "title": "Lieferant fuer {supplier} ({contract}) nicht erreichbar",
       "description": "Die Integration konnte die Tarifkarte nach mehreren Versuchen nicht herunterladen: {error}. Sie verwendet weiterhin die zuletzt erfolgreich ausgewerteten Preise. Das ist meist ein voruebergehendes Netzwerk- oder CDN-Problem, das sich beim naechsten Aktualisieren von selbst loest; nutzen Sie den Dienst be_electricity_prices.refresh oder pruefen Sie Ihr Netzwerk, falls es weiter auftritt."
     },
+    "extractor_unreadable_no_prices": {
+      "title": "Keine Preise fur {supplier}: die Tarifkarte ist nicht lesbar",
+      "description": "{supplier} veroffentlicht die Tarifkarte als Seitenbilder ohne Textebene, sodass die Preise nicht ausgelesen werden konnen, und dieser Eintrag hat keine altere Karte im Cache, auf die er zuruckgreifen konnte. Das ist kein Fehler der Integration, und eine Meldung hilft nicht: im Dokument steht nichts zu lesen. Alle Sensoren dieses Eintrags ({contract}) bleiben nicht verfugbar, bis {supplier} wieder eine lesbare Karte veroffentlicht. Fur Preise jetzt gleich: einen Eintrag Benutzerdefiniert (Experte) anlegen und die Werte der Karte von Hand eintragen. Diese Meldung verschwindet von selbst, sobald {supplier} wieder lesbare Karten veroffentlicht."
+    },
     "extractor_unreadable": {
       "title": "Die Tarifkarte von {supplier} ist nicht mehr lesbar",
       "description": "{supplier} veroffentlicht die Tarifkarte jetzt als Seitenbilder ohne Textebene, sodass die Preise nicht mehr ausgelesen werden konnen. Das ist kein Fehler der Integration, und eine Meldung hilft nicht: im Dokument steht nichts Lesbares. Dieser Eintrag verwendet weiter die zuletzt erfolgreich gelesenen Preise ({contract}), die mit jeder neuen Karte weiter von Ihrer echten Rechnung abweichen. Fur korrekte Preise wechseln Sie den Anbieter oder legen Sie einen benutzerdefinierten (Experten-)Eintrag an und tragen die Werte Ihrer Karte selbst ein. Diese Meldung verschwindet von selbst, sobald {supplier} wieder lesbare Karten veroffentlicht."

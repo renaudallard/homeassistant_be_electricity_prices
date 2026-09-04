@@ -649,6 +649,10 @@
       "title": "Kan de leverancier voor {supplier} ({contract}) niet bereiken",
       "description": "De integratie kon de tariefkaart na meerdere pogingen niet downloaden: {error}. Ze blijft de laatst goed ontledede prijzen tonen. Dit is meestal een tijdelijk netwerk- of CDN-probleem dat bij de volgende vernieuwing vanzelf verdwijnt; gebruik de service be_electricity_prices.refresh of controleer je netwerk als het blijft gebeuren."
     },
+    "extractor_unreadable_no_prices": {
+      "title": "Geen prijzen voor {supplier}: de tariefkaart is onleesbaar",
+      "description": "{supplier} publiceert zijn tariefkaart als paginafoto's zonder tekstlaag, waardoor de prijzen er niet uit gelezen kunnen worden, en deze invoer heeft geen oudere kaart in cache om op terug te vallen. Dit is geen fout in de integratie en melden helpt niet: er valt niets te lezen in het document. Alle sensoren van deze invoer ({contract}) blijven onbeschikbaar tot {supplier} weer een leesbare kaart publiceert. Wil je nu prijzen, maak dan een Aangepaste (expert) invoer en typ de waarden van je kaart zelf in. Deze melding verdwijnt vanzelf zodra {supplier} weer leesbare kaarten publiceert."
+    },
     "extractor_unreadable": {
       "title": "De tariefkaart van {supplier} is niet meer leesbaar",
       "description": "{supplier} publiceert zijn tariefkaart nu als paginafoto's zonder tekstlaag, waardoor de prijzen er niet meer uit gelezen kunnen worden. Dit is geen fout in de integratie en melden helpt niet: er valt niets te lezen in het document. Deze invoer blijft de laatst succesvol ingelezen prijzen gebruiken ({contract}); die wijken elke maand verder af van je echte factuur. Om correct te blijven, stap over naar een andere leverancier of maak een Aangepaste (expert) invoer en typ de waarden van je kaart zelf in. Deze melding verdwijnt vanzelf zodra {supplier} weer leesbare kaarten publiceert."

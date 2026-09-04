@@ -940,14 +940,41 @@ class _MigratingStore(Store[dict[str, Any]]):
 # side banded and the energy side flat.
 _SNAPSHOT_SCHEMA_VERSION = 50
 
+# The oldest stored schema a rejected blob may still be replayed from when no
+# fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
+# the floor because it is the one bump in fifty that changed what a stored
+# field MEANS rather than adding one: before it the blob held the card as
+# priced, so replaying it through _resolve_snapshot would gross a professional
+# entry's rates by its VAT rate a second time. Every later bump either adds a
+# field, which loads at the dataclass default, or corrects one supplier's
+# parsed value, which is drift on a card already being served months late and
+# is what the stale-snapshot card says out loud. Move this only for a bump that
+# changes a meaning, never for one that adds a field or corrects a value, or
+# the replay stops rescuing anybody.
+_DEGRADED_MIN_SCHEMA_VERSION = 16
+
 
 def _snapshot_to_dict(
-    snap: SupplierSnapshot, fetched_at: datetime, probe_key: str | None = None
+    snap: SupplierSnapshot,
+    fetched_at: datetime,
+    probe_key: str | None = None,
+    *,
+    schema_version: int = _SNAPSHOT_SCHEMA_VERSION,
 ) -> dict[str, Any]:
+    """Serialise one snapshot for the Store.
+
+    ``schema_version`` is what gets stamped, and it is an argument only so a
+    replayed blob is written back under the version it was parsed by rather
+    than the running one. Stamping it current would launder a v16 card into
+    looking freshly parsed, and the next release whose parser fix is meant to
+    reach this user would have nothing left to invalidate. Keyword-only,
+    because it is the one argument here that goes silently wrong rather than
+    loudly wrong if a caller gets the order out.
+    """
     return {
         "_cached_at": fetched_at.isoformat(),
         "_probe_key": probe_key,
-        "_schema_version": _SNAPSHOT_SCHEMA_VERSION,
+        "_schema_version": schema_version,
         "supplier": snap.supplier,
         "contract": snap.contract,
         "energy_kind": _energy_kind(snap.energy),
@@ -976,8 +1003,18 @@ def _taxes_from_dict(data: dict[str, Any]) -> TaxOverlay:
     )
 
 
-def _snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
-    if data.get("_schema_version", 1) < _SNAPSHOT_SCHEMA_VERSION:
+def _snapshot_from_dict(
+    data: dict[str, Any], *, min_schema_version: int = _SNAPSHOT_SCHEMA_VERSION
+) -> SupplierSnapshot:
+    """Rebuild a snapshot from its stored dict.
+
+    ``min_schema_version`` is the oldest schema the caller will read. The
+    default is the running one, which is the healing gate: anything older is
+    refused so the next refresh re-parses the card with the current extractor.
+    The replay path lowers it to ``_DEGRADED_MIN_SCHEMA_VERSION``, because for
+    a supplier publishing page images there is no next refresh to heal with.
+    """
+    if data.get("_schema_version", 1) < min_schema_version:
         raise ValueError(
             "snapshot schema is older than the running integration; "
             "discarding cache so the next refresh re-fetches"

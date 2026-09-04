@@ -2828,7 +2828,9 @@ def _render_report(
             "These suppliers publish their tariff card as page images, so there "
             "is no text layer to parse. No change to this repository can fix "
             "them; affected entries raise the `extractor_unreadable` Repairs "
-            "card pointing at the custom-supplier workaround. These rows do "
+            "card when a cached card is still being served, or its "
+            "`_no_prices` twin when there is none, both pointing at the "
+            "custom-supplier workaround. These rows do "
             "not fail the run, and they disappear on their own if the supplier "
             "goes back to publishing text."
         )
