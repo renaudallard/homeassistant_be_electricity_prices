@@ -54,6 +54,9 @@ from .const import (
 from .providers.base import (
     ExtractorError,
 )
+from .fees import (
+    _compensation_kva,
+)
 from .snapshot_store import (
     SNAPSHOT_STALE_DAYS,
 )
@@ -250,6 +253,41 @@ class _IssuesMixin:
             "connection_fee_missing",
             self._snapshot is not None
             and self._snapshot.taxes.region_connection_fee_unavailable,
+        )
+
+    def _sync_prosumer_gap_issue(self) -> None:
+        """Flag a compensation install whose card omits the prosumer tariff.
+
+        Cociter's trihoraire card prints the supplier's own 37,10 EUR/kVA
+        forfait "en regime de compensation" but drops the "Tarif prosumer"
+        column its variable card carries, so the DSO half of the fee is absent
+        rather than zero. The tariff is regulated and identical whichever
+        supplier reprints it: TotalEnergies publishes it on the same Walloon
+        row as the PIC / MEDIUM / ECO bands, which is what rules out reading
+        the omission as "the incitative configuration abolishes it".
+
+        ``_prosumer_monthly_fee`` contributes 0 for a missing rate, so the
+        entry silently under-bills by the DSO tariff alone: 81 to 99 EUR per
+        kVA per year across the five Walloon GRDs, which is 405 to 496 EUR a
+        year on a 5 kVA inverter. Say what the cost excludes rather than
+        invent a figure from another supplier's card, and clear it the moment
+        the column comes back.
+
+        Gated through ``_compensation_kva`` so the eligibility rule stays in
+        the one place that owns it: Wallonia, the compensation regime, and a
+        kVA that parses above zero.
+        """
+        overlay = (
+            self._snapshot.dsos.get(str(self.entry.data.get(CONF_DSO, "")))
+            if self._snapshot is not None
+            else None
+        )
+        self._sync_issue(
+            "prosumer_tariff_missing",
+            _compensation_kva(self.entry) > 0.0
+            and overlay is not None
+            and overlay.prosumer_eur_per_kva_year is None,
+            extra={"dso": str(self.entry.data.get(CONF_DSO, ""))},
         )
 
     def _entry_extractor(self) -> SupplierExtractor | None:

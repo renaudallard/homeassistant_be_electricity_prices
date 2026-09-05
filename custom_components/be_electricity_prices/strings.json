@@ -684,6 +684,10 @@
     "connection_fee_missing": {
       "title": "{supplier} ({contract}) no longer publishes the Walloon connection fee",
       "description": "Since the August 2026 card, {supplier} has stopped printing the \"Redevance de raccordement\" row on its Walloon tariff cards. Wallonia still levies this charge and the card's own terms keep taxes and network fees fully passed through, but the rate is published nowhere this integration can read.\n\nPrices for this entry therefore exclude it, which under-bills by roughly 0,075 c€/kWh (about €2.60 per year at 3500 kWh). Everything else on the card, including the new flat federal excise, is priced normally. This notice clears automatically once {supplier} prints the row again."
+    },
+    "prosumer_tariff_missing": {
+      "title": "{supplier} ({contract}) does not publish the {dso} prosumer tariff",
+      "description": "This entry is on the Walloon compensation regime, so the DSO levies a prosumer tariff per kVA of inverter. {supplier}'s card for {contract} prints its own photovoltaic forfait but omits the \"Tarif prosumer\" column that its other cards carry, so the network half of the fee is published nowhere this integration can read.\n\nPrices for this entry therefore exclude it. The tariff runs from about €81 to €99 per kVA per year across the Walloon network operators, so a 5 kVA inverter is under-billed by roughly €400 to €500 a year. Everything else on the card, including the supplier's own forfait, is priced normally. This notice clears automatically once {supplier} prints the column again."
     }
   },
   "entity": {

@@ -688,6 +688,10 @@
     "connection_fee_missing": {
       "title": "{supplier} ({contract}) veröffentlicht die wallonische Anschlussgebühr nicht mehr",
       "description": "Seit der Tarifkarte vom August 2026 druckt {supplier} die Zeile „Redevance de raccordement“ nicht mehr auf seinen wallonischen Tarifkarten. Die Wallonie erhebt diese Gebühr weiterhin, und die Bedingungen der Karte sehen vor, dass Steuern und Netzentgelte vollständig weitergegeben werden, doch der Satz wird nirgends veröffentlicht, wo diese Integration ihn lesen könnte.\n\nDie Preise dieses Eintrags schließen ihn daher aus, was rund 0,075 c€/kWh zu wenig berechnet (etwa 2,60 € pro Jahr bei 3500 kWh). Alles übrige auf der Karte, auch die neue pauschale föderale Akzise, wird normal berechnet. Dieser Hinweis verschwindet automatisch, sobald {supplier} die Zeile wieder druckt."
+    },
+    "prosumer_tariff_missing": {
+      "title": "{supplier} ({contract}) veröffentlicht den Prosumer-Tarif von {dso} nicht",
+      "description": "Dieser Eintrag unterliegt der wallonischen Kompensationsregelung, sodass der Netzbetreiber einen Prosumer-Tarif je kVA Wechselrichterleistung erhebt. Die Karte von {supplier} für {contract} nennt zwar die eigene Photovoltaik-Pauschale, lässt aber die Spalte „Tarif prosumer“ weg, die ihre übrigen Karten führen; der Netzanteil ist damit nirgends veröffentlicht, wo diese Integration ihn lesen könnte.\n\nDie Preise dieses Eintrags schließen ihn deshalb aus. Der Tarif liegt je nach Netzbetreiber bei etwa 81 bis 99 € je kVA und Jahr, ein Wechselrichter mit 5 kVA wird also um rund 400 bis 500 € pro Jahr zu niedrig abgerechnet. Alles übrige auf der Karte, einschließlich der Pauschale des Lieferanten selbst, wird normal berechnet. Dieser Hinweis verschwindet automatisch, sobald {supplier} die Spalte wieder veröffentlicht."
     }
   },
   "entity": {

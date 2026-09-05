@@ -2217,6 +2217,7 @@ _REPAIR_ISSUE_KINDS = (
     "exclusive_night_rate_missing",
     "impact_rates_missing",
     "connection_fee_missing",
+    "prosumer_tariff_missing",
 )
 
 
@@ -3646,6 +3647,94 @@ async def test_missing_walloon_connection_fee_raises_and_clears_a_repair(
     )
     coord._sync_connection_fee_issue()
     assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_missing_walloon_prosumer_tariff_raises_and_clears_a_repair(
+    hass: HomeAssistant,
+) -> None:
+    """Cociter's trihoraire card prints its own PV forfait "en regime de
+    compensation" but drops the DSO "Tarif prosumer" column its variable card
+    carries. _prosumer_monthly_fee contributes 0 for a missing rate, so the
+    entry under-bills by 81 to 99 EUR/kVA/year without saying so."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable_impact",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "compensation",
+            "solar_kva": 5.0,
+        },
+        title="Cociter trihoraire",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    issue_id = f"prosumer_tariff_missing_{entry.entry_id}"
+    registry = ir.async_get(hass)
+
+    coord._snapshot = make_snapshot(
+        dsos={"ores": DsoOverlay(distribution_single=0.1198, transport=0.0274)},
+        supplier_prosumer_eur_per_kva_year=37.1,
+    )
+    coord._sync_prosumer_gap_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+    # The column comes back: the DSO half is read again and the notice clears.
+    coord._snapshot = make_snapshot(
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.1198,
+                transport=0.0274,
+                prosumer_eur_per_kva_year=85.84,
+            )
+        },
+        supplier_prosumer_eur_per_kva_year=37.1,
+    )
+    coord._sync_prosumer_gap_issue()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_prosumer_gap_is_silent_outside_the_compensation_regime(
+    hass: HomeAssistant,
+) -> None:
+    """The same missing column on an injection-regime entry is not a gap: no
+    prosumer tariff is due, so raising there would be noise on every Walloon
+    card that legitimately omits the column."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable_impact",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+            "solar_regime": "injection",
+            "solar_kva": 5.0,
+        },
+        title="Cociter trihoraire injection",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        dsos={"ores": DsoOverlay(distribution_single=0.1198, transport=0.0274)},
+    )
+    coord._sync_prosumer_gap_issue()
+    assert (
+        ir.async_get(hass).async_get_issue(
+            DOMAIN, f"prosumer_tariff_missing_{entry.entry_id}"
+        )
+        is None
+    )
 
 
 async def test_spot_monthly_mean_waits_for_the_historical_spot_fill(

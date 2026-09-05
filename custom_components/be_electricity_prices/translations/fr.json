@@ -688,6 +688,10 @@
     "connection_fee_missing": {
       "title": "{supplier} ({contract}) ne publie plus la redevance de raccordement wallonne",
       "description": "Depuis la carte tarifaire d'août 2026, {supplier} n'imprime plus la ligne « Redevance de raccordement » sur ses cartes wallonnes. La Wallonie prélève toujours cette redevance et les conditions de la carte prévoient que les taxes et les tarifs de réseau restent entièrement répercutés, mais le taux n'est publié nulle part où cette intégration puisse le lire.\n\nLes prix de cette entrée l'excluent donc, ce qui sous-facture d'environ 0,075 c€/kWh (environ 2,60 € par an pour 3500 kWh). Tout le reste de la carte, y compris la nouvelle accise fédérale forfaitaire, est facturé normalement. Cet avis disparaît automatiquement dès que {supplier} réimprime la ligne."
+    },
+    "prosumer_tariff_missing": {
+      "title": "{supplier} ({contract}) ne publie pas le tarif prosumer {dso}",
+      "description": "Cette entrée est en régime de compensation wallon : le GRD facture donc un tarif prosumer par kVA d'onduleur. La carte {contract} de {supplier} affiche son propre forfait photovoltaïque mais omet la colonne « Tarif prosumer » que portent ses autres cartes, si bien que la part réseau de ce forfait n'est publiée nulle part où cette intégration puisse la lire.\n\nLes prix de cette entrée l'excluent donc. Le tarif va d'environ 81 € à 99 € par kVA et par an selon le gestionnaire de réseau : un onduleur de 5 kVA est donc sous-facturé d'environ 400 à 500 € par an. Tout le reste de la carte, y compris le forfait propre au fournisseur, est facturé normalement. Cet avis disparaîtra automatiquement dès que {supplier} publiera à nouveau la colonne."
     }
   },
   "entity": {

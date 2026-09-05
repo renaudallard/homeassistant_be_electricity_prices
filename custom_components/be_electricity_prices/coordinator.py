@@ -985,6 +985,7 @@ class BePricesCoordinator(
         self._sync_exclusive_night_gap_issue()
         self._sync_impact_gap_issue()
         self._sync_connection_fee_issue()
+        self._sync_prosumer_gap_issue()
         return CoordinatorData(
             hourly=hourly,
             resolution=(

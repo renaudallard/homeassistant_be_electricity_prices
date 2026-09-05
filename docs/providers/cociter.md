@@ -270,7 +270,18 @@ The three card layouts (`cociter.py:407-455`):
 - Trihoraire card: 5 numbers per row, `yearly | pic | medium | eco |
   uitsl_nacht`. It is the one layout that is not an extension of the others:
   the mono and bi-hourly columns are gone, because an Impact customer is billed
-  on the Impact network tariff and on nothing else.
+  on the Impact network tariff and on nothing else. It also drops the
+  `tarif_prosumer` column, which the variable card does carry, while still
+  printing the supplier's own 37,10 EUR/kVA forfait "en regime de
+  compensation". That combination is real (the card is headed `Compteur a
+  releve annuel`), so a compensation entry on this contract gets the supplier
+  half of its prosumer fee and none of the DSO half. The tariff is regulated
+  and identical whichever supplier reprints it, which TotalEnergies settles by
+  publishing it on the same Walloon row as its PIC / MEDIUM / ECO bands, so the
+  omission is the card's and not the tariff's. Rather than borrow another
+  supplier's figure, the coordinator raises `prosumer_tariff_missing` and says
+  what the cost excludes: 81 to 99 EUR per kVA per year across the five GRDs,
+  405 to 496 EUR a year on a 5 kVA inverter.
 
 The trihoraire layout is picked out FIRST, by the card's own title (`prix
 variable trihoraire`, `_TRIHORAIRE_CARD_RE`), before anything counts columns.

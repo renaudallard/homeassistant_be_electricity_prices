@@ -688,6 +688,10 @@
     "connection_fee_missing": {
       "title": "{supplier} ({contract}) publiceert de Waalse aansluitingsvergoeding niet meer",
       "description": "Sinds de tariefkaart van augustus 2026 drukt {supplier} de rij \"Redevance de raccordement\" niet meer af op zijn Waalse tariefkaarten. Wallonië heft deze bijdrage nog steeds en de kaart bepaalt zelf dat taksen en netkosten volledig worden doorgerekend, maar het tarief staat nergens waar deze integratie het kan lezen.\n\nDe prijzen voor deze ingave sluiten ze daarom uit, wat ongeveer 0,075 c€/kWh te weinig aanrekent (ongeveer €2,60 per jaar bij 3500 kWh). Al de rest op de kaart, ook de nieuwe vlakke federale accijns, wordt normaal berekend. Deze melding verdwijnt automatisch zodra {supplier} de rij opnieuw afdrukt."
+    },
+    "prosumer_tariff_missing": {
+      "title": "{supplier} ({contract}) publiceert het prosumententarief van {dso} niet",
+      "description": "Deze vermelding valt onder het Waalse compensatieregime, waardoor de distributienetbeheerder een prosumententarief per kVA omvormervermogen aanrekent. De kaart van {supplier} voor {contract} vermeldt wel het eigen fotovoltaïsche forfait, maar laat de kolom \"Tarif prosumer\" weg die op de andere kaarten wel staat, zodat het netgedeelte nergens staat waar deze integratie het kan lezen.\n\nDe prijzen voor deze vermelding sluiten het daarom uit. Het tarief loopt van ongeveer €81 tot €99 per kVA per jaar naargelang de netbeheerder, dus een omvormer van 5 kVA wordt jaarlijks ongeveer €400 tot €500 te weinig aangerekend. Al de rest van de kaart, inclusief het forfait van de leverancier zelf, wordt normaal aangerekend. Deze melding verdwijnt automatisch zodra {supplier} de kolom opnieuw publiceert."
     }
   },
   "entity": {

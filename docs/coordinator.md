@@ -46,7 +46,7 @@ await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
 `entry.runtime_data` is assigned *after* `async_config_entry_first_refresh` returns (`__init__.py:177`). During that very first refresh `runtime_data` is HA's `UNDEFINED` sentinel, not this coordinator. Two guards depend on this:
 
-- `_save_persistent` reads `runtime_data` defensively (`coordinator.py:1223`) and only skips the write when it has been explicitly assigned to a *different* `BePricesCoordinator`. It must not skip during first refresh (when the attribute is `UNDEFINED`), or the first snapshot would never persist.
+- `_save_persistent` reads `runtime_data` defensively (`coordinator.py:1224`) and only skips the write when it has been explicitly assigned to a *different* `BePricesCoordinator`. It must not skip during first refresh (when the attribute is `UNDEFINED`), or the first snapshot would never persist.
 - `async_unload_entry` (`__init__.py:332`) reads `runtime_data` with `getattr(..., None)` and an `isinstance` check, because a setup that raised before line 172 leaves the sentinel in place; a bare `is not None` test would pass and then `AttributeError` on `._supplier_tuple`, masking the real setup failure.
 
 Never read `entry.runtime_data` as "this coordinator" during first refresh.
@@ -55,8 +55,8 @@ Never read `entry.runtime_data` as "this coordinator" during first refresh.
 
 `__init__` snapshots two things at construction time so later reload races resolve correctly:
 
-- `self._supplier_tuple` (`coordinator.py:881`): the `(supplier, contract, region)` triple frozen at build time. `async_unload_entry` (`__init__.py:332`) and `_save_persistent` (`coordinator.py:1223`) target this *original* tuple even after an OptionsFlow edit has mutated `entry.data`, because HA mutates `entry.data` before firing the reload.
-- `self._entry_data_signature` (`coordinator.py:890`): a `frozenset` of every `entry.data` item, built by `_compute_data_signature` (`coordinator.py:1110`). `_async_options_updated` (`__init__.py:428`) compares it against the current entry to skip a needless reload when only `entry.options` changed (an OptionsFlow no-op `options = {}` finalize). Every load-bearing field lives in `entry.data`, so an options-only delta is safe to ignore.
+- `self._supplier_tuple` (`coordinator.py:881`): the `(supplier, contract, region)` triple frozen at build time. `async_unload_entry` (`__init__.py:332`) and `_save_persistent` (`coordinator.py:1224`) target this *original* tuple even after an OptionsFlow edit has mutated `entry.data`, because HA mutates `entry.data` before firing the reload.
+- `self._entry_data_signature` (`coordinator.py:890`): a `frozenset` of every `entry.data` item, built by `_compute_data_signature` (`coordinator.py:1111`). `_async_options_updated` (`__init__.py:429`) compares it against the current entry to skip a needless reload when only `entry.options` changed (an OptionsFlow no-op `options = {}` finalize). Every load-bearing field lives in `entry.data`, so an options-only delta is safe to ignore.
 
 Other important instance fields set in `__init__`:
 
@@ -245,7 +245,7 @@ The curve is persisted under the `spot_cache` payload key and restored beside `h
 
 `_ensure_historical_spots` (`coordinator_spots.py:234`) fills `self._historical_spots` for every local hour in `[Jan 1, today]`, fetching missing week-sized chunks from ENTSO-E and handing whatever ENTSO-E could not answer to the keyless fallback in a single request. It runs only for dynamic or spot-indexed-injection contracts (`coordinator_spots.py:234`) and needs the entry's API key (`coordinator_spots.py:234`), returning early if there is none. Details:
 
-- **The FIRST tick asks for the delivery month, not the year.** `async_config_entry_first_refresh` runs inside setup, and setup is what the config flow's final step waits on, so a cold cache spent that step fetching 35 week-chunks: minutes of spinner on a fresh install, and far longer with ENTSO-E down. The first tick fetches `[month start, today]` -- the window the monthly mean computed straight after cannot do without -- clears `_year_spots_deferred` and schedules `_fill_year_spots` (`coordinator.py:1022`) as an entry-tied background task, which walks `[Jan 1, today]` and then requests a refresh. What the deferral costs is one tick of the year-to-date's past hours, which bill their network and tax legs and forfeit only the energy term exactly as a cold cache already makes them; the requested refresh puts them back. Entry-tied, so unloading cancels it and a user who walks away from a fresh install mid-backfill leaves no fetch running.
+- **The FIRST tick asks for the delivery month, not the year.** `async_config_entry_first_refresh` runs inside setup, and setup is what the config flow's final step waits on, so a cold cache spent that step fetching 35 week-chunks: minutes of spinner on a fresh install, and far longer with ENTSO-E down. The first tick fetches `[month start, today]` -- the window the monthly mean computed straight after cannot do without -- clears `_year_spots_deferred` and schedules `_fill_year_spots` (`coordinator.py:1023`) as an entry-tied background task, which walks `[Jan 1, today]` and then requests a refresh. What the deferral costs is one tick of the year-to-date's past hours, which bill their network and tax legs and forfeit only the energy term exactly as a cold cache already makes them; the requested refresh puts them back. Entry-tied, so unloading cancels it and a user who walks away from a fresh install mid-backfill leaves no fetch running.
 - **One walk at a time.** `_ensure_historical_spots` is a thin wrapper holding `_spot_fetch_lock` around `_walk_historical_spots`. Three callers reach it from outside the tick -- the statistics backfill, the compare page, and that deferred year-fill -- and nothing serialised them, so two could walk the same empty cache at once and each fetch what the other was already fetching. Whichever arrives second finds the days present and returns without a request.
 
 - A day counts as "present" when at least 20 of its 24 hours are cached (`coordinator_spots.py:261`), tolerating ENTSO-E source gaps and DST seams (23/25-hour days).
@@ -293,7 +293,7 @@ The current-slot sensors (`current_price`, `energy_component`, `network_componen
 
 ## 5. Slot selection and the live price table
 
-`_build_hourly` (`coordinator.py:1123`) builds the UTC-keyed `hourly` table:
+`_build_hourly` (`coordinator.py:1124`) builds the UTC-keyed `hourly` table:
 
 - **Dynamic** (`coordinator.py:826`): one breakdown per spot returned by ENTSO-E; the table's resolution follows the spot grid (15-minute for quarter-hourly suppliers).
 - **Static/TOU/Impact** (`coordinator.py:887`): iterate UTC from local midnight to the start of the day after tomorrow, one slot per clock hour, so DST seams keep the wall-clock gap correct (47 slots spring-forward, 49 fall-back, 48 otherwise). The local-midnight anchor makes `today_min`/`today_max`/`today_average` cover the full local day rather than "now to midnight".
@@ -318,7 +318,7 @@ Widening the table to three local days would also have papered over the symptom,
 
 ### 5.2 Cheapest / most-expensive window
 
-The window computation is *not* owned by the coordinator. `_find_window` (`__init__.py:472`) is a pure helper behind the `cheapest_window` and `most_expensive_window` services (`__init__.py:472`, `__init__.py:472`). It reads `coordinator.data.hourly` and `.resolution`, scales the requested `duration_hours` to slots via `slots_per_hour(resolution)` (`__init__.py:629`), and only considers strictly time-contiguous runs (`__init__.py:629`) so a gap in a dynamic table can't stretch a window past its duration. `_today_ranked` in `sensor.py` computes the `cheapest_4h_today` / `most_expensive_4h_today` attributes on the `current_price` sensor.
+The window computation is *not* owned by the coordinator. `_find_window` (`__init__.py:473`) is a pure helper behind the `cheapest_window` and `most_expensive_window` services (`__init__.py:473`, `__init__.py:473`). It reads `coordinator.data.hourly` and `.resolution`, scales the requested `duration_hours` to slots via `slots_per_hour(resolution)` (`__init__.py:630`), and only considers strictly time-contiguous runs (`__init__.py:630`) so a gap in a dynamic table can't stretch a window past its duration. `_today_ranked` in `sensor.py` computes the `cheapest_4h_today` / `most_expensive_4h_today` attributes on the `current_price` sensor.
 
 ## 6. Monthly capacity peak (Flanders)
 
@@ -415,20 +415,22 @@ Repairs issues, all keyed by `entry_id`:
 
 | Issue | Raised by | When | Line |
 |-------|-----------|------|------|
-| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d) | 154 |
-| `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure | 264 |
-| `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures | 264 |
-| `extractor_unreadable` | `_sync_extractor_issue(unreadable=True)` | same, but the fetch raised `CardNotReadableError` (`providers/base.py:1035`): the card downloaded fine and carries no text layer, so it names the custom-supplier workaround instead of asking for a GitHub issue | 279 |
-| `extractor_unreadable_no_prices` | `_sync_extractor_issue(unreadable=True)` with `_snapshot is None` | the same unreadable card on an entry with nothing cached to serve: a brand-new entry, or one whose blob fell below `_DEGRADED_MIN_SCHEMA_VERSION`. Every sensor reads unavailable, so it names the workaround and says nothing about drift | 279 |
-| `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 322 |
-| `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) AND the successor has a contract in the entry's region | 338 |
-| `supplier_deprecated_no_successor` | `_sync_deprecated_supplier_issue` | same, but the successor is unset, unknown to this build, or has no contract in the entry's region | 338 |
-| `supplier_deprecated_ended` | `_sync_deprecated_supplier_issue` | same as `supplier_deprecated`, but the local date is past `deprecated_until`: the transfer has happened and this entry has stopped updating | 338 |
-| `supplier_deprecated_ended_no_successor` | `_sync_deprecated_supplier_issue` | same, past the date, with no usable successor | 338 |
-| `connection_fee_missing` | `_sync_connection_fee_issue` | the snapshot carries `TaxOverlay.region_connection_fee_unavailable`, i.e. a Walloon card that stopped printing the connection-fee row | 233 |
+| `snapshot_stale` | `_sync_stale_issue` | age > `SNAPSHOT_STALE_DAYS` (7 d) | 158 |
+| `extractor_failed` | `_sync_extractor_issue(transient=False)` | parse error / 404 / non-PDF; on the first failure | 316 |
+| `extractor_unreachable` | `_sync_extractor_issue(transient=True)` | network timeout / reset / 5xx / anti-bot 403; only after `_EXTRACTOR_ISSUE_THRESHOLD` consecutive failures | 316 |
+| `extractor_unreadable` | `_sync_extractor_issue(unreadable=True)` | same, but the fetch raised `CardNotReadableError` (`providers/base.py:1035`): the card downloaded fine and carries no text layer, so it names the custom-supplier workaround instead of asking for a GitHub issue | 316 |
+| `extractor_unreadable_no_prices` | `_sync_extractor_issue(unreadable=True)` with `_snapshot is None` | the same unreadable card on an entry with nothing cached to serve: a brand-new entry, or one whose blob fell below `_DEGRADED_MIN_SCHEMA_VERSION`. Every sensor reads unavailable, so it names the workaround and says nothing about drift | 316 |
+| `entsoe_auth_failed` | `_sync_entsoe_auth_issue` | ENTSO-E returns 401 for the API key | 393 |
+| `supplier_deprecated` | `_sync_deprecated_supplier_issue` | the entry's supplier carries `deprecated_until` in the registry (`providers/base.py`) AND the successor has a contract in the entry's region | 409 |
+| `supplier_deprecated_no_successor` | `_sync_deprecated_supplier_issue` | same, but the successor is unset, unknown to this build, or has no contract in the entry's region | 409 |
+| `supplier_deprecated_ended` | `_sync_deprecated_supplier_issue` | same as `supplier_deprecated`, but the local date is past `deprecated_until`: the transfer has happened and this entry has stopped updating | 409 |
+| `supplier_deprecated_ended_no_successor` | `_sync_deprecated_supplier_issue` | same, past the date, with no usable successor | 409 |
+| `connection_fee_missing` | `_sync_connection_fee_issue` | the snapshot carries `TaxOverlay.region_connection_fee_unavailable`, i.e. a Walloon card that stopped printing the connection-fee row | 237 |
+| `prosumer_tariff_missing` | `_sync_prosumer_gap_issue` | the entry is a Walloon compensation install (`_compensation_kva` above zero) and its DSO overlay carries no `prosumer_eur_per_kva_year`, i.e. a card that omits the "Tarif prosumer" column | 258 |
 
-The first four are failure states and clear on a successful refresh, as does
-`connection_fee_missing` once the supplier prints the row again.
+The first four are failure states and clear on a successful refresh, as do
+`connection_fee_missing` and `prosumer_tariff_missing` once the supplier prints
+the row or the column again.
 `supplier_deprecated` is not: it is a lifecycle notice, evaluated first on every
 tick (`coordinator.py:566`) straight off the registry flag, and it clears only
 when the entry is re-pointed at a supplier that has not
@@ -454,11 +456,11 @@ Negative-cache TTLs: `_SHARED_FAILURE_TTL` is 5 minutes (`snapshot_store.py:100`
 
 ### 9.1 Forcing a refresh
 
-`async_force_refresh` (`coordinator.py:1050`) backs the `be_electricity_prices.refresh` service (`__init__.py:362`). It sets the one-shot `_force_refresh` flag (honoured by `_self_is_fresh` and `_shared_is_fresh`), clears the spot cache, and pops the shared snapshot and negative-fetch rows so a sibling on the same tuple also re-fetches. It **also drops this tuple's per-month archive rows** via `_drop_monthly_rows` (`coordinator.py:1050`): the YTD walk runs Jan 1 through today inclusive, so the current delivery month sits in that cache too, with no TTL. Without the drop, a supplier that re-issues the current month's card under the same month (Eneco publishes corrected volumes) went on being billed from the first card fetched for the life of the HA process, and this service — whose whole purpose is picking up a corrected card — could not clear it. It intentionally keeps `self._snapshot`/`_snapshot_fetched_at` so a transient failure during the forced refresh doesn't blank the entry. `reset_monthly_peak` (`coordinator.py:1050`), behind the diagnostic Reset-peak button, drops `_peak_kw` and persists immediately.
+`async_force_refresh` (`coordinator.py:1051`) backs the `be_electricity_prices.refresh` service (`__init__.py:362`). It sets the one-shot `_force_refresh` flag (honoured by `_self_is_fresh` and `_shared_is_fresh`), clears the spot cache, and pops the shared snapshot and negative-fetch rows so a sibling on the same tuple also re-fetches. It **also drops this tuple's per-month archive rows** via `_drop_monthly_rows` (`coordinator.py:1051`): the YTD walk runs Jan 1 through today inclusive, so the current delivery month sits in that cache too, with no TTL. Without the drop, a supplier that re-issues the current month's card under the same month (Eneco publishes corrected volumes) went on being billed from the first card fetched for the life of the HA process, and this service — whose whole purpose is picking up a corrected card — could not clear it. It intentionally keeps `self._snapshot`/`_snapshot_fetched_at` so a transient failure during the forced refresh doesn't blank the entry. `reset_monthly_peak` (`coordinator.py:1051`), behind the diagnostic Reset-peak button, drops `_peak_kw` and persists immediately.
 
 ## 10. Persistence
 
-`_save_persistent` (`coordinator.py:1223`) writes `entry_supplier`/`entry_contract`/`entry_region` (the frozen `_supplier_tuple`, not live `entry.data`), the peak, the serialized snapshot, and `historical_spots` pruned to the current YTD window. Two guards prevent a slow tick from clobbering a reloaded entry's state:
+`_save_persistent` (`coordinator.py:1224`) writes `entry_supplier`/`entry_contract`/`entry_region` (the frozen `_supplier_tuple`, not live `entry.data`), the peak, the serialized snapshot, and `historical_spots` pruned to the current YTD window. Two guards prevent a slow tick from clobbering a reloaded entry's state:
 
 - **Identity guard** (`coordinator.py:948`): skip when `runtime_data` is a *different* coordinator (must not skip during first refresh, when it is `UNDEFINED`).
 - **Tuple guard** (`coordinator.py:968`): skip when live `entry.data` has drifted from `_supplier_tuple` (the OptionsFlow window where `entry.data` changed but `runtime_data` is still swapping).
