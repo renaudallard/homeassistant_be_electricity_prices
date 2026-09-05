@@ -174,6 +174,29 @@ def test_energy_fund_is_flanders_only() -> None:
     assert wallonia.taxes.energy_fund_eur_per_month == 0.0
 
 
+def test_energy_fund_is_read_on_every_card_layout() -> None:
+    """Only the Fix and Flex cards issued from January 2026 wrap between the
+    label and "(domicilieadres)"; every 2025 issue and every Dynamic issue
+    prints them on one line. Requiring the newline returned the 0.0 default
+    for 45 of the 63 cards published since January 2025, which no test could
+    see while that cell prints 0,00 on every one of them.
+
+    The two archive fixtures carry the split: aug26 wraps, dec25 does not.
+    """
+    for fixture, contract in (
+        ("eneco_fix.pdf", "power_fix"),
+        ("eneco_flex.pdf", "power_flex"),
+        ("eneco_dyn.pdf", "power_dynamic"),
+        ("eneco_flex_aug26.pdf", "power_flex"),
+        ("eneco_flex_dec25.pdf", "power_flex"),
+    ):
+        text = fixture_text(fixture).replace(
+            "(domicilieadres) 0,00", "(domicilieadres) 7,77"
+        )
+        snap = parse_snapshot(text, contract, "test://x", REGION_FLANDERS)
+        assert snap.taxes.energy_fund_eur_per_month == pytest.approx(7.77), fixture
+
+
 def test_fix_extracts_taxes() -> None:
     snap = parse_snapshot(
         fixture_text("eneco_fix.pdf"), "power_fix", "test://fix", REGION_FLANDERS

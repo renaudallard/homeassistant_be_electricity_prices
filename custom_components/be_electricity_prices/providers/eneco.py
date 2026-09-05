@@ -556,8 +556,13 @@ def _extract_taxes(text: str, region: str) -> TaxOverlay:
     # the domiciled low-voltage cell, so nothing is mis-billed today; the gate
     # is what keeps a Walloon entry right the month that changes.
     fund = (
+        # _WS already matches a newline, so this reads the label whether or
+        # not the cell wraps. Requiring one tied the read to a layout Eneco
+        # changed: only the Fix and Flex cards issued from January 2026 wrap
+        # here, so 45 of the 63 cards published since January 2025 fell
+        # through to the 0.0 default with nothing to say so.
         re.search(
-            rf"Standaard tarief{_WS}*\n{_WS}*\(domicilieadres\){_WS}+{_NUM}",
+            rf"Standaard tarief{_WS}*\(domicilieadres\){_WS}+{_NUM}",
             text,
         )
         if region == REGION_FLANDERS
