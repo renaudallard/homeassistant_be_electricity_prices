@@ -2610,6 +2610,22 @@ def _validate_dsos(
     which is what they did."""
     dsos = getattr(snap, "dsos", None) or {}
     for key, overlay in dsos.items():
+        metering = getattr(overlay, "data_management_per_year", None)
+        if metering is not None:
+            # A Brussels row also carries the <= 13 kVA Sibelga power term when
+            # the supplier folds it in, so it runs well above what every
+            # Flemish and Walloon row measures. Two ceilings and not one,
+            # because a single ceiling clearing the Brussels figure would miss
+            # the misread this exists for: a Walloon row read one column right
+            # takes the prosumer tariff, 85,84 instead of ORES's 14,10. One
+            # column left takes the transport rate in c/kWh, which the floor
+            # catches.
+            ceiling = 120.0 if key in _BRUSSELS_DSO_KEYS else 40.0
+            _expect(
+                f"{prefix}: {key} metering fee in [5, {ceiling:.0f}] EUR/yr",
+                5.0 <= metering <= ceiling,
+                detail=f"data_management_per_year={metering}",
+            )
         capacity = getattr(overlay, "capacity_eur_per_kw_year", None)
         if key in require_capacity:
             _expect(
@@ -2625,7 +2641,49 @@ def _validate_dsos(
             )
 
 
-def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:  # noqa: ARG001 - contract_id reserved for richer validation
+# Contracts whose card prints no standing charge at all, so 0,00 EUR/yr is the
+# right value and not an anchor that stopped matching. Engie's Empty House
+# carries no "vaste vergoeding" row, no "abonnement" and no EUR/jaar figure
+# anywhere in its 10 073 characters, which is what an empty-property product is
+# for; Ecopower's Groene Burgerstroom prints none either, being a cooperative
+# that sells shares rather than a subscription, while its own dynamic card
+# prints 60,00. Listed and not inferred, because the miss this bound exists to
+# catch reads exactly 0,00, so a rule that let any contract off would catch
+# nothing. test_no_standing_charge_matches_the_cards holds this set against
+# what the extractors parse, so it cannot drift.
+_NO_STANDING_CHARGE: frozenset[str] = frozenset(
+    {"ecopower_burgerstroom", "engie_empty_house", "engie_pro_empty_house"}
+)
+
+
+def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
+    # The supplier's standing charge, on every rate shape. The floor is the
+    # half that pays: the field defaults to 0,0, so an anchor that stops
+    # matching after a re-render drops the whole abonnement in silence. Bounds
+    # and not a per-contract table, because a supplier re-pricing its
+    # abonnement is ordinary publishing and must not red the daily run. One
+    # misread still gets through: Eneco Dynamic's fee anchor takes the first
+    # number after "Enkelvoudige meter" and the neighbouring cell reads a
+    # c/kWh rate, which no bound can separate from a real fee of the same
+    # magnitude. That one wants a tighter anchor in the extractor, not a wider
+    # assertion here.
+    fee = getattr(energy, "yearly_fixed_fee", None)
+    floor = 0.0 if contract_id in _NO_STANDING_CHARGE else 5.0
+    _expect(
+        f"{prefix}: standing charge in [{floor:.0f}, 300] EUR/yr",
+        fee is not None and floor <= fee <= 300.0,
+        detail=f"yearly_fixed_fee={fee}",
+    )
+    # Bounded from above only: a card that prints "-" for the exclusive-night
+    # abonnement means that circuit carries none, and four Luminus products do
+    # exactly that, so 0,0 is a published value here and not a miss.
+    night = getattr(energy, "yearly_fixed_fee_exclusive_night", None)
+    if night is not None:
+        _expect(
+            f"{prefix}: exclusive-night standing charge at most 300 EUR/yr",
+            0.0 <= night <= 300.0,
+            detail=f"yearly_fixed_fee_exclusive_night={night}",
+        )
     if isinstance(energy, _RATE_FIXED):
         rate = getattr(energy, "single", None)
         _expect(

@@ -1034,6 +1034,60 @@ def test_injection_shape_is_asserted_even_when_the_card_prints_an_indicative() -
     assert shape_rows and shape_rows[0].ok
 
 
+def test_a_dropped_standing_charge_fails_the_check() -> None:
+    """The floor is the half of the fee bound that pays.
+
+    ``yearly_fixed_fee`` defaults to 0,0, so an abonnement anchor that stops
+    matching after a card re-render drops the whole standing charge in
+    silence. A contract off the allowlist reading 0,00 therefore has to fail,
+    and one on it has to pass, or the bound is decoration.
+    """
+    assert "energyknights_essentia" not in lc._NO_STANDING_CHARGE
+    failures = _energy_failures(SpotMonthlyRates(factor=1.19, base=0.009))
+    assert [f for f in failures if "standing charge" in f], failures
+
+    lc.CHECKS.clear()
+    lc._validate_energy(
+        "x", "engie_empty_house", SpotMonthlyRates(factor=1.19, base=0.009)
+    )
+    assert not [c for c in lc.CHECKS if not c.ok and "standing charge" in c.label]
+
+
+def test_no_standing_charge_matches_the_cards() -> None:
+    """Only a card that prints no standing charge may sit on the allowlist.
+
+    The bound in ``_validate_energy`` refuses a 0,00 EUR/yr abonnement,
+    because that is what a fee anchor looks like once it stops matching.
+    Engie's Empty House and Ecopower's Groene Burgerstroom genuinely print
+    none, so they are listed rather than inferred. Held against the fixtures
+    here so the list cannot outlive the fact, the way _PRO_INJECTION_VAT_EXEMPT
+    did before it got its own test.
+    """
+    from custom_components.be_electricity_prices.const import REGION_FLANDERS
+    from custom_components.be_electricity_prices.providers import ecopower, engie
+
+    from tests import fixture_text
+
+    cards = {
+        "engie_empty_house": lambda: engie.parse_snapshot(
+            "engie_empty_house",
+            {REGION_FLANDERS: fixture_text("engie_empty_house_v.pdf")},
+        ),
+        "ecopower_burgerstroom": lambda: ecopower.parse_snapshot(
+            fixture_text("ecopower_burgerstroom_jul.pdf", layout=True),
+            "test://gbs",
+            "juli 2026",
+        ),
+    }
+    for contract_id, parse in cards.items():
+        assert contract_id in lc._NO_STANDING_CHARGE, contract_id
+        assert parse().energy.yearly_fixed_fee == 0.0, contract_id
+    # No pro Empty House fixture exists and the residential one cannot stand in
+    # for it: the two editions take different branches. Everything else on the
+    # allowlist has to be one of these cards.
+    assert lc._NO_STANDING_CHARGE - set(cards) == {"engie_pro_empty_house"}
+
+
 def test_pro_injection_vat_expectation_matches_the_cards() -> None:
     """The live check's expectation and the extractor must agree.
 
@@ -1356,8 +1410,18 @@ def test_a_spot_monthly_card_with_per_meter_bands_is_fully_bounded(
 
 def test_a_mono_only_spot_monthly_card_is_unaffected(_bound_rate_types: None) -> None:
     """energie.be Variabel prints one formula for every meter. The new band
-    assertions must not start demanding pairs it never had."""
-    assert _energy_failures(SpotMonthlyRates(factor=1.19, base=0.009)) == []
+    assertions must not start demanding pairs it never had.
+
+    The card's own 35,00 EUR/yr standing charge is set because the fee bound
+    reads every rate shape, and a stub left at the dataclass default 0,0 would
+    fail it for a reason this test is not about.
+    """
+    assert (
+        _energy_failures(
+            SpotMonthlyRates(factor=1.19, base=0.009, yearly_fixed_fee=35.0)
+        )
+        == []
+    )
 
 
 def test_sweep_cost_is_reported_and_never_warned_on(

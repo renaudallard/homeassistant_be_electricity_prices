@@ -256,8 +256,8 @@ loaded `base` module.
 ### Structure and main functions
 
 ```
-main()                       scripts/live_check.py:2985  asyncio.run(_run()); rc=8 on harness crash
-  _run()                     scripts/live_check.py:2706  load providers, gather checks, render, exit code
+main()                       scripts/live_check.py:3043  asyncio.run(_run()); rc=8 on harness crash
+  _run()                     scripts/live_check.py:2764  load providers, gather checks, render, exit code
     _load_providers()        scripts/live_check.py:92    file-path import of every provider (no HA)
     _attributed_check(...)   scripts/live_check.py:408   per-supplier wait_for + trace attribution
       _check_eneco ...       scripts/live_check.py:661   one _check_<supplier> per registered extractor
@@ -269,8 +269,8 @@ main()                       scripts/live_check.py:2985  asyncio.run(_run()); rc
     _check_card_freshness()  scripts/live_check.py:1676   resolved card == newest advertised
     _fetch_with_retry(...)   scripts/live_check.py:622   transient-only retry with backoff
     _validate_snapshot(...)  scripts/live_check.py:2431  energy + injection shape gates
-    _drift_warnings(...)     scripts/live_check.py:2969  latency / byte budget checks
-    _render_report(...)      scripts/live_check.py:2623  markdown pass/fail report
+    _drift_warnings(...)     scripts/live_check.py:3027  latency / byte budget checks
+    _render_report(...)      scripts/live_check.py:2639  markdown pass/fail report
 ```
 
 ### Card freshness
@@ -474,7 +474,7 @@ that reads the value 100x too large — and that part still holds.
 
 `_validate_snapshot` (`scripts/live_check.py:2567`) runs two gates:
 
-- `_validate_energy` (`scripts/live_check.py:2628`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:2659`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
@@ -554,15 +554,15 @@ hard cap (`scripts/live_check.py:405`, raised from 240s when the professional ed
 doubled Engie's and Mega's sequential fetch counts), recorded as an extractor failure rather than
 propagating so one hung supplier cannot starve the `gather()`. Every latency budget below must stay
 under that cap, or the supplier is killed before it can report the drift the budget exists to catch.
-The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2713`) bounds individual
+The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2771`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:3160`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:3218`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
-`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:2800`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:3037`) for the known-large catalogues (Bolt,
+`BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:2858`), with per-supplier overrides in
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:3095`) for the known-large catalogues (Bolt,
 Ecofix, Engie, Mega, OCTA+, TotalEnergies) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py:2847`) for those same multi-fetch suppliers plus EBEM, Eneco, Energy Knights and
+(`scripts/live_check.py:2905`) for those same multi-fetch suppliers plus EBEM, Eneco, Energy Knights and
 Luminus, which are slow per fetch rather than large. That last group is the
 recurring one: each answers a residential line in seconds and a GitHub runner
 in minutes, for a byte-identical payload, so the alert reports where the run
@@ -576,8 +576,8 @@ it aggregates every supplier's discovery fetch under one name (`scripts/live_che
 budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see below). Tuning a
 false-firing drift alert means adjusting the override, not the code.
 
-A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:2944`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:3147`). The
+A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:3002`,
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:3205`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever
@@ -612,13 +612,13 @@ the two baselines are identical until the day they are not.
 
 ### Exit codes and the two report side-channels
 
-`_run()` (`scripts/live_check.py:2706`) splits checks into `extractor` and `catalog` kinds. The
+`_run()` (`scripts/live_check.py:2764`) splits checks into `extractor` and `catalog` kinds. The
 extractor report (with the metrics block) is printed to stdout, which the workflow captures. The
 catalog diff is written to `catalog_report.md` and the drift warnings to `drift_report.md` at the
-repo root (`scripts/live_check.py:2773`), each a side-channel the workflow reads to file a separate
+repo root (`scripts/live_check.py:2831`), each a side-channel the workflow reads to file a separate
 issue so the three failure modes never conflate in one thread.
 
-The exit code is bit-encoded (`scripts/live_check.py:2783`):
+The exit code is bit-encoded (`scripts/live_check.py:2841`):
 
 | Bit | Value | Meaning | Retried by workflow? |
 | --- | --- | --- | --- |
@@ -627,7 +627,7 @@ The exit code is bit-encoded (`scripts/live_check.py:2783`):
 | 2 | 4 | drift alert (latency or byte budget blown) | no |
 | - | 8 | harness crash (top-level Python exception in the script) | no |
 
-`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:2993`) so the workflow
+`rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py:3051`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
 
 ### Unreadable cards do not gate bit 0
@@ -640,7 +640,7 @@ rows). It also handed every other supplier seven rolls of the dice at a transien
 is where the collateral rows in those issues came from.
 
 `_record` (`scripts/live_check.py:530`) marks such a check `expected`, and `_extractor_regressions`
-(`scripts/live_check.py:2887`) is the single definition of what gates CI. The classification reads
+(`scripts/live_check.py:2945`) is the single definition of what gates CI. The classification reads
 the exception type the fetch sites already write into the detail string
 (`CardNotReadableError`, raised by `providers/_pdf.py`), so it follows the card actually
 published rather than a hardcoded supplier list: a supplier that goes back to publishing text
