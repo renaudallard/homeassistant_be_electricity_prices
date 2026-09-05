@@ -91,8 +91,10 @@ Notes:
 
 `fetch` (`eneco.py:146-161`) validates the contract id, scrapes the listing,
 resolves the live PDF URL, downloads and extracts its text, then delegates to
-`parse_snapshot`. The `region` argument is ignored: one PDF per contract covers
-every region the contract is sold in (`eneco.py:149`).
+`parse_snapshot`. One PDF per contract still covers every region the contract is
+sold in, so `region` never selects the card; it is forwarded into the parse
+(`eneco.py:161`) and reaches the tax overlay alone (`eneco.py:293`), where it
+gates the Flemish energy fund out of Wallonia (`eneco.py:552-570`).
 
 ```
 fetch(session, contract_id, region)
@@ -151,9 +153,10 @@ candidate:
 Returns `None` when no volume in the range yields a covering snapshot
 (`eneco.py:207`) or when the contract id is unknown (`eneco.py:181-183`); the
 coordinator then falls back to the current snapshot as a proxy. This behaviour is
-pinned by `test_fetch_for_month_*` (`tests/test_eneco.py:394-452`): a match
+pinned by `test_fetch_for_month_*` (`tests/test_eneco.py:394-488`): a match
 returns the snapshot, a validity mismatch returns `None`, a 404 for every volume
-returns `None`, and an unknown contract returns `None` rather than raising.
+returns `None`, an unknown contract returns `None` rather than raising, and a
+Walloon caller gets the Flemish energy fund zeroed on the archived card too.
 
 ### `discover`
 
@@ -173,7 +176,7 @@ SupplierSnapshot(
     contract=contract_id,
     energy=_extract_energy(text, contract_id),      # eneco.py:306-313
     dsos=_extract_dsos(text),                        # eneco.py:422-434
-    taxes=_extract_taxes(text),                      # eneco.py:510-583
+    taxes=_extract_taxes(text, region),              # eneco.py:510-583
     source_url=source_url,
     publication_label=_extract_publication_month(text),  # eneco.py:301-303
     valid_until=parse_valid_until(text),             # _pdf.py:794
@@ -342,7 +345,7 @@ Illustrative Antwerpen values: `distribution_single = 0.0535`,
 | `flanders_renewables` | "Bijdrage groene stroom en WKK ... (€cent/kWh)" | `eneco.py:528-532`, `574` |
 | `wallonia_renewables` | "Bijdrage groene stroom Wallonie ... (€cent/kWh)" | `eneco.py:533-537`, `575-579` |
 | `region_connection_fee` | "Aansluitingsvergoeding elektriciteit ... (€cent/kWh)" | `eneco.py:538-551`, `580` |
-| `energy_fund_eur_per_month` | "Standaard tarief (domicilieadres)" | `eneco.py:552-570`, `581` |
+| `energy_fund_eur_per_month` | "Standaard tarief (domicilieadres)", read for Flanders only (0.0 in Wallonia) | `eneco.py:552-570`, `581` |
 
 The renewables and connection-fee matches anchor on the `(€cent/kWh)` unit token
 rather than the first number after the label, because sibling rows carry `(2)(4)`
@@ -437,6 +440,19 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
   took the product offline. It now anchors on the `(€/jaar)` and
   `Geschatte jaarprijs` tokens (`eneco.py:338-348`, guarded at
   `tests/test_eneco.py:251-260`).
+- **Energiefonds is billed in Flanders only**: the table is headed "Bijdrage
+  Energiefonds (Vlaanderen)" but rides on the one card Eneco serves to both
+  regions, and `fees.py` bills 12 x the field with no region check of its own
+  (`fees.py:219`). `region` is therefore forwarded to `_extract_taxes`
+  (`eneco.py:293`), which zeroes the field outside Flanders (`eneco.py:552-570`);
+  both callers pass it, the live card (`eneco.py:161`) and the archive walk
+  (`eneco.py:201`). Every issue since January 2025 prints 0,00 in the domiciled
+  low-voltage cell, so nothing is mis-billed today; the gate is what keeps a
+  Walloon entry right the month that changes. Guarded by
+  `test_energy_fund_is_flanders_only` (`tests/test_eneco.py:160-174`) on the live
+  path and `test_fetch_for_month_gates_the_energy_fund_by_region`
+  (`tests/test_eneco.py:455-488`) on the archive path, both of which patch a
+  non-zero rate into the fixture to have anything to assert.
 - **`Standaard tarief (domicilieadres)` label wrap**: the January 2026 template gave
   the Wallonia DSO table ten numeric columns instead of seven, narrowing the tax
   column until the Energiefonds label no longer fitted on one line. Only the Fix and

@@ -403,7 +403,7 @@ energy fund.
 | `wallonia_renewables` | `float` | `0.0` | Wallonia green-energy contribution. |
 | `brussels_renewables` | `float` | `0.0` | Brussels green-energy levy. |
 | `region_connection_fee` | `float` | `0.0` | Regional connection fee. |
-| `energy_fund_eur_per_month` | `float` | `0.0` | Monthly energy-fund charge (the one field not per-kWh). |
+| `energy_fund_eur_per_month` | `float` | `0.0` | Monthly energy-fund charge (the one field not per-kWh). It is a Flemish levy, and `fees.py` bills 12 x it with no region check of its own (`fees.py:219`), so an extractor serving more than one region must return `0.0` outside Flanders. |
 | `vat_rate` | `float` | `0.0` | VAT convention. `0.0` means the snapshot's prices are already VAT-incl (the convention for both Cociter and Eneco today). An extractor that ships ex-VAT numbers must set this to the parsed rate explicitly. |
 
 Regional renewables differ across the three regions; the pricing engine picks

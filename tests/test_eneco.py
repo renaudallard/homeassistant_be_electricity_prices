@@ -452,6 +452,42 @@ def test_fetch_for_month_unknown_contract_returns_none() -> None:
     assert snap is None
 
 
+def test_fetch_for_month_gates_the_energy_fund_by_region() -> None:
+    """The archive path carries region too. A Walloon Flex entry bills past
+    months through fetch_for_month, and the Flemish levy has to be zeroed
+    there for the same reason it is zeroed on the live card: one PDF serves
+    both regions and fees.py bills the field with no region check of its own.
+
+    Without this, a mutant that hard-codes REGION_FLANDERS into the archive
+    call passes every other test in this file. Every published card prints
+    0,00 in that cell, so the rate has to be patched in to say anything.
+
+    Uses the wrapped August 2026 card on purpose: the unwrapped December 2025
+    one would also exercise the label-wrap fix, so a failure here would have
+    two possible causes instead of one.
+    """
+    text = fixture_text("eneco_flex_aug26.pdf").replace(
+        "(domicilieadres) 0,00", "(domicilieadres) 7,77"
+    )
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+            new=AsyncMock(return_value="ok"),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+            new=AsyncMock(return_value=text),
+        ),
+    ):
+        month = date(2026, 8, 1)
+        wallonia = _run(fetch_for_month(None, "power_flex", REGION_WALLONIA, month))  # type: ignore[arg-type]
+        flanders = _run(fetch_for_month(None, "power_flex", REGION_FLANDERS, month))  # type: ignore[arg-type]
+    assert wallonia is not None
+    assert flanders is not None
+    assert wallonia.taxes.energy_fund_eur_per_month == 0.0
+    assert flanders.taxes.energy_fund_eur_per_month == pytest.approx(7.77)
+
+
 def test_flex_extracts_cohort_coefficients() -> None:
     """The variable card's BELPEX-RLP-M factor / base are surfaced (VAT-baked)
     so a signing cohort can be re-priced against the monthly mean. Applying them
