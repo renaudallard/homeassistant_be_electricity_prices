@@ -2192,7 +2192,12 @@ _INJECTION_SHAPE: dict[str, str] = {
     # settles on the billed period's index. Its printed Maandprijs runs two
     # months behind: the Mei 2026 card's 4,32 inverts to an index of 54,52,
     # which is March's.
+    # Flexy Online prints the same injection formula and the same indicative
+    # as Flexy, so it is pinned beside it: left to the default its flag would
+    # go unchecked, since spot_indexed_injection alone derives the weaker
+    # "spot" shape.
     "ecofix_flexy": "spp",
+    "ecofix_flexy_online": "spp",
     # Every non-dynamic Bolt card prints the quarter-hourly Belpex formula
     # beside its illustrative figure and says the billing multiplies each
     # quarter by that quarter's own index. Losing the formula puts the credit
@@ -3018,8 +3023,12 @@ BYTES_WARN_THRESHOLD = 5_000_000
 #     Allow 15 MB.
 #   * engie: ~5.4 MB (sitemap discovery + ~24 region PDFs). Allow 8 MB
 #     so we don't fire on a slow day.
-#   * ecofix: ~6.6 MB (3 contracts x 2 regions, ~1.1 MB each PDF).
-#     Allow 8 MB.
+#   * ecofix: 13.2 MB (4 contracts x 2 regions, no per-PDF cache), measured
+#     2026-09-05 at the 1.46-1.89 MB the rasterized cards weigh. Allow 16 MB.
+#     Latency stays on the 90 s default deliberately: the same pass takes
+#     about a second from a residential line, and Ecofix has never been one
+#     of the runner-slow hosts, so there is no measurement that would justify
+#     an override.
 #   * mega: ~5.3 MB (~342KB listing fetched once via the harness's
 #     listing-cache + 33 region PDFs at ~150KB each). Allow 7 MB so a
 #     slow CI day or a slightly larger PDF batch doesn't fire.
@@ -3034,7 +3043,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     "bolt": 100_000_000,
     "totalenergies": 15_000_000,
     "engie": 16_000_000,
-    "ecofix": 8_000_000,
+    "ecofix": 16_000_000,
     "mega": 14_000_000,
     "octaplus": 22_000_000,
 }

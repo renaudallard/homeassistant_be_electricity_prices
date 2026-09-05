@@ -188,6 +188,46 @@ def test_bolt_discover_matches_registry() -> None:
     assert discovered == expected
 
 
+def test_ecofix_discover_matches_registry() -> None:
+    """Ecofix's listing is the only surface that can answer the question.
+
+    discover() used to HEAD-probe the registry's own URLs, so
+    ``discovered - baseline`` was empty by construction and the catalogue
+    check reported green for the whole time Flexy Online was on sale. The
+    page links each electricity card beside its gas twin, so this also pins
+    that the GAS_ cards stay out.
+    """
+    session = _FakeSession(_read("ecofix.html"))
+    discovered = _run(ecofix_mod.discover(session))
+    assert discovered == {c.contract_id for c in ecofix_mod._CONTRACTS}
+    assert not [cid for cid in discovered if "gas" in cid]
+    # Comparing against the registry is vacuous on its own: the HEAD-probe
+    # fallback returns exactly the registry too, so it passes either way.
+    # Drop a card from the LISTING and the result has to follow it.
+    without_motion = _read("ecofix.html").replace(
+        "EL_Ecofix_Motion_NL.pdf", "EL_Ecofix_Retired_NL.pdf"
+    )
+    assert "ecofix_motion" not in _run(
+        ecofix_mod.discover(_FakeSession(without_motion))
+    )
+
+
+def test_ecofix_discover_sees_a_product_named_for_its_term() -> None:
+    """The stem class takes digits and hyphens.
+
+    A letters-only stem cannot match a card like EL_Ecofix_Flexy_24_NL.pdf,
+    and the failure mode is silence: the product simply never appears, which
+    is exactly how the HEAD-probe version failed.
+    """
+    body = _read("ecofix.html").replace(
+        "EL_Ecofix_Flexy_Online_NL.pdf", "EL_Ecofix_Flexy_24_NL.pdf"
+    )
+    discovered = _run(ecofix_mod.discover(_FakeSession(body)))
+    assert "ecofix_flexy_24" in discovered - {
+        c.contract_id for c in ecofix_mod._CONTRACTS
+    }
+
+
 def test_eneco_discover_matches_registry() -> None:
     session = _FakeSession(_read("eneco.html"))
     discovered = _run(eneco_mod.discover(session))

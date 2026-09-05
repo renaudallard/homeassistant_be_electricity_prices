@@ -1,14 +1,13 @@
 <!--
-Ecofix has no public listing endpoint at portal.ecofixgp.be; the supplier
-uses overwrite-in-place URLs under /docs/prices/current/. The discover()
-implementation HEAD-probes the three known PDFs directly, so this fixture
-is unused by the current discover path. Kept as a placeholder so a future
-listing endpoint can be wired in without restructuring tests.
+Trimmed from https://www.ecofixgp.be/tarieven/tariefkaarten (server-rendered).
+The real page links each electricity card beside its gas twin, which is why
+discover() has to key on the EL_ prefix rather than on "Ecofix" alone.
 -->
-<html><body><h1>Ecofix tariff cards</h1>
-<ul>
-<li><a href="https://portal.ecofixgp.be/docs/prices/current/EL_Ecofix_Motion_NL.pdf">Motion</a></li>
-<li><a href="https://portal.ecofixgp.be/docs/prices/current/EL_Ecofix_Motion_Online_NL.pdf">Motion Online</a></li>
-<li><a href="https://portal.ecofixgp.be/docs/prices/current/EL_Ecofix_Flexy_NL.pdf">Flexy</a></li>
+<ul class="tariefkaarten">
+  <li><a href="https://portal.ecofixgp.be/docs/prices/current/EL_Ecofix_Motion_NL.pdf">Motion</a>
+      <a href="https://portal.ecofixgp.be/docs/prices/current/GAS_Ecofix_Motion_NL.pdf">Motion gas</a></li>
+  <li><a href="https://portal.ecofixgp.be/docs/prices/current/EL_Ecofix_Motion_Online_NL.pdf">Motion Online</a></li>
+  <li><a href="https://portal.ecofixgp.be/docs/prices/current/EL_Ecofix_Flexy_NL.pdf">Flexy</a>
+      <a href="https://portal.ecofixgp.be/docs/prices/current/GAS_Ecofix_Flexy_NL.pdf">Flexy gas</a></li>
+  <li><a href="https://portal.ecofixgp.be/docs/prices/current/EL_Ecofix_Flexy_Online_NL.pdf">Flexy Online</a></li>
 </ul>
-</body></html>

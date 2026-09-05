@@ -42,10 +42,11 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.providers.ecofix import (
     _dynamic_formula_match,
+    _extract_fee_and_flanders_renewables,
     _extract_flanders_dsos,
     _extract_injection,
     _extract_publication,
-    discover,
+    _head_probe_ids,
     parse_snapshot,
 )
 from tests import fixture_text
@@ -70,6 +71,7 @@ def test_ecofix_is_registered() -> None:
         "ecofix_motion",
         "ecofix_motion_online",
         "ecofix_flexy",
+        "ecofix_flexy_online",
     }
     # Brussels is not on any current Ecofix card; the registry must
     # advertise Flanders + Wallonia only so config-flow doesn't offer
@@ -366,7 +368,41 @@ def test_unknown_contract_raises() -> None:
         parse_snapshot("bogus", _layout(_MOTION_ONLINE), "wallonia", "x")
 
 
-# ---- discover() -------------------------------------------------------------
+def test_flexy_swapped_fee_and_renewable_columns_are_rejected() -> None:
+    """The variable branch reads the fee and the Flemish renewable from two
+    SEPARATE positional anchors, so a reflowed card silently swaps them. The
+    dynamic branch below cannot: it takes max/min of one slice. Measured on
+    this fixture the swap bills a 1,60 EUR/jaar fee with 0,6000 EUR/kWh of
+    renewables, which is +1.985,60 EUR a year at 3.500 kWh, so it has to
+    fail loudly instead."""
+    text = _layout(_FLEXY)
+    fee, renewable = _extract_fee_and_flanders_renewables(text, "variable")
+    assert fee == pytest.approx(60.0)
+    assert renewable == pytest.approx(0.016)
+
+    swapped = text.replace("60,00 meter Piekuren", "1,60 meter Piekuren", 1)
+    if "Verbruik 1,60" in swapped:
+        swapped = swapped.replace("Verbruik 1,60", "Verbruik 60,00", 1)
+    else:
+        swapped = swapped.replace("1,60\nVerbruik", "60,00\nVerbruik", 1)
+    assert swapped != text, "the swap did not change the card"
+    with pytest.raises(ExtractorError, match="columns swapped"):
+        _extract_fee_and_flanders_renewables(swapped, "variable")
+
+
+def test_flexy_online_reads_the_flexy_card_unchanged() -> None:
+    """Flexy Online is the same product sold online, so it parses on Flexy's
+    own branch: only the dispatch and the URL differ. Nothing here should
+    need a fixture of its own, and that is the point."""
+    text = _layout(_FLEXY)
+    as_flexy = parse_snapshot("ecofix_flexy", text, "flanders")
+    as_online = parse_snapshot("ecofix_flexy_online", text, "flanders")
+    assert as_online.energy == as_flexy.energy
+    assert as_online.taxes == as_flexy.taxes
+    assert as_online.contract == "ecofix_flexy_online"
+
+
+# ---- discover() fallback -----------------------------------------------------
 
 
 class _HeadResponse:
@@ -391,7 +427,9 @@ class _StubHeadSession:
         return _HeadResponse(200 if url in self._ok else 404)
 
 
-def test_discover_returns_all_three_contracts_when_each_url_200s() -> None:
+def test_head_probe_fallback_returns_every_contract_whose_url_200s() -> None:
+    """The listing is the discovery surface now; this is what runs when the
+    listing itself is unreachable, so it still has to hold."""
     base = "https://portal.ecofixgp.be/docs/prices/current"
     session = _StubHeadSession(
         ok={
@@ -400,11 +438,11 @@ def test_discover_returns_all_three_contracts_when_each_url_200s() -> None:
             f"{base}/EL_Ecofix_Flexy_NL.pdf",
         }
     )
-    discovered = asyncio.run(discover(session))  # type: ignore[arg-type]
+    discovered = asyncio.run(_head_probe_ids(session))  # type: ignore[arg-type]
     assert discovered == {"ecofix_motion", "ecofix_motion_online", "ecofix_flexy"}
 
 
-def test_discover_drops_retired_product_when_url_404s() -> None:
+def test_head_probe_fallback_drops_a_retired_product() -> None:
     base = "https://portal.ecofixgp.be/docs/prices/current"
     # Simulate Ecofix retiring "Motion" while keeping the other two.
     session = _StubHeadSession(
@@ -413,5 +451,5 @@ def test_discover_drops_retired_product_when_url_404s() -> None:
             f"{base}/EL_Ecofix_Flexy_NL.pdf",
         }
     )
-    discovered = asyncio.run(discover(session))  # type: ignore[arg-type]
+    discovered = asyncio.run(_head_probe_ids(session))  # type: ignore[arg-type]
     assert discovered == {"ecofix_motion_online", "ecofix_flexy"}

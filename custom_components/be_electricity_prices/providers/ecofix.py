@@ -29,11 +29,12 @@ Ecofix publishes residential electricity tariff cards at stable URLs:
 
     https://portal.ecofixgp.be/docs/prices/current/EL_Ecofix_<PRODUCT>_NL.pdf
 
-Three products are sold today:
+Four products are sold today:
 
   - Motion         : dynamic, 15-min Belpex-indexed, phone customer service.
   - Motion Online  : dynamic, 15-min Belpex-indexed, online-only.
   - Flexy          : variable, monthly RLP-weighted Belpex average.
+  - Flexy Online   : the same variable product, online-only.
 
 Cards cover Flanders + Wallonia in one PDF (no Brussels rows). The same DSO
 and tax overlay is repeated across the three monthly cards; only the
@@ -72,6 +73,7 @@ from ._pdf import (
     NL_MONTHS,
     SIGN_CHARS,
     fetch_pdf_text_layout,
+    fetch_text,
     head_freshness_key,
     head_ok,
     parse_sign,
@@ -97,6 +99,12 @@ from .base import (
 _LOGGER = logging.getLogger(__name__)
 
 _BASE_URL = "https://portal.ecofixgp.be/docs/prices/current"
+# The public tariff-card page server-renders one anchor per card, so it is a
+# real discovery surface: measured 2026-09-05 it carries all four residential
+# electricity cards plus the two gas cards. /tarieven is server-rendered too
+# but links only Flexy and Motion, which is what the old docstring was
+# describing when it concluded no listing existed.
+_LISTING_URL = "https://www.ecofixgp.be/tarieven/tariefkaarten"
 
 
 @dataclass(frozen=True)
@@ -113,6 +121,9 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "ecofix_motion_online", "Ecofix Motion Online", "dynamic", "Motion_Online"
     ),
     _ContractDef("ecofix_flexy", "Ecofix Flexy", "variable", "Flexy"),
+    _ContractDef(
+        "ecofix_flexy_online", "Ecofix Flexy Online", "variable", "Flexy_Online"
+    ),
 )
 
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
@@ -120,6 +131,15 @@ _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
 def _document_url(contract: _ContractDef) -> str:
     return f"{_BASE_URL}/EL_Ecofix_{contract.slug}_NL.pdf"
+
+
+# The same filename read back off the listing. ``EL_`` is what separates a card
+# from the ``GAS_`` twin the listing links beside it, and the leading slash
+# keeps the match on a path rather than on prose. Digits and hyphens are in the
+# class deliberately: with a letters-only stem an Ecofix product named for its
+# term (EL_Ecofix_Flexy_24_NL.pdf) matches nothing and the catalogue check goes
+# green on it, which is the exact failure this replaces.
+_CARD_URL_RE = re.compile(r"/EL_Ecofix_([A-Za-z0-9_-]+)_NL\.pdf")
 
 
 _DUTCH_MONTHS: dict[str, int] = {name: i for i, name in enumerate(NL_MONTHS, 1)}
@@ -164,12 +184,27 @@ async def probe(
 async def discover(session: aiohttp.ClientSession) -> set[str]:
     """Return contract ids for every Ecofix PDF that currently 200s.
 
-    Ecofix has no listing endpoint -- ``/docs/prices/`` is 404, the
-    public ``/tarieven`` page only links a subset of products. HEAD-probe
-    the three known URLs; the live-check script then diffs against the
-    registry's contract ids. A future 404 (product retired) drops it
-    here; a future new product needs a code update.
+    Read the tariefkaarten page, which server-renders one anchor per card.
+    HEAD-probing the registry's own URLs, which is what this did, cannot
+    surface a product the registry does not already know: ``discovered -
+    baseline`` was empty by construction, so the catalogue check reported
+    green for the whole time Flexy Online was on sale. A listing the
+    supplier maintains is the only thing that can answer the question.
+
+    Falls back to the probe when the page is unreachable, so a listing
+    outage degrades to the old behaviour instead of reporting that every
+    product has been withdrawn.
     """
+    try:
+        listing = await fetch_text(session, _LISTING_URL)
+    except ExtractorError as err:
+        _LOGGER.warning("Ecofix discover: %s unreachable: %s", _LISTING_URL, err)
+        return await _head_probe_ids(session)
+    return {f"ecofix_{slug.lower()}" for slug in _CARD_URL_RE.findall(listing)}
+
+
+async def _head_probe_ids(session: aiohttp.ClientSession) -> set[str]:
+    """The registry's own URLs that still 200, the pre-listing behaviour."""
     out: set[str] = set()
     for contract in _CONTRACTS:
         if await head_ok(session, _document_url(contract), timeout=10):
@@ -290,11 +325,25 @@ def _extract_fee_and_flanders_renewables(
             raise ExtractorError("Ecofix Flexy: yearly fixed fee not found")
         if not renew_match:
             raise ExtractorError("Ecofix Flexy: Vlaanderen renewables not found")
-        renewable = renew_match.group(1) or renew_match.group(2)
-        return (
-            to_float(fee_match.group(1)),
-            to_float(renewable) / 100.0,
-        )
+        fee = to_float(fee_match.group(1))
+        renewable_cents = to_float(renew_match.group(1) or renew_match.group(2))
+        # Both anchors here are positional, and the Online twin of a product is
+        # exactly what reflows this pair: Motion Online prints the fee and the
+        # renewable in the opposite order to Motion. The dynamic branch below
+        # absorbs that by taking max/min of one slice; two separate anchors
+        # cannot. Read swapped, the Flexy card bills a 1,60 EUR/jaar fee with
+        # 0,6000 EUR/kWh of Flemish renewables, measured at +1.985,60 EUR a
+        # year at 3.500 kWh and +2.861,60 at 5.000. Bound the renewable rather
+        # than compare it to the fee: the boundary this docstring already
+        # documents is "renewables under 5 c/kWh", while a fee-relative test
+        # would also reject a legitimate low or zero standing charge, which is
+        # a real Belgian online-only offer.
+        if renewable_cents >= 5.0:
+            raise ExtractorError(
+                "Ecofix Flexy: Vlaanderen renewable above 5 c/kWh, so the fee "
+                "and renewable columns swapped"
+            )
+        return fee, renewable_cents / 100.0
 
     block = _flanders_energy_block(text)
     # Two numbers live between "(€ cent/kWh)" (closing the WKK header)
