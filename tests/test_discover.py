@@ -501,3 +501,59 @@ def test_readme_counts_the_spot_indexed_injection_contracts_correctly() -> None:
         f"README says {found[0]}; the registry has {contracts} contracts "
         f"across {len(suppliers)} suppliers: {sorted(suppliers)}"
     )
+
+
+def _issue_form_options(field_id: str) -> list[str]:
+    """The options a dropdown offers on the bug report form."""
+    # PyYAML ships no stubs and homeassistant pulls it in anyway, so the
+    # CI type pass needs the marker rather than another pinned dependency.
+    import yaml  # type: ignore[import-untyped]
+    from pathlib import Path
+
+    form = yaml.safe_load(
+        (
+            Path(__file__).parent.parent
+            / ".github"
+            / "ISSUE_TEMPLATE"
+            / "bug_report.yml"
+        ).read_text(encoding="utf-8")
+    )
+    for field in form["body"]:
+        if field.get("id") == field_id:
+            return list(field["attributes"]["options"])
+    raise AssertionError(f"the bug report form has no {field_id!r} field any more")
+
+
+def test_issue_form_offers_every_registered_supplier() -> None:
+    """The form's supplier list must hold every label the flow offers.
+
+    The field is required and has no "other", so a supplier missing here
+    does not merely annoy: it forces the reporter to name a supplier they
+    are not on, and the report then reads as a bug in that supplier's
+    extractor. Issue #85 arrived that way, filed against Eneco by an Energy
+    Knights customer, because the list had gone four suppliers stale.
+    """
+    from custom_components.be_electricity_prices.providers import all_extractors
+
+    offered = set(_issue_form_options("supplier"))
+    registered = {extractor.label for extractor in all_extractors()}
+    assert offered == registered, (
+        f"missing from the form: {sorted(registered - offered)}; "
+        f"offered but not a supplier: {sorted(offered - registered)}"
+    )
+
+
+def test_issue_form_offers_every_dso() -> None:
+    """Same for the DSO list, down to the spelling.
+
+    The reporter picks the name they were shown in the options flow, so a
+    label that only nearly matches sends them hunting for their own DSO.
+    """
+    from custom_components.be_electricity_prices.const import DSO_CHOICES
+
+    offered = set(_issue_form_options("dso"))
+    known = {label for region in DSO_CHOICES.values() for _, label in region}
+    assert offered == known, (
+        f"missing from the form: {sorted(known - offered)}; "
+        f"offered but not a DSO: {sorted(offered - known)}"
+    )

@@ -80,8 +80,8 @@ body:
         - Fluvius Antwerpen
         - Fluvius Halle-Vilvoorde
         - Fluvius Imewo
-        - Fluvius Intergem
-        - Fluvius Iveka
+        - Fluvius Midden-Vlaanderen (Intergem)
+        - Fluvius Kempen (Iveka)
         - Fluvius Limburg
         - Fluvius West
         - Fluvius Zenne-Dijle
@@ -89,7 +89,7 @@ body:
         - AIESH
         - ORES
         - RESA
-        - REW
+        - Regie de Wavre
         - Sibelga
     validations:
       required: true
@@ -116,12 +116,16 @@ body:
         - Mega
         - Bolt
         - Cociter
-        - Dats24
-        - Ebem
+        - DATS 24
+        - EBEM
         - Ecofix
         - Ecopower
+        - energie.be
+        - Energy Knights
+        - EnergyVision
         - Frank Energie
-        - Octa+
+        - OCTA+
+        - "Expert: custom formula (no public card)"
     validations:
       required: true
 
@@ -133,6 +137,13 @@ body:
     validations:
       required: true
 
+  - type: input
+    id: contract_start
+    attributes:
+      label: Contract start date
+      description: The date set on the integration's contract start option, if you set one. It prices the contract off the card published that month instead of the current one, so it is the first thing to check on a wrong price.
+      placeholder: e.g. 2026-06-01, or "not set"
+
   - type: dropdown
     id: meter
     attributes:
@@ -140,7 +151,7 @@ body:
       options:
         - Mono-horaire (single rate)
         - Bi-horaire (peak / off-peak)
-        - Dynamic (smart meter, hourly)
+        - Dynamic (smart meter, hourly or quarter-hourly)
         - Exclusive night
         - Not sure
     validations:
