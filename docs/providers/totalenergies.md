@@ -71,7 +71,7 @@ Notes on the kind mapping:
   the three band split lives entirely on the DSO side (`DsoOverlay.distribution_pic`
   / `_medium` / `_eco`, applied under `dso_tariff_mode=impact`). See
   `test_impact_parses_as_flat_supplier_energy_with_impact_dso_bands`
-  (`tests/test_totalenergies.py:194`).
+  (`tests/test_totalenergies.py:206`).
 - **myDynamic bills per clock hour, not per quarter hour.** `DynamicRates.quarter_hourly`
   defaults `False` (`providers/base.py:159`) and TotalEnergies never overrides it,
   so the integration aggregates the ENTSO-E 15 minute curve to hourly for this
@@ -163,7 +163,7 @@ Notable parsing hurdles:
   absent (`totalenergies.py:478-509`, `_realized_monthly_consumption`,
   `totalenergies.py:485`). The test pins realized (13,53 / 14,65 / 12,55 / 12,39)
   over estimate (15,62 / ...) values as illustrative
-  (`tests/test_totalenergies.py:153-168`).
+  (`tests/test_totalenergies.py:165-180`).
 - **Per-contract table drift.** The `Consommation` row has 0 to 5 trailing
   asterisks and may or may not carry an intervening `Tarif annuel` / `Tarif mensuel`
   label; the four meter values (mono / jour / nuit / excl_nuit) are separated by
@@ -205,7 +205,7 @@ via `_vat_multiplier` (`totalenergies.py:360`), defaulting to 1.06 when absent
 (`_pdf.py:411-438`). The illustrative test pins Wallonia myDynamic
 `0.1034 * BELPEXH + 1.75` (HTVA, 6% VAT) to `factor == 1.09604`, `base == 0.01855`
 (`tests/test_totalenergies.py:58-69`); Brussels resolves the same factor with
-`base == 0.04081` from the split layout (`tests/test_totalenergies.py:72-86`).
+`base == 0.04081` from the split layout (`tests/test_totalenergies.py:84-98`).
 
 The `yearly_fixed_fee` (~90 EUR/yr, illustrative) comes from
 `_extract_fee_and_renewables` and is shared across all kinds
@@ -223,19 +223,19 @@ Region specifics:
 
 - **Flanders** distribution already includes transport, so `transport=0.0` and the
   c€/kWh lands in `distribution_single` (same convention as Engie/Luminus/Mega
-  Flanders, `totalenergies.py:687-719`, `tests/test_totalenergies.py:279-292`).
+  Flanders, `totalenergies.py:687-719`, `tests/test_totalenergies.py:291-304`).
   The Flanders row's 9th column is surfaced into `prosumer_eur_per_kva_year`
   (`totalenergies.py:711`); capacity is a Flanders only field.
 - **Wallonia** rows carry 12 numbers; the extractor surfaces mono/jour/nuit/excl,
   the Impact PIC/MEDIUM/ECO triplet, terme fixe (as `data_management_per_year`),
   transport and prosumer. The two capacity columns (cols 10-11) are not surfaced
-  (`totalenergies.py:731-772`, `tests/test_totalenergies.py:260-276`).
+  (`totalenergies.py:731-772`, `tests/test_totalenergies.py:272-288`).
 - **Brussels** Sibelga has no separate capacity charge, so the metering fee and the
   `<=13kVA` "Terme de puissance mise a disposition" power term are folded together
   into `data_management_per_year` (`totalenergies.py:837-855`). The OSP annual fee
   table is parsed by the shared `parse_brussels_osp` into `brussels_osp_by_tier`
   (`_pdf.py:553`). The test pins `data_management_per_year == 14.73 + 50.07`
-  (illustrative, `tests/test_totalenergies.py:218-235`).
+  (illustrative, `tests/test_totalenergies.py:230-247`).
 
 ### Tax overlay
 
@@ -243,7 +243,7 @@ Region specifics:
 
 - `federal_excise`: first excise tier (0-3000 kWh), mandatory, raises on a miss
   (`totalenergies.py:590`). Illustrative pinned value 0.0503 EUR/kWh across all
-  three regions (`tests/test_totalenergies.py:312-314`).
+  three regions (`tests/test_totalenergies.py:324-326`).
 - `energy_contribution`: federal levy. Read from the labelled "Cotisation sur
   l'énergie" line, or, when the header is wrapped, from the DSO table fallback
   (see historical bug). Both readers return `None` on a miss rather than 0.0, so
@@ -252,13 +252,13 @@ Region specifics:
   matters since 2026-08-01: the levy fell to zero, and the old
   `if energy_contribution == 0.0: raise` would have taken every TotalEnergies
   contract offline the way it took Frank offline (issue #49).
-  `test_zero_energy_contribution_is_accepted` (`tests/test_totalenergies.py:270`)
+  `test_zero_energy_contribution_is_accepted` (`tests/test_totalenergies.py:282`)
   and `test_missing_energy_contribution_is_fatal` (`:249`) pin both halves.
 - Regional renewables land in exactly one of `flanders_renewables`,
   `wallonia_renewables`, `brussels_renewables` per region (all others 0), taken
   from the second number on the fee+renewables line (`_extract_renewables`,
   `totalenergies.py:671`). Illustrative: Flanders 0.0157 (green + cogen merged),
-  Wallonia 0.032, Brussels 0.0285 (`tests/test_totalenergies.py:316-323`).
+  Wallonia 0.032, Brussels 0.0285 (`tests/test_totalenergies.py:328-335`).
 - `region_connection_fee`: Wallonia only ("Redevance de raccordement"), mandatory
   there, raises on a miss (`totalenergies.py:653`). Illustrative 0.0007 EUR/kWh.
 - `energy_fund_eur_per_month`: Flanders only ("Résidence principale sans tarif
@@ -278,16 +278,16 @@ Two shapes, selected on `kind` in `_extract_injection` (`totalenergies.py:553`):
   (`totalenergies.py:554-573`). `factor = f_pdf * 10.0`, `base = b_cents / 100.0`,
   with **no VAT scaling** because residential injection is VAT-exempt
   (`providers/base.py:271-273`). Illustrative Wallonia: `0.1 * BELPEXH - 1.3` ->
-  `factor == 1.0`, `base == -0.013` (`tests/test_totalenergies.py:89-103`). A
+  `factor == 1.0`, `base == -0.013` (`tests/test_totalenergies.py:101-115`). A
   dynamic card whose injection block is missing the BELPEXH formula raises rather
   than silently pricing feed-in at the flat monthly rate every hour
-  (`totalenergies.py:559-567`, `tests/test_totalenergies.py:116-122`).
+  (`totalenergies.py:559-567`, `tests/test_totalenergies.py:128-134`).
 - **Non-dynamic contracts: monthly-indicative-only.** The table injection value is
   the V-test annual ESTIMATE; the billed value is the realized monthly indicative
   ("prix mensuels de l'injection"), so `_realized_monthly_injection`
   (`totalenergies.py:519`) overrides `current` and `factor`/`base` stay `None`
   (`totalenergies.py:574-580`). Illustrative 0.0112 EUR/kWh for both a variable and
-  a fixed card (`tests/test_totalenergies.py:174-191`).
+  a fixed card (`tests/test_totalenergies.py:186-203`).
 
 This places TotalEnergies in two of the three injection taxonomy shapes: shape (b)
 hourly factor*spot+base for myDynamic, shape (a) monthly-indicative-only for every
@@ -322,11 +322,11 @@ The land mines a future maintainer must know, each traceable to a source comment
   spanning the line break and grabbing the 90,00 yearly fee as the exclusive-night
   rate (0.90 EUR/kWh) with no error. The row now ends at the line break, so a card
   with too few columns misses and raises (`totalenergies.py:407-422`,
-  `tests/test_totalenergies.py:140-150`).
+  `tests/test_totalenergies.py:152-162`).
 - **Impact is flat supplier energy with DSO-side bands.** It used to fail to parse
   as a standard variable card. The PIC value under `Heures PIC/MEDIUM/ECO` is the
   single supplier rate; the band variation comes from the DSO Impact distribution
-  (`totalenergies.py:512-515`, `tests/test_totalenergies.py:194-215`).
+  (`totalenergies.py:512-515`, `tests/test_totalenergies.py:206-227`).
 - **Distinct anchors for the two BELPEX formulas.** Both consumption and injection
   print `factor * BELPEXH`. Consumption always appears first (so the first match is
   consumption, `totalenergies.py:336-338`); injection is anchored after the

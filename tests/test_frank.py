@@ -62,6 +62,15 @@ def test_energy_is_dynamic_rates() -> None:
     assert isinstance(snap.energy, DynamicRates)
 
 
+def test_dynamic_bills_per_clock_hour() -> None:
+    """Frank settles on the hourly Belpex, so the contract belongs on the
+    hourly ENTSO-E product. Unpinned until now: nothing in this file read
+    ``quarter_hourly``, so a flip would have gone green."""
+    snap = _snap()
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is False
+
+
 def test_energy_formula_factor() -> None:
     """(0,1068 x BELPEX + 1,500) x 1,06 => factor = 0.1068 * 1.06 * 10."""
     snap = _snap()

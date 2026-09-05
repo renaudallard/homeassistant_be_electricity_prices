@@ -200,6 +200,16 @@ def test_wallonia_ores_subarea_divergence_is_fatal() -> None:
         parse_snapshot("engie_dynamic", {REGION_WALLONIA: wal})
 
 
+def test_dynamic_bills_per_quarter_hour() -> None:
+    """The card indexes on eSpot_15, the price of that precise quarter hour,
+    so it settles on 96 slots a day. Engie is the only supplier that SETS
+    ``quarter_hourly`` without pinning it, so flipping it to False would have
+    moved the contract onto the hourly product with this file still green."""
+    snap = parse_snapshot("engie_dynamic", _dynamic_three_regions())
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is True
+
+
 def test_dynamic_missing_vat_phrase_is_fatal() -> None:
     # The Dynamic formula is printed pre-VAT and scaled by the parsed VAT
     # multiplier; a reworded VAT header must raise rather than silently

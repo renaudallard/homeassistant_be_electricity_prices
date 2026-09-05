@@ -247,7 +247,7 @@ On the 7-column Empower card the pricing model only carries mono + bi-horaire +
 exclusive-night, so the three Flextime middle columns are skipped for the
 non-Flextime variants, and exclusive-night is taken from index 6, not from the
 visually-cheapest Flextime super-creuses column (`engie.py:509`, test
-`test_empower_variable_skips_flextime_tiers` `tests/test_engie.py:310`).
+`test_empower_variable_skips_flextime_tiers` `tests/test_engie.py:320`).
 
 ### Dynamic formula parsing and unit conversion
 
@@ -276,7 +276,7 @@ otherwise cancel out (`0.1039 * 10.6 == 0.1039 * 1.06 * 10`).
 - `_extract_energy_contribution` (`engie.py:954`): Engie's PDF strips the comma,
   so `0,20417` renders as `020417`. The regex matches an optional separator and
   reconstructs the value as `0.<digits>` with a `\d{4,6}` quantifier
-  (illustrative parsed value `0.0020417`, test `tests/test_engie.py:230`).
+  (illustrative parsed value `0.0020417`, test `tests/test_engie.py:240`).
 - `_extract_federal_excise` (`engie.py:907`): anchored on
   `Consommation entre 0 et 3.000 kWh`; mandatory across regions, raises on miss.
 - `_extract_consumption_renewables` (`engie.py:884`): takes the last number on
@@ -338,7 +338,7 @@ Five DSOs mapped via `_WALLONIA_LABELS` (`engie.py:1068`): AIEG, AIESH,
 on dynamic contracts (the prosumer column is replaced by nothing, since dynamic
 SMR3 contracts have no compensation regime; `engie.py:793`, test
 `test_dynamic_wallonia_dso_has_separate_transport_no_prosumer`
-`tests/test_engie.py:203`). The last column is always the c€/kWh transport rate,
+`tests/test_engie.py:213`). The last column is always the c€/kWh transport rate,
 so it is billed separately (unlike Flanders).
 
 Two gotchas guard this parser:
@@ -361,7 +361,7 @@ Reads the single Sibelga row (`engie.py:841`). Brussels has no separate capacity
 charge (capacity is Flanders-only), so the parser folds two flat annual euros,
 the metering fee (`Activité de mesure`, column 5) and the Sibelga <=13kVA power
 term (column 6), into `data_management_per_year` (`engie.py:1024`, test
-`test_dynamic_brussels_extracts_sibelga` `tests/test_engie.py:263`, illustrative
+`test_dynamic_brussels_extracts_sibelga` `tests/test_engie.py:273`, illustrative
 `14.73 + 50.07`). It also parses the Brugel OSP annual-fee table via the shared
 `parse_brussels_osp` (`_pdf.py:747`) into `brussels_osp_by_tier`.
 
@@ -385,7 +385,7 @@ Engie's cards print 6% VAT inclusive (`engie.py:42`), so the extracted energy /
 network / tax numbers are post-VAT and must not be re-scaled; the one exception is
 the dynamic formula, which is printed pre-VAT and is scaled locally in
 `_extract_energy` (see above). Test `test_dynamic_extracts_taxes_for_every_region`
-(`tests/test_engie.py:226`) asserts `vat_rate == 0.0`.
+(`tests/test_engie.py:236`) asserts `vat_rate == 0.0`.
 
 The Flemish energy fund has two sub-cases (`_extract_energy_fund`,
 `engie.py:671`): `Résidentiel (avec domicile)` (0 for most products) and
@@ -393,8 +393,8 @@ The Flemish energy fund has two sub-cases (`_extract_energy_fund`,
 vacant homes with no registered domicile, so `parse_snapshot` passes
 `sans_domicile=True` for it (`engie.py:371`) and it bills the `sans domicile`
 rate (illustrative `10,07/mo`, tests `test_empty_house_is_mono_only`
-`tests/test_engie.py:280` and `test_energy_fund_selects_domicile_case`
-`tests/test_engie.py:300`). A miss legitimately means "no fund on this card"
+`tests/test_engie.py:290` and `test_energy_fund_selects_domicile_case`
+`tests/test_engie.py:310`). A miss legitimately means "no fund on this card"
 outside Flanders, so this helper keeps a silent `0.0` default (`engie.py:685`),
 unlike the mandatory levies which raise.
 
@@ -408,7 +408,7 @@ contract:
   column (`engie.py:551`, divided by 100). The second `Injection(3)` row is the
   annual estimate and is ignored. Fixed and non-Flextime variable contracts carry
   only this (test `test_easy_fixed_extracts_bihourly_rates`
-  `tests/test_engie.py:242`: `current` set, `factor`/`base` None;
+  `tests/test_engie.py:252`: `current` set, `factor`/`base` None;
   `test_empower_variable_injection_is_single_rate` `tests/test_engie.py:109`).
 - Per-slot TOU triplet (`peak`/`transition`/`offpeak`): only for `kind == "tou"`
   when the row has >=6 numbers (`engie.py:562`), reading columns 4/5/6. Engie
@@ -446,7 +446,7 @@ No supplier-side PV / prosumer forfait: Engie does not populate
   `<N>% de tva comprise` phrase and raises `could not parse Engie dynamic VAT
   multiplier` if absent, rather than falling back to the shared helper's 6%
   default and masking a rate/wording change. Test
-  `test_dynamic_missing_vat_phrase_is_fatal` (`tests/test_engie.py:203`).
+  `test_dynamic_missing_vat_phrase_is_fatal` (`tests/test_engie.py:213`).
 - Yearly-fee two-layout fallback (standard `Type d'usage` vs Empower
   `Prix mensuels`), `engie.py:432`.
 - One PDF, three billing modes. Empower Variable and Empower Flextime share the
@@ -455,7 +455,7 @@ No supplier-side PV / prosumer forfait: Engie does not populate
 - `Prix mensuels` vs `Prix annuels estimés`. The variable card prints two
   Consommation rows; the extractor must take the monthly one (the first match),
   because the annual estimate over-bills by ~7% in a falling-price month (test
-  `test_easy_variable_uses_monthly_not_annual_estimate` `tests/test_engie.py:453`).
+  `test_easy_variable_uses_monthly_not_annual_estimate` `tests/test_engie.py:463`).
 - Comma-stripped energy contribution (`020417` for `0,20417`), `engie.py:649`.
 - Apostrophe glyph drift: `d'usage` matched as `d[©']usage`, `Cotisation sur
   l['©]énergie` (`engie.py:445`, `engie.py:663`).
@@ -470,7 +470,7 @@ No supplier-side PV / prosumer forfait: Engie does not populate
 - Tarif Social is intentionally excluded (`engie.py:225`).
 - Partial-region resilience: `parse_snapshot` accepts a single-region map so a
   snapshot still builds if Engie's API is down for one region (test
-  `test_parse_snapshot_with_partial_regions_still_works` `tests/test_engie.py:477`).
+  `test_parse_snapshot_with_partial_regions_still_works` `tests/test_engie.py:487`).
 
 ## Test fixtures
 

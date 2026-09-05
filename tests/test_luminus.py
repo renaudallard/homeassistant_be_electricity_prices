@@ -92,6 +92,14 @@ def test_dynamic_wallonia_extracts_consumption_formula() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(75.0)
 
 
+def test_dynamic_bills_per_clock_hour() -> None:
+    """The card indexes on "Belpex H", the hourly quotation, so the contract
+    stays on the hourly ENTSO-E product. Unpinned until now."""
+    snap = _dynamic_w()
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is False
+
+
 def test_dynamic_flanders_has_a_different_base() -> None:
     # Luminus's hourly formula has a region-specific base; Flanders is
     # 50 cents below Wallonia. This is the one fact that motivates the

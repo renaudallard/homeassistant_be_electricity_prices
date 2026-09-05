@@ -139,7 +139,7 @@ focused helpers. Because energy prices, distribution rows and renewables
 surcharges all differ between Flanders and Wallonia on every product, the parser
 branches hard on `region` (`luminus.py:199-204`) and never merges. That region-
 awareness is not cosmetic: `test_dynamic_flanders_has_a_different_base`
-(`test_luminus.py:95-107`) shows the dynamic formula's base is region-specific
+(`test_luminus.py:103-115`) shows the dynamic formula's base is region-specific
 (Flanders 50 cents below Wallonia in the fixtures), so a merged snapshot would
 silently give one region the wrong base.
 
@@ -185,7 +185,7 @@ EUR/kWh (`luminus.py:306-308`, `346-349`). Prices are 6% VAT inclusive as printe
 `(<month> <year>)` on the first page, e.g. `(avril 2026)`. The May 2026 cards
 started padding the inside of the parens (`(mai 2026 )` with a trailing space),
 so the regex tolerates optional whitespace inside the parens
-(`test_publication_label_tolerates_padded_parens`, `test_luminus.py:391-400`).
+(`test_publication_label_tolerates_padded_parens`, `test_luminus.py:399-408`).
 
 ## Energy formula per kind
 
@@ -224,7 +224,7 @@ Illustrative (`test_smartflex_parses_as_time_of_use`): peak `0.1554`, transition
 
 Both the `TimeOfUseRates` docstring in `base.py` and this extractor use the
 `smartflex_seasonal` weekend rule for SmartFlex; the extractor and its test
-(`test_luminus.py:253`) pin the seasonal behavior.
+(`test_luminus.py:261`) pin the seasonal behavior.
 
 ### dynamic
 
@@ -298,7 +298,7 @@ monthly-regime column. `_extract_flanders_dsos` reads that footnote when
 `kind == "dynamic"` and falls back to the table value if it is absent
 (`luminus.py:585-593`, applied at `luminus.py:612-614`).
 `test_flanders_dynamic_dso_table_is_smaller_than_static`
-(`test_luminus.py:169-188`) pins it: Antwerpen dynamic data-management `18.56`
+(`test_luminus.py:177-196`) pins it: Antwerpen dynamic data-management `18.56`
 (footnote) vs static `18.92` (table), and the dynamic prosumer is `None` while
 static is `54.63` (illustrative).
 
@@ -365,7 +365,7 @@ Flanders green `0.0117` + cogen `0.0039` = `0.0156`.
 The energy fund uses the BTR (Basse tension résidentiel) value, not BTNR
 (non-residential) which is printed first; a `-` means no fee
 (`_extract_energy_fund`, `luminus.py:700-709`). In both fixture regions today BTR
-is `-`, so `energy_fund_eur_per_month` is `0.0` (`test_luminus.py:209-212`).
+is `-`, so `energy_fund_eur_per_month` is `0.0` (`test_luminus.py:217-220`).
 
 Flanders renewables splits across green-energy + cogeneration
 (`_extract_flanders_renewables`, `luminus.py:712-743`): the primary regex sums
@@ -393,7 +393,7 @@ injection shapes in the project taxonomy, selected by contract kind:
 Illustrative: dynamic Wallonia injection `0,1019 x Belpex H - 1,2737` yields
 `factor == 1.019`, `base == -0.012737` (negative base preserved,
 `test_dynamic_extracts_injection_formula_with_negative_base`,
-`test_luminus.py:110-116`). Non-dynamic indicative
+`test_luminus.py:118-124`). Non-dynamic indicative
 (`test_injection_uses_applicable_rate_not_annual_estimate`): comfy Wallonia
 `0.0381`, comfyflex Flanders `0.0396`.
 
@@ -405,7 +405,7 @@ Two anchoring subtleties in the indicative regex (`luminus.py:397-402`):
    `de l'énergie injectée` tail, but only the applicable row capitalises
    `Tarif`, so the case-sensitive `Tarif` binds to the applicable rate
    (`luminus.py:561-569`). `test_injection_uses_applicable_rate_not_annual_estimate`
-   (`test_luminus.py:260-278`) verifies this in both directions, including the
+   (`test_luminus.py:268-286`) verifies this in both directions, including the
    May card where the estimate (`3.68`) is below the applicable rate (`3.81`),
    so picking the wrong row would under-credit.
 2. **Footnote digit + mid-phrase wrap.** Some cards print a footnote digit right
@@ -417,7 +417,7 @@ Two anchoring subtleties in the indicative regex (`luminus.py:397-402`):
 Fail-loud invariant: both Luminus card families always publish injection, so if
 neither `current` nor `factor` parses, `_extract_injection` raises rather than
 silently crediting nothing (`luminus.py:612-618`). `test_missing_injection_row_fails_loud`
-(`test_luminus.py:119-125`) corrupts the `injectée` label and asserts the raise.
+(`test_luminus.py:127-133`) corrupts the `injectée` label and asserts the raise.
 
 There is no supplier-side prosumer / PV forfait on Luminus cards
 (`SupplierSnapshot.supplier_prosumer_eur_per_kva_year` is left `None`). The only
@@ -437,7 +437,7 @@ not a fee-free contract; the comment notes dropping this would silently lose
 abonnement, so it must bill `0`, not the standard fee (it is billed once on the
 main connection). Returns `None` when there is no third column (dynamic cards
 print a single value and offer no exclusive-night), so the standard fee applies.
-`test_comfy_wallonia_fixed_rates_and_dso` (`test_luminus.py:137-147`) confirms
+`test_comfy_wallonia_fixed_rates_and_dso` (`test_luminus.py:145-155`) confirms
 `yearly_fixed_fee_exclusive_night == 0.0` and that
 `yearly_fixed_fee_for_meter(..., "exclusive_night")` returns `0.0`.
 
@@ -450,12 +450,12 @@ print a single value and offer no exclusive-night), so the standard fee applies.
   (`luminus.py:413-415`).
 - **Region-specific dynamic base.** Flanders and Wallonia have different bases
   in the same formula; never merge regions into one snapshot
-  (`test_luminus.py:95-107`).
+  (`test_luminus.py:103-115`).
 - **Applicable-vs-estimate rows** on both the consumption (`Énergie fournie` vs
   `Estimation annuelle de l'énergie fournie`) and injection (`Tarif` vs
   `Estimation annuelle du tarif`) sides. Always take the current-month
   applicable row (`test_comfyflex_flanders_uses_current_monthly_not_annual_estimate`,
-  `test_luminus.py:158-166`; injection at `test_luminus.py:260-278`).
+  `test_luminus.py:166-174`; injection at `test_luminus.py:268-286`).
 - **SMR3 reduced data-management fee** from the `quart d'heure` footnote on
   dynamic Flanders cards, not the table's monthly column (`luminus.py:585-593`).
 - **Two DSO column widths** per region (static wide, dynamic narrow); the same

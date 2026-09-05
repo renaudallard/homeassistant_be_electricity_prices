@@ -69,6 +69,18 @@ def test_dynamic_wallonia_extracts_consumption_formula() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(90.0)
 
 
+def test_dynamic_bills_per_clock_hour() -> None:
+    """The card indexes on BELPEXH, the hourly quotation, so the contract
+    stays on the hourly ENTSO-E product. Unpinned until now."""
+    snap = parse_snapshot(
+        "totalenergies_mydynamic",
+        fixture_text("totalenergies_dynamic_w.pdf", layout=True),
+        "wallonia",
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is False
+
+
 def test_dynamic_brussels_pulls_base_from_split_layout() -> None:
     # Brussels Dynamic prints the formula across two lines:
     #   "0.1034 * BELPEXH + 0.1034 * BELPEXH + ... + Formule tarifaire"

@@ -79,7 +79,7 @@ suffix mapping is not identity: the Korting tier's PDF filename token is `VT`, n
 `Korting`, and the Slim tier's token alternates between `SL` and the full word `Slim` from
 month to month (both live in the CMS at once), so `_SUFFIX_ALIASES` treats them as aliases
 (`providers/frank.py:112`). `test_matches_suffix_slim_accepts_both_sl_and_full_word`
-(`tests/test_frank.py:354`) pins this behaviour.
+(`tests/test_frank.py:363`) pins this behaviour.
 
 No tier is retired. `discover()` (`providers/frank.py:264`) surfaces any unrecognised
 suffix as `frank_dynamic_<suffix>` so the catalog-drift detector flags a genuinely new
@@ -183,7 +183,7 @@ sub-parsers. All five run against the layout-preserving text from
 separators and `to_float` normalises either. The comment (`providers/frank.py:325`)
 records why: a dot-decimal re-render of the card would otherwise truncate a mandatory tax
 row to 0 or collapse the VAT multiplier 1,06 to 1 rather than failing loud.
-`test_dot_decimal_render_matches_comma` (`tests/test_frank.py:133`) pins that a comma card
+`test_dot_decimal_render_matches_comma` (`tests/test_frank.py:142`) pins that a comma card
 and its dot-replaced twin parse identically.
 
 ## Energy formula
@@ -207,7 +207,7 @@ base   = base_pre_vat_cents * vat_mult / 100.0
 
 The VAT multiplier (1,06 for the 6% residential rate) is applied here because the energy
 formula on the card is stated ex-VAT and multiplied by `x 1,06`. `test_energy_formula_factor`
-(`tests/test_frank.py:64`) pins the standard April card at factor `0.1068 * 1.06 * 10`
+(`tests/test_frank.py:73`) pins the standard April card at factor `0.1068 * 1.06 * 10`
 (illustrative) and `test_energy_formula_base` at `1.500 * 1.06 / 100` (illustrative).
 
 The monthly standing charge is parsed by `_MONTHLY_FEE_RE` matching
@@ -215,9 +215,9 @@ The monthly standing charge is parsed by `_MONTHLY_FEE_RE` matching
 `yearly_fixed_fee` (`providers/frank.py:365`). A missing row is fatal: the comment notes
 the ~35 EUR/yr charge is mandatory, so a miss raises "monthly fixed fee row not found"
 rather than silently billing zero (`providers/frank.py:362`).
-`test_missing_monthly_fee_is_fatal` (`tests/test_frank.py:178`) locks this. The April
+`test_missing_monthly_fee_is_fatal` (`tests/test_frank.py:187`) locks this. The April
 fixture's 2,92 EUR/month resolves to 35.04 EUR/year (illustrative,
-`tests/test_frank.py:78`).
+`tests/test_frank.py:87`).
 
 ## Injection
 
@@ -241,14 +241,14 @@ base   = base_cents / 100.0
 A missing formula is fatal: every Frank dynamic card prints one, so a miss is layout
 drift, not a fee-free contract, and raising avoids silently crediting a solar user 0
 EUR/kWh (`providers/frank.py:385`). `test_missing_injection_is_fatal`
-(`tests/test_frank.py:192`) pins this. The sign between BELPEX and the base is mandatory
+(`tests/test_frank.py:201`) pins this. The sign between BELPEX and the base is mandatory
 in the regex; a sign-less or reworded formula misses and raises rather than defaulting to
 minus (`providers/frank.py:391`).
 
 The April fixture yields factor `0.1 * 10 = 1.0` and base `-1.150 / 100` (illustrative,
-`tests/test_frank.py:217`). Watch the JN tier: it carries a different injection base
+`tests/test_frank.py:226`). Watch the JN tier: it carries a different injection base
 (-0,02 vs -0,0115 on the other four tiers), pinned by the parametrized tier test
-(`tests/test_frank.py:250` and the comment at `tests/test_frank.py:272`).
+(`tests/test_frank.py:259` and the comment at `tests/test_frank.py:281`).
 
 Frank publishes no supplier-side prosumer / PV forfait; `parse_snapshot` leaves
 `supplier_prosumer_eur_per_kva_year` at its default `None`. Flanders digital meters
@@ -260,7 +260,7 @@ stays `None` too.
 `_extract_taxes` (`providers/frank.py:429`) parses five levy rows and builds a `TaxOverlay`.
 All card values are VAT-inclusive (6% BTW), so `vat_rate=0.0` is set explicitly
 (`providers/frank.py:447`, comment at :439) and pinned by `test_taxes_vat_rate_zero`
-(`tests/test_frank.py:211`).
+(`tests/test_frank.py:220`).
 
 | overlay field | card row | regex | required |
 | --- | --- | --- | --- |
@@ -273,23 +273,23 @@ All card values are VAT-inclusive (6% BTW), so `vat_rate=0.0` is set explicitly
 (cogeneration) surcharges (`providers/frank.py:443`). Because Frank is Flanders-only, both
 are mandatory renewables levies on every card; a miss raises "could not parse Frank
 Energie GSC/WKK levies" rather than under-billing (`providers/frank.py:434`).
-`test_missing_gsc_wkk_is_fatal` (`tests/test_frank.py:185`) locks this, and
+`test_missing_gsc_wkk_is_fatal` (`tests/test_frank.py:194`) locks this, and
 `test_taxes_flanders_renewables_gsc_plus_wkk` pins GSC 1,166 + WKK 0,371 = 1,537 EURct/kWh
-(illustrative, `tests/test_frank.py:200`).
+(illustrative, `tests/test_frank.py:209`).
 
 The federal excise is mandatory; a miss raises "could not parse Frank Energie tax block"
 (`providers/frank.py:422`), pinned by `test_missing_federal_excise_is_fatal`
-(`tests/test_frank.py:169`).
+(`tests/test_frank.py:178`).
 
 The federal energy contribution used to be mandatory too. It dropped to zero on
 2026-08-01 and Frank deleted the row from the card outright rather than printing a zero,
 which took every Frank contract offline (issue #49). An absent row is now read as the
 levy being abolished and defaults to 0.0 (`providers/frank.py:430`, comment at :423);
-`test_august_card_drops_the_energy_contribution_row` (`tests/test_frank.py:151`) pins it
+`test_august_card_drops_the_energy_contribution_row` (`tests/test_frank.py:160`) pins it
 against the August 2026 fixture, and the April fixture still pins the pre-reform 0,2042.
 The energy fund is
 optional and defaults to 0.0; the April fixture has no residential fund row, pinned by
-`test_taxes_energy_fund_residential_zero` (`tests/test_frank.py:207`). All EURct/kWh values
+`test_taxes_energy_fund_residential_zero` (`tests/test_frank.py:216`). All EURct/kWh values
 are divided by 100 to reach EUR/kWh.
 
 ## DSO overlay
@@ -311,7 +311,7 @@ canonical DSO key:
 
 Note Kempen -> `fluvius_iveka` and Midden-Vlaanderen -> `fluvius_intergem`: the card's
 regional trade name is not the canonical key. `test_dsos_cover_all_eight_fluvius_subareas`
-(`tests/test_frank.py:85`) asserts all eight are present.
+(`tests/test_frank.py:94`) asserts all eight are present.
 
 The parser first narrows to the digital-meter section between the "Digitale meter" and
 "Klassieke meter" markers (`providers/frank.py:455`); a missing "Digitale meter" marker
@@ -327,7 +327,7 @@ excl_night  -> distribution_exclusive_night (EURct/kWh /100)
 ```
 
 `transport` is always 0.0: transport is bundled into distribution on Frank's card, pinned
-by `test_dso_transport_is_zero` (`tests/test_frank.py:107`). A label that does not match is
+by `test_dso_transport_is_zero` (`tests/test_frank.py:116`). A label that does not match is
 skipped (not fatal), so a single relabelled sub-area drops out silently rather than failing
 the whole snapshot; the eight-sub-area test is the safety net.
 
@@ -336,20 +336,20 @@ Two layout hurdles are handled in the row regex:
 - The bracket around the label is character-class-tolerant: `[\[\(]...[\]\)]`
   (`providers/frank.py:465`) accepts a mismatched open/close bracket. Frank's PDF renders
   Kempen as `Fluvius [Kempen)` with mismatched brackets;
-  `test_dso_kempen_despite_bracket_artifact` (`tests/test_frank.py:114`) pins that it still
+  `test_dso_kempen_despite_bracket_artifact` (`tests/test_frank.py:123`) pins that it still
   parses.
 - The hyphen in labels like "Halle-Vilvoorde" is loosened to `[\s\-]*` so a space or
   missing hyphen in the rendered text still matches (`providers/frank.py:463`).
 
 `test_dso_antwerpen_distribution` and `test_dso_antwerpen_capacity_and_databeheer`
-(`tests/test_frank.py:91`) pin the Antwerpen row (illustrative: normaal 5,35 ct/kWh, excl
+(`tests/test_frank.py:100`) pin the Antwerpen row (illustrative: normaal 5,35 ct/kWh, excl
 nacht 4,81 ct/kWh, capacity 52,37 EUR/kW/yr, databeheer 18,92 EUR/yr).
 
 ## valid_until
 
 `parse_valid_until` (`_pdf.py:1004`) is the shared best-effort validity parser; Frank cards
 resolve to the last day of the pricing month. `test_valid_until_is_end_of_april`
-(`tests/test_frank.py:292`) pins the April fixture to a date in month 4, year 2026. This
+(`tests/test_frank.py:301`) pins the April fixture to a date in month 4, year 2026. This
 parsed date is what makes `archive_validity_check` authoritative in `fetch_for_month`.
 
 ## Quirks and historical bugs (land mines)
@@ -368,14 +368,14 @@ parsed date is what makes `archive_validity_check` authoritative in `fetch_for_m
 - Fail-loud on missing mandatory rows: energy formula, monthly fee, injection formula,
   federal excise, and GSC/WKK all raise `ExtractorError` rather than silently zeroing.
   The energy contribution is the one federal row that is NOT mandatory any more — see
-  Taxes below. Five fatal-miss tests guard the rest (`tests/test_frank.py:177`-197,
+  Taxes below. Five fatal-miss tests guard the rest (`tests/test_frank.py:186`-197,
   :184, :192, and `test_missing_federal_excise_is_fatal` at :169).
 - Mismatched bracket artifact in the DSO table (`Fluvius [Kempen)`) is tolerated by the
   character-class brackets (`providers/frank.py:465`).
 - Kempen and Midden-Vlaanderen map to non-obvious canonical keys (`fluvius_iveka`,
   `fluvius_intergem`).
 - JN tier's injection base differs (-0,02 vs -0,0115 elsewhere,
-  `tests/test_frank.py:272`).
+  `tests/test_frank.py:281`).
 - Hourly billing: no tier sets `quarter_hourly`, so the integration aggregates ENTSO-E's
   15-minute curve to hourly (`base.py:144`).
 
@@ -393,7 +393,7 @@ Fixtures live under `tests/fixtures/`. Each is a real Frank PDF for one tier and
 | `frank_dynamic_aug.pdf` | `frank_dynamic` | standard tier, August 2026; the first card with the energy-contribution row deleted |
 
 The five tiers share one PDF layout, but only the default tier had a fixture originally;
-`test_non_default_tiers_extract_energy_and_injection` (`tests/test_frank.py:262`) was added
+`test_non_default_tiers_extract_energy_and_injection` (`tests/test_frank.py:271`) was added
 with the other four fixtures to catch a tier-specific card regression. Tests load fixtures
 through `fixture_text(name, layout=True)` (`tests/test_frank.py:47`), matching the
 layout-preserving extraction used in production.

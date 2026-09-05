@@ -216,6 +216,16 @@ def test_dynamic_extracts_consumption_formula_tvac() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(42.4)
 
 
+def test_dynamic_bills_per_clock_hour() -> None:
+    """Mega quotes "Day Ahead Epex Spot" per hour, so the contract stays on
+    the hourly ENTSO-E product. Unpinned until now."""
+    snap = parse_snapshot(
+        "mega_dynamic", fixture_text("mega_dynamic_w.pdf"), "wallonia"
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is False
+
+
 def test_dynamic_injection_uses_separate_htva_formula_with_endash() -> None:
     snap = parse_snapshot(
         "mega_dynamic", fixture_text("mega_dynamic_w.pdf"), "wallonia"

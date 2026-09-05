@@ -358,6 +358,19 @@ def test_dynamic_extracts_factor_and_base() -> None:
     assert snap.energy.factor * 0.10 + snap.energy.base == pytest.approx(0.11872)
 
 
+def test_dynamic_bills_per_clock_hour() -> None:
+    """The card sells an HOURLY index: Power Dynamic is quoted on Belpex-H,
+    and ``quarter_hourly`` is what picks the ENTSO-E product the contract is
+    fetched on and whether it is priced on 24 slots a day or 96. Nothing in
+    this file read it, so flipping it would have moved the contract onto the
+    quarter-hourly product with every test still green."""
+    snap = parse_snapshot(
+        fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn", REGION_FLANDERS
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is False
+
+
 def test_dynamic_publication_label_present() -> None:
     snap = parse_snapshot(
         fixture_text("eneco_dyn.pdf"), "power_dynamic", "test://dyn", REGION_FLANDERS

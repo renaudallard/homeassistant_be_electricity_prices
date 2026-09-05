@@ -164,7 +164,7 @@ candidate:
 Returns `None` when no volume in the range yields a covering snapshot
 (`eneco.py:215`) or when the contract id is unknown (`eneco.py:190-192`); the
 coordinator then falls back to the current snapshot as a proxy. This behaviour is
-pinned by `test_fetch_for_month_*` (`tests/test_eneco.py:458-552`): a match
+pinned by `test_fetch_for_month_*` (`tests/test_eneco.py:471-565`): a match
 returns the snapshot, a validity mismatch returns `None`, a 404 for every volume
 returns `None`, an unknown contract returns `None` rather than raising, and a
 Walloon caller gets the Flemish energy fund zeroed on the archived card too.
@@ -222,7 +222,7 @@ swapping comma for dot.
 `_extract_publication_month` (`eneco.py:316-318`) captures `Tariefkaart <month>
 <year>` (for example `mei 2026`). `valid_until` comes from the shared
 `parse_valid_until` (`_pdf.py:1004`), which reads the "Geldig van ... t.e.m. ..."
-line. `test_extracts_valid_until_from_geldig_line` (`tests/test_eneco.py:368-382`)
+line. `test_extracts_valid_until_from_geldig_line` (`tests/test_eneco.py:381-395`)
 pins April 30 2026 on all three fixtures so the `tomorrow_prices_available` binary
 sensor flips off at month end.
 
@@ -415,10 +415,10 @@ Injection taxonomy (the three-shape rule, `base.py:268-306`):
   card computes from the LAST KNOWN (previous) month's index: on the August 2026
   card, 6,38 c/kWh against the 8,0649 August settles at, a 20,9% under-credit.
   Illustrative: `current = 0.0476`, `factor = 0.8`, `base = -0.0265`
-  (`tests/test_eneco.py:385-415`).
+  (`tests/test_eneco.py:398-428`).
 - **Power Dynamic is hourly `factor * spot + base`**: it indexes on Belpex-H, so it
   is the only contract that surfaces spot coefficients. Illustrative, from
-  `test_dynamic_extracts_injection_rates` (`tests/test_eneco.py:418-428`): formula
+  `test_dynamic_extracts_injection_rates` (`tests/test_eneco.py:431-441`): formula
   `0,1 X BELPEX-H -1,188` yields `factor = 1.0`, `base = -0.01188`, and (no
   `Maandprijs`) `current = 0.0592` from the yearly estimate. The negative base is a
   real Belgian outcome (the producer can pay to inject at low spot), preserved via
@@ -444,7 +444,7 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
   dropped the `/ VALORISATIE` suffix from the injection heading. The old anchor
   keyed off that suffix, which zeroed every Eneco injection credit. The anchor now
   keys off the stable `AFNAME EN INJECTIE` prefix (`eneco.py:634-637`), guarded by
-  `test_injection_survives_valorisatie_suffix_drop` (`tests/test_eneco.py:431-448`).
+  `test_injection_survives_valorisatie_suffix_drop` (`tests/test_eneco.py:444-461`).
 - **`>` bullet before every row label until June 2025**: the cards printed
   `10,67 10,67 10,67 10,67 > Maandprijs`, and the July 2025 redesign dropped the
   bullet. The anchors demanded the bare label, so `fetch_for_month` rejected the
@@ -453,7 +453,7 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
   Dynamic issues that `archive_validity_check` accepted anyway. Both anchors now
   take the optional `_BULLET` (`eneco.py:152`), guarded by
   `test_flex_reads_the_bullet_prefixed_archive_card`
-  (`tests/test_eneco.py:623-640`). 26 of the 27 Flex issues come back: the
+  (`tests/test_eneco.py:636-653`). 26 of the 27 Flex issues come back: the
   October 2023 card still stops on the federal excise anchor, because its text
   layer splits the anchor word across a line break as `V\nerbruik tussen`. Flex
   issues before April 2023 stay unreadable on purpose: they price a
@@ -467,11 +467,11 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
   the 143 archived cards the cut moves no match and drops only that one. It is
   guarded by `test_energy_anchor_does_not_reach_the_injection_page`, which
   reshapes the June 2025 card into the 2021 layout and asserts that
-  `parse_snapshot` raises (`tests/test_eneco.py:656-678`).
+  `parse_snapshot` raises (`tests/test_eneco.py:669-691`).
 - **An injection row we cannot read is fatal**: a numeric row ending in
   `Maandprijs` or `Geschatte jaarprijs` that neither anchor matched raises rather
   than storing a snapshot with an empty leg (`eneco.py:682-685`, guarded at
-  `tests/test_eneco.py:643-653`). The bullet is why: the archive check passes a
+  `tests/test_eneco.py:656-666`). The bullet is why: the archive check passes a
   card whose credit silently went missing, and a keyless entry then credits
   nothing at all for those months. The `Zie afname` recap rows carry the same two
   labels with no figure, so the guard keys on a row that starts with a number.
@@ -495,7 +495,7 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
   Walloon entry right the month that changes. Guarded by
   `test_energy_fund_is_flanders_only` (`tests/test_eneco.py:160-174`) on the live
   path and `test_fetch_for_month_gates_the_energy_fund_by_region`
-  (`tests/test_eneco.py:519-552`) on the archive path, both of which patch a
+  (`tests/test_eneco.py:532-565`) on the archive path, both of which patch a
   non-zero rate into the fixture to have anything to assert.
 - **`Standaard tarief (domicilieadres)` label wrap**: the January 2026 template gave
   the Wallonia DSO table ten numeric columns instead of seven, narrowing the tax
@@ -522,7 +522,7 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
 - **Archive substitution guard**: `archive_validity_check` rejects a snapshot whose
   `valid_until` does not fall in the requested month, so a CDN that overwrites a
   historical URL with the current card cannot mis-bill past consumption
-  (`_pdf.py:756-793`, `tests/test_eneco.py:478-496`).
+  (`_pdf.py:756-793`, `tests/test_eneco.py:491-509`).
 - **Sign flexibility**: every Belpex formula match (consumption and injection)
   accepts the full `SIGN_CHARS` class so a card that flips to a Unicode minus does
   not silently drop the formula or the base (`eneco.py:386-388`, `428-431`,
