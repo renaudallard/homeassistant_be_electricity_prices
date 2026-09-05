@@ -101,6 +101,7 @@ _NL_MONTHS = NL_MONTHS
 _CONTRACT_SLUGS: dict[str, str] = {
     "power_fix": "FIX",
     "power_flex": "FLEX",
+    "power_flex_one": "FLEX_ONE",
     "power_dynamic": "DYNAMIC",
 }
 
@@ -242,6 +243,12 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     Eneco's tariefkaarten page links every product as a direct PDF.
     Extract every ``BC_..._NL_ENECO_POWER_<NAME>.pdf`` and lower-case
     to match the registry's contract id (``power_fix``, etc.).
+
+    The product token accepts underscores. A bare ``[A-Z]+`` matched the
+    three single-word slugs and nothing else, so Zon & Wind Flex One
+    (``POWER_FLEX_ONE``) stayed invisible here for as long as it was sold
+    while every catalog check reported green. Discovery has to be looser
+    than the resolver, never narrower.
     """
     try:
         listing = await _fetch_listing(session)
@@ -249,7 +256,7 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
         return set()
     return {
         f"power_{name.lower()}"
-        for name in re.findall(r"BC_[\d_]+_NL_ENECO_POWER_([A-Z]+)\.pdf", listing)
+        for name in re.findall(r"BC_[\d_]+_NL_ENECO_POWER_([A-Z_]+)\.pdf", listing)
     }
 
 
@@ -314,7 +321,9 @@ def _extract_publication_month(text: str) -> str:
 def _extract_energy(text: str, contract_id: str) -> EnergyRates:
     if contract_id == "power_fix":
         return _extract_fixed(text)
-    if contract_id == "power_flex":
+    if contract_id in ("power_flex", "power_flex_one"):
+        # Flex One is the same variable card with a lower base coefficient
+        # (1,462 against Flex's 3,001), so it parses on the same block.
         return _extract_variable(text)
     if contract_id == "power_dynamic":
         return _extract_dynamic(text)
@@ -730,9 +739,24 @@ EXTRACTOR = SupplierExtractor(
             spot_indexed_injection=True,
         ),
         Contract(
+            # A second variable card, not a relabel: its own text sells a
+            # "contract van 1 jaar" against Flex's "contract van onbepaalde
+            # duur". Same layout, same 0,102 factor and same 65,00 EUR fee,
+            # with a lower base (1,462 against 3,001), so on the September
+            # 2026 cards it prices 15,98 c/kWh against Flex's 17,61: a Flex
+            # One household forced onto Flex overpays 57,05 EUR a year at
+            # 3500 kWh. Injection is identical, hence the same flag.
+            id="power_flex_one",
+            label="Eneco Zon & Wind Flex One",
+            kind="variable",
+            regions=_ENECO_REGIONS,
+            spot_indexed_injection=True,
+        ),
+        Contract(
             # Power Dynamic is sold in Flanders only: its card reads
             # "voor Vlaanderen" / "in Vlaanderen" and requires a Flemish
-            # SMR3 digital meter, unlike Fix/Flex which cover both regions
+            # SMR3 digital meter, unlike Fix, Flex and Flex One, which all
+            # cover both regions
             # ("voor Vlaanderen en Wallonie"). The Walloon DSO rows on the
             # card are vestigial reference, so don't offer it in Wallonia.
             id="power_dynamic",

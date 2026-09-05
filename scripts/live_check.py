@@ -2184,6 +2184,7 @@ _INJECTION_SHAPE: dict[str, str] = {
     # printed figure alone is the previous month's rate.
     "power_fix": "month",
     "power_flex": "month",
+    "power_flex_one": "month",
     # EBEM indexes on SPP0, the solar-weighted mean, same reasoning.
     "ebem_variable": "spp",
     "ebem_basic_plus": "spp",
@@ -3066,11 +3067,12 @@ _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     "ebem": 130.0,
     # eneco.be answers slowly from GitHub runners and fast from anywhere
     # else: the listing page it times out on in CI serves in ~1.3 s and
-    # ~180 KB from a residential line. Its six small fetches summed to
-    # 35-96 s across the six attempts of one run, with a TimeoutError on
-    # every attempt, so the 90 s default fires on host latency rather
-    # than on any change to the cards. Same shape as the bolt CDN and
-    # the mega runner-IP block.
+    # ~180 KB from a residential line. Its listing plus one card per
+    # contract summed to 35-96 s across the six attempts of one run, with a
+    # TimeoutError on every attempt, so the 90 s default fires on host
+    # latency rather than on any change to the cards. Stated per contract
+    # rather than as a count: the count moved the day Flex One was added.
+    # Same shape as the bolt CDN and the mega runner-IP block.
     "eneco": 150.0,
     # Energy Knights is the same shape again, and was simply never sized: it
     # arrived after these overrides were written and sat on the 90s default.

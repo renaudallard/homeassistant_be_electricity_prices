@@ -355,7 +355,7 @@ regardless of the consumption snapshot's `vat_rate`. At least one of (`current`,
 When the per-slot triplet is set, `current` stays the single-meter fallback. The
 vast majority of contracts leave the triplet `None` (one injection rate across
 all hours). Note the related invariant: monthly-indexed injection (EBEM
-Variabel/B@sic+, Eneco Fix/Flex, DATS24) must emit `current` only and never an
+Variabel/B@sic+, Eneco Fix/Flex/Flex One, DATS24) must emit `current` only and never an
 hourly-spot `factor`/`base`, or a latent mis-price is masked while the
 indicative prints.
 

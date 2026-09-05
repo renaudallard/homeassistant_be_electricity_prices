@@ -195,6 +195,26 @@ def test_eneco_discover_matches_registry() -> None:
     assert discovered == expected
 
 
+def test_eneco_discover_sees_an_underscored_product_slug() -> None:
+    """The product token has to accept an underscore.
+
+    Eneco's fourth residential card is ``POWER_FLEX_ONE``, and the old
+    ``[A-Z]+`` token could not match it at all, so the card was invisible to
+    the catalogue check for as long as it was sold while every run reported
+    green. The registry comparison above cannot see that on its own: it
+    passes whenever the fixture and the registry agree, whatever the
+    character class allows. This asks the question the other way round, with
+    a slug that is in neither.
+    """
+    body = _read("eneco.html") + "\nBC_032_012609_NL_ENECO_POWER_FLEX_TWO.pdf\n"
+    session = _FakeSession(body)
+    discovered = _run(eneco_mod.discover(session))
+    assert "power_flex_two" in discovered - set(eneco_mod._CONTRACT_SLUGS)
+    # The fixture also carries the three GAS cards Eneco lists on the same
+    # page. A looser token must not start reporting those as new products.
+    assert not [cid for cid in discovered if "gas" in cid]
+
+
 def test_totalenergies_discover_matches_registry() -> None:
     session = _FakeSession(_read("totalenergies.html"))
     discovered = _run(totalenergies_mod.discover(session))

@@ -249,8 +249,8 @@ served by a rate a month stale than by no energy leg at all.
 
 ### Monthly-indexed feed-in credits
 
-The same lag applies to a feed-in credit. Eneco Power Fix and Flex print a
-credit "berekend op basis van de LAATST GEKENDE waarde van Belpex-injectie",
+The same lag applies to a feed-in credit. Eneco Power Fix, Flex and Flex One
+print a credit "berekend op basis van de LAATST GEKENDE waarde van Belpex-injectie",
 i.e. the previous month's, while the contract indexes it monthly and settles
 retroactively. `InjectionRates.month_indexed` marks that, and the credit then
 resolves against the delivery month's mean on the live tick, in both
@@ -601,7 +601,7 @@ carrying a branch that cannot run.
 | (a) Monthly indicative | `current` set | No | Ecofix Flexy, the fixed and variable cards that publish a realized rate |
 | (b) Hourly formula | `factor` + `base` set | Yes | Dynamic contracts (Engie, Luminus, Mega, OCTA+, TotalEnergies) |
 | (c) Spot-indexed on a static-energy card | `factor` + `base` set, energy NOT dynamic, and either `current is None` or the card flags `slot_indexed` | Yes | Cociter Variable and Variable Trihoraire, every Bolt fixed and variable card |
-| (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed` | A monthly MEAN, not an hourly spot | DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex, energie.be, Energy Knights Essentia, EnergyVision fixed (both regions) |
+| (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed` | A monthly MEAN, not an hourly spot | DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex/Flex One, energie.be, Energy Knights Essentia, EnergyVision fixed (both regions) |
 
 Shape (d) resolves through `_spp_injection_spot`, which is the one place that
 decides WHICH mean and is deliberately not allowed to answer with an hour's
@@ -710,7 +710,7 @@ user-facing numbers diverged (`injection.py:278-281`).
 
 ### Historical bug: monthly-indexed injection emitting an hourly factor
 
-A monthly-indexed injection (DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex,
+A monthly-indexed injection (DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex/Flex One,
 EnergyVision 3 jaar vast / 1 an fixe) must
 emit only the realized monthly `current`, never an hourly `factor*spot+base`,
 because the indicative is the actual credit. The guard that keeps shape (b)/(c)

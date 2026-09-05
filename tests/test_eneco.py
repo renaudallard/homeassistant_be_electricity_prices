@@ -248,6 +248,70 @@ def test_flex_extracts_current_monthly_rate() -> None:
     assert snap.energy.formula is not None and "BELPEX" in snap.energy.formula
 
 
+def test_flex_one_is_registered_and_sold_in_both_regions() -> None:
+    # Eneco's fourth residential card, POWER_FLEX_ONE on the CDN. It sat
+    # unregistered while it was sold, and it is the cheaper of the two
+    # variable cards: 15,98 against Flex's 17,61 c/kWh, 57,05 EUR/yr at
+    # 3500 kWh, on the same 65,00 EUR fee.
+    regions = {c.id: set(c.regions) for c in eneco_mod.EXTRACTOR.contracts}
+    assert regions["power_flex_one"] == {"flanders", "wallonia"}
+    assert eneco_mod._CONTRACT_SLUGS["power_flex_one"] == "FLEX_ONE"
+
+
+def test_flex_one_parses_on_the_flex_energy_block() -> None:
+    # Same card layout as Flex, same 0,102 factor, lower base (1,462
+    # against 3,001), so no parser changes hands: only the dispatch does.
+    snap = parse_snapshot(
+        fixture_text("eneco_flex_one.pdf"),
+        "power_flex_one",
+        "test://flexone",
+        REGION_FLANDERS,
+    )
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current == pytest.approx(0.1598)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+    # (0,102 X BELPEX-RLP-M + 1,462) X 1,06, converted to EUR/kWh against
+    # a spot in EUR/kWh: factor 0,102 x 1,06 x 10, base 1,462 x 1,06 / 100.
+    assert snap.energy.formula_factor == pytest.approx(1.0812)
+    assert snap.energy.formula_base == pytest.approx(0.0154972)
+
+
+def test_flex_one_carries_the_full_overlay() -> None:
+    # The DSO and tax parsers are shared, so the point of this is that the
+    # new card really does carry both blocks: an energy leg that parses on
+    # top of empty overlays would bill the network side at zero.
+    snap = parse_snapshot(
+        fixture_text("eneco_flex_one.pdf"),
+        "power_flex_one",
+        "test://flexone",
+        REGION_FLANDERS,
+    )
+    assert FLUVIUS_KEYS <= set(snap.dsos)
+    assert snap.taxes.federal_excise == pytest.approx(0.048760)
+    assert snap.taxes.flanders_renewables == pytest.approx(0.0151)
+    assert snap.taxes.wallonia_renewables == pytest.approx(0.0322)
+    assert snap.valid_until == date(2026, 9, 30)
+
+
+def test_flex_one_extracts_injection_rates() -> None:
+    # The same injection coefficients Flex's September card prints:
+    # "0,084 X BELPEX -3" with a 7,86 c/kWh Maandprijs, settled on the
+    # monthly Belpex-injectie. The month_indexed flag is what keeps the
+    # coefficients off the hourly spot path, so it has to survive here too.
+    snap = parse_snapshot(
+        fixture_text("eneco_flex_one.pdf"),
+        "power_flex_one",
+        "test://flexone",
+        REGION_FLANDERS,
+    )
+    inj = snap.injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.0786)
+    assert inj.month_indexed is True
+    assert inj.factor == pytest.approx(0.84)
+    assert inj.base == pytest.approx(-0.03)
+
+
 def test_flex_yearly_fee_survives_extra_header_line() -> None:
     # The fee anchor keys off the (€/jaar) header and the "Geschatte
     # jaarprijs" row, not a fixed newline count, so an extra header line

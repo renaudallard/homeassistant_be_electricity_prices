@@ -1173,6 +1173,38 @@ def test_a_month_indexed_card_losing_its_flag_fails() -> None:
     assert rows and rows[0].ok
 
 
+def test_every_month_indexed_eneco_card_is_pinned_in_the_shape_map() -> None:
+    """An unpinned Eneco card derives the WRONG shape, not a weaker one.
+
+    Fix, Flex and Flex One all carry ``spot_indexed_injection`` so the flow
+    offers them a key, and that flag is the first thing
+    ``_expected_injection_shape`` derives from. In a live run, where
+    ``_CONTRACTS_BY_ID`` is populated, an unpinned card resolves to "spot",
+    which asserts a factor and a base and never looks at ``month_indexed`` at
+    all, so a card that dropped the flag would ship green and credit the
+    current slot's spot. Derived from the fixtures rather than listed, so a
+    fourth Eneco product cannot be added without landing in the map, which is
+    exactly how Flex One arrived.
+    """
+    from custom_components.be_electricity_prices.const import REGION_FLANDERS
+    from custom_components.be_electricity_prices.providers.eneco import parse_snapshot
+
+    from tests import fixture_text
+
+    for fixture, cid in (
+        ("eneco_fix.pdf", "power_fix"),
+        ("eneco_flex.pdf", "power_flex"),
+        ("eneco_flex_one.pdf", "power_flex_one"),
+        ("eneco_dyn.pdf", "power_dynamic"),
+    ):
+        snap = parse_snapshot(
+            fixture_text(fixture), cid, f"test://{fixture}", REGION_FLANDERS
+        )
+        assert snap.injection is not None, fixture
+        if snap.injection.month_indexed:
+            assert lc._expected_injection_shape(cid) == "month", cid
+
+
 def test_a_month_indexed_card_losing_its_coefficients_fails() -> None:
     """The printed indicative alone is the PREVIOUS month's rate, so a card
     that keeps it and loses the formula must not pass. That is exactly what
