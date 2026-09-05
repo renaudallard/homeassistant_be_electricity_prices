@@ -587,3 +587,28 @@ def test_unreadable_injection_row_is_fatal() -> None:
         text = text.replace(label, f"» {label}")
     with pytest.raises(eneco_mod.ExtractorError, match="injection row"):
         parse_snapshot(text, "power_fix", "test://fix", REGION_FLANDERS)
+
+
+def test_energy_anchor_does_not_reach_the_injection_page() -> None:
+    """The bullet left the consumption anchor loose enough to match the
+    injection row, which prints the same shape. The June 2021 Flex card is
+    the live instance: it prices a Kwartaalprijs, so the only four figure
+    "> Maandprijs" row in the whole document is the injection one, and
+    reading it would bill an injection credit as the consumption price.
+    That card cannot carry the test because it fails on the fixed fee
+    first, so give the June 2025 card the same shape."""
+    text = fixture_text("eneco_flex_jun25.pdf")
+    text = text.replace(
+        "10,67 10,67 10,67 10,67 > Maandprijs",
+        "Zie afname Zie afname Zie afname Zie afname > Kwartaalprijs",
+    )
+    text = text.replace(
+        "2,90 2,90 2,90 > Maandprijs", "4,91 4,91 4,91 4,91 > Maandprijs"
+    )
+    # Keep the test from going vacuous if the fixture is ever regenerated:
+    # the one row the anchor can match has to sit on the injection side.
+    rows = [m.start() for m in re.finditer(r"(?:\d,\d+ ){4}> Maandprijs", text)]
+    assert len(rows) == 1
+    assert rows[0] > text.index("AFNAME EN INJECTIE")
+    with pytest.raises(eneco_mod.ExtractorError, match="variable energy block"):
+        parse_snapshot(text, "power_flex", "test://jun21shape", REGION_FLANDERS)

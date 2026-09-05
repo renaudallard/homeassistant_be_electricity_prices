@@ -354,8 +354,21 @@ def _extract_variable(text: str) -> VariableRates:
         text,
         re.S,
     )
+    # Fix and Flex reprint the same "<figures> > Maandprijs" row on the
+    # injection side, and the optional bullet lets this anchor reach it: on
+    # the June 2021 Flex card the only match in the whole document sits on
+    # the injection page. So search the consumption side alone, cutting at
+    # whichever injection heading the card prints, "AFNAME EN INJECTIE" on
+    # the modern layout and the btw exemption line on the 2021 two-page one.
+    # Measured over the 143 archived cards: the cut moves no match and drops
+    # only that one. Five 2020/2021 cards print neither heading, and none of
+    # them carries an injection section at all.
+    injection = re.search(
+        r"AFNAME\s+EN\s+INJECTIE|Injectietarieven\s+zijn\s+vrijgesteld", text
+    )
+    consumption = text[: injection.start()] if injection else text
     monthly_match = re.search(
-        rf"{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_BULLET}Maandprijs", text
+        rf"{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_BULLET}Maandprijs", consumption
     )
     # Accept any sign character between the BELPEX factor and the base
     # so a future card flipping to '-' or to a Unicode minus doesn't
