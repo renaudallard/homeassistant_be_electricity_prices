@@ -554,3 +554,36 @@ def test_fix_and_flex_credit_the_delivery_month_not_the_printed_indicative() -> 
     assert dyn.injection is not None
     assert dyn.injection.month_indexed is False
     assert _injection_is_spot_formula(dyn.injection, dyn.energy) is True
+
+
+def test_flex_reads_the_bullet_prefixed_archive_card() -> None:
+    """Every issue up to June 2025 prefixed the row label with a ">"
+    bullet, which the Maandprijs anchor refused. That cost fetch_for_month
+    the 27 Flex issues from April 2023 to June 2025, so a cohort signed on
+    15 June 2025 was priced off a different card from one signed a month
+    later."""
+    text = fixture_text("eneco_flex_jun25.pdf")
+    assert "> Maandprijs" in text
+    snap = parse_snapshot(text, "power_flex", "test://jun25", REGION_FLANDERS)
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.current == pytest.approx(0.1067)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
+    assert snap.energy.formula_factor == pytest.approx(1.0812, rel=1e-4)
+    assert snap.valid_until == date(2025, 6, 30)
+    # The same bullet nulled the injection leg on the cards whose energy
+    # block did parse: 26 Fix and 23 Dynamic issues.
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(0.0290)
+
+
+def test_unreadable_injection_row_is_fatal() -> None:
+    """A printed injection figure we cannot read must fail the card rather
+    than store it with an empty leg. With the bullet unread the archive
+    check still accepted 49 issues carrying no credit at all, so swap the
+    bullet for one the anchor does not know: the next such change has to
+    fail loudly."""
+    text = fixture_text("eneco_fix.pdf")
+    for label in ("Maandprijs", "Geschatte jaarprijs"):
+        text = text.replace(label, f"» {label}")
+    with pytest.raises(eneco_mod.ExtractorError, match="injection row"):
+        parse_snapshot(text, "power_fix", "test://fix", REGION_FLANDERS)

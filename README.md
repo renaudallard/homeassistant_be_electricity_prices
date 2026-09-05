@@ -997,7 +997,7 @@ python scripts/live_check.py    # hits real supplier endpoints
 ```
 
 Tests run against fixture PDFs and HTML snippets in
-[`tests/fixtures/`](./tests/fixtures/) (real supplier cards spanning September 2025 to August 2026, one or more
+[`tests/fixtures/`](./tests/fixtures/) (real supplier cards spanning June 2025 to September 2026, one or more
 per card-publishing supplier — the expert custom supplier has no card —
 plus tiny HTML snippets under `tests/fixtures/discover/` for
 catalog-discovery tests). Refresh a current-month fixture with the

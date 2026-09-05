@@ -141,6 +141,14 @@ _FLUVIUS_LABELS: dict[str, str] = {
 # yearly fee) was truncated to its first 1.xxx and mis-parsed.
 _NUM = r"(\d{1,3}(?:[\xa0\u2009\u202f]\d{3})+(?:,\d{1,4})?|\d+(?:[\.,]\d{1,4})?)"
 _WS = r"[\s\xa0]"
+# Eneco prefixed every priced row label with a ">" bullet until the
+# June 2025 issue ("10,67 10,67 10,67 10,67 > Maandprijs"); the July
+# 2025 redesign dropped it. Accept it optionally so the archive stays
+# readable: with the bullet rejected, fetch_for_month discarded the 27
+# Flex issues from April 2023 to June 2025 outright and left
+# injection.current empty on 26 Fix and 23 Dynamic issues the CDN
+# still serves.
+_BULLET = rf"(?:>{_WS}*)?"
 
 
 async def fetch(
@@ -346,7 +354,9 @@ def _extract_variable(text: str) -> VariableRates:
         text,
         re.S,
     )
-    monthly_match = re.search(rf"{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+Maandprijs", text)
+    monthly_match = re.search(
+        rf"{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_BULLET}Maandprijs", text
+    )
     # Accept any sign character between the BELPEX factor and the base
     # so a future card flipping to '-' or to a Unicode minus doesn't
     # silently drop the formula display string. _extract_dynamic above
@@ -617,8 +627,10 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
 
     # Numeric prefix only: dodges "Zie afname Geschatte jaarprijs" lines on
     # Power Dynamic (the Zie-afname block is the consumption recap).
-    maand = re.search(rf"((?:{_NUM}\s+){{1,4}}){_WS}*Maandprijs", section)
-    yearly = re.search(rf"((?:{_NUM}\s+){{1,4}}){_WS}*Geschatte jaarprijs", section)
+    maand = re.search(rf"((?:{_NUM}\s+){{1,4}}){_WS}*{_BULLET}Maandprijs", section)
+    yearly = re.search(
+        rf"((?:{_NUM}\s+){{1,4}}){_WS}*{_BULLET}Geschatte jaarprijs", section
+    )
     formula = re.search(
         rf"(0,\d+)\s*X\s*BELPEX[\w\-]*\s*([{SIGN_CHARS}])\s*(\d+(?:,\d+)?)",
         section,
@@ -633,6 +645,22 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
     current_cents = _first_num(maand)
     if current_cents is None:
         current_cents = _first_num(yearly)
+    # A card that prints a numeric injection row we could not read has to
+    # fail the card instead of storing a snapshot with an empty leg. The
+    # '>' bullet nulled current on 49 archived issues (26 Fix, 23
+    # Dynamic) that archive_validity_check waved through, and a keyless
+    # entry then credits nothing for those months. Live, this raises and
+    # surfaces a Repairs card; on the archive path fetch_for_month
+    # swallows it and the month falls back to the current card, which is
+    # still silent but at least credits a figure the supplier published.
+    # The "Zie afname" recap rows carry the same two labels with no
+    # figure, so key the guard on a row that starts with a number, and
+    # match whatever glyph sits between it and the label rather than
+    # reusing _BULLET, so the next change of that kind is caught too.
+    if current_cents is None and re.search(
+        rf"^{_WS}*{_NUM}[^\n]*(?:Maandprijs|Geschatte jaarprijs)", section, re.M
+    ):
+        raise ExtractorError("Eneco injection row is printed but unreadable")
 
     factor: float | None = None
     base: float | None = None
