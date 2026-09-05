@@ -81,10 +81,10 @@ one in another region because it is a different product (a 1-year lock, not 3).
 `quarter_hourly=True` on the dynamic card (`providers/energyvision.py:457`): it bills "op
 kwartierbasis" on the Day-Ahead EPEX SPOT Belgium 15-minute curve, so the live price table,
 next-slot sensor and cheapest-window service keep the native 15-minute slots. YTD billing
-stays hourly. `spot_indexed_injection` is left at its default `False` for both: the dynamic
-card already collects the ENTSO-E key via its energy formula, and the fixed card's injection
-is indexed on a MONTHLY mean, which the coordinator reaches through
-`_injection_needs_month_spot` rather than through the hourly spot gate.
+stays hourly. Both fixed contracts set `spot_indexed_injection` and the dynamic one does not:
+its energy formula already collects the ENTSO-E key, while the fixed cards' injection indexes
+on a MONTHLY mean that still needs spots the energy leg never fetches. The flag is about which
+leg pays for the key, not about whether the index is hourly.
 
 ## Fetch strategy
 

@@ -355,9 +355,10 @@ Schema is inline (`config_flow.py:139`), an *optional* `PASSWORD` field. The gat
 
 `_contract_has_spot_injection` (`flow_schemas.py:294`) reads the registry's
 `Contract.spot_indexed_injection` flag (`providers/base.py:77`). That flag marks a
-non-dynamic product whose *injection* is a per-hour spot formula with no printed
-monthly indicative, currently the two Cociter variable cards: the energy is priced without a spot
-but the feed-in credit needs the day-ahead curve. Unlike the required `api_key`
+non-dynamic product whose *feed-in* is index-linked while the energy leg fetches no
+spots, which is most of the static range across a dozen suppliers: the energy is
+priced without a spot but the feed-in credit needs the day-ahead curve, per hour or
+as a delivery-month mean. Unlike the required `api_key`
 step, this one is skippable (`flow_schemas.py:965` docstring): submitting blank pops
 `CONF_API_KEY` and continues to `meters`, leaving the injection price unavailable
 until a key is added via Reconfigure. A typed key is validated by

@@ -257,7 +257,7 @@ computed and the coordinator leaves the credit on the printed figure until it do
 a VREG-derived illustration averaging 56% from the settled index, so it is the cold-start
 value and never the answer.
 
-`Contract.spot_indexed_injection` stays `False` on all three. It exists to offer an
+`Contract.spot_indexed_injection` stays `False` on all six. It exists to offer an
 *optional* key to a contract whose kind does not collect one, and every kind here is
 spot-priced, so the key is already mandatory. `scripts/live_check.py` pins
 `energyknights_essentia` to the `"spp"` shape: an unlisted `spot_monthly` derives

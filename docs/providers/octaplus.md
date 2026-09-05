@@ -75,11 +75,11 @@ Notes:
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
   long-term statistics). See `DynamicRates` docs in `base.py:183-210`.
-- No product carries `spot_indexed_injection=True`. That flag means a PER-HOUR
-  spot index, and no OCTA+ card has one on a static-energy product: the
-  non-dynamic cards index their credit on the monthly Epex SPP, which the
-  coordinator reaches through `_injection_needs_month_spot` instead (contrast
-  Cociter Variable, whose card says the injection price varies every hour).
+- 6 of the 8 products carry `spot_indexed_injection=True`. The flag does not
+  mean a per-hour index, which is what this said: it means the injection needs
+  spots the ENERGY leg never fetches, and a monthly Epex SPP index needs them
+  just as much as an hourly one. The two dynamic products leave it False,
+  their energy formula collecting the key already.
 
 ## Fetch strategy
 

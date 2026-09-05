@@ -107,9 +107,11 @@ Notes on the enumeration:
   (`base.py:159`) and Mega leaves it unset, so the coordinator aggregates the
   ENTSO-E 15-minute curve to clock hours for this contract, unlike Engie / Cociter /
   EBEM / Ecofix / OCTA+ / Ecopower which bill per quarter-hour.
-- No contract sets `spot_indexed_injection`; Mega's injection is either a printed
-  monthly indicative or (dynamic only) the HTVA formula, never a spot-only-variable
-  shape.
+- 8 of the 21 contracts set `spot_indexed_injection`, derived rather than listed:
+  `mega.py` sets it for the variable and Impact kinds, whose credit indexes on a
+  monthly mean the energy leg never fetches. The dynamic products leave it False
+  because their energy formula already makes the key mandatory. This said "no
+  contract sets it" for as long as the derivation had been there.
 
 The catalog also carries `Prepaid Fixed` / `Prepaid Flex`, which are topup-card
 products with a different billing model (no monthly invoice, no recorder-backed
@@ -533,8 +535,10 @@ block, second column. There are three shapes depending on the kind:
 
 In the taxonomy from [../pricing-model.md](../pricing-model.md), Mega uses shape (a)
 monthly-indicative-only for its non-dynamic products and shape (b) hourly
-`factor*spot+base` for Dynamic. It never uses the spot-indexed-variable shape (c), so
-no contract sets `spot_indexed_injection`. `_extract_injection` returns `None` only
+`factor*spot+base` for Dynamic. It never uses the spot-indexed-variable shape (c),
+which is a statement about the INDEX and not about the flag: 8 of the 21 contracts
+set `spot_indexed_injection`, because a monthly-mean credit needs spots the energy
+leg never fetches. `_extract_injection` returns `None` only
 when both `current` and `factor` are absent (`_mega_cards.py:87`).
 
 ### Supplier-side PV forfait

@@ -65,8 +65,9 @@ map to contract ids.
 | `ebem_dynamic` | EBEM Groen Dyn@mic | `dynamic` | `dynamic` | hourly factor*spot+base | True (15-min) |
 
 Declared in `_CONTRACTS` (`ebem.py:121`) and turned into `Contract` objects in
-the registry (`ebem.py:712`). None of the three sets `spot_indexed_injection`,
-so all default to `False`.
+the registry (`ebem.py:712`). Two of the three set `spot_indexed_injection`,
+Groen Variabel and B@sic+, whose credit indexes on the monthly SPP0 the energy
+leg never fetches; only the dynamic product leaves it `False`.
 
 - **Groen Variabel**: monthly RLP-weighted Belpex variable with a full
   per-meter-type energy split (mono, bi-hourly peak / off-peak, exclusive

@@ -61,7 +61,7 @@ the resolved CDN URL, not the price page.
 
 | id | label | kind | regions | quarter_hourly | spot_indexed_injection |
 | --- | --- | --- | --- | --- | --- |
-| `ecopower_burgerstroom` | Ecopower Groene Burgerstroom | `variable` | Flanders | n/a | False (default) |
+| `ecopower_burgerstroom` | Ecopower Groene Burgerstroom | `variable` | Flanders | n/a | True |
 | `ecopower_dynamische_burgerstroom` | Ecopower Dynamische Burgerstroom | `dynamic` | Flanders | True | False (default) |
 
 Constants: `_CONTRACT_ID` / `_CONTRACT_LABEL` (`ecopower.py:141-142`), `_DBS_CONTRACT_ID` /
@@ -80,9 +80,10 @@ Notes:
   the cheapest-window service keep the native 15-minute slots. YTD billing stays hourly regardless
   (Home Assistant only retains hourly long-term statistics). See `DynamicRates` docstring,
   `base.py:141-154`.
-- Neither contract sets `spot_indexed_injection`. The dynamic contract already collects the
-  ENTSO-E key via its energy formula, and the variable contract publishes a monthly indicative
-  injection credit, so no separate spot key step is needed.
+- Groene Burgerstroom sets `spot_indexed_injection`; the dynamic contract does not, its
+  energy formula collecting the ENTSO-E key already. The variable card's printed indicative is
+  a fallback rather than a reason to skip the key: the credit resolves against a monthly mean
+  that needs spots the energy leg never fetches.
 
 No product has been retired. Both are Flanders-only by construction (there is no other region to
 be limited to).

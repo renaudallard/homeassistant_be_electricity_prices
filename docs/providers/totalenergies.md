@@ -76,9 +76,11 @@ Notes on the kind mapping:
   defaults `False` (`providers/base.py:159`) and TotalEnergies never overrides it,
   so the integration aggregates the ENTSO-E 15 minute curve to hourly for this
   contract (same grid choice as Frank/Luminus/Mega/Eneco, `providers/base.py:140-154`).
-- No contract sets `spot_indexed_injection` (it defaults `False`,
-  `providers/base.py:77`); non-dynamic injection is monthly indicative, so no
-  ENTSO-E key is needed for the injection side.
+- 8 of the 9 contracts set `spot_indexed_injection`, derived in
+  `totalenergies.py` as "every kind except dynamic": their credit indexes on a
+  monthly mean the energy leg never fetches, so the flow has to offer the key.
+  Only MyDynamic leaves it False, its energy formula collecting one already.
+  This said "no contract sets it" long after that derivation landed.
 - No product is retired in the current registry.
 
 The per contract `regions` override exists because TotalEnergies's listing page
@@ -291,8 +293,10 @@ Two shapes, selected on `kind` in `_extract_injection` (`totalenergies.py:553`):
 
 This places TotalEnergies in two of the three injection taxonomy shapes: shape (b)
 hourly factor*spot+base for myDynamic, shape (a) monthly-indicative-only for every
-other product. Shape (c) spot-indexed-variable is not used; no contract sets
-`spot_indexed_injection`.
+other product. Shape (c) spot-indexed-variable is not used, which is a statement
+about the INDEX and not about the flag: 8 of the 9 contracts set
+`spot_indexed_injection`, because a monthly-mean credit needs spots the energy leg
+never fetches.
 
 There is **no supplier-side prosumer/PV forfait**: `supplier_prosumer_eur_per_kva_year`
 is left `None` (`SupplierSnapshot` default, `providers/base.py:725`). The only
