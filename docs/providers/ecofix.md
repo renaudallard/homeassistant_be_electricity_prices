@@ -32,15 +32,22 @@ Related reading:
 > | `EL_Ecofix_Flexy_NL` | 121 chars, 1 image @ 99.9% | 13 chars (178 on p4) |
 >
 > What survives as live text is the supplier's own side: the formulas, and a
-> handful of unlabelled fee numbers. Motion keeps them on page 1, Flexy on
-> page 4:
+> handful of unlabelled fee numbers. The Motion pair keep them on page 1, the
+> Flexy pair on page 4. All four residential cards Ecofix publishes, read off
+> the September 2026 downloads with `pypdf`:
 >
 > ```
-> Motion   (0,1000 x Belpex 15M) + 1,1020    inj (0,0884 x Belpex 15M) - 0,5000
-> Flexy    (BELPEX-RLP-M * 0,1020) + 1,2000  inj (BELPEX-SPP-M * 0,0884) - 0,5000
+> Motion         (0,1000 x Belpex 15M) + 1,1020    inj (0,0884 x Belpex 15M) - 0,5000   60,00 EUR/yr
+> Motion Online  (0,1010 x Belpex 15M) + 0,74      inj (0,0884 x Belpex 15M) - 0,5000   10,00 EUR/yr
+> Flexy          (BELPEX-RLP-M * 0,1020) + 1,2000  inj (BELPEX-SPP-M * 0,0884) - 0,5000  60,00 EUR/yr
+> Flexy Online   (BELPEX-RLP-M * 0,1010) + 0,74    inj (BELPEX-SPP-M * 0,0884) - 0,5000  10,00 EUR/yr
 > ```
 >
-> **September 2026 changed nothing.** All three NL cards were republished on 31
+> The two Online editions carry their own energy coefficient and a 10,00 EUR
+> standing charge against 60,00, so they are separate products rather than the
+> standard cards renamed. The injection formula is the one thing all four share.
+>
+> **September 2026 changed nothing.** All four NL cards were republished on 31
 > August 2026 at 11:19 GMT and came back as page images again, so the shape has
 > now survived a month boundary. Against the copies committed here when the
 > supplier was added, `tests/fixtures/ecofix_*.pdf` (2 May 2026, `Producer:
@@ -113,7 +120,7 @@ the parsed snapshot to the requested `region` (`ecofix.py:136`). The three
 products share the same monthly DSO and tax overlay; only the energy formula and
 the yearly fixed fee differ between them (`ecofix.py:38`, pinned by
 `test_motion_publication_and_renewables_match_motion_online` at
-`tests/test_ecofix.py:236`).
+`tests/test_ecofix.py:238`).
 
 `/docs/prices/` is a 404 and the public `/tarieven` page links only Flexy and
 Motion, which is what the module's own docstring was describing when it concluded
@@ -211,7 +218,7 @@ withdrawn. Behaviour is pinned by `test_ecofix_discover_matches_registry` and
 `test_ecofix_discover_sees_a_product_named_for_its_term`
 (`tests/test_discover.py:190`), and the fallback by
 `test_head_probe_fallback_returns_every_contract_whose_url_200s`
-(`tests/test_ecofix.py:394`). The registry check alone is vacuous, since the
+(`tests/test_ecofix.py:396`). The registry check alone is vacuous, since the
 fallback returns exactly the registry too, so the first of those also drops a card
 from the listing and asserts the result follows it.
 
@@ -305,7 +312,7 @@ surfaced into a `VariableRates`. The `BELPEX-RLP-M` indexation expression is
 surfaced as the `formula` diagnostic string only (no cross-check against the rates;
 a miss just leaves `formula` None). Illustrative: `Maandprijs: 11,81 11,81 11,81
 11,81` gives `current = peak = offpeak = exclusive_night = 0.1181`
-(`test_flexy_is_variable_with_indicative_monthly_rate`, `tests/test_ecofix.py:258`).
+(`test_flexy_is_variable_with_indicative_monthly_rate`, `tests/test_ecofix.py:260`).
 A missing `Maandprijs` row is fatal.
 
 ## DSO overlay coverage
@@ -323,12 +330,15 @@ Flexy meters monthly and reads the monthly/yearly column (group 5). They are equ
 on today's cards, so a single column had been masking the mismatch until Fluvius
 diverges the two regimes (`ecofix.py:642`,
 `test_flanders_data_management_column_follows_metering_regime`,
-`tests/test_ecofix.py:184`).
+`tests/test_ecofix.py:186`).
 
 A second `Vlaams gewest Analoge meter` table below carries the analog-meter prosumer
-rate in its 5th column, attached as `prosumer_eur_per_kva_year` for analog-meter
-holdouts only. It is attached even for digital-meter users; the integration filters
-by meter type downstream (`ecofix.py:620`, `tests/test_ecofix.py:170`).
+rate in its 5th column, attached to every Flanders overlay as
+`prosumer_eur_per_kva_year`, digital rows included (`ecofix.py:707`). Nothing
+filters it by meter type, which this said for a long time: the only gate is
+`_compensation_kva` (`fees.py:244`), which bills the prosumer fee on Walloon
+compensation entries alone, so on a Flemish overlay the value is never read at
+all (`tests/test_ecofix.py:170`).
 
 Sub-areas mapped: `fluvius_antwerpen`, `fluvius_halle_vilvoorde`, `fluvius_imewo`,
 `fluvius_iveka`, `fluvius_limburg`, `fluvius_intergem`, `fluvius_west`,
@@ -349,7 +359,7 @@ Non-ORES DSOs mapped from `_WALLONIA_LABELS`: `aieg`, `aiesh`, `rew` (label `WAV
 which are collapsed to a single `ores` key. If a future card splits sub-areas
 (different numbers per row), `_extract_ores` raises `ExtractorError` rather than
 silently billing at the first sub-area's rate
-(`test_ores_subarea_drift_is_rejected`, `tests/test_ecofix.py:349`).
+(`test_ores_subarea_drift_is_rejected`, `tests/test_ecofix.py:351`).
 
 ## Tax overlay
 
@@ -396,7 +406,7 @@ Ecofix spans two of the three injection taxonomy shapes depending on TariffKind
   A missing formula is **fatal**: raising rather than returning None avoids
   silently zeroing the feed-in credit, and refusing to fall back to the indicative
   alone avoids freezing a spot-indexed injection at a flat rate
-  (`test_dynamic_injection_missing_formula_is_fatal`, `tests/test_ecofix.py:177`).
+  (`test_dynamic_injection_missing_formula_is_fatal`, `tests/test_ecofix.py:179`).
   Illustrative (`test_motion_online_injection`, `tests/test_ecofix.py:114`):
   `(0.0884 x Belpex 15M) - 0.5000` c/kWh gives `factor = 0.884`, `base = -0.005`,
   `current = 0.0483`.
@@ -448,7 +458,7 @@ test in the source.
   now accepts either order, scoped to the Vlaanderen block so the later federal
   `Verbruik tussen 0 & 3.000 kWh` row cannot shadow it (`ecofix.py:288`,
   `test_flexy_renewables_survives_number_before_verbruik_layout`,
-  `tests/test_ecofix.py:299`).
+  `tests/test_ecofix.py:301`).
 - **Afname anchor must not reach the Injectie formula.** The tempered lookahead in
   `_dynamic_formula_match` is the guard; without it a reworded/absent consumption
   formula would bind the injection formula to consumption (`ecofix.py:327`,
@@ -464,7 +474,7 @@ test in the source.
   chars for a word+year token that is actually a Dutch month, so a future
   `... Versie 2026` header cannot shadow the real month line and drop validity
   (`ecofix.py:519`, `test_publication_scan_skips_colliding_version_token`,
-  `tests/test_ecofix.py:269`). The card has no `geldig`/`valable` keyword, so the
+  `tests/test_ecofix.py:271`). The card has no `geldig`/`valable` keyword, so the
   shared `parse_valid_until` helper would return None; the month name is parsed
   directly and `valid_until` is set to the last day of that month for the monthly
   rotation binary sensor.
@@ -476,7 +486,7 @@ test in the source.
   (`ecofix.py:718`).
 - **Mandatory Walloon fees are fatal on a miss.** The connection fee and green-energy
   contribution raise rather than zero out (`ecofix.py:544`, `ecofix.py:531`,
-  `test_missing_wallonia_connection_fee_is_fatal`, `tests/test_ecofix.py:279`).
+  `test_missing_wallonia_connection_fee_is_fatal`, `tests/test_ecofix.py:281`).
 - **Injection is never VAT-scaled.** Residential injection is VAT-exempt; the
   dynamic injection factor/base omit the VAT multiplier that the consumption side
   applies (`ecofix.py:418`).

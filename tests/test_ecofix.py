@@ -169,8 +169,10 @@ def test_motion_online_flanders_dsos() -> None:
     assert iveka.distribution_exclusive_night == pytest.approx(0.056606)
     assert iveka.capacity_eur_per_kw_year == pytest.approx(59.5794)
     assert iveka.data_management_per_year == pytest.approx(18.92)
-    # Analog-meter prosumer rate is attached even when the user has a
-    # digital meter; the integration filters by meter type downstream.
+    # Analog-meter prosumer rate is attached to every Flanders overlay,
+    # digital rows included. Nothing filters it by meter type: the only gate
+    # is _compensation_kva, which bills the prosumer fee on Walloon
+    # compensation entries alone, so on a Flemish overlay it is never read.
     assert iveka.prosumer_eur_per_kva_year == pytest.approx(67.79)
 
 
