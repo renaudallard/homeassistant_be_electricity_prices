@@ -15,11 +15,13 @@
         "data": {
           "contract": "Contract",
           "contract_start_date": "Contract start date (optional)",
-          "contract_end_date": "Contract end date (optional)"
+          "contract_end_date": "Contract end date (optional)",
+          "ytd_from_contract_start": "Bill the year-to-date from the contract start date"
         },
         "data_description": {
           "contract_start_date": "The date your contract started. For a fixed contract this prices you at the rate you locked in at signing instead of today's rate sheet, where the supplier keeps an archive of past cards. Leave blank to always use the current card.",
-          "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew, and used by the projected year cost to say how much of the year is still under this contract. It changes no billed rate."
+          "contract_end_date": "The date your contract ends. Exposed as a timestamp sensor so an automation can remind you to renew, and used by the projected year cost to say how much of the year is still under this contract. It changes no billed rate.",
+          "ytd_from_contract_start": "By default the year-to-date cost counts from 1 January, whoever supplied you then. Tick this to start it at the contract start date above instead, so the figure covers only this contract. Fees are pro-rated over the same window, and the value drops the first time it applies. Only affects the contract's first calendar year; from the next 1 January the two are the same."
         }
       },
       "signed_rate": {
@@ -83,7 +85,7 @@
       },
       "injection_api_key": {
         "title": "ENTSO-E API key (injection)",
-        "description": "Optional. This contract prices solar injection off the day-ahead spot, which needs a free ENTSO-E key from transparency.entsoe.eu. Leave blank to skip; the injection price stays unavailable until you add a key.",
+        "description": "Optional. This contract indexes solar injection on the day-ahead spot, which needs a free ENTSO-E key from transparency.entsoe.eu. Leave blank to skip; without a key the injection price falls back to the figure printed on your tariff card, which is the previous month's, or stays unavailable if your card prints none.",
         "data": {
           "api_key": "ENTSO-E API key"
         }
@@ -254,7 +256,7 @@
       },
       "compare_contract": {
         "title": "Compare another supplier",
-        "description": "Pick a contract from {supplier}. Both static and dynamic contracts are listed, so you can quote across contract kinds.",
+        "description": "Pick a contract from {supplier}. Both static and dynamic contracts are listed, so you can quote across contract kinds, and your own contract is listed too: pick it to ask what the same contract would cost with a different meter type or solar regime.",
         "data": {
           "contract": "Contract"
         }
@@ -292,11 +294,13 @@
         "data": {
           "contract": "[%key:component::be_electricity_prices::config::step::contract::data::contract%]",
           "contract_start_date": "[%key:component::be_electricity_prices::config::step::contract::data::contract_start_date%]",
-          "contract_end_date": "[%key:component::be_electricity_prices::config::step::contract::data::contract_end_date%]"
+          "contract_end_date": "[%key:component::be_electricity_prices::config::step::contract::data::contract_end_date%]",
+          "ytd_from_contract_start": "Bill the year-to-date from the contract start date"
         },
         "data_description": {
           "contract_start_date": "[%key:component::be_electricity_prices::config::step::contract::data_description::contract_start_date%]",
-          "contract_end_date": "[%key:component::be_electricity_prices::config::step::contract::data_description::contract_end_date%]"
+          "contract_end_date": "[%key:component::be_electricity_prices::config::step::contract::data_description::contract_end_date%]",
+          "ytd_from_contract_start": "By default the year-to-date cost counts from 1 January, whoever supplied you then. Tick this to start it at the contract start date above instead, so the figure covers only this contract. Fees are pro-rated over the same window, and the value drops the first time it applies. Only affects the contract's first calendar year; from the next 1 January the two are the same."
         }
       },
       "signed_rate": {

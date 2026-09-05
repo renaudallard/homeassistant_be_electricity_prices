@@ -4281,6 +4281,56 @@ def test_config_flow_steps_are_fully_translated() -> None:
                     )
 
 
+def test_strings_json_reads_the_same_as_the_english_translation() -> None:
+    """Every literal in strings.json must match `translations/en.json`, and
+    every key the translation carries must exist in strings.json.
+
+    Home Assistant serves `translations/<lang>.json`, so a correction typed
+    into the language files reaches users while strings.json keeps the
+    sentence it replaced, and strings.json is what a regenerated language
+    would be derived from. Both directions have drifted: the ENTSO-E key step
+    promised no injection price at all without a key, months after the
+    fallback to the card's printed figure landed, the compare picker went on
+    omitting that you can quote your own contract, and the
+    ytd_from_contract_start field was never given a source string at all, in
+    either the config or the options step.
+
+    The missing-key half is why this walks both dictionaries. Walking only
+    strings.json never visits a key it does not have, which is exactly the
+    shape four of those six took.
+    """
+    import json
+    import pathlib
+
+    base = pathlib.Path(__file__).resolve().parent.parent / (
+        "custom_components/be_electricity_prices"
+    )
+    src = json.loads(base.joinpath("strings.json").read_text(encoding="utf-8"))
+    english = json.loads(
+        base.joinpath("translations/en.json").read_text(encoding="utf-8")
+    )
+    drift: list[str] = []
+    missing: list[str] = []
+
+    def walk(source: object, target: object, path: str) -> None:
+        if isinstance(source, dict) and isinstance(target, dict):
+            for key, value in source.items():
+                if key in target:
+                    walk(value, target[key], f"{path}.{key}" if path else key)
+            for key in target:
+                if key not in source:
+                    missing.append(f"{path}.{key}" if path else key)
+        # A "[%key:...%]" value resolves to another entry rather than carrying
+        # text of its own, so it never has an English twin to differ from.
+        elif isinstance(source, str) and not source.startswith("[%key:"):
+            if source != target:
+                drift.append(path)
+
+    walk(src, english, "")
+    assert not drift, f"strings.json differs from translations/en.json at {drift}"
+    assert not missing, f"strings.json has no source string for {missing}"
+
+
 def test_the_meters_step_explains_every_field() -> None:
     """The meters step must carry per-field help, not just labels.
 
