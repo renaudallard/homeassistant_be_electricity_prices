@@ -410,6 +410,43 @@ def _belix_band_coefficients(text: str) -> dict[str, tuple[float, float]]:
     return out
 
 
+# The "Prix maximum" column, printed on the same row as the indicative and
+# in the same unit. Both figures end in "c€/kWh", so the ceiling is the
+# SECOND one on the row.
+_CEILING_TAIL = r"[^\n]*?\d+,\d+\s*c€/kWh[^\n]*?(\d+,\d+)\s*c€/kWh"
+
+_VARIABLE_CEILING_ROWS: tuple[tuple[str, str], ...] = (
+    ("single", r"Compteur monohoraire"),
+    ("peak", r"Heures pleines"),
+    ("offpeak", r"Heures creuses"),
+    ("exclusive_night", r"Compteur exclusif nuit"),
+)
+
+
+def _price_ceilings(
+    text: str, rows: tuple[tuple[str, str], ...]
+) -> dict[str, float | None]:
+    """The card's "Prix maximum" column, per row, as TVAC EUR/kWh.
+
+    Note (8): "COCITER a decide de plafonner le prix de fourniture de
+    l'energie [...] si le Belix venait a augmenter au point que
+    l'application du prix variable (indexe) donne une valeur superieure au
+    prix maximum, c'est le prix maximum qui s'applique." The cap is on the
+    supply price only; network, taxes and surcharges stay due in full, which
+    is exactly what ``pricing`` already does with a ceiling.
+
+    A row without the column yields None rather than 0.0, so a card that
+    stops publishing the cap goes back to uncapped instead of pricing every
+    kWh at zero. The dynamic card prints no cap at all and reaches this with
+    no matching row.
+    """
+    out: dict[str, float | None] = {}
+    for key, label in rows:
+        match = re.search(label + _CEILING_TAIL, text)
+        out[key] = to_float(match.group(1)) / 100.0 if match else None
+    return out
+
+
 # The trihoraire card announces itself in its own title, "Carte tarifaire (1)
 # septembre 2026 a prix variable trihoraire". Discriminating on that rather
 # than on the absence of a header the other two cards carry: an old edition
@@ -467,12 +504,16 @@ def _impact_energy(text: str, yearly_fee: float) -> ImpactRates:
             f"{band}: ({row.group(1)} x BELIX {row.group(2)} {row.group(3)}) "
             f"c€/kWh + {row.group(4)}% VAT"
         )
+    ceilings = _price_ceilings(text, _IMPACT_BANDS)
     return ImpactRates(
         pic=rates["pic"],
         medium=rates["medium"],
         eco=rates["eco"],
         yearly_fixed_fee=yearly_fee,
         formula="; ".join(formulas) or None,
+        ceiling_pic=ceilings["pic"],
+        ceiling_medium=ceilings["medium"],
+        ceiling_eco=ceilings["eco"],
         **coefficients,
     )
 
@@ -530,6 +571,7 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
         # peak and 7,8% high off-peak, and the night circuit, which draws the
         # volume, is 7,8% high all day.
         bands = _belix_band_coefficients(text)
+        ceilings = _price_ceilings(text, _VARIABLE_CEILING_ROWS)
         return VariableRates(
             current=to_float(mono.group(1)) / 100.0,
             peak=to_float(peak.group(1)) / 100.0 if peak else None,
@@ -559,6 +601,10 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
                 0
             ],
             formula_base_exclusive_night=bands.get("exclusive_night", (None, None))[1],
+            ceiling_single=ceilings["single"],
+            ceiling_peak=ceilings["peak"],
+            ceiling_offpeak=ceilings["offpeak"],
+            ceiling_exclusive_night=ceilings["exclusive_night"],
         )
 
     # cociter_dynamic

@@ -28,13 +28,18 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import date, datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from custom_components.be_electricity_prices.pricing import (
+    dso_impact_band,
+    energy_eur_per_kwh,
+)
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from tests import make_text_session, fixture_text
 from custom_components.be_electricity_prices.providers.base import (
@@ -713,3 +718,84 @@ def test_the_dynamic_card_gains_no_bands() -> None:
     )
 
     assert _belix_band_coefficients(fixture_text("cociter_dyn_2604.pdf")) == {}
+
+
+def test_variable_card_carries_the_price_ceiling() -> None:
+    """Note (8) caps the supply price: "si le Belix venait a augmenter au
+    point que l'application du prix variable donne une valeur superieure au
+    prix maximum, c'est le prix maximum qui s'applique". The column is
+    printed on every meter row and was read on none of them, so a month
+    whose BELIX cleared the cap billed the uncapped formula."""
+    snap = parse_snapshot(
+        fixture_text("cociter_var_2609.pdf"),
+        "cociter_variable",
+        "test://var",
+        "2026-09",
+    )
+    assert isinstance(snap.energy, VariableRates)
+    for ceiling in (
+        snap.energy.ceiling_single,
+        snap.energy.ceiling_peak,
+        snap.energy.ceiling_offpeak,
+        snap.energy.ceiling_exclusive_night,
+    ):
+        assert ceiling == pytest.approx(0.265)
+    # The cap is the SECOND c€/kWh figure on the row; reading the first would
+    # silently clamp every kWh to the indicative.
+    assert snap.energy.current == pytest.approx(0.155809)
+
+
+def test_trihoraire_card_carries_the_price_ceiling() -> None:
+    """Same cap, printed per band on the trihoraire card."""
+    snap = parse_snapshot(
+        fixture_text("cociter_vai_2609.pdf"),
+        "cociter_variable_impact",
+        "test://vai",
+        "2026-09",
+    )
+    assert isinstance(snap.energy, ImpactRates)
+    assert snap.energy.ceiling_pic == pytest.approx(0.265)
+    assert snap.energy.ceiling_medium == pytest.approx(0.265)
+    assert snap.energy.ceiling_eco == pytest.approx(0.265)
+    assert snap.energy.pic == pytest.approx(0.190079)
+
+
+def test_a_card_without_the_maximum_column_stays_uncapped() -> None:
+    """The column arrived with the September 2026 cards: April prints the row
+    ending at the indicative. Such a card has to yield None, not 0.0, or every
+    kWh on it would clamp to zero. The dynamic card never carries a cap at
+    all, which is the supplier leaving that contract deliberately uncapped."""
+    older = parse_snapshot(
+        fixture_text("cociter_var_2604.pdf"),
+        "cociter_variable",
+        "test://var",
+        "2026-04",
+    )
+    assert isinstance(older.energy, VariableRates)
+    assert older.energy.ceiling_single is None
+    assert older.energy.ceiling_peak is None
+    assert older.energy.ceiling_offpeak is None
+    assert older.energy.ceiling_exclusive_night is None
+    # and the rate it does publish is untouched by the miss
+    assert older.energy.current == pytest.approx(0.126625)
+
+
+def test_impact_band_rate_is_capped_by_its_ceiling() -> None:
+    """The engine has to apply the Impact ceiling the way it already applies
+    the variable one. Rates above the cap here because the published bands sit
+    well under it: the cap only bites above a BELIX of about 200 EUR/MWh."""
+    when = datetime(2026, 9, 15, 19, 30, tzinfo=ZoneInfo("Europe/Brussels"))
+    assert dso_impact_band(when) == "pic"
+    uncapped = ImpactRates(pic=0.30, medium=0.20, eco=0.10)
+    assert energy_eur_per_kwh(uncapped, when, None, "dynamic", "wallonia") == (
+        pytest.approx(0.30)
+    )
+    capped = ImpactRates(pic=0.30, medium=0.20, eco=0.10, ceiling_pic=0.265)
+    assert energy_eur_per_kwh(capped, when, None, "dynamic", "wallonia") == (
+        pytest.approx(0.265)
+    )
+    # A band under its own cap is untouched, and a band with no cap is too.
+    eco_when = datetime(2026, 9, 15, 3, 30, tzinfo=ZoneInfo("Europe/Brussels"))
+    assert energy_eur_per_kwh(capped, eco_when, None, "dynamic", "wallonia") == (
+        pytest.approx(0.10)
+    )

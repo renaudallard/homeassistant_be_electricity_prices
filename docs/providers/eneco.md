@@ -423,7 +423,7 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
 ## Quirks and historical bugs
 
 - **VAT-inclusive cards**: all prices are 6 % VAT-incl, so `vat_rate = 0.0` and the
-  pricing engine does not rescale (`eneco.py:36`, `eneco.py:605`, `base.py:471-474`).
+  pricing engine does not rescale (`eneco.py:36`, `eneco.py:605`, `base.py:479-482`).
   Dynamic is the exception where a VAT multiplier is read from the card and folded
   into `factor` / `base` (`eneco.py:415-437`).
 - **`AFNAME EN INJECTIE / VALORISATIE` rename (issue #35)**: the July 2026 cards

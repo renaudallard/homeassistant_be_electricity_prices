@@ -444,11 +444,20 @@ def energy_eur_per_kwh(
         return energy.offpeak
     if isinstance(energy, ImpactRates):
         band = dso_impact_band(when)
+        # Named cap rather than ceiling: the variable branch above binds
+        # ``ceiling`` to a FixedRates for its own routing.
         if band == "pic":
-            return energy.pic
-        if band == "medium":
-            return energy.medium
-        return energy.eco
+            banded, cap = energy.pic, energy.ceiling_pic
+        elif band == "medium":
+            banded, cap = energy.medium, energy.ceiling_medium
+        else:
+            banded, cap = energy.eco, energy.ceiling_eco
+        # Same cap the variable branch applies, per band: the customer pays
+        # the lower of the indexed rate and the card's "Prix maximum", and
+        # only on the supply leg. Taken band by band because the ceiling is
+        # published per row, so a card capping the peak band alone still
+        # prices the other two off their own formula.
+        return banded if cap is None else min(banded, cap)
     raise TypeError(f"unknown energy rates type: {type(energy).__name__}")
 
 

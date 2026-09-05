@@ -109,7 +109,7 @@ suppliers (Frank default, Mega, TotalEnergies, Eneco).
 ### Probe
 
 There is no probe. `EXTRACTOR` does not set `probe`, so it defaults to `None`
-(`base.py:570`). Per the `SnapshotProbe` contract (`base.py:949-949`), the
+(`base.py:570`). Per the `SnapshotProbe` contract (`base.py:957-957`), the
 `api-next/get-pricelist/` endpoint mints a fresh PDF per request with no cheap
 freshness key the coordinator can rely on, so the time-based TTL takes over.
 
@@ -119,7 +119,7 @@ There is no historical fetch. `EXTRACTOR` does not set `fetch_for_month`, so it
 defaults to `None` (`base.py:547`). The endpoint is API-only and overwrite-in-
 place (each slug always returns the current month), with no accessible archive
 per past month, exactly the case the `ArchivedSnapshotFetcher` docstring names
-Luminus for (`base.py:519-524`). The coordinator therefore bills past months at
+Luminus for (`base.py:527-532`). The coordinator therefore bills past months at
 the current snapshot as a proxy.
 
 ### `discover()`
@@ -176,7 +176,7 @@ Printed energy rows are in `c€/kWh`; the extractor divides by 100 to store
 EUR/kWh (`luminus.py:306-308`, `346-349`). Prices are 6% VAT inclusive as printed
 (`luminus.py:42-44`), so the snapshot's `TaxOverlay.vat_rate` is set to `0.0`
 (`luminus.py:221`) meaning "already VAT-incl" per the `TaxOverlay` convention
-(`base.py:471-474`). The one exception is the Dynamic formula, printed `hors TVA`
+(`base.py:479-482`). The one exception is the Dynamic formula, printed `hors TVA`
 (ex-VAT), handled below.
 
 ### Publication label

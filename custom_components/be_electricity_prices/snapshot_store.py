@@ -938,7 +938,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # energy bands beside their standard rates, so an entry on the incitative DSO
 # mode bills both halves on the same schedule. A v49 snapshot has the network
 # side banded and the energy side flat.
-_SNAPSHOT_SCHEMA_VERSION = 50
+# v51: the Cociter variable and trihoraire cards now carry the "Prix maximum"
+# column their note (8) says overrides the indexed rate, on VariableRates and
+# on the new ImpactRates ceilings. A v50 snapshot has no cap at all, so a
+# month whose BELIX mean cleared it would bill the uncapped formula.
+_SNAPSHOT_SCHEMA_VERSION = 51
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

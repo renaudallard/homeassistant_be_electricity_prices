@@ -386,6 +386,14 @@ class ImpactRates:
     medium_base: float | None = None
     eco_factor: float | None = None
     eco_base: float | None = None
+    # Per-band cap on the SUPPLY price, when the card publishes one. Same
+    # meaning as ``VariableRates.ceiling_*``: the customer pays the lower of
+    # the indexed rate and this, and network, taxes and surcharges stay due
+    # in full on top. Per band rather than one value because the column is
+    # printed per row, and a card is free to cap the expensive band alone.
+    ceiling_pic: float | None = None
+    ceiling_medium: float | None = None
+    ceiling_eco: float | None = None
 
 
 EnergyRates = (

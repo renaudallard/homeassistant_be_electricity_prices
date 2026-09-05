@@ -115,7 +115,7 @@ not serve; the coordinator then falls back to its time based TTL.
 There is **no** `fetch_for_month` on the extractor (`EXTRACTOR`,
 `totalenergies.py:820`, only sets `fetch` and `probe`). TotalEnergies is an
 overwrite-in-place supplier: the `/latest/` URL exposes only the current month
-and no dated archive is reachable (`providers/base.py:519-524`). The yearly cost
+and no dated archive is reachable (`providers/base.py:527-532`). The yearly cost
 backfill therefore bills every past month with the current snapshot as a proxy.
 
 ### Discovery (CI only)
@@ -264,7 +264,7 @@ Region specifics:
 - `energy_fund_eur_per_month`: Flanders only ("Résidence principale sans tarif
   social" line, `_extract_energy_fund`, `totalenergies.py:696`).
 - `vat_rate` is set to `0.0`, meaning the snapshot's consumption prices are already
-  VAT-incl and must not be rescaled by the pricing engine (`providers/base.py:471-474`).
+  VAT-incl and must not be rescaled by the pricing engine (`providers/base.py:479-482`).
   The dynamic path applies VAT during parsing (see above); the fixed/variable table
   and realized values are stored as printed.
 
@@ -295,7 +295,7 @@ other product. Shape (c) spot-indexed-variable is not used; no contract sets
 `spot_indexed_injection`.
 
 There is **no supplier-side prosumer/PV forfait**: `supplier_prosumer_eur_per_kva_year`
-is left `None` (`SupplierSnapshot` default, `providers/base.py:717`). The only
+is left `None` (`SupplierSnapshot` default, `providers/base.py:725`). The only
 prosumer charge is the DSO tariff (`DsoOverlay.prosumer_eur_per_kva_year`), surfaced
 for both the Flanders and Wallonia rows where the card publishes it.
 

@@ -25,7 +25,7 @@ OCTA+ (extractor `id="octaplus"`, label `"OCTA+"`, `octaplus.py:672-686`) sells
 residential electricity only in Wallonia and Flanders. Brussels is rejected: the
 Brussels offers on OCTA+'s site are professional-only, so `_OCTAPLUS_REGIONS`
 (`octaplus.py:670`) is `frozenset({REGION_FLANDERS, REGION_WALLONIA})` and
-`EXTRACTOR.regions()` (the union over contracts, `base.py:560-565`) is those two
+`EXTRACTOR.regions()` (the union over contracts, `base.py:568-573`) is those two
 regions. `fetch` raises `ExtractorError("... not available in region ...")` for
 any other region (`octaplus.py:182-183`, exercised by
 `test_brussels_region_rejected`).
@@ -120,7 +120,7 @@ OCTA+ declares no `fetch_for_month` (the `SupplierExtractor` is built with only
 `fetch` and `probe`, `octaplus.py:794-809`). There is no accessible archive:
 cards are overwrite-in-place, so past months fall back to the current snapshot
 as a proxy. This is the documented behaviour for overwrite-in-place suppliers in
-`base.py:519-524`.
+`base.py:527-532`.
 
 ### `discover` (`octaplus.py:156-167`)
 
@@ -211,7 +211,7 @@ non-matching separator to force the raise). Wallonia adds
 
 The `TaxOverlay` sets `vat_rate=0.0` (`octaplus.py:228`): OCTA+ snapshots ship
 VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
-`vat_rate` convention in `base.py:702-702`.
+`vat_rate` convention in `base.py:710-710`.
 
 ### Regional renewables
 

@@ -151,7 +151,7 @@ There is no `probe`. `EXTRACTOR` (`dats24.py:565-587`) sets `id`, `label`,
 month-keyed URL is not a freshness signal either: within a month the file is
 replaced in place, so a HEAD tells us nothing a cheap diff could use, and the
 coordinator's time-based TTL governs refresh. This is the "DATS 24 single-PDF"
-case called out in the `SnapshotProbe` contract comment in `base.py:949-949`.
+case called out in the `SnapshotProbe` contract comment in `base.py:957-957`.
 
 Note the module does define a `discover` coroutine (`dats24.py:239-252`), but it
 is a catalog-drift check for the live-check harness, not a coordinator probe. It
