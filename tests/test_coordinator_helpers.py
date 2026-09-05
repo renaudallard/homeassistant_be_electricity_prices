@@ -4526,6 +4526,77 @@ async def test_cohort_energy_leg_dynamic_uses_signing_month(
     assert leg == DynamicRates(factor=1.02, base=0.01)
 
 
+async def test_cohort_freezes_the_feed_in_coefficients(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A contract that locks its offtake formula locks the feed-in one too.
+
+    Issue #85: the customer confirmed from his own bill that he is held to the
+    signing month's coefficients on BOTH legs for twelve months, while the
+    integration re-priced only the offtake and credited his feed-in at the
+    current card's. On his contract that is 0,94 x spot - 11 EUR/MWh against
+    1 x spot - 12, which over-credits at any spot above about 16,7 EUR/MWh.
+
+    The coefficients move and the printed indicative does not: ``current`` is
+    the illustration the supplier published for that month's new customers, so
+    a keyless entry keeps seeing today's figure.
+    """
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    current = make_snapshot(
+        energy=DynamicRates(factor=1.06, base=0.01272),
+        injection=InjectionRates(factor=1.0, base=-0.012, current=0.058),
+    )
+    archived = make_snapshot(
+        energy=DynamicRates(factor=1.1342, base=0.00742),
+        injection=InjectionRates(factor=0.94, base=-0.011, current=0.0548),
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return archived
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2026-06-30")
+    legs = await _cohort_legs(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+    )
+    assert legs.energy == DynamicRates(factor=1.1342, base=0.00742)
+    assert legs.injection is not None
+    assert legs.injection.factor == 0.94
+    assert legs.injection.base == -0.011
+    # The keyless fallback stays on the current card's printed figure.
+    assert legs.injection.current == 0.058
+
+
+async def test_cohort_leaves_a_printed_only_feed_in_alone(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A card that publishes only a monthly figure re-prices every month by its
+    own terms, so freezing it would invent a lock the contract does not have.
+    Nothing to freeze means no override at all."""
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    current = make_snapshot(
+        energy=FixedRates(single=0.30), injection=InjectionRates(current=0.060)
+    )
+    archived = make_snapshot(
+        energy=FixedRates(single=0.20), injection=InjectionRates(current=0.050)
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return archived
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2025-11-10")
+    legs = await _cohort_legs(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
+    )
+    assert legs.energy == FixedRates(single=0.20)
+    assert legs.injection is None
+
+
 async def test_cohort_energy_leg_none_without_start_date(hass: HomeAssistant) -> None:
     current = make_snapshot(energy=FixedRates(single=0.30))
 

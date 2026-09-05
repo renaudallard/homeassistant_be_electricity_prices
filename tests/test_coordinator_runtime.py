@@ -3089,12 +3089,19 @@ async def test_variable_cohort_keeps_its_per_hour_injection_index(
     # Fix the month mean so a regression back to the bake is unambiguous.
     coord._monthly_spot_mean = MagicMock(return_value=0.10)  # type: ignore[method-assign]
 
-    async def _cohort(*_a: object, **_k: object) -> SpotMonthlyRates:
-        return SpotMonthlyRates(factor=0.8, base=0.05)
+    async def _cohort(*_a: object, **_k: object) -> Any:
+        from custom_components.be_electricity_prices.cohort import _CohortLegs
+
+        # Energy re-priced to the cohort, feed-in left alone: this card
+        # indexes the two legs on different periods, so the injection half of
+        # the cohort splice must not reach it.
+        return _CohortLegs(
+            energy=SpotMonthlyRates(factor=0.8, base=0.05), injection=None
+        )
 
     with (
         patch(
-            "custom_components.be_electricity_prices.cohort._cohort_energy_leg",
+            "custom_components.be_electricity_prices.coordinator._cohort_legs",
             new=_cohort,
         ),
         patch(

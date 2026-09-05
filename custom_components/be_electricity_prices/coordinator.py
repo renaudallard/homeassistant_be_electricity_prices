@@ -42,7 +42,7 @@ from .coordinator_snapshot import _SnapshotMixin
 from .coordinator_spots import _SpotsMixin
 
 from .cohort import (
-    _cohort_energy_leg,
+    _cohort_legs,
     ytd_window_start,
 )
 from .fees import (
@@ -705,7 +705,7 @@ class BePricesCoordinator(
         # baking cohort energy into it would mis-price co-tenants; ``priced`` is
         # a per-tick local. A no-op (``priced is self._snapshot``) when no start
         # date is set.
-        cohort_energy = await _cohort_energy_leg(
+        cohort = await _cohort_legs(
             self.hass,
             self._session,
             get_extractor(self.entry.data[CONF_SUPPLIER]),
@@ -714,10 +714,17 @@ class BePricesCoordinator(
             self.entry,
             self._snapshot,
         )
+        cohort_changes: dict[str, object] = {}
+        if cohort.energy is not None:
+            cohort_changes["energy"] = cohort.energy
+        if cohort.injection is not None:
+            # A contract that locks its offtake formula locks the feed-in one
+            # with it, so the credit follows the signing card too (issue #85).
+            cohort_changes["injection"] = cohort.injection
         priced = (
             self._snapshot
-            if cohort_energy is None
-            else replace(self._snapshot, energy=cohort_energy)
+            if not cohort_changes
+            else replace(self._snapshot, **cohort_changes)  # type: ignore[arg-type]
         )
 
         spot_prices: dict[datetime, float] = {}
@@ -901,7 +908,7 @@ class BePricesCoordinator(
         # PV output peaks exactly when the day-ahead price troughs, a flat mean
         # systematically over-credits. _injection_needs_spot identifies that
         # shape (factor/base with no printed indicative), so leave it alone.
-        injection_snapshot = self._snapshot
+        injection_snapshot = priced
         if (
             isinstance(priced.energy, SpotMonthlyRates)
             or _injection_needs_month_spot(self._snapshot, self.entry)
@@ -949,7 +956,7 @@ class BePricesCoordinator(
                 # whatever the current slot costs.
                 pass
             else:
-                injection_snapshot = _bake_monthly_injection(self._snapshot, inj_mean)
+                injection_snapshot = _bake_monthly_injection(priced, inj_mean)
         injection_price = _compute_injection_price(
             injection_snapshot, self.entry, spot_prices
         )

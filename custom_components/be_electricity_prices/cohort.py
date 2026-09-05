@@ -43,7 +43,7 @@ from datetime import date
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from typing import Any
+from typing import Any, NamedTuple
 import aiohttp
 
 from .const import (
@@ -65,6 +65,7 @@ from .providers.base import (
     DynamicRates,
     EnergyRates,
     FixedRates,
+    InjectionRates,
     SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
@@ -336,6 +337,40 @@ def _cohort_energy_from_archived(
     return None
 
 
+def _cohort_injection_from_archived(
+    archived: "SupplierSnapshot", current: "SupplierSnapshot"
+) -> InjectionRates | None:
+    """The feed-in coefficients a signing cohort bills at, or ``None``.
+
+    A contract that locks its offtake formula for the term locks the feed-in
+    formula with it: the customer on issue #85 confirmed both from his own
+    bill, twelve months on the June coefficients while the integration
+    credited him at September's. The energy leg has always been re-priced
+    this way and the feed-in leg never was, so the two halves of one contract
+    were read off two different cards.
+
+    Only the COEFFICIENTS move, on the same principle as
+    ``_cohort_energy_from_archived``: ``factor`` and ``base`` are the
+    contract, while ``current`` is the illustration the supplier printed for
+    that month's new customers and is stale the moment the month turns. The
+    current card's ``current`` is therefore kept, so a keyless entry with
+    nothing to resolve a formula against sees exactly what it saw before.
+
+    ``None`` when the archived leg carries no coefficients: a card that
+    publishes only a printed monthly figure re-prices every month by its own
+    terms, and freezing it would invent a lock the contract does not have.
+    """
+    old = archived.injection
+    live = current.injection
+    if old is None or live is None:
+        return None
+    if old.factor is None and old.base is None:
+        return None
+    if (old.factor, old.base) == (live.factor, live.base):
+        return None
+    return replace(live, factor=old.factor, base=old.base)
+
+
 def _month_indexed_leg(
     snapshot: "SupplierSnapshot", entry: ConfigEntry
 ) -> EnergyRates | None:
@@ -368,7 +403,17 @@ def _month_indexed_leg(
     return _cohort_energy_from_archived(snapshot)
 
 
-async def _cohort_energy_leg(
+class _CohortLegs(NamedTuple):
+    """What a signing cohort bills at, both halves of it.
+
+    ``None`` on either means "no override, keep the current card's leg".
+    """
+
+    energy: EnergyRates | None
+    injection: InjectionRates | None
+
+
+async def _cohort_legs(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
     extractor: "SupplierExtractor",
@@ -376,8 +421,16 @@ async def _cohort_energy_leg(
     region: str,
     entry: ConfigEntry,
     current_snapshot: "SupplierSnapshot",
-) -> EnergyRates | None:
-    """Resolve the energy leg a contract actually bills at, or ``None``.
+) -> _CohortLegs:
+    """Resolve the legs a contract actually bills at.
+
+    A fixed / dynamic contract signed months ago is billed at the rate it
+    locked in at signing, not today's card. This returns the signing-month
+    card's energy leg so the caller can splice it onto the current
+    delivery-month DSO / tax overlays; ``None`` means "no cohort override,
+    keep the current energy" (no start date set, or nothing to re-price with:
+    no signing rate typed and no archived card, or a variable cohort with no
+    ENTSO-E key to resolve its monthly mean).
 
     A fixed / dynamic contract signed months ago is billed at the rate it
     locked in at signing, not today's card. This returns the signing-month
@@ -400,7 +453,7 @@ async def _cohort_energy_leg(
     signing history, so it must always price at the current card).
     """
     if contract != entry.data.get(CONF_CONTRACT):
-        return None
+        return _CohortLegs(None, None)
     if entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
         # The custom supplier's rate IS what the user typed on the
         # custom_energy step, so there is nothing for a signing rate to
@@ -415,10 +468,10 @@ async def _cohort_energy_leg(
         #
         # Guarding here rather than only popping the keys in the flow is what
         # heals the entries already holding them.
-        return None
+        return _CohortLegs(None, None)
     start = _contract_start_month(entry)
     if start is None:
-        return _month_indexed_leg(current_snapshot, entry)
+        return _CohortLegs(_month_indexed_leg(current_snapshot, entry), None)
     now = dt_util.now()
     # Resolve the archived signing-month card first, as the base the typed
     # rate overlays onto. Fixed / dynamic re-price from its leg directly (the
@@ -430,6 +483,7 @@ async def _cohort_energy_leg(
     # signing rate still applies, and used to sit unread until the month
     # rolled over and the price jumped under the user.
     archived: EnergyRates | None = None
+    archived_snap: SupplierSnapshot | None = None
     if start < date(now.year, now.month, 1) and extractor.fetch_for_month is not None:
         snap_start = await _snapshot_for_month(
             hass,
@@ -444,6 +498,7 @@ async def _cohort_energy_leg(
         # _snapshot_for_month returns the SAME current_snapshot object when the
         # signing month has no archive; identity means "no archived card".
         if snap_start is not current_snapshot:
+            archived_snap = snap_start
             cohort = _cohort_energy_from_archived(snap_start)
             # A SpotMonthlyRates leg bills at the current month's mean spot,
             # which needs an ENTSO-E key. Only the dynamic and spot-monthly
@@ -495,7 +550,32 @@ async def _cohort_energy_leg(
         start,
         source,
     )
-    return manual if manual is not None else archived
+    energy = manual if manual is not None else archived
+    # The feed-in leg locks with the offtake leg, so it is resolved from the
+    # same archived card rather than left on the current one (issue #85).
+    injection = (
+        None
+        if archived_snap is None
+        else _cohort_injection_from_archived(archived_snap, current_snapshot)
+    )
+    return _CohortLegs(energy=energy, injection=injection)
+
+
+async def _cohort_energy_leg(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: "SupplierExtractor",
+    contract: str,
+    region: str,
+    entry: ConfigEntry,
+    current_snapshot: "SupplierSnapshot",
+) -> EnergyRates | None:
+    """The energy half of :func:`_cohort_legs`, for callers that price only
+    the offtake side."""
+    legs = await _cohort_legs(
+        hass, session, extractor, contract, region, entry, current_snapshot
+    )
+    return legs.energy
 
 
 async def _effective_snapshot_for_month(
@@ -527,12 +607,19 @@ async def _effective_snapshot_for_month(
         current_snapshot,
         entry,
     )
-    cohort = await _cohort_energy_leg(
+    legs = await _cohort_legs(
         hass, session, extractor, contract, region, entry, current_snapshot
     )
-    if cohort is None:
+    if legs.energy is None and legs.injection is None:
         return snap_m
-    return replace(snap_m, energy=cohort)
+    changes: dict[str, object] = {}
+    if legs.energy is not None:
+        changes["energy"] = legs.energy
+    if legs.injection is not None:
+        # The feed-in coefficients lock with the offtake ones, so the credit
+        # for a past month is billed off the signing card too (issue #85).
+        changes["injection"] = legs.injection
+    return replace(snap_m, **changes)  # type: ignore[arg-type]
 
 
 def _month_snapshot_cache(

@@ -220,7 +220,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |     |   for each slot: compute_breakdown(snapshot, dso_overlay,
    |     |                    taxes, meter, dso_mode, spot)  ->  PriceBreakdown   pricing.py
    |     |     v
-   |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:729
+   |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py:736
    |
    entry.runtime_data = coordinator                  __init__.py:177
    async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor, button
@@ -236,7 +236,7 @@ Numbered walkthrough:
 1. The user completes the config flow; HA stores the selections in `entry.data` and calls
    `async_setup_entry` (`__init__.py:215`).
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
-   tuple (`coordinator.py:881`) so a later options edit that mutates `entry.data` can still evict
+   tuple (`coordinator.py:888`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
 3. `async_load_persistent` (`coordinator.py:456`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
@@ -255,7 +255,7 @@ Numbered walkthrough:
    into a `PriceBreakdown`. See [pricing-model.md](pricing-model.md).
 8. The result is packed into `CoordinatorData` (`coordinator.py:176`): the `hourly` table keyed by
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
-   suppliers, `coordinator.py:732`), plus snapshot metadata, the injection price, fees, and the
+   suppliers, `coordinator.py:739`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
 9. `entry.runtime_data` is set to the coordinator, the three platforms are forwarded, and a
    slot-boundary push is registered (`__init__.py:199`). Because `current_price` and
@@ -280,7 +280,7 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
 - On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py:445`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,
-  `coordinator.py:832`).
+  `coordinator.py:839`).
 
 Two further caching behaviors are worth knowing at the architecture level. First, snapshots are
 shared process-wide across config entries keyed by `(supplier, contract, region)`
