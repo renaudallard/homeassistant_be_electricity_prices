@@ -5150,6 +5150,27 @@ def test_cohort_energy_from_archived_tou_not_repriced() -> None:
     assert _cohort_energy_from_archived(archived) is None
 
 
+def test_a_provisional_archived_row_is_re_asked_after_its_ttl() -> None:
+    """An extractor that knows a closed month can still change flags the row:
+    Eneco settles a month on the index printed on the NEXT card, so August
+    fetched on 1 September carries the printed estimate. Such a row is treated
+    like the running month's, whatever the calendar says."""
+    closed = make_snapshot()
+    assert not snapshot_store._month_row_is_provisional(
+        closed, date(2026, 8, 1), date(2026, 9, 15)
+    )
+    assert snapshot_store._month_row_is_provisional(
+        replace(closed, provisional=True), date(2026, 8, 1), date(2026, 9, 15)
+    )
+    # The running month and a cached None stay provisional as before.
+    assert snapshot_store._month_row_is_provisional(
+        closed, date(2026, 9, 1), date(2026, 9, 15)
+    )
+    assert snapshot_store._month_row_is_provisional(
+        None, date(2026, 3, 1), date(2026, 9, 15)
+    )
+
+
 def test_cohort_energy_from_archived_impact_without_a_monthly_formula() -> None:
     """Resolved bands with coefficients the card does not flag as the
     delivery month's index stay as printed: freezing them would pin the

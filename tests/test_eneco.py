@@ -689,3 +689,159 @@ def test_energy_anchor_does_not_reach_the_injection_page() -> None:
     assert rows[0] > text.index("AFNAME EN INJECTIE")
     with pytest.raises(eneco_mod.ExtractorError, match="variable energy block"):
         parse_snapshot(text, "power_flex", "test://jun21shape", REGION_FLANDERS)
+
+
+def test_published_index_is_the_index_the_printed_price_was_computed_at() -> None:
+    """Every Flex card footnotes the Belpex-RLP-M its Maandprijs was computed
+    on: "laatst gekende waarde van Belpex-RLP-M (08/2026: €133,4366/MWh)". The
+    printed rate is the card's own formula at that value on all five cards, to
+    the fourth decimal, which is what makes the footnote the settlement figure
+    for the month it names rather than a decoration."""
+    from custom_components.be_electricity_prices.providers.eneco import (
+        published_index,
+    )
+
+    expected = {
+        "eneco_flex_jun25.pdf": (date(2025, 5, 1), 63.7399),
+        "eneco_flex_dec25.pdf": (date(2025, 11, 1), 89.3987),
+        "eneco_flex.pdf": (date(2026, 3, 1), 96.8502),
+        "eneco_flex_aug26.pdf": (date(2026, 7, 1), 112.5292),
+        "eneco_flex_one.pdf": (date(2026, 8, 1), 133.4366),
+    }
+    for name, (month, eur_per_mwh) in expected.items():
+        text = fixture_text(name)
+        published = published_index(text)
+        assert published is not None, name
+        assert published[0] == month, name
+        assert published[1] == pytest.approx(eur_per_mwh / 1000.0), name
+        contract = "power_flex_one" if "one" in name else "power_flex"
+        energy = parse_snapshot(text, contract, "test://", REGION_WALLONIA).energy
+        assert isinstance(energy, VariableRates)
+        assert energy.formula_factor is not None and energy.formula_base is not None
+        assert energy.formula_factor * published[1] + energy.formula_base == (
+            pytest.approx(energy.current, abs=5e-5)
+        ), name
+    # The Fix card prices energy at a fixed rate and footnotes only its
+    # injection index, so there is nothing to settle on.
+    assert published_index(fixture_text("eneco_fix.pdf")) is None
+
+
+def _archive_of(cards: dict[str, str]) -> tuple[Any, Any]:
+    """HEAD and GET stand-ins serving ``cards`` keyed by the URL's issue."""
+
+    async def head(_session: Any, url: str) -> str | None:
+        return "ok" if any(issue in url for issue in cards) else None
+
+    async def pdf(_session: Any, url: str) -> str:
+        for issue, text in cards.items():
+            if issue in url:
+                return text
+        raise AssertionError(url)
+
+    return head, pdf
+
+
+def test_fetch_for_month_settles_a_closed_month_on_the_next_cards_index() -> None:
+    """August 2026 printed 15,41 c/kWh, the formula at JULY's 112,5292. The
+    September card footnotes August's realised Belpex-RLP-M, 133,4366, so the
+    archived August month is billed at the formula on that: 17,6686 c/kWh,
+    which is 2,26 c/kWh more than the card said and what Eneco invoices."""
+    head, pdf = _archive_of(
+        {
+            "012608": fixture_text("eneco_flex_aug26.pdf"),
+            "012609": fixture_text("eneco_flex_one.pdf"),
+        }
+    )
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+            new=head,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+            new=pdf,
+        ),
+    ):
+        august = _run(fetch_for_month(None, "power_flex", "wallonia", date(2026, 8, 1)))  # type: ignore[arg-type]
+    assert august is not None
+    energy = august.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.index_realised == pytest.approx(0.1334366)
+    # (0,102 x 133,4366 + 3,058) x 1,06 in c/kWh
+    assert energy.current == pytest.approx(0.176686, abs=1e-6)
+    assert energy.current > 0.1541
+    # The coefficients are the August card's own, untouched.
+    assert energy.formula_factor == pytest.approx(0.102 * 1.06 * 10)
+    assert energy.formula_base == pytest.approx(3.058 * 1.06 / 100)
+    assert august.provisional is False
+    assert august.publication_label == "augustus 2026"
+
+
+def test_fetch_for_month_keeps_the_estimate_and_flags_it_while_the_next_card_is_out() -> (
+    None
+):
+    """September 2026 with no October card yet: the printed figure stands, no
+    realised index is recorded, and the row is provisional so the monthly cache
+    asks again after its TTL instead of filing the estimate as a closed fact."""
+    head, pdf = _archive_of({"012609": fixture_text("eneco_flex_aug26.pdf")})
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+            new=head,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+            new=pdf,
+        ),
+    ):
+        # The August fixture parses as the September issue here only because
+        # the validity check is bypassed by the month name; what matters is
+        # that no 012610 issue answers.
+        running = _run(
+            fetch_for_month(None, "power_flex", "wallonia", date(2026, 8, 1))  # type: ignore[arg-type]
+        )
+    assert running is None or running.provisional is True
+    head, pdf = _archive_of({"012608": fixture_text("eneco_flex_aug26.pdf")})
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+            new=head,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+            new=pdf,
+        ),
+    ):
+        august = _run(fetch_for_month(None, "power_flex", "wallonia", date(2026, 8, 1)))  # type: ignore[arg-type]
+    assert august is not None
+    assert august.provisional is True
+    energy = august.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.index_realised is None
+    assert energy.current == pytest.approx(0.1541)
+
+
+def test_fetch_for_month_leaves_a_fixed_card_alone() -> None:
+    """Power Fix prices energy at a fixed rate; the next card's footnote
+    settles nothing on it, so the archived month is neither re-resolved nor
+    flagged provisional."""
+    head, pdf = _archive_of(
+        {
+            "012604": fixture_text("eneco_fix.pdf"),
+            "012605": fixture_text("eneco_fix.pdf"),
+        }
+    )
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.head_freshness_key",
+            new=head,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+            new=pdf,
+        ),
+    ):
+        april = _run(fetch_for_month(None, "power_fix", "flanders", date(2026, 4, 1)))  # type: ignore[arg-type]
+    assert april is not None
+    assert isinstance(april.energy, FixedRates)
+    assert april.provisional is False

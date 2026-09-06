@@ -502,11 +502,15 @@ def _month_row_is_provisional(
     correct it, and this repo already treats that as normal. A cached ``None``
     is not either, whatever the month: it means the archive had nothing at the
     moment it was asked, which for a supplier publishing in arrears is a
-    statement about the calendar rather than about the month.
+    statement about the calendar rather than about the month. Nor is a row the
+    extractor itself flagged ``provisional``: Eneco settles a month on the
+    index printed on the NEXT card, and a month fetched before that card is
+    out still carries the printed estimate.
     """
-    return snap is None or (year_month.year, year_month.month) >= (
-        today.year,
-        today.month,
+    return (
+        snap is None
+        or snap.provisional
+        or (year_month.year, year_month.month) >= (today.year, today.month)
     )
 
 

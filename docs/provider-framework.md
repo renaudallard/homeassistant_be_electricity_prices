@@ -219,6 +219,7 @@ EUR/kWh, re-published monthly.
 | `yearly_fixed_fee` | `float` | `0.0` | Yearly standing charge. |
 | `yearly_fixed_fee_exclusive_night` | `float \| None` | `None` | Dedicated exclusive-night yearly fee (EBEM Groen Variabel prints one); `None` means the standard fee applies. |
 | `formula` | `str \| None` | `None` | Indexation expression text for diagnostics, when published. |
+| `index_realised` | `float \| None` | `None` | The value the card's index settled at for the card's OWN month, in EUR/kWh, once the supplier published it. Eneco footnotes each month's realised Belpex-RLP-M on the next card; `fetch_for_month` settles the archived month on it and `current` is then that figure. `None` while the next card is not out. |
 
 ### DynamicRates
 
@@ -257,7 +258,7 @@ transition : 11:00-17:00 + 22:00-01:00
 offpeak    : 01:00-07:00
 ```
 
-`weekend_rule` (`WeekendRule`, `providers/base.py:309`) selects the weekend
+`weekend_rule` (`WeekendRule`, `providers/base.py:316`) selects the weekend
 schedule:
 
 - `weekend_offpeak` (generic CWaPE default): Saturday, Sunday and public holidays are entirely off-peak.
@@ -437,6 +438,7 @@ class SupplierSnapshot:
     injection: InjectionRates | None = None
     supplier_prosumer_eur_per_kva_year: float | None = None
     valid_until: date | None = None
+    provisional: bool = False
 ```
 
 | Field | Type | Default | Meaning |
@@ -451,6 +453,7 @@ class SupplierSnapshot:
 | `injection` | `InjectionRates \| None` | `None` | Solar feed-in compensation, or `None` when the contract has no injection. |
 | `supplier_prosumer_eur_per_kva_year` | `float \| None` | `None` | Supplier-side compensation-regime prosumer forfait in EUR per kVA per year, billed ON TOP OF the DSO prosumer tariff. Cociter Variable publishes one; most cards do not. Already TVAC, never VAT-scaled. |
 | `valid_until` | `date \| None` | `None` | Last calendar day the rates apply to (typically the last day of the pricing month). `None` when the extractor could not parse a validity period; consumers treat `None` as "assume available". |
+| `provisional` | `bool` | `False` | The extractor knows this ARCHIVED month's figures can still change (an Eneco month whose next card, carrying the realised index, is not out yet). The monthly snapshot cache re-fetches such a row after its TTL instead of keeping it as a closed month's fact. Never set on a live card. |
 
 `valid_until` feeds the `tomorrow_prices_available` binary sensor, which checks
 `date.today() <= valid_until`; `None` means "we do not know", so callers fall

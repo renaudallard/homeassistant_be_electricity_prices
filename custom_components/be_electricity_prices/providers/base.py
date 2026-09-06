@@ -158,6 +158,13 @@ class VariableRates:
     # month's own mean, cohort or not, and the printed rate is the fallback for
     # an entry with no ENTSO-E key. False -> the printed rate is what is billed.
     month_indexed: bool = False
+    # The value that index settled at for THIS card's own month, in EUR/kWh,
+    # once the supplier has published it. Eneco prints each month's realised
+    # Belpex-RLP-M in the footnote of the FOLLOWING month's card, so an
+    # archived month is settled on the figure Eneco itself bills, and
+    # ``current`` is then that figure rather than the printed estimate. None
+    # while the month is still running or the next card is not out yet.
+    index_realised: float | None = None
     # The same coefficients for a bi-hourly meter's two bands, when the card
     # prints them per meter. Mega does: mono "Epex x 1,1095 + 3,6", peak
     # "x 1,3275 + 3,6", off-peak "x 0,94 + 3,6". Billing a bi-hourly cohort at
@@ -783,6 +790,13 @@ class SupplierSnapshot:
     # check ``date.today() <= valid_until``; ``None`` means we don't
     # know, so callers should fall back to "treat as available".
     valid_until: date | None = None
+    # True when the extractor knows this ARCHIVED month's figures can still
+    # change. Eneco settles a month on the index it publishes on the next
+    # card, so a month whose next card is not out yet bills the printed
+    # estimate for now; the monthly snapshot cache re-fetches such a row after
+    # its TTL instead of keeping it as a closed month's historical fact. Never
+    # set on a live card.
+    provisional: bool = False
 
 
 def _vat_energy(energy: EnergyRates, factor: float) -> EnergyRates:

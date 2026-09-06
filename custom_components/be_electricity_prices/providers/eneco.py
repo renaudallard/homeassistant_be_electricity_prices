@@ -41,6 +41,7 @@ Eneco serves Flanders and Wallonia only (no Brussels).
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from datetime import date
 
 import aiohttp
@@ -141,6 +142,13 @@ _FLUVIUS_LABELS: dict[str, str] = {
 # integer part at three digits, so any value >= 1000 (e.g. a four-digit
 # yearly fee) was truncated to its first 1.xxx and mis-parsed.
 _NUM = r"(\d{1,3}(?:[\xa0\u2009\u202f]\d{3})+(?:,\d{1,4})?|\d+(?:[\.,]\d{1,4})?)"
+# "laatst gekende waarde van Belpex-RLP-M (08/2026: €133,4366/MWh)": the month
+# the printed Maandprijs was computed on and the value it settled at. Belpex-
+# RLP-M is only known at month end, so the card printed in September carries
+# August's realised value, which is what August is billed at.
+_INDEX_FOOTNOTE_RE = re.compile(
+    r"Belpex-RLP-M\s*\((\d{2})/(\d{4}):\s*€\s*([\d.,]+)\s*/MWh\)"
+)
 _WS = r"[\s\xa0]"
 # Eneco prefixed every priced row label with a ">" bullet until the
 # June 2025 issue ("10,67 10,67 10,67 10,67 > Maandprijs"); the July
@@ -190,6 +198,23 @@ async def fetch_for_month(
     slug = _CONTRACT_SLUGS.get(contract_id)
     if slug is None:
         return None
+    found = await _archived_card(session, slug, contract_id, region, year_month)
+    if found is None:
+        return None
+    snap, _text = found
+    return await _settle_on_published_index(
+        session, slug, contract_id, region, snap, year_month
+    )
+
+
+async def _archived_card(
+    session: aiohttp.ClientSession,
+    slug: str,
+    contract_id: str,
+    region: str,
+    year_month: date,
+) -> tuple[SupplierSnapshot, str] | None:
+    """The validated card for ``year_month`` and its text, or ``None``."""
     yymm = f"{year_month.year % 100:02d}{year_month.month:02d}"
     for volume in ("01", "02", "03", "04", "05"):
         issue = f"{volume}{yymm}"
@@ -212,8 +237,76 @@ async def fetch_for_month(
             continue
         result = archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
         if result is not None:
-            return result
+            return result, text
     return None
+
+
+def published_index(text: str) -> tuple[date, float] | None:
+    """The Belpex-RLP-M value a card prints, as ``(month, EUR/kWh)``.
+
+    Every Flex card footnotes the index its Maandprijs was computed on, which
+    is the last month closed at publication: "de maandprijs berekend op basis
+    van de laatst gekende waarde van Belpex-RLP-M (08/2026: €133,4366/MWh)".
+    Eneco's own indexation page defines the parameter as the RLP-weighted mean
+    of the delivery month, known only at month end, so this figure is what the
+    named month is finally billed at. Four decimals, straight from Eneco.
+    """
+    match = _INDEX_FOOTNOTE_RE.search(text)
+    if match is None:
+        return None
+    return (
+        date(int(match.group(2)), int(match.group(1)), 1),
+        to_float(match.group(3)) / 1000.0,
+    )
+
+
+async def _settle_on_published_index(
+    session: aiohttp.ClientSession,
+    slug: str,
+    contract_id: str,
+    region: str,
+    snap: SupplierSnapshot,
+    year_month: date,
+) -> SupplierSnapshot:
+    """Re-resolve an archived Flex month on the index Eneco published for it.
+
+    The card for ``year_month`` prints its Maandprijs on the PREVIOUS month's
+    Belpex-RLP-M, so billing that figure bills last month's index: measured on
+    the 2026 cards, between 1,5 c/kWh over (April) and 2,5 c/kWh under (June)
+    on a 13 to 17 c/kWh energy leg. The card for the month after prints what
+    the month actually settled at, and that is the figure Eneco invoices, so
+    the archived month takes it: ``current`` becomes the card's own formula at
+    the realised index and ``index_realised`` records the value.
+
+    While that next card is not out yet (the running month, or the first days
+    after it closes) the printed estimate stands and the snapshot is flagged
+    ``provisional`` so the monthly cache asks again after its TTL rather than
+    filing the estimate as a closed month's fact. A next card whose footnote
+    names some other month is left alone: nothing on it settles this one.
+    """
+    energy = snap.energy
+    if not isinstance(energy, VariableRates):
+        return snap
+    if energy.formula_factor is None or energy.formula_base is None:
+        return snap
+    following = date(
+        year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
+    )
+    found = await _archived_card(session, slug, contract_id, region, following)
+    if found is None:
+        return replace(snap, provisional=True)
+    published = published_index(found[1])
+    if published is None or published[0] != year_month:
+        return snap
+    index = published[1]
+    return replace(
+        snap,
+        energy=replace(
+            energy,
+            current=energy.formula_factor * index + energy.formula_base,
+            index_realised=index,
+        ),
+    )
 
 
 async def probe(
