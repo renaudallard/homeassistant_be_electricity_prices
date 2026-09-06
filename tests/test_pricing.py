@@ -29,10 +29,12 @@ from __future__ import annotations
 
 from typing import Any
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from custom_components.be_electricity_prices.pricing import (
+    MeterType,
     compute_breakdown,
     dso_impact_band,
     energy_eur_per_kwh,
@@ -50,6 +52,7 @@ from custom_components.be_electricity_prices.providers.base import (
     EnergyRates,
     FixedRates,
     ImpactRates,
+    SpotMonthlyRates,
     SupplierSnapshot,
     TaxOverlay,
     TimeOfUseRates,
@@ -827,3 +830,43 @@ def test_a_half_published_band_pair_is_not_a_split() -> None:
     assert static_energy_eur_per_kwh(half_var, "peak") == pytest.approx(0.20)
     whole_var = VariableRates(current=0.20, peak=0.28, offpeak=0.16)
     assert static_energy_eur_per_kwh(whole_var, "offpeak") == pytest.approx(0.16)
+
+
+def test_spot_monthly_impact_bands_follow_the_cwape_schedule() -> None:
+    """A month-priced leg carrying the three Impact pairs bills each hour on
+    the CWaPE band, every day of the week, capped per band. The coefficients
+    are Cociter's September 2026 trihoraire card and the mean is August's
+    BELIX, so each band lands on the figure that card prints."""
+    leg = SpotMonthlyRates(
+        factor=1.06,
+        base=0.053,
+        factor_pic=1.06,
+        base_pic=0.053,
+        factor_medium=0.848,
+        base_medium=0.053,
+        factor_eco=0.636,
+        base_eco=0.053,
+        ceiling_pic=0.265,
+    )
+    tz = ZoneInfo("Europe/Brussels")
+
+    def at(day: int, hour: int, mean: float, meter: MeterType = "dynamic") -> float:
+        when = datetime(2026, 9, day, hour, 30, tzinfo=tz)
+        return energy_eur_per_kwh(leg, when, mean, meter, "wallonia", "impact")
+
+    assert at(15, 19, 0.12932) == pytest.approx(0.190079, abs=1e-6)  # PIC
+    assert at(15, 9, 0.12932) == pytest.approx(0.162663, abs=1e-6)  # MEDIUM
+    assert at(15, 0, 0.12932) == pytest.approx(0.162663, abs=1e-6)  # MEDIUM
+    assert at(15, 13, 0.12932) == pytest.approx(0.135248, abs=1e-6)  # ECO
+    assert at(15, 3, 0.12932) == pytest.approx(0.135248, abs=1e-6)  # ECO
+    # Sunday 19:30 is PIC too: the Impact schedule has no weekend exception.
+    assert at(20, 19, 0.12932) == pytest.approx(0.190079, abs=1e-6)
+    # The band, not the meter, decides: a mono meter on this leg bills the
+    # same, as it does on ImpactRates.
+    assert at(15, 19, 0.12932, "mono") == pytest.approx(0.190079, abs=1e-6)
+    # The cap binds on the band that carries one and leaves the others alone.
+    assert at(15, 19, 0.30) == pytest.approx(0.265)
+    assert at(15, 13, 0.30) == pytest.approx(0.636 * 0.30 + 0.053)
+    # The mean is mandatory, as for every month-priced leg.
+    with pytest.raises(ValueError):
+        energy_eur_per_kwh(leg, datetime(2026, 9, 15, 19, tzinfo=tz), None)

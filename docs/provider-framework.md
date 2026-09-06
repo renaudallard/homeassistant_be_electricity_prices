@@ -257,7 +257,7 @@ transition : 11:00-17:00 + 22:00-01:00
 offpeak    : 01:00-07:00
 ```
 
-`weekend_rule` (`WeekendRule`, `providers/base.py:293`) selects the weekend
+`weekend_rule` (`WeekendRule`, `providers/base.py:309`) selects the weekend
 schedule:
 
 - `weekend_offpeak` (generic CWaPE default): Saturday, Sunday and public holidays are entirely off-peak.
@@ -307,14 +307,16 @@ on a professional one, since the cards print them in c€/kWh Hors TVA. Each ban
 parsed independently, so a card that prints only some of them still contributes what
 it has, and `None` means "not published" rather than zero.
 
-They are **diagnostic only**. Signing-cohort re-pricing does not use them:
-`_cohort_energy_from_archived` (`cohort.py:275`) returns `None` for this shape. An
-Impact contract is monthly-indexed, so re-pricing a cohort correctly needs a
-three-band monthly-mean shape that resolves downstream the way `SpotMonthlyRates`
-does for the single-rate case, and that shape does not exist. Freezing the archived
-card's resolved bands instead would pin the signing-month index, the exact bug that
-function exists to avoid. Capturing the coefficients is the prerequisite if the shape
-is ever built.
+With `month_indexed` set they are what the contract bills. Cociter's trihoraire
+card prints its bands at the previous month's BELIX and its note (7) settles the
+delivery month on its own, so `_cohort_energy_from_archived` (`cohort.py:276`)
+turns the three pairs into a `SpotMonthlyRates` leg carrying `factor_pic` /
+`factor_medium` / `factor_eco` and the per-band ceilings, which `energy_eur_per_kwh`
+routes by `dso_impact_band`; every month-mean gate then prices it like the variable
+card's mono pair. Without the flag (a card that prints resolved bands with no monthly
+formula behind them, or one whose formula rows did not all parse) the function
+returns `None` and the printed bands bill, since freezing coefficients the card does
+not index monthly would pin the signing-month index, the exact bug it exists to avoid.
 
 ### SpotMonthlyRates
 

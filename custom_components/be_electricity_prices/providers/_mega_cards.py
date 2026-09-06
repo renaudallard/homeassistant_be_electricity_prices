@@ -292,13 +292,19 @@ def _extract_energy(
             if formula_match
             else None
         )
+        coefficients = _impact_band_coefficients(text, professional=professional)
         return ImpactRates(
             pic=pic,
             medium=medium,
             eco=eco,
             yearly_fixed_fee=yearly_fee,
             formula=formula,
-            **_impact_band_coefficients(text, professional=professional),
+            pic_factor=coefficients["pic_factor"],
+            pic_base=coefficients["pic_base"],
+            medium_factor=coefficients["medium_factor"],
+            medium_base=coefficients["medium_base"],
+            eco_factor=coefficients["eco_factor"],
+            eco_base=coefficients["eco_base"],
         )
 
     mono = _extract_meter_value(text, "Compteur mono-horaire")

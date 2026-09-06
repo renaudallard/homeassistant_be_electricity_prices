@@ -306,9 +306,9 @@ Fields pulled and their helpers:
 | Field | Helper | Location |
 | --- | --- | --- |
 | Energy rates (per kind) | `_extract_energy` | `_mega_cards.py:254` |
-| Injection | `_extract_injection` | `_mega_cards.py:551` |
-| Publication label | `_extract_publication_month` | `_mega_cards.py:512` |
-| Valid until | `parse_valid_until` then `_extract_valid_until` | `_pdf.py:1004`, `_mega_cards.py:531` |
+| Injection | `_extract_injection` | `_mega_cards.py:557` |
+| Publication label | `_extract_publication_month` | `_mega_cards.py:518` |
+| Valid until | `parse_valid_until` then `_extract_valid_until` | `_pdf.py:1004`, `_mega_cards.py:537` |
 | Federal excise | `_extract_federal_excise` | `_mega_overlays.py:149` |
 | Energy contribution | `_extract_energy_contribution` | `_mega_overlays.py:180` |
 | Wallonia connection fee | `_extract_connection_fee` (Wallonia only) | `_mega_overlays.py:198` |
@@ -319,7 +319,7 @@ Fields pulled and their helpers:
 ### Energy block
 
 `_extract_energy` (`_mega_cards.py:254`) always reads the yearly standing charge first
-(`_extract_yearly_fee`, `_mega_cards.py:497`), which accepts both the split dynamic layout
+(`_extract_yearly_fee`, `_mega_cards.py:503`), which accepts both the split dynamic layout
 (`Redevance fixe\n(€/an)\n42.4`) and the joined fixed layout
 (`Redevance fixe (€/an)\n111.3`). A missing standing charge raises (it is on every
 card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:427`) enforces it.
@@ -340,7 +340,7 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:427`) enforces it.
   that rather than hiding it.
 - `fixed` / `variable`: read `Compteur mono-horaire` (mono), plus `Tarif jour`
   (peak), `Tarif nuit` (offpeak) and `Exclusif nuit` (exclusive night) via
-  `_extract_meter_value` (`_mega_cards.py:472`). The bi-hourly labels are only read inside
+  `_extract_meter_value` (`_mega_cards.py:478`). The bi-hourly labels are only read inside
   the `Compteur bi-horaire` scope so a later mention in a dynamic-formula footnote
   cannot shadow the energy-block value; the anchor regex tolerates the newline pypdf
   inserts inside `Compteur bi-horaire`. A missing mono rate raises. `fixed` builds
@@ -353,7 +353,7 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py:427`) enforces it.
 > prix de l'energie pour une livraison les 12 prochains mois."* The rates Mega
 > settles on are in the sentence below it, *"Les derniers prix constates et utilises
 > pour le calcul de votre facture de regularisation pour le mois de &lt;month&gt;"*,
-> in c€/kWh. `_realized_rates` (`_mega_cards.py:377`) parses that sentence and both
+> in c€/kWh. `_realized_rates` (`_mega_cards.py:383`) parses that sentence and both
 > `_extract_energy` and `_extract_injection` prefer it, falling back to the table
 > when it is absent.
 >
@@ -469,11 +469,11 @@ folded fee to 14.73 + 50.0744 and the OSP tiers to
 
 ### Publication label and validity
 
-`_extract_publication_month` (`_mega_cards.py:512`) first tries the versioned Smart Fixed
+`_extract_publication_month` (`_mega_cards.py:518`) first tries the versioned Smart Fixed
 prefix `V<n> <month> <year>` (the token class includes `é` and `û` so `août` keeps
 its version, `test_publication_month_keeps_version_for_august`, `test_mega.py:420`),
 then falls back to `Prix du mois MM/YYYY` rendered as `<month-name> YYYY` from
-`_FR_MONTH_NAMES` (`_mega_cards.py:509`). `valid_until` prefers the shared
+`_FR_MONTH_NAMES` (`_mega_cards.py:515`). `valid_until` prefers the shared
 `parse_valid_until` keyword scan and falls back to `_extract_valid_until`
 (`mega.py:727`), which reads `mois MM/YYYY` and returns the last calendar day of that
 month (Mega cards are valid for the printed month).
@@ -520,7 +520,7 @@ cross-region excise (0.0503288) and the per-region renewables split.
 
 ## Injection
 
-`_extract_injection` (`_mega_cards.py:551`) produces an `InjectionRates` from the same energy
+`_extract_injection` (`_mega_cards.py:557`) produces an `InjectionRates` from the same energy
 block, second column. There are three shapes depending on the kind:
 
 - `tou_impact`: injection is the second number under any of the three tier labels

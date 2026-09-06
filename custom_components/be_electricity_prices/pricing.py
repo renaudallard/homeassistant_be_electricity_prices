@@ -361,6 +361,29 @@ def energy_eur_per_kwh(
         if spot_eur_per_kwh is None:
             raise ValueError("spot-monthly tariff needs a monthly mean spot")
         factor, base = energy.factor, energy.base
+        if (
+            energy.factor_pic is not None
+            and energy.factor_medium is not None
+            and energy.factor_eco is not None
+        ):
+            # A Tarif Impact card re-priced on the month: the band is the
+            # CWaPE one, every day of the week, and the cap is per band, the
+            # same routing ``ImpactRates`` gets below.
+            band = dso_impact_band(when)
+            if band == "pic":
+                band_coefs = (energy.factor_pic, energy.base_pic, energy.ceiling_pic)
+            elif band == "medium":
+                band_coefs = (
+                    energy.factor_medium,
+                    energy.base_medium,
+                    energy.ceiling_medium,
+                )
+            else:
+                band_coefs = (energy.factor_eco, energy.base_eco, energy.ceiling_eco)
+            band_factor, band_base, cap = band_coefs
+            assert band_factor is not None
+            rate = band_factor * spot_eur_per_kwh + (band_base or 0.0)
+            return rate if cap is None else min(rate, cap)
         if energy.factor_transition is not None:
             # A time-of-use schedule, not a bi-hourly one: three bands chosen
             # by the contract's own slot rule. Decided before every other

@@ -942,7 +942,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # column their note (8) says overrides the indexed rate, on VariableRates and
 # on the new ImpactRates ceilings. A v50 snapshot has no cap at all, so a
 # month whose BELIX mean cleared it would bill the uncapped formula.
-_SNAPSHOT_SCHEMA_VERSION = 51
+# v52: the Cociter trihoraire card carries month_indexed on its ImpactRates,
+# so the three band formulas re-price on the delivery month's BELIX the way
+# the variable card's do. A v51 snapshot bills the printed bands, which are
+# the previous month's index, and Cociter's probe only flips on a new card.
+_SNAPSHOT_SCHEMA_VERSION = 52
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

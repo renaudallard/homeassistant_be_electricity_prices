@@ -479,6 +479,12 @@ def _impact_energy(text: str, yearly_fee: float) -> ImpactRates:
     third of the day wrong, and a card selling a three-band product with a
     band missing is a layout drift, so this fails loud like the injection,
     tax and transport parsers.
+
+    The indicative rates are a fallback, not the contract: like the variable
+    card, this one computes them on the PREVIOUS month's BELIX and bills the
+    delivery month on its own. ``month_indexed`` carries that to
+    ``_month_indexed_leg``, which resolves the three coefficient pairs against
+    the running month mean when the entry holds an ENTSO-E key.
     """
     rates: dict[str, float] = {}
     coefficients: dict[str, float | None] = {}
@@ -514,6 +520,13 @@ def _impact_energy(text: str, yearly_fee: float) -> ImpactRates:
         ceiling_pic=ceilings["pic"],
         ceiling_medium=ceilings["medium"],
         ceiling_eco=ceilings["eco"],
+        # Note (7) is the variable card's: "indexe mensuellement ... moyenne
+        # arithmetique des cotations journalieres Day Ahead EPEX SPOT Belgium
+        # durant le mois de fourniture", and the printed rates are computed on
+        # last month's BELIX. Flag it only when all three pairs parsed, so a
+        # half-read card bills its printed bands rather than one band on a
+        # formula and two on nothing.
+        month_indexed=all(value is not None for value in coefficients.values()),
         **coefficients,
     )
 

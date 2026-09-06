@@ -65,6 +65,7 @@ from .providers.base import (
     DynamicRates,
     EnergyRates,
     FixedRates,
+    ImpactRates,
     InjectionRates,
     SpotMonthlyRates,
     SupplierExtractor,
@@ -283,9 +284,28 @@ def _cohort_energy_from_archived(
     rather than freeze the archived card's stale resolved rate, which would
     pin the signing-month index.
     ``None`` when the archived card exposes no re-priceable rate (a variable
-    card whose coefficients couldn't be parsed, or a TOU / Impact kind).
+    card whose coefficients couldn't be parsed, or a TOU / Impact card that
+    prints resolved bands without a monthly formula behind them).
     """
     energy = archived.energy
+    if isinstance(energy, ImpactRates) and energy.month_indexed:
+        # A Tarif Impact card indexed per band monthly (Cociter trihoraire)
+        # becomes the three-band monthly leg on the CWaPE schedule, carrying
+        # each band's cap, so the same month-mean gates price it.
+        return SpotMonthlyRates(
+            factor=energy.pic_factor or 0.0,
+            base=energy.pic_base or 0.0,
+            factor_pic=energy.pic_factor,
+            base_pic=energy.pic_base,
+            factor_medium=energy.medium_factor,
+            base_medium=energy.medium_base,
+            factor_eco=energy.eco_factor,
+            base_eco=energy.eco_base,
+            ceiling_pic=energy.ceiling_pic,
+            ceiling_medium=energy.ceiling_medium,
+            ceiling_eco=energy.ceiling_eco,
+            yearly_fixed_fee=energy.yearly_fixed_fee,
+        )
     if isinstance(energy, TimeOfUseRates) and energy.month_indexed:
         # A TOU card that indexes each band monthly becomes the three-band
         # monthly leg, so every existing month-mean gate keeps working.
@@ -387,6 +407,9 @@ def _month_indexed_leg(
 
     BELIX is exactly the arithmetic monthly mean the coordinator already
     computes, so the coefficients resolve against it without approximation.
+    The trihoraire card is the same contract on the three CWaPE bands, one
+    formula each, and its September 2026 card printed August's index too, so
+    it takes the same leg with the bands in place of the mono pair.
 
     Returns ``None`` without an ENTSO-E key, which keeps the printed
     indicative: the variable kind never prompts for one, and an entry that has
@@ -394,7 +417,7 @@ def _month_indexed_leg(
     Same reasoning, and the same guard, as the variable cohort below.
     """
     energy = snapshot.energy
-    if not isinstance(energy, (VariableRates, TimeOfUseRates)):
+    if not isinstance(energy, (VariableRates, TimeOfUseRates, ImpactRates)):
         return None
     if not energy.month_indexed:
         return None

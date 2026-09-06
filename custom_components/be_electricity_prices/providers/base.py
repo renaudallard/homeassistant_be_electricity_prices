@@ -281,6 +281,22 @@ class SpotMonthlyRates:
     # with ``weekend_rule``, not by the bi-hourly day/night split.
     factor_transition: float | None = None
     base_transition: float | None = None
+    # The three CWaPE Impact bands, for a Tarif Impact card that indexes each
+    # band monthly. Cociter Tarif Variable Trihoraire is the case: one BELIX
+    # formula per band and printed rates that are the previous month's, the
+    # same sentence as its variable sibling. Chosen by ``dso_impact_band``
+    # rather than by the bi-hourly or time-of-use rule, and checked before
+    # both, since a card prints one schedule or the other. The per-band
+    # ceilings are the same cap ``ImpactRates.ceiling_*`` carries.
+    factor_pic: float | None = None
+    base_pic: float | None = None
+    factor_medium: float | None = None
+    base_medium: float | None = None
+    factor_eco: float | None = None
+    base_eco: float | None = None
+    ceiling_pic: float | None = None
+    ceiling_medium: float | None = None
+    ceiling_eco: float | None = None
     weekend_rule: WeekendRule = "weekend_offpeak"
     yearly_fixed_fee: float = 0.0
     # Dedicated yearly fixed fee for an exclusive-night meter circuit, carried
@@ -371,15 +387,12 @@ class ImpactRates:
     # EUR/kWh on a residential card, left ex-VAT on a professional one. The
     # cards print them in c€/kWh Hors TVA, so both conversions are applied.
     #
-    # These are DIAGNOSTIC only today. Signing-cohort re-pricing does not use
-    # them: an Impact contract is monthly-indexed, so re-pricing a cohort
-    # correctly needs a three-band monthly-mean energy shape that resolves
-    # downstream, the way SpotMonthlyRates does for the single-rate case, and
-    # that shape does not exist. Freezing the archived card's resolved bands
-    # instead would pin the signing-month index, which is the exact bug
-    # ``_cohort_energy_from_archived`` exists to avoid, so it returns None for
-    # this shape and the entry bills at the current card. Capturing the
-    # coefficients here is the prerequisite if that shape is ever built.
+    # With ``month_indexed`` set they are what the contract bills: the card's
+    # printed bands are the previous month's index and note (7) settles the
+    # delivery month on its own BELIX, so ``_cohort_energy_from_archived``
+    # turns the three pairs into a banded SpotMonthlyRates leg that every
+    # month-mean gate already resolves, the way the variable card's mono pair
+    # is. Without the flag they stay diagnostic and the printed bands bill.
     pic_factor: float | None = None
     pic_base: float | None = None
     medium_factor: float | None = None
@@ -394,6 +407,10 @@ class ImpactRates:
     ceiling_pic: float | None = None
     ceiling_medium: float | None = None
     ceiling_eco: float | None = None
+    # True when every band above carries its coefficient pair AND the card
+    # says the printed rate is last month's index (Cociter trihoraire). Same
+    # meaning as ``VariableRates.month_indexed``.
+    month_indexed: bool = False
 
 
 EnergyRates = (

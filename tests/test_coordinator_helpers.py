@@ -117,6 +117,7 @@ from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     EnergyRates,
     FixedRates,
+    ImpactRates,
     InjectionRates,
     SpotMonthlyRates,
     SupplierExtractor,
@@ -5147,6 +5148,56 @@ def test_cohort_energy_from_archived_tou_not_repriced() -> None:
         energy=TimeOfUseRates(peak=0.30, transition=0.20, offpeak=0.12)
     )
     assert _cohort_energy_from_archived(archived) is None
+
+
+def test_cohort_energy_from_archived_impact_without_a_monthly_formula() -> None:
+    """Resolved bands with coefficients the card does not flag as the
+    delivery month's index stay as printed: freezing them would pin the
+    signing-month index, which is the bug this function exists to avoid."""
+    archived = make_snapshot(
+        energy=ImpactRates(
+            pic=0.19, medium=0.16, eco=0.13, pic_factor=1.06, pic_base=0.053
+        )
+    )
+    assert _cohort_energy_from_archived(archived) is None
+
+
+def test_cohort_energy_from_archived_impact_builds_banded_spot_monthly() -> None:
+    """A month-indexed Impact card (Cociter trihoraire) becomes the
+    three-band monthly leg on the CWaPE schedule, each band keeping its own
+    cap, so every existing month-mean gate prices it."""
+    archived = make_snapshot(
+        energy=ImpactRates(
+            pic=0.190079,
+            medium=0.162663,
+            eco=0.135248,
+            yearly_fixed_fee=53.0,
+            pic_factor=1.06,
+            pic_base=0.053,
+            medium_factor=0.848,
+            medium_base=0.053,
+            eco_factor=0.636,
+            eco_base=0.053,
+            ceiling_pic=0.265,
+            ceiling_medium=0.265,
+            ceiling_eco=0.265,
+            month_indexed=True,
+        )
+    )
+    assert _cohort_energy_from_archived(archived) == SpotMonthlyRates(
+        factor=1.06,
+        base=0.053,
+        factor_pic=1.06,
+        base_pic=0.053,
+        factor_medium=0.848,
+        base_medium=0.053,
+        factor_eco=0.636,
+        base_eco=0.053,
+        ceiling_pic=0.265,
+        ceiling_medium=0.265,
+        ceiling_eco=0.265,
+        yearly_fixed_fee=53.0,
+    )
 
 
 async def test_cohort_energy_leg_variable_uses_signing_coefficients(

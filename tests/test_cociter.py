@@ -799,3 +799,92 @@ def test_impact_band_rate_is_capped_by_its_ceiling() -> None:
     assert energy_eur_per_kwh(capped, eco_when, None, "dynamic", "wallonia") == (
         pytest.approx(0.10)
     )
+
+
+def test_trihoraire_is_billed_on_the_delivery_month() -> None:
+    """The trihoraire card carries the variable card's note (7): "indexe
+    mensuellement ... moyenne arithmetique des cotations journalieres Day Ahead
+    EPEX SPOT Belgium durant le mois de fourniture", and prints its three bands
+    at LAST month's BELIX (129,32 for August on the September 2026 card). So the
+    printed bands are the fallback and the delivery month is billed on its own
+    mean, per band, the way the variable card's mono pair already is."""
+    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+    from custom_components.be_electricity_prices.providers.base import (
+        SpotMonthlyRates,
+    )
+
+    snap = parse_snapshot(
+        fixture_text("cociter_vai_2609.pdf"),
+        "cociter_variable_impact",
+        "test://vai",
+        "2026-09",
+    )
+    energy = snap.energy
+    assert isinstance(energy, ImpactRates)
+    assert energy.month_indexed is True
+
+    entry = SimpleNamespace(
+        data={"contract": "cociter_variable_impact", "api_key": "k"}
+    )
+    leg = _month_indexed_leg(snap, entry)  # type: ignore[arg-type]
+    assert isinstance(leg, SpotMonthlyRates)
+    assert leg.factor_pic == pytest.approx(1.06)
+    assert leg.factor_medium == pytest.approx(0.848)
+    assert leg.factor_eco == pytest.approx(0.636)
+    assert leg.ceiling_pic == pytest.approx(0.265)
+    assert leg.yearly_fixed_fee == pytest.approx(53.0)
+
+    def at(hour: int, belix_eur_per_kwh: float) -> float:
+        when = datetime(2026, 9, 15, hour, 30, tzinfo=ZoneInfo("Europe/Brussels"))
+        return energy_eur_per_kwh(
+            leg, when, belix_eur_per_kwh, "dynamic", "wallonia", "impact"
+        )
+
+    # At August's index every band reproduces the printed indicative, which
+    # is what the card says it computed and what made this a lag, not noise.
+    assert at(19, 0.12932) == pytest.approx(energy.pic, abs=1e-6)
+    assert at(9, 0.12932) == pytest.approx(energy.medium, abs=1e-6)
+    assert at(13, 0.12932) == pytest.approx(energy.eco, abs=1e-6)
+    # September's own mean is what September is billed at: 136,24 EUR/MWh to
+    # the 7th moves PIC from 19,0079 to 19,7414 c/kWh.
+    assert at(19, 0.13624) == pytest.approx(0.197414, abs=1e-6)
+    assert at(13, 0.13624) == pytest.approx(0.139649, abs=1e-6)
+    # The band is the CWaPE one every day of the week: a Saturday evening is
+    # still PIC, unlike the bi-hourly or time-of-use rules.
+    saturday = datetime(2026, 9, 19, 19, 30, tzinfo=ZoneInfo("Europe/Brussels"))
+    assert energy_eur_per_kwh(leg, saturday, 0.13624, "dynamic", "wallonia") == (
+        pytest.approx(0.197414, abs=1e-6)
+    )
+    # And the card's cap still binds on the re-priced leg.
+    assert at(19, 0.30) == pytest.approx(0.265)
+
+    # No ENTSO-E key: the printed bands stand, as on the variable card.
+    assert (
+        _month_indexed_leg(
+            snap,
+            SimpleNamespace(data={"contract": "cociter_variable_impact"}),  # type: ignore[arg-type]
+        )
+        is None
+    )
+
+
+def test_trihoraire_with_a_band_formula_unreadable_keeps_its_printed_bands() -> None:
+    """A card whose indicative rates parse but one band's formula does not is
+    billed on the printed bands for the whole month rather than on two
+    formulas and a hole: the flag is only set when all three pairs are read."""
+    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+
+    raw = fixture_text("cociter_vai_2609.pdf").replace(
+        "(0,08 x BELIX + 5) + 6% TVA", "(0,08 x BELIX + 5) TVAC"
+    )
+    snap = parse_snapshot(raw, "cociter_variable_impact", "test://vai", "2026-09")
+    energy = snap.energy
+    assert isinstance(energy, ImpactRates)
+    assert energy.medium == pytest.approx(0.162663)
+    assert energy.medium_factor is None
+    assert energy.pic_factor == pytest.approx(1.06)
+    assert energy.month_indexed is False
+    entry = SimpleNamespace(
+        data={"contract": "cociter_variable_impact", "api_key": "k"}
+    )
+    assert _month_indexed_leg(snap, entry) is None  # type: ignore[arg-type]
