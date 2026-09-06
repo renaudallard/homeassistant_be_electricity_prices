@@ -43,6 +43,7 @@ jobs:
             pypdf \
             pdfplumber \
             defusedxml \
+            pyxlsb \
             homeassistant==2026.2.3 \
             pytest-homeassistant-custom-component==0.13.316
       - name: Lint

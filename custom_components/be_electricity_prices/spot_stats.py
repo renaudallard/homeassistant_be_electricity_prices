@@ -61,6 +61,7 @@ from .providers.base import (
     SupplierSnapshot,
 )
 from .synergrid import (
+    RlpWeights,
     SppWeights,
 )
 
@@ -279,6 +280,46 @@ def _spp_month_mean(
         num += price * weight
         den += weight
     return num / den if den else None
+
+
+def _rlp_month_mean(
+    bucket: _SpotMonthBucket,
+    weights: RlpWeights,
+    year: int,
+    month: int,
+) -> float | None:
+    """RLP-weighted mean of the (year, month) bucket's prices, or ``None``.
+
+    Weights each hourly price by the residential load profile's share for its
+    LOCAL clock hour, which is how Synergrid keys the profile and how Eneco
+    defines Belpex-RLP-M: checked against the seven values Eneco published for
+    January to July 2026, this reproduces every one to the cent, while the same
+    weights on UTC hours miss by up to 0,7 EUR/MWh once summer time starts.
+    Hourly prices, not quarters: Eneco weights the Belpex hourly quotation, and
+    the cache is hourly by construction. ``None`` when no weighted hour exists.
+    """
+    num = 0.0
+    den = 0.0
+    for ts, price in bucket.get((year, month), ()):
+        local = dt_util.as_local(ts)
+        weight = weights.get((local.month, local.day, local.hour))
+        if weight is None:
+            continue
+        num += price * weight
+        den += weight
+    return num / den if den else None
+
+
+def _rlp_weighted_month_mean(
+    spots: dict[datetime, float],
+    weights: RlpWeights,
+    year: int,
+    month: int,
+) -> float | None:
+    """RLP-weighted mean of the spots whose local timestamp falls in
+    (year, month), or ``None``. Convenience wrapper over :func:`_rlp_month_mean`
+    for callers holding a raw spot dict."""
+    return _rlp_month_mean(_bucket_by_local_month(spots), weights, year, month)
 
 
 def _spp_weighted_month_mean(

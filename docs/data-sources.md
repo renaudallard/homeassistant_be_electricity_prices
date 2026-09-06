@@ -619,7 +619,40 @@ matter to this module:
   sum series and the price means this module writes. Ordering after it keeps the
   dashboard's expectations satisfied on first load.
 
-## Part 3: the Synergrid SPP profile (`synergrid.py`)
+## Part 3: the Synergrid SPP and RLP profiles (`synergrid.py`)
+
+### The RLP profile
+
+The residential load profile (RLP0N) is the other Synergrid profile Belgian
+cards index on: Eneco's Belpex-RLP-M is "het gewogen gemiddelde van de Belpex
+Day Ahead Market noteringen voor de betreffende maand, waarbij de
+wegingscoefficienten worden bepaald door het RLP verbruiksprofiel", the profile
+itself being "een rekenkundig gemiddelde van de RLP verbruiksprofielen voor alle
+distributienetbeheerders". `fetch_rlp_weights` downloads
+`synergrid.be/images/downloads/SLP-RLP-SPP/<year>/RLP0N <year> Electricity all DSOs.xlsb`
+(about 3,4 MB, a binary workbook read with `pyxlsb`, the one runtime dependency
+added for it) and `_rlp_weights_from_rows` reduces its `RLP96UbyDGO` sheet to
+one hourly curve keyed by LOCAL (month, day, hour).
+
+Two choices in that reduction were settled against Eneco's own published
+values (`indexatieparameters-elek.pdf`, January to July 2026) and both matter:
+
+- The workbook lists one column per DSO sub-area but only three curves are
+  distinct (Fluvius, the Walloon DSOs with the small ones, Sibelga); the same
+  Fluvius curve appears eight times. Averaging the columns as printed misses
+  Eneco by up to 2,2 EUR/MWh in summer. Averaging the DISTINCT curves, then
+  weighting the Belpex HOURLY quotation (the mean of the hour's quarters) by
+  the hour's local-time weight, reproduces all seven values to the cent.
+- The Year / Month / Day / h columns are Belgian local time with DST; keying the
+  weights on UTC hours instead, as the SPP parser does for its own UTC column,
+  is off by up to 0,7 EUR/MWh from April on.
+
+`spot_stats._rlp_month_mean` applies the weights the same way, and the parser
+refuses a sheet whose weights do not sum to about one over the year. The same
+download and temp-file discipline as the SPP file applies, with a `.xlsb`
+suffix.
+
+### The SPP profile
 
 ### Why it exists
 

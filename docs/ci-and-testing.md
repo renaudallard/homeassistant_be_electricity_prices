@@ -160,7 +160,7 @@ call site with `# type: ignore[arg-type]`, never to relax the production functio
 accept the stub. `pyproject.toml` sets `explicit_package_bases = true` (`pyproject.toml:12`) so
 mypy treats `custom_components/be_electricity_prices` and `tests/` as separate package roots
 (neither carries a root `__init__.py`), matching how pytest collects them, and it silences
-missing stubs for `pypdf`, `pdfplumber`, and `pytest_homeassistant_custom_component`
+missing stubs for `pypdf`, `pdfplumber`, `pyxlsb`, and `pytest_homeassistant_custom_component`
 (`pyproject.toml:14`).
 
 ## scripts/doc_ref_check.py

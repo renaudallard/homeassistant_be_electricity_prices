@@ -49,11 +49,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import struct
 import tempfile
 import zipfile
 from datetime import datetime, timedelta
+from collections.abc import Iterable
 from pathlib import Path
-from typing import IO
+from typing import IO, Any
 
 # The four parses below run over a REMOTE workbook. The stdlib parser
 # already refuses an EXTERNAL entity (it raises ParseError rather than
@@ -95,6 +97,47 @@ _PKG_REL_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 
 # Hourly weights keyed by (month, day, hour) in UTC.
 SppWeights = dict[tuple[int, int, int], float]
+# (LOCAL month, day, hour) -> the hour's share of the year's residential load.
+# Local, not UTC: Synergrid keys the RLP workbook's Year / Month / Day / h
+# columns in Belgian local time with DST, and Eneco's published Belpex-RLP-M is
+# reproduced to the cent only on that alignment.
+RlpWeights = dict[tuple[int, int, int], float]
+
+
+async def fetch_rlp_weights(session: aiohttp.ClientSession, year: int) -> RlpWeights:
+    """Return the year's hourly RLP weights in local time, or ``{}``.
+
+    The residential load profile (RLP0N) is the other Synergrid profile Belgian
+    cards index on: Eneco's Belpex-RLP-M weights each hour's Belpex quotation
+    by it. Synergrid publishes it per DSO as a binary workbook,
+    ``RLP0N <year> Electricity all DSOs.xlsb``, about 3,4 MB, which
+    :func:`_parse_rlp_weights` reduces to one hourly curve. Never raises: a
+    download or parse failure logs and returns an empty mapping, and the
+    caller keeps the plain arithmetic mean.
+    """
+    url = f"{_BASE_URL}/{year}/RLP0N%20{year}%20Electricity%20all%20DSOs.xlsb"
+    try:
+        path = await _download(session, url, suffix=".xlsb")
+    except (aiohttp.ClientError, TimeoutError, OSError, ValueError) as err:
+        _LOGGER.warning("Synergrid RLP download failed (%s): %s", url, err)
+        return {}
+    try:
+        return await asyncio.to_thread(_parse_rlp_weights, path)
+    except (
+        ImportError,  # pyxlsb missing: the manifest requirement was not installed
+        zipfile.BadZipFile,  # an xlsb is a zip container; a non-workbook fails here
+        struct.error,  # pyxlsb unpacks the binary records with struct
+        LookupError,
+        ValueError,
+        TypeError,
+        AttributeError,
+        ArithmeticError,
+        OSError,
+    ) as err:
+        _LOGGER.warning("Synergrid RLP parse failed (%s): %s", url, err)
+        return {}
+    finally:
+        await asyncio.to_thread(path.unlink, True)
 
 
 async def fetch_spp_weights(session: aiohttp.ClientSession, year: int) -> SppWeights:
@@ -137,7 +180,9 @@ async def fetch_spp_weights(session: aiohttp.ClientSession, year: int) -> SppWei
 _WRITE_BUFFER_BYTES = 4 * 1024 * 1024
 
 
-async def _download(session: aiohttp.ClientSession, url: str) -> Path:
+async def _download(
+    session: aiohttp.ClientSession, url: str, *, suffix: str = ".xlsx"
+) -> Path:
     """Stream ``url`` to a temp file (never into memory) and return its path.
 
     Every filesystem call goes through the executor. This runs on the event
@@ -153,7 +198,7 @@ async def _download(session: aiohttp.ClientSession, url: str) -> Path:
         # Named factory with a concrete return type: asyncio.to_thread cannot
         # resolve NamedTemporaryFile's overloads, so it picked the text one.
         return tempfile.NamedTemporaryFile(  # noqa: SIM115 - closed below
-            mode="w+b", delete=False, suffix=".xlsx"
+            mode="w+b", delete=False, suffix=suffix
         )
 
     tmp = await asyncio.to_thread(_open_temp)
@@ -303,3 +348,88 @@ def _accumulate_row(
         return
     key = (utc.month, utc.day, utc.hour)
     weights[key] = weights.get(key, 0.0) + value
+
+
+_RLP_SHEET = "RLP96UbyDGO"
+# Row layout of that sheet: 0 = DSO names, 1 = "DGO" labels, 2 = EAN codes,
+# then one quarter-hour per row as CET | Year | Month | Day | h | Min | Date |
+# one unit curve per DSO column. Only the local-time columns and the curves
+# are read; the CET serial is fixed UTC+1 and is not used.
+_RLP_FIRST_CURVE_COLUMN = 7
+_RLP_MONTH_COLUMN, _RLP_DAY_COLUMN, _RLP_HOUR_COLUMN = 2, 3, 4
+_RLP_YEAR_COLUMN = 1
+_RLP_CURVE_ROUNDING = 12
+
+
+def _parse_rlp_weights(path: Path) -> RlpWeights:
+    """Read the all-DSO RLP0N workbook into hourly local-time weights.
+
+    ``pyxlsb`` is imported here rather than at module level so an install
+    without the manifest requirement fails the fetch, not the integration.
+    """
+    from pyxlsb import open_workbook
+
+    with open_workbook(str(path)) as workbook, workbook.get_sheet(_RLP_SHEET) as sheet:
+        return _rlp_weights_from_rows([c.v for c in row] for row in sheet.rows())
+
+
+def _rlp_weights_from_rows(rows: Iterable[list[Any]]) -> RlpWeights:
+    """The mean of the distinct DSO curves, summed to local clock hours.
+
+    Eneco defines its index on "het rekenkundig gemiddelde van de RLP
+    verbruiksprofielen voor alle distributienetbeheerders". Synergrid's
+    workbook lists one column per DSO sub-area, but only three curves are
+    distinct (Fluvius, the Walloon DSOs with the small ones, Sibelga): the
+    same Fluvius curve appears eight times. Averaging the columns as printed
+    weights Flanders eight to one and misses Eneco's published values by up to
+    2,2 EUR/MWh in summer; averaging the DISTINCT curves reproduces all seven
+    published 2026 values to the cent, so that is the rule. Curves are
+    deduplicated by value, not by name, so a sub-area that gains its own curve
+    counts once.
+
+    Raises ``ValueError`` when the sheet has no curve or the weights do not
+    sum to about one over the year, which is what a wrong sheet or a
+    truncated download looks like.
+    """
+    names: list[Any] | None = None
+    keys: list[tuple[int, int, int]] = []
+    curves: list[list[float]] = []
+    for row in rows:
+        if names is None:
+            names = list(row)
+            continue
+        year = row[_RLP_YEAR_COLUMN] if len(row) > _RLP_YEAR_COLUMN else None
+        if not isinstance(year, (int, float)):
+            continue
+        values = row[_RLP_FIRST_CURVE_COLUMN:]
+        if not curves:
+            curves = [[] for _ in values]
+        if len(values) != len(curves):
+            raise ValueError("RLP sheet row has a different column count")
+        keys.append(
+            (
+                int(row[_RLP_MONTH_COLUMN]),
+                int(row[_RLP_DAY_COLUMN]),
+                int(row[_RLP_HOUR_COLUMN]),
+            )
+        )
+        for curve, value in zip(curves, values, strict=True):
+            curve.append(
+                float(value) if isinstance(value, (int, float)) else float("nan")
+            )
+    distinct: dict[tuple[float, ...], list[float]] = {}
+    for curve in curves:
+        if any(value != value for value in curve):  # a column with gaps
+            continue
+        distinct.setdefault(tuple(round(v, _RLP_CURVE_ROUNDING) for v in curve), curve)
+    if not distinct or not keys:
+        raise ValueError("RLP sheet holds no complete curve")
+    weights: RlpWeights = {}
+    count = float(len(distinct))
+    for index, key in enumerate(keys):
+        mean = sum(curve[index] for curve in distinct.values()) / count
+        weights[key] = weights.get(key, 0.0) + mean
+    total = sum(weights.values())
+    if not 0.99 < total < 1.01:
+        raise ValueError(f"RLP weights sum to {total:.4f}, expected 1")
+    return weights
