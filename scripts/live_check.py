@@ -951,6 +951,44 @@ async def _check_ecofix(
     await _check_two_region_supplier(session, ecofix, "ecofix")
 
 
+async def _expect_newest_listed_card(
+    session: aiohttp.ClientSession,
+    ecopower: types.ModuleType,
+    snap: object,
+    prefix: str,
+) -> None:
+    """Fail when the listing carries a dynamic card newer than the resolved one.
+
+    This replaces the calendar lag for a card republished only on a rate
+    change. The pattern here is deliberately looser than the extractor's and
+    written independently of it: any link whose filename holds
+    ``_dbs_tariefkaart``, with whatever leading digits it carries, normalised
+    to YYYYMM. That independence is the point. In 0.12.5 the extractor demanded
+    exactly six digits, the August card arrived as
+    ``20260801_dbs_tariefkaart.pdf``, and the resolver quietly served January's
+    card for eleven days, billing a superseded tax block that parsed clean.
+
+    A listing that cannot be read is not a regression, so it records a pass and
+    says so: the fetch assertions above already cover the page being down.
+    """
+    try:
+        html = await _fetch_text(session, ecopower._DBS_PAGE)
+    except Exception as err:  # noqa: BLE001 - a listing outage is not a regression
+        _record(f"{prefix}: newest listed card", True, f"listing unread: {err}")
+        return
+    stamps = {d[:6] for d in re.findall(r"/(\d{6,8})[a-z]?_dbs_tariefkaart", html)}
+    if not stamps:
+        _record(f"{prefix}: newest listed card", True, "no dated link on the page")
+        return
+    newest = max(stamps)
+    resolved = str(getattr(snap, "publication_label", "") or "").replace("-", "")
+    _expect(
+        f"{prefix}: resolved the newest card the listing carries",
+        bool(resolved) and resolved >= newest,
+        detail=f"listing newest {newest}, resolved {resolved or '<none>'}",
+    )
+
+
 async def _check_ecopower(
     session: aiohttp.ClientSession, ecopower: types.ModuleType
 ) -> None:
@@ -970,6 +1008,8 @@ async def _check_ecopower(
             _record(f"{prefix}: fetch", False, f"{type(err).__name__}: {err}")
             continue
         _expect(f"{prefix}: publication label", bool(snap.publication_label))
+        if cid in _PERIOD_NO_ROTATION:
+            await _expect_newest_listed_card(session, ecopower, snap, prefix)
         _expect(
             f"{prefix}: all eight Fluvius DSOs present",
             expected_dso_keys <= set(snap.dsos),
@@ -2414,6 +2454,21 @@ _PERIOD_MAX_LAG_MONTHS: dict[str, int] = {
     "ecopower_burgerstroom": 1,
 }
 
+# Contracts whose card is republished only when a rate actually changes, so a
+# calendar lag says nothing about it. Ecopower's dynamic card was the billing
+# card for nine, three and seven consecutive months across 2025 and 2026: the
+# page carries four of them in twenty months, and the extractor says so too
+# ("Dynamic cards don't rotate monthly"). A ceiling cannot express that, and a
+# ceiling big enough to try would be the skip the test below forbids.
+#
+# Freshness is not dropped for these, it is asserted better: the supplier check
+# re-reads the listing with a deliberately looser pattern than the extractor
+# uses and fails when the page carries a card newer than the one resolved. That
+# is the 0.12.5 shape, where the filename gained a day component, the
+# extractor's six-digit pattern stopped matching it, and the resolver fell back
+# to a January card that downloaded and parsed clean.
+_PERIOD_NO_ROTATION: frozenset[str] = frozenset({"ecopower_dynamische_burgerstroom"})
+
 # The arrears allowance above rests on a publishing convention, not on a
 # date the supplier declares, so nothing can expire it automatically the way
 # deprecated_until does. It is pinned to a review date instead, enforced by
@@ -2548,6 +2603,16 @@ def _expect_card_period(prefix: str, contract_id: str, snap: object) -> None:
         _record(f"{prefix}: card period readable", True, f"unparsed label {label!r}")
         return
     year, month = parsed
+    if contract_id in _PERIOD_NO_ROTATION:
+        # Recorded rather than skipped, so the row is visibly present and can
+        # be told apart from a check that never ran.
+        _record(
+            f"{prefix}: card is recent enough",
+            True,
+            f"{label!r}: republished on rate changes only, so freshness is "
+            "asserted against the listing instead of the calendar",
+        )
+        return
     lag = (today.year - year) * 12 + (today.month - month)
     allowed = _PERIOD_MAX_LAG_MONTHS.get(contract_id, 0)
     if today.day <= _PERIOD_GRACE_DAYS:

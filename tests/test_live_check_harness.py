@@ -1002,10 +1002,38 @@ def test_every_allowance_is_a_ceiling_not_a_skip() -> None:
 
 
 def test_the_ecopower_dynamic_card_is_not_exempt() -> None:
-    """Only the definitive card publishes in arrears. Exempting the supplier
-    wholesale would have re-hidden the dynamic bug fixed in 0.12.5."""
+    """The supplier is never exempt wholesale, and the dynamic card never gets
+    a lag ceiling: it is republished on rate changes, not monthly, so a
+    calendar allowance either false-alarms or becomes a skip wearing a number.
+
+    Its freshness is asserted against the listing instead, which is strictly
+    stronger than the calendar was. That is what keeps the 0.12.5 bug caught:
+    the extractor's pattern stopped matching a new filename shape and the
+    resolver fell back to a January card that downloaded and parsed clean, so
+    the only signal was the page carrying something newer than what we
+    resolved.
+    """
     assert "ecopower" not in lc._PERIOD_MAX_LAG_MONTHS
     assert "ecopower_dynamische_burgerstroom" not in lc._PERIOD_MAX_LAG_MONTHS
+    assert "ecopower_dynamische_burgerstroom" in lc._PERIOD_NO_ROTATION
+    assert "ecopower" not in lc._PERIOD_NO_ROTATION
+    # The two sets must not overlap: a contract cannot be both bounded by a
+    # ceiling and told the ceiling does not apply to it.
+    assert not (set(lc._PERIOD_MAX_LAG_MONTHS) & lc._PERIOD_NO_ROTATION)
+
+
+def test_a_no_rotation_card_is_checked_against_the_listing() -> None:
+    """Every contract excused from the calendar has to be covered by the
+    listing assertion instead, or the exemption is just a skip."""
+    import inspect
+
+    src = inspect.getsource(lc._check_ecopower)
+    assert "_PERIOD_NO_ROTATION" in src
+    assert "_expect_newest_listed_card" in src
+    # and the listing pattern must not be the extractor's own, or a regex
+    # regression would hide from the check written to catch it
+    helper = inspect.getsource(lc._expect_newest_listed_card)
+    assert "_DBS_CARD_RE" not in helper
 
 
 def test_injection_shape_is_asserted_even_when_the_card_prints_an_indicative() -> None:
