@@ -348,6 +348,10 @@ def _cohort_energy_from_archived(
             ceiling_peak=energy.ceiling_peak,
             ceiling_offpeak=energy.ceiling_offpeak,
             ceiling_exclusive_night=energy.ceiling_exclusive_night,
+            # Which mean the coefficients resolve against travels with them;
+            # the realised index does not, it belongs to a delivery month and
+            # is spliced on per month by _effective_snapshot_for_month.
+            rlp_indexed=energy.rlp_indexed,
             yearly_fixed_fee=energy.yearly_fixed_fee,
             # Carry the dedicated exclusive-night standing fee so an
             # exclusive-night meter keeps its own fee instead of falling back to
@@ -637,7 +641,16 @@ async def _effective_snapshot_for_month(
         return snap_m
     changes: dict[str, object] = {}
     if legs.energy is not None:
-        changes["energy"] = legs.energy
+        energy = legs.energy
+        if isinstance(energy, SpotMonthlyRates):
+            # The month's own archived card may carry the value its index
+            # settled at (Eneco prints it on the next card). The cohort leg
+            # holds the contract's coefficients; the month supplies the index.
+            energy = replace(
+                energy,
+                index_realised=getattr(snap_m.energy, "index_realised", None),
+            )
+        changes["energy"] = energy
     if legs.injection is not None:
         # The feed-in coefficients lock with the offtake ones, so the credit
         # for a past month is billed off the signing card too (issue #85).

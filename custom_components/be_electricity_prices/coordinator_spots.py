@@ -57,10 +57,13 @@ from .spot_stats import (
     _energy_is_quarter_hourly,
     _group_spot_quarters_by_hour,
     _mean_of_month,
+    _rlp_weighted_month_mean,
     _spp_weighted_month_mean,
 )
 from .synergrid import (
+    RlpWeights,
     SppWeights,
+    fetch_rlp_weights,
     fetch_spp_weights,
 )
 
@@ -170,6 +173,10 @@ _SPP_REFRESH_DAYS = 30
 # Back off this long after a failed SPP fetch so a persistent problem (e.g. the
 # new-year file not yet published) doesn't re-download 52 MB every hourly tick.
 _SPP_RETRY_TTL = timedelta(hours=12)
+# The RLP profile is one estimated curve per year, revised rarely; the same
+# monthly refresh and failure back-off as the SPP profile apply.
+_RLP_REFRESH_DAYS = 30
+_RLP_RETRY_TTL = timedelta(hours=12)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -195,6 +202,10 @@ class _SpotsMixin:
     _spp_fetched_at: datetime | None
     _spp_failed_at: datetime | None
     _spp_weights_year: int | None
+    _rlp_weights: Any
+    _rlp_fetched_at: datetime | None
+    _rlp_failed_at: datetime | None
+    _rlp_weights_year: int | None
     _complete_spot_days: set[date]
     _unloaded: bool
     _snapshot: SupplierSnapshot | None
@@ -719,6 +730,80 @@ class _SpotsMixin:
             self._spp_failed_at = None
         else:
             self._spp_failed_at = now
+
+    def _restore_rlp_weights(self, blob: dict[str, Any]) -> None:
+        """Rehydrate the persisted RLP profile blob into ``_rlp_weights``."""
+        year = blob.get("year")
+        raw = blob.get("weights")
+        if not isinstance(year, int) or not isinstance(raw, dict):
+            return
+        parsed: RlpWeights = {}
+        for key, value in raw.items():
+            if not isinstance(key, str) or not isinstance(value, (int, float)):
+                continue
+            try:
+                month, day, hour = (int(x) for x in key.split(","))
+            except ValueError:
+                continue
+            parsed[(month, day, hour)] = float(value)
+        if not parsed:
+            return
+        self._rlp_weights = parsed
+        self._rlp_weights_year = year
+        fetched = blob.get("fetched_at")
+        if isinstance(fetched, str):
+            try:
+                self._rlp_fetched_at = datetime.fromisoformat(fetched)
+            except ValueError:
+                self._rlp_fetched_at = None
+
+    async def _ensure_rlp_weights(self) -> None:
+        """Refresh the Synergrid RLP profile for the current year if stale.
+
+        Only called for an entry whose ENERGY leg resolves against the
+        RLP-weighted month mean (Eneco Flex and Flex One). Soft-fail like the
+        SPP profile: on error keep what is held, back off ``_RLP_RETRY_TTL``,
+        and the caller prices the plain mean meanwhile.
+        """
+        now = dt_util.utcnow()
+        year = dt_util.now().year
+        fresh = (
+            self._rlp_weights_year == year
+            and self._rlp_fetched_at is not None
+            and (now - self._rlp_fetched_at) < timedelta(days=_RLP_REFRESH_DAYS)
+        )
+        if fresh:
+            return
+        if (
+            self._rlp_failed_at is not None
+            and (now - self._rlp_failed_at) < _RLP_RETRY_TTL
+        ):
+            return
+        weights = await fetch_rlp_weights(self._session, year)
+        if weights:
+            self._rlp_weights = weights
+            self._rlp_weights_year = year
+            self._rlp_fetched_at = now
+            self._rlp_failed_at = None
+        else:
+            self._rlp_failed_at = now
+
+    def _rlp_weighted_month_mean(
+        self, year: int, month: int, extra_spots: dict[datetime, float]
+    ) -> float | None:
+        """RLP-weighted mean of the delivery month's Day-Ahead spots, or None.
+
+        Weights each hourly price by the residential load profile's share for
+        its local clock hour, which is Eneco's Belpex-RLP-M. Same
+        local-delivery-month filter as :meth:`_monthly_spot_mean`; ``None``
+        when the profile or the month's spots are unavailable, and the caller
+        falls back to the plain mean.
+        """
+        if not self._rlp_weights:
+            return None
+        return _rlp_weighted_month_mean(
+            self._billable_spots(extra_spots), self._rlp_weights, year, month
+        )
 
     def _spp_weighted_month_mean(
         self, year: int, month: int, extra_spots: dict[datetime, float]

@@ -71,6 +71,7 @@ from .snapshot_store import (
 )
 from .spot_stats import (
     _energy_is_quarter_hourly,
+    _energy_is_rlp_indexed,
     _injection_is_spp_indexed,
     _spp_weighting_enabled,
 )
@@ -132,7 +133,7 @@ from .providers import (
     SupplierSnapshot,
     get as get_extractor,
 )
-from .synergrid import SppWeights
+from .synergrid import RlpWeights, SppWeights
 from .providers.base import (
     EnergyRates,
 )
@@ -416,6 +417,13 @@ class BePricesCoordinator(
         self._spp_weights_year: int | None = None
         self._spp_fetched_at: datetime | None = None
         self._spp_failed_at: datetime | None = None
+        # Synergrid residential load profile: hourly weights keyed by LOCAL
+        # (month, day, hour), for an energy leg indexed on the RLP-weighted
+        # month mean (Eneco Flex). Same lifecycle as the SPP profile.
+        self._rlp_weights: RlpWeights = {}
+        self._rlp_weights_year: int | None = None
+        self._rlp_fetched_at: datetime | None = None
+        self._rlp_failed_at: datetime | None = None
         # Stable past days the spot walk should not ask for again yet, each
         # holding the instant it may be retried at. Written when a fetch left
         # the day short of 20 hours (_SHORT_SPOT_DAY_TTL) and when both
@@ -639,6 +647,9 @@ class BePricesCoordinator(
         spp = stored.get("spp_weights")
         if isinstance(spp, dict):
             self._restore_spp_weights(spp)
+        rlp = stored.get("rlp_weights")
+        if isinstance(rlp, dict):
+            self._restore_rlp_weights(rlp)
         # Older persisted blobs may carry kwh_buckets / kwh_baselines /
         # year_start / year_start_register_baselines from a previous
         # release that tracked monthly accumulation in-process. Those
@@ -797,6 +808,14 @@ class BePricesCoordinator(
         # weight nothing, every restart.
         if spp_weighted and (spot_prices or self._historical_spots):
             await self._ensure_spp_weights()
+        # And the RLP profile when the ENERGY leg resolves against the
+        # RLP-weighted month mean (Eneco Flex and Flex One, whose Belpex-RLP-M
+        # weights each hour's Belpex by the residential load profile). Same
+        # soft-fail: without the profile the plain mean stands in, which is
+        # what every RLP card was priced on before.
+        rlp_weighted = _energy_is_rlp_indexed(priced.energy)
+        if rlp_weighted and (spot_prices or self._historical_spots):
+            await self._ensure_rlp_weights()
 
         # A spot-monthly contract bills a flat rate = factor * this month's
         # mean spot + base. Compute the running mean once (over the persisted
@@ -853,7 +872,13 @@ class BePricesCoordinator(
             else:
                 await self._ensure_historical_spots(spots_from, today_local)
 
-        monthly_mean: float | None = None
+        # Two means, because the two legs can name two indices. Eneco's
+        # energy is on Belpex-RLP-M, the RLP-weighted month mean, while its
+        # injection is on Belpex-injectie, the plain one, so the energy leg
+        # takes the weighted mean when the profile is loaded and the feed-in
+        # bake below keeps the plain mean whatever the energy did.
+        plain_mean: float | None = None
+        energy_mean: float | None = None
         if isinstance(priced.energy, SpotMonthlyRates) or _injection_needs_month_spot(
             self._snapshot, self.entry
         ):
@@ -861,12 +886,19 @@ class BePricesCoordinator(
             # credit is indexed on one: without it the bake below would resolve
             # against None and wipe the credit instead of resolving it.
             now_local = dt_util.now()
-            monthly_mean = self._monthly_spot_mean(
+            plain_mean = self._monthly_spot_mean(
                 now_local.year, now_local.month, spot_prices
             )
+            energy_mean = plain_mean
+            if rlp_weighted:
+                weighted = self._rlp_weighted_month_mean(
+                    now_local.year, now_local.month, spot_prices
+                )
+                if weighted is not None:
+                    energy_mean = weighted
 
         try:
-            hourly = self._build_hourly(priced, spot_prices, monthly_mean)
+            hourly = self._build_hourly(priced, spot_prices, energy_mean)
         except KeyError as err:
             # The fresh snapshot does not contain the user's configured
             # DSO -- typically a regex drift on a new card. Surface a
@@ -913,7 +945,7 @@ class BePricesCoordinator(
             isinstance(priced.energy, SpotMonthlyRates)
             or _injection_needs_month_spot(self._snapshot, self.entry)
         ) and not _injection_hourly_on_cohort(self._snapshot, self.entry):
-            inj_mean = monthly_mean
+            inj_mean = plain_mean
             spp_only = _injection_is_spp_indexed(self._snapshot)
             # A card that prints an indicative has something to fall back to
             # when the mean is missing; a formula-only leg does not. That, not
@@ -970,6 +1002,7 @@ class BePricesCoordinator(
             historical_spots=self._historical_spots,
             spot_quarters=self._historical_spot_quarters,
             spp_weights=self._spp_weights if spp_weighted else None,
+            rlp_weights=self._rlp_weights if rlp_weighted else None,
             breakdown=ytd_breakdown,
             billed_peak_kw=billed_peak,
         )
@@ -1329,6 +1362,16 @@ class BePricesCoordinator(
                 ),
                 "weights": {
                     f"{m},{d},{h}": v for (m, d, h), v in self._spp_weights.items()
+                },
+            }
+        if self._rlp_weights and self._rlp_weights_year is not None:
+            payload["rlp_weights"] = {
+                "year": self._rlp_weights_year,
+                "fetched_at": (
+                    self._rlp_fetched_at.isoformat() if self._rlp_fetched_at else None
+                ),
+                "weights": {
+                    f"{m},{d},{h}": v for (m, d, h), v in self._rlp_weights.items()
                 },
             }
         await self._store.async_save(payload)

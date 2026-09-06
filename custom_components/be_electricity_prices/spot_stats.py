@@ -59,6 +59,7 @@ from .providers.base import (
     EnergyRates,
     SpotMonthlyRates,
     SupplierSnapshot,
+    VariableRates,
 )
 from .synergrid import (
     RlpWeights,
@@ -320,6 +321,60 @@ def _rlp_weighted_month_mean(
     (year, month), or ``None``. Convenience wrapper over :func:`_rlp_month_mean`
     for callers holding a raw spot dict."""
     return _rlp_month_mean(_bucket_by_local_month(spots), weights, year, month)
+
+
+def _energy_month_spot(
+    energy: EnergyRates,
+    bucket: _SpotMonthBucket,
+    year: int,
+    month: int,
+    today: date,
+    rlp_weights: RlpWeights | None,
+    cache: dict[tuple[int, int], float | None],
+) -> float | None:
+    """The spot a month-priced ENERGY leg bills (year, month) at.
+
+    Three sources, in order of how much they know. The supplier's own
+    published value of the index for that month (``index_realised``, spliced
+    onto the leg from the month's archived card) settles a closed month
+    exactly and short-circuits everything else. Failing that, the RLP-weighted
+    mean when the card indexes on one and the profile is loaded, else the
+    plain arithmetic mean; both go through the thin-month guard, and a
+    weighted mean that comes back empty falls to the plain one rather than to
+    nothing. Memoised per month, since a month's leg is one object across a
+    walk; the realised value is a field read and is not cached.
+
+    Shared by the year-to-date walk, the backfill and the live tick so all
+    three resolve a month-indexed energy leg against the same number.
+    """
+    realised = getattr(energy, "index_realised", None)
+    if realised is not None:
+        return float(realised)
+    key = (year, month)
+    if key not in cache:
+        mean: float | None = None
+        if rlp_weights and getattr(energy, "rlp_indexed", False):
+            mean = (
+                None
+                if _month_is_thinly_cached(bucket, year, month, today)
+                else _rlp_month_mean(bucket, rlp_weights, year, month)
+            )
+        if mean is None:
+            mean = _covered_month_mean(bucket, year, month, today)
+        cache[key] = mean
+    return cache[key]
+
+
+def _energy_is_rlp_indexed(energy: EnergyRates | None) -> bool:
+    """True when this energy leg resolves against the RLP-weighted month mean:
+    a month-indexed variable card that names one, or the SpotMonthlyRates leg
+    it is re-priced through. What decides whether the Synergrid RLP profile is
+    worth fetching for an entry."""
+    if isinstance(energy, VariableRates):
+        return energy.month_indexed and energy.rlp_indexed
+    if isinstance(energy, SpotMonthlyRates):
+        return energy.rlp_indexed
+    return False
 
 
 def _spp_weighted_month_mean(

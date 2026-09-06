@@ -250,7 +250,7 @@ optional injection key behaves the same way.
 The blank check comes first for that reason: while ENTSO-E is down *every* key
 validates as `"cannot_connect"`, an empty one included, so without it the menu
 would offer to store `""`. That is the one value nothing downstream recovers from.
-`_fetch_spot_prices` (`coordinator_spots.py:541`) raises `missing ENTSO-E API key`
+`_fetch_spot_prices` (`coordinator_spots.py:552`) raises `missing ENTSO-E API key`
 before `fetch_day_ahead_or_fallback` is ever called, so an entry holding an empty
 key never reaches the keyless energy-charts source that a merely *wrong* key would
 have been priced from until ENTSO-E came back to reject it. The step answers
@@ -498,7 +498,7 @@ stale stored value never renders as an invalid pre-selection:
 | Menu option | Step | Effect |
 | --- | --- | --- |
 | `edit` | `async_step_edit` (`config_flow.py:757`) | Re-run the whole step chain pre-filled, save back to `entry.data` |
-| `compare` | `async_step_compare` (`compare_flow.py:1542`) | One-off quote against another supplier; nothing saved |
+| `compare` | `async_step_compare` (`compare_flow.py:1556`) | One-off quote against another supplier; nothing saved |
 
 Menu labels live in `options.step.init.menu_options` (`strings.json:193`).
 
@@ -587,7 +587,7 @@ table below is the authority on what the picker excludes.
 
 ### The ranking branch
 
-`_SweepStepsMixin` (`compare_flow.py:2388`) is a separate branch reached from a
+`_SweepStepsMixin` (`compare_flow.py:2402`) is a separate branch reached from a
 third menu entry. It subclasses `_CompareStepsMixin` because it reuses
 `_resolve_household` and the live-validated key prompt; only the menu entry and
 the steps are separate. `_sweep_candidates` (`flow_schemas.py:321`) narrows to
@@ -597,16 +597,16 @@ purpose. An empty cell aborts `compare_all_no_alternatives`, which is an answer
 rather than a failure: a Brussels `tou` household has exactly one slot contract
 in the region and it is theirs.
 
-The pricing itself is not in the flow. `_SweepEngine` (`compare_flow.py:508`)
+The pricing itself is not in the flow. `_SweepEngine` (`compare_flow.py:512`)
 holds only an entry, a hass and the dialog's what-if overrides, which is
-everything `_resolve_household` (`compare_flow.py:830`), `_sweep_own_row`
-(`compare_flow.py:1105`) and `_sweep_one` (`compare_flow.py:1407`) ever read
+everything `_resolve_household` (`compare_flow.py:834`), `_sweep_own_row`
+(`compare_flow.py:1105`) and `_sweep_one` (`compare_flow.py:1421`) ever read
 off the flow they used to live on. That is what lets a sweep run with nobody
 watching. Faking a flow object would work today, since `OptionsFlow.config_entry`
 resolves through the handler, but it would tie a scheduled job to flow-manager
 internals that move between Home Assistant releases.
 
-`build_sweep` (`compare_flow.py:778`) resolves the cell for both callers, so
+`build_sweep` (`compare_flow.py:782`) resolves the cell for both callers, so
 the dialog and the schedule never drift on which contracts count. It returns
 the abort reason as a string rather than raising, because the dialog turns
 that into an abort and the scheduled run into a log line.
@@ -614,8 +614,8 @@ that into an abort and the scheduled run into a log line.
 #### The scheduled ranking
 
 Opt-in per entry (`CONF_DAILY_COMPARE`, default off), a box on the `meters`
-step. `async_run_daily_compare` (`compare_flow.py:473`) drives
-`run_full_sweep` (`compare_flow.py:715`) and parks the result on
+step. `async_run_daily_compare` (`compare_flow.py:477`) drives
+`run_full_sweep` (`compare_flow.py:719`) and parks the result on
 `coordinator.daily_compare`, which is all the delivery the sensor needs: it is
 a `CoordinatorEntity`, so setting the attribute and calling
 `async_update_listeners` is the whole path, with no dispatcher.
@@ -651,12 +651,12 @@ a cold sweep takes; cards move about monthly.
 | `compare_all_result` | `compare_flow.py:2330` | One `{ranking}` token carrying the whole table, plus the opt-in for the year-to-date pass. A stored ranking dates itself and offers `refresh`, which clears the rows and sweeps live; nothing is reported pending, since the scheduled run skipped nothing |
 | `compare_all_ytd` | `compare_flow.py:2381` | Second pass, now a thin wrapper: the pass itself is `_SweepEngine.fill_ytd_column`, so the nightly sweep runs the same one. A row prints a figure only where it replayed the same real archived months the baseline did (`archived_months_present`) **and** where its feed-in can be credited: the pass takes the coordinator's historical spot cache, and `_needs_missing_spots` drops a row whose injection is spot-indexed when that cache is empty, since the credit is lost whole rather than approximated |
 
-| `compare` | `compare_flow.py:409` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:181`): suppliers with at least one contract in the user's region **and the entry's own segment**, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
-| `compare_contract` | `compare_flow.py:319` | Contract picker via `_compare_contract_schema` (`compare_flow.py:214`), spans static and dynamic kinds but never crosses the residential/professional line: a pro card is published ex-VAT and bands the excise by annual volume, so `_resolve_snapshot` grosses it at the entry's own rate and the row is neither what the household would pay nor a contract it could sign. Excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
+| `compare` | `compare_flow.py:409` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:185`): suppliers with at least one contract in the user's region **and the entry's own segment**, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
+| `compare_contract` | `compare_flow.py:319` | Contract picker via `_compare_contract_schema` (`compare_flow.py:218`), spans static and dynamic kinds but never crosses the residential/professional line: a pro card is published ex-VAT and bands the excise by annual volume, so `_resolve_snapshot` grosses it at the entry's own rate and the row is neither what the household would pay nor a contract it could sign. Excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
 | `compare_meter` | `compare_flow.py:355` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:230`) |
 | `compare_solar` | `compare_flow.py:397` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:1143`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:1095`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
-| `compare_api_key` | `compare_flow.py:486` | Shown when `_after_compare_meter` (`compare_flow.py:1721`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved. Skippable like `injection_api_key`: a blank submission asks ENTSO-E nothing and goes straight on, since a quote is a one-off and every reader of the key falls back to the entry's own with `or` |
-| `compare_result` | `compare_flow.py:514` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:1816`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
+| `compare_api_key` | `compare_flow.py:486` | Shown when `_after_compare_meter` (`compare_flow.py:1735`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved. Skippable like `injection_api_key`: a blank submission asks ENTSO-E nothing and goes straight on, since a quote is a one-off and every reader of the key falls back to the entry's own with `or` |
+| `compare_result` | `compare_flow.py:514` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:1830`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
 
 The quoted supplier's freshly fetched card is resolved through
 `snapshot_store._resolve_snapshot`, the same helper the live path uses, so it gets
@@ -671,14 +671,14 @@ inlined at a call site.
 The compare-meter narrowing mirrors the install `_meter_schema` exactly (dynamic/
 tou/tou_impact all require a smart meter; `config_flow.py:500` comment). The
 compare result never mutates coordinator state: both places that borrow the
-historical spot cache go through `_borrowed_spot_cache` (`compare_flow.py:139`),
+historical spot cache go through `_borrowed_spot_cache` (`compare_flow.py:143`),
 which saves and restores `_historical_spots`, `_historical_spot_quarters` and
 `_complete_spot_days` around the fetch — the completeness set travels with the
 two dicts because a day listed there counts as fully present without consulting
 them, so isolating the dicts alone would make the fetch skip every day the
 coordinator had already walked. The month-mean borrow merges
 (`compare_flow.py:753`); the YTD borrow isolates (`compare_flow.py:1307`).
-The builder is in two halves: `_resolve_household` (`compare_flow.py:830`) resolves everything that does not depend on which contract is being quoted -- the meter reads, the recorder walk, the measured hour shapes, the day-ahead window -- and returns a `_HouseholdQuote` (`compare_flow.py:421`); the rest of `_build_compare_placeholders` is the target side, recomputed per contract. The household half is O(1) in the number of contracts compared, which is what makes quoting more than one affordable. Placeholder
+The builder is in two halves: `_resolve_household` (`compare_flow.py:834`) resolves everything that does not depend on which contract is being quoted -- the meter reads, the recorder walk, the measured hour shapes, the day-ahead window -- and returns a `_HouseholdQuote` (`compare_flow.py:425`); the rest of `_build_compare_placeholders` is the target side, recomputed per contract. The household half is O(1) in the number of contracts compared, which is what makes quoting more than one affordable. Placeholder
 tokens map to `options.step.compare_result.description` (`strings.json:236`), which
 references `{meter_used}`, `{current_annual}`, `{delta_ytd}`, the ASCII bar charts
 `{annual_chart}`/`{ytd_chart}`, `{card_note}` (per-side caveats about what a card

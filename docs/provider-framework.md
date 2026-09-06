@@ -220,6 +220,7 @@ EUR/kWh, re-published monthly.
 | `yearly_fixed_fee_exclusive_night` | `float \| None` | `None` | Dedicated exclusive-night yearly fee (EBEM Groen Variabel prints one); `None` means the standard fee applies. |
 | `formula` | `str \| None` | `None` | Indexation expression text for diagnostics, when published. |
 | `index_realised` | `float \| None` | `None` | The value the card's index settled at for the card's OWN month, in EUR/kWh, once the supplier published it. Eneco footnotes each month's realised Belpex-RLP-M on the next card; `fetch_for_month` settles the archived month on it and `current` is then that figure. `None` while the next card is not out. |
+| `rlp_indexed` | `bool` | `False` | The index is the RLP-weighted month mean (Eneco's Belpex-RLP-M), not the plain one; the coordinator resolves the coefficients against Synergrid's residential load profile. Meaningful only with `month_indexed`. |
 
 ### DynamicRates
 
@@ -258,7 +259,7 @@ transition : 11:00-17:00 + 22:00-01:00
 offpeak    : 01:00-07:00
 ```
 
-`weekend_rule` (`WeekendRule`, `providers/base.py:316`) selects the weekend
+`weekend_rule` (`WeekendRule`, `providers/base.py:334`) selects the weekend
 schedule:
 
 - `weekend_offpeak` (generic CWaPE default): Saturday, Sunday and public holidays are entirely off-peak.

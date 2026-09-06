@@ -70,6 +70,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_API_KEY,
     CONF_CONTRACT,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
@@ -84,7 +85,7 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
-from .synergrid import SppWeights
+from .synergrid import RlpWeights, SppWeights
 from .cohort import (
     _cohort_energy_leg,
     _month_snapshot_cache,
@@ -114,7 +115,8 @@ from .injection import (
 from .spot_stats import (
     _SpotMonthBucket,
     _bucket_by_local_month,
-    _covered_month_mean,
+    _energy_is_rlp_indexed,
+    _energy_month_spot,
     _injection_is_spp_indexed,
     _injection_on_month_mean,
     _spp_injection_spot,
@@ -377,17 +379,21 @@ def _hour_spot(
     bucket: _SpotMonthBucket,
     mean_cache: dict[tuple[int, int], float | None],
     today: date,
+    rlp_weights: RlpWeights | None = None,
 ) -> float | None:
     """The spot value to price ``energy`` at for one hour.
 
     A ``SpotMonthlyRates`` leg (a variable contract re-priced at its signing
-    cohort's coefficients) bills the delivery month's arithmetic mean, matching
-    the live price table (``_build_hourly``) and the YTD walk
-    (``_ytd_hourly_energy`` with ``monthly_mean=True``); every other kind uses
-    the per-hour spot. The month mean is memoised so a 365-day window computes
-    at most 12 means.
+    cohort's coefficients, or a month-indexed card re-priced on the delivery
+    month) bills the month's index, which ``_energy_month_spot`` resolves the
+    same way for the live price table (``_build_hourly``) and the YTD walk
+    (``_ytd_hourly_energy`` with ``monthly_mean=True``): the supplier's
+    published realised value when the month's card carries one, else the
+    RLP-weighted or plain mean of the cached hours. Every other kind uses the
+    per-hour spot. The month mean is memoised so a 365-day window computes at
+    most 12 means.
 
-    The mean goes through ``_covered_month_mean`` for the same reason the live
+    The mean goes through the thin-month guard for the same reason the live
     walk does: a CLOSED month with only a handful of cached hours averages an
     unrepresentative slice, and applying that to all 744 of them is a wrong
     rate rather than a missing one. It matters more here than there, because
@@ -395,12 +401,11 @@ def _hour_spot(
     are written into the recorder and stay until someone re-runs the service.
     """
     if isinstance(energy, SpotMonthlyRates):
-        key = (local.year, local.month)
-        if key not in mean_cache:
-            mean_cache[key] = (
-                _covered_month_mean(bucket, *key, today) if spots else None
-            )
-        return mean_cache[key]
+        if not spots:
+            return None
+        return _energy_month_spot(
+            energy, bucket, local.year, local.month, today, rlp_weights, mean_cache
+        )
     return spots.get(utc_hour) if spots else None
 
 
@@ -420,6 +425,7 @@ class _BackfillContext:
     regime: str
     snap_for: Callable[[date], Awaitable[Any]]
     spp_weights: SppWeights | None
+    rlp_weights: RlpWeights | None
     month_spp_cache: dict[tuple[int, int, bool], float | None]
     month_mean_cache: dict[tuple[int, int], float | None]
     hourly_injection: bool
@@ -463,6 +469,10 @@ async def _build_context(
     if _spp_weighting_enabled(entry, snap):
         await coordinator._ensure_spp_weights()
         spp_weights = coordinator._spp_weights
+    rlp_weights = None
+    if _energy_is_rlp_indexed(snap.energy) and entry.data.get(CONF_API_KEY):
+        await coordinator._ensure_rlp_weights()
+        rlp_weights = coordinator._rlp_weights or None
     return _BackfillContext(
         region=region,
         dso=entry.data[CONF_DSO],
@@ -479,6 +489,7 @@ async def _build_context(
         # mean-indexed credit off the Synergrid solar profile; mirror the live
         # YTD credit so the backfill meets it at the seam.
         spp_weights=spp_weights,
+        rlp_weights=rlp_weights,
         month_spp_cache={},
         month_mean_cache={},
         # A card whose injection is a per-hour spot formula with no printed
@@ -604,7 +615,14 @@ async def _backfill_price_sensors(
         local = dt_util.as_local(utc_hour)
         snap_h = await _snap_for(date(local.year, local.month, 1))
         spot = _hour_spot(
-            snap_h.energy, local, utc_hour, spots, month_bucket, month_mean_cache, today
+            snap_h.energy,
+            local,
+            utc_hour,
+            spots,
+            month_bucket,
+            month_mean_cache,
+            today,
+            ctx.rlp_weights,
         )
         # Dynamic / spot-monthly without a spot for this hour: nothing to
         # write, the formula factor*spot+base (or factor*mean+base) needs both.
@@ -781,7 +799,14 @@ async def _backfill_cost_sensor(
         month_first = date(local.year, local.month, 1)
         snap_h = await _snap_for(month_first)
         spot = _hour_spot(
-            snap_h.energy, local, utc_hour, spots, month_bucket, month_mean_cache, today
+            snap_h.energy,
+            local,
+            utc_hour,
+            spots,
+            month_bucket,
+            month_mean_cache,
+            today,
+            ctx.rlp_weights,
         )
 
         # Energy term: an hour the spot cache cannot price is NOT dropped.

@@ -954,7 +954,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # both legs (TimeOfUseRates formula_* and the InjectionRates per-slot pairs)
 # plus month_indexed, so the delivery month is billed on its own EPEXDAM. A
 # v52 snapshot holds only the printed triplets, which are last month's.
-_SNAPSHOT_SCHEMA_VERSION = 53
+# v54: Eneco Zon & Wind Flex and Flex One carry month_indexed and rlp_indexed,
+# so the delivery month is billed on its own RLP-weighted Belpex-RLP-M rather
+# than the previous month's figure the card prints. A v53 snapshot bills the
+# printed estimate for the whole month.
+_SNAPSHOT_SCHEMA_VERSION = 54
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

@@ -5858,3 +5858,81 @@ def test_compare_quote_weights_a_monthly_leg_that_splits_by_meter() -> None:
     )
     assert peak_only is not None
     assert quotes[14] != pytest.approx(peak_only)
+
+
+async def test_effective_snapshot_splices_the_months_realised_index_onto_the_leg(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A month-indexed card re-priced through a SpotMonthlyRates leg keeps the
+    contract's coefficients, and each delivery month supplies its own index:
+    the archived card for a closed month carries the value Eneco published for
+    it, and the splice hands that to the leg. The live card, and a month whose
+    next card is not out yet, carry none."""
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    live = VariableRates(
+        current=0.1761,
+        formula_factor=1.0812,
+        formula_base=0.0318106,
+        month_indexed=True,
+        rlp_indexed=True,
+    )
+    current = make_snapshot(energy=live)
+
+    async def _ffm(
+        _session: object, _contract: str, _region: str, year_month: date
+    ) -> SupplierSnapshot:
+        if (year_month.year, year_month.month) == (2026, 8):
+            return make_snapshot(
+                energy=replace(live, current=0.176686, index_realised=0.1334366)
+            )
+        return make_snapshot(energy=live)
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", api_key="k")
+    august = await _effective_snapshot_for_month(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "test",
+        "wallonia",
+        date(2026, 8, 1),
+        current,
+        entry,
+    )
+    assert isinstance(august.energy, SpotMonthlyRates)
+    assert august.energy.rlp_indexed is True
+    assert august.energy.index_realised == pytest.approx(0.1334366)
+    assert august.energy.factor == pytest.approx(1.0812)
+    july = await _effective_snapshot_for_month(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "test",
+        "wallonia",
+        date(2026, 7, 1),
+        current,
+        entry,
+    )
+    assert isinstance(july.energy, SpotMonthlyRates)
+    assert july.energy.index_realised is None
+
+
+def test_cohort_leg_carries_the_weighting_but_never_the_realised_index() -> None:
+    """The coefficients and which mean they resolve against are the contract's
+    and travel with the leg; a realised index belongs to one delivery month
+    and would, carried from the signing card, price every month at the signing
+    month's index."""
+    archived = make_snapshot(
+        energy=VariableRates(
+            current=0.15,
+            formula_factor=1.0812,
+            formula_base=0.03,
+            month_indexed=True,
+            rlp_indexed=True,
+            index_realised=0.0999,
+        )
+    )
+    leg = _cohort_energy_from_archived(archived)
+    assert isinstance(leg, SpotMonthlyRates)
+    assert leg.rlp_indexed is True
+    assert leg.index_realised is None

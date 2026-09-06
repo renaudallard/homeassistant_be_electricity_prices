@@ -74,7 +74,7 @@ Notes:
   it the live price table would aggregate to hourly and the current / next-slot
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
-  long-term statistics). See `DynamicRates` docs in `base.py:190-217`.
+  long-term statistics). See `DynamicRates` docs in `base.py:197-224`.
 - 6 of the 8 products carry `spot_indexed_injection=True`. The flag does not
   mean a per-hour index, which is what this said: it means the injection needs
   spots the ENERGY leg never fetches, and a monthly Epex SPP index needs them
@@ -211,7 +211,7 @@ non-matching separator to force the raise). Wallonia adds
 
 The `TaxOverlay` sets `vat_rate=0.0` (`octaplus.py:228`): OCTA+ snapshots ship
 VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
-`vat_rate` convention in `base.py:747-747`.
+`vat_rate` convention in `base.py:765-765`.
 
 ### Regional renewables
 
@@ -359,9 +359,12 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
   **The residual, stated plainly:** `Epex RLP M` weights the day-ahead by the
   residual load profile, and we resolve it against the plain arithmetic month
   mean, which sits about 3–4% below because consumption leans into the
-  expensive hours. Synergrid publishes the RLP profile only as `.xlsb`
-  (`SLP-RLP-SPP/2026/RLP0N 2026 Electricity.xlsb`), a binary workbook no
-  current dependency can read. A bounded 3–4% one-way error replaces a
+  expensive hours. The profile is now fetched (`synergrid.fetch_rlp_weights`,
+  the all-DSO `.xlsb` read with `pyxlsb`) and Eneco's Flex cards resolve on it,
+  reproducing Eneco's published values to the cent; OCTA+ stays on the plain
+  mean until its own `Epex RLP M` is validated the same way against a published
+  series, since its cards print a forecast and not a realised value to check
+  against. A bounded 3–4% one-way error replaces a
   +9,4%-to-+19,8% one that swings 50 points month to month, so the trade is
   worth making — but it is a trade, not an exact answer. Note this is the
   OPPOSITE conclusion to Eneco's energy leg, where the printed figure is last

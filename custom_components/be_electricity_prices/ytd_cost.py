@@ -105,12 +105,13 @@ from .providers.base import (
 )
 from .spot_stats import (
     _bucket_by_local_month,
+    _energy_month_spot,
     _injection_is_spp_indexed,
-    _covered_month_mean,
     _injection_on_month_mean,
     _spp_injection_spot,
 )
 from .synergrid import (
+    RlpWeights,
     SppWeights,
 )
 
@@ -299,6 +300,7 @@ async def _ytd_hourly_energy(
     spot_quarters: dict[datetime, list[float]] | None = None,
     monthly_mean: bool = False,
     spp_weights: SppWeights | None = None,
+    rlp_weights: RlpWeights | None = None,
     breakdown: dict[str, float] | None = None,
 ) -> float | None:
     """YTD energy cost for hourly-billed contracts (TOU + dynamic).
@@ -418,24 +420,30 @@ async def _ytd_hourly_energy(
     for utc_hour in cons_per_hour.keys() | inj_per_hour.keys():
         hours_seen += 1
         local = dt_util.as_local(utc_hour)
+        snap_h = await _snap_for(date(local.year, local.month, 1))
         spot: float | None = None
         # Distinguishes "this contract needs no spot" (TOU, Impact,
         # exclusive-night: neither branch below runs) from "it needs one and
         # the cache has none", which are billed differently.
         spot_missing = False
         if monthly_mean:
-            key = (local.year, local.month)
-            if key not in month_means:
-                # Gated on coverage: a closed month cached too thinly would
-                # otherwise price every one of its hours off an
-                # unrepresentative handful.
-                month_means[key] = _covered_month_mean(month_bucket, *key, today)
-            spot = month_means[key]
+            # The month's own leg decides: the supplier's published realised
+            # index first, then the RLP-weighted or plain mean of the cached
+            # hours, gated on coverage so a closed month cached too thinly does
+            # not price every one of its hours off an unrepresentative handful.
+            spot = _energy_month_spot(
+                snap_h.energy,
+                month_bucket,
+                local.year,
+                local.month,
+                today,
+                rlp_weights,
+                month_means,
+            )
             spot_missing = spot is None
         elif historical_spots is not None:
             spot = historical_spots.get(utc_hour)
             spot_missing = spot is None
-        snap_h = await _snap_for(date(local.year, local.month, 1))
         try:
             if spot_missing:
                 # No spot for this hour. Bill the two legs that do not depend
@@ -615,6 +623,7 @@ async def _compute_current_year_cost(
     historical_spots: dict[datetime, float] | None = None,
     spot_quarters: dict[datetime, list[float]] | None = None,
     spp_weights: SppWeights | None = None,
+    rlp_weights: RlpWeights | None = None,
     breakdown: dict[str, float] | None = None,
     billed_peak_kw: float = 0.0,
 ) -> float | None:
@@ -808,6 +817,7 @@ async def _compute_current_year_cost(
             spot_quarters=spot_quarters,
             monthly_mean=True,
             spp_weights=spp_weights,
+            rlp_weights=rlp_weights,
         )
         if monthly_energy is None:
             return fees

@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:697-712`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:711`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:729`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:976`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:994`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -258,6 +258,19 @@ on the 2026 cards the printed estimate ran from 1,50 c/kWh over (April) to
 2,50 c/kWh under (June). A month whose next card is not out yet keeps its
 estimate and is flagged `SupplierSnapshot.provisional`, so the monthly cache
 re-asks after its TTL instead of filing the estimate as a closed month's fact.
+
+The running month has no published value yet, and Eneco's own rule for a
+settlement that falls inside it is the index "berekend op basis van de tot dan
+toe gekende waarden van Belpex Day Ahead Market". So the Flex cards carry
+`month_indexed` and `rlp_indexed`, `_month_indexed_leg` re-prices them like
+Cociter, and `_energy_month_spot` resolves the leg in this order: the month's
+published `index_realised` when the splice found one, else the RLP-weighted mean
+of the cached hours (`_rlp_month_mean`, Synergrid's profile as `synergrid.py`
+reduces it, reproducing Eneco's seven published 2026 values to the cent), else
+the plain mean while the profile is not loaded. The feed-in credit keeps the
+plain mean: Belpex-injectie is the arithmetic one, and the live tick computes the
+two means separately for that reason. Without an ENTSO-E key the printed figure
+stands, as on every month-indexed card.
 
 `TimeOfUseRates.month_indexed` does the same for a time-of-use card that prints
 one formula per band: Luminus SmartFlex, and Engie Empower Flextime, whose
@@ -433,7 +446,7 @@ RLP would need a profile the package does not carry, and the note lives on
 ### Time-of-use: `tou_slot`
 
 `TimeOfUseRates` has three published rates `peak`, `transition`, `offpeak`, and a
-`weekend_rule` (`providers/base.py:240-291`). `tou_slot` maps a local datetime to
+`weekend_rule` (`providers/base.py:247-298`). `tou_slot` maps a local datetime to
 its band (`pricing.py:195-239`).
 
 Shared weekday schedule:
@@ -465,7 +478,7 @@ discount and is out of scope (`pricing.py:214-219`).
 `ImpactRates` (`tou_impact` kind) is Wallonia's Tarif Impact, distinct from TOU
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
-(`providers/base.py:376-379`). Fields: `pic`, `medium`, `eco`
+(`providers/base.py:394-397`). Fields: `pic`, `medium`, `eco`
 (`providers/base.py:368-370`). `dso_impact_band` (`pricing.py:641-657`):
 
 | Band | Hours (every day) |
@@ -556,7 +569,7 @@ on an exclusive-night config entry when the card prints one (EBEM Groen Variabel
 otherwise the standard `yearly_fixed_fee` for every meter type
 (`pricing.py:497-511`). Three rate shapes carry the dedicated field: `FixedRates`
 (`providers/base.py:112-145`), `VariableRates` (`providers/base.py:121-125`) and
-`SpotMonthlyRates` (`providers/base.py:234-239`), the last because a variable card
+`SpotMonthlyRates` (`providers/base.py:241-246`), the last because a variable card
 re-priced onto a monthly-mean leg for a signing cohort keeps the separate charge
 its card printed. An exclusive-night circuit is configured as a SECOND config
 entry pointing at the night kWh sensor; the primary day meter stays
@@ -596,7 +609,7 @@ keys (`pricing.py:771-802`, same guard in `compute_breakdown` at
 Injection is computed in `coordinator.py`, not `pricing.py`, but it consumes the
 same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 `current`, an hourly formula `factor`/`base`, an optional per-slot TOU triplet
-`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:434-449`).
+`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:452-467`).
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption

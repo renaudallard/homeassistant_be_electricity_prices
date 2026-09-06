@@ -481,11 +481,17 @@ def _extract_variable(text: str) -> VariableRates:
     )
     if not yearly_fee_match or not monthly_match:
         raise ExtractorError("could not parse Eneco variable energy block")
-    # Numeric coefficients for signing-cohort re-pricing, VAT-baked to EUR/kWh
-    # like the dynamic path (snapshot vat_rate is 0). The variable formula does
-    # not print its VAT multiplier, so read it from the card header ("inclusief
-    # 6% btw"). The BELPEX-RLP-M index is approximated by the plain arithmetic
-    # monthly mean (a close, few-percent approximation of the RLP weighting).
+    # Numeric coefficients, VAT-baked to EUR/kWh like the dynamic path
+    # (snapshot vat_rate is 0). The variable formula does not print its VAT
+    # multiplier, so read it from the card header ("inclusief 6% btw").
+    #
+    # The card is month-indexed on Belpex-RLP-M, the RLP-weighted mean of the
+    # DELIVERY month's Belpex quotations, known only at month end; the printed
+    # Maandprijs is the formula at the PREVIOUS month's value and the footnote
+    # says so. So the coefficients are what the contract bills: the coordinator
+    # resolves them against the running month's RLP-weighted mean (Synergrid's
+    # profile, reproducing Eneco's published values to the cent), and an
+    # archived month is settled on the value the next card prints.
     f_factor: float | None = None
     f_base: float | None = None
     if formula_match:
@@ -505,6 +511,8 @@ def _extract_variable(text: str) -> VariableRates:
         formula=formula_match.group(0) if formula_match else None,
         formula_factor=f_factor,
         formula_base=f_base,
+        month_indexed=f_factor is not None,
+        rlp_indexed=f_factor is not None,
     )
 
 

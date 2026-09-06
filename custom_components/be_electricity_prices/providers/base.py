@@ -165,6 +165,13 @@ class VariableRates:
     # ``current`` is then that figure rather than the printed estimate. None
     # while the month is still running or the next card is not out yet.
     index_realised: float | None = None
+    # True when the index is the RLP-weighted month mean (Eneco's
+    # Belpex-RLP-M) rather than the plain one: each hour's Belpex quotation
+    # weighted by Synergrid's residential load profile. The coordinator then
+    # resolves the coefficients against that weighted mean, which sits 3 to 6
+    # percent above the plain mean on the 2026 months because households draw
+    # in the expensive hours. Meaningful only with ``month_indexed``.
+    rlp_indexed: bool = False
     # The same coefficients for a bi-hourly meter's two bands, when the card
     # prints them per meter. Mega does: mono "Epex x 1,1095 + 3,6", peak
     # "x 1,3275 + 3,6", off-peak "x 0,94 + 3,6". Billing a bi-hourly cohort at
@@ -304,6 +311,17 @@ class SpotMonthlyRates:
     ceiling_pic: float | None = None
     ceiling_medium: float | None = None
     ceiling_eco: float | None = None
+    # Carried from the variable card this leg re-prices: True when the month
+    # mean the coefficients resolve against is the RLP-weighted one (Eneco).
+    # ``_energy_month_spot`` reads it to pick the weighted mean over the plain.
+    rlp_indexed: bool = False
+    # The supplier's own published value of the index for the ONE delivery
+    # month this leg is being applied to, in EUR/kWh. Set by the month splice
+    # (``_effective_snapshot_for_month``) from that month's archived card, never
+    # by the cohort conversion: the coefficients are the contract's, the index
+    # is the month's. When present it settles the month exactly and no mean is
+    # computed. Always None on the live tick's leg.
+    index_realised: float | None = None
     weekend_rule: WeekendRule = "weekend_offpeak"
     yearly_fixed_fee: float = 0.0
     # Dedicated yearly fixed fee for an exclusive-night meter circuit, carried

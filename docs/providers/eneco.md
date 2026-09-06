@@ -59,10 +59,10 @@ https://eneco.be/nl/elektriciteit-gas/tariefkaarten
 
 | id | label | kind | regions | source line |
 | --- | --- | --- | --- | --- |
-| `power_fix` | Eneco Zon & Wind Vast | `fixed` | flanders, wallonia | `eneco.py:818-826` |
-| `power_flex` | Eneco Zon & Wind Flex | `variable` | flanders, wallonia | `eneco.py:827-833` |
+| `power_fix` | Eneco Zon & Wind Vast | `fixed` | flanders, wallonia | `eneco.py:826-834` |
+| `power_flex` | Eneco Zon & Wind Flex | `variable` | flanders, wallonia | `eneco.py:835-841` |
 | `power_flex_one` | Eneco Zon & Wind Flex One | `variable` | flanders, wallonia | `eneco.py:834-862` |
-| `power_dynamic` | Eneco Zon & Wind Dynamisch | `dynamic` | flanders only | `eneco.py:834-859` |
+| `power_dynamic` | Eneco Zon & Wind Dynamisch | `dynamic` | flanders only | `eneco.py:842-867` |
 
 Notes:
 
@@ -86,7 +86,7 @@ Notes:
   reference and must not be offered in Wallonia (`eneco.py:741-766`, enforced by
   `test_power_dynamic_offered_in_flanders_only`, `tests/test_eneco.py:59-66`).
 - `DynamicRates.quarter_hourly` is left at its default `False` (`_extract_dynamic`
-  returns a `DynamicRates` without setting it, `eneco.py:540-544`). Eneco Dynamic
+  returns a `DynamicRates` without setting it, `eneco.py:548-552`). Eneco Dynamic
   bills per clock hour, so the integration aggregates the ENTSO-E 15-minute curve
   to hourly (`base.py:140-154`).
 - Fix, Flex and Flex One all set `spot_indexed_injection` (`base.py:95`), so the
@@ -248,7 +248,7 @@ sensor flips off at month end.
 | kind | helper | fields returned | key anchors |
 | --- | --- | --- | --- |
 | fixed | `_extract_fixed` (`eneco.py:333-351`) | `single`, `peak` (day), `offpeak` (night), `exclusive_night`, `yearly_fixed_fee` | `DAG NACHT` header then five `_NUM` |
-| variable | `_extract_variable` (`eneco.py:447-508`) | `current`, `yearly_fixed_fee`, `formula` | `(€/jaar)` + `Geschatte jaarprijs`; `Maandprijs`; Belpex formula |
+| variable | `_extract_variable` (`eneco.py:447-508`) | `current`, `yearly_fixed_fee`, `formula`, `formula_factor` / `formula_base`, `month_indexed`, `rlp_indexed` | `(€/jaar)` + `Geschatte jaarprijs`; `Maandprijs`; Belpex formula |
 | dynamic | `_extract_dynamic` (`eneco.py:418-451`) | `factor`, `base`, `yearly_fixed_fee` | `Enkelvoudige meter`; `(f X BELPEX-H +- base) X vat` |
 
 Fixed (`_extract_fixed`) reads a five-number row (yearly fee, single, day, night,
@@ -269,6 +269,19 @@ between the Belpex factor and the base (`SIGN_CHARS`, `_pdf.py:713`) so a polari
 flip does not drop the display string. Illustrative:
 `current = 0.1390`, `yearly_fixed_fee = 65.0`
 (`test_flex_extracts_current_monthly_rate`, `tests/test_eneco.py:241-248`).
+
+The formula's coefficients are parsed to the EUR/kWh basis (`x 10` on the
+factor, `/ 100` on the base, both times the card's VAT multiplier) and the card
+is flagged `month_indexed` and `rlp_indexed`: Belpex-RLP-M is, in Eneco's own
+words, the RLP-weighted mean of the DELIVERY month's Belpex quotations, known
+only at month end, and the printed Maandprijs is the formula at the PREVIOUS
+month's value. With an ENTSO-E key the coordinator therefore re-prices the
+running month on its RLP-weighted mean to date (Synergrid's profile,
+`synergrid.fetch_rlp_weights`), which is also how Eneco settles a bill that
+falls inside a month, and each closed month on the value the next card publishes
+(see `fetch_for_month` above). The injection leg stays on the plain mean:
+Belpex-injectie is the arithmetic one. `test_flex_is_month_indexed_on_the_rlp_weighted_mean`
+pins the flags and the re-price.
 
 Dynamic (`_extract_dynamic`) captures the full PDF formula including the VAT
 multiplier the card actually prints (`eneco.py:428-431`): `(f X BELPEX-H +- base)
@@ -309,7 +322,7 @@ kept as the canonical `ores` (`eneco.py:109-111`, dedup guard at `eneco.py:448`)
 A Wallonia row carries 7 numbers on Power Dynamic or 10 on Power Fix. The optional
 middle triplet is the Tarif Impact (CWaPE 3-band) set, and Eneco's column order is
 `MEDIUM | PIC | ECO`, which differs from OCTA+ / Bolt (`PIC | MEDIUM | ECO`); the
-code maps groups 4/5/6 to `medium`/`pic`/`eco` accordingly (`eneco.py:579-586`).
+code maps groups 4/5/6 to `medium`/`pic`/`eco` accordingly (`eneco.py:587-594`).
 Layout: Enkelvoudig, Dag, Nacht, Uitsl. nacht, `[MEDIUM PIC ECO]`, Transport,
 Databeheer (EUR/year), Prosument (EUR/kVA/year). The trailing three columns are
 read positionally from the end (`groups[-3:]`), so the optional Impact triplet does
@@ -369,13 +382,13 @@ Illustrative Antwerpen values: `distribution_single = 0.0535`,
 | `federal_excise` | first number in the "Verbruik tussen 0 en 3.000 kWh" or "Alle verbruik" tier (Tiers are abolished 2026-08-01) | `eneco.py:543-552` |
 | `energy_contribution` | second number in that tier (0.0 default, abolished 2026-08-01) | `eneco.py:548-554` |
 | `flanders_renewables` | "Bijdrage groene stroom en WKK ... (€cent/kWh)" | `eneco.py:560-564`, `606` |
-| `wallonia_renewables` | "Bijdrage groene stroom Wallonie ... (€cent/kWh)" | `eneco.py:658-662`, `607-611` |
+| `wallonia_renewables` | "Bijdrage groene stroom Wallonie ... (€cent/kWh)" | `eneco.py:666-670`, `607-611` |
 | `region_connection_fee` | "Aansluitingsvergoeding elektriciteit ... (€cent/kWh)" | `eneco.py:570-583`, `612` |
 | `energy_fund_eur_per_month` | "Standaard tarief (domicilieadres)", read for Flanders only (0.0 in Wallonia) | `eneco.py:584-602`, `613` |
 
 The renewables and connection-fee matches anchor on the `(€cent/kWh)` unit token
 rather than the first number after the label, because sibling rows carry `(2)(4)`
-footnote markers that a lazy `_NUM` would otherwise capture (`eneco.py:649-652`).
+footnote markers that a lazy `_NUM` would otherwise capture (`eneco.py:657-660`).
 Both regional renewables are populated from every card; the pricing engine selects
 the right one per region (`tests/test_eneco.py:206-210`). Illustrative values from
 `test_fix_extracts_taxes` (`tests/test_eneco.py:200-227`):
@@ -393,7 +406,7 @@ under-bill; the renewables, by contrast, are gated in `live_check` and default t
 
 ### Injection
 
-`_extract_injection` (`eneco.py:618-715`) is the most delicate block. Layout on
+`_extract_injection` (`eneco.py:626-723`) is the most delicate block. Layout on
 every contract:
 
 ```

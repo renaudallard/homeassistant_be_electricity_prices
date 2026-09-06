@@ -71,7 +71,11 @@ from .providers import all_extractors, get as get_extractor
 from .energy_meters import memoise_meter_reads
 from .providers._pdf import memoise_text_fetches
 from .providers.base import SpotMonthlyRates, SupplierSnapshot
-from .spot_stats import _injection_is_spp_indexed, _spp_weighting_enabled
+from .spot_stats import (
+    _energy_is_rlp_indexed,
+    _injection_is_spp_indexed,
+    _spp_weighting_enabled,
+)
 from .injection import _injection_needs_spot
 
 from .cohort import ytd_window_start
@@ -1088,8 +1092,18 @@ class _SweepEngine:
             troughs at midday. A month-mean leg takes its delivery month's own
             index, which is a published number and not a shape question.
             """
-            if _needs_month_mean(snapshot):
-                return await _month_spot()
+            if snapshot is not None and _needs_month_mean(snapshot):
+                month = await _month_spot()
+                if _energy_is_rlp_indexed(snapshot.energy):
+                    # Eneco's index is the RLP-weighted mean; the plain one
+                    # is the fallback while the profile is not loaded. Reuses
+                    # the coordinator's profile, never downloads here.
+                    weighted: float | None = coord._rlp_weighted_month_mean(
+                        today_local.year, today_local.month, spot_dict
+                    )
+                    if weighted is not None:
+                        return weighted
+                return month
             return _consumption_weighted_spot(spot_dict, hour_weights) or avg_spot
 
         # Measured consumption / injection from the user's kWh sensors.

@@ -845,3 +845,53 @@ def test_fetch_for_month_leaves_a_fixed_card_alone() -> None:
     assert april is not None
     assert isinstance(april.energy, FixedRates)
     assert april.provisional is False
+
+
+def test_flex_is_month_indexed_on_the_rlp_weighted_mean() -> None:
+    """Eneco's own definition: Belpex-RLP-M is the RLP-weighted mean of the
+    DELIVERY month's Belpex quotations, known only at month end, and the card
+    prints the formula at the previous month's value. So the card is
+    month-indexed, on the RLP-weighted mean, and an entry holding a key is
+    re-priced through the same leg Cociter uses, with the weighting carried."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+    from custom_components.be_electricity_prices.providers.base import (
+        SpotMonthlyRates,
+    )
+    from custom_components.be_electricity_prices.spot_stats import (
+        _energy_is_rlp_indexed,
+    )
+
+    for name, contract in (
+        ("eneco_flex_aug26.pdf", "power_flex"),
+        ("eneco_flex_one.pdf", "power_flex_one"),
+    ):
+        snap = parse_snapshot(fixture_text(name), contract, "test://", REGION_WALLONIA)
+        energy = snap.energy
+        assert isinstance(energy, VariableRates)
+        assert energy.month_indexed is True
+        assert energy.rlp_indexed is True
+        assert _energy_is_rlp_indexed(energy)
+        leg = _month_indexed_leg(
+            snap,
+            SimpleNamespace(data={"contract": contract, "api_key": "k"}),  # type: ignore[arg-type]
+        )
+        assert isinstance(leg, SpotMonthlyRates)
+        assert leg.rlp_indexed is True
+        assert leg.index_realised is None
+        assert leg.factor == pytest.approx(0.102 * 1.06 * 10)
+        assert _energy_is_rlp_indexed(leg)
+        # No key: the printed figure stands, as on every month-indexed card.
+        assert (
+            _month_indexed_leg(
+                snap,
+                SimpleNamespace(data={"contract": contract}),  # type: ignore[arg-type]
+            )
+            is None
+        )
+    # The Fix card is a fixed rate and the Dynamic one a per-slot formula.
+    fix = parse_snapshot(
+        fixture_text("eneco_fix.pdf"), "power_fix", "t", REGION_WALLONIA
+    )
+    assert not _energy_is_rlp_indexed(fix.energy)
