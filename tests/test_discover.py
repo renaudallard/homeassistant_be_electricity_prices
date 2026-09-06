@@ -584,6 +584,59 @@ def _issue_form_options(field_id: str) -> list[str]:
     raise AssertionError(f"the bug report form has no {field_id!r} field any more")
 
 
+def test_readme_documents_every_repairs_issue() -> None:
+    """The README's Repairs list must name every card the code can raise.
+
+    Same drift as the supplier lists above, and it has bitten: the card that
+    discloses a missing Walloon prosumer tariff shipped with the provider and
+    coordinator docs updated and the README left one short, so its two counts
+    disagreed with the code and with each other. Nothing catches that by
+    reading, because the list looks complete either way.
+
+    The three ``supplier_deprecated`` variants share one issue id and differ
+    only in translation key, so only the base name is a card a user can see.
+    """
+    import json
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    strings = json.loads(
+        (root / "custom_components/be_electricity_prices/strings.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    variants = {
+        "supplier_deprecated_no_successor",
+        "supplier_deprecated_ended",
+        "supplier_deprecated_ended_no_successor",
+    }
+    raised = {key for key in strings["issues"] if key not in variants}
+
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    documented = set(re.findall(r"^- \*\*`([a-z_]+)_<entry>`\*\*", readme, re.M))
+    assert documented == raised, (
+        f"undocumented in the README: {sorted(raised - documented)}; "
+        f"documented but never raised: {sorted(documented - raised)}"
+    )
+
+    # The heading counts them, so it has to move with the list. Spelled out,
+    # which is why this maps the word rather than matching a digit.
+    words = {
+        9: "Nine",
+        10: "Ten",
+        11: "Eleven",
+        12: "Twelve",
+        13: "Thirteen",
+        14: "Fourteen",
+    }
+    stated = re.search(r"(\w+) repair issues surface", readme)
+    assert stated is not None, "the README sentence counting the issues is gone"
+    assert stated.group(1) == words[len(raised)], (
+        f"README says {stated.group(1)} repair issues; there are {len(raised)}"
+    )
+
+
 def test_issue_form_offers_every_registered_supplier() -> None:
     """The form's supplier list must hold every label the flow offers.
 
