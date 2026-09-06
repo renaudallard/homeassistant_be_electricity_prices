@@ -299,7 +299,7 @@ about the INDEX and not about the flag: 8 of the 9 contracts set
 never fetches.
 
 There is **no supplier-side prosumer/PV forfait**: `supplier_prosumer_eur_per_kva_year`
-is left `None` (`SupplierSnapshot` default, `providers/base.py:742`). The only
+is left `None` (`SupplierSnapshot` default, `providers/base.py:755`). The only
 prosumer charge is the DSO tariff (`DsoOverlay.prosumer_eur_per_kva_year`), surfaced
 for both the Flanders and Wallonia rows where the card publishes it.
 

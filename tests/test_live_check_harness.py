@@ -1215,7 +1215,7 @@ def test_every_month_indexed_card_can_collect_a_key() -> None:
     missing = sorted(
         cid
         for cid, shape in lc._INJECTION_SHAPE.items()
-        if shape in ("spp", "month", "spot")
+        if shape in ("spp", "month", "spot", "triplet")
         and cid in by_id
         and by_id[cid].kind not in SPOT_PRICED_CONTRACT_KINDS
         and not by_id[cid].spot_indexed_injection
@@ -1318,9 +1318,16 @@ def test_a_tou_card_losing_its_injection_triplet_fails() -> None:
         factor=None,
         base=None,
         spp_indexed=False,
+        month_indexed=False,
         peak=None,
         transition=None,
         offpeak=None,
+        factor_peak=None,
+        base_peak=None,
+        factor_transition=None,
+        base_transition=None,
+        factor_offpeak=None,
+        base_offpeak=None,
     )
     lc._validate_injection("x", SimpleNamespace(injection=inj), "triplet")
     rows = [c for c in lc.CHECKS if "triplet present" in c.label]
@@ -1331,6 +1338,18 @@ def test_a_tou_card_losing_its_injection_triplet_fails() -> None:
     lc._validate_injection("x", SimpleNamespace(injection=inj), "triplet")
     rows = [c for c in lc.CHECKS if "triplet present" in c.label]
     assert rows and rows[0].ok
+    # The printed triplet alone is last month's figure. The three pairs and
+    # the flag are what bill the delivery month, so their loss fails too.
+    rows = [c for c in lc.CHECKS if "three pairs + flag" in c.label]
+    assert rows and not rows[0].ok
+
+    lc.CHECKS.clear()
+    inj.factor_peak, inj.base_peak = 0.906, 0.0003
+    inj.factor_transition, inj.base_transition = 0.519, 0.0003
+    inj.factor_offpeak, inj.base_offpeak = 0.155, 0.0003
+    inj.month_indexed = True
+    lc._validate_injection("x", SimpleNamespace(injection=inj), "triplet")
+    assert all(c.ok for c in lc.CHECKS), [c.label for c in lc.CHECKS if not c.ok]
 
 
 @pytest.fixture

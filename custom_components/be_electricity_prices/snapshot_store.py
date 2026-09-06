@@ -946,7 +946,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # so the three band formulas re-price on the delivery month's BELIX the way
 # the variable card's do. A v51 snapshot bills the printed bands, which are
 # the previous month's index, and Cociter's probe only flips on a new card.
-_SNAPSHOT_SCHEMA_VERSION = 52
+# v53: Engie Empower Flextime carries a month coefficient pair per band on
+# both legs (TimeOfUseRates formula_* and the InjectionRates per-slot pairs)
+# plus month_indexed, so the delivery month is billed on its own EPEXDAM. A
+# v52 snapshot holds only the printed triplets, which are last month's.
+_SNAPSHOT_SCHEMA_VERSION = 53
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

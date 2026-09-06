@@ -358,7 +358,10 @@ regardless of the consumption snapshot's `vat_rate`. At least one of (`current`,
 
 When the per-slot triplet is set, `current` stays the single-meter fallback. The
 vast majority of contracts leave the triplet `None` (one injection rate across
-all hours). Note the related invariant: monthly-indexed injection (EBEM
+all hours). A card whose slots are each a monthly formula (Engie Empower Flextime)
+sets the three `factor_*` / `base_*` pairs beside the triplet and `month_indexed`;
+the triplet is then last month's figure and the coordinator bakes the pairs on the
+delivery month's mean. Note the related invariant: monthly-indexed injection (EBEM
 Variabel/B@sic+, Eneco Fix/Flex/Flex One, DATS24) must emit `current` only and never an
 hourly-spot `factor`/`base`, or a latent mis-price is masked while the
 indicative prints.
@@ -625,7 +628,9 @@ Grounded in the protocol above, a minimal new PDF provider looks like this:
 5. Populate `injection` (`InjectionRates`) if the contract has feed-in. Emit
    `current` only for monthly-indexed injection; emit `factor`/`base` only for a
    genuine hourly-spot formula; use the per-slot triplet only for a TOU contract
-   whose feed-in varies by slot. Injection values are never VAT-incl.
+   whose feed-in varies by slot, adding the per-slot coefficient pairs and
+   `month_indexed` when each slot is itself a monthly formula. Injection values
+   are never VAT-incl.
 6. Optionally implement `probe` (usually `functools.partial(head_freshness_key, ...)`
    or a listing GET) returning a stable string, `None` when there is no reliable
    signal.

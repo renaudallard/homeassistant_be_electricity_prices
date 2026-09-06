@@ -218,7 +218,7 @@ decimals) so a battery force-export automation can rank the day's injection
 hours ahead of time (`_split_injection_today_tomorrow`). The coordinator fills
 `data.injection_hourly` only for contracts whose injection actually varies:
 every dynamic contract and both Cociter variable cards (spot-indexed `factor*spot+base`),
-plus Engie Empower Flextime (a fixed TOU schedule). A flat or monthly-indexed
+plus Engie Empower Flextime (a TOU schedule, each slot credit re-indexed on the month). A flat or monthly-indexed
 contract emits no array, so both lists come back empty and the sensor returns
 `{}`. The rows carry the contract's own grid, like `current_price`, and
 `tomorrow` fills in once the day-ahead publishes (~13:00 CET), like the

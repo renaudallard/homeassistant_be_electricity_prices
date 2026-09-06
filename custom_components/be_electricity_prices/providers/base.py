@@ -468,6 +468,19 @@ class InjectionRates:
     peak: float | None = None
     transition: float | None = None
     offpeak: float | None = None
+    # Month coefficient pair per TOU slot, for a card whose per-slot credit is
+    # itself indexed on the delivery month. Engie Empower Flextime is the case:
+    # one EPEXDAM formula per Flextime band on the injection side too, and the
+    # triplet above is printed at the PREVIOUS month's index. ``month_indexed``
+    # names the mean they resolve against, exactly as for ``factor`` / ``base``,
+    # and the printed triplet stays the fallback until that mean is known. All
+    # six or none: a partial set is not a formula.
+    factor_peak: float | None = None
+    base_peak: float | None = None
+    factor_transition: float | None = None
+    base_transition: float | None = None
+    factor_offpeak: float | None = None
+    base_offpeak: float | None = None
     # True when this formula indexes on the SOLAR-weighted monthly mean
     # (Belpex_SPP and friends) rather than on the same index the energy leg
     # uses. energie.be Variabel is the case: consumption on Belpex_RLP,
@@ -831,6 +844,12 @@ def _vat_injection(injection: InjectionRates, factor: float) -> InjectionRates:
         peak=scaled(injection.peak),
         transition=scaled(injection.transition),
         offpeak=scaled(injection.offpeak),
+        factor_peak=scaled(injection.factor_peak),
+        base_peak=scaled(injection.base_peak),
+        factor_transition=scaled(injection.factor_transition),
+        base_transition=scaled(injection.base_transition),
+        factor_offpeak=scaled(injection.factor_offpeak),
+        base_offpeak=scaled(injection.base_offpeak),
     )
 
 

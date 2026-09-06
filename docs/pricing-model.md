@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:697-712`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:691`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:704`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:943`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:962`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -247,6 +247,12 @@ Without an ENTSO-E key it returns `None` and the printed indicative stands: the
 variable kind never prompts for a key, and an entry that has none is better
 served by a rate a month stale than by no energy leg at all.
 
+`TimeOfUseRates.month_indexed` does the same for a time-of-use card that prints
+one formula per band: Luminus SmartFlex, and Engie Empower Flextime, whose
+"Flextime Heures pleines = 2,3228 + (0,1487 x EPEXDAM)" rows sit on the very card
+whose Empower Variable rows were already re-priced. Both become the three-band
+`SpotMonthlyRates` leg carrying the card's weekend rule.
+
 The trihoraire card is the same contract on the three CWaPE bands and carries
 the same note (7), so `ImpactRates.month_indexed` marks it and the three band
 formulas become a `SpotMonthlyRates` leg carrying `factor_pic` / `factor_medium`
@@ -283,6 +289,17 @@ contracts across five suppliers shipped in exactly that state.
 the live check's `_INJECTION_SHAPE`. A contract whose KIND already collects the
 key for its energy leg (`dynamic`, `spot_monthly`) is exempt and leaves the
 registry flag False, which is why energie.be Variabel does not set it.
+
+A per-slot credit can be month-indexed too. Engie Empower Flextime prints one
+EPEXDAM formula per Flextime slot on the injection side as well, so its triplet
+carries `factor_peak` / `base_peak` and the two sibling pairs beside the printed
+figures, and `_bake_monthly_injection` bakes the three slots on the delivery
+month's mean while `_tou_injection_rate` resolves them the same way in the
+historical walks. The slot is chosen by the energy leg's weekend rule whichever
+shape that leg took this tick: `_tou_weekend_rule` reads it off a
+`TimeOfUseRates` card or off the `SpotMonthlyRates` leg the card re-prices
+through, so a Flextime entry holding a key does not fall off the slot rate onto
+the flat Normal credit the moment its energy re-prices.
 
 `month_indexed` also makes `_injection_is_spot_formula` return False outright.
 Month coefficients are never a per-hour formula, and without that guard a card
@@ -594,7 +611,7 @@ convex and the two orders give different money:
   year-to-date walk bills on.
 - a MONTH-MEAN formula floors once, on the delivery month's tariff, because such
   a card publishes one number a month and the guarantee is written against that
-  number. `_bake_monthly_injection` (`injection.py:64`) produces it and the floor
+  number. `_bake_monthly_injection` (`injection.py:104`) produces it and the floor
   lands on the flat `current` path.
 
 The per-slot TOU triplet is never clamped. No card ships both a triplet and a
@@ -608,7 +625,7 @@ carrying a branch that cannot run.
 | (a) Monthly indicative | `current` set | No | Ecofix Flexy, the fixed and variable cards that publish a realized rate |
 | (b) Hourly formula | `factor` + `base` set | Yes | Dynamic contracts (Engie, Luminus, Mega, OCTA+, TotalEnergies) |
 | (c) Spot-indexed on a static-energy card | `factor` + `base` set, energy NOT dynamic, and either `current is None` or the card flags `slot_indexed` | Yes | Cociter Variable and Variable Trihoraire, every Bolt fixed and variable card |
-| (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed` | A monthly MEAN, not an hourly spot | DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex/Flex One, energie.be, Energy Knights Essentia, EnergyVision fixed (both regions) |
+| (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed`; or the per-slot triplet with its three `factor_*` / `base_*` pairs and `month_indexed` | A monthly MEAN, not an hourly spot | DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex/Flex One, energie.be, Energy Knights Essentia, EnergyVision fixed (both regions); Engie Empower Flextime per slot |
 
 Shape (d) resolves through `_spp_injection_spot`, which is the one place that
 decides WHICH mean and is deliberately not allowed to answer with an hour's
@@ -640,7 +657,7 @@ Shape (d) needs
 one too, at monthly rather than hourly resolution. `Contract` advertises both
 with `spot_indexed_injection` so the config flow offers the API-key
 step on the injection regime (`providers/base.py:71-77`). At runtime,
-`_injection_needs_spot` detects it (`injection.py:94-107`):
+`_injection_needs_spot` detects it (`injection.py:162-175`):
 
 ```python
 def _injection_needs_spot(snapshot, entry) -> bool:   # injection.py:94
@@ -668,7 +685,7 @@ in the live, backfill and compare paths, or the credit drifts.
 EUR/kWh price only on the injection regime and only when the snapshot has injection
 data (`injection.py:223-236`). Priority:
 
-1. **Per-slot TOU** via `_tou_injection_rate` (`injection.py:171-190`).
+1. **Per-slot TOU** via `_tou_injection_rate` (`injection.py:242-282`).
 2. **Spot formula** `factor * spot + base` when either the energy is
    `DynamicRates` (shape b) OR `inj.current is None` (shape c). If no spot is
    available it returns `None` rather than fabricate a value
@@ -708,7 +725,7 @@ otherwise so the caller falls back to the current / factor+base path.
 
 `_historical_injection_rate(injection, spot, *, energy, when)` mirrors the live
 priority for a past hour: TOU slot first, then `factor*spot+base` when both the
-formula and a historical spot exist, then `current` (`injection.py:268-289`).
+formula and a historical spot exist, then `current` (`injection.py:362-383`).
 The ordering (formula before `current`) is a bug fix: several dynamic-injection
 contracts (Engie, Luminus, Mega, OCTA+, TotalEnergies) publish BOTH a `current`
 indicative and `factor`/`base`, and checking `current` first made the YTD credit
@@ -722,7 +739,7 @@ EnergyVision 3 jaar vast / 1 an fixe) must
 emit only the realized monthly `current`, never an hourly `factor*spot+base`,
 because the indicative is the actual credit. The guard that keeps shape (b)/(c)
 from swallowing these cards is the `inj.current is None` clause in both
-`_injection_needs_spot` (`injection.py:94`) and `_compute_injection_price`
+`_injection_needs_spot` (`injection.py:162`) and `_compute_injection_price`
 (`injection.py:169`): when a card prints a monthly `current`, the spot branch
 is skipped and the realized rate is used, keeping the live sensor consistent with
 the YTD credit for the same hour (`injection.py:167-170`). A latent mis-price
@@ -737,7 +754,7 @@ context):
 - `compensation`: per-hour `(cons - inj) * all_in`, netting injection against
   consumption (per band when bi) and clamping at zero.
 - `injection`: per-hour `cons * all_in - inj * inj_rate`, where `inj_rate` comes
-  from `_historical_injection_rate` (`injection.py:331-385`).
+  from `_historical_injection_rate` (`injection.py:444-500`).
 
 Shape (c) has a dedicated YTD helper `_ytd_spot_injection_credit`
 (`ytd_cost.py:444`) that credits a static-energy contract whose injection is a

@@ -202,7 +202,7 @@ constructs `SupplierExtractor` with only `fetch` and `probe`). Filenames are
 overwrite-in-place and Ecofix publishes no public archive of past months
 (`ecofix.py:45`), so the coordinator's proxy-forward fallback bills past
 consumption windows at the current snapshot's rates. If Ecofix ever exposes a
-dated archive, add an `ArchivedSnapshotFetcher` (see `providers/base.py:982`).
+dated archive, add an `ArchivedSnapshotFetcher` (see `providers/base.py:1001`).
 
 ### discover()
 

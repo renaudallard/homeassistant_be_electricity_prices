@@ -133,12 +133,13 @@ def test_empower_variable_injection_is_single_band_but_month_indexed() -> None:
     assert inj.factor * 0.09257 + inj.base == pytest.approx(0.04918, abs=1e-5)
 
 
-def test_flextime_injection_keeps_its_triplet_and_no_formula() -> None:
-    """Flextime's card carries the same EPEXDAM sentence but prints THREE
-    injection coefficient pairs, one per slot, and InjectionRates holds one.
-    Storing the Normal pair would be a fourth, wrong formula: inert on the
-    live sensor because the per-slot rates win, but enough to make the
-    coordinator fetch spots for a number nothing reads."""
+def test_flextime_injection_is_a_month_indexed_triplet() -> None:
+    """Flextime's card carries the same EPEXDAM sentence and prints THREE
+    injection coefficient pairs, one per slot: "Flextime Heures pleines =
+    0,0300 + (0,0906 x EPEXDAM)" and its two siblings. They travel on the
+    per-slot fields, each reproducing its printed figure at the card's own
+    index (March 2026: 92,57), and the single ``factor`` / ``base`` stay
+    empty: the Normal pair would be a fourth formula nothing reads."""
     snap = parse_snapshot(
         "engie_empower_flextime",
         {REGION_WALLONIA: fixture_text("engie_empower_flextime_w.pdf")},
@@ -148,7 +149,97 @@ def test_flextime_injection_keeps_its_triplet_and_no_formula() -> None:
     assert inj.peak == pytest.approx(0.08417)
     assert inj.factor is None
     assert inj.base is None
-    assert inj.month_indexed is False
+    assert inj.month_indexed is True
+    assert inj.factor_peak == pytest.approx(0.0906 * 10.0)
+    assert inj.factor_transition == pytest.approx(0.0519 * 10.0)
+    assert inj.factor_offpeak == pytest.approx(0.0155 * 10.0)
+    for base in (inj.base_peak, inj.base_transition, inj.base_offpeak):
+        assert base == pytest.approx(0.0300 / 100.0)
+    assert inj.factor_peak is not None and inj.base_peak is not None
+    assert inj.factor_peak * 0.09257 + inj.base_peak == pytest.approx(
+        inj.peak, abs=1e-5
+    )
+    assert inj.formula is not None and "Flextime" in inj.formula
+
+
+def test_flextime_energy_is_month_indexed_per_band() -> None:
+    """The Flextime bands are formulas on the DELIVERY month's EPEXDAM like
+    the bi-hourly ones beside them, and the printed triplet is last month's:
+    "Flextime Heures pleines = 2,9422 + (0,1388 x EPEXDAM)" reproduces the
+    printed 16,738 only at March's 92,57. The card was billing that figure
+    for the whole of April while Empower Variable on the same PDF re-priced."""
+    from datetime import datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers.base import (
+        SpotMonthlyRates,
+    )
+
+    snap = parse_snapshot(
+        "engie_empower_flextime",
+        {REGION_WALLONIA: fixture_text("engie_empower_flextime_w.pdf")},
+    )
+    energy = snap.energy
+    assert isinstance(energy, TimeOfUseRates)
+    assert energy.month_indexed is True
+    assert energy.formula_factor_peak == pytest.approx(0.1388 * 10.0 * 1.06)
+    assert energy.formula_base_peak == pytest.approx(2.9422 / 100.0 * 1.06)
+    assert energy.formula_factor_transition == pytest.approx(0.1084 * 10.0 * 1.06)
+    assert energy.formula_factor_offpeak == pytest.approx(0.0856 * 10.0 * 1.06)
+    assert energy.formula_factor_peak is not None
+    assert energy.formula_base_peak is not None
+    assert energy.formula_factor_peak * 0.09257 + energy.formula_base_peak == (
+        pytest.approx(energy.peak, abs=1e-5)
+    )
+
+    from types import SimpleNamespace
+
+    entry = SimpleNamespace(data={"contract": "engie_empower_flextime", "api_key": "k"})
+    leg = _month_indexed_leg(snap, entry)  # type: ignore[arg-type]
+    assert isinstance(leg, SpotMonthlyRates)
+    assert leg.weekend_rule == "weekend_no_peak"
+    mean = 0.07893  # April 2026 arithmetic mean, EUR/kWh
+
+    def at(day: int, hour: int) -> float:
+        when = datetime(2026, 4, day, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        return energy_eur_per_kwh(leg, when, mean, meter="dynamic", region="wallonia")
+
+    # Wednesday 15 April: peak, transition and offpeak on their own pairs.
+    assert at(15, 19) == pytest.approx(0.1388 * 10 * 1.06 * mean + 2.9422 / 100 * 1.06)
+    assert at(15, 13) == pytest.approx(0.1084 * 10 * 1.06 * mean + 2.2972 / 100 * 1.06)
+    assert at(15, 3) == pytest.approx(0.0856 * 10 * 1.06 * mean + 1.3172 / 100 * 1.06)
+    # Saturday 18 April 19:00 is never peak on Flextime: the transition pair.
+    assert at(18, 19) == pytest.approx(at(15, 13))
+    # April's index sat under March's, so every band prices below the card.
+    assert at(15, 19) < energy.peak
+    # Without a key the printed triplet stands.
+    assert (
+        _month_indexed_leg(
+            snap,
+            SimpleNamespace(data={"contract": "engie_empower_flextime"}),  # type: ignore[arg-type]
+        )
+        is None
+    )
+
+
+def test_pro_flextime_binds_its_formulas_on_the_ex_vat_basis() -> None:
+    """The professional card prints everything HTVA, so both legs bind with
+    no 1,06 and the coefficients stay ex-VAT for apply_vat to resolve."""
+    snap = parse_snapshot(
+        "engie_pro_empower_flextime",
+        {REGION_FLANDERS: fixture_text("engie_pro_empower_variable_v.pdf")},
+    )
+    energy = snap.energy
+    assert isinstance(energy, TimeOfUseRates)
+    assert energy.month_indexed is True
+    inj = snap.injection
+    assert inj is not None
+    assert inj.month_indexed is True
+    assert inj.factor_peak is not None and inj.base_peak is not None
+    assert inj.vat_applies is True
 
 
 def test_endex_injection_keeps_its_printed_rate() -> None:
@@ -687,3 +778,82 @@ def test_pro_contract_is_flagged_in_the_registry() -> None:
     contracts = {c.id: c for c in EXTRACTORS["engie"].contracts}
     assert contracts["engie_pro_easy_variable"].professional is True
     assert contracts["engie_easy_variable"].professional is False
+
+
+def test_flextime_credit_bakes_and_replays_on_the_month() -> None:
+    """Both halves of the fix, on the engine side. Live: the coordinator bakes
+    the three pairs onto the month mean and clears them, so the slot rate the
+    sensor selects is this month's. Historical: the year-to-date walk hands the
+    month mean to _historical_injection_rate, which resolves the slot's own
+    pair. And once the ENERGY leg has re-priced to SpotMonthlyRates the slot
+    is still chosen by the card's weekend rule, so the credit never falls off
+    the triplet onto the flat Normal figure."""
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.cohort import _month_indexed_leg
+    from custom_components.be_electricity_prices.const import (
+        CONF_SOLAR_REGIME,
+        SOLAR_REGIME_INJECTION,
+    )
+    from custom_components.be_electricity_prices.injection import (
+        _bake_monthly_injection,
+        _historical_injection_rate,
+        _injection_needs_month_spot,
+        _injection_needs_spot,
+        _injection_price_for_slot,
+        _injection_varies_intraday,
+    )
+
+    snap = parse_snapshot(
+        "engie_empower_flextime",
+        {REGION_WALLONIA: fixture_text("engie_empower_flextime_w.pdf")},
+    )
+    inj = snap.injection
+    assert inj is not None
+    entry = SimpleNamespace(
+        data={
+            CONF_SOLAR_REGIME: SOLAR_REGIME_INJECTION,
+            "contract": "engie_empower_flextime",
+            "api_key": "k",
+        }
+    )
+    # A month formula, never a per-hour one.
+    assert _injection_needs_month_spot(snap, entry)  # type: ignore[arg-type]
+    assert not _injection_needs_spot(snap, entry)  # type: ignore[arg-type]
+
+    mean = 0.07893  # April 2026, EUR/kWh
+    baked = _bake_monthly_injection(snap, mean).injection
+    assert baked is not None
+    assert baked.peak == pytest.approx(0.0906 * 10 * mean + 0.0003)
+    assert baked.transition == pytest.approx(0.0519 * 10 * mean + 0.0003)
+    assert baked.offpeak == pytest.approx(0.0155 * 10 * mean + 0.0003)
+    assert baked.factor_peak is None and baked.base_offpeak is None
+    # No mean yet: the printed triplet stands rather than being wiped.
+    assert _bake_monthly_injection(snap, None).injection == inj
+
+    peak_hour = datetime(2026, 4, 15, 19, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    saturday_19 = datetime(2026, 4, 18, 19, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    # Historical replay on the month mean, slot by slot, off the card's leg.
+    assert _historical_injection_rate(
+        inj, mean, energy=snap.energy, when=peak_hour
+    ) == pytest.approx(baked.peak)
+    assert _historical_injection_rate(
+        inj, mean, energy=snap.energy, when=saturday_19
+    ) == pytest.approx(baked.transition)
+    # With no mean the printed slot figure is the answer.
+    assert _historical_injection_rate(
+        inj, None, energy=snap.energy, when=peak_hour
+    ) == pytest.approx(inj.peak)
+    # And off the re-priced SpotMonthlyRates leg the slot is the same one.
+    leg = _month_indexed_leg(snap, entry)  # type: ignore[arg-type]
+    assert leg is not None
+    assert _historical_injection_rate(
+        inj, mean, energy=leg, when=saturday_19
+    ) == pytest.approx(baked.transition)
+    assert _injection_varies_intraday(baked, leg)
+    assert _injection_price_for_slot(baked, leg, None, peak_hour) == pytest.approx(
+        baked.peak
+    )

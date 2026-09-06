@@ -577,7 +577,13 @@ _EPEXDAM_BAND: dict[str, str] = {
     "tarif bihoraire heures pleines": "peak",
     "tarif bihoraire heures creuses": "offpeak",
     "exclusif nuit": "exclusive_night",
+    # The Empower card's three Flextime rows, on both legs. They ride in the
+    # same block as the bi-hourly rows and are bound by the same Normal row.
+    "flextime heures pleines": "flex_peak",
+    "flextime heures creuses": "flex_transition",
+    "flextime heures super-creuses": "flex_offpeak",
 }
+_FLEXTIME_BANDS: tuple[str, ...] = ("flex_peak", "flex_transition", "flex_offpeak")
 # "(Mars 2026: 92,57 EUR/MWh)" - the index the printed prices were computed at.
 _EPEXDAM_INDEX_RE = re.compile(
     r"EPEXDAM\s+connue\s*\([^)]*?(\d+[,.]\d+)\s*€?\s*/\s*MWh", re.IGNORECASE
@@ -623,7 +629,7 @@ def _epexdam_formulas(
         slot = " ".join((label or "").split()).lower()
         key = _EPEXDAM_BAND.get(slot)
         if key is None:
-            # A Flextime row, or a label this card generation invented.
+            # A label this card generation invented.
             continue
         if key == "single" or not blocks:
             blocks.append({})
@@ -637,6 +643,30 @@ def _epexdam_formulas(
     # No block reproduces this leg's printed price: the caller keeps that
     # price rather than billing a formula bound to the wrong leg.
     return {}
+
+
+def _flextime_coefficients(
+    text: str, printed_single: float, vat: float, printed_slots: tuple[float, ...]
+) -> tuple[tuple[float, float], ...] | None:
+    """The three Flextime ``(factor, base)`` pairs of the leg printing
+    ``printed_single`` on its Normal row, or ``None``.
+
+    Bound through :func:`_epexdam_formulas`, so the block is the one whose
+    Normal row reproduces this leg's printed figure, and then held to the
+    same test per slot: each Flextime pair has to reproduce the slot's own
+    printed figure at the index the card states. A row that does not is a
+    layout the card has not printed before, and the answer is the printed
+    triplet, not two formulas and a guess.
+    """
+    coefs = _epexdam_formulas(text, printed_single, vat)
+    index = _epexdam_index(text)
+    if index is None or any(band not in coefs for band in _FLEXTIME_BANDS):
+        return None
+    pairs = tuple(coefs[band] for band in _FLEXTIME_BANDS)
+    for (factor, base), printed in zip(pairs, printed_slots, strict=True):
+        if abs((factor * index / 1000.0 + base) - printed) > 1e-4:
+            return None
+    return pairs
 
 
 def _extract_energy(
@@ -709,12 +739,35 @@ def _extract_energy(
         # Exclusif nuit. The variable contract uses the bi-horaire pair;
         # the Flextime contract returns the TOU triplet directly.
         if kind == "tou":
-            return TimeOfUseRates(
+            tou = TimeOfUseRates(
                 peak=prices[3] / 100.0,
                 transition=prices[4] / 100.0,
                 offpeak=prices[5] / 100.0,
                 yearly_fixed_fee=yearly_fee,
                 weekend_rule="weekend_no_peak",
+            )
+            # The same EPEXDAM sentence as Empower Variable, printed on the
+            # same card: each Flextime band is a formula on the DELIVERY
+            # month's mean and the triplet above is last month's. Bound by
+            # the Normal row this leg prints, like the bi-hourly pairs.
+            flex = _flextime_coefficients(
+                text,
+                prices[0] / 100.0,
+                _vat_multiplier(text, professional=professional),
+                (tou.peak, tou.transition, tou.offpeak),
+            )
+            if flex is None:
+                return tou
+            (f_peak, b_peak), (f_trans, b_trans), (f_off, b_off) = flex
+            return replace(
+                tou,
+                month_indexed=True,
+                formula_factor_peak=f_peak,
+                formula_base_peak=b_peak,
+                formula_factor_transition=f_trans,
+                formula_base_transition=b_trans,
+                formula_factor_offpeak=f_off,
+                formula_base_offpeak=b_off,
             )
         mono = prices[0] / 100.0
         peak = prices[1] / 100.0
@@ -803,6 +856,7 @@ def _extract_injection(
     peak: float | None = None
     transition: float | None = None
     offpeak: float | None = None
+    slot_coefs: tuple[tuple[float, float], ...] | None = None
     if kind == "tou" and len(nums) >= 6:
         # Empower Flextime: the feed-in tariff varies by slot, so surface
         # the per-slot triplet (columns 4-6) the pricing engine selects via
@@ -811,6 +865,14 @@ def _extract_injection(
         peak = nums[3] / 100.0
         transition = nums[4] / 100.0
         offpeak = nums[5] / 100.0
+        # And each slot is its own EPEXDAM formula, printed at the previous
+        # month's index like the rest of the card. Not grossed: injection is
+        # exempt on the residential edition and HTVA throughout on the
+        # professional one, where vat_applies carries the 21% to apply_vat.
+        if current is not None:
+            slot_coefs = _flextime_coefficients(
+                text, current, 1.0, (peak, transition, offpeak)
+            )
 
     formulas = list(_FORMULA_RE.finditer(text))
     factor: float | None = None
@@ -844,9 +906,8 @@ def _extract_injection(
         #
         # Restricted to the variable kind on purpose. Flextime matches the
         # same anchor but prints THREE distinct injection coefficient pairs,
-        # one per TOU slot, and InjectionRates holds exactly one pair: writing
-        # its Normal row here would store a fourth, wrong formula, and would
-        # flip _injection_needs_month_spot to True and fetch spots for a value
+        # one per TOU slot, which travel on the per-slot fields above: writing
+        # its Normal row here as well would store a fourth formula that
         # nothing reads, because the per-slot rates win. The ENDEX101 cards
         # are excluded by the formula regex itself, which requires the literal
         # EPEXDAM; their index is a futures average published in ADVANCE, so
@@ -863,8 +924,16 @@ def _extract_injection(
             factor, base = single
             month_indexed = True
             formula = f"{base * 100.0:.4f} + ({factor / 10.0:.4f} x EPEXDAM)"
+    if slot_coefs is not None:
+        month_indexed = True
+        formula = "Flextime: " + "; ".join(
+            f"{slot} {b * 100.0:.4f} + ({f / 10.0:.4f} x EPEXDAM)"
+            for slot, (f, b) in zip(("peak", "transition", "offpeak"), slot_coefs)
+        )
     if current is None and factor is None and peak is None:
         return None
+    none2: tuple[float | None, float | None] = (None, None)
+    peak_c, trans_c, off_c = slot_coefs if slot_coefs is not None else (none2,) * 3
     return InjectionRates(
         current=current,
         factor=factor,
@@ -874,6 +943,12 @@ def _extract_injection(
         peak=peak,
         transition=transition,
         offpeak=offpeak,
+        factor_peak=peak_c[0],
+        base_peak=peak_c[1],
+        factor_transition=trans_c[0],
+        base_transition=trans_c[1],
+        factor_offpeak=off_c[0],
+        base_offpeak=off_c[1],
         # "Le prix d'injection est soumis a la TVA (21%)" on the
         # professional card, against "n'est pas soumis a la TVA" on the
         # residential one.
@@ -1192,19 +1267,21 @@ def _contract_regions(c: _ContractDef) -> frozenset[str]:
 # never fetches, so the flow has to offer the optional key or the formula can
 # never resolve.
 #
-# Flextime is deliberately absent even though its card carries the same
-# sentence: it prints one injection coefficient pair per TOU slot, which
-# InjectionRates cannot hold, so the extractor leaves its printed triplet
-# alone. The ENDEX101 products are absent because their index is a futures
-# average published in ADVANCE, so their printed figure is the billed rate.
+# Flextime carries the same sentence with one coefficient pair per TOU slot,
+# on the per-slot fields of InjectionRates, and its ENERGY bands are indexed
+# the same way, so it needs the key twice over. The ENDEX101 products are
+# absent because their index is a futures average published in ADVANCE, so
+# their printed figure is the billed rate.
 _EPEXDAM_INJECTION_CONTRACTS: frozenset[str] = frozenset(
     {
         "engie_empower_variable",
+        "engie_empower_flextime",
         "engie_flow",
         "engie_direct_online",
         "engie_basic_online",
         "engie_empty_house",
         "engie_pro_empower_variable",
+        "engie_pro_empower_flextime",
         "engie_pro_flow",
         "engie_pro_empty_house",
     }

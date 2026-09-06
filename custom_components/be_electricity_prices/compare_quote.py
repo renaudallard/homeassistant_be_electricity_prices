@@ -247,20 +247,25 @@ def _compare_injection_credit(
     printed indicative below. Every other monthly-indexed injection is
     spot-independent and delegates to the live helper too.
     """
-    from .injection import _compute_injection_price, _floor_injection
-    from .providers.base import DynamicRates, TimeOfUseRates
+    from .injection import (
+        _compute_injection_price,
+        _floor_injection,
+        _tou_weekend_rule,
+    )
+    from .providers.base import DynamicRates
     from .spot_stats import _injection_on_month_mean
 
     inj = getattr(snapshot, "injection", None)
     energy = getattr(snapshot, "energy", None)
+    weekend_rule = _tou_weekend_rule(energy)
     if (
         inj is not None
-        and isinstance(energy, TimeOfUseRates)
+        and weekend_rule is not None
         and inj.peak is not None
         and inj.transition is not None
         and inj.offpeak is not None
     ):
-        wp, wt, wo = _tou_slot_weights(energy.weekend_rule, inj_hour_weights)
+        wp, wt, wo = _tou_slot_weights(weekend_rule, inj_hour_weights)
         return float(
             (inj.peak * wp + inj.transition * wt + inj.offpeak * wo) / (wp + wt + wo)
         )
@@ -405,13 +410,14 @@ def _tou_weighted_per_kwh(
     Returns ``None`` on compute failure so the caller can render '-'
     on the result page rather than tear the flow down.
     """
+    from .injection import _tou_weekend_rule
     from .pricing import (
         compute_breakdown,
         impact_band_hours,
         is_belgian_holiday,
         is_offpeak,
     )
-    from .providers.base import ImpactRates, TimeOfUseRates
+    from .providers.base import ImpactRates
 
     try:
         bd = compute_breakdown(snapshot, dso, region, when_now, spot, meter, dso_mode)
@@ -448,8 +454,12 @@ def _tou_weighted_per_kwh(
         )
     )
     impact_network = dso_mode == "impact"
+    # The card's TimeOfUseRates or the month-mean leg it re-prices through:
+    # both carry the weekend rule the slot mix is weighted on.
+    weekend_rule = _tou_weekend_rule(snapshot.energy)
     if (
-        not isinstance(snapshot.energy, (TimeOfUseRates, ImpactRates))
+        weekend_rule is None
+        and not isinstance(snapshot.energy, ImpactRates)
         and not bi_split
         and not impact_network
     ):
@@ -497,7 +507,7 @@ def _tou_weighted_per_kwh(
         if not hours:
             return bd.all_in
         return weighted / hours
-    if not isinstance(snapshot.energy, TimeOfUseRates):
+    if weekend_rule is None:
         # Fixed/Variable on a bi-hourly/dynamic meter: weight the peak and
         # off-peak all-in by the region's bi-horaire hour split (uniform
         # consumption across a representative week, region-aware via
@@ -547,7 +557,7 @@ def _tou_weighted_per_kwh(
             mon -= timedelta(days=7)
         return mon
 
-    if snapshot.energy.weekend_rule == "smartflex_seasonal":
+    if weekend_rule == "smartflex_seasonal":
         # SmartFlex bills seasonal bands, so blend a summer and a winter
         # representative WEEK by season length (21/03-20/09 = 184 days, the
         # rest 181). A full week captures both the seasonal energy bands and

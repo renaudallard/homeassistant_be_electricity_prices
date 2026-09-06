@@ -485,9 +485,9 @@ on 2026-08-01: EBEM's August card failed CI three times over for reporting the z
 prints (issue #49). The upper bound is what the gate was really protecting against — a unit slip
 that reads the value 100x too large — and that part still holds.
 
-`_validate_snapshot` (`scripts/live_check.py:2632`) runs two gates:
+`_validate_snapshot` (`scripts/live_check.py:2668`) runs two gates:
 
-- `_validate_energy` (`scripts/live_check.py:2724`) dispatches on the energy dataclass type and
+- `_validate_energy` (`scripts/live_check.py:2760`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band
   (the source uses `[0.05, 0.50]` EUR/kWh as an illustrative sanity range); dynamic contracts
   check `factor` in `[0.5, 3.0]` and `base` in `[0, 0.10]` (illustrative); TOU and Impact
@@ -510,7 +510,8 @@ that reads the value 100x too large — and that part still holds.
   None), `"spot"` (`factor`/`base` set), `"spp"` (a formula indexed on the solar-weighted monthly
   mean: `current`, `factor`/`base` AND `spp_indexed` all set, with the coefficients bounds-checked),
   `"month"` (the same on the plain arithmetic monthly mean, flagged `month_indexed`),
-  `"triplet"` (a per-slot peak/transition/offpeak feed-in tariff, which only Empower Flextime has),
+  `"triplet"` (a per-slot peak/transition/offpeak feed-in tariff with its three month coefficient
+  pairs and `month_indexed`, which only Empower Flextime has),
   or `"present"` (`factor`/`base` set). Per-contract
   expectations live in `_INJECTION_SHAPE`; the DATS 24 check passes
   `injection_shape` explicitly because its Wallonia card pays no feed-in while its Flanders card
@@ -570,10 +571,10 @@ under that cap, or the supplier is killed before it can report the drift the bud
 The session-level `aiohttp.ClientTimeout(total=60)` (`scripts/live_check.py:2836`) bounds individual
 requests.
 
-`_drift_warnings` (`scripts/live_check.py:3283`) compares each supplier's summed fetch time and
+`_drift_warnings` (`scripts/live_check.py:3319`) compares each supplier's summed fetch time and
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py:2923`), with per-supplier overrides in
-`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:3160`) for the known-large catalogues (Bolt,
+`_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py:3196`) for the known-large catalogues (Bolt,
 Ecofix, Engie, Mega, OCTA+, TotalEnergies) and `_LATENCY_BUDGET_OVERRIDES`
 (`scripts/live_check.py:2970`) for those same multi-fetch suppliers plus EBEM, Eneco, Energy Knights and
 Luminus, which are slow per fetch rather than large. That last group is the
@@ -590,7 +591,7 @@ budget is blown, `live_check.yml` opens or updates a dedicated drift issue (see 
 false-firing drift alert means adjusting the override, not the code.
 
 A supplier whose extractor already failed this run is skipped too (`scripts/live_check.py:3067`,
-against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:3270`). The
+against the set `_failed_suppliers` reads off the check labels, `scripts/live_check.py:3306`). The
 failure is both the louder signal and the usual cause of the numbers: a supplier that reworks its
 cards changes their size, and because bit 0 makes the workflow retry the whole run for an hour,
 every other supplier gets several more rolls against its budget with drift judged on whichever

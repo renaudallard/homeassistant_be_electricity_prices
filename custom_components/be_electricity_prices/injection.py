@@ -61,6 +61,46 @@ from .spot_stats import (
 )
 
 
+def _slot_coefficients(
+    inj: InjectionRates,
+) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]] | None:
+    """The per-slot month coefficient pairs (peak, transition, offpeak), or
+    ``None`` unless all six fields are set. Engie Empower Flextime is the card
+    that carries them; a partial set is not a formula and is ignored whole."""
+    if (
+        inj.factor_peak is None
+        or inj.base_peak is None
+        or inj.factor_transition is None
+        or inj.base_transition is None
+        or inj.factor_offpeak is None
+        or inj.base_offpeak is None
+    ):
+        return None
+    return (
+        (inj.factor_peak, inj.base_peak),
+        (inj.factor_transition, inj.base_transition),
+        (inj.factor_offpeak, inj.base_offpeak),
+    )
+
+
+def _tou_weekend_rule(energy: EnergyRates | None) -> str | None:
+    """The weekend rule of a time-of-use ENERGY leg, or ``None`` when the leg
+    is not banded by TOU slot.
+
+    A ``TimeOfUseRates`` card qualifies, and so does the ``SpotMonthlyRates``
+    leg a month-indexed TOU card is re-priced through, which carries the
+    card's rule beside ``factor_transition``. The feed-in triplet has to
+    follow the same slots whichever shape the energy leg took this tick:
+    judged on the class alone, a Flextime entry holding a key fell off the
+    slot rate onto the flat Normal credit the moment its energy re-priced.
+    """
+    if isinstance(energy, TimeOfUseRates):
+        return energy.weekend_rule
+    if isinstance(energy, SpotMonthlyRates) and energy.factor_transition is not None:
+        return energy.weekend_rule
+    return None
+
+
 def _bake_monthly_injection(
     snapshot: SupplierSnapshot, mean: float | None
 ) -> SupplierSnapshot:
@@ -80,9 +120,37 @@ def _bake_monthly_injection(
     standing, which ``_injection_is_spot_formula`` would then read as "price
     this per hour". Skip the call entirely only for a card that has a printed
     ``current`` to fall back to.
+
+    A per-slot triplet with its own coefficient pairs (Engie Empower Flextime)
+    is baked slot by slot into ``peak`` / ``transition`` / ``offpeak`` and the
+    pairs are cleared, so the slot rate the engine selects is this month's.
+    With no mean the printed triplet stands: those are month coefficients on
+    fields no per-hour path reads, so nothing mistakes them for a spot formula.
     """
     inj = snapshot.injection
-    if inj is None or inj.factor is None or inj.base is None:
+    if inj is None:
+        return snapshot
+    slots = _slot_coefficients(inj)
+    if slots is not None:
+        if mean is None:
+            return snapshot
+        (f_peak, b_peak), (f_trans, b_trans), (f_off, b_off) = slots
+        return replace(
+            snapshot,
+            injection=replace(
+                inj,
+                peak=f_peak * mean + b_peak,
+                transition=f_trans * mean + b_trans,
+                offpeak=f_off * mean + b_off,
+                factor_peak=None,
+                base_peak=None,
+                factor_transition=None,
+                base_transition=None,
+                factor_offpeak=None,
+                base_offpeak=None,
+            ),
+        )
+    if inj.factor is None or inj.base is None:
         return snapshot
     current = None if mean is None else inj.factor * mean + inj.base
     return replace(
@@ -142,8 +210,10 @@ def _injection_needs_month_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) 
     return (
         inj is not None
         and (inj.spp_indexed or inj.month_indexed)
-        and inj.factor is not None
-        and inj.base is not None
+        and (
+            (inj.factor is not None and inj.base is not None)
+            or _slot_coefficients(inj) is not None
+        )
         and not isinstance(snapshot.energy, (DynamicRates, SpotMonthlyRates))
     )
 
@@ -170,7 +240,10 @@ def _injection_hourly_on_cohort(snapshot: SupplierSnapshot, entry: ConfigEntry) 
 
 
 def _tou_injection_rate(
-    inj: InjectionRates, energy: EnergyRates, when: datetime
+    inj: InjectionRates,
+    energy: EnergyRates,
+    when: datetime,
+    month_mean: float | None = None,
 ) -> float | None:
     """Per-slot injection rate for a time-of-use contract whose feed-in
     tariff varies by slot (Engie Empower Flextime).
@@ -179,11 +252,29 @@ def _tou_injection_rate(
     single rate (``peak`` unset), so the caller falls back to the normal
     current / factor+base path. Uses the energy contract's own
     ``weekend_rule`` so injection and consumption agree on the slot for a
-    given hour.
+    given hour, whether that leg is the card's ``TimeOfUseRates`` or the
+    month-mean leg it re-prices through.
+
+    ``month_mean`` is the delivery month's mean for a month-indexed triplet:
+    the slot's own coefficient pair is resolved against it, and the printed
+    slot rate is the answer without one. Only ever a MONTH mean, never an
+    hour's spot: the historical walks pass what ``_injection_on_month_mean``
+    says the credit settles on, and the live path passes nothing because the
+    coordinator has already baked the triplet for the tick.
     """
-    if not isinstance(energy, TimeOfUseRates) or inj.peak is None:
+    rule = _tou_weekend_rule(energy)
+    if rule is None or inj.peak is None:
         return None
-    slot = tou_slot(when, energy.weekend_rule)
+    slot = tou_slot(when, rule)
+    if month_mean is not None and inj.month_indexed:
+        coefs = _slot_coefficients(inj)
+        if coefs is not None:
+            (f_peak, b_peak), (f_trans, b_trans), (f_off, b_off) = coefs
+            if slot == "peak":
+                return f_peak * month_mean + b_peak
+            if slot == "transition":
+                return f_trans * month_mean + b_trans
+            return f_off * month_mean + b_off
     if slot == "peak":
         return inj.peak
     if slot == "transition":
@@ -345,7 +436,7 @@ def _injection_varies_intraday(inj: InjectionRates, energy: EnergyRates) -> bool
     (mean-baked) spot-monthly injection is constant intra-day, so no per-hour
     array is worth emitting for it. Mirrors the branch conditions of
     ``_injection_price_for_slot``."""
-    if isinstance(energy, TimeOfUseRates) and inj.peak is not None:
+    if _tou_weekend_rule(energy) is not None and inj.peak is not None:
         return True
     return _injection_is_spot_formula(inj, energy)
 
@@ -397,7 +488,9 @@ def _historical_injection_rate(
         ]
         return fmean(rates) if rates else None
     if energy is not None and when is not None:
-        tou_rate = _tou_injection_rate(injection, energy, when)
+        # ``spot`` is the month mean whenever the caller settles this credit
+        # on one, which is exactly when a month-indexed triplet may use it.
+        tou_rate = _tou_injection_rate(injection, energy, when, spot)
         if tou_rate is not None:
             return tou_rate
     if injection.factor is not None and injection.base is not None and spot is not None:

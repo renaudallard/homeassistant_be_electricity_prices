@@ -2118,6 +2118,11 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         (``month_indexed``). Eneco's Belpex-injectie is the case. The flag
         carries the same weight: without it the coefficients read as a
         per-hour formula and the credit follows the current slot's spot.
+      * ``"triplet"`` - a per-slot peak / transition / offpeak credit whose
+        three slots are each a month formula: the printed triplet, the three
+        coefficient pairs AND ``month_indexed``. Engie Empower Flextime is the
+        case. Losing the pairs puts the credit back on last month's index for
+        the whole month, which is what the printed triplet is.
       * ``"present"`` - present, shape unconstrained (default).
 
     Monthly indicatives can settle slightly negative (a producer pays to
@@ -2212,6 +2217,36 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
             peak is not None and transition is not None and offpeak is not None,
             detail=f"peak={peak}, transition={transition}, offpeak={offpeak}",
         )
+        # The triplet is last month's figure; the three pairs plus the flag
+        # are what bill the delivery month. Bounded like the "month" shape:
+        # each pair redistributes a fraction of the index plus a small offset.
+        pairs = {
+            slot: (
+                getattr(injection, f"factor_{slot}", None),
+                getattr(injection, f"base_{slot}", None),
+            )
+            for slot in ("peak", "transition", "offpeak")
+        }
+        _expect(
+            f"{prefix}: month-indexed injection triplet (three pairs + flag)",
+            all(f is not None and b is not None for f, b in pairs.values())
+            and bool(getattr(injection, "month_indexed", False)),
+            detail=f"{pairs}, month_indexed="
+            f"{getattr(injection, 'month_indexed', None)}",
+        )
+        for slot, (slot_factor, slot_base) in pairs.items():
+            if slot_factor is not None:
+                _expect(
+                    f"{prefix}: {slot} injection factor in (0, 1]",
+                    0.0 < slot_factor <= 1.0,
+                    detail=f"factor={slot_factor}",
+                )
+            if slot_base is not None:
+                _expect(
+                    f"{prefix}: {slot} injection base in [-0.05, 0.05] EUR/kWh",
+                    -0.05 <= slot_base <= 0.05,
+                    detail=f"base={slot_base}",
+                )
 
 
 # Explicit injection-shape overrides per contract id (see _validate_injection).
@@ -2278,7 +2313,8 @@ _INJECTION_SHAPE: dict[str, str] = {
     # DELIVERY month's daily EPEX day-ahead quotations and say the month's
     # value is only known at month-end, so the printed Injection(3) figure is
     # the formula on the PREVIOUS month. Flextime carries the same sentence
-    # but three coefficient pairs, so it stays a triplet.
+    # with three coefficient pairs, one per slot, which the "triplet" shape
+    # pins together with the flag.
     "engie_empower_variable": "month",
     "engie_flow": "month",
     "engie_direct_online": "month",
