@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:697-712`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:741`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:743`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1006`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1008`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -438,11 +438,16 @@ was parsed, so a bi-hourly signing cohort was re-priced onto it for every hour
 of the month, over-charging its peak hours and under-charging its off-peak
 ones. The band rule is the one `_routed_rate` uses, Impact comptage included.
 
-The index itself stays an approximation on purpose: these cards weight the
-month by the Synergrid RLP profile and the coordinator applies the coefficients
-against the plain arithmetic monthly mean, which is a few percent out. Modelling
-RLP would need a profile the package does not carry, and the note lives on
-`VariableRates.formula_factor` so it is not mistaken for an oversight.
+The index is exact only where the leg says which mean it is: an
+`rlp_indexed` leg (Eneco's Belpex-RLP-M) is resolved against Synergrid's RLP
+profile, which the coordinator downloads for it (see the data sources, Part 3).
+energie.be Variabel and Energy Knights Essentia Online also print an
+RLP-weighted index but are not flagged, so their coefficients are still applied
+against the plain arithmetic monthly mean, a few percent out: neither
+supplier's blend of the DSO curves has been checked against a value it
+published, the way Eneco's was, and until one is the plain mean is the honest
+figure. The note lives on `VariableRates.formula_factor` so it is not mistaken
+for an oversight.
 
 ### Time-of-use: `tou_slot`
 
@@ -480,7 +485,7 @@ discount and is out of scope (`pricing.py:214-219`).
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
 (`providers/base.py:406-409`). Fields: `pic`, `medium`, `eco`
-(`providers/base.py:368-370`). `dso_impact_band` (`pricing.py:641-657`):
+(`providers/base.py:370-372`). `dso_impact_band` (`pricing.py:641-657`):
 
 | Band | Hours (every day) |
 | --- | --- |
@@ -610,11 +615,11 @@ keys (`pricing.py:771-802`, same guard in `compute_breakdown` at
 Injection is computed in `coordinator.py`, not `pricing.py`, but it consumes the
 same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 `current`, an hourly formula `factor`/`base`, an optional per-slot TOU triplet
-`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:464-479`).
+`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:466-481`).
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption
-snapshot's `vat_rate` (`providers/base.py:695-695`). None of the injection code
+snapshot's `vat_rate` (`providers/base.py:779-779`). None of the injection code
 paths multiply by `1.0 + vat_rate`.
 
 Injection formulas can go negative at low spot (the producer pays to inject) and

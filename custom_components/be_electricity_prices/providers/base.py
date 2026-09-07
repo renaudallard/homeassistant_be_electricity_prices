@@ -160,8 +160,10 @@ class VariableRates:
     # Used to re-price a signing cohort with a contract start date: the cohort's
     # coefficients are frozen while the index keeps moving, built into a
     # SpotMonthlyRates leg by the coordinator. ``None`` when the card exposes
-    # only a resolved rate. For RLP-indexed cards the arithmetic mean is a close
-    # (few-percent) approximation of the true residential-load-profile weighting.
+    # only a resolved rate. A leg flagged ``rlp_indexed`` is resolved against
+    # Synergrid's residential load profile instead; for the RLP cards not
+    # flagged (energie.be Variabel, Energy Knights Essentia Online) the
+    # arithmetic mean stands in, a close (few-percent) approximation.
     formula_factor: float | None = None
     formula_base: float | None = None
     # True when the card says its rate IS the delivery month's index and the
