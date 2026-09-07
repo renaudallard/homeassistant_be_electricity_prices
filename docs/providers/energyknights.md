@@ -222,10 +222,13 @@ Knights publishes both series at `https://www.energyknights.be/priceparameters`.
 The VREG series barely moves (78 to 116 EUR/MWh over two years) while the settled index
 swings 55 to 131, which is why the gap is large and signed both ways. As an *estimator*
 of the month's settled index the printed figure is about 20% out on average and the
-previous month's settled value about 15%; the arithmetic mean of the ENTSO-E curve, which
-is what the coordinator resolves the coefficients against, is about 5% out and always in
-the same direction (below), the known RLP-weighting residual `README.md` already
-discloses for the EBEM / Eneco / Mega cohorts.
+previous month's settled value about 15%; the plain arithmetic mean of the ENTSO-E curve,
+which the coordinator resolved the coefficients against until the profile could be blended
+per DSO, is about 5% out and always in the same direction (below). The leg now carries
+`rlp_indexed` with the `flanders` blend, so it resolves against the Fluvius curve of
+Synergrid's profile instead, which reproduces all eight BelpexRLP values Energy Knights
+published for 2026 to 0,01 EUR/MWh. Energy Knights sells in Flanders only, so the
+customer's DSO curve is always that one.
 
 `spot_monthly` is in `SPOT_PRICED_CONTRACT_KINDS` (`const.py:257`), which routes the
 config flow through `async_step_api_key` (`config_flow.py:384`) with a `vol.Required`
@@ -248,8 +251,9 @@ Dynamisch and Bolt Dynamisch use, and the printed 5,85 is an illustration.
 
 Essentia settles it on Belpex-SPP-M, the solar-weighted monthly mean, while its energy
 leg indexes on the load-weighted Belpex-RLP-M. `spp_indexed` is what stops the
-coordinator resolving the formula against the energy leg's mean. This is the one place
-the integration is *exact*: measured against Energy Knights' own published series, the
+coordinator resolving the formula against the energy leg's mean. Both legs are now
+*exact*: for the offtake see the `flanders` blend above, and on this side, measured
+against Energy Knights' own published series, the
 SPP-weighted mean the coordinator already computes from Synergrid's solar profile
 reproduces the settled `BELPEX_SPP_M` to 0,007% mean and 0,015% worst over 2026-01..07.
 Its `current` is kept anyway, because that profile has to land before the mean can be

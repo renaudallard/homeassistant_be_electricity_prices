@@ -958,7 +958,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # so the delivery month is billed on its own RLP-weighted Belpex-RLP-M rather
 # than the previous month's figure the card prints. A v53 snapshot bills the
 # printed estimate for the whole month.
-_SNAPSHOT_SCHEMA_VERSION = 54
+# v55: Energy Knights Essentia carries rlp_indexed with the flanders blend, so
+# its BelpexRLP offtake resolves against the Fluvius curve rather than the
+# plain arithmetic mean it billed about 5% low on.
+_SNAPSHOT_SCHEMA_VERSION = 55
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

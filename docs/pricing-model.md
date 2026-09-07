@@ -438,16 +438,16 @@ was parsed, so a bi-hourly signing cohort was re-priced onto it for every hour
 of the month, over-charging its peak hours and under-charging its off-peak
 ones. The band rule is the one `_routed_rate` uses, Impact comptage included.
 
-The index is exact only where the leg says which mean it is: an
-`rlp_indexed` leg (Eneco's Belpex-RLP-M) is resolved against Synergrid's RLP
-profile, which the coordinator downloads for it (see the data sources, Part 3).
-energie.be Variabel and Energy Knights Essentia Online also print an
-RLP-weighted index but are not flagged, so their coefficients are still applied
-against the plain arithmetic monthly mean, a few percent out: neither
-supplier's blend of the DSO curves has been checked against a value it
-published, the way Eneco's was, and until one is the plain mean is the honest
-figure. The note lives on `VariableRates.formula_factor` so it is not mistaken
-for an oversight.
+The index is exact where the leg says which blend it is. An `rlp_indexed` leg is
+resolved against Synergrid's RLP profile in the blend it names (see the data
+sources, Part 3): Eneco's Belpex-RLP-M against the equal mean of the three
+distinct regional curves, Energy Knights Essentia against the Fluvius curve
+alone, each reproducing its own supplier's published 2026 values to the cent.
+energie.be Variabel also prints an RLP-weighted index but is not flagged, so its
+coefficients are still applied against the plain arithmetic monthly mean, a few
+percent out, until its blend is checked against a value it published the way the
+other two were. The note lives on `VariableRates.formula_factor` so it is not
+mistaken for an oversight.
 
 ### Time-of-use: `tou_slot`
 

@@ -248,9 +248,9 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     # so the gap is measurable rather than arguable. Over the 26 months that
     # table covers, the printed offtake figure sits at least 10% from the
     # settled index in 19 of them (-24,7% to +56,2%) and the printed credit in
-    # 23 of them (-56,1% to +242,9%). Resolved against the month's own mean the
-    # offtake leg lands about 5% low with a known, one-directional
-    # RLP-weighting residual, and the credit is exact.
+    # 23 of them (-56,1% to +242,9%). The offtake leg carries rlp_indexed with
+    # the flanders blend, so it resolves against the Fluvius curve and matches
+    # the published BelpexRLP to the cent; the credit is SPP-weighted.
     _ContractDef(
         "energyknights_essentia",
         "Energy Knights Essentia Online",
@@ -598,7 +598,7 @@ def parse_snapshot(
     if contract.kind == "dynamic":
         energy = _dynamic_energy(rows, fee, vat, contract, green)
     else:
-        energy = _spot_monthly_energy(rows, fee, vat, green)
+        energy = _spot_monthly_energy(rows, fee, vat, contract, green)
     return SupplierSnapshot(
         supplier="energyknights",
         contract=contract_id,
@@ -754,6 +754,7 @@ def _spot_monthly_energy(
     rows: dict[str, tuple[float, float, float]],
     fee: float,
     vat: float,
+    contract: _ContractDef,
     green: float = 0.0,
 ) -> SpotMonthlyRates:
     """Essentia Online's monthly-indexed leg.
@@ -800,6 +801,13 @@ def _spot_monthly_energy(
         factor_exclusive_night=night_factor,
         base_exclusive_night=night_base,
         yearly_fixed_fee=fee,
+        # BelpexRLP is the Fluvius load-weighted month mean, and Energy Knights
+        # sells in Flanders only, so the coefficients resolve against the
+        # Fluvius curve of Synergrid's profile. That reproduces the eight
+        # BelpexRLP values Energy Knights published for 2026 to the cent, where
+        # the plain arithmetic mean ran about 5% low.
+        rlp_indexed=contract.index.casefold() == "belpexrlp",
+        rlp_blend="flanders",
     )
 
 

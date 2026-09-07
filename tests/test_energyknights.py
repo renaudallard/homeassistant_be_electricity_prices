@@ -261,6 +261,10 @@ def test_essentia_printed_rates_reconcile_with_their_own_formulas() -> None:
     """
     energy = _essentia().energy
     assert isinstance(energy, SpotMonthlyRates)
+    # Flanders-only: the offtake resolves against the Fluvius RLP curve, which
+    # reproduces the published BelpexRLP; the plain mean ran about 5% low.
+    assert energy.rlp_indexed is True
+    assert energy.rlp_blend == "flanders"
     idx = 127.50
     assert _printed_cents_from(energy.factor, energy.base, idx) == 14.66
     assert _printed_cents_from(energy.factor_peak, energy.base_peak, idx) == 14.97
