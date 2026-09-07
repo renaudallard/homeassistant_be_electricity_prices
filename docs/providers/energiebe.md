@@ -124,8 +124,14 @@ would ship a knowingly wrong rate that no later tick corrects, the 0.6.7 mispric
 
 `spot_monthly` instead stores the coefficients and lets the coordinator resolve
 `factor x mean(this month's spot) + base` from its ENTSO-E cache (`coordinator.py:640`),
-which firms up as the month fills in. The arithmetic monthly mean is a close (few-percent)
-approximation of the RLP weighting, the same approximation EBEM / Eneco / Mega cohorts use.
+which firms up as the month fills in. That mean is RLP-weighted, on the `columns` blend:
+the card defines Belpex_RLP as the mean "van de verschillende distributienetbeheerders",
+and energie.be publishes the literal column reading of it, every DSO sub-area counting
+once. Measured against its own published table (2026-01..08, at
+`api/v1/data/document?key=Indexation`) the blend lands within about 0,01 c€/kWh, where the
+plain arithmetic mean it used before ran a few percent low - 0,59 c€/kWh on July 2026,
+about 20 EUR/year at 3500 kWh. Eneco reads the same phrase as the mean of the three
+distinct curves; each supplier's own published table settles which.
 The kind is also what makes the config flow collect an ENTSO-E key
 (`config_flow.py:488`) - without one this contract cannot be priced at all.
 
@@ -404,7 +410,7 @@ keeps no archive the same frozen number reaches every past month of `current_yea
 
 ## Taxes
 
-`_extract_taxes` (`providers/energiebe.py:521`) parses four levy rows and builds a
+`_extract_taxes` (`providers/energiebe.py:526`) parses four levy rows and builds a
 `TaxOverlay`. All card values are VAT-inclusive (the federal excise and the energy fund are
 VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`).
 
@@ -429,7 +435,7 @@ pins GSC 1,17 + WKK 0,39 = 1,56 c€/kWh. All c€/kWh values are divided by 100
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/energiebe.py:539`) covers all eight Fluvius sub-areas via
+`_extract_dsos` (`providers/energiebe.py:544`) covers all eight Fluvius sub-areas via
 `_DSO_ROWS` (`providers/energiebe.py:144`), which maps each card label prefix to the
 canonical DSO key:
 

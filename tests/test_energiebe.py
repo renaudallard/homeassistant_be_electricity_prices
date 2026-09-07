@@ -327,7 +327,12 @@ def test_an_abolished_contribution_row_no_longer_takes_the_supplier_offline() ->
 
 def test_variable_energy_is_spot_monthly_rates() -> None:
     """(1,12 x Belpex_RLP + 0,80) is a monthly index, not a per-slot spot."""
-    assert isinstance(_var_snap().energy, SpotMonthlyRates)
+    energy = _var_snap().energy
+    assert isinstance(energy, SpotMonthlyRates)
+    # Belpex_RLP is the column-weighted mean of the DSO profiles, which the
+    # card reads literally; the "columns" blend reproduces its published table.
+    assert energy.rlp_indexed is True
+    assert energy.rlp_blend == "columns"
 
 
 def test_variable_energy_formula_factor() -> None:

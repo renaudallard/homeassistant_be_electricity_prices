@@ -961,7 +961,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v55: Energy Knights Essentia carries rlp_indexed with the flanders blend, so
 # its BelpexRLP offtake resolves against the Fluvius curve rather than the
 # plain arithmetic mean it billed about 5% low on.
-_SNAPSHOT_SCHEMA_VERSION = 55
+# v56: energie.be Variabel carries rlp_indexed with the columns blend, so its
+# Belpex_RLP resolves against the column-weighted profile rather than the plain
+# mean.
+_SNAPSHOT_SCHEMA_VERSION = 56
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

@@ -443,11 +443,13 @@ resolved against Synergrid's RLP profile in the blend it names (see the data
 sources, Part 3): Eneco's Belpex-RLP-M against the equal mean of the three
 distinct regional curves, Energy Knights Essentia against the Fluvius curve
 alone, each reproducing its own supplier's published 2026 values to the cent.
-energie.be Variabel also prints an RLP-weighted index but is not flagged, so its
-coefficients are still applied against the plain arithmetic monthly mean, a few
-percent out, until its blend is checked against a value it published the way the
-other two were. The note lives on `VariableRates.formula_factor` so it is not
-mistaken for an oversight.
+energie.be Variabel against the column-weighted mean, every DSO sub-area counting
+once, which is how it publishes the same phrase Eneco reads as the distinct
+mean. Each blend was settled against the supplier's own published table rather
+than against the wording, which is identical on two of the three cards. A leg
+that names no blend keeps the plain arithmetic monthly mean, a few percent
+below any of them, since households draw in the expensive hours; the note lives
+on `VariableRates.formula_factor` so that is not mistaken for an oversight.
 
 ### Time-of-use: `tou_slot`
 

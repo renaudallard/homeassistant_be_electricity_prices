@@ -370,9 +370,12 @@ def _extract_variable_energy(text: str) -> SpotMonthlyRates:
 
     The card prices a delivery month at ``factor x Belpex_RLP + base``, where
     Belpex_RLP is that month's RLP-weighted mean day-ahead price - a
-    SpotMonthlyRates leg, resolved against the running monthly mean of the
-    ENTSO-E curve (a close, few-percent approximation of the RLP weighting,
-    same as every other monthly-indexed card here).
+    SpotMonthlyRates leg. The card defines the weighting as the mean "van de
+    verschillende distributienetbeheerders"; energie.be publishes the column
+    reading of that (every DSO sub-area weighted equally), which the "columns"
+    blend reproduces to about 0,01 c-EUR/kWh where the plain mean ran a few
+    percent out. Eneco reads the same phrase as the mean of the distinct
+    curves; each supplier's own published table settles which.
 
     The resolved price the card prints alongside the formula is deliberately
     NOT read. Unlike the realized "maandprijs" other variable cards publish,
@@ -398,6 +401,8 @@ def _extract_variable_energy(text: str) -> SpotMonthlyRates:
         factor=factor_pdf * _VAT_MULT,
         base=base_cents / 100.0 * _VAT_MULT,
         yearly_fixed_fee=_yearly_fee(text),
+        rlp_indexed=True,
+        rlp_blend="columns",
     )
 
 
