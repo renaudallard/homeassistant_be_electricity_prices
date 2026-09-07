@@ -66,7 +66,7 @@ Eighteen products are declared in `_CONTRACTS` (`engie.py:150`): ten
 residential, and eight professional editions of the same families. Every
 `Contract` exposed to the registry (`engie.py:1041`) sets `regions` from the
 contract's `months_per_region` keys (`engie.py:133`) and `professional` from
-its `segment`; `spot_indexed_injection` is set from `_EPEXDAM_INJECTION_CONTRACTS`,
+its `segment`; `spot_indexed_injection` and `month_indexed_energy` are both set from `_EPEXDAM_INJECTION_CONTRACTS`,
 the products whose feed-in credit is a formula on the monthly EPEXDAM that their
 energy leg never fetches spots for (the EPEXDAM variable cards and both Empower
 Flextime editions, whose credit is one such formula per slot). Dynamic contracts

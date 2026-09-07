@@ -77,6 +77,10 @@ need a spot for injection.
 | `luminus_smartflex` | Luminus SmartFlex | tou | `smartflex` | Time-of-use (3 seasonal bands), needs SMR3 |
 | `luminus_dynamic` | Luminus Dynamic | dynamic | `dynamic` | `factor*Belpex H + base`, hourly billing |
 
+MaxxFlex and SmartFlex carry `month_indexed_energy`, the registry twin of the parsed
+`month_indexed`, which offers the optional ENTSO-E key on every solar regime;
+ComfyFlex, ComfyFlex+ and BasicFlex print resolved rates and do not.
+
 Declared in `_CONTRACTS` (`luminus.py:105-122`); `_CONTRACTS_BY_ID` indexes them
 (`luminus.py:124`); `EXTRACTOR.contracts` is built from them (`luminus.py:909-918`).
 
@@ -109,7 +113,7 @@ suppliers (Frank default, Mega, TotalEnergies, Eneco).
 ### Probe
 
 There is no probe. `EXTRACTOR` does not set `probe`, so it defaults to `None`
-(`base.py:570`). Per the `SnapshotProbe` contract (`base.py:1025-1025`), the
+(`base.py:570`). Per the `SnapshotProbe` contract (`base.py:1037-1037`), the
 `api-next/get-pricelist/` endpoint mints a fresh PDF per request with no cheap
 freshness key the coordinator can rely on, so the time-based TTL takes over.
 

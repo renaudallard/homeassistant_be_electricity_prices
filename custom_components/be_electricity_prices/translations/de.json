@@ -84,8 +84,8 @@
         }
       },
       "injection_api_key": {
-        "title": "ENTSO-E API-Schluessel (Einspeisung)",
-        "description": "Optional. Dieser Vertrag indexiert die Einspeisung am Day-Ahead-Spotpreis und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; ohne Schluessel faellt der Einspeisepreis auf den auf Ihrer Tarifkarte gedruckten Betrag des Vormonats zurueck oder bleibt nicht verfuegbar, wenn dort keiner steht.",
+        "title": "ENTSO-E API-Schluessel (optional)",
+        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; ohne Schluessel rechnet die Integration den auf Ihrer Tarifkarte gedruckten Betrag des Vormonats ab, und der Einspeisepreis bleibt nicht verfuegbar, wenn dort keiner steht.",
         "data": {
           "api_key": "ENTSO-E API-Schluessel"
         }
@@ -363,8 +363,8 @@
         }
       },
       "injection_api_key": {
-        "title": "ENTSO-E API-Schluessel (Einspeisung)",
-        "description": "Optional. Dieser Vertrag indexiert die Einspeisung am Day-Ahead-Spotpreis und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; ohne Schluessel faellt der Einspeisepreis auf den auf Ihrer Tarifkarte gedruckten Betrag des Vormonats zurueck oder bleibt nicht verfuegbar, wenn dort keiner steht.",
+        "title": "ENTSO-E API-Schluessel (optional)",
+        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats, oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benoetigt dafuer einen kostenlosen ENTSO-E-Schluessel von transparency.entsoe.eu. Leer lassen zum Ueberspringen; ohne Schluessel rechnet die Integration den auf Ihrer Tarifkarte gedruckten Betrag des Vormonats ab, und der Einspeisepreis bleibt nicht verfuegbar, wenn dort keiner steht.",
         "data": {
           "api_key": "ENTSO-E API-Schluessel"
         }

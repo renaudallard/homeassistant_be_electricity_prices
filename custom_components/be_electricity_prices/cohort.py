@@ -416,9 +416,10 @@ def _month_indexed_leg(
     it takes the same leg with the bands in place of the mono pair.
 
     Returns ``None`` without an ENTSO-E key, which keeps the printed
-    indicative: the variable kind never prompts for one, and an entry that has
-    none is better served by a rate a month stale than by no energy leg at all.
-    Same reasoning, and the same guard, as the variable cohort below.
+    indicative: the key is offered as optional to every contract flagged
+    ``month_indexed_energy`` in the registry, and an entry that skipped it is
+    better served by a rate a month stale than by no energy leg at all. Same
+    reasoning, and the same guard, as the variable cohort below.
     """
     energy = snapshot.energy
     if not isinstance(energy, (VariableRates, TimeOfUseRates, ImpactRates)):

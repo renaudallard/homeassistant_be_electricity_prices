@@ -64,6 +64,9 @@ https://eneco.be/nl/elektriciteit-gas/tariefkaarten
 | `power_flex_one` | Eneco Zon & Wind Flex One | `variable` | flanders, wallonia | `eneco.py:834-862` |
 | `power_dynamic` | Eneco Zon & Wind Dynamisch | `dynamic` | flanders only | `eneco.py:842-867` |
 
+Flex and Flex One carry `month_indexed_energy`, the registry twin of the parsed
+`month_indexed`, which offers the optional ENTSO-E key on every solar regime.
+
 Notes:
 
 - **Power Fix** is a fixed contract with a single rate plus a bi-hourly (day /

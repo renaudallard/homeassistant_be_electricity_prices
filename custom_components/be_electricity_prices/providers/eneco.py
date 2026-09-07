@@ -838,6 +838,9 @@ EXTRACTOR = SupplierExtractor(
             kind="variable",
             regions=_ENECO_REGIONS,
             spot_indexed_injection=True,
+            # Belpex-RLP-M is the delivery month's index, so the key is
+            # offered on every solar regime, compensation included.
+            month_indexed_energy=True,
         ),
         Contract(
             # A second variable card, not a relabel: its own text sells a
@@ -852,6 +855,7 @@ EXTRACTOR = SupplierExtractor(
             kind="variable",
             regions=_ENECO_REGIONS,
             spot_indexed_injection=True,
+            month_indexed_energy=True,
         ),
         Contract(
             # Power Dynamic is sold in Flanders only: its card reads

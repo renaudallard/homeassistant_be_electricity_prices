@@ -791,6 +791,12 @@ _OCTAPLUS_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
 # Every non-dynamic OCTA+ product indexes injection on the monthly Epex SPP;
 # the dynamic pair indexes per quarter-hour through its energy formula.
 
+# The variable cards print one "Epex RLP M" formula per meter and settle on the
+# delivery month; Fixed, Eco Fixed and Fixed Impact print the rate they bill.
+_MONTHLY_ENERGY_CONTRACTS: frozenset[str] = frozenset(
+    {"octaplus_smartvariable", "octaplus_flux", "octaplus_ecoflux"}
+)
+
 EXTRACTOR = SupplierExtractor(
     sweep_cost_s=2.2,
     id="octaplus",
@@ -802,6 +808,7 @@ EXTRACTOR = SupplierExtractor(
             kind=c.kind,
             regions=c.regions or _OCTAPLUS_REGIONS,
             spot_indexed_injection=c.kind != "dynamic",
+            month_indexed_energy=c.contract_id in _MONTHLY_ENERGY_CONTRACTS,
         )
         for c in _CONTRACTS
     ),

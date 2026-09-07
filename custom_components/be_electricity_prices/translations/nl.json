@@ -84,8 +84,8 @@
         }
       },
       "injection_api_key": {
-        "title": "ENTSO-E API-sleutel (injectie)",
-        "description": "Optioneel. Dit contract indexeert de injectie op de day-ahead spotprijs en heeft daarvoor een gratis ENTSO-E-sleutel van transparency.entsoe.eu nodig. Laat leeg om over te slaan; zonder sleutel valt de injectieprijs terug op het bedrag op uw tariefkaart, dat van vorige maand, of blijft onbeschikbaar als uw kaart er geen drukt.",
+        "title": "ENTSO-E API-sleutel (optioneel)",
+        "description": "Optioneel. Dit contract indexeert zijn energieprijs op het day-ahead-gemiddelde van de leveringsmaand, of zijn injectie op de day-ahead spotprijs, of beide, en heeft daarvoor een gratis ENTSO-E-sleutel van transparency.entsoe.eu nodig. Laat leeg om over te slaan; zonder sleutel rekent de integratie het bedrag op uw tariefkaart aan, dat van vorige maand, en blijft de injectieprijs onbeschikbaar als uw kaart er geen drukt.",
         "data": {
           "api_key": "ENTSO-E API-sleutel"
         }
@@ -363,8 +363,8 @@
         }
       },
       "injection_api_key": {
-        "title": "ENTSO-E API-sleutel (injectie)",
-        "description": "Optioneel. Dit contract indexeert de injectie op de day-ahead spotprijs en heeft daarvoor een gratis ENTSO-E-sleutel van transparency.entsoe.eu nodig. Laat leeg om over te slaan; zonder sleutel valt de injectieprijs terug op het bedrag op uw tariefkaart, dat van vorige maand, of blijft onbeschikbaar als uw kaart er geen drukt.",
+        "title": "ENTSO-E API-sleutel (optioneel)",
+        "description": "Optioneel. Dit contract indexeert zijn energieprijs op het day-ahead-gemiddelde van de leveringsmaand, of zijn injectie op de day-ahead spotprijs, of beide, en heeft daarvoor een gratis ENTSO-E-sleutel van transparency.entsoe.eu nodig. Laat leeg om over te slaan; zonder sleutel rekent de integratie het bedrag op uw tariefkaart aan, dat van vorige maand, en blijft de injectieprijs onbeschikbaar als uw kaart er geen drukt.",
         "data": {
           "api_key": "ENTSO-E API-sleutel"
         }

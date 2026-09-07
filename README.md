@@ -352,11 +352,16 @@ formula** supplier, which has no card and asks for the whole set.
    requires a smart meter; Simple and Bi-horaire follow the existing
    meter convention.
 6. **ENTSO-E API key** *(dynamic and monthly-indexed contracts, both of
-   which price the commodity off spot; also offered on the injection
-   regime for a contract whose injection is itself index-linked, which is
-   most static cards and not the handful it once was — every Bolt card and
-   both Cociter variable cards index it per hour, while energie.be Vast and most of the
-   rest index it on a monthly mean)* — validated against the real ENTSO-E endpoint at
+   which price the commodity off spot; also offered, skippable, to every
+   contract whose energy is indexed on the delivery month's mean and whose
+   card prints last month's figure, on any solar regime — Cociter Variable
+   and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and SmartFlex,
+   OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex One — and on
+   the injection regime for a contract whose injection is itself
+   index-linked, which is most static cards and not the handful it once was
+   — every Bolt card and both Cociter variable cards index it per hour, while
+   energie.be Vast and most of the rest index it on a monthly mean)* —
+   validated against the real ENTSO-E endpoint at
    submission; bad keys are rejected before the entry is saved. If ENTSO-E is
    *unreachable* rather than rejecting the key, setup no longer dead-ends: the
    wizard says so and offers to check again or to continue without verifying.
@@ -456,10 +461,13 @@ injection tariff that is itself index-linked — the hourly-spot shape
 (Cociter Variable and Variable Trihoraire, every Bolt fixed and variable
 card) and the monthly-mean shape (energie.be Vast on Belpex_SPP, and most
 other static cards), 65 contracts across 14 suppliers between them, and the
-signing-cohort re-price of a variable contract, which resolves the current
-month's mean spot. Both stay off without a key rather than failing the
-entry — the injection price goes unavailable, and the cohort re-price keeps
-the current card. The token is free but ENTSO-E does not auto-grant it —
+re-price of a month-indexed contract on the delivery month's own mean, cohort
+or not, for which the flow offers the key on every solar regime (Cociter
+Variable and Trihoraire, Engie's EPEXDAM cards, Luminus MaxxFlex and
+SmartFlex, OCTA+ Smart Variable, Flux and Eco Flux, Eneco Flex and Flex
+One). Both stay off without a key rather than failing the entry — the
+injection price goes unavailable, and the re-price keeps the card's printed
+figure, which is the previous month's. The token is free but ENTSO-E does not auto-grant it —
 you have to request access explicitly:
 
 1. **Register** an account on the

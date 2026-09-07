@@ -68,6 +68,7 @@ from .flow_schemas import (
     _capacity_schema,
     _connection_power_schema,
     _contract_has_spot_injection,
+    _contract_is_month_indexed,
     _contract_is_professional,
     _contract_kind,
     _contract_schema,
@@ -438,21 +439,27 @@ class _WizardStepsMixin:
             step_id="solar", data_schema=_solar_schema(self._data)
         )
 
-    def _needs_injection_api_key(self) -> bool:
-        """An ENTSO-E key is offered after the solar step when the chosen
-        contract prices injection off the spot (Cociter Variable) and the
-        user picked the injection regime, unless a key was already
-        collected (dynamic energy)."""
-        return (
-            self._data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
-            and not self._data.get(CONF_API_KEY)
-            and _contract_has_spot_injection(
-                self._data.get(CONF_SUPPLIER), self._data.get(CONF_CONTRACT)
-            )
-        )
+    def _needs_optional_api_key(self) -> bool:
+        """An ENTSO-E key is offered after the solar step, skippable, when
+        the chosen contract prices something off the day-ahead market that
+        its kind does not already collect a key for: an energy leg indexed on
+        the delivery month's mean (Cociter Variable, Engie's EPEXDAM cards,
+        Luminus MaxxFlex and SmartFlex, OCTA+ Smart Variable and Flux, Eneco
+        Flex), on ANY solar regime, or an index-linked feed-in credit on the
+        injection regime. A key already collected (dynamic or spot-monthly
+        energy) skips the step."""
+        if self._data.get(CONF_API_KEY):
+            return False
+        supplier = self._data.get(CONF_SUPPLIER)
+        contract = self._data.get(CONF_CONTRACT)
+        if _contract_is_month_indexed(supplier, contract):
+            return True
+        return self._data.get(
+            CONF_SOLAR_REGIME
+        ) == SOLAR_REGIME_INJECTION and _contract_has_spot_injection(supplier, contract)
 
     async def _after_solar(self) -> ConfigFlowResult:
-        if self._needs_injection_api_key():
+        if self._needs_optional_api_key():
             return await self.async_step_injection_api_key()
         if self._is_custom():
             return await self._custom_tail()
@@ -468,11 +475,12 @@ class _WizardStepsMixin:
     async def async_step_injection_api_key(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Optional ENTSO-E key for spot-indexed injection.
+        """Optional ENTSO-E key for an index-linked leg the kind does not
+        collect one for: a month-indexed energy leg or spot-indexed injection.
 
         Unlike the dynamic-energy ``api_key`` step this one is skippable:
-        the energy is priced without a spot, so leaving it blank just
-        leaves the injection price unavailable until a key is added via
+        the card prints a figure to fall back on, so leaving it blank bills
+        that figure (last month's index) until a key is added via
         Reconfigure. A typed key is validated against the live endpoint.
         """
         errors: dict[str, str] = {}

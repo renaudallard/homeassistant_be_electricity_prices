@@ -2680,9 +2680,31 @@ def _validate_snapshot(
     DATS 24, whose Wallonia card pays no feed-in)."""
     _expect_card_period(prefix, contract_id, snap)
     _validate_energy(prefix, contract_id, getattr(snap, "energy", None))
+    _expect_month_indexed_registry(prefix, contract_id, getattr(snap, "energy", None))
     shape = injection_shape or _expected_injection_shape(contract_id)
     _validate_injection(prefix, snap, shape)
     _validate_dsos(prefix, snap, require_capacity=require_capacity)
+
+
+def _expect_month_indexed_registry(
+    prefix: str, contract_id: str, energy: object
+) -> None:
+    """The parser's ``month_indexed`` and the registry's ``month_indexed_energy``
+    have to agree, for the same reason the injection pair does: the flow offers
+    the optional ENTSO-E key from the registry flag, before any card is fetched,
+    and the coordinator re-prices from the parsed one. A card that gains or
+    loses its monthly formula changes what the key buys, and this is where
+    that shows. Contracts the harness does not know are left alone."""
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None or energy is None:
+        return
+    parsed = bool(getattr(energy, "month_indexed", False))
+    flagged = bool(getattr(contract, "month_indexed_energy", False))
+    _expect(
+        f"{prefix}: month-indexed energy matches the registry flag",
+        parsed == flagged,
+        detail=f"parsed month_indexed={parsed}, registry month_indexed_energy={flagged}",
+    )
 
 
 # The Fluvius row five Flanders checks spot-checked by hand for a PRESENT

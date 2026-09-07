@@ -901,6 +901,13 @@ _MONTHLY_INJECTION_CONTRACTS: frozenset[str] = frozenset(
         "luminus_smartflex",
     }
 )
+# Contracts whose ENERGY is a monthly formula too: MaxxFlex prints one per
+# meter and SmartFlex one per band, both on the delivery month's Belpex.
+# ComfyFlex, ComfyFlex+ and BasicFlex print resolved rates (ComfyFlex on a
+# quarterly index), so their energy is billed as printed.
+_MONTHLY_ENERGY_CONTRACTS: frozenset[str] = frozenset(
+    {"luminus_maxxflex", "luminus_smartflex"}
+)
 
 
 EXTRACTOR = SupplierExtractor(
@@ -914,6 +921,7 @@ EXTRACTOR = SupplierExtractor(
             kind=c.kind,
             regions=_LUMINUS_REGIONS,
             spot_indexed_injection=c.contract_id in _MONTHLY_INJECTION_CONTRACTS,
+            month_indexed_energy=c.contract_id in _MONTHLY_ENERGY_CONTRACTS,
         )
         for c in _CONTRACTS
     ),

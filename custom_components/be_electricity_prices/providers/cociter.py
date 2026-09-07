@@ -871,6 +871,9 @@ EXTRACTOR = SupplierExtractor(
             # Variable energy, but the injection is an hourly BELPEX
             # formula with no fixed indicative -> needs an ENTSO-E spot.
             spot_indexed_injection=True,
+            # And the energy itself is indexed on the delivery month's BELIX
+            # (note 7), so the key is offered on every solar regime.
+            month_indexed_energy=True,
         ),
         Contract(
             id="cociter_variable_impact",
@@ -882,6 +885,7 @@ EXTRACTOR = SupplierExtractor(
             # feed-in credit needs an ENTSO-E spot the three-band energy
             # leg never fetches.
             spot_indexed_injection=True,
+            month_indexed_energy=True,
         ),
         Contract(
             id="cociter_dynamic",

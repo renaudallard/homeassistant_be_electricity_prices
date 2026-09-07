@@ -1299,7 +1299,10 @@ EXTRACTOR = SupplierExtractor(
             kind=c.kind,
             regions=_contract_regions(c),
             professional=c.professional,
+            # The EPEXDAM cards index BOTH legs on the delivery month, so the
+            # one set drives both flags.
             spot_indexed_injection=c.contract_id in _EPEXDAM_INJECTION_CONTRACTS,
+            month_indexed_energy=c.contract_id in _EPEXDAM_INJECTION_CONTRACTS,
         )
         for c in _CONTRACTS
     ),

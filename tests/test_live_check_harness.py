@@ -1620,3 +1620,32 @@ def test_expiry_check_forgives_only_a_card_that_just_lapsed(
     )
     expired = [c for c in lc.CHECKS if c.label.endswith("card has not expired")]
     assert bool(expired) is fails, note
+
+
+def test_a_card_whose_month_indexing_disagrees_with_the_registry_fails() -> None:
+    """The parser's month_indexed and the registry's month_indexed_energy have
+    to agree, like the injection pair: the flow offers the key from the
+    registry, the coordinator re-prices from the parse. Contracts the harness
+    does not know are left alone."""
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID["harness_month"] = SimpleNamespace(month_indexed_energy=True)
+    try:
+        lc._expect_month_indexed_registry(
+            "x", "harness_month", SimpleNamespace(month_indexed=False)
+        )
+        rows = [c for c in lc.CHECKS if "registry flag" in c.label]
+        assert rows and not rows[0].ok
+        lc.CHECKS.clear()
+        lc._expect_month_indexed_registry(
+            "x", "harness_month", SimpleNamespace(month_indexed=True)
+        )
+        rows = [c for c in lc.CHECKS if "registry flag" in c.label]
+        assert rows and rows[0].ok
+        lc.CHECKS.clear()
+        lc._expect_month_indexed_registry(
+            "x", "unknown_contract", SimpleNamespace(month_indexed=True)
+        )
+        assert not [c for c in lc.CHECKS if "registry flag" in c.label]
+    finally:
+        lc._CONTRACTS_BY_ID.pop("harness_month", None)
+        lc.CHECKS.clear()

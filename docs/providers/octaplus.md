@@ -63,6 +63,9 @@ OCTA+ serves" (both), overridden only for the Impact variant.
 
 Notes:
 
+- Smart Variable, Flux and Eco Flux carry `month_indexed_energy`, the registry twin
+  of the parsed `month_indexed`, which offers the optional ENTSO-E key on every solar
+  regime.
 - `octaplus_fixed_impact` is the only region-limited product. It sets
   `regions=frozenset({REGION_WALLONIA})` (`octaplus.py:110-116`) because
   Impact comptage is a Walloon CWaPE concept and the Flanders `FIXED` card
@@ -74,7 +77,7 @@ Notes:
   it the live price table would aggregate to hourly and the current / next-slot
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
-  long-term statistics). See `DynamicRates` docs in `base.py:197-224`.
+  long-term statistics). See `DynamicRates` docs in `base.py:209-236`.
 - 6 of the 8 products carry `spot_indexed_injection=True`. The flag does not
   mean a per-hour index, which is what this said: it means the injection needs
   spots the ENERGY leg never fetches, and a monthly Epex SPP index needs them
@@ -117,7 +120,7 @@ preferred headers.
 ### `fetch_for_month`
 
 OCTA+ declares no `fetch_for_month` (the `SupplierExtractor` is built with only
-`fetch` and `probe`, `octaplus.py:794-809`). There is no accessible archive:
+`fetch` and `probe`, `octaplus.py:800-817`). There is no accessible archive:
 cards are overwrite-in-place, so past months fall back to the current snapshot
 as a proxy. This is the documented behaviour for overwrite-in-place suppliers in
 `base.py:527-532`.
@@ -211,7 +214,7 @@ non-matching separator to force the raise). Wallonia adds
 
 The `TaxOverlay` sets `vat_rate=0.0` (`octaplus.py:228`): OCTA+ snapshots ship
 VAT-incl (TVAC) numbers, so the pricing engine must not re-scale them. See the
-`vat_rate` convention in `base.py:765-765`.
+`vat_rate` convention in `base.py:777-777`.
 
 ### Regional renewables
 

@@ -215,6 +215,10 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
     )
+    # The Cociter variable card is month-indexed, so the optional ENTSO-E key
+    # is offered on every regime; left blank here.
+    assert result["step_id"] == "injection_api_key"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     # Then the meters step (current_year_cost inputs); skipped here.
     assert result["step_id"] == "meters"
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
@@ -375,13 +379,51 @@ async def test_options_flow_spot_injection_api_key_is_skippable(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_options_flow_spot_injection_skipped_when_not_injection_regime(
+async def test_options_flow_month_indexed_energy_offers_the_key_on_every_regime(
     hass: HomeAssistant,
 ) -> None:
-    # Same contract on the 'none' regime must NOT ask for a key.
+    """Cociter Variable's ENERGY is indexed on the delivery month's BELIX, so
+    the optional key is worth offering with no solar at all: it is what lets
+    the running month be billed on its own mean rather than last month's. The
+    step stays skippable."""
     entry = _make_entry()
     entry.add_to_hass(hass)
     result = await _walk_to_solar_cociter_variable(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    assert result["step_id"] == "injection_api_key"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["step_id"] == "meters"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_spot_injection_skipped_when_not_injection_regime(
+    hass: HomeAssistant,
+) -> None:
+    """A card whose energy is fixed and only whose feed-in credit is
+    index-linked (Eneco Zon & Wind Vast) has nothing for a key to buy off the
+    injection regime, so the step is not offered there."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "power_fix"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "mono"}
+    )
+    assert result["step_id"] == "dso_tariff_mode"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
+    )
+    assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
     )
@@ -3257,6 +3299,9 @@ async def test_options_flow_contract_dates_round_trip(hass: HomeAssistant) -> No
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
     )
+    # Month-indexed card: the optional key step is offered, left blank.
+    assert result["step_id"] == "injection_api_key"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["step_id"] == "meters"
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY

@@ -318,6 +318,22 @@ def _contract_has_spot_injection(
     return any(c.id == contract_id and c.spot_indexed_injection for c in contracts)
 
 
+def _contract_is_month_indexed(
+    supplier_id: str | None, contract_id: str | None
+) -> bool:
+    """True when the chosen contract's ENERGY is indexed on the delivery
+    month's mean, so the optional ENTSO-E key is worth offering on every
+    solar regime. Resolved from the registry's ``Contract.month_indexed_energy``
+    flag, the registry twin of the parser's ``month_indexed``."""
+    if not supplier_id or not contract_id:
+        return False
+    try:
+        contracts = get_extractor(supplier_id).contracts
+    except ExtractorError:
+        return False
+    return any(c.id == contract_id and c.month_indexed_energy for c in contracts)
+
+
 def _sweep_candidates(
     region: str, group: str, professional: bool, own_contract: str
 ) -> list[tuple[str, Contract]]:

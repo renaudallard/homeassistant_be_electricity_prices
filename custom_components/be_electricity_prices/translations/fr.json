@@ -84,8 +84,8 @@
         }
       },
       "injection_api_key": {
-        "title": "Cle API ENTSO-E (injection)",
-        "description": "Facultatif. Ce contrat indexe l'injection sur le prix spot day-ahead et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, le prix d'injection reprend le montant imprime sur votre fiche tarifaire, celui du mois precedent, ou reste indisponible si votre fiche n'en imprime aucun.",
+        "title": "Cle API ENTSO-E (facultative)",
+        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, l'integration facture le montant imprime sur votre fiche tarifaire, celui du mois precedent, et le prix d'injection reste indisponible si votre fiche n'en imprime aucun.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }
@@ -363,8 +363,8 @@
         }
       },
       "injection_api_key": {
-        "title": "Cle API ENTSO-E (injection)",
-        "description": "Facultatif. Ce contrat indexe l'injection sur le prix spot day-ahead et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, le prix d'injection reprend le montant imprime sur votre fiche tarifaire, celui du mois precedent, ou reste indisponible si votre fiche n'en imprime aucun.",
+        "title": "Cle API ENTSO-E (facultative)",
+        "description": "Facultatif. Ce contrat indexe son prix de l'energie sur la moyenne day-ahead du mois de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et necessite une cle ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans cle, l'integration facture le montant imprime sur votre fiche tarifaire, celui du mois precedent, et le prix d'injection reste indisponible si votre fiche n'en imprime aucun.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }
