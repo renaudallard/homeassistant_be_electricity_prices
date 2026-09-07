@@ -2275,6 +2275,167 @@ async def test_snapshot_for_month_falls_back_to_current_when_no_archive(
     assert snap is current
 
 
+@pytest.mark.parametrize("kind", ["static", "dynamic"])
+async def test_year_cost_cached_only_reaches_no_archive(
+    hass: HomeAssistant, freezer: Any, kind: str
+) -> None:
+    """``cached_only`` has to hold for the WHOLE walk, not just the leg that
+    happens to be read first.
+
+    The year-to-date resolves months in four places -- the fee, prosumer and
+    capacity accumulators, the hourly replay's month cache, the spot-injection
+    credit's, and the static per-day branch's own resolver. Each is a separate
+    call site, and one that forgets to forward the flag puts a PDF fetch per
+    elapsed month back inside config-entry setup, which is issue #88 all over
+    again and would show up as nothing worse than a slow start.
+
+    So run the real engine on both dispatch paths and require that the
+    extractor is never asked for a month."""
+
+    freezer.move_to("2026-05-15 12:00:00+02:00")
+    today = dt_util.now().date()
+    jan_first = date(today.year, 1, 1)
+    asked: list[date] = []
+
+    async def _fetch_for_month(
+        _session: object, _contract: str, _region: str, year_month: date
+    ) -> SupplierSnapshot | None:
+        asked.append(year_month)
+        return make_snapshot(source_url="test://archived")
+
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_fetch_for_month,
+    )
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+
+    if kind == "static":
+        snap = make_snapshot(
+            energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
+            source_url="test://current",
+        )
+        entry = _yearly_entry(meter="mono", solar_regime="none")
+        cons = {d: 5.0 for d in _days_through(jan_first, today)}
+        with _patch_recorder_per_entity({"sensor.day_cons": cons}):
+            cost = await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                extractor,
+                snap,
+                entry,
+                cached_only=True,
+            )
+    else:
+        snap = make_snapshot(
+            contract="test_dynamic",
+            energy=DynamicRates(factor=1.0, base=0.0),
+            source_url="test://current",
+        )
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                "supplier": "test",
+                "contract": "test_dynamic",
+                "region": "wallonia",
+                "dso": "ores",
+                "meter": "dynamic",
+                "solar_regime": "none",
+                "consumption_kwh": "sensor.cons_total",
+                "dso_tariff_mode": "bi_horaire",
+            },
+        )
+        spot_hour = datetime(2026, 1, 6, 13, 0, tzinfo=UTC)
+
+        async def _fake_hourly(
+            _hass: object, entity_id: str, _start: date, _end: date
+        ) -> dict[datetime, float]:
+            return {spot_hour: 1.0} if entity_id == "sensor.cons_total" else {}
+
+        with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+            cost = await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                extractor,
+                snap,
+                entry,
+                historical_spots={spot_hour: 0.20},
+                cached_only=True,
+            )
+
+    assert asked == [], "setup must not wait on an archived card"
+    # And it is still a real bill, priced off the current card as the proxy.
+    assert cost is not None and cost > 0.0
+
+
+async def test_snapshot_for_month_cached_only_never_fetches(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The first coordinator tick runs inside config-entry setup, where one
+    archived PDF per elapsed month does not fit in Home Assistant's bootstrap
+    budget (issue #88). ``cached_only`` answers that walk from the cache: a
+    month it does not hold falls back to the current card, the same proxy a
+    supplier with no archive gets, and nothing is written so the warm-up
+    still asks the supplier for it.
+
+    A row it DOES hold is handed back even when it has expired: a caller that
+    cannot fetch keeps what it has rather than forfeiting a month it is
+    already holding."""
+
+    current = _archive_snapshot("current")
+    archived = _archive_snapshot("2026-06")
+    fetch_calls = 0
+
+    async def _fake_fetch(*_a: object, **_kw: object) -> SupplierSnapshot | None:
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return archived
+
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_fake_fetch,
+    )
+
+    async def _ask(month: date, *, cached_only: bool) -> SupplierSnapshot:
+        return await _snapshot_for_month(
+            hass,
+            MagicMock(),
+            extractor,
+            "test",
+            "wallonia",
+            month,
+            current,
+            cached_only=cached_only,
+        )
+
+    freezer.move_to("2026-06-15 09:00:00+02:00")
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+
+    assert await _ask(date(2026, 5, 1), cached_only=True) is current
+    assert fetch_calls == 0, "setup must not wait on an archived card"
+    # Nothing was cached either, so the warm-up that follows still fetches it.
+    assert await _ask(date(2026, 5, 1), cached_only=False) is archived
+    assert fetch_calls == 1
+    assert await _ask(date(2026, 5, 1), cached_only=True) is archived
+
+    # The running month's row can still move, and a day later a fetching
+    # caller re-asks for it. A cached_only caller keeps the row it has.
+    assert await _ask(date(2026, 6, 1), cached_only=False) is archived
+    assert fetch_calls == 2
+    freezer.move_to("2026-06-17 09:00:00+02:00")
+    assert await _ask(date(2026, 6, 1), cached_only=True) is archived
+    assert fetch_calls == 2
+    assert await _ask(date(2026, 6, 1), cached_only=False) is archived
+    assert fetch_calls == 3
+
+
 async def test_snapshot_for_month_caches_negative_results(
     hass: HomeAssistant,
 ) -> None:

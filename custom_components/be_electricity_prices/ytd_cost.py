@@ -142,6 +142,7 @@ async def _walk_ytd_months(
     today: date,
     *,
     contract: str | None = None,
+    cached_only: bool = False,
 ) -> AsyncIterator[tuple[SupplierSnapshot, date, int, int]]:
     """Yield ``(snap_m, month_first, days_in_full_month, days_in_ytd)``
     for each month from the year-to-date window start up through today.
@@ -167,6 +168,11 @@ async def _walk_ytd_months(
     ``contract`` overrides the entry's stored contract id; the
     OptionsFlow compare path uses this to walk months for an
     alternative supplier without mutating the live entry.
+
+    ``cached_only`` walks the same months without fetching any of them: every
+    month the cache does not already hold falls back to the current card. The
+    first coordinator tick uses it to stay off the network while it is running
+    inside config-entry setup.
     """
     region = entry.data.get(CONF_REGION, "")
     contract = contract or entry.data[CONF_CONTRACT]
@@ -174,7 +180,15 @@ async def _walk_ytd_months(
     while cur <= today:
         month_first = date(cur.year, cur.month, 1)
         snap_m = await _effective_snapshot_for_month(
-            hass, session, extractor, contract, region, month_first, snapshot, entry
+            hass,
+            session,
+            extractor,
+            contract,
+            region,
+            month_first,
+            snapshot,
+            entry,
+            cached_only=cached_only,
         )
         if cur.month == 12:
             next_first = date(cur.year + 1, 1, 1)
@@ -197,6 +211,7 @@ async def _ytd_static_fees(
     *,
     contract: str | None = None,
     meter: MeterType | None = None,
+    cached_only: bool = False,
 ) -> float:
     """Pro-rated YTD total of yearly_fixed_fee + 12*energy_fund using each
     month's archived snapshot.
@@ -213,7 +228,14 @@ async def _ytd_static_fees(
     days_in_year = 366 if calendar.isleap(today.year) else 365
     total = 0.0
     async for snap_m, _, _, days_in_ytd in _walk_ytd_months(
-        hass, session, extractor, snapshot, entry, today, contract=contract
+        hass,
+        session,
+        extractor,
+        snapshot,
+        entry,
+        today,
+        contract=contract,
+        cached_only=cached_only,
     ):
         annual = _annual_static_fees(
             snap_m, meter or entry.data.get(CONF_METER, METER_MONO), entry
@@ -231,6 +253,7 @@ async def _ytd_prosumer(
     today: date,
     *,
     contract: str | None = None,
+    cached_only: bool = False,
 ) -> float:
     """Sum the monthly prosumer fee across YTD using each month's archived
     snapshot's DSO overlay, so a CWaPE indexation that lands mid-year is
@@ -242,7 +265,14 @@ async def _ytd_prosumer(
 
     total = 0.0
     async for snap_m, _, days_in_full_month, days_in_ytd in _walk_ytd_months(
-        hass, session, extractor, snapshot, entry, today, contract=contract
+        hass,
+        session,
+        extractor,
+        snapshot,
+        entry,
+        today,
+        contract=contract,
+        cached_only=cached_only,
     ):
         overlay = snap_m.dsos.get(dso)
         monthly_fee = _prosumer_monthly_fee(overlay, snap_m, kva)
@@ -262,6 +292,7 @@ async def _ytd_capacity(
     billed_peak_kw: float,
     *,
     contract: str | None = None,
+    cached_only: bool = False,
 ) -> float:
     """Sum the monthly Flemish capacity charge across YTD, reading each
     month's archived DSO overlay so a VREG indexation landing mid-year is
@@ -283,7 +314,14 @@ async def _ytd_capacity(
 
     total = 0.0
     async for snap_m, _, days_in_full_month, days_in_ytd in _walk_ytd_months(
-        hass, session, extractor, snapshot, entry, today, contract=contract
+        hass,
+        session,
+        extractor,
+        snapshot,
+        entry,
+        today,
+        contract=contract,
+        cached_only=cached_only,
     ):
         monthly = _capacity_monthly_eur(snap_m.dsos.get(dso), billed_peak_kw)
         total += monthly * (days_in_ytd / days_in_full_month)
@@ -306,6 +344,7 @@ async def _ytd_hourly_energy(
     spp_weights: SppWeights | None = None,
     rlp_weights: RlpWeights | None = None,
     breakdown: dict[str, float] | None = None,
+    cached_only: bool = False,
 ) -> float | None:
     """YTD energy cost for hourly-billed contracts (TOU + dynamic).
 
@@ -382,7 +421,14 @@ async def _ytd_hourly_energy(
     await _top_up_today_hourly(hass, inj_ids, inj_per_hour, today)
 
     _snap_for = _month_snapshot_cache(
-        hass, session, extractor, contract, region, snapshot, entry
+        hass,
+        session,
+        extractor,
+        contract,
+        region,
+        snapshot,
+        entry,
+        cached_only=cached_only,
     )
 
     # Spot-monthly contracts bill every hour of a delivery month at that
@@ -646,6 +692,7 @@ async def _compute_current_year_cost(
     rlp_weights: RlpWeights | None = None,
     breakdown: dict[str, float] | None = None,
     billed_peak_kw: float = 0.0,
+    cached_only: bool = False,
 ) -> float | None:
     """Time-correct yearly bill from HA recorder + per-month tariff cards.
 
@@ -734,6 +781,15 @@ async def _compute_current_year_cost(
     on the walk already happening here rather than reading the recorder twice.
     It stays empty for the dynamic / spot-monthly / TOU (hourly) branches,
     which don't produce daily kWh totals.
+
+    ``cached_only`` prices every past month off whatever archived cards the
+    process already holds, fetching none. Only the coordinator's FIRST tick
+    passes it, because that tick runs inside config-entry setup and one PDF
+    per elapsed month does not fit in Home Assistant's bootstrap budget (see
+    :func:`snapshot_store._snapshot_for_month`). What it costs is the months
+    the cache is missing: they bill against the current card instead of their
+    own, exactly as a supplier with no archive does all year, until the
+    warm-up refresh lands.
     """
     today = dt_util.now().date()
     # contract / meter overrides let the OptionsFlow's compare path run
@@ -763,10 +819,25 @@ async def _compute_current_year_cost(
     window_start = ytd_window_start(entry, today)
 
     static_fees = await _ytd_static_fees(
-        hass, session, extractor, snapshot, entry, today, contract=contract, meter=meter
+        hass,
+        session,
+        extractor,
+        snapshot,
+        entry,
+        today,
+        contract=contract,
+        meter=meter,
+        cached_only=cached_only,
     )
     prosumer_ytd = await _ytd_prosumer(
-        hass, session, extractor, snapshot, entry, today, contract=contract
+        hass,
+        session,
+        extractor,
+        snapshot,
+        entry,
+        today,
+        contract=contract,
+        cached_only=cached_only,
     )
     capacity_ytd = await _ytd_capacity(
         hass,
@@ -777,6 +848,7 @@ async def _compute_current_year_cost(
         today,
         billed_peak_kw,
         contract=contract,
+        cached_only=cached_only,
     )
     fees = static_fees + prosumer_ytd + capacity_ytd
     if breakdown is not None:
@@ -817,6 +889,7 @@ async def _compute_current_year_cost(
             breakdown=breakdown,
             historical_spots=historical_spots or {},
             spot_quarters=spot_quarters,
+            cached_only=cached_only,
         )
         if dyn_energy is None:
             return fees
@@ -841,6 +914,7 @@ async def _compute_current_year_cost(
             monthly_mean=True,
             spp_weights=spp_weights,
             rlp_weights=rlp_weights,
+            cached_only=cached_only,
         )
         if monthly_energy is None:
             return fees
@@ -871,6 +945,7 @@ async def _compute_current_year_cost(
             contract=contract,
             meter=meter,
             breakdown=breakdown,
+            cached_only=cached_only,
         )
         if hourly_energy is None:
             return fees
@@ -886,7 +961,14 @@ async def _compute_current_year_cost(
                 today,
                 historical_spots,
                 _month_snapshot_cache(
-                    hass, session, extractor, contract, region, snapshot, entry
+                    hass,
+                    session,
+                    extractor,
+                    contract,
+                    region,
+                    snapshot,
+                    entry,
+                    cached_only=cached_only,
                 ),
             )
         return hourly_energy + fees
@@ -914,7 +996,15 @@ async def _compute_current_year_cost(
         if month_first in month_breakdowns:
             return month_breakdowns[month_first]
         snap_m = await _effective_snapshot_for_month(
-            hass, session, extractor, contract, region, month_first, snapshot, entry
+            hass,
+            session,
+            extractor,
+            contract,
+            region,
+            month_first,
+            snapshot,
+            entry,
+            cached_only=cached_only,
         )
         try:
             single_bd = static_breakdown(snap_m, dso, region, "single", dso_mode)
@@ -1041,7 +1131,14 @@ async def _compute_current_year_cost(
             today,
             historical_spots,
             _month_snapshot_cache(
-                hass, session, extractor, contract, region, snapshot, entry
+                hass,
+                session,
+                extractor,
+                contract,
+                region,
+                snapshot,
+                entry,
+                cached_only=cached_only,
             ),
         )
         # This regime has no compensation clamp, so the billed energy is

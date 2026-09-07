@@ -603,6 +603,8 @@ async def _snapshot_for_month(
     year_month: date,
     current_snapshot: "SupplierSnapshot",
     entry: ConfigEntry | None = None,
+    *,
+    cached_only: bool = False,
 ) -> "SupplierSnapshot":
     """Resolve the historical snapshot for ``year_month`` or fall back.
 
@@ -617,6 +619,16 @@ async def _snapshot_for_month(
     as parsed and each caller's own VAT / consumption facts are applied on
     the way out. ``current_snapshot`` is the caller's own and already
     resolved, so it is passed through untouched.
+
+    ``cached_only`` answers from the cache and never reaches the network: a
+    month with no row falls back to the current snapshot, the same proxy a
+    supplier without an archive gets. The first coordinator tick asks for it
+    because that tick runs inside config-entry setup, and one archived card
+    per elapsed month is not something setup can afford (Frank Energie's
+    cards take ~25 s each to lay out on a Raspberry Pi, so a September start
+    spent ~226 s there and Home Assistant cancelled the whole of bootstrap
+    stage 2 over it). The warm-up that follows fills the cache off the setup
+    path and asks for a refresh.
     """
 
     def resolved(snap: "SupplierSnapshot | None") -> "SupplierSnapshot":
@@ -637,10 +649,17 @@ async def _snapshot_for_month(
     if cache_key in cache:
         row = cache[cache_key]
         stamped = fetched_at.get(cache_key)
-        if not _month_row_is_provisional(row, year_month, today) or (
-            stamped is not None
-            and dt_util.utcnow() - stamped < _MONTHLY_PROVISIONAL_TTL
+        if (
+            cached_only
+            or not _month_row_is_provisional(row, year_month, today)
+            or (
+                stamped is not None
+                and dt_util.utcnow() - stamped < _MONTHLY_PROVISIONAL_TTL
+            )
         ):
+            # A caller that cannot fetch keeps the row it has, expired or not:
+            # dropping it here would forfeit a month it is already holding and
+            # hand back the current card in its place.
             return resolved(row)
         # Provisional and past its TTL: drop the row and re-ask. Without this
         # a supplier correcting the running month's card moved current_price
@@ -656,6 +675,10 @@ async def _snapshot_for_month(
         # rather than of the month, so this row is never provisional.
         cache[cache_key] = None
         fetched_at[cache_key] = dt_util.utcnow()
+        return current_snapshot
+    if cached_only:
+        # Uncached and no fetch allowed: the documented fallback. Nothing is
+        # written to the cache, so the warm-up still asks the supplier.
         return current_snapshot
     # Negative cache: a transient fetch_for_month failure is intentionally
     # NOT written to ``cache`` (a cached None means "no archive for

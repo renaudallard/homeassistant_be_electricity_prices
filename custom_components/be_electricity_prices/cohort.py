@@ -616,6 +616,8 @@ async def _effective_snapshot_for_month(
     year_month: date,
     current_snapshot: "SupplierSnapshot",
     entry: ConfigEntry,
+    *,
+    cached_only: bool = False,
 ) -> "SupplierSnapshot":
     """Delivery-month snapshot with the signing cohort's energy leg spliced in.
 
@@ -625,6 +627,11 @@ async def _effective_snapshot_for_month(
     energy so a locked contract bills its own rate every month while network
     tariffs and taxes still track the delivery month. A no-op (returns the
     plain delivery-month snapshot) when there is no cohort override.
+
+    ``cached_only`` is passed straight through to the delivery-month lookup
+    (see :func:`_snapshot_for_month`). The cohort leg below is NOT gated by
+    it: the signing month is what the live price table is already built from
+    on the same tick, so its row is in the cache by the time this runs.
     """
     snap_m = await _snapshot_for_month(
         hass,
@@ -635,6 +642,7 @@ async def _effective_snapshot_for_month(
         year_month,
         current_snapshot,
         entry,
+        cached_only=cached_only,
     )
     legs = await _cohort_legs(
         hass, session, extractor, contract, region, entry, current_snapshot
@@ -668,20 +676,31 @@ def _month_snapshot_cache(
     region: str,
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
+    *,
+    cached_only: bool = False,
 ) -> Callable[[date], Awaitable[SupplierSnapshot]]:
     """Return a memoised ``snap_for(month_first)`` fetching each delivery
     month's effective snapshot once.
 
     The live YTD cost and both backfill passes walk the same months
     repeatedly; the per-call cache keeps archive fetches to at most one
-    per month.
+    per month. ``cached_only`` forwards the no-network mode the first
+    coordinator tick runs its year-to-date walk in.
     """
     cache: dict[date, SupplierSnapshot] = {}
 
     async def _snap_for(month_first: date) -> SupplierSnapshot:
         if month_first not in cache:
             cache[month_first] = await _effective_snapshot_for_month(
-                hass, session, extractor, contract, region, month_first, snapshot, entry
+                hass,
+                session,
+                extractor,
+                contract,
+                region,
+                month_first,
+                snapshot,
+                entry,
+                cached_only=cached_only,
             )
         return cache[month_first]
 

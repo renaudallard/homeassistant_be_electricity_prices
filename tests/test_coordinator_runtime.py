@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -4346,12 +4347,18 @@ async def test_the_first_tick_fetches_the_month_not_the_year(
         assert windows == [(date(2026, 8, 1), date(2026, 8, 31))], (
             "the tick setup waits on must not walk back to 1 January"
         )
-        assert len(scheduled) == 1, "the rest of the year is deferred, not dropped"
+        deferred = {coro.__name__: coro for coro in scheduled}
+        assert set(deferred) == {"_fill_year_spots", "_fill_month_cards"}, (
+            "the rest of the year is deferred, not dropped"
+        )
+        # The archived cards have their own test; close it so the loop does
+        # not warn about a coroutine nobody awaited.
+        deferred["_fill_month_cards"].close()
 
         # What was deferred is the whole year, and it asks for a refresh so the
         # past hours the first tick could not price land in the sensor.
         coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
-        await scheduled[0]
+        await deferred["_fill_year_spots"]
         assert windows[-1] == (date(2026, 1, 1), date(2026, 8, 31))
         coord.async_request_refresh.assert_awaited_once()
 
@@ -4365,7 +4372,122 @@ async def test_the_first_tick_fetches_the_month_not_the_year(
         # And the deferral is once per coordinator, not once per tick.
         await coord._update_body()
         assert windows[-1] == (date(2026, 1, 1), date(2026, 8, 31))
+        assert len(scheduled) == 2
+
+
+async def test_the_first_tick_prices_the_year_from_cards_in_hand(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The year-to-date walk bills each past month with that month's own
+    archived card, one PDF apiece. That runs inside config-entry setup, and a
+    Frank Energie card takes about 25 s to lay out on a Raspberry Pi: 226 s
+    for a September start, against the 300 s Home Assistant allows the whole
+    of bootstrap stage 2. Setup was cancelled over it (issue #88).
+
+    So the first tick prices the year from the cards already cached and
+    schedules the fetch of the rest as a background task. Every later tick
+    walks the months for real, which with a warm cache costs nothing.
+    """
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=DynamicRates(factor=1.0, base=0.01))
+    coord._year_spots_deferred = False
+
+    modes: list[bool] = []
+    scheduled: list[Any] = []
+
+    async def _ytd(*_a: Any, **kw: Any) -> float:
+        modes.append(bool(kw.get("cached_only")))
+        return 0.0
+
+    def _capture_task(_hass: Any, coro: Any, _name: str) -> Any:
+        scheduled.append(coro)
+        return None
+
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator"
+            "._compute_current_year_cost",
+            _ytd,
+        ),
+        patch.object(coord._store, "async_save", AsyncMock()),
+        patch.object(entry, "async_create_background_task", _capture_task),
+    ):
+        await coord._update_body()
+        assert modes == [True], "setup must not wait on one PDF per elapsed month"
+        assert [coro.__name__ for coro in scheduled] == ["_fill_month_cards"]
+        scheduled[0].close()
+
+        # Once per coordinator, not once per tick: with the cache warm the
+        # walk is free, and skipping it would keep serving the proxy card.
+        await coord._update_body()
+        assert modes == [True, False]
         assert len(scheduled) == 1
+
+
+async def test_fill_month_cards_warms_the_year_then_asks_for_a_refresh(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The deferred fill fetches every month of the year-to-date window and
+    then asks for a refresh, so the months the first tick billed against the
+    current card are re-billed against their own.
+
+    A restart on a warm cache fetches nothing and must not ask for an extra
+    full tick per entry."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=DynamicRates(factor=1.0, base=0.01))
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+
+    asked: list[date] = []
+    published = True
+
+    async def _fetch_for_month(
+        _session: Any, _contract: str, _region: str, year_month: date
+    ) -> SupplierSnapshot | None:
+        asked.append(year_month)
+        if not published:
+            return None
+        return make_snapshot(publication_label=f"{year_month:%Y-%m}")
+
+    extractor = make_stub_extractor(extractor_id="cociter")
+    extractor = replace(extractor, fetch_for_month=_fetch_for_month)
+    _monthly_snapshots(hass).clear()
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._fill_month_cards()
+        assert asked == [date(2026, m, 1) for m in range(1, 9)]
+        coord.async_request_refresh.assert_awaited_once()
+
+        # Second pass, straight away: every row is cached, the running
+        # month's inside its TTL, so the walk touches the network at all.
+        coord.async_request_refresh.reset_mock()
+        asked.clear()
+        await coord._fill_month_cards()
+        assert asked == []
+        coord.async_request_refresh.assert_not_awaited()
+
+        # The month rolls over: August has closed and is a historical fact
+        # now, so it is never asked for again, while September is new and its
+        # card is not out yet. Asking and getting nothing back is not a card
+        # the walk did not have, so it costs no extra tick either.
+        freezer.move_to("2026-09-01 10:00:00+02:00")
+        published = False
+        await coord._fill_month_cards()
+        assert asked == [date(2026, 9, 1)]
+        coord.async_request_refresh.assert_not_awaited()
 
 
 def _ranking(ran_at: datetime) -> Any:

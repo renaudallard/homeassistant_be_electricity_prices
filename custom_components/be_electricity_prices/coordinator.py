@@ -43,6 +43,7 @@ from .coordinator_spots import _SpotsMixin
 
 from .cohort import (
     _cohort_legs,
+    _effective_snapshot_for_month,
     ytd_window_start,
 )
 from .fees import (
@@ -62,6 +63,7 @@ from .snapshot_store import (
     SNAPSHOT_STALE_DAYS,
     _MigratingStore,
     _bump_tuple_generation,
+    archived_months_present,
     _drop_monthly_rows,
     _shared_failed_fetches,
     _shared_snapshots,
@@ -411,6 +413,9 @@ class BePricesCoordinator(
         # cannot do without, because that tick is what the config flow's final
         # step is waiting on.
         self._year_spots_deferred = True
+        # Same deal for the archived tariff cards the year-to-date walk bills
+        # each past month with. See _fill_month_cards.
+        self._month_cards_deferred = True
         # Synergrid solar production profile: hourly weights keyed by UTC
         # (month, day, hour), for SPP-weighted custom injection. Persisted so a
         # restart doesn't force a fresh 52 MB download; refreshed monthly (the
@@ -999,6 +1004,22 @@ class BePricesCoordinator(
             injection_snapshot, self.entry, spot_prices
         )
         ytd_breakdown: dict[str, float] = {}
+        # FIRST tick only, and for the same reason the year's spots are
+        # deferred above: this one runs inside config-entry setup. The
+        # year-to-date walk bills each past month with that month's own
+        # archived card, one PDF apiece, and a Frank Energie card takes about
+        # 25 s to lay out on a Raspberry Pi -- 226 s for a September start,
+        # against the 300 s Home Assistant allows the whole of bootstrap
+        # stage 2. That is what cancelled setup in issue #88.
+        #
+        # So walk the months against whatever cards the process already holds
+        # (after a restart, the ones restored from the store), and fetch the
+        # rest in the background. What the deferral costs is the months still
+        # missing: they bill their fees, network and tax legs off the current
+        # card rather than their own, which is what a supplier with no archive
+        # bills all year anyway, and the refresh the fill requests puts the
+        # right ones back.
+        cached_months_only = self._month_cards_deferred
         current_year_cost = await _compute_current_year_cost(
             self.hass,
             self._session,
@@ -1013,7 +1034,15 @@ class BePricesCoordinator(
             ),
             breakdown=ytd_breakdown,
             billed_peak_kw=billed_peak,
+            cached_only=cached_months_only,
         )
+        if cached_months_only:
+            self._month_cards_deferred = False
+            self.entry.async_create_background_task(
+                self.hass,
+                self._fill_month_cards(),
+                f"{DOMAIN}_month_cards_{self.entry.entry_id}",
+            )
         projection_breakdown: dict[str, Any] = {}
         projected_year_cost = await _compute_projected_year_cost(
             self.hass,
@@ -1092,6 +1121,61 @@ class BePricesCoordinator(
         before = (len(self._historical_spots), len(self._historical_spot_quarters))
         await self._ensure_historical_spots(ytd_window_start(self.entry, today), today)
         after = (len(self._historical_spots), len(self._historical_spot_quarters))
+        if self._unloaded or after == before:
+            return
+        await self.async_request_refresh()
+
+    def _ytd_months(self, today: date) -> list[date]:
+        """First of each month the year-to-date walk covers, up to today."""
+        months: list[date] = []
+        cur = ytd_window_start(self.entry, today)
+        while cur <= today:
+            months.append(date(cur.year, cur.month, 1))
+            cur = (
+                date(cur.year + 1, 1, 1)
+                if cur.month == 12
+                else date(cur.year, cur.month + 1, 1)
+            )
+        return months
+
+    async def _fill_month_cards(self) -> None:
+        """Fetch the year's archived tariff cards, off the setup path.
+
+        Scheduled by the first tick, which priced the year-to-date from the
+        cards already in hand so that config-entry setup did not wait on one
+        PDF per elapsed month (issue #88). Runs as an entry-tied background
+        task, so unloading the entry cancels it.
+
+        Failures need no handling here: _snapshot_for_month logs the month it
+        could not fetch, leaves the row uncached and hands back the current
+        card, which is the same proxy the deferred tick already billed with.
+
+        The refresh is only asked for when the walk actually retrieved a card
+        the tick did not have. A restart on a supplier with no archive, or one
+        whose months are all restored from the store, changes nothing, and an
+        extra full tick per entry per restart would buy nothing.
+        """
+        if self._snapshot is None:
+            return
+        supplier, contract, region = self._supplier_tuple
+        extractor = get_extractor(supplier)
+        today = dt_util.now().date()
+        months = self._ytd_months(today)
+        before = archived_months_present(self.hass, supplier, contract, region, months)
+        for month_first in months:
+            if self._unloaded:
+                return
+            await _effective_snapshot_for_month(
+                self.hass,
+                self._session,
+                extractor,
+                contract,
+                region,
+                month_first,
+                self._snapshot,
+                self.entry,
+            )
+        after = archived_months_present(self.hass, supplier, contract, region, months)
         if self._unloaded or after == before:
             return
         await self.async_request_refresh()
