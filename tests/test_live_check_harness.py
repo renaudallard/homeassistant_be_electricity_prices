@@ -1352,6 +1352,64 @@ def test_a_tou_card_losing_its_injection_triplet_fails() -> None:
     assert all(c.ok for c in lc.CHECKS), [c.label for c in lc.CHECKS if not c.ok]
 
 
+def test_a_card_paying_back_the_whole_index_passes_a_unit_slip_does_not() -> None:
+    """The factor ceiling is a unit check, not an economic one.
+
+    Cards state their injection coefficient in c/kWh per EUR/MWh, so the
+    parser owes a x10 to reach EUR/kWh per EUR/kWh and a miss lands an order
+    of magnitude out. How MUCH of the index a supplier hands back is its own
+    call: Engie's September 2026 Flextime card credits 0,1001 x EPEXDAM on
+    the peak slot, which is 100,1% of the index, and the old ceiling of 1.0
+    read that real card as a break (issue #87).
+    """
+    inj = SimpleNamespace(
+        current=0.05836,
+        factor=None,
+        base=None,
+        spp_indexed=False,
+        month_indexed=True,
+        peak=0.12975,
+        transition=0.05836,
+        offpeak=0.00043,
+        factor_peak=1.001,
+        base_peak=0.0003,
+        factor_transition=0.449,
+        base_transition=0.0003,
+        factor_offpeak=0.001,
+        base_offpeak=0.0003,
+    )
+    lc._validate_injection("x", SimpleNamespace(injection=inj), "triplet")
+    assert all(c.ok for c in lc.CHECKS), [c.label for c in lc.CHECKS if not c.ok]
+
+    # The x10 the parser owes, dropped: still caught.
+    lc.CHECKS.clear()
+    inj.factor_peak = 10.01
+    lc._validate_injection("x", SimpleNamespace(injection=inj), "triplet")
+    rows = [c for c in lc.CHECKS if "peak injection factor" in c.label]
+    assert rows and not rows[0].ok
+
+    # Same story on the scalar shape, which shares the bound.
+    lc.CHECKS.clear()
+    scalar = SimpleNamespace(
+        current=0.0476,
+        factor=1.001,
+        base=-0.0265,
+        spp_indexed=False,
+        month_indexed=True,
+        peak=None,
+        transition=None,
+        offpeak=None,
+    )
+    lc._validate_injection("x", SimpleNamespace(injection=scalar), "month")
+    assert all(c.ok for c in lc.CHECKS), [c.label for c in lc.CHECKS if not c.ok]
+
+    lc.CHECKS.clear()
+    scalar.factor = 10.01
+    lc._validate_injection("x", SimpleNamespace(injection=scalar), "month")
+    rows = [c for c in lc.CHECKS if "month injection factor" in c.label]
+    assert rows and not rows[0].ok
+
+
 @pytest.fixture
 def _bound_rate_types() -> Iterator[None]:
     """Bind the rate classes _validate_energy dispatches on.

@@ -2176,13 +2176,17 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         )
         # Presence alone would ship a coefficient drift green. The old
         # "monthly" pin at least guaranteed structurally that no coefficient
-        # could reach the bake; now that one does, bound it. A feed-in
-        # formula redistributes a FRACTION of the spot, so the factor sits
-        # below 1, and the offset is a small deduction in EUR/kWh.
+        # could reach the bake; now that one does, bound it. The ceiling
+        # catches a UNIT slip, not an economic one: the cards state their
+        # coefficient in c/kWh per EUR/MWh, so a missing conversion lands an
+        # order of magnitude out. Paying back the whole index is a tariff a
+        # supplier is free to publish - Engie's September 2026 Flextime card
+        # does exactly that on its peak slot - so a 1.0 ceiling only cries
+        # wolf. The offset stays a small deduction in EUR/kWh.
         if factor is not None:
             _expect(
-                f"{prefix}: {index} injection factor in (0, 1]",
-                0.0 < factor <= 1.0,
+                f"{prefix}: {index} injection factor in (0, 2]",
+                0.0 < factor <= 2.0,
                 detail=f"factor={factor}",
             )
         if base is not None:
@@ -2219,7 +2223,7 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         )
         # The triplet is last month's figure; the three pairs plus the flag
         # are what bill the delivery month. Bounded like the "month" shape:
-        # each pair redistributes a fraction of the index plus a small offset.
+        # each pair is an order-of-magnitude check plus a small offset.
         pairs = {
             slot: (
                 getattr(injection, f"factor_{slot}", None),
@@ -2237,8 +2241,8 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         for slot, (slot_factor, slot_base) in pairs.items():
             if slot_factor is not None:
                 _expect(
-                    f"{prefix}: {slot} injection factor in (0, 1]",
-                    0.0 < slot_factor <= 1.0,
+                    f"{prefix}: {slot} injection factor in (0, 2]",
+                    0.0 < slot_factor <= 2.0,
                     detail=f"factor={slot_factor}",
                 )
             if slot_base is not None:
