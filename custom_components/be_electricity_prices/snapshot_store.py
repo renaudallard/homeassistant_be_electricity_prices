@@ -594,6 +594,96 @@ def archived_months_present(
     return out
 
 
+def monthly_rows_to_store(
+    hass: HomeAssistant,
+    supplier: str,
+    contract: str,
+    region: str,
+    months: "Sequence[date]",
+) -> dict[str, dict[str, Any]]:
+    """Serialise this contract's SETTLED per-month archive rows for the Store.
+
+    The per-month cache lives in memory, so every Home Assistant restart used
+    to re-fetch one archived card per elapsed month. That is one PDF apiece,
+    about 25 s each for Frank Energie on a Raspberry Pi, and it is what issue
+    #88 spent its bootstrap budget on. A closed month's card is a historical
+    fact, so writing it to disk retires that cost for good rather than merely
+    moving it off the setup path.
+
+    Only rows ``_month_row_is_provisional`` calls settled are written: a
+    cached ``None`` says the archive had nothing at the moment it was asked,
+    the running month's card can still be corrected, and a row the extractor
+    flagged provisional is waiting on the index the next card prints. None of
+    the three is a fact worth outliving the process.
+
+    ``months`` bounds the write to the months the year-to-date walk actually
+    asks for, so a blob does not accumulate every month an entry has ever
+    walked (about 5 KB per row).
+    """
+    today = dt_util.now().date()
+    cache = _monthly_snapshots(hass)
+    stamped = _monthly_fetched_at(hass)
+    out: dict[str, dict[str, Any]] = {}
+    for month in months:
+        month_id = f"{month.year:04d}-{month.month:02d}"
+        cache_key = (supplier, contract, region, month_id)
+        snap = cache.get(cache_key)
+        if snap is None or _month_row_is_provisional(snap, month, today):
+            continue
+        out[month_id] = _snapshot_to_dict(
+            snap, stamped.get(cache_key) or dt_util.utcnow()
+        )
+    return out
+
+
+def restore_monthly_rows(
+    hass: HomeAssistant,
+    supplier: str,
+    contract: str,
+    region: str,
+    rows: dict[str, Any],
+) -> int:
+    """Seed the per-month archive cache from a stored blob, returning the
+    number of months restored.
+
+    A row already in the cache is left alone: this process fetched it, which
+    outranks what the last one wrote. A row that no longer parses, or that was
+    written under an older snapshot schema, is dropped rather than migrated --
+    the same healing gate the live snapshot uses, so a parser fix reaches
+    these months as soon as ``_SNAPSHOT_SCHEMA_VERSION`` moves. And a row that
+    is no longer settled is dropped too: the file may be older than the clock
+    is, and the running month's card must be re-asked whatever the disk says.
+    """
+    today = dt_util.now().date()
+    cache = _monthly_snapshots(hass)
+    stamped = _monthly_fetched_at(hass)
+    restored = 0
+    for month_id, data in rows.items():
+        if not isinstance(month_id, str) or not isinstance(data, dict):
+            continue
+        try:
+            month = date(int(month_id[:4]), int(month_id[5:7]), 1)
+        except ValueError:
+            continue
+        cache_key = (supplier, contract, region, month_id)
+        if cache_key in cache:
+            continue
+        try:
+            snap = _snapshot_from_dict(data)
+        except (KeyError, ValueError, TypeError) as err:
+            _LOGGER.debug("discarding stored archive row %s: %s", month_id, err)
+            continue
+        if _month_row_is_provisional(snap, month, today):
+            continue
+        cache[cache_key] = snap
+        try:
+            stamped[cache_key] = datetime.fromisoformat(data["_cached_at"])
+        except (KeyError, TypeError, ValueError):
+            stamped[cache_key] = dt_util.utcnow()
+        restored += 1
+    return restored
+
+
 async def _snapshot_for_month(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,

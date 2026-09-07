@@ -3969,6 +3969,91 @@ def _dynamic_entry() -> MockConfigEntry:
     )
 
 
+async def test_archived_month_cards_survive_a_restart(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A closed month's card is a historical fact, so it must round-trip
+    through the Store. Without that every restart re-fetched one archived PDF
+    per elapsed month -- 226 s of Raspberry Pi CPU on Frank Energie, which is
+    what cancelled setup in issue #88.
+
+    The running month is NOT written: its card can still be corrected, and
+    this repo treats that as normal."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coord
+    tuple_key = ("cociter", "cociter_dynamic", "wallonia")
+    closed = make_snapshot(publication_label="2026-07")
+    running = make_snapshot(publication_label="2026-08")
+    _monthly_snapshots(hass).clear()
+    _monthly_snapshots(hass)[(*tuple_key, "2026-07")] = closed
+    _monthly_snapshots(hass)[(*tuple_key, "2026-08")] = running
+    # "The archive had nothing when asked" is a statement about the calendar,
+    # not a fact about the month, so it is not written either.
+    _monthly_snapshots(hass)[(*tuple_key, "2026-06")] = None
+
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+
+    assert set(saved["monthly_cards"]) == {"2026-07"}
+
+    _monthly_snapshots(hass).clear()
+    fresh = BePricesCoordinator(hass, entry)
+    with patch.object(fresh._store, "async_load", AsyncMock(return_value=saved)):
+        await fresh.async_load_persistent()
+
+    restored = _monthly_snapshots(hass)[(*tuple_key, "2026-07")]
+    assert restored is not None
+    assert restored.publication_label == "2026-07"
+    assert (*tuple_key, "2026-08") not in _monthly_snapshots(hass), (
+        "the running month has to be asked for again"
+    )
+
+
+async def test_restored_month_cards_are_dropped_by_a_schema_bump(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Stored archive rows heal on a parser fix the same way the live
+    snapshot does: a row written under an older snapshot schema is discarded
+    rather than migrated, so the next walk re-parses that month's card.
+
+    A row for a supplier tuple the entry no longer holds is never adopted at
+    all -- it is another contract's published rates."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    row = _snapshot_to_dict(
+        make_snapshot(publication_label="2026-07"), datetime(2026, 8, 1, tzinfo=UTC)
+    )
+    stale = dict(row, _schema_version=_SNAPSHOT_SCHEMA_VERSION - 1)
+    payload = {
+        "entry_supplier": "cociter",
+        "entry_contract": "cociter_dynamic",
+        "entry_region": "wallonia",
+        "monthly_cards": {"2026-07": stale},
+    }
+    _monthly_snapshots(hass).clear()
+    coord = BePricesCoordinator(hass, entry)
+    with patch.object(coord._store, "async_load", AsyncMock(return_value=payload)):
+        await coord.async_load_persistent()
+    assert _monthly_snapshots(hass) == {}
+
+    # Same row, current schema, but written for another contract.
+    payload["monthly_cards"] = {"2026-07": row}
+    payload["entry_contract"] = "cociter_variable"
+    fresh = BePricesCoordinator(hass, entry)
+    with patch.object(fresh._store, "async_load", AsyncMock(return_value=payload)):
+        await fresh.async_load_persistent()
+    assert _monthly_snapshots(hass) == {}
+
+
 async def test_spot_cache_survives_a_restart(hass: HomeAssistant, freezer: Any) -> None:
     """The day-ahead curve must round-trip through the Store, so an ENTSO-E
     outage spanning a Home Assistant restart still has something to price

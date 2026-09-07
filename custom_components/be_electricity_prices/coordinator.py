@@ -70,6 +70,8 @@ from .snapshot_store import (
     _SNAPSHOT_SCHEMA_VERSION,
     _snapshot_from_dict,
     _snapshot_to_dict,
+    monthly_rows_to_store,
+    restore_monthly_rows,
 )
 from .spot_stats import (
     _energy_is_quarter_hourly,
@@ -547,6 +549,23 @@ class BePricesCoordinator(
                     for key, kw in history.items()
                     if isinstance(key, str) and isinstance(kw, (int, float))
                 }
+        # The archived per-month cards, behind the same tuple gate as the
+        # snapshot: they are one contract's published rates, and serving them
+        # for another one would bill the year-to-date off a card the household
+        # never had. Restoring them is what keeps a restart from re-fetching a
+        # PDF per elapsed month -- 226 s of it on a Raspberry Pi with Frank
+        # Energie, which is what cancelled setup in issue #88.
+        stored_months = stored.get("monthly_cards")
+        if isinstance(stored_months, dict) and not tuple_mismatch:
+            restored = restore_monthly_rows(
+                self.hass, *self._supplier_tuple, stored_months
+            )
+            if restored:
+                _LOGGER.debug(
+                    "restored %d archived month card(s) for %s",
+                    restored,
+                    self.entry.entry_id,
+                )
         # Same tuple_mismatch gate as the snapshot above: ENTSO-E spots
         # were collected while the entry was on a *dynamic* contract on
         # the previous tuple. After an OptionsFlow swap to a static
@@ -1432,6 +1451,17 @@ class BePricesCoordinator(
         # running across a year boundary doesn't retain the prior year's
         # ~8760 hourly entries forever.
         self._prune_historical_spots()
+        # The archived cards each past month is billed with. Written under
+        # the tuple guard above like everything else, and only for the months
+        # the year-to-date window covers, so the blob does not grow past a
+        # year of them (about 5 KB apiece).
+        monthly_cards = monthly_rows_to_store(
+            self.hass,
+            *self._supplier_tuple,
+            self._ytd_months(dt_util.now().date()),
+        )
+        if monthly_cards:
+            payload["monthly_cards"] = monthly_cards
         if self._historical_spots:
             payload["historical_spots"] = {
                 h.isoformat(): v for h, v in self._historical_spots.items()
