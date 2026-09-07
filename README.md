@@ -319,8 +319,8 @@ Download the latest [release zip](https://github.com/renaudallard/homeassistant_
 extract it under `<config>/custom_components/be_electricity_prices/`, and
 restart Home Assistant.
 
-`pypdf`, `pdfplumber` and `defusedxml` are the only extra runtime
-dependencies; Home Assistant installs them automatically from the
+`pypdf`, `pdfplumber`, `defusedxml` and `pyxlsb` are the only extra
+runtime dependencies; Home Assistant installs them automatically from the
 manifest.
 
 ## Configuration
