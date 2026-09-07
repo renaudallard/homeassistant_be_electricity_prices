@@ -34,6 +34,7 @@ from __future__ import annotations
 from datetime import UTC
 from datetime import date
 from datetime import datetime
+from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.util import dt as dt_util
 from statistics import fmean
@@ -52,6 +53,10 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .pricing import (
+    DsoTariffMode,
+    MeterType,
+    dso_impact_band,
+    is_offpeak,
     slot_start,
 )
 from .providers.base import (
@@ -302,13 +307,34 @@ def _rlp_month_mean(
     num = 0.0
     den = 0.0
     for ts, price in bucket.get((year, month), ()):
-        local = dt_util.as_local(ts)
-        weight = weights.get((local.month, local.day, local.hour))
+        weight = _rlp_hour_weight(weights, dt_util.as_local(ts))
         if weight is None:
             continue
         num += price * weight
         den += weight
     return num / den if den else None
+
+
+def _rlp_hour_weight(weights: RlpWeights | None, local: datetime) -> float | None:
+    """The profile's weight for one local hour, or ``None`` without a profile
+    or a row for it.
+
+    Synergrid keys the workbook by local clock time. The spring changeover
+    day has no 02:00 row, and no instant reads as that hour, so nothing asks
+    for it; the autumn one holds both 02:00 instants' quarters under a single
+    key (0,000173 against 0,000086 for its neighbours in the 2026 file). Each
+    of the two UTC hours that read as 02:00 therefore gets half of that key,
+    so the hour weighs as the two hours it is rather than four. A wall time
+    is ambiguous when its two folds carry different offsets.
+    """
+    if not weights:
+        return None
+    weight = weights.get((local.month, local.day, local.hour))
+    if weight is None:
+        return None
+    if local.replace(fold=0).utcoffset() != local.replace(fold=1).utcoffset():
+        return weight / 2.0
+    return weight
 
 
 def _rlp_weighted_month_mean(
@@ -569,3 +595,102 @@ def _spp_injection_spot(
     if plain_key not in cache:
         cache[plain_key] = _covered_month_mean(bucket, year, month, today)
     return cache[plain_key]
+
+
+def _register_for(
+    local: datetime, meter: MeterType, dso_mode: DsoTariffMode, region: str
+) -> str:
+    """The meter register a local hour's net kWh lands in under yearly net
+    metering: the dedicated circuit for an exclusive-night meter, the CWaPE
+    band under Impact comptage (an SMR3 meter counts per band), day or night
+    for a bi-hourly or digital meter on the bi-hourly schedule, one register
+    for a mono meter."""
+    if meter == "exclusive_night":
+        return "night"
+    if dso_mode == "impact":
+        return dso_impact_band(local)
+    if meter in ("bi", "dynamic"):
+        return "offpeak" if is_offpeak(local, region) else "peak"
+    return "single"
+
+
+def _day_register_weights(
+    weights: RlpWeights | None, day: date, bi_capable: bool, region: str
+) -> dict[str, float]:
+    """A day's RLP mass per register, for the static per-day walk: the sum of
+    the day's hourly weights landing in ``peak`` / ``offpeak`` on a bi-hourly
+    meter, or all of them under ``single``. Empty when no profile is loaded,
+    which the allocation reads as "price the slices as metered"."""
+    if not weights:
+        return {}
+    out: dict[str, float] = {}
+    start = dt_util.start_of_local_day(day)
+    for offset in range(25):
+        local = start + timedelta(hours=offset)
+        if local.date() != day:
+            break
+        weight = weights.get((day.month, day.day, local.hour))
+        if weight is None:
+            continue
+        register = (
+            ("offpeak" if is_offpeak(local, region) else "peak")
+            if bi_capable
+            else "single"
+        )
+        out[register] = out.get(register, 0.0) + weight
+    return out
+
+
+class _NetAllocation:
+    """Yearly net metering priced the way a yearly-read meter is settled.
+
+    Under the Walloon compensation regime the meter runs backwards and the DSO
+    reports one net figure per register for the year. The supplier then spreads
+    that volume over the year by the residential load profile and prices each
+    slice at its month's tariff; Eneco's own worked example says so ("het
+    gebruik van Synthetic Load Profiles om de spreiding van het verbruik over
+    het jaar heen te simuleren"). Netting the metered hours as they happen
+    instead priced a summer surplus at summer rates against a winter draw at
+    winter rates, a different number whenever the tariff moves within the year
+    and not the one on the bill.
+
+    ``add`` takes one slice, an hour or a day, with the register it lands in,
+    its metered net kWh, the all-in rate its month bills and its RLP weight.
+    ``billed`` prices each register's clamped net at the weight-averaged rate
+    of that register's slices when ``allocated``, else at the slices' own
+    rates as metered, which is the pre-profile behaviour. Registers are clamped
+    one by one: each is a counter, and one that ends the year below where it
+    started is forfeited on its own. ``raw`` is the same sum unclamped, for the
+    diagnostics that tell the zero floor from a stalled meter.
+    """
+
+    def __init__(self) -> None:
+        self._net: dict[str, float] = {}
+        self._direct: dict[str, float] = {}
+        self._weight: dict[str, float] = {}
+        self._weighted_rate: dict[str, float] = {}
+
+    def add(
+        self, register: str, net_kwh: float, all_in: float, weight: float | None
+    ) -> None:
+        self._net[register] = self._net.get(register, 0.0) + net_kwh
+        self._direct[register] = self._direct.get(register, 0.0) + net_kwh * all_in
+        if weight:
+            self._weight[register] = self._weight.get(register, 0.0) + weight
+            self._weighted_rate[register] = (
+                self._weighted_rate.get(register, 0.0) + weight * all_in
+            )
+
+    def _priced(self, register: str, allocated: bool) -> float:
+        weight = self._weight.get(register, 0.0)
+        if allocated and weight > 0.0:
+            return self._net[register] * self._weighted_rate[register] / weight
+        return self._direct[register]
+
+    def raw(self, *, allocated: bool) -> float:
+        return sum(self._priced(register, allocated) for register in self._net)
+
+    def billed(self, *, allocated: bool) -> float:
+        return sum(
+            max(0.0, self._priced(register, allocated)) for register in self._net
+        )

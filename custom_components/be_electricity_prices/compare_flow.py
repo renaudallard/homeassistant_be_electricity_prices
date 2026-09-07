@@ -76,6 +76,7 @@ from .spot_stats import (
     _injection_is_spp_indexed,
     _spp_weighting_enabled,
 )
+from .synergrid import RlpWeights
 from .injection import _injection_needs_spot
 
 from .cohort import ytd_window_start
@@ -316,6 +317,18 @@ class _QuoteEntry:
     """
 
     data: Mapping[str, Any]
+
+
+def _coordinator_rlp_weights(entry: ConfigEntry) -> RlpWeights | None:
+    """The RLP profile the entry's coordinator holds, or ``None``.
+
+    The year-to-date figures on the compare page have to allocate a
+    compensation entry's net and weight an RLP-indexed leg exactly as the
+    sensor beside them does, so they read the same profile. Never downloaded
+    from the dialog."""
+    coord = getattr(entry, "runtime_data", None)
+    weights = getattr(coord, "_rlp_weights", None)
+    return weights or None
 
 
 def _needs_month_mean(snapshot: SupplierSnapshot | None) -> bool:
@@ -614,6 +627,7 @@ class _SweepEngine:
                     historical_spots=hist_spots,
                     spot_quarters=hist_quarters,
                     billed_peak_kw=hh.peak_kw,
+                    rlp_weights=_coordinator_rlp_weights(self.config_entry),
                 )
         baseline = archived_months_present(
             self.hass,
@@ -697,6 +711,7 @@ class _SweepEngine:
                     historical_spots=hist_spots,
                     spot_quarters=hist_quarters,
                     billed_peak_kw=hh.peak_kw,
+                    rlp_weights=_coordinator_rlp_weights(self.config_entry),
                 )
             except Exception:  # noqa: BLE001 - one row loses its history
                 rows.append(row)
@@ -2270,6 +2285,7 @@ class _CompareStepsMixin(OptionsFlow):
                     historical_spots=hist_spots,
                     spot_quarters=hist_quarters,
                     billed_peak_kw=peak_kw,
+                    rlp_weights=_coordinator_rlp_weights(self.config_entry),
                 )
                 compare_ytd_val = await _compute_current_year_cost(
                     self.hass,
@@ -2282,6 +2298,7 @@ class _CompareStepsMixin(OptionsFlow):
                     historical_spots=hist_spots,
                     spot_quarters=hist_quarters,
                     billed_peak_kw=peak_kw,
+                    rlp_weights=_coordinator_rlp_weights(self.config_entry),
                 )
             except Exception:  # noqa: BLE001 - degrade to '-'
                 current_ytd_val = None

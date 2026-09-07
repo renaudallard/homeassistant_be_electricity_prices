@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import const, synergrid
@@ -19,6 +20,7 @@ from custom_components.be_electricity_prices.coordinator import (
 )
 from custom_components.be_electricity_prices.spot_stats import (
     _bucket_by_local_month,
+    _rlp_hour_weight,
     _rlp_month_mean,
     _rlp_weighted_month_mean,
 )
@@ -100,6 +102,30 @@ def test_rlp_month_mean_weights_local_hours() -> None:
     assert _rlp_weighted_month_mean(spots, weights, 2026, 7) == pytest.approx(125.0)
     assert _rlp_month_mean(bucket, weights, 2026, 6) is None
     assert _rlp_month_mean(bucket, {}, 2026, 7) is None
+
+
+def test_rlp_hour_weight_halves_the_repeated_autumn_hour() -> None:
+    """Synergrid's workbook is in local time: on the autumn changeover day
+    the 02:00 row holds both instants' quarters (0,000173 against 0,000086
+    for its neighbours in the 2026 file). Each of the two UTC hours that read
+    as 02:00 gets half, so the month mean weighs the hour as the two hours it
+    is and not four."""
+    weights = {(10, 25, 1): 1.0, (10, 25, 2): 2.0, (10, 25, 3): 1.0}
+    spots = {
+        datetime(2026, 10, 24, 23, tzinfo=UTC): 10.0,  # 01:00 CEST
+        datetime(2026, 10, 25, 0, tzinfo=UTC): 20.0,  # 02:00 CEST, first pass
+        datetime(2026, 10, 25, 1, tzinfo=UTC): 40.0,  # 02:00 CET, second pass
+        datetime(2026, 10, 25, 2, tzinfo=UTC): 30.0,  # 03:00 CET
+    }
+    assert _rlp_weighted_month_mean(spots, weights, 2026, 10) == pytest.approx(
+        (10.0 + 20.0 + 40.0 + 30.0) / 4.0
+    )
+    plain = dt_util.as_local(datetime(2026, 10, 24, 23, tzinfo=UTC))
+    assert _rlp_hour_weight(weights, plain) == 1.0
+    assert _rlp_hour_weight(None, plain) is None
+    assert _rlp_hour_weight({}, plain) is None
+    unlisted = dt_util.as_local(datetime(2026, 10, 25, 5, tzinfo=UTC))
+    assert _rlp_hour_weight(weights, unlisted) is None
 
 
 async def test_fetch_rlp_returns_empty_on_download_error() -> None:
@@ -336,3 +362,76 @@ async def test_the_tick_prices_energy_on_the_rlp_mean_and_injection_on_the_plain
     assert energies and all(e == pytest.approx(0.125) for e in energies)
     # Feed-in credit: the same coefficients on the PLAIN mean.
     assert data.injection_price_eur_per_kwh == pytest.approx(0.10)
+
+
+# ---- yearly net metering allocated by the profile ------------------------------
+
+
+def test_net_allocation_prices_each_register_on_its_weighted_rate() -> None:
+    """Two registers, three slices. Allocated: each register's net at the
+    weight-averaged rate of its slices, clamped per register. As metered: the
+    slices' own products, which is the pre-profile behaviour."""
+    from custom_components.be_electricity_prices.spot_stats import _NetAllocation
+
+    netting = _NetAllocation()
+    netting.add("peak", -10.0, 0.30, 1.0)  # a summer surplus at a dear rate
+    netting.add("peak", 16.0, 0.10, 3.0)  # a winter draw at a cheap one
+    netting.add("offpeak", -2.0, 0.20, 1.0)
+    # peak: net 6 kWh at (0.30 x 1 + 0.10 x 3) / 4 = 0.15 -> 0.90; offpeak: net
+    # -2 -> clamped to 0 on its own, never offsetting the peak register.
+    assert netting.billed(allocated=True) == pytest.approx(0.90)
+    assert netting.raw(allocated=True) == pytest.approx(0.90 - 2.0 * 0.20)
+    # As metered: -3.0 + 1.6 = -1.4 on peak -> 0; offpeak -0.4 -> 0.
+    assert netting.billed(allocated=False) == pytest.approx(0.0)
+    assert netting.raw(allocated=False) == pytest.approx(-1.4 - 0.4)
+    # A register with no weights falls back to its metered products.
+    netting.add("night", 5.0, 0.20, None)
+    assert netting.billed(allocated=True) == pytest.approx(0.90 + 1.0)
+
+
+def test_register_for_follows_the_meter_and_the_dso_mode() -> None:
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.spot_stats import _register_for
+
+    tz = dt_util.DEFAULT_TIME_ZONE
+    wednesday_noon = datetime(2026, 9, 9, 12, tzinfo=tz)
+    wednesday_evening = datetime(2026, 9, 9, 19, tzinfo=tz)
+    assert _register_for(wednesday_noon, "mono", "bi_horaire", "wallonia") == "single"
+    # Wallonia 2026: 11:00-17:00 is off-peak on the bi-hourly schedule.
+    assert _register_for(wednesday_noon, "bi", "bi_horaire", "wallonia") == "offpeak"
+    assert (
+        _register_for(wednesday_evening, "dynamic", "bi_horaire", "wallonia") == "peak"
+    )
+    assert _register_for(wednesday_evening, "dynamic", "impact", "wallonia") == "pic"
+    assert (
+        _register_for(wednesday_noon, "exclusive_night", "bi_horaire", "wallonia")
+        == "night"
+    )
+
+
+def test_day_register_weights_sum_the_days_hours_per_register() -> None:
+    from custom_components.be_electricity_prices.spot_stats import (
+        _day_register_weights,
+    )
+
+    day = date(2026, 9, 9)
+    weights = {(9, 9, h): 1.0 for h in range(24)}
+    assert _day_register_weights(weights, day, False, "wallonia") == {"single": 24.0}
+    split = _day_register_weights(weights, day, True, "wallonia")
+    # Wallonia: off-peak 22:00-07:00 (9 h) and 11:00-17:00 (6 h).
+    assert split == {"peak": 9.0, "offpeak": 15.0}
+    assert _day_register_weights(None, day, True, "wallonia") == {}
+    # The walk is by wall clock, which is how the workbook is keyed: the
+    # spring changeover day has no 02:00 row and yields 23 hours, the autumn
+    # one carries both 02:00 instants under one key and its mass is whole.
+    spring = date(2026, 3, 29)
+    spring_weights = {(3, 29, h): 1.0 for h in range(24) if h != 2}
+    assert sum(
+        _day_register_weights(spring_weights, spring, False, "wallonia").values()
+    ) == pytest.approx(23.0)
+    autumn = date(2026, 10, 25)
+    autumn_weights = {(10, 25, h): (2.0 if h == 2 else 1.0) for h in range(24)}
+    assert sum(
+        _day_register_weights(autumn_weights, autumn, False, "wallonia").values()
+    ) == pytest.approx(25.0)

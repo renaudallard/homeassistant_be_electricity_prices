@@ -116,6 +116,7 @@ from .const import (
     REGION_FLANDERS,
     RESOLUTION_HOURLY,
     RESOLUTION_QUARTER,
+    SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
     STORAGE_VERSION,
     SUPPLIER_CUSTOM,
@@ -814,7 +815,10 @@ class BePricesCoordinator(
         # soft-fail: without the profile the plain mean stands in, which is
         # what every RLP card was priced on before.
         rlp_weighted = _energy_is_rlp_indexed(priced.energy)
-        if rlp_weighted and (spot_prices or self._historical_spots):
+        # A compensation entry wants the same profile for another reason: its
+        # yearly net is settled by spreading the volume over the year on it.
+        allocating = self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_COMPENSATION
+        if (rlp_weighted and (spot_prices or self._historical_spots)) or allocating:
             await self._ensure_rlp_weights()
 
         # A spot-monthly contract bills a flat rate = factor * this month's
@@ -1002,7 +1006,9 @@ class BePricesCoordinator(
             historical_spots=self._historical_spots,
             spot_quarters=self._historical_spot_quarters,
             spp_weights=self._spp_weights if spp_weighted else None,
-            rlp_weights=self._rlp_weights if rlp_weighted else None,
+            rlp_weights=(
+                (self._rlp_weights or None) if (rlp_weighted or allocating) else None
+            ),
             breakdown=ytd_breakdown,
             billed_peak_kw=billed_peak,
         )

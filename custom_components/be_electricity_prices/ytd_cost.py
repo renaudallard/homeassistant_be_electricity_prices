@@ -104,10 +104,14 @@ from .providers.base import (
     TimeOfUseRates,
 )
 from .spot_stats import (
+    _NetAllocation,
     _bucket_by_local_month,
+    _day_register_weights,
     _energy_month_spot,
     _injection_is_spp_indexed,
     _injection_on_month_mean,
+    _register_for,
+    _rlp_hour_weight,
     _spp_injection_spot,
 )
 from .synergrid import (
@@ -334,8 +338,11 @@ async def _ytd_hourly_energy(
     bit-exact reconciliation with the live 15-minute sensor.
 
     Solar handling is uniform across both paths:
-      - ``compensation``: per-hour ``(cons - inj) * all_in``, summed
-        and clamped at zero (Walloon meter forfeits surplus).
+      - ``compensation``: the hour's net ``cons - inj`` lands in its meter
+        register and ``_NetAllocation`` prices each register's net for the
+        window at the RLP-weighted mean of its all-in rates when the
+        profile is loaded, else as metered, clamped at zero per register
+        (Walloon meter forfeits surplus).
       - ``injection``: per-hour ``cons * all_in - inj * inj_rate``
         where ``inj_rate`` is the supplier's monthly indicative for TOU
         and ``factor*spot+base`` for dynamic at that hour's spot.
@@ -415,6 +422,7 @@ async def _ytd_hourly_energy(
     # correct, so report the coverage instead of leaving the user to guess.
     hours_seen = 0
     hours_priced = 0
+    netting = _NetAllocation()
     # Iterate the union of both sides so an injection-only wiring
     # still contributes its credit (mirroring _resolve_daily_kwh).
     for utc_hour in cons_per_hour.keys() | inj_per_hour.keys():
@@ -463,7 +471,16 @@ async def _ytd_hourly_energy(
         kwh_cons = cons_per_hour.get(utc_hour, 0.0)
         kwh_inj = inj_per_hour.get(utc_hour, 0.0)
         if regime == SOLAR_REGIME_COMPENSATION:
-            d_cost = (kwh_cons - kwh_inj) * bd.all_in
+            # Yearly net metering: the hour's net lands in a register and is
+            # priced by _NetAllocation after the walk, on the profile when it
+            # is loaded, else as metered.
+            netting.add(
+                _register_for(local, meter, dso_mode, region),
+                kwh_cons - kwh_inj,
+                bd.all_in,
+                _rlp_hour_weight(rlp_weights, local),
+            )
+            d_cost = 0.0
         elif regime == SOLAR_REGIME_INJECTION:
             d_cost = kwh_cons * bd.all_in
             # Energy bills at the flat month-mean (spot); the injection credit
@@ -508,7 +525,10 @@ async def _ytd_hourly_energy(
         energy_cost += d_cost
 
     if regime == SOLAR_REGIME_COMPENSATION:
-        energy_cost = max(energy_cost, 0.0)
+        allocated = rlp_weights is not None
+        energy_cost = netting.billed(allocated=allocated)
+        if breakdown is not None:
+            breakdown["energy_ytd_raw_eur"] = netting.raw(allocated=allocated)
     if breakdown is not None:
         breakdown["hours_seen"] = float(hours_seen)
         breakdown["hours_priced"] = float(hours_priced)
@@ -652,10 +672,13 @@ async def _compute_current_year_cost(
       regime=compensation, bi :
                (d_cons - d_inj) * peak + (n_cons - n_inj) * offpeak
 
-    Compensation netting happens once over the YTD total at the end
-    (clamped at zero), matching how the Walloon annual meter readout
-    actually settles -- a day of over-injection can offset a later day
-    of higher consumption.
+    Compensation netting happens once over the YTD total at the end, per
+    register and clamped at zero, matching how the Walloon annual meter
+    readout actually settles: a day of over-injection can offset a later
+    day of higher consumption. The net is then spread over the elapsed days
+    by the RLP profile (``_NetAllocation``), which is how the supplier
+    allocates the DSO's single yearly figure, so the rows above give each
+    day's register nets and the price is settled after the walk.
 
     Plus fees: the supplier yearly fixed fee and the Flemish energy
     fund are summed per archived month using each month's snapshot
@@ -920,6 +943,7 @@ async def _compute_current_year_cost(
         return bundle
 
     energy_cost = 0.0
+    netting = _NetAllocation()
     # A flat energy leg can still carry a monthly-indexed feed-in credit
     # (energie.be Vast). The daily walk has no spot of its own, so resolve the
     # delivery month's SPP-weighted mean here, memoised per month, and let the
@@ -940,12 +964,28 @@ async def _compute_current_year_cost(
 
         bi_capable = meter in ("bi", "dynamic")
         if regime == SOLAR_REGIME_COMPENSATION:
+            # Yearly net metering, per register, priced after the walk by
+            # _NetAllocation: on the day's RLP mass when the profile is
+            # loaded, else as metered.
+            day_weights = _day_register_weights(rlp_weights, day, bi_capable, region)
             if bi_capable:
-                d_cost = (d_cons - d_inj) * peak_bd.all_in + (
-                    n_cons - n_inj
-                ) * offpeak_bd.all_in
+                netting.add(
+                    "peak", d_cons - d_inj, peak_bd.all_in, day_weights.get("peak")
+                )
+                netting.add(
+                    "offpeak",
+                    n_cons - n_inj,
+                    offpeak_bd.all_in,
+                    day_weights.get("offpeak"),
+                )
             else:
-                d_cost = (total_cons - total_inj) * single_bd.all_in
+                netting.add(
+                    "single",
+                    total_cons - total_inj,
+                    single_bd.all_in,
+                    day_weights.get("single"),
+                )
+            d_cost = 0.0
         elif regime == SOLAR_REGIME_INJECTION:
             if bi_capable:
                 d_cost = d_cons * peak_bd.all_in + n_cons * offpeak_bd.all_in
@@ -980,10 +1020,13 @@ async def _compute_current_year_cost(
     energy_ytd_raw = energy_cost
 
     if regime == SOLAR_REGIME_COMPENSATION:
-        # YTD clamp at zero: the bill never goes negative, surplus
-        # injection past consumption is forfeited (by most Walloon
-        # suppliers).
-        energy_cost = max(energy_cost, 0.0)
+        # Yearly net metering: each register's net for the window, priced by
+        # _NetAllocation on the profile when it is loaded, else as metered,
+        # and clamped at zero per register, since surplus injection past
+        # consumption is forfeited (by most Walloon suppliers).
+        allocated = rlp_weights is not None
+        energy_ytd_raw = netting.raw(allocated=allocated)
+        energy_cost = netting.billed(allocated=allocated)
 
     if regime == SOLAR_REGIME_INJECTION:
         # Spot-indexed injection on a static-energy contract (Cociter

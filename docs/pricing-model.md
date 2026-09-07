@@ -777,8 +777,19 @@ explicitly rather than left to fall through.
 Past-month YTD billing routes injection per regime (`ytd_cost.py:271-437`,
 context):
 
-- `compensation`: per-hour `(cons - inj) * all_in`, netting injection against
-  consumption (per band when bi) and clamping at zero.
+- `compensation`: yearly net metering, settled the way the supplier settles a
+  yearly-read meter. Each slice's net `(cons - inj)` lands in its meter register
+  (`_register_for`: single, day / night, the Impact band under Impact comptage,
+  the dedicated night circuit) and `_NetAllocation` prices each register's net
+  for the window at the RLP-weighted average of that register's all-in rates,
+  clamped per register, since the DSO reports one net figure per register and
+  the supplier spreads it over the year by the residential load profile (Eneco's
+  rekenvoorbeeld: "Synthetic Load Profiles om de spreiding van het verbruik over
+  het jaar heen te simuleren"). Netting the metered hours as they happen priced a
+  summer surplus at summer rates against a winter draw at winter rates, a
+  different number whenever the tariff moves within the year. Without the
+  profile loaded the slices are priced as metered, still clamped per register.
+  The coordinator fetches the profile for every compensation entry.
 - `injection`: per-hour `cons * all_in - inj * inj_rate`, where `inj_rate` comes
   from `_historical_injection_rate` (`injection.py:444-500`).
 

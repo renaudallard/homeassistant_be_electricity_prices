@@ -760,10 +760,12 @@ class _SpotsMixin:
     async def _ensure_rlp_weights(self) -> None:
         """Refresh the Synergrid RLP profile for the current year if stale.
 
-        Only called for an entry whose ENERGY leg resolves against the
-        RLP-weighted month mean (Eneco Flex and Flex One). Soft-fail like the
-        SPP profile: on error keep what is held, back off ``_RLP_RETRY_TTL``,
-        and the caller prices the plain mean meanwhile.
+        Called for an entry whose ENERGY leg resolves against the RLP-weighted
+        month mean (Eneco Flex and Flex One) and for every entry on the
+        compensation regime, whose yearly net is spread over the year by the
+        same profile. Soft-fail like the SPP profile: on error keep what is
+        held, back off ``_RLP_RETRY_TTL``, and the caller prices the plain
+        mean, or the metered slices, meanwhile.
         """
         now = dt_util.utcnow()
         year = dt_util.now().year

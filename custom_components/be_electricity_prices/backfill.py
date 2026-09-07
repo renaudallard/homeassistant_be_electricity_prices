@@ -113,12 +113,15 @@ from .injection import (
     _injection_needs_spot,
 )
 from .spot_stats import (
+    _NetAllocation,
     _SpotMonthBucket,
     _bucket_by_local_month,
     _energy_is_rlp_indexed,
     _energy_month_spot,
     _injection_is_spp_indexed,
     _injection_on_month_mean,
+    _register_for,
+    _rlp_hour_weight,
     _spp_injection_spot,
     _spp_weighting_enabled,
 )
@@ -469,8 +472,14 @@ async def _build_context(
     if _spp_weighting_enabled(entry, snap):
         await coordinator._ensure_spp_weights()
         spp_weights = coordinator._spp_weights
+    # The RLP profile serves two things here: the month mean of an energy leg
+    # indexed on it, and the allocation of a compensation entry's yearly net
+    # over the year, which is how such a meter is settled.
     rlp_weights = None
-    if _energy_is_rlp_indexed(snap.energy) and entry.data.get(CONF_API_KEY):
+    regime = entry.data.get(CONF_SOLAR_REGIME, "none")
+    if (
+        _energy_is_rlp_indexed(snap.energy) and entry.data.get(CONF_API_KEY)
+    ) or regime == SOLAR_REGIME_COMPENSATION:
         await coordinator._ensure_rlp_weights()
         rlp_weights = coordinator._rlp_weights or None
     return _BackfillContext(
@@ -794,6 +803,8 @@ async def _backfill_cost_sensor(
     rows: list[Any] = []
     running_energy = 0.0
     running_fees = 0.0
+    netting = _NetAllocation()
+    allocated = ctx.rlp_weights is not None
     for utc_hour in hours:
         local = dt_util.as_local(utc_hour)
         month_first = date(local.year, local.month, 1)
@@ -835,7 +846,12 @@ async def _backfill_cost_sensor(
             cons = cons_per_hour.get(utc_hour, 0.0)
             inj = inj_per_hour.get(utc_hour, 0.0)
             if is_compensation:
-                running_energy += (cons - inj) * bd.all_in
+                netting.add(
+                    _register_for(local, meter, dso_mode, region),
+                    cons - inj,
+                    bd.all_in,
+                    _rlp_hour_weight(ctx.rlp_weights, local),
+                )
             elif regime == SOLAR_REGIME_INJECTION:
                 running_energy += cons * bd.all_in
                 inj_rate = _injection_rate_for_hour(
@@ -911,7 +927,7 @@ async def _backfill_cost_sensor(
         # consumption); injection / none never go negative through
         # the energy term alone.
         displayed_energy = (
-            max(running_energy, 0.0) if is_compensation else running_energy
+            netting.billed(allocated=allocated) if is_compensation else running_energy
         )
         state = round(displayed_energy + running_fees, 4)
         # Accumulate from Jan 1 (the caller anchors ``hours`` there) but

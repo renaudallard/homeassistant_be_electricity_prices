@@ -673,10 +673,11 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             }
         if self.entity_description.key == "current_year_cost":
             # Diagnostic breakdown: lets a flat or low sensor be told apart.
-            # On the static per-day path a negative energy_ytd_raw_eur means
-            # the compensation zero-floor is hiding banked injection (working
-            # as designed), and a consumption_today_kwh that never grows points
-            # at a stalled meter input. On the hourly path hours_priced below
+            # A negative energy_ytd_raw_eur (every static entry, and an hourly
+            # one on the compensation regime) means the compensation zero-floor
+            # is hiding banked injection (working as designed), and a
+            # consumption_today_kwh that never grows points at a stalled meter
+            # input. On the hourly path hours_priced below
             # hours_seen means the spot cache could not price part of the
             # window, so the bill is missing those hours' energy term.
             diag = data.ytd_diagnostics

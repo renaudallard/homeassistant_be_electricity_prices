@@ -5936,3 +5936,115 @@ def test_cohort_leg_carries_the_weighting_but_never_the_realised_index() -> None
     assert isinstance(leg, SpotMonthlyRates)
     assert leg.rlp_indexed is True
     assert leg.index_realised is None
+
+
+async def test_compensation_year_is_allocated_by_the_profile_when_loaded(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A yearly-read meter is settled on its net for the year, spread over the
+    months by the residential load profile. January over-injects at a dear
+    rate and February draws at a cheap one: as metered the year nets to a
+    negative energy term and the sensor sits on the fees floor; allocated, the
+    26 kWh the year actually nets to is priced at the profile-weighted rate of
+    the two months, and that is what the supplier invoices."""
+    freezer.move_to("2026-02-28 12:00:00+02:00")
+    zero_taxes = TaxOverlay(federal_excise=0.0, energy_contribution=0.0)
+    free_grid = {"ores": DsoOverlay(distribution_single=0.0, transport=0.0)}
+
+    async def _ffm(
+        _session: object, _contract: str, _region: str, year_month: date
+    ) -> SupplierSnapshot:
+        rate = 0.30 if year_month.month == 1 else 0.10
+        return make_snapshot(
+            energy=FixedRates(single=rate), dsos=free_grid, taxes=zero_taxes
+        )
+
+    _monthly_snapshots(hass).clear()
+    current = make_snapshot(
+        energy=FixedRates(single=0.10), dsos=free_grid, taxes=zero_taxes
+    )
+    entry = _yearly_entry(meter="mono", solar_regime="compensation", solar_kva=0.0)
+    today = dt_util.now().date()
+    days = _days_through(date(2026, 1, 1), today)
+    cons_per_day = {d: (0.0 if d.month == 1 else 12.0) for d in days}
+    inj_per_day = {d: (10.0 if d.month == 1 else 0.0) for d in days}
+    uniform = {(d.month, d.day, h): 1.0 for d in days for h in range(24)}
+    with _patch_recorder_per_entity(
+        {"sensor.day_cons": cons_per_day, "sensor.day_inj": inj_per_day}
+    ):
+        as_metered = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _fixed_extractor(_ffm),
+            current,
+            entry,
+        )
+        breakdown: dict[str, float] = {}
+        allocated = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _fixed_extractor(_ffm),
+            current,
+            entry,
+            rlp_weights=uniform,
+            breakdown=breakdown,
+        )
+    # Metered: 31 x -10 x 0.30 + 28 x 12 x 0.10 = -59.4 -> clamped to the floor.
+    assert as_metered == pytest.approx(0.0)
+    # Allocated: net 26 kWh at the time-weighted rate of the two months.
+    net = 28 * 12.0 - 31 * 10.0
+    rate = (31 * 24 * 0.30 + 28 * 24 * 0.10) / (59 * 24)
+    assert allocated == pytest.approx(net * rate, rel=1e-6)
+    assert breakdown["energy_ytd_raw_eur"] == pytest.approx(net * rate, rel=1e-6)
+
+
+async def test_compensation_registers_are_clamped_one_by_one(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A bi-hourly meter has two counters. The night register ending the year
+    below where it started is forfeited on its own and never offsets the day
+    register, with or without the profile."""
+    freezer.move_to("2026-01-31 12:00:00+01:00")
+    zero_taxes = TaxOverlay(federal_excise=0.0, energy_contribution=0.0)
+    grid = {
+        "ores": DsoOverlay(
+            distribution_single=0.0,
+            distribution_peak=0.0,
+            distribution_offpeak=0.0,
+            transport=0.0,
+        )
+    }
+    snap = make_snapshot(
+        energy=FixedRates(single=0.20, peak=0.20, offpeak=0.20),
+        dsos=grid,
+        taxes=zero_taxes,
+    )
+    entry = _yearly_entry(meter="bi", solar_regime="compensation", solar_kva=0.0)
+    today = dt_util.now().date()
+    days = _days_through(date(2026, 1, 1), today)
+    with _patch_recorder_per_entity(
+        {
+            "sensor.day_cons": {d: 5.0 for d in days},
+            "sensor.day_inj": {d: 0.0 for d in days},
+            "sensor.night_cons": {d: 0.0 for d in days},
+            "sensor.night_inj": {d: 8.0 for d in days},
+        }
+    ):
+        metered = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+        )
+        allocated = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            rlp_weights={(d.month, d.day, h): 1.0 for d in days for h in range(24)},
+        )
+    # Day register: 31 x 5 kWh at 0.20 = 31.0 EUR; the night surplus is gone.
+    assert metered == pytest.approx(31.0)
+    assert allocated == pytest.approx(31.0)
