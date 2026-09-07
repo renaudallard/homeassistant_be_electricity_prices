@@ -344,7 +344,7 @@ A malformed `price.amount` or `position` raises `EntsoeError`
 constructs a fresh `EntsoeClient` per call (`api.py:77`,
 `coordinator_spots.py:280`). Two paths use it:
 
-- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:552`). Windows the request
+- Live curve, `_fetch_spot_prices` (`coordinator_spots.py:553`). Windows the request
   on the local (Europe/Brussels) day so a 00:00 to 02:00 local query does not
   drop yesterday's UTC tail; anchors both endpoints on local midnight converted
   to UTC so the fetched window matches the actual local-day hour count, which
@@ -360,7 +360,7 @@ constructs a fresh `EntsoeClient` per call (`api.py:77`,
   `_spot_cache_day` stays `None` across a restart, so the first tick still
   fetches, and slots that no longer cover today or tomorrow are dropped on load.
   `_fallback_spots` is what reads it when a fetch fails.
-- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:245`).
+- Historical backfill, `_ensure_historical_spots` (`coordinator_spots.py:246`).
   Ensures `self._historical_spots` covers every hour of the local days in a range,
   fetching only the missing spans. It considers a day "present" when at least 20
   of its 24 hours are cached (`coordinator_spots.py:350`), tolerating both the
@@ -402,8 +402,8 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
-| `backfill_range` (`backfill.py:1014`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py:1183`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
+| `backfill_range` (`backfill.py:1015`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
+| `backfill_if_missing` (`backfill.py:1184`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists. |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py:41`). Backfill is reached either automatically
@@ -421,7 +421,7 @@ a coordinator (`backfill.py:879`).
 ### Statistic ids and the two statistic shapes
 
 The statistic id is the sensor's entity id, resolved from the entity registry by
-unique id `f"{entry_id}_{key}"` via `_stat_id` (`backfill.py:155`). When the
+unique id `f"{entry_id}_{key}"` via `_stat_id` (`backfill.py:156`). When the
 entity is not registered yet (the auto path can fire before platform setup
 completes), the sensor is skipped silently and reported with a 0 count rather
 than fabricating a slug that would diverge from a user-renamed entity.
@@ -435,7 +435,7 @@ Two families of statistics are written:
 
 These are `async_import_statistics` external statistics (`source="recorder"`),
 not internal long-term statistics derived from a live sensor state. The key list
-(`_PRICE_SENSOR_KEYS`, `backfill.py:145`) is maintained by hand in lockstep with
+(`_PRICE_SENSOR_KEYS`, `backfill.py:146`) is maintained by hand in lockstep with
 `sensor.py`, deliberately, because the backfilled values come straight out of
 `compute_breakdown`, not from the live entities, so coupling this module to the
 entity-construction tuples would buy nothing.
@@ -448,19 +448,19 @@ intra-hour spread to record.
 
 Only the price (`mean`) sensors are pure functions of the tariff and spot. The
 `current_year_cost` sensor also needs how many kWh the household consumed and
-injected each past hour. `_backfill_cost_sensor` (`backfill.py:699`) recovers
+injected each past hour. `_backfill_cost_sensor` (`backfill.py:700`) recovers
 that from the recorder: it reads hourly kWh for every configured consumption
 sensor (`_hourly_consumption_sensors`) and injection sensor
 (`_hourly_injection_sensors`) through `_recorder_hourly_kwh`, binned into
 UTC-hour totals (`backfill.py:586`). The recorder helpers treat their date
 arguments as local-day boundaries, so the code passes the local dates of the
 first and last UTC hour, keeping the query window aligned with the backfill's
-`_hour_iter` grid (`backfill.py:168`).
+`_hour_iter` grid (`backfill.py:169`).
 
 ### Billing each past hour at its historical rate
 
 Both backfill passes cache one `SupplierSnapshot` per month via
-`_month_snapshot_cache` (`cohort.py:662`, called at `backfill.py:431`), so a 365-day window
+`_month_snapshot_cache` (`cohort.py:663`, called at `backfill.py:431`), so a 365-day window
 touches at most 12 archive fetches. `_snapshot_for_month` reuses the extractor's
 `fetch_for_month` archive path (see [provider-framework.md](provider-framework.md)),
 falling back to the current live snapshot when a supplier publishes no archive.
@@ -480,7 +480,7 @@ both places.
 
 ### Spot provisioning for backfill
 
-`_ensure_dynamic_spots` (`backfill.py:299`) reuses the coordinator's
+`_ensure_dynamic_spots` (`backfill.py:300`) reuses the coordinator's
 `_ensure_historical_spots` so the bulk-fetch logic (week-sized chunks, present
 threshold, negative cache) stays in one place. It returns an empty dict when no
 spot is needed (static energy with a monthly or no injection). The gate is
@@ -527,7 +527,7 @@ or 0.0`), a table `async_import_statistics` never writes. Left alone, the live
 chain restarts at zero directly after a backfilled row carrying the whole year, so
 the first compiled hour reports `change = 0 - <year to date>` and the Energy
 dashboard's Cost card shows roughly **minus one annual bill** for that day.
-`_seed_short_term_sum` (`backfill.py:957`) writes one short-term row at the last
+`_seed_short_term_sum` (`backfill.py:958`) writes one short-term row at the last
 backfilled instant to hand the platform its resume point. That row must carry
 `last_reset` as well as `state` and `sum`: the compiler reads all three, and a row
 missing `last_reset` looks like a fresh cycle against the sensor's Jan-1
@@ -537,7 +537,7 @@ effort and swallows recorder errors, since failing to seed is no worse than not
 trying. `tests/recorder/test_backfill_seam.py` pins all three states against a
 real recorder.
 
-`_backfill_cost_sensor` runs one running total per hour (`backfill.py:699`)
+`_backfill_cost_sensor` runs one running total per hour (`backfill.py:700`)
 rather than one end-of-day number, so the recorder draws a smoothly growing YTD
 line. Fixed fees (the supplier's yearly fixed fee, the energy-fund monthly charge
 times 12, the DSO data-management annual charge, and the Brussels Brugel OSP fee)
@@ -578,7 +578,7 @@ hour.
 ### `clear=True` is series-scoped and guarded
 
 The recorder's only public deletion primitive here is `clear_statistics`, which
-is series-scoped, not range-scoped: `_clear_all` (`backfill.py:277`) deletes the
+is series-scoped, not range-scoped: `_clear_all` (`backfill.py:278`) deletes the
 entire series for the given statistic ids. `backfill_range` therefore refuses the
 narrow-window-plus-clear combination: if `clear=True` and the window starts after
 Jan 1 of the end year, it raises `ServiceValidationError` (`backfill.py:800`),
@@ -632,17 +632,31 @@ distributienetbeheerders". `fetch_rlp_weights` downloads
 `synergrid.be/images/downloads/SLP-RLP-SPP/<year>/RLP0N <year> Electricity all DSOs.xlsb`
 (about 3,4 MB, a binary workbook read with `pyxlsb`, the one runtime dependency
 added for it) and `_rlp_weights_from_rows` reduces its `RLP96UbyDGO` sheet to
-one hourly curve keyed by LOCAL (month, day, hour).
+one hourly curve keyed by LOCAL (month, day, hour), for the DSO **blend** the
+caller asks for.
 
-Two choices in that reduction were settled against Eneco's own published
-values (`indexatieparameters-elek.pdf`, January to July 2026) and both matter:
+The workbook lists one column per DSO sub-area but only three curves are
+distinct (Fluvius, the Walloon DSOs with the small ones, Sibelga); the same
+Fluvius curve appears eight times. Three suppliers read that sheet three ways,
+and each reproduces its OWN published values to the cent, so the blend is a
+parameter rather than a single rule (all three checked against the published
+2026 tables, January to August):
 
-- The workbook lists one column per DSO sub-area but only three curves are
-  distinct (Fluvius, the Walloon DSOs with the small ones, Sibelga); the same
-  Fluvius curve appears eight times. Averaging the columns as printed misses
-  Eneco by up to 2,2 EUR/MWh in summer. Averaging the DISTINCT curves, then
-  weighting the Belpex HOURLY quotation (the mean of the hour's quarters) by
-  the hour's local-time weight, reproduces all seven values to the cent.
+- `distinct` weights the three distinct curves equally. This is Eneco's
+  Belpex-RLP-M; averaging the columns as printed instead weights Flanders eight
+  to one and misses Eneco by up to 2,2 EUR/MWh in summer.
+- `columns` weights every column, i.e. each distinct curve by its number of
+  sub-areas (8 Fluvius, 15 Walloon, 2 Sibelga in the 2026 file). This is
+  energie.be's Belpex_RLP, which its card defines with the same words as Eneco
+  but publishes the column reading of.
+- `flanders` is the Fluvius curve alone, found by a column name starting
+  "Fluvius". Energy Knights sells in Flanders only and bills the customer's own
+  DSO; a sheet with no Fluvius column is refused rather than guessed.
+
+Two further choices, common to every blend, were settled the same way:
+
+- The Belpex HOURLY quotation (the mean of the hour's quarters) is weighted by
+  the hour's local-time weight; the quarter-level reading is a touch further off.
 - The Year / Month / Day / h columns are Belgian local time with DST; keying the
   weights on UTC hours instead, as the SPP parser does for its own UTC column,
   is off by up to 0,7 EUR/MWh from April on.
@@ -657,12 +671,15 @@ it, while the per-day walk of the static year-to-date path, which is by wall
 clock, takes the key whole. The same download and temp-file discipline as the
 SPP file applies, with a `.xlsb` suffix. The coordinator fetches the profile for
 an entry whose energy leg carries `rlp_indexed` (Eneco Zon & Wind Flex and Flex
-One) and holds an ENTSO-E key, and for every entry on the compensation regime,
-whose yearly net it spreads over the year by that profile (`_NetAllocation`,
-see the pricing model); it refreshes the profile monthly, persists it beside the
-SPP weights, and `_energy_month_spot` picks the weighted mean over the plain one
-for an RLP-indexed leg in the live tick, the year-to-date walk, the backfill and
-the compare page.
+One, Energy Knights Essentia, energie.be Variabel) and holds an ENTSO-E key, and
+for every entry on the compensation regime, whose yearly net it spreads over the
+year by that profile (`_NetAllocation`, see the pricing model). The blend is the
+entry's own energy leg's (`_rlp_blend_for`), defaulting to `distinct` for a
+compensation entry with no RLP energy leg; a change of blend re-downloads, since
+the curves differ, and the blend is persisted beside the weights. It refreshes
+the profile monthly, persists it beside the SPP weights, and `_energy_month_spot`
+picks the weighted mean over the plain one for an RLP-indexed leg in the live
+tick, the year-to-date walk, the backfill and the compare page.
 
 ### The SPP profile
 

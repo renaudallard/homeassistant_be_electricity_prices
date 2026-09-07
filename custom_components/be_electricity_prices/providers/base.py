@@ -54,6 +54,16 @@ TariffKind = Literal[
     "fixed", "variable", "dynamic", "tou", "tou_impact", "spot_monthly"
 ]
 
+# Which residential-load blend an RLP-weighted month index uses. Three Belgian
+# suppliers read Synergrid's one workbook three ways, each reproducing its own
+# published value to the cent: "distinct" is the equal mean of the three
+# distinct regional curves (Fluvius, the Walloon DSOs, Sibelga), which is
+# Eneco's Belpex-RLP-M; "columns" is the mean over every DSO column, weighting
+# each region by its number of sub-areas, which is energie.be's Belpex_RLP;
+# "flanders" is the Fluvius curve alone, which Energy Knights, a Flanders-only
+# supplier, bills on. Meaningful only where ``rlp_indexed`` is set.
+RlpBlend = Literal["distinct", "columns", "flanders"]
+
 # The three Belgian regions, as a Contract.regions default and for the
 # extractors whose every product serves all of them. Public: mega and
 # totalenergies each restated it from the REGION_* constants.
@@ -186,6 +196,9 @@ class VariableRates:
     # percent above the plain mean on the 2026 months because households draw
     # in the expensive hours. Meaningful only with ``month_indexed``.
     rlp_indexed: bool = False
+    # Which DSO blend of the RLP profile the weighting uses (see ``RlpBlend``).
+    # Only read when ``rlp_indexed``; the default is Eneco's distinct-curve mean.
+    rlp_blend: RlpBlend = "distinct"
     # The same coefficients for a bi-hourly meter's two bands, when the card
     # prints them per meter. Mega does: mono "Epex x 1,1095 + 3,6", peak
     # "x 1,3275 + 3,6", off-peak "x 0,94 + 3,6". Billing a bi-hourly cohort at
@@ -329,6 +342,9 @@ class SpotMonthlyRates:
     # mean the coefficients resolve against is the RLP-weighted one (Eneco).
     # ``_energy_month_spot`` reads it to pick the weighted mean over the plain.
     rlp_indexed: bool = False
+    # Which DSO blend of the RLP profile the weighting uses (see ``RlpBlend``);
+    # carried from the card, meaningful only with ``rlp_indexed``.
+    rlp_blend: RlpBlend = "distinct"
     # The supplier's own published value of the index for the ONE delivery
     # month this leg is being applied to, in EUR/kWh. Set by the month splice
     # (``_effective_snapshot_for_month``) from that month's archived card, never

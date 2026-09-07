@@ -72,6 +72,7 @@ from .snapshot_store import (
 from .spot_stats import (
     _energy_is_quarter_hourly,
     _energy_is_rlp_indexed,
+    _rlp_blend_for,
     _injection_is_spp_indexed,
     _spp_weighting_enabled,
 )
@@ -423,6 +424,7 @@ class BePricesCoordinator(
         # month mean (Eneco Flex). Same lifecycle as the SPP profile.
         self._rlp_weights: RlpWeights = {}
         self._rlp_weights_year: int | None = None
+        self._rlp_blend: str = "distinct"
         self._rlp_fetched_at: datetime | None = None
         self._rlp_failed_at: datetime | None = None
         # Stable past days the spot walk should not ask for again yet, each
@@ -819,7 +821,7 @@ class BePricesCoordinator(
         # yearly net is settled by spreading the volume over the year on it.
         allocating = self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_COMPENSATION
         if (rlp_weighted and (spot_prices or self._historical_spots)) or allocating:
-            await self._ensure_rlp_weights()
+            await self._ensure_rlp_weights(_rlp_blend_for(priced.energy))
 
         # A spot-monthly contract bills a flat rate = factor * this month's
         # mean spot + base. Compute the running mean once (over the persisted
@@ -1373,6 +1375,7 @@ class BePricesCoordinator(
         if self._rlp_weights and self._rlp_weights_year is not None:
             payload["rlp_weights"] = {
                 "year": self._rlp_weights_year,
+                "blend": self._rlp_blend,
                 "fetched_at": (
                     self._rlp_fetched_at.isoformat() if self._rlp_fetched_at else None
                 ),

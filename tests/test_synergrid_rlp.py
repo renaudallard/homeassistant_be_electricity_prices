@@ -27,11 +27,14 @@ from custom_components.be_electricity_prices.spot_stats import (
 from custom_components.be_electricity_prices.synergrid import _rlp_weights_from_rows
 
 
-def _sheet(curves: list[list[float]], hours: int) -> list[list[Any]]:
+def _sheet(
+    curves: list[list[float]], hours: int, curve_names: list[str] | None = None
+) -> list[list[Any]]:
     """Rows in the RLP96UbyDGO layout: names, DGO labels, EAN codes, then one
     quarter per row for ``hours`` local clock hours of 1 July, with one
     column per curve in ``curves`` (each already summing to one)."""
-    names = [None] * 7 + [f"DSO {i}" for i in range(len(curves))]
+    labelled = curve_names or [f"DSO {i}" for i in range(len(curves))]
+    names = [None] * 7 + list(labelled)
     labels = [None] * 7 + ["DGO"] * len(curves)
     eans = ["CET", "Year", "Month", "Day", "h", "Min", "Date"] + [
         str(541448800000 + i) for i in range(len(curves))
@@ -53,19 +56,49 @@ def _sheet(curves: list[list[float]], hours: int) -> list[list[Any]]:
     return rows
 
 
-def test_rlp_weights_average_the_distinct_curves_and_sum_the_quarters() -> None:
-    """Eight identical Fluvius columns count once: the mean is over the
-    DISTINCT curves, keyed by local clock hour with the four quarters summed."""
-    fluvius = [0.1, 0.1, 0.1, 0.1, 0.15, 0.15, 0.15, 0.15]  # sums to 1
-    wallonia = [0.2, 0.2, 0.2, 0.2, 0.05, 0.05, 0.05, 0.05]
-    sibelga = [0.05, 0.05, 0.05, 0.05, 0.2, 0.2, 0.2, 0.2]
-    rows = _sheet([fluvius, fluvius, fluvius, wallonia, wallonia, sibelga], 2)
-    weights = _rlp_weights_from_rows(rows)
+# Three distinct curves shared by 3 / 2 / 1 columns: the same fixture priced
+# three ways, one per supplier's blend.
+_FLUVIUS = [0.1, 0.1, 0.1, 0.1, 0.15, 0.15, 0.15, 0.15]  # sums to 1
+_WALLONIA = [0.2, 0.2, 0.2, 0.2, 0.05, 0.05, 0.05, 0.05]
+_SIBELGA = [0.05, 0.05, 0.05, 0.05, 0.2, 0.2, 0.2, 0.2]
+_BLEND_ROWS = _sheet(
+    [_FLUVIUS, _FLUVIUS, _FLUVIUS, _WALLONIA, _WALLONIA, _SIBELGA],
+    2,
+    ["Fluvius Antwerpen", "GASELWEST", "IMEWO", "ORES (Namur)", "RESA", "SIBELGA"],
+)
+
+
+def test_rlp_weights_distinct_blend_averages_the_distinct_curves() -> None:
+    """Eight identical Fluvius columns count once: the default "distinct" blend
+    is the equal mean over the DISTINCT curves, keyed by local clock hour with
+    the four quarters summed (Eneco's Belpex-RLP-M)."""
+    weights = _rlp_weights_from_rows(_BLEND_ROWS)
     assert set(weights) == {(7, 1, 0), (7, 1, 1)}
-    # hour 0: mean of (0.4, 0.8, 0.2) = 0.4666..; hour 1: mean of (0.6, 0.2, 0.8)
     assert weights[(7, 1, 0)] == pytest.approx((0.4 + 0.8 + 0.2) / 3)
     assert weights[(7, 1, 1)] == pytest.approx((0.6 + 0.2 + 0.8) / 3)
     assert sum(weights.values()) == pytest.approx(1.0)
+
+
+def test_rlp_weights_columns_blend_weights_each_curve_by_its_columns() -> None:
+    """The "columns" blend weights every DSO column equally, i.e. each distinct
+    curve by how many share it: 3 Fluvius, 2 Walloon, 1 Sibelga (energie.be)."""
+    weights = _rlp_weights_from_rows(_BLEND_ROWS, "columns")
+    assert weights[(7, 1, 0)] == pytest.approx((3 * 0.4 + 2 * 0.8 + 1 * 0.2) / 6)
+    assert weights[(7, 1, 1)] == pytest.approx((3 * 0.6 + 2 * 0.2 + 1 * 0.8) / 6)
+    assert sum(weights.values()) == pytest.approx(1.0)
+
+
+def test_rlp_weights_flanders_blend_is_the_fluvius_curve_alone() -> None:
+    """The "flanders" blend is the group carrying a Fluvius name (Energy
+    Knights bills on the customer's DSO); a sheet without one is refused."""
+    weights = _rlp_weights_from_rows(_BLEND_ROWS, "flanders")
+    # Fluvius alone, four quarters summed: hour 0 = 4 x 0.1, hour 1 = 4 x 0.15.
+    assert weights[(7, 1, 0)] == pytest.approx(0.4)
+    assert weights[(7, 1, 1)] == pytest.approx(0.6)
+    assert sum(weights.values()) == pytest.approx(1.0)
+    no_fluvius = _sheet([_WALLONIA, _SIBELGA], 2, ["ORES (Namur)", "SIBELGA"])
+    with pytest.raises(ValueError, match="no Fluvius curve"):
+        _rlp_weights_from_rows(no_fluvius, "flanders")
 
 
 def test_rlp_weights_refuse_a_sheet_that_does_not_sum_to_one() -> None:
@@ -146,6 +179,27 @@ async def test_fetch_rlp_returns_empty_on_a_bad_workbook_and_cleans_up() -> None
     ):
         assert await synergrid.fetch_rlp_weights(session, 2026) == {}
     assert not Path(garbage.name).exists()
+
+
+async def test_fetch_rlp_passes_the_blend_to_the_parser() -> None:
+    seen: dict[str, Any] = {}
+
+    def fake_parse(_path: Any, blend: str = "distinct") -> dict[Any, float]:
+        seen["blend"] = blend
+        return {(1, 1, 0): 1.0}
+
+    with (
+        patch.object(synergrid, "_download", new=AsyncMock(return_value=Path("x"))),
+        patch.object(synergrid, "_parse_rlp_weights", new=fake_parse),
+        patch.object(
+            synergrid.asyncio,
+            "to_thread",
+            new=AsyncMock(side_effect=lambda f, *a: f(*a)),
+        ),
+        patch.object(synergrid, "Path"),
+    ):
+        await synergrid.fetch_rlp_weights(MagicMock(), 2026, "flanders")
+    assert seen["blend"] == "flanders"
 
 
 async def test_fetch_rlp_asks_for_the_all_dso_workbook_with_an_xlsb_suffix() -> None:
@@ -271,6 +325,26 @@ async def test_ensure_rlp_weights_fetches_when_stale(
     assert coord._rlp_weights_year == 2026
 
 
+async def test_ensure_rlp_weights_refetches_when_the_blend_changes(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The curves differ per blend, so asking for a different one is not fresh
+    even inside the refresh window: it re-downloads."""
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_weights",
+        new=AsyncMock(side_effect=lambda _s, _y, blend: {(9, 15, 10): 1.0}),
+    ) as mock:
+        await coord._ensure_rlp_weights("distinct")
+        await coord._ensure_rlp_weights("distinct")  # fresh: no second download
+        await coord._ensure_rlp_weights("flanders")  # new blend: re-download
+    assert mock.await_count == 2
+    assert coord._rlp_blend == "flanders"
+
+
 async def test_ensure_rlp_weights_backs_off_after_failure(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -295,6 +369,7 @@ async def test_rlp_weights_survive_persist_round_trip(hass: HomeAssistant) -> No
     coord = BePricesCoordinator(hass, entry)
     coord._rlp_weights = {(9, 15, 10): 2.0, (1, 1, 12): 1.5}
     coord._rlp_weights_year = 2026
+    coord._rlp_blend = "flanders"
     coord._rlp_fetched_at = datetime(2026, 9, 1, tzinfo=UTC)
     entry.runtime_data = coord
     await coord._save_persistent()
@@ -303,6 +378,7 @@ async def test_rlp_weights_survive_persist_round_trip(hass: HomeAssistant) -> No
     await reloaded.async_load_persistent()
     assert reloaded._rlp_weights == coord._rlp_weights
     assert reloaded._rlp_weights_year == 2026
+    assert reloaded._rlp_blend == "flanders"
 
 
 async def test_the_tick_prices_energy_on_the_rlp_mean_and_injection_on_the_plain_one(

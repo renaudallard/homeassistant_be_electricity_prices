@@ -221,7 +221,8 @@ EUR/kWh, re-published monthly.
 | `yearly_fixed_fee_exclusive_night` | `float \| None` | `None` | Dedicated exclusive-night yearly fee (EBEM Groen Variabel prints one); `None` means the standard fee applies. |
 | `formula` | `str \| None` | `None` | Indexation expression text for diagnostics, when published. |
 | `index_realised` | `float \| None` | `None` | The value the card's index settled at for the card's OWN month, in EUR/kWh, once the supplier published it. Eneco footnotes each month's realised Belpex-RLP-M on the next card; `fetch_for_month` settles the archived month on it and `current` is then that figure. `None` while the next card is not out. |
-| `rlp_indexed` | `bool` | `False` | The index is the RLP-weighted month mean (Eneco's Belpex-RLP-M), not the plain one; the coordinator resolves the coefficients against Synergrid's residential load profile. Meaningful only with `month_indexed`. |
+| `rlp_indexed` | `bool` | `False` | The index is an RLP-weighted month mean, not the plain one; the coordinator resolves the coefficients against Synergrid's residential load profile. Meaningful only with `month_indexed`. |
+| `rlp_blend` | `RlpBlend` | `"distinct"` | Which DSO reduction of that profile: `"distinct"` (Eneco's equal mean of the three regional curves), `"columns"` (energie.be's column-weighted mean), or `"flanders"` (Energy Knights' Fluvius curve). Read only with `rlp_indexed`. |
 
 ### DynamicRates
 
@@ -260,7 +261,7 @@ transition : 11:00-17:00 + 22:00-01:00
 offpeak    : 01:00-07:00
 ```
 
-`weekend_rule` (`WeekendRule`, `providers/base.py:348`) selects the weekend
+`weekend_rule` (`WeekendRule`, `providers/base.py:364`) selects the weekend
 schedule:
 
 - `weekend_offpeak` (generic CWaPE default): Saturday, Sunday and public holidays are entirely off-peak.
@@ -350,7 +351,7 @@ regardless of the consumption snapshot's `vat_rate`. At least one of (`current`,
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py:147`; illustrative only). |
+| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py:157`; illustrative only). |
 | `factor` | `float \| None` | `None` | Multiplier for the hourly formula `injection = factor * spot + base`. |
 | `base` | `float \| None` | `None` | Additive term for that formula. Belgian formulas can produce negative values at low spot (the producer pays to inject) and the engine respects that. |
 | `formula` | `str \| None` | `None` | Formula text for diagnostics. |

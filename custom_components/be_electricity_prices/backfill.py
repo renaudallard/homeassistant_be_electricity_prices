@@ -121,6 +121,7 @@ from .spot_stats import (
     _injection_is_spp_indexed,
     _injection_on_month_mean,
     _register_for,
+    _rlp_blend_for,
     _rlp_hour_weight,
     _spp_injection_spot,
     _spp_weighting_enabled,
@@ -480,7 +481,7 @@ async def _build_context(
     if (
         _energy_is_rlp_indexed(snap.energy) and entry.data.get(CONF_API_KEY)
     ) or regime == SOLAR_REGIME_COMPENSATION:
-        await coordinator._ensure_rlp_weights()
+        await coordinator._ensure_rlp_weights(_rlp_blend_for(snap.energy))
         rlp_weights = coordinator._rlp_weights or None
     return _BackfillContext(
         region=region,

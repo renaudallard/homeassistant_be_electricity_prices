@@ -403,6 +403,15 @@ def _energy_is_rlp_indexed(energy: EnergyRates | None) -> bool:
     return False
 
 
+def _rlp_blend_for(energy: EnergyRates | None) -> str:
+    """Which RLP blend this entry's profile should be fetched as: the leg's own
+    when it is RLP-indexed, else the distinct-curve mean, which is the blend a
+    compensation entry with no RLP energy leg allocates its net on."""
+    if _energy_is_rlp_indexed(energy):
+        return getattr(energy, "rlp_blend", "distinct") or "distinct"
+    return "distinct"
+
+
 def _spp_weighted_month_mean(
     spots: dict[datetime, float],
     weights: SppWeights,

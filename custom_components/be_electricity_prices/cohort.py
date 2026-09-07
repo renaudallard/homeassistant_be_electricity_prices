@@ -352,6 +352,7 @@ def _cohort_energy_from_archived(
             # the realised index does not, it belongs to a delivery month and
             # is spliced on per month by _effective_snapshot_for_month.
             rlp_indexed=energy.rlp_indexed,
+            rlp_blend=energy.rlp_blend,
             yearly_fixed_fee=energy.yearly_fixed_fee,
             # Carry the dedicated exclusive-night standing fee so an
             # exclusive-night meter keeps its own fee instead of falling back to

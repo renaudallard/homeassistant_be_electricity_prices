@@ -104,16 +104,18 @@ SppWeights = dict[tuple[int, int, int], float]
 RlpWeights = dict[tuple[int, int, int], float]
 
 
-async def fetch_rlp_weights(session: aiohttp.ClientSession, year: int) -> RlpWeights:
+async def fetch_rlp_weights(
+    session: aiohttp.ClientSession, year: int, blend: str = "distinct"
+) -> RlpWeights:
     """Return the year's hourly RLP weights in local time, or ``{}``.
 
     The residential load profile (RLP0N) is the other Synergrid profile Belgian
-    cards index on: Eneco's Belpex-RLP-M weights each hour's Belpex quotation
-    by it. Synergrid publishes it per DSO as a binary workbook,
+    cards index on: a card weights each hour's Belpex quotation by it. Synergrid
+    publishes it per DSO as a binary workbook,
     ``RLP0N <year> Electricity all DSOs.xlsb``, about 3,4 MB, which
-    :func:`_parse_rlp_weights` reduces to one hourly curve. Never raises: a
-    download or parse failure logs and returns an empty mapping, and the
-    caller keeps the plain arithmetic mean.
+    :func:`_parse_rlp_weights` reduces to one hourly curve for the requested
+    ``blend`` (see ``RlpBlend``). Never raises: a download or parse failure logs
+    and returns an empty mapping, and the caller keeps the plain arithmetic mean.
     """
     url = f"{_BASE_URL}/{year}/RLP0N%20{year}%20Electricity%20all%20DSOs.xlsb"
     try:
@@ -122,7 +124,7 @@ async def fetch_rlp_weights(session: aiohttp.ClientSession, year: int) -> RlpWei
         _LOGGER.warning("Synergrid RLP download failed (%s): %s", url, err)
         return {}
     try:
-        return await asyncio.to_thread(_parse_rlp_weights, path)
+        return await asyncio.to_thread(_parse_rlp_weights, path, blend)
     except (
         ImportError,  # pyxlsb missing: the manifest requirement was not installed
         zipfile.BadZipFile,  # an xlsb is a zip container; a non-workbook fails here
@@ -361,7 +363,7 @@ _RLP_YEAR_COLUMN = 1
 _RLP_CURVE_ROUNDING = 12
 
 
-def _parse_rlp_weights(path: Path) -> RlpWeights:
+def _parse_rlp_weights(path: Path, blend: str = "distinct") -> RlpWeights:
     """Read the all-DSO RLP0N workbook into hourly local-time weights.
 
     ``pyxlsb`` is imported here rather than at module level so an install
@@ -370,33 +372,44 @@ def _parse_rlp_weights(path: Path) -> RlpWeights:
     from pyxlsb import open_workbook
 
     with open_workbook(str(path)) as workbook, workbook.get_sheet(_RLP_SHEET) as sheet:
-        return _rlp_weights_from_rows([c.v for c in row] for row in sheet.rows())
+        return _rlp_weights_from_rows(
+            ([c.v for c in row] for row in sheet.rows()), blend
+        )
 
 
-def _rlp_weights_from_rows(rows: Iterable[list[Any]]) -> RlpWeights:
-    """The mean of the distinct DSO curves, summed to local clock hours.
+def _rlp_weights_from_rows(
+    rows: Iterable[list[Any]], blend: str = "distinct"
+) -> RlpWeights:
+    """One DSO blend of the RLP profile, summed to local clock hours.
 
-    Eneco defines its index on "het rekenkundig gemiddelde van de RLP
-    verbruiksprofielen voor alle distributienetbeheerders". Synergrid's
-    workbook lists one column per DSO sub-area, but only three curves are
-    distinct (Fluvius, the Walloon DSOs with the small ones, Sibelga): the
-    same Fluvius curve appears eight times. Averaging the columns as printed
-    weights Flanders eight to one and misses Eneco's published values by up to
-    2,2 EUR/MWh in summer; averaging the DISTINCT curves reproduces all seven
-    published 2026 values to the cent, so that is the rule. Curves are
-    deduplicated by value, not by name, so a sub-area that gains its own curve
-    counts once.
+    Synergrid's workbook lists one column per DSO sub-area, but only three
+    curves are distinct (Fluvius, the Walloon DSOs with the small ones,
+    Sibelga): the same Fluvius curve appears eight times. Three suppliers read
+    the same sheet three ways, and each reproduces its own published values to
+    the cent, so the blend is what the caller asks for:
 
-    Raises ``ValueError`` when the sheet has no curve or the weights do not
-    sum to about one over the year, which is what a wrong sheet or a
-    truncated download looks like.
+      - "distinct": the equal mean of the three distinct curves. Eneco's
+        Belpex-RLP-M; averaging the columns as printed instead weights Flanders
+        eight to one and misses Eneco by up to 2,2 EUR/MWh in summer.
+      - "columns": the mean over every column, i.e. each distinct curve
+        weighted by how many sub-areas share it. energie.be's Belpex_RLP,
+        which its card defines as the mean "van de verschillende
+        distributienetbeheerders" read literally.
+      - "flanders": the Fluvius curve alone, identified by name. Energy Knights
+        sells in Flanders only and bills on the customer's DSO.
+
+    Curves are deduplicated by value, not by name, so a sub-area that gains its
+    own curve counts once. Raises ``ValueError`` when the sheet has no curve,
+    the flanders blend finds no Fluvius column, or the weights do not sum to
+    about one over the year, which is what a wrong sheet or a truncated
+    download looks like.
     """
-    names: list[Any] | None = None
+    header: list[Any] | None = None
     keys: list[tuple[int, int, int]] = []
     curves: list[list[float]] = []
     for row in rows:
-        if names is None:
-            names = list(row)
+        if header is None:
+            header = list(row)
             continue
         year = row[_RLP_YEAR_COLUMN] if len(row) > _RLP_YEAR_COLUMN else None
         if not isinstance(year, (int, float)):
@@ -417,19 +430,57 @@ def _rlp_weights_from_rows(rows: Iterable[list[Any]]) -> RlpWeights:
             curve.append(
                 float(value) if isinstance(value, (int, float)) else float("nan")
             )
-    distinct: dict[tuple[float, ...], list[float]] = {}
-    for curve in curves:
+    col_names = list(header[_RLP_FIRST_CURVE_COLUMN:]) if header else []
+    # Group the columns by value: each distinct curve, how many columns share
+    # it, and the sub-area names it was printed under (for the flanders blend).
+    sigs: dict[tuple[float, ...], int] = {}
+    group_curves: list[list[float]] = []
+    group_counts: list[int] = []
+    group_names: list[list[str]] = []
+    for idx, curve in enumerate(curves):
         if any(value != value for value in curve):  # a column with gaps
             continue
-        distinct.setdefault(tuple(round(v, _RLP_CURVE_ROUNDING) for v in curve), curve)
-    if not distinct or not keys:
+        sig = tuple(round(v, _RLP_CURVE_ROUNDING) for v in curve)
+        group = sigs.get(sig)
+        if group is None:
+            group = len(group_curves)
+            sigs[sig] = group
+            group_curves.append(curve)
+            group_counts.append(0)
+            group_names.append([])
+        group_counts[group] += 1
+        group_names[group].append(str(col_names[idx]) if idx < len(col_names) else "")
+    if not group_curves or not keys:
         raise ValueError("RLP sheet holds no complete curve")
+    chosen = _blend_curves(group_curves, group_counts, group_names, blend)
     weights: RlpWeights = {}
-    count = float(len(distinct))
     for index, key in enumerate(keys):
-        mean = sum(curve[index] for curve in distinct.values()) / count
-        weights[key] = weights.get(key, 0.0) + mean
+        weights[key] = weights.get(key, 0.0) + chosen[index]
     total = sum(weights.values())
     if not 0.99 < total < 1.01:
         raise ValueError(f"RLP weights sum to {total:.4f}, expected 1")
     return weights
+
+
+def _blend_curves(
+    group_curves: list[list[float]],
+    group_counts: list[int],
+    group_names: list[list[str]],
+    blend: str,
+) -> list[float]:
+    """Reduce the distinct DSO groups to one per-quarter curve for ``blend``."""
+    length = len(group_curves[0])
+    if blend == "flanders":
+        for curve, names in zip(group_curves, group_names, strict=True):
+            if any(name.strip().lower().startswith("fluvius") for name in names):
+                return curve
+        raise ValueError("RLP sheet has no Fluvius curve for the flanders blend")
+    if blend == "columns":
+        total_cols = float(sum(group_counts))
+        return [
+            sum(curve[i] * count for curve, count in zip(group_curves, group_counts))
+            / total_cols
+            for i in range(length)
+        ]
+    count = float(len(group_curves))
+    return [sum(curve[i] for curve in group_curves) / count for i in range(length)]

@@ -206,6 +206,7 @@ class _SpotsMixin:
     _rlp_fetched_at: datetime | None
     _rlp_failed_at: datetime | None
     _rlp_weights_year: int | None
+    _rlp_blend: str
     _complete_spot_days: set[date]
     _unloaded: bool
     _snapshot: SupplierSnapshot | None
@@ -750,6 +751,8 @@ class _SpotsMixin:
             return
         self._rlp_weights = parsed
         self._rlp_weights_year = year
+        stored_blend = blob.get("blend")
+        self._rlp_blend = stored_blend if isinstance(stored_blend, str) else "distinct"
         fetched = blob.get("fetched_at")
         if isinstance(fetched, str):
             try:
@@ -757,34 +760,39 @@ class _SpotsMixin:
             except ValueError:
                 self._rlp_fetched_at = None
 
-    async def _ensure_rlp_weights(self) -> None:
+    async def _ensure_rlp_weights(self, blend: str = "distinct") -> None:
         """Refresh the Synergrid RLP profile for the current year if stale.
 
         Called for an entry whose ENERGY leg resolves against the RLP-weighted
-        month mean (Eneco Flex and Flex One) and for every entry on the
-        compensation regime, whose yearly net is spread over the year by the
-        same profile. Soft-fail like the SPP profile: on error keep what is
-        held, back off ``_RLP_RETRY_TTL``, and the caller prices the plain
-        mean, or the metered slices, meanwhile.
+        month mean (Eneco Flex on the distinct-curve mean, Energy Knights on
+        the Fluvius curve, energie.be on the column mean) and for every entry
+        on the compensation regime, whose yearly net is spread over the year by
+        the profile. ``blend`` picks which DSO reduction to fetch; a change of
+        blend re-downloads, since the curves differ. Soft-fail like the SPP
+        profile: on error keep what is held, back off ``_RLP_RETRY_TTL``, and
+        the caller prices the plain mean, or the metered slices, meanwhile.
         """
         now = dt_util.utcnow()
         year = dt_util.now().year
         fresh = (
             self._rlp_weights_year == year
+            and self._rlp_blend == blend
             and self._rlp_fetched_at is not None
             and (now - self._rlp_fetched_at) < timedelta(days=_RLP_REFRESH_DAYS)
         )
         if fresh:
             return
         if (
-            self._rlp_failed_at is not None
+            self._rlp_blend == blend
+            and self._rlp_failed_at is not None
             and (now - self._rlp_failed_at) < _RLP_RETRY_TTL
         ):
             return
-        weights = await fetch_rlp_weights(self._session, year)
+        weights = await fetch_rlp_weights(self._session, year, blend)
         if weights:
             self._rlp_weights = weights
             self._rlp_weights_year = year
+            self._rlp_blend = blend
             self._rlp_fetched_at = now
             self._rlp_failed_at = None
         else:
