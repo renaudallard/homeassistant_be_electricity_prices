@@ -4803,7 +4803,12 @@ def test_sweep_candidate_counts_per_cell() -> None:
     expected = {
         ("flanders", "static", False): 53,
         ("flanders", "static", True): 21,
-        ("flanders", "spot", False): 26,
+        # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
+        # settle on a monthly index once their tranche is spent, so they land
+        # in the spot cell rather than the static one. Re-costed with them:
+        # they parse in 6,4 to 8,2 s against the older pair's 4,3 to 5,2, so
+        # the supplier's reservation moved from 5,7 s to 9,1.
+        ("flanders", "spot", False): 29,
         ("flanders", "spot", True): 3,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,

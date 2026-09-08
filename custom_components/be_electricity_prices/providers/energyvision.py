@@ -51,9 +51,17 @@ the product rather than a variant of one card:
   Dutch ones. Parsed by the ``*_fr`` helpers below. This is where DATS 24's
   Walloon customers land after the 2026-08-31 transfer.
 
-Out of scope: gas (``GSG``, ``GS1JVG``) and the per-volume tiered products
-(``GS1800V``, ``GSVI3``, ``GSLP``, ``GSEZ``, ``GSEZLP``), which price a
-first tranche of kWh differently and have no representation in the model.
+* ``GS1800V`` / ``GSVI3`` / ``GSLP`` (Flanders): the tiered range, which
+  bills a first tranche of the YEAR at a flat rate and the remainder on
+  ``factor x Belpex-RLP-M + 20 EUR/MWh``. Parsed as a ``SpotMonthlyRates``
+  leg carrying the tranche, which ``resolve_volume_tier`` folds into the
+  coefficients against the entry's annual volume. GSVI3 fixes its feed-in
+  price instead of indexing it, which is the only shape difference.
+
+Out of scope: gas (``GSG``, ``GS1JVG``) and the two tiered products that also
+price self-consumed solar (``GSEZ``, ``GSEZLP``): their "Groene stroom uit
+zonnepanelen op je dak" row is a third energy leg with no representation in
+the model.
 """
 
 from __future__ import annotations
@@ -82,6 +90,7 @@ from ._pdf import (
     head_freshness_key,
     parse_sign,
     parse_valid_until,
+    tier_bound_kwh,
     to_float,
     vat_multiplier,
 )
@@ -94,6 +103,7 @@ from .base import (
     ExtractorError,
     FixedRates,
     InjectionRates,
+    SpotMonthlyRates,
     SupplierExtractor,
     SupplierSnapshot,
     TariffKind,
@@ -137,14 +147,34 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         token="WAL-fr",
         regions=_WALLONIA_ONLY,
     ),
+    # The tiered range. All three share one shape and differ only in the
+    # tranche, the flat rate, the coefficient, the standing charge and how the
+    # feed-in is priced, so one parser reads the three of them.
+    _ContractDef(
+        "energyvision_tiered_1800",
+        "EnergyVision 1.800 kWh vast",
+        "spot_monthly",
+        "GS1800V",
+    ),
+    _ContractDef(
+        "energyvision_fixed_injection_3y",
+        "EnergyVision vaste injectieprijs 3 jaar",
+        "spot_monthly",
+        "GSVI3",
+    ),
+    _ContractDef(
+        "energyvision_laadpunt",
+        "EnergyVision Laadpunt",
+        "spot_monthly",
+        "GSLP",
+    ),
 )
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
 # Every residential electricity product code EnergyVision currently lists,
-# across both regions, so discover() flags only a genuinely new SKU. Only
-# GSDYN / GS3JV (Flanders) and GS1JV (Wallonia) are implemented; the rest are
-# catalogued-but-declined: GSVI3 / GS1800V / GSLP / GSEZ / GSEZLP are
-# per-volume tiered products the model can't represent, GSG / GS1JVG are gas,
+# across both regions, so discover() flags only a genuinely new SKU. All of
+# them are implemented except the catalogued-but-declined ones: GSEZ / GSEZLP
+# price self-consumed solar as a third energy leg, GSG / GS1JVG are gas, and
 # GRSO is a transient group-buy SKU.
 DISCOVER_IDS: frozenset[str] = frozenset(
     {
@@ -189,6 +219,31 @@ _FIXED_INJECTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Tiered cards, page 1: "Groene stroom (<1.800 kWh - vast tarief) 10,60
+# €cent/kWh" and its ">" twin for the remainder. The bound's dot is a
+# thousands separator, so it goes through tier_bound_kwh rather than to_float,
+# which would read 1.800 kWh as one point eight.
+_TIER_FIXED_RE = re.compile(
+    rf"Groene\s+stroom[^(\n]*\(\s*<\s*([\d.,]+)\s*kWh\s*[{SIGN_CHARS}]\s*"
+    rf"vast\s+tarief\s*\)\s*{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    re.IGNORECASE,
+)
+# Their feed-in row is either indexed ("variabel") or fixed for the term
+# ("vast", GSVI3). Both print one figure; which of the two it is decides
+# whether _spp_injection finds a formula to index it on.
+_TIER_INJECTION_RE = re.compile(
+    rf"Injectie\s*[{SIGN_CHARS}]\s*(?:variabel|vast)\s+{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    re.IGNORECASE,
+)
+# The tranche's remainder: "1,12 x Belpex-RLP-M + 20 EUR/MWh". Same shape as
+# the SPP formula below and matched the same way, with the index name's
+# hyphens literal so the sign group cannot bind one of them.
+_RLP_FORMULA_RE = re.compile(
+    rf"{_NUM}\s*x\s*Belpex[\s{SIGN_CHARS}]*RLP[\s{SIGN_CHARS}]*M\s*"
+    rf"([{SIGN_CHARS}])\s*{_NUM}\s*EUR\s*/\s*MWh",
+    re.IGNORECASE,
+)
+
 # The fixed cards state the injection formula in prose, identically in both
 # languages: "0,6 x Belpex-SPP-M - 15 EUR/MWh". The separators inside the
 # index name are hyphens, so they are matched literally rather than through
@@ -214,7 +269,12 @@ _FEE_RE = re.compile(rf"Vaste\s+vergoeding\s+{_NUM}\s*€\s*/\s*jaar", re.IGNORE
 # Taxes (Flanders). GSC + WKC print as a single combined value; the
 # energiefonds shows a domiciled (standard residential = 0 EUR/month) and a
 # non-domiciled row; bill the domiciled one.
-_GSC_WKC_RE = re.compile(rf"GSC\s+en\s+WKC\s+geldig\s+voor\s+{_NUM}", re.IGNORECASE)
+# "Kosten GSC en WKC geldig voor 1,554 €cent/kWh" on most cards and
+# "... bedragen 1,554 €cent/kWh" on the laadpunt one. Same levy, same figure,
+# two verbs; pinning one of them lost the whole tax overlay on the other.
+_GSC_WKC_RE = re.compile(
+    rf"GSC\s+en\s+WKC\s+(?:geldig\s+voor|bedragen)\s+{_NUM}", re.IGNORECASE
+)
 _CONTRIB_RE = re.compile(rf"Energiebijdrage\s+{_NUM}", re.IGNORECASE)
 _EXCISE_RE = re.compile(
     rf"Verbruik\s+tussen\s+0\s*&\s*3\.000\s+kWh\s+{_NUM}", re.IGNORECASE
@@ -400,6 +460,8 @@ def parse_snapshot(
     energy: EnergyRates
     if contract.kind == "dynamic":
         energy, injection = _extract_dynamic(text)
+    elif contract.kind == "spot_monthly":
+        energy, injection = _extract_tiered(text)
     else:
         energy, injection = _extract_fixed(text)
     return SupplierSnapshot(
@@ -541,6 +603,49 @@ def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:
         raise ExtractorError("EnergyVision: could not parse fixed injection price")
     injection = _spp_injection(text, to_float(inj.group(1)) / 100.0)
     return energy, injection
+
+
+def _extract_tiered(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
+    """Energy + feed-in for a tiered card.
+
+    The tranche and the formula are carried side by side rather than blended
+    here: which of them a household actually pays depends on its yearly
+    volume, which is entry data and not card data, so ``resolve_volume_tier``
+    folds them together when the snapshot is read for an entry.
+
+    ``rlp_blend`` is the Flanders curve because that is what the card names,
+    "het rekenkundig gemiddelde van de RLP-verbruiksprofielen stroom van de
+    verschillende distributienetbeheerders van Vlaanderen". Every Flemish
+    sub-area shares one Synergrid curve, so the mean over them IS that curve.
+    """
+    fee = _fee(text)
+    tier = _TIER_FIXED_RE.search(text)
+    if tier is None:
+        raise ExtractorError("EnergyVision: could not parse the fixed tranche row")
+    formula = _RLP_FORMULA_RE.search(text)
+    if formula is None:
+        raise ExtractorError("EnergyVision: could not parse the Belpex-RLP-M formula")
+    # The card quotes the formula "(exclusief btw)" against VAT-inclusive
+    # printed prices, so the coefficients are scaled to the same basis the way
+    # the dynamic leg's are. The tranche's own rate is printed inclusive and
+    # is used as-is.
+    vat = vat_multiplier(text, _VAT_RE)
+    energy = SpotMonthlyRates(
+        factor=to_float(formula.group(1)) * vat,
+        base=parse_sign(formula.group(2)) * to_float(formula.group(3)) / 1000.0 * vat,
+        tier_kwh=tier_bound_kwh(tier.group(1)),
+        tier_rate=to_float(tier.group(2)) / 100.0,
+        rlp_indexed=True,
+        rlp_blend="flanders",
+        yearly_fixed_fee=fee,
+    )
+    inj = _TIER_INJECTION_RE.search(text)
+    if inj is None:
+        raise ExtractorError("EnergyVision: could not parse the injection price")
+    # A card that fixes its feed-in price for the term (GSVI3) prints no SPP
+    # formula, so this returns the printed figure as a flat credit; the two
+    # that index it get the coefficients and the monthly guarantee.
+    return energy, _spp_injection(text, to_float(inj.group(1)) / 100.0)
 
 
 def _extract_taxes(text: str) -> TaxOverlay:
@@ -710,7 +815,13 @@ _MONTH_INDEXED_INJECTION = frozenset({"energyvision_fixed_3y", "energyvision_fix
 
 
 EXTRACTOR = SupplierExtractor(
-    sweep_cost_s=5.7,
+    # Re-measured when the tiered range landed: those three cards take 6,4 to
+    # 8,2 s to lay out and parse against 4,3 to 5,2 s for the older pair, in
+    # both measurement orders, so warm-up does not explain the gap. The budget
+    # reserves the worst card of the supplier plus 10%, and leaving it at the
+    # old 5,7 would let the sweep start a laadpunt card it cannot finish,
+    # which is the one thing the reservation exists to prevent.
+    sweep_cost_s=9.1,
     id="energyvision",
     label="EnergyVision",
     contracts=tuple(

@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -37,6 +37,7 @@ from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
     FixedRates,
+    SpotMonthlyRates,
     SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.energyvision import (
@@ -83,6 +84,21 @@ def _wal_aug_text() -> str:
 
 def _wal_aug() -> SupplierSnapshot:
     return parse_snapshot(_FIXED_WAL, _wal_aug_text(), "test://ev-wal-aug")
+
+
+_TIERED_1800 = "energyvision_tiered_1800"
+_TIERED_VI3 = "energyvision_fixed_injection_3y"
+_TIERED_LP = "energyvision_laadpunt"
+
+
+def _tiered(contract_id: str, fixture: str) -> SupplierSnapshot:
+    return parse_snapshot(
+        contract_id, fixture_text(fixture, layout=True), f"test://{contract_id}"
+    )
+
+
+def _tiered_1800() -> SupplierSnapshot:
+    return _tiered(_TIERED_1800, "energyvision_tiered_1800_sep.pdf")
 
 
 # ---- dynamic card (GSDYN) ---------------------------------------------------
@@ -339,7 +355,14 @@ def test_energyvision_is_registered() -> None:
     assert "energyvision" in EXTRACTORS
     assert EXTRACTORS["energyvision"].label == "EnergyVision"
     contract_ids = {c.id for c in EXTRACTORS["energyvision"].contracts}
-    assert contract_ids == {_DYNAMIC, _FIXED, _FIXED_WAL}
+    assert contract_ids == {
+        _DYNAMIC,
+        _FIXED,
+        _FIXED_WAL,
+        _TIERED_1800,
+        _TIERED_VI3,
+        _TIERED_LP,
+    }
 
 
 def test_each_contract_serves_exactly_one_region() -> None:
@@ -349,6 +372,8 @@ def test_each_contract_serves_exactly_one_region() -> None:
     assert regions[_DYNAMIC] == frozenset({"flanders"})
     assert regions[_FIXED] == frozenset({"flanders"})
     assert regions[_FIXED_WAL] == frozenset({"wallonia"})
+    for tiered in (_TIERED_1800, _TIERED_VI3, _TIERED_LP):
+        assert regions[tiered] == frozenset({"flanders"})
 
 
 def test_contract_kinds() -> None:
@@ -356,6 +381,10 @@ def test_contract_kinds() -> None:
     assert kinds[_DYNAMIC] == "dynamic"
     assert kinds[_FIXED] == "fixed"
     assert kinds[_FIXED_WAL] == "fixed"
+    # The tiered range settles on a monthly index once the tranche is spent,
+    # so the flow collects the ENTSO-E key the way it does for a dynamic card.
+    for tiered in (_TIERED_1800, _TIERED_VI3, _TIERED_LP):
+        assert kinds[tiered] == "spot_monthly"
 
 
 def test_discover_ids_superset_of_supported() -> None:
@@ -567,3 +596,119 @@ def test_missing_renewables_row_is_still_fatal() -> None:
 
     with pytest.raises(ExtractorError, match="GSC/WKK"):
         _extract_taxes("Bijzondere accijns 4,876 €cent/kWh\n")
+
+
+# ---- tiered cards (GS1800V / GSVI3 / GSLP) ----------------------------------
+
+
+def test_tiered_card_carries_the_tranche_and_the_formula() -> None:
+    """The September card prints the tranche and its remainder as two rows:
+    "Groene stroom (<1.800 kWh - vast tarief) 10,60 €cent/kWh" against
+    "(>1.800 kWh - variabel tarief)", with footnote b indexing the remainder
+    on "1,12 x Belpex-RLP-M + 20 EUR/MWh (exclusief btw)".
+
+    Both halves are carried, not blended: which one a household pays depends
+    on its yearly volume, which is entry data rather than card data."""
+    snap = _tiered_1800()
+    energy = snap.energy
+    assert isinstance(energy, SpotMonthlyRates)
+    # The bound's dot is a thousands separator; to_float would read it as 1,8.
+    assert energy.tier_kwh == pytest.approx(1800.0)
+    assert energy.tier_rate == pytest.approx(0.1060)
+    # The formula is quoted ex-VAT against a VAT-inclusive card.
+    assert energy.factor == pytest.approx(1.12 * 1.06)
+    assert energy.base == pytest.approx(0.020 * 1.06)
+    assert energy.yearly_fixed_fee == pytest.approx(50.0)
+
+
+def test_tiered_card_indexes_on_the_flanders_rlp_curve() -> None:
+    """The card names "het rekenkundig gemiddelde van de
+    RLP-verbruiksprofielen stroom van de verschillende distributienetbeheerders
+    van Vlaanderen". Every Flemish sub-area shares one Synergrid curve, so the
+    mean over them is that curve, which is the blend Energy Knights already
+    bills on."""
+    energy = _tiered_1800().energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.rlp_indexed is True
+    assert energy.rlp_blend == "flanders"
+
+
+def test_tiered_card_injection_is_spp_indexed_with_its_floor() -> None:
+    """Footnote b indexes the credit on "0,6 x Belpex-SPP-M - 15 EUR/MWh" and
+    condition 5 guarantees 1 €cent/kWh on a monthly basis."""
+    inj = _tiered_1800().injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.0278)
+    assert inj.factor == pytest.approx(0.6)
+    assert inj.base == pytest.approx(-0.015)
+    assert inj.spp_indexed is True
+    assert inj.minimum == pytest.approx(0.01)
+
+
+def test_tiered_card_keeps_the_regulated_side() -> None:
+    """The tiered cards print the same Flemish net-tariff and levy tables as
+    the rest of the range, so nothing about the energy shape may cost the
+    snapshot its overlays."""
+    snap = _tiered_1800()
+    assert len(snap.dsos) == 8
+    assert snap.publication_label == "september 2026"
+    assert snap.taxes.flanders_renewables == pytest.approx(0.01554)
+    assert snap.taxes.federal_excise == pytest.approx(0.04876)
+    antwerpen = snap.dsos["fluvius_antwerpen"]
+    assert antwerpen.capacity_eur_per_kw_year == pytest.approx(52.3679)
+    assert antwerpen.network_ceiling_eur_per_kwh == pytest.approx(0.3472738)
+
+
+def test_the_laadpunt_card_reads_its_own_gsc_wording() -> None:
+    """GSLP prints "Kosten GSC en WKC bedragen 1,554" where every sibling says
+    "geldig voor". Same levy and same figure, two verbs, and pinning one of
+    them lost the whole tax overlay on the other."""
+    snap = _tiered(_TIERED_LP, "energyvision_laadpunt_sep.pdf")
+    assert snap.taxes.flanders_renewables == pytest.approx(0.01554)
+    energy = snap.energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.tier_kwh == pytest.approx(1000.0)
+    assert energy.tier_rate == pytest.approx(0.0954)
+    # The charging-point product carries a much larger standing charge.
+    assert energy.yearly_fixed_fee == pytest.approx(410.0)
+
+
+def test_the_fixed_injection_card_prices_its_feed_in_flat() -> None:
+    """GSVI3 fixes the feed-in price for the term ("Injectie - vast 4,00
+    €cent/kWh") and prints no SPP formula, which is the only shape difference
+    across the tiered range. It must not be left indexed on a formula the card
+    does not carry."""
+    snap = _tiered(_TIERED_VI3, "energyvision_vast_injectie_sep.pdf")
+    inj = snap.injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.04)
+    assert inj.factor is None
+    assert inj.base is None
+    assert inj.spp_indexed is False
+    energy = snap.energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.tier_kwh == pytest.approx(1000.0)
+    assert energy.factor == pytest.approx(1.15 * 1.06)
+
+
+def test_tiered_card_bills_the_year_the_card_says() -> None:
+    """End to end, in euros: the resolved leg has to cost
+    ``1.800 x 10,60c + rest x formula`` over the year, which is what the
+    Voordeelzekerheid clause settles a tiered year at."""
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers.base import (
+        resolve_volume_tier,
+    )
+
+    snap = _tiered_1800()
+    mean = 0.075
+    for annual in (2500.0, 3500.0, 6000.0):
+        rate = energy_eur_per_kwh(
+            resolve_volume_tier(snap, annual).energy,
+            datetime(2026, 3, 4, 9, tzinfo=UTC),
+            mean,
+        )
+        variable = 1.12 * 1.06 * mean + 0.020 * 1.06
+        assert rate * annual == pytest.approx(
+            1800 * 0.1060 + (annual - 1800) * variable
+        )

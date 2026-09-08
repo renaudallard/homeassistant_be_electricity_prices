@@ -1156,6 +1156,8 @@ async def _check_energyvision(
                 detail=str(snap.taxes),
             )
             _validate_snapshot(prefix, cid, snap, require_capacity=_CAPACITY_REQUIRED)
+            if contract.kind == "spot_monthly":
+                _check_energyvision_tier(prefix, snap)
             if "ores" in snap.dsos:
                 # The Walloon card prints the CWaPE Impact bands cheapest
                 # first, the reverse of the DATS 24 layout: a positional
@@ -1169,6 +1171,54 @@ async def _check_energyvision(
                     and o.distribution_medium < o.distribution_pic,
                     detail=str(o),
                 )
+
+
+def _check_energyvision_tier(prefix: str, snap: object) -> None:
+    """The tiered range's own shape: a tranche, a rate for it, and the Flanders
+    RLP curve the remainder resolves against.
+
+    Every bound here is sized on the unit slip it catches rather than on what
+    the tariff happens to cost. The tranche bound is the one that matters:
+    the card prints "1.800 kWh" with a thousands separator, and reading it
+    with ``to_float`` instead of ``tier_bound_kwh`` yields 1,8 kWh, which
+    would put essentially the whole year on the variable leg and leave every
+    other assertion here green.
+    """
+    energy = getattr(snap, "energy", None)
+    tier_kwh = getattr(energy, "tier_kwh", None)
+    tier_rate = getattr(energy, "tier_rate", None)
+    _expect(
+        f"{prefix}: tranche parsed as whole kWh",
+        tier_kwh is not None and tier_kwh >= 100.0,
+        detail=f"tier_kwh={tier_kwh}",
+    )
+    _expect(
+        f"{prefix}: tranche rate in EUR/kWh",
+        tier_rate is not None and 0.01 <= tier_rate <= 1.0,
+        detail=f"tier_rate={tier_rate}",
+    )
+    factor = getattr(energy, "factor", None)
+    base = getattr(energy, "base", None)
+    _expect(
+        f"{prefix}: remainder coefficients in EUR/kWh",
+        factor is not None
+        and 0.1 <= factor <= 10.0
+        and base is not None
+        and abs(base) < 1.0,
+        detail=f"factor={factor}, base={base}",
+    )
+    # The card names the mean over the Flemish DSOs, and every Flemish
+    # sub-area shares one Synergrid curve. A leg that lost the flag would
+    # settle on the plain arithmetic mean, which runs a few percent below.
+    _expect(
+        f"{prefix}: remainder indexed on the Flanders RLP curve",
+        getattr(energy, "rlp_indexed", False)
+        and getattr(energy, "rlp_blend", None) == "flanders",
+        detail=(
+            f"rlp_indexed={getattr(energy, 'rlp_indexed', None)}, "
+            f"rlp_blend={getattr(energy, 'rlp_blend', None)}"
+        ),
+    )
 
 
 async def _check_luminus(
@@ -2386,6 +2436,18 @@ _INJECTION_SHAPE: dict[str, str] = {
     # the contract.
     "energyvision_fixed_3y": "spp",
     "energyvision_fixed_1y": "spp",
+    # The two tiered cards that index their credit monthly, same Belpex-SPP-M
+    # formula as the fixed pair above. Pinned rather than derived: their kind
+    # is spot_monthly, which the default reads as presence-only.
+    "energyvision_tiered_1800": "spp",
+    "energyvision_laadpunt": "spp",
+    # GSVI3 fixes its feed-in price for the term instead of indexing it, so
+    # its card prints a figure and no formula. "monthly" is the shape that
+    # asserts exactly that pair (current set, no factor/base); the label reads
+    # as monthly-indexed, which this one is not, but the invariant is the one
+    # worth holding: a formula appearing here would mean the parser had picked
+    # up a sibling card's wording.
+    "energyvision_fixed_injection_3y": "monthly",
     # Energy Knights Essentia settles the credit on Belpex-SPP-M while its
     # energy leg indexes on the load-weighted Belpex-RLP-M. Pinned because an
     # unlisted spot_monthly derives "present", which asserts only that a leg

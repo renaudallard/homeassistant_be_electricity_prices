@@ -23,12 +23,20 @@ Related reading:
 ## Overview
 
 EnergyVision sells a "Goedkope stroom" family of residential electricity cards; the
-integration tracks three of them:
+integration tracks six of them:
 
 - **GSDYN** ("Goedkope Stroom Dynamisch", Flanders) - a quarter-hourly spot-indexed dynamic product.
 - **GS3JV** ("Goedkope stroom 3 jaar vast", Flanders) - a flat 3-year fixed rate.
 - **GS1JV** ("Électricité bon marché 1 an fixe", Wallonia) - the same fixed shape on a
   1-year lock, off a French card.
+- **GS1800V** ("Goedkope stroom met 1.800 kWh vast", Flanders) - the tiered shape: the
+  year's first 1.800 kWh at 10,60 c€/kWh and the remainder on
+  `1,12 x Belpex-RLP-M + 20 EUR/MWh`.
+- **GSVI3** ("Goedkope stroom met vaste injectieprijs 3 jaar", Flanders) - the same shape
+  on a 1.000 kWh tranche at 9,54 c€/kWh with a `1,15` coefficient, and a feed-in price
+  fixed for the term instead of indexed.
+- **GSLP** ("Goedkope stroom + Laadpunt", Flanders) - the 1.000 kWh tranche again, with the
+  charging point's much larger 410 €/yr standing charge.
 
 Region is a property of the product, not a variant of one card: EnergyVision publishes each
 product for exactly one region in exactly one language (`-nl` for the Flemish cards,
@@ -37,10 +45,9 @@ therefore carries both a `regions` frozenset and the filename `token`, and `fetc
 region the contract is not sold in, naming the regions it is. The two publications share no
 wording, so the Walloon card has its own parser set (the `*_fr` helpers) rather than
 bilingual alternations - see [Wallonia](#wallonia-gs1jv) below. Gas (GSG / GS1JVG) stays out
-of scope. The other electricity SKUs (GSVI3 / GS1800V / GSLP / GSEZ /
-GSEZLP) are per-volume tiered products the pricing model cannot represent (a first-N-kWh
-fixed block plus a variable remainder), so they are catalogued-but-declined; GRSO is a
-transient group-buy SKU. `DISCOVER_IDS` (`providers/energyvision.py:149`) lists all of
+of scope, and so do GSEZ / GSEZLP: they are tiered like the three above but also price
+self-consumed solar ("Groene stroom uit zonnepanelen op je dak 20 €cent/kWh"), a third
+energy leg with no representation in the model. GRSO is a transient group-buy SKU. `DISCOVER_IDS` (`providers/energyvision.py:179`) lists all of
 them so `discover()` only flags a genuinely new code.
 
 EnergyVision publishes its cards as PDFs named `EV-<MMYY>-<CODE>-<lang>.pdf` under
@@ -62,7 +69,7 @@ config (contract_id) -> fetch(): GET listing -> regex the EV-<MMYY>-<CODE>-nl hr
 ```
 
 The `publication_label` is a lowercased "month year" string ("juli 2026") from the card
-header via `_publication_label` (`providers/energyvision.py:441`).
+header via `_publication_label` (`providers/energyvision.py:503`).
 
 ## Contracts
 
@@ -90,8 +97,8 @@ leg pays for the key, not about whether the index is hourly.
 
 ### Resolve + download (`fetch`, `_resolve_card_url`)
 
-`fetch` (`providers/energyvision.py:323`) validates the contract id and region, then
-`_resolve_card_url` (`providers/energyvision.py:371`) GETs the listing HTML and regexes the
+`fetch` (`providers/energyvision.py:383`) validates the contract id and region, then
+`_resolve_card_url` (`providers/energyvision.py:431`) GETs the listing HTML and regexes the
 first `href="/sites/default/files/inline-files/EV-<4 digits>-<CODE>-<token>...pdf"` for the
 contract's code and language token. The `[^"]*` before `.pdf` tolerates the Drupal `_0` dedup suffix. The
 resolved absolute URL is layout-extracted with `fetch_pdf_text_layout` (the layout
@@ -99,14 +106,14 @@ extractor keeps column alignment, important for the DSO table), then parsed.
 
 ### Probe
 
-`EXTRACTOR.probe` = `probe` (`providers/energyvision.py:341`): a cheap
+`EXTRACTOR.probe` = `probe` (`providers/energyvision.py:401`): a cheap
 `head_freshness_key` HEAD on the listing page (ETag / Last-Modified). That key flips when
 EnergyVision rotates the monthly cards, which is exactly when the resolved PDF URL changes,
 so the coordinator re-fetches on a month roll rather than on the time-based TTL.
 
 ### Discover + archive
 
-`discover` (`providers/energyvision.py:356`) returns the residential NL electricity product
+`discover` (`providers/energyvision.py:416`) returns the residential NL electricity product
 codes on the listing (`EV-<MMYY>-<CODE>-nl`), which live_check diffs against `DISCOVER_IDS`
 to flag a new SKU. `EXTRACTOR.fetch_for_month` is `None`: the listing only exposes the
 current month and old versioned URLs are not reliably reachable, so past months bill at the
@@ -114,7 +121,7 @@ current snapshot as a proxy, the same as Ecofix / energie.be.
 
 ## Parsing
 
-`parse_snapshot` (`providers/energyvision.py:389`) dispatches on the contract kind
+`parse_snapshot` (`providers/energyvision.py:449`) dispatches on the contract kind
 (dynamic -> `_extract_dynamic`, fixed -> `_extract_fixed`) for the energy + injection legs,
 and shares `_extract_dsos` + `_extract_taxes` across both cards (their DSO and tax tables
 are identical). `_NUM = r"([\d]+(?:[.,][\d]+)?)"` accepts both decimal separators; a
@@ -135,8 +142,8 @@ applying the x10 would 10x the energy leg.
 
 ## Energy formula (GSDYN)
 
-`_extract_dynamic` (`providers/energyvision.py:460`) does one `findall` with
-`_DYN_FORMULA_RE` (`providers/energyvision.py:175`), which matches both the `afnametarief`
+`_extract_dynamic` (`providers/energyvision.py:522`) does one `findall` with
+`_DYN_FORMULA_RE` (`providers/energyvision.py:205`), which matches both the `afnametarief`
 and `injectietarief` rows in the running formula sentence and keys them by group 1:
 
 ```
@@ -160,8 +167,8 @@ vergoeding.
 
 ## Fixed energy (GS3JV)
 
-`_extract_fixed` (`providers/energyvision.py:532`) parses the "Groene stroom - vast tarief
-13,57 €cent/kWh" row with `_FIXED_ENERGY_RE` (`providers/energyvision.py:183`). The fixed
+`_extract_fixed` (`providers/energyvision.py:594`) parses the "Groene stroom - vast tarief
+13,57 €cent/kWh" row with `_FIXED_ENERGY_RE` (`providers/energyvision.py:213`). The fixed
 rate is printed VAT-inclusive, so it is used as-is (`single = 13,57 / 100`), with the 75
 EUR/jaar vaste vergoeding as `yearly_fixed_fee`. `test_fixed_energy_is_fixed_rates` and
 `test_fixed_yearly_fixed_fee` pin both.
@@ -198,7 +205,7 @@ formula", `test_missing_dynamic_injection_is_fatal`) rather than silently credit
 
 ## Taxes
 
-`_extract_taxes` (`providers/energyvision.py:546`) passes this card's anchors to the shared
+`_extract_taxes` (`providers/energyvision.py:651`) passes this card's anchors to the shared
 `flanders_tax_overlay` helper (`providers/_pdf.py`), which parses the Flanders levy block
 into a `TaxOverlay`. The helper owns which rows may be missing; a lost GSC/WKC row now
 reports "GSC/WKK levies" rather than the generic "tax block" this extractor used for both. All card values are VAT-inclusive (the federal excise and energy fund
@@ -222,8 +229,8 @@ bills the domiciled one, and its regex anchors on "Standaard tarief gedomiciliee
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/energyvision.py:563`) covers all eight Fluvius sub-areas via
-`_DSO_ROWS` (`providers/energyvision.py:317`). EnergyVision prints the area names in **upper
+`_extract_dsos` (`providers/energyvision.py:668`) covers all eight Fluvius sub-areas via
+`_DSO_ROWS` (`providers/energyvision.py:377`). EnergyVision prints the area names in **upper
 case** ("FLUVIUS ANTWERPEN", "FLUVIUS KEMPEN", ...), so the shared Title-case
 `FLUVIUS_CARD_LABELS` map does not apply and this module carries its own:
 
@@ -244,7 +251,7 @@ asserts all eight are present on both cards.
 
 The card prints two meter tables (`Vlaams Gewest Digitale Meter` then
 `Vlaams Gewest Analoge Meter`); the parser slices to the **digital-meter** block between
-`_DIGITAL_MARKER` and `_ANALOG_MARKER` (`providers/energyvision.py:312`) - a modern SMR3
+`_DIGITAL_MARKER` and `_ANALOG_MARKER` (`providers/energyvision.py:372`) - a modern SMR3
 customer is on a digital meter - and reads the five columns:
 
 ```
@@ -267,6 +274,49 @@ analog-meter block (with its prosumer column) is skipped, so
 card says "is geldig voor het product ... van juli 2026", so the month name sits inside a
 "geldig" validity-keyword window and resolves to the last day of the month
 (`date(2026, 7, 31)`, `test_publication_label_and_valid_until`).
+
+## The tiered cards (GS1800V / GSVI3 / GSLP)
+
+All three print the tranche and its remainder as two rows on page 1:
+
+```
+Groene stroom (<1.800 kWh - vast tarief)     10,60 €cent/kWh
+Groene stroom (>1.800 kWh - variabel tarief) 18,03 €cent/kWh
+```
+
+The second figure is an illustration, not a rate. Footnote c says the printed prices are
+computed "volgens methodologie Vlaamse Nutsregulator die een inschatting maakt op
+jaarbasis", and footnote b gives what actually bills: `1,12 x Belpex-RLP-M + 20 EUR/MWh`,
+quoted ex-VAT against a VAT-inclusive card, so the coefficients are scaled by the card's
+own 6% the way the dynamic leg's are. The tranche's rate is printed inclusive and is used
+as-is.
+
+`_extract_tiered` carries both halves on a `SpotMonthlyRates` leg (`tier_kwh` / `tier_rate`
+beside `factor` / `base`) rather than blending them, because which one a household pays
+depends on its yearly volume, which is entry data and not card data.
+`resolve_volume_tier` folds them together when the snapshot is read for an entry - see
+[the pricing model](../pricing-model.md#volume-tiered-energy) for the algebra and for why
+the blend is the annual bill exactly rather than an approximation of it.
+
+The index is the Flanders RLP curve: the card names "het rekenkundig gemiddelde van de
+RLP-verbruiksprofielen stroom van de verschillende distributienetbeheerders van
+Vlaanderen", and every Flemish sub-area shares one Synergrid curve, so the mean over them
+is that curve. That is the same `rlp_blend="flanders"` Energy Knights Essentia bills on.
+
+Two per-card differences are worth knowing, because both broke the first parse:
+
+- **GSVI3 fixes its feed-in price** ("Injectie - vast 4,00 €cent/kWh") and prints no
+  Belpex-SPP-M formula, where its two siblings print "Injectie - variabel" and index the
+  credit monthly. `_TIER_INJECTION_RE` accepts either word and `_spp_injection` then finds
+  a formula or does not, so the flat card is not left indexed on one it does not carry.
+- **GSLP words its GSC/WKC levy differently**: "Kosten GSC en WKC *bedragen* 1,554
+  €cent/kWh" where every other card says "geldig voor". Same levy and same figure, and
+  pinning one verb cost the laadpunt card its entire tax overlay.
+
+The allowance is stated per year and charged pro rata per day (footnote a), split 900/900
+across a day/night meter and not applied to an exclusive-night register. None of that
+reaches the pricing engine, because footnote f's *Voordeelzekerheid* settles the year so
+the full tranche lands at the flat rate whenever the volume allowed it.
 
 ## Wallonia (GS1JV)
 
@@ -337,20 +387,20 @@ Five things a maintainer needs to know about this card:
   (`providers/energyvision.py:454`).
 - **Injection coefficient is exactly 1,0.** Bolt's `factor < 1.0` injection-row heuristic
   would miss it, so the dynamic row is parsed explicitly by label
-  (`providers/energyvision.py:460`).
+  (`providers/energyvision.py:522`).
 - **GS3JV injection is monthly, not spot.** It is `Belpex-SPP-M` (month-end). Emit the
   coefficients with `spp_indexed` so they resolve against the delivery MONTH's mean, and
   never let them reach the hourly spot (`_spp_injection`).
 - **Month-versioned URLs + Drupal dedup suffix.** The card URL carries the pricing month and
   the CMS may append `_0`; resolve it off the listing, do not construct it
-  (`providers/energyvision.py:371`).
+  (`providers/energyvision.py:431`).
 - **Upper-case Fluvius labels.** EnergyVision prints them in caps, so it needs its own
-  `_DSO_ROWS` map, not `FLUVIUS_CARD_LABELS` (`providers/energyvision.py:317`).
+  `_DSO_ROWS` map, not `FLUVIUS_CARD_LABELS` (`providers/energyvision.py:377`).
 - **Two meter tables.** Slice to the digital-meter block before parsing DSO rows, or the
-  analog rows leak in (`providers/energyvision.py:563`).
+  analog rows leak in (`providers/energyvision.py:668`).
 - **GSC + WKC are combined; energiefonds is domiciled.** A single combined renewables value,
   and the domiciled (0 EUR/month) fund row is billed, not the non-domiciled one
-  (`providers/energyvision.py:546`).
+  (`providers/energyvision.py:651`).
 - **Kempen and Midden-Vlaanderen map to non-obvious keys** (`fluvius_iveka`,
   `fluvius_intergem`).
 
