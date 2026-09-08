@@ -896,6 +896,7 @@ def test_a_half_published_dso_pair_bands_on_neither_walk() -> None:
     boxes are independently optional, while every parsed card binds the pair
     together."""
     from custom_components.be_electricity_prices.pricing import (
+        StaticBand,
         compute_breakdown,
         static_breakdown,
     )
@@ -912,7 +913,8 @@ def test_a_half_published_dso_pair_bands_on_neither_walk() -> None:
         },
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.0),
     )
-    for band, hour in (("peak", 9), ("offpeak", 23)):
+    cases: tuple[tuple[StaticBand, int], ...] = (("peak", 9), ("offpeak", 23))
+    for band, hour in cases:
         when = datetime(2026, 3, 4, hour, tzinfo=UTC)
         hourly = compute_breakdown(half, "d", "flanders", when, None, "bi")
         static = static_breakdown(half, "d", "flanders", band)
@@ -933,7 +935,11 @@ def test_a_half_published_dso_pair_bands_on_neither_walk() -> None:
         },
         taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.0),
     )
-    for band, hour, expected in (("peak", 9, 0.15), ("offpeak", 23, 0.09)):
+    banded: tuple[tuple[StaticBand, int, float], ...] = (
+        ("peak", 9, 0.15),
+        ("offpeak", 23, 0.09),
+    )
+    for band, hour, expected in banded:
         when = datetime(2026, 3, 4, hour, tzinfo=UTC)
         hourly = compute_breakdown(whole, "d", "flanders", when, None, "bi")
         static = static_breakdown(whole, "d", "flanders", band)

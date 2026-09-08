@@ -1129,6 +1129,7 @@ async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
             entry,
             historical_spots=spots,
         )
+    assert snap.injection is not None
     live = _injection_price_for_slot(snap.injection, snap.energy, 0.005, dt_util.now())
     assert live is not None and live < 0.0
     # No consumption wired, so the whole bill is the feed-in credit and it
