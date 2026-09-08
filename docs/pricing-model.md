@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1038`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1042`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -224,7 +224,16 @@ the rule caps the two network legs against what the year carries, so a running
 total cannot measure itself against it. `_annual_consumption_kwh` supplies the
 figure the entry already states for the excise band, and
 `_capped_capacity_monthly_eur` divides the capped year back into the month the
-caller is accruing. Every path that bills the charge goes through it -- the
+caller is accruing.
+
+All three figures have to be on ONE VAT basis, and on a professional card they
+were not. `apply_vat` grosses the overlay's EUR/year fees and leaves every
+per-kWh rate as printed, because the pricing engine grosses those per
+component; the ceiling is a per-kWh rate and was grossed with the fees anyway,
+so the headroom came out as a gross ceiling minus a net distribution term.
+The ceiling now stays as printed and the difference is grossed where the
+comparison happens, against a capacity charge that already is. On a
+residential card the factor is 1 and none of this moves. Every path that bills the charge goes through it -- the
 live `capacity_cost` sensor, the year-to-date walk and the backfill's per-hour
 accrual -- because it used to sit on the quote paths alone, and a card printing
 a ceiling then had it honoured in the compare page and billed straight through
@@ -545,7 +554,7 @@ discount and is out of scope (`pricing.py:214-219`).
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
 (`providers/base.py:436-439`). Fields: `pic`, `medium`, `eco`
-(`providers/base.py:370-372`). `dso_impact_band` (`pricing.py:675-691`):
+(`providers/base.py:440-443`). `dso_impact_band` (`pricing.py:675-691`):
 
 | Band | Hours (every day) |
 | --- | --- |
@@ -895,7 +904,7 @@ it.
 The Flanders capaciteitstarief is billed by the coordinator, not folded into the
 per-kWh all-in. It is surfaced on its own `capacity_cost` sensor AND accrued into
 `current_year_cost` through `_ytd_capacity`, so the running bill reflects what
-Fluvius actually charges rather than the energy side alone. Monthly cost (`_compute_capacity`, `fees.py:128-137`):
+Fluvius actually charges rather than the energy side alone. Monthly cost (`_compute_capacity`, `fees.py:138-150`):
 
 ```
 capacity_cost_eur = capped(peak_kw * overlay.capacity_eur_per_kw_year) / 12.0
@@ -965,7 +974,7 @@ full year of history has accumulated.
 ## Prosumer term
 
 The prosumer (compensation-regime) fee is Walloon-only and monthly
-(`_compute_prosumer`, `fees.py:316-331`):
+(`_compute_prosumer`, `fees.py:341-356`):
 
 ```
 prosumer_cost_eur = kva * (dso_rate + supplier_rate) / 12.0
@@ -999,7 +1008,7 @@ overlay, gated the same Walloon-only way (`ytd_cost.py:203-229`).
 
 The Brussels Brugel OSP (Obligations de Service Public) fee is a flat annual
 Sibelga charge scaled by contractual connection power
-(`_brussels_osp_fee`, `fees.py:197-206`):
+(`_brussels_osp_fee`, `fees.py:211-220`):
 
 ```python
 def _brussels_osp_fee(overlay, entry) -> float:      # fees.py:87

@@ -877,6 +877,15 @@ def _vat_energy(energy: EnergyRates, factor: float) -> EnergyRates:
 
 
 def _vat_dso(dso: DsoOverlay, factor: float) -> DsoOverlay:
+    """Gross the overlay's EUR/year fees, and only those.
+
+    The per-kWh rates stay as the card printed them: the pricing engine
+    grosses them per component from ``vat_rate``. ``network_ceiling_eur_per_kwh``
+    is one of those, and grossing it here put it on a different basis from the
+    ``distribution_single + transport`` it is measured against, which
+    overstated the VREG headroom by 21% of that term. It is grossed where the
+    comparison happens instead.
+    """
     return replace(
         dso,
         data_management_per_year=dso.data_management_per_year * factor,
@@ -899,11 +908,6 @@ def _vat_dso(dso: DsoOverlay, factor: float) -> DsoOverlay:
             None
             if dso.brussels_power_term_above_13kva is None
             else dso.brussels_power_term_above_13kva * factor
-        ),
-        network_ceiling_eur_per_kwh=(
-            None
-            if dso.network_ceiling_eur_per_kwh is None
-            else dso.network_ceiling_eur_per_kwh * factor
         ),
     )
 

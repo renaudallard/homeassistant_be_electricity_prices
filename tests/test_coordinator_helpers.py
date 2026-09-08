@@ -6615,3 +6615,43 @@ def test_a_month_index_is_never_read_as_an_hourly_one() -> None:
         snap = make_snapshot(energy=VariableRates(current=0.19), injection=leg)
         assert _injection_needs_spot(snap, entry) is True
         assert _injection_replays_hourly_spot(leg) is True
+
+
+def test_the_vreg_ceiling_and_its_network_term_share_a_vat_basis() -> None:
+    """The VREG rule caps the capacity charge plus the per-kWh network term
+    together, so the three figures have to be on one basis.
+
+    They were not on a professional card. ``apply_vat`` grosses the EUR/year
+    fees and leaves every per-kWh rate as printed, because the pricing engine
+    grosses those per component; the ceiling is a per-kWh rate and was grossed
+    with the fees anyway. The headroom was then measured as a gross ceiling
+    minus a net distribution term, overstating it by the VAT on that term --
+    about 88 EUR of headroom on a 3500 kWh connection, in the one direction
+    that stops the cap biting.
+    """
+    from custom_components.be_electricity_prices.fees import _capped_capacity_annual
+    from custom_components.be_electricity_prices.providers.base import apply_vat
+
+    overlay = DsoOverlay(
+        distribution_single=0.10,
+        transport=0.0145,
+        capacity_eur_per_kw_year=50.0,
+        network_ceiling_eur_per_kwh=0.16,
+    )
+    net = make_snapshot(
+        dsos={"fluvius": overlay},
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002, vat_rate=0.21),
+    )
+    gross = apply_vat(net, include_vat=True)
+    # The ceiling stays as the card printed it, like every other per-kWh rate.
+    assert gross.dsos["fluvius"].network_ceiling_eur_per_kwh == pytest.approx(0.16)
+    # And the whole sandwich scales by exactly the VAT factor, which is what
+    # "one basis" means: the capped charge on the gross card is the capped
+    # charge on the net one, grossed.
+    capped_net = _capped_capacity_annual(overlay, 12.0 * 50.0, 3500.0, "mono")
+    capped_gross = _capped_capacity_annual(
+        gross.dsos["fluvius"], 12.0 * 50.0 * 1.21, 3500.0, "mono", 0.21
+    )
+    assert capped_gross == pytest.approx(capped_net * 1.21)
+    # The cap really is binding here, or the assertion above proves nothing.
+    assert capped_net < 12.0 * 50.0

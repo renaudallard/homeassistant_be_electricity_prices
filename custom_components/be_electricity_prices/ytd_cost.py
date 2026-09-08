@@ -333,7 +333,10 @@ async def _ytd_capacity(
         cached_only=cached_only,
     ):
         monthly = _capped_capacity_monthly_eur(
-            snap_m.dsos.get(dso), entry, billed_peak_kw
+            snap_m.dsos.get(dso),
+            entry,
+            billed_peak_kw,
+            vat_rate=snap_m.taxes.vat_rate,
         )
         total += monthly * (days_in_ytd / days_in_full_month)
     return total

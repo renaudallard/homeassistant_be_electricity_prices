@@ -104,6 +104,7 @@ def _capped_capacity_monthly_eur(
     entry: ConfigEntry,
     peak_kw: float,
     meter: MeterType | None = None,
+    vat_rate: float = 0.0,
 ) -> float:
     """One month of the Flemish capacity charge after the VREG ceiling.
 
@@ -129,6 +130,7 @@ def _capped_capacity_monthly_eur(
         12.0 * monthly,
         _annual_consumption_kwh(entry),
         meter or entry.data.get(CONF_METER, METER_MONO),
+        vat_rate,
     )
     return capped / 12.0
 
@@ -145,7 +147,9 @@ def _compute_capacity(
     dso = entry.data.get(CONF_DSO)
     if dso is None:
         return 0.0
-    return _capped_capacity_monthly_eur(snapshot.dsos.get(dso), entry, peak_kw, meter)
+    return _capped_capacity_monthly_eur(
+        snapshot.dsos.get(dso), entry, peak_kw, meter, snapshot.taxes.vat_rate
+    )
 
 
 def _capped_capacity_annual(
@@ -153,6 +157,7 @@ def _capped_capacity_annual(
     capacity_annual: float,
     annual_kwh: float,
     meter: MeterType,
+    vat_rate: float = 0.0,
 ) -> float:
     """The Flemish capacity charge after the VREG ceiling, in EUR/year.
 
@@ -177,6 +182,13 @@ def _capped_capacity_annual(
 
     Returns ``capacity_annual`` unchanged when the card prints no ceiling,
     when the volume is unknown, or when the total is already under it.
+
+    ``vat_rate`` is the rate the engine still has to apply to a per-kWh rate,
+    which is the card's on an entry billing VAT-inclusive and zero everywhere
+    else. Both per-kWh terms here are as the card printed them, and the
+    capacity charge they are measured against has already been grossed by
+    ``apply_vat``, so the difference is put on that basis before the two are
+    compared. On a residential card the factor is 1 and nothing moves.
     """
     if overlay is None or overlay.network_ceiling_eur_per_kwh is None:
         return capacity_annual
@@ -185,7 +197,9 @@ def _capped_capacity_annual(
     per_kwh = overlay.distribution_single + overlay.transport
     if meter == "exclusive_night" and overlay.distribution_exclusive_night is not None:
         per_kwh = overlay.distribution_exclusive_night + overlay.transport
-    headroom = (overlay.network_ceiling_eur_per_kwh - per_kwh) * annual_kwh
+    headroom = (
+        (overlay.network_ceiling_eur_per_kwh - per_kwh) * (1.0 + vat_rate) * annual_kwh
+    )
     capped = min(capacity_annual, max(headroom, 0.0))
     # ``_billed_peak_kw`` already floors the PEAK at 2,5 kW, so the charge
     # arrives at or above the minimum; the cap is the only thing that can push
