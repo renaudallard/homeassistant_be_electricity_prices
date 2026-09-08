@@ -4016,6 +4016,60 @@ async def test_the_signing_month_card_is_kept_on_disk(
     assert signing is not None and signing.publication_label == "2024-11"
 
 
+async def test_a_month_with_no_card_is_not_re_asked_every_restart(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Establishing that a supplier publishes nothing for a month costs the
+    same download and parse a real card does -- Frank Energie spends 24 s
+    saying so about March 2026 -- and the marker used to die with the process,
+    so every restart paid it again.
+
+    It is not a permanent answer, though: a supplier publishing in arrears
+    turns "not out yet" into a real card days later, so the marker expires on
+    the same TTL it does in memory."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coord
+    tuple_key = ("cociter", "cociter_dynamic", "wallonia")
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    _monthly_snapshots(hass)[(*tuple_key, "2026-03")] = None
+    _monthly_fetched_at(hass)[(*tuple_key, "2026-03")] = dt_util.utcnow()
+    # The running month is re-asked whatever the disk says.
+    _monthly_snapshots(hass)[(*tuple_key, "2026-08")] = None
+    _monthly_fetched_at(hass)[(*tuple_key, "2026-08")] = dt_util.utcnow()
+
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+
+    assert set(saved["monthly_cards"]) == {"2026-03"}
+    assert saved["monthly_cards"]["2026-03"]["_absent"] is True
+
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    fresh = BePricesCoordinator(hass, entry)
+    with patch.object(fresh._store, "async_load", AsyncMock(return_value=saved)):
+        await fresh.async_load_persistent()
+    assert _monthly_snapshots(hass)[(*tuple_key, "2026-03")] is None
+
+    # A day later the marker has expired and the month is asked again, in case
+    # the card was published in the meantime.
+    freezer.move_to("2026-09-01 12:00:00+02:00")
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    later = BePricesCoordinator(hass, entry)
+    with patch.object(later._store, "async_load", AsyncMock(return_value=saved)):
+        await later.async_load_persistent()
+    assert (*tuple_key, "2026-03") not in _monthly_snapshots(hass)
+
+
 async def test_archived_month_cards_survive_a_restart(
     hass: HomeAssistant, freezer: Any
 ) -> None:

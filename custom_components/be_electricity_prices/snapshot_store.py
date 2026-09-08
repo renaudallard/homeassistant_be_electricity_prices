@@ -610,29 +610,48 @@ def monthly_rows_to_store(
     fact, so writing it to disk retires that cost for good rather than merely
     moving it off the setup path.
 
-    Only rows ``_month_row_is_provisional`` calls settled are written: a
-    cached ``None`` says the archive had nothing at the moment it was asked,
-    the running month's card can still be corrected, and a row the extractor
-    flagged provisional is waiting on the index the next card prints. None of
-    the three is a fact worth outliving the process.
+    Only rows ``_month_row_is_provisional`` calls settled are written: the
+    running month's card can still be corrected, and a row the extractor
+    flagged provisional is waiting on the index the next card prints. Neither
+    is a fact worth outliving the process.
+
+    A CLOSED month that came back with no card is written too, as a marker
+    carrying the instant it was asked. Establishing that costs the same
+    download and parse as a card does -- Frank Energie publishes nothing for
+    March 2026 and spends 24 s saying so -- and dropping the marker made every
+    restart pay it again, for ever. It is not a permanent answer: a supplier
+    publishing in arrears turns "not out yet" into a real card days later, so
+    the marker expires on the same ``_MONTHLY_PROVISIONAL_TTL`` it does in
+    memory, which the restore applies.
 
     ``months`` bounds the write to the months the year-to-date walk actually
     asks for, so a blob does not accumulate every month an entry has ever
     walked (about 5 KB per row).
     """
     today = dt_util.now().date()
+    running = (today.year, today.month)
     cache = _monthly_snapshots(hass)
     stamped = _monthly_fetched_at(hass)
     out: dict[str, dict[str, Any]] = {}
     for month in months:
         month_id = f"{month.year:04d}-{month.month:02d}"
         cache_key = (supplier, contract, region, month_id)
-        snap = cache.get(cache_key)
-        if snap is None or _month_row_is_provisional(snap, month, today):
+        if cache_key not in cache:
             continue
-        out[month_id] = _snapshot_to_dict(
-            snap, stamped.get(cache_key) or dt_util.utcnow()
-        )
+        snap = cache[cache_key]
+        stamp = stamped.get(cache_key)
+        if snap is None:
+            # Written on its stamp alone, so a marker with no stamp -- which
+            # nothing writes today -- is skipped rather than restored as
+            # ageless. Never for the running month: that one is re-asked on
+            # every tick anyway.
+            if stamp is None or (month.year, month.month) >= running:
+                continue
+            out[month_id] = {"_cached_at": stamp.isoformat(), "_absent": True}
+            continue
+        if _month_row_is_provisional(snap, month, today):
+            continue
+        out[month_id] = _snapshot_to_dict(snap, stamp or dt_util.utcnow())
     return out
 
 
@@ -667,6 +686,26 @@ def restore_monthly_rows(
             continue
         cache_key = (supplier, contract, region, month_id)
         if cache_key in cache:
+            continue
+        if data.get("_absent"):
+            # "The archive had nothing when asked", and asking again is what
+            # it costs to find out. Honour it only while the in-memory rule
+            # would have, so a card published in arrears is still picked up a
+            # day later rather than never.
+            try:
+                stamp = datetime.fromisoformat(data["_cached_at"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if dt_util.utcnow() - stamp >= _MONTHLY_PROVISIONAL_TTL:
+                continue
+            if (month.year, month.month) >= (today.year, today.month):
+                # A marker for the running month is never written, but a blob
+                # written before midnight on the 1st carries one for what has
+                # since become the running month.
+                continue
+            cache[cache_key] = None
+            stamped[cache_key] = stamp
+            restored += 1
             continue
         try:
             snap = _snapshot_from_dict(data)
