@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 
+import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
@@ -76,6 +77,7 @@ from tests import make_entry, make_snapshot, make_stub_extractor
 
 
 _SPOTS = "custom_components.be_electricity_prices.coordinator_spots"
+_COORD = "custom_components.be_electricity_prices.coordinator"
 
 
 def _entry() -> MockConfigEntry:
@@ -4573,6 +4575,55 @@ async def test_fill_month_cards_warms_the_year_then_asks_for_a_refresh(
         await coord._fill_month_cards()
         assert asked == [date(2026, 9, 1)]
         coord.async_request_refresh.assert_not_awaited()
+
+
+async def test_the_first_tick_gives_up_on_a_hanging_source(
+    hass: HomeAssistant,
+) -> None:
+    """Scoping the first tick's window to the running month bounded the WORK,
+    not the WAIT. Each week-chunk carries a 30 s client timeout and a chunk
+    that times out is followed by the next one, so a month is about 180 s
+    against a source that hangs rather than refuses -- inside the same
+    bootstrap budget issue #88 was cancelled by.
+
+    The tick has to come back and let the background fill deal with it."""
+    # Deliberately NOT frozen: freezegun stops time.monotonic, which is the
+    # clock asyncio.timeout runs on, so a frozen test can never see the
+    # deadline it is here to prove.
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=DynamicRates(factor=1.0, base=0.01))
+    coord._month_cards_deferred = False
+    coord._profiles_deferred = False
+
+    scheduled: list[Any] = []
+    stuck = asyncio.Event()
+
+    async def _hangs(*_a: Any, **_kw: Any) -> None:
+        await stuck.wait()
+
+    def _capture_task(_hass: Any, coro: Any, _name: str) -> Any:
+        scheduled.append(coro)
+        return None
+
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
+    coord._ensure_historical_spots = _hangs  # type: ignore[method-assign,assignment]
+
+    with (
+        patch(f"{_COORD}._FIRST_TICK_SPOT_BUDGET", 0.05),
+        patch.object(coord._store, "async_save", AsyncMock()),
+        patch.object(entry, "async_create_background_task", _capture_task),
+    ):
+        data = await coord._update_body()
+
+    assert data is not None, "a hanging source must not take setup with it"
+    assert [coro.__name__ for coro in scheduled] == ["_fill_year_spots"], (
+        "and what it could not fetch is still handed to the background fill"
+    )
+    scheduled[0].close()
 
 
 async def test_the_first_tick_defers_the_synergrid_profile(

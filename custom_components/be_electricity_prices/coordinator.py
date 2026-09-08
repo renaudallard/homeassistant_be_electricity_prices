@@ -146,6 +146,16 @@ from .providers.base import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# How long the FIRST tick may spend filling the running month's day-ahead
+# history before it gives up and leaves the rest to the background fill. Sized
+# off what it is protecting rather than off the fetch: config-entry setup runs
+# inside a bootstrap stage whose 300 s budget is shared with every other
+# integration, and the card fetch, the today/tomorrow curve and this all come
+# out of it. A month of chunks against a healthy ENTSO-E is a few seconds, so
+# this only ever bites on a source that hangs, which is exactly the case where
+# waiting buys nothing: the fill retries it off the setup path a moment later.
+_FIRST_TICK_SPOT_BUDGET = 45.0
+
 
 def _supplier_label(supplier_id: str | None) -> str:
     """The supplier's human-facing label, falling back to its raw id.
@@ -911,10 +921,32 @@ class BePricesCoordinator(
                 # only the energy term, exactly as a cold cache already does,
                 # and the refresh the fill requests puts them back.
                 self._year_spots_deferred = False
-                await self._ensure_historical_spots(
-                    max(spots_from, date(today_local.year, today_local.month, 1)),
-                    today_local,
-                )
+                # And bounded, because scoping the window is not the same as
+                # bounding the wait. Each week-chunk carries a 30 s client
+                # timeout and a chunk that times out is logged and followed by
+                # the next one, so a month is five of them plus the keyless
+                # fallback: about 180 s against a supplier that hangs rather
+                # than refuses, inside the same 300 s bootstrap budget issue
+                # #88 was cancelled by. On the deadline this keeps whatever
+                # chunks did land -- they are merged per chunk -- and the fill
+                # below asks for the rest, which is the arrangement the year
+                # already had.
+                try:
+                    async with asyncio.timeout(_FIRST_TICK_SPOT_BUDGET):
+                        await self._ensure_historical_spots(
+                            max(
+                                spots_from,
+                                date(today_local.year, today_local.month, 1),
+                            ),
+                            today_local,
+                        )
+                except TimeoutError:
+                    _LOGGER.warning(
+                        "Day-ahead history for %s was still fetching after %ds "
+                        "during setup; continuing in the background",
+                        self.entry.title,
+                        int(_FIRST_TICK_SPOT_BUDGET),
+                    )
                 self.entry.async_create_background_task(
                     self.hass,
                     self._fill_year_spots(),
