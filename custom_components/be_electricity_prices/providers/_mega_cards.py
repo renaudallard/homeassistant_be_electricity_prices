@@ -166,9 +166,12 @@ def _variable_cohort_coefficients(
     prints "TVA N% incluse" (it prints "Hors TVA"), so the shared call baked
     6% into an ex-VAT formula and inflated a pro entry's whole energy leg.
 
-    The Epex index is the monthly RLP-weighted spot; the coordinator applies
-    these against the plain arithmetic monthly mean (a close, few-percent
-    approximation).
+    The card names the index "Epex" and nothing more. Its INJECTION formula, a
+    paragraph away, spells out "la moyenne des valeurs quart-horaires Day-Ahead
+    EPEX SPOT Belgium, ponderee par le SPP" and writes "Epex SPP", so the
+    silence here is the card distinguishing the two rather than omitting a
+    weighting. These resolve against the plain arithmetic monthly mean, which
+    is what ``rlp_indexed`` being unset asks for.
     """
     match = _VARIABLE_MONO_FORMULA_RE.search(re.sub(r"\s+", " ", text))
     if match is None:
@@ -299,6 +302,14 @@ def _extract_energy(
             eco=eco,
             yearly_fixed_fee=yearly_fee,
             formula=formula,
+            # All three bands or none. The re-priced leg prices each band off
+            # its own pair, and a partial set would leave the engine falling
+            # back to the PIC formula for the two it could not read -- the
+            # dearest band applied to the cheapest hours.
+            month_indexed=all(
+                coefficients[f"{band}_factor"] is not None
+                for band in ("pic", "medium", "eco")
+            ),
             pic_factor=coefficients["pic_factor"],
             pic_base=coefficients["pic_base"],
             medium_factor=coefficients["medium_factor"],
@@ -330,6 +341,12 @@ def _extract_energy(
         offpeak=realized.get("offpeak", offpeak),
         exclusive_night=realized.get("exclusive_night", excl_night),
         yearly_fixed_fee=yearly_fee,
+        # The card prints the formula and, beside it, the rates it settled the
+        # PREVIOUS month at; the flag is what re-prices the delivery month off
+        # the formula instead of billing that figure. The bands below are
+        # optional and fall back to the mono pair, so the mono coefficients
+        # alone decide.
+        month_indexed=f_factor is not None,
         formula_factor=f_factor,
         formula_base=f_base,
         formula_factor_peak=bands.get("peak", (None, None))[0],

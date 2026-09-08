@@ -901,6 +901,15 @@ EXTRACTOR = SupplierExtractor(
             # for. Dynamic collects the key via its energy formula; the
             # fixed cards lock the credit for a year and index nothing.
             spot_indexed_injection=c.kind in ("variable", "tou_impact"),
+            # And the same two kinds index their ENERGY on the delivery month.
+            # Their cards print a formula per meter or per CWaPE band and,
+            # beside it, "les derniers prix constates et utilises pour le
+            # calcul de votre facture de regularisation pour le mois de
+            # <MONTH>" -- a month they name, and it is the one before the
+            # card's own: the April card settles March, the May card April.
+            # Billing that figure bills last month's index, so the re-price
+            # needs the optional key step on every solar regime.
+            month_indexed_energy=c.kind in ("variable", "tou_impact"),
         )
         for c in _CONTRACTS
     ),

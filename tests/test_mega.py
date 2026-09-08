@@ -1428,3 +1428,94 @@ def test_a_cap_cohort_keeps_its_ceiling() -> None:
     # And below it the formula still governs.
     low = energy_eur_per_kwh(leg, when, 0.05, meter="mono", region="wallonia")
     assert low < 0.1665
+
+
+def test_mega_reprices_its_variable_and_impact_cards_on_the_delivery_month() -> None:
+    """Mega's cards print a formula AND the rates it settled a NAMED month at.
+
+    "les derniers prix constates et utilises pour le calcul de votre facture de
+    regularisation pour le mois de <MONTH>" -- and the month named is the one
+    before the card's own: the April card settles March, the May card April.
+    Billing that figure bills last month's index, which is the same lag the
+    Cociter and Engie cards carry and are re-priced for. The coefficients were
+    parsed as the prerequisite for this and the flag was never turned on, so
+    _cohort_energy_from_archived answered None and nothing re-priced.
+
+    Pinned by inverting the card's own printed rates: one card prints one
+    month's index, so the re-priced leg evaluated at that index has to give
+    the rates back.
+    """
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.cohort import (
+        _cohort_energy_from_archived,
+    )
+    from custom_components.be_electricity_prices.pricing import (
+        dso_impact_band,
+        energy_eur_per_kwh,
+    )
+    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+    from tests import make_snapshot
+
+    variable = parse_snapshot(
+        "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), "wallonia"
+    ).energy
+    assert isinstance(variable, VariableRates)
+    assert variable.month_indexed is True
+    assert variable.formula_factor is not None and variable.formula_base is not None
+    index = (variable.current - variable.formula_base) / variable.formula_factor
+    leg = _cohort_energy_from_archived(
+        make_snapshot(energy=variable, supplier="mega", contract="mega_smart_flex")
+    )
+    assert isinstance(leg, SpotMonthlyRates)
+    when = datetime(2026, 4, 15, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    assert energy_eur_per_kwh(leg, when, index, meter="mono", region="wallonia") == (
+        pytest.approx(variable.current)
+    )
+
+    impact = parse_snapshot(
+        "mega_offpeak_impact_var", fixture_text("mega_offpeak_impact_w.pdf"), "wallonia"
+    ).energy
+    assert isinstance(impact, ImpactRates)
+    assert impact.month_indexed is True
+    assert impact.pic_factor is not None and impact.pic_base is not None
+    band_index = (impact.pic - impact.pic_base) / impact.pic_factor
+    imp_leg = _cohort_energy_from_archived(
+        make_snapshot(
+            energy=impact, supplier="mega", contract="mega_offpeak_impact_var"
+        )
+    )
+    assert isinstance(imp_leg, SpotMonthlyRates)
+    # Each CWaPE band prices off its OWN pair, so check all three: a partial
+    # set would silently fall back to the PIC formula for the others.
+    for hour, printed in ((19, impact.pic), (9, impact.medium), (3, impact.eco)):
+        moment = datetime(2026, 5, 12, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        assert dso_impact_band(moment) in ("pic", "medium", "eco")
+        got = energy_eur_per_kwh(
+            imp_leg,
+            moment,
+            band_index,
+            meter="mono",
+            region="wallonia",
+            dso_tariff_mode="impact",
+        )
+        # Mega rounds each band separately, so the card's own figure can sit
+        # one unit in the last decimal off its formula.
+        assert got == pytest.approx(printed, abs=1e-4)
+
+    # A FIXED card locks its rate and prints no such sentence, so nothing on
+    # it is re-priced.
+    fixed = parse_snapshot(
+        "mega_smart_fixed", fixture_text("mega_smart_fixed_w.pdf"), "wallonia"
+    ).energy
+    assert not getattr(fixed, "month_indexed", False)
+
+
+def test_every_mega_formula_card_can_collect_a_key() -> None:
+    """The registry flag and the parser must agree, or the re-price is
+    unreachable: with month_indexed_energy False no flow step ever offers the
+    ENTSO-E key, no mean is available, and every path keeps the printed
+    figure."""
+    for contract in EXTRACTORS["mega"].contracts:
+        expected = contract.kind in ("variable", "tou_impact")
+        assert contract.month_indexed_energy is expected, contract.id

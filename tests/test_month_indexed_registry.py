@@ -27,6 +27,7 @@ from custom_components.be_electricity_prices.providers import (
     eneco,
     engie,
     luminus,
+    mega,
     octaplus,
 )
 from custom_components.be_electricity_prices.providers._pdf import (
@@ -230,6 +231,29 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
             "octaplus_fixed_impact", _aligned("octaplus_fixed_w.pdf"), REGION_WALLONIA
         ),
     ),
+    (
+        "mega",
+        "mega_smart_flex",
+        lambda: mega.parse_snapshot(
+            "mega_smart_flex", fixture_text("mega_smart_flex_w.pdf"), REGION_WALLONIA
+        ),
+    ),
+    (
+        "mega",
+        "mega_offpeak_impact_var",
+        lambda: mega.parse_snapshot(
+            "mega_offpeak_impact_var",
+            fixture_text("mega_offpeak_impact_w.pdf"),
+            REGION_WALLONIA,
+        ),
+    ),
+    (
+        "mega",
+        "mega_smart_fixed",
+        lambda: mega.parse_snapshot(
+            "mega_smart_fixed", fixture_text("mega_smart_fixed_w.pdf"), REGION_WALLONIA
+        ),
+    ),
 ]
 
 
@@ -267,3 +291,4 @@ def test_contract_is_month_indexed_reads_the_registry() -> None:
     assert not _contract_is_month_indexed("eneco", "power_fix")
     assert not _contract_is_month_indexed("nobody", "power_flex")
     assert not _contract_is_month_indexed(None, None)
+

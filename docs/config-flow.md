@@ -355,7 +355,8 @@ collected one) and either:
    is indexed on the delivery month's mean and its card prints last month's figure
    (`Contract.month_indexed_energy`: Cociter Variable and Trihoraire, Engie's
    EPEXDAM cards, Luminus MaxxFlex and SmartFlex, OCTA+ Smart Variable, Flux and
-   Eco Flux, Eneco Flex and Flex One). Offered on EVERY solar regime, since the key
+   Eco Flux, Eneco Flex and Flex One, and every Mega Flex plus Off-peak Impact,
+   whose cards name the settled month outright). Offered on EVERY solar regime, since the key
    is what lets `_month_indexed_leg` bill the running month on its own mean; or
 2. `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` and
    `_contract_has_spot_injection(supplier, contract)` is true.
