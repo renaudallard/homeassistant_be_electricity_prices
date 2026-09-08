@@ -6361,3 +6361,220 @@ async def test_compensation_registers_are_clamped_one_by_one(
     # Day register: 31 x 5 kWh at 0.20 = 31.0 EUR; the night surplus is gone.
     assert metered == pytest.approx(31.0)
     assert allocated == pytest.approx(31.0)
+
+
+def _flat_month_spots(today: date, value: float = 0.06) -> dict[datetime, float]:
+    """One flat month of hourly spots up to ``today``.
+
+    Flat on purpose: with every hour at the same price the delivery month's
+    mean equals it, so a walk that resolves the month index and one that
+    resolves the hour's own price land on the same number, and any remaining
+    gap is a routing difference rather than a sampling one.
+    """
+    out: dict[datetime, float] = {}
+    when = dt_util.start_of_local_day(date(today.year, today.month, 1))
+    end = dt_util.start_of_local_day(today) + timedelta(hours=23)
+    while when <= end:
+        out[when.astimezone(UTC)] = value
+        when += timedelta(hours=1)
+    return out
+
+
+async def test_impact_comptage_credits_the_delivery_month_index(
+    hass: HomeAssistant,
+) -> None:
+    """The Walloon comptage option must not move the feed-in credit.
+
+    ``dso_tariff_mode == impact`` routes the year-to-date onto the per-hour
+    walk, which used to be called without the spot cache. A month-indexed
+    credit then resolved against nothing and fell back to the figure the card
+    prints for the PREVIOUS month, while the injection_price sensor beside it
+    billed the delivery month's. Measured on a TotalEnergies Impact shape the
+    same household was credited 1,47 c/kWh against the 0,59 it bills.
+    """
+    today = dt_util.now().date()
+    spots = _flat_month_spots(today)
+    mean = sum(spots.values()) / len(spots)
+    inj = InjectionRates(
+        current=0.0147, factor=0.228, base=-0.00625, month_indexed=True
+    )
+    snap = make_snapshot(
+        energy=VariableRates(current=0.19),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.12,
+                distribution_offpeak=0.07,
+                distribution_pic=0.15,
+                distribution_medium=0.11,
+                distribution_eco=0.06,
+                transport=0.0145,
+            )
+        },
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.002),
+        injection=inj,
+    )
+    days = _days_through(date(today.year, today.month, 1), today)
+    per_day = {d: 24.0 for d in days}
+    per_hour = {utc: 1.0 for utc in spots}
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return dict(per_hour) if entity_id == "sensor.inj" else {}
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        return dict(per_day) if entity_id == "sensor.inj" else {}
+
+    async def _credit(mode: str) -> float:
+        entry = _yearly_entry(
+            meter="mono",
+            solar_regime="injection",
+            dso_tariff_mode=mode,
+            consumption_kwh="sensor.cons",
+            injection_kwh="sensor.inj",
+            day_consumption_kwh=None,
+            night_consumption_kwh=None,
+            day_injection_kwh=None,
+            night_injection_kwh=None,
+        )
+        with (
+            patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+            patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily),
+        ):
+            total = await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                _stub_extractor(),
+                snap,
+                entry,
+                historical_spots=dict(spots),
+            )
+        assert total is not None
+        # Consumption is unwired and the card carries no fees, so the whole
+        # figure is the feed-in credit over the kWh injected.
+        return -total / sum(per_day.values())
+
+    assert inj.factor is not None and inj.base is not None
+    settled = inj.factor * mean + inj.base
+    assert await _credit("bi_horaire") == pytest.approx(settled)
+    assert await _credit("impact") == pytest.approx(settled)
+
+
+async def test_tou_energy_credits_the_month_index_not_the_printed_figure(
+    hass: HomeAssistant,
+) -> None:
+    """A time-of-use card's feed-in credit follows the delivery month too.
+
+    Engie Empower Flextime and Luminus SmartFlex are billed on the per-hour
+    walk because their ENERGY is banded, and that walk was called without the
+    spot cache, so their month-indexed credit sat on the card's printed
+    figure all year.
+    """
+    today = dt_util.now().date()
+    spots = _flat_month_spots(today)
+    mean = sum(spots.values()) / len(spots)
+    snap = make_snapshot(
+        energy=TimeOfUseRates(peak=0.22, transition=0.18, offpeak=0.14),
+        injection=InjectionRates(
+            current=0.0381, factor=0.481, base=-0.006392, month_indexed=True
+        ),
+    )
+    per_hour = {utc: 1.0 for utc in spots}
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        return dict(per_hour) if entity_id == "sensor.inj" else {}
+
+    entry = _yearly_entry(
+        meter="mono",
+        solar_regime="injection",
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+        day_consumption_kwh=None,
+        night_consumption_kwh=None,
+        day_injection_kwh=None,
+        night_injection_kwh=None,
+    )
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        total = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots=dict(spots),
+        )
+    assert total is not None
+    credit = -total / len(per_hour)
+    assert credit == pytest.approx(0.481 * mean - 0.006392)
+    assert credit != pytest.approx(0.0381)
+
+
+async def test_dynamic_compensation_net_is_allocated_on_the_profile(
+    hass: HomeAssistant,
+) -> None:
+    """A dynamic contract's compensation net is spread on the load profile.
+
+    ``_NetAllocation`` prices a Walloon reversing meter by spreading the year's
+    net over the profile, which is how the supplier settles it. The dynamic
+    branch never forwarded ``rlp_weights``, so passing the profile changed the
+    figure by nothing at all and the sensor disagreed with the backfilled
+    series, which allocates on every branch.
+    """
+    today = dt_util.now().date()
+    spots = _flat_month_spots(today)
+    # A price that moves with the clock, or the two settlements coincide.
+    spots = {utc: 0.02 + 0.08 * (dt_util.as_local(utc).hour / 23.0) for utc in spots}
+    snap = make_snapshot(energy=DynamicRates(factor=1.0, base=0.0))
+    cons = {utc: 1.0 for utc in spots}
+    inj = {utc: 0.6 if 9 <= dt_util.as_local(utc).hour < 17 else 0.0 for utc in spots}
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.cons":
+            return dict(cons)
+        return dict(inj) if entity_id == "sensor.inj" else {}
+
+    entry = _yearly_entry(
+        meter="dynamic",
+        solar_regime="compensation",
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+        day_consumption_kwh=None,
+        night_consumption_kwh=None,
+        day_injection_kwh=None,
+        night_injection_kwh=None,
+    )
+    weights = {
+        (
+            dt_util.as_local(utc).month,
+            dt_util.as_local(utc).day,
+            dt_util.as_local(utc).hour,
+        ): (2.0 if dt_util.as_local(utc).hour >= 17 else 0.5)
+        for utc in spots
+    }
+    with patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly):
+        metered = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots=dict(spots),
+        )
+        allocated = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots=dict(spots),
+            rlp_weights=weights,
+        )
+    assert metered is not None and allocated is not None
+    assert metered != pytest.approx(allocated)

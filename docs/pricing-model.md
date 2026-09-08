@@ -871,7 +871,9 @@ Shape (c) has a dedicated YTD helper `_ytd_spot_injection_credit`
 (`ytd_cost.py:599`) that replays the hour's own spot for a static-energy
 contract whose injection prices off BELPEX; it is a no-op unless the injection
 is that shape and an injection sensor is wired, and it skips hours with no
-cached spot (`ytd_cost.py:657-658`).
+cached spot (`ytd_cost.py:657-658`). It belongs to the per-day walk alone: that
+is the only branch with no per-hour spot of its own, and the hourly branches
+credit the same formula inside the walk.
 
 Both of shape (c)'s tells reach it, and the guard reads them through the one
 predicate `_injection_replays_hourly_spot` that also decides whether

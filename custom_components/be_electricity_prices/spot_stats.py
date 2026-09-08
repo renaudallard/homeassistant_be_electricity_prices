@@ -391,6 +391,62 @@ def _energy_month_spot(
     return cache[key]
 
 
+def _energy_needs_spot(energy: EnergyRates) -> bool:
+    """True when this energy leg cannot be priced without a spot value.
+
+    The two formula kinds: a dynamic leg needs the hour's own price, a
+    spot-monthly one the delivery month's index. Every other kind carries a
+    resolved rate and is priced with no spot at all, so an empty cache costs
+    it nothing.
+
+    Asked of the HOUR's own leg rather than of the walk's, because an archived
+    month can carry a different kind from the one the caller dispatched on, and
+    because the walks used to infer it from whether a spot cache had been
+    handed over. That inference is what let the year-to-date drop its cache on
+    the branches whose energy needs none, and with it the feed-in credit and
+    the load profile that ride on the same arguments.
+    """
+    return isinstance(energy, (DynamicRates, SpotMonthlyRates))
+
+
+def _hour_spot(
+    energy: EnergyRates,
+    local: datetime,
+    utc_hour: datetime,
+    spots: dict[datetime, float],
+    bucket: _SpotMonthBucket,
+    mean_cache: dict[tuple[int, int], float | None],
+    today: date,
+    rlp_weights: RlpWeights | None = None,
+) -> float | None:
+    """The spot value to price ``energy`` at for one hour.
+
+    A ``SpotMonthlyRates`` leg (a variable contract re-priced at its signing
+    cohort's coefficients, or a month-indexed card re-priced on the delivery
+    month) bills the month's index, which ``_energy_month_spot`` resolves the
+    same way for the live price table (``_build_hourly``), the year-to-date
+    walk and the backfill: the supplier's published realised value when the
+    month's card carries one, else the RLP-weighted or plain mean of the
+    cached hours. Every other kind uses the per-hour spot. The month mean is
+    memoised so a 365-day window computes at most 12 means.
+
+    The mean goes through the thin-month guard for the same reason the live
+    walk does: a CLOSED month with only a handful of cached hours averages an
+    unrepresentative slice, and applying that to all 744 of them is a wrong
+    rate rather than a missing one. It matters more on the backfill than on
+    the year-to-date, because that one is recomputed every tick and heals
+    itself while these rows are written into the recorder and stay until
+    someone re-runs the service.
+    """
+    if isinstance(energy, SpotMonthlyRates):
+        if not spots:
+            return None
+        return _energy_month_spot(
+            energy, bucket, local.year, local.month, today, rlp_weights, mean_cache
+        )
+    return spots.get(utc_hour) if spots else None
+
+
 def _energy_is_rlp_indexed(energy: EnergyRates | None) -> bool:
     """True when this energy leg resolves against the RLP-weighted month mean:
     a month-indexed variable card that names one, or the SpotMonthlyRates leg

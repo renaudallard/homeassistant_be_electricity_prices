@@ -87,6 +87,7 @@ from .fees import (
 from .injection import (
     _historical_injection_rate,
     _injection_hourly_on_cohort,
+    _injection_is_spot_formula,
     _injection_replays_hourly_spot,
 )
 from .pricing import (
@@ -108,7 +109,8 @@ from .spot_stats import (
     _NetAllocation,
     _bucket_by_local_month,
     _day_register_weights,
-    _energy_month_spot,
+    _energy_needs_spot,
+    _hour_spot,
     _injection_is_spp_indexed,
     _injection_on_month_mean,
     _register_for,
@@ -449,11 +451,14 @@ async def _ytd_hourly_energy(
     month_spp: dict[tuple[int, int, bool], float | None] = {}
     # Bucket the year's spots by local month once so each month's mean is a
     # lookup rather than a full-year rescan (the loop reads up to twelve
-    # distinct months). Only the spot-monthly path reads it; a dynamic
-    # contract prices per hour, so skip the bucketing there entirely.
+    # distinct months). TWO independent readers, and gating on the first alone
+    # is what dropped the second: a month-priced ENERGY leg, and a feed-in
+    # credit that settles on a month index whatever the energy does (Eneco Fix
+    # prices energy without a mean and indexes its credit on one). A dynamic
+    # contract with a per-hour credit reads neither, and skips the scan.
     month_bucket = (
         _bucket_by_local_month(historical_spots)
-        if monthly_mean and historical_spots
+        if historical_spots and (monthly_mean or _injection_on_month_mean(snapshot))
         else {}
     )
     # A static card whose injection is a per-hour spot formula with no printed
@@ -484,29 +489,29 @@ async def _ytd_hourly_energy(
         hours_seen += 1
         local = dt_util.as_local(utc_hour)
         snap_h = await _snap_for(date(local.year, local.month, 1))
-        spot: float | None = None
-        # Distinguishes "this contract needs no spot" (TOU, Impact,
-        # exclusive-night: neither branch below runs) from "it needs one and
-        # the cache has none", which are billed differently.
-        spot_missing = False
-        if monthly_mean:
-            # The month's own leg decides: the supplier's published realised
-            # index first, then the RLP-weighted or plain mean of the cached
-            # hours, gated on coverage so a closed month cached too thinly does
-            # not price every one of its hours off an unrepresentative handful.
-            spot = _energy_month_spot(
-                snap_h.energy,
-                month_bucket,
-                local.year,
-                local.month,
-                today,
-                rlp_weights,
-                month_means,
-            )
-            spot_missing = spot is None
-        elif historical_spots is not None:
-            spot = historical_spots.get(utc_hour)
-            spot_missing = spot is None
+        # The HOUR's own leg decides, not the branch the caller dispatched on:
+        # a spot-monthly leg takes the month's index (the supplier's published
+        # realised value first, then the RLP-weighted or plain mean of the
+        # cached hours, gated on coverage so a closed month cached too thinly
+        # does not price every one of its hours off an unrepresentative
+        # handful), a dynamic leg the hour's own price, and every other kind
+        # carries a resolved rate and needs none. Asking the leg is also what
+        # lets this walk hold the spot cache on the branches whose energy does
+        # not need it, so the feed-in credit beside it can still resolve.
+        spot = _hour_spot(
+            snap_h.energy,
+            local,
+            utc_hour,
+            historical_spots or {},
+            month_bucket,
+            month_means,
+            today,
+            rlp_weights,
+        )
+        # Distinguishes "this contract needs no spot" (fixed, variable, TOU,
+        # Impact) from "it needs one and the cache has none", which are billed
+        # differently. Same rule the backfill applies to the same question.
+        spot_missing = spot is None and _energy_needs_spot(snap_h.energy)
         try:
             if spot_missing:
                 # No spot for this hour. Bill the two legs that do not depend
@@ -545,7 +550,19 @@ async def _ytd_hourly_energy(
             # a different index rather than a coarser one and the card's own
             # indicative is credited instead.
             inj_spot = _spp_injection_spot(
-                spot,
+                # The hour's spot goes in only when the CREDIT is the one that
+                # replays it, judged by the same predicate the live scalar
+                # uses. ``spot`` is resolved for the ENERGY leg, and the two
+                # legs need not agree: a card that prints a monthly indicative
+                # beside its formula bills the indicative, and handing this the
+                # energy's spot would price a whole year of feed-in off a
+                # formula the card calls an illustration.
+                (
+                    spot
+                    if snap_h.injection is not None
+                    and _injection_is_spot_formula(snap_h.injection, snap_h.energy)
+                    else None
+                ),
                 # The INJECTION's flag, not the energy leg's. They differ on
                 # exactly the cards this matters for: Eneco Fix and Flex price
                 # energy without a mean and index the credit on one, so the
@@ -895,6 +912,8 @@ async def _compute_current_year_cost(
             breakdown=breakdown,
             historical_spots=historical_spots or {},
             spot_quarters=spot_quarters,
+            spp_weights=spp_weights,
+            rlp_weights=rlp_weights,
             cached_only=cached_only,
         )
         if dyn_energy is None:
@@ -951,32 +970,17 @@ async def _compute_current_year_cost(
             contract=contract,
             meter=meter,
             breakdown=breakdown,
+            historical_spots=historical_spots or {},
+            spot_quarters=spot_quarters,
+            spp_weights=spp_weights,
+            rlp_weights=rlp_weights,
             cached_only=cached_only,
         )
         if hourly_energy is None:
             return fees
-        if regime == SOLAR_REGIME_INJECTION:
-            # _ytd_hourly_energy here runs without historical spots, so a
-            # spot-indexed injection (Cociter Variable) credited nothing
-            # above. Apply the same per-hour spot-replayed credit the
-            # daily path uses; a no-op for monthly-indicative injection.
-            hourly_energy -= await _ytd_spot_injection_credit(
-                hass,
-                snapshot,
-                entry,
-                today,
-                historical_spots,
-                _month_snapshot_cache(
-                    hass,
-                    session,
-                    extractor,
-                    contract,
-                    region,
-                    snapshot,
-                    entry,
-                    cached_only=cached_only,
-                ),
-            )
+        # No separate feed-in term here, unlike the per-day walk below: this
+        # branch holds the spot cache, so the walk itself credits a per-hour
+        # formula hour by hour. Adding one would credit it twice.
         return hourly_energy + fees
 
     # The EFFECTIVE meter, not the entry's. The comparison page quotes a

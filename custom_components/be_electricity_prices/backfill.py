@@ -114,10 +114,10 @@ from .injection import (
 )
 from .spot_stats import (
     _NetAllocation,
-    _SpotMonthBucket,
     _bucket_by_local_month,
     _energy_is_rlp_indexed,
-    _energy_month_spot,
+    _energy_needs_spot,
+    _hour_spot,
     _injection_is_spp_indexed,
     _injection_on_month_mean,
     _register_for,
@@ -132,7 +132,7 @@ from .pricing import (
     compute_breakdown,
     compute_network_and_taxes,
 )
-from .providers import DynamicRates, SpotMonthlyRates, get as get_extractor
+from .providers import get as get_extractor
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -358,7 +358,7 @@ async def _ensure_dynamic_spots(
     if cohort is not None:
         eff_energy = cohort
     if (
-        not isinstance(eff_energy, (DynamicRates, SpotMonthlyRates))
+        not _energy_needs_spot(eff_energy)
         and not _injection_needs_spot(snap, entry)
         and not _injection_needs_month_spot(snap, entry)
     ):
@@ -373,44 +373,6 @@ async def _ensure_dynamic_spots(
         dt_util.as_local(start).date(), dt_util.as_local(end).date()
     )
     return coordinator._historical_spots, coordinator._historical_spot_quarters
-
-
-def _hour_spot(
-    energy: Any,
-    local: datetime,
-    utc_hour: datetime,
-    spots: dict[datetime, float],
-    bucket: _SpotMonthBucket,
-    mean_cache: dict[tuple[int, int], float | None],
-    today: date,
-    rlp_weights: RlpWeights | None = None,
-) -> float | None:
-    """The spot value to price ``energy`` at for one hour.
-
-    A ``SpotMonthlyRates`` leg (a variable contract re-priced at its signing
-    cohort's coefficients, or a month-indexed card re-priced on the delivery
-    month) bills the month's index, which ``_energy_month_spot`` resolves the
-    same way for the live price table (``_build_hourly``) and the YTD walk
-    (``_ytd_hourly_energy`` with ``monthly_mean=True``): the supplier's
-    published realised value when the month's card carries one, else the
-    RLP-weighted or plain mean of the cached hours. Every other kind uses the
-    per-hour spot. The month mean is memoised so a 365-day window computes at
-    most 12 means.
-
-    The mean goes through the thin-month guard for the same reason the live
-    walk does: a CLOSED month with only a handful of cached hours averages an
-    unrepresentative slice, and applying that to all 744 of them is a wrong
-    rate rather than a missing one. It matters more here than there, because
-    the year-to-date is recomputed every tick and heals itself while these rows
-    are written into the recorder and stay until someone re-runs the service.
-    """
-    if isinstance(energy, SpotMonthlyRates):
-        if not spots:
-            return None
-        return _energy_month_spot(
-            energy, bucket, local.year, local.month, today, rlp_weights, mean_cache
-        )
-    return spots.get(utc_hour) if spots else None
 
 
 @dataclass(frozen=True)
@@ -637,7 +599,7 @@ async def _backfill_price_sensors(
         # Dynamic / spot-monthly without a spot for this hour: nothing to
         # write, the formula factor*spot+base (or factor*mean+base) needs both.
         # Fixed / variable pass spot=None and ignore it in compute_breakdown.
-        if isinstance(snap_h.energy, (DynamicRates, SpotMonthlyRates)) and spot is None:
+        if spot is None and _energy_needs_spot(snap_h.energy):
             continue
         try:
             bd = compute_breakdown(snap_h, dso, region, local, spot, meter, dso_mode)
@@ -830,9 +792,7 @@ async def _backfill_cost_sensor(
         # persisted cost series drop grid and taxes on every metered kWh in an
         # ENTSO-E gap, so the imported rows and the compiled ones disagreed at
         # the seam by more than the energy nobody could price.
-        no_spot = (
-            isinstance(snap_h.energy, (DynamicRates, SpotMonthlyRates)) and spot is None
-        )
+        no_spot = spot is None and _energy_needs_spot(snap_h.energy)
         try:
             bd = (
                 compute_network_and_taxes(snap_h, dso, region, local, meter, dso_mode)
