@@ -87,6 +87,7 @@ from custom_components.be_electricity_prices.injection import (
     _injection_needs_month_spot,
     _injection_needs_spot,
     _injection_needs_spot_quarters,
+    _injection_replays_hourly_spot,
     _injection_price_for_slot,
     _injection_varies_intraday,
 )
@@ -6578,3 +6579,39 @@ async def test_dynamic_compensation_net_is_allocated_on_the_profile(
         )
     assert metered is not None and allocated is not None
     assert metered != pytest.approx(allocated)
+
+
+def test_a_month_index_is_never_read_as_an_hourly_one() -> None:
+    """``_injection_needs_spot`` means "this credit carries a PER-HOUR index".
+
+    Its absent-``current`` test reads "the card printed no rate to prefer",
+    which is a tell for a per-slot formula and says nothing about the period
+    the credit settles on. A month-indexed card that stops printing its
+    indicative has both, and every one of the four extractors that set the
+    month flag can emit that shape: they return the leg as long as either the
+    figure or the formula parsed. Claimed as per-hour it lost the month bake
+    the coordinator gates on this, so the injection_price sensor reported
+    nothing at all while the running bill went on crediting the month formula.
+    """
+    entry = _yearly_entry(solar_regime="injection")
+    month_only = InjectionRates(factor=0.9, base=-0.01, month_indexed=True)
+    spp_only = InjectionRates(factor=0.9, base=-0.01, spp_indexed=True)
+    for flag, leg in (("month_indexed", month_only), ("spp_indexed", spp_only)):
+        snap = make_snapshot(energy=VariableRates(current=0.19), injection=leg)
+        assert _injection_needs_spot(snap, entry) is False, flag
+        assert _injection_hourly_on_cohort(snap, entry) is False, flag
+        assert _injection_needs_month_spot(snap, entry) is True, flag
+        # And the per-hour replay does not claim it either, or the credit
+        # would be applied twice: once at the month mean and once per hour.
+        assert _injection_replays_hourly_spot(leg) is False, flag
+
+    # The shapes it does describe are untouched: Cociter Tarif Variable
+    # prints no indicative and settles per hour, and every Bolt fixed and
+    # variable card prints one it calls an illustration.
+    for leg in (
+        InjectionRates(factor=0.97, base=-0.021),
+        InjectionRates(current=0.0531, factor=0.9, base=-0.01, slot_indexed=True),
+    ):
+        snap = make_snapshot(energy=VariableRates(current=0.19), injection=leg)
+        assert _injection_needs_spot(snap, entry) is True
+        assert _injection_replays_hourly_spot(leg) is True

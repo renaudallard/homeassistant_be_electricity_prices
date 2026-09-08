@@ -172,12 +172,26 @@ def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> boo
     config flow must collect an API key) to credit the injection.
     DynamicRates contracts already fetch spots via the energy
     path and are excluded here. Only relevant on the injection regime.
+
+    A leg carrying a MONTH index is excluded outright, whatever else is true.
+    The absent-``current`` test reads "the card printed no rate to prefer",
+    which is a tell for a per-slot formula and not a claim about the period it
+    settles on, and a month-indexed card that stops printing its indicative
+    has both. Every one of eneco, engie, luminus and totalenergies can emit
+    that shape: their extractors return the leg as long as EITHER the figure
+    or the formula parsed. It answered True here, so ``_injection_needs_spot``
+    -- the predicate that means "this credit carries a PER-HOUR index" --
+    claimed it, the coordinator skipped the month bake it gates, and the
+    injection_price sensor reported nothing at all while the running bill went
+    on crediting the month formula.
     """
     if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
         return False
     inj = snapshot.injection
     return (
         inj is not None
+        and not inj.month_indexed
+        and not inj.spp_indexed
         and (inj.current is None or inj.slot_indexed)
         and inj.factor is not None
         and inj.base is not None
@@ -350,6 +364,11 @@ def _injection_replays_hourly_spot(inj: InjectionRates) -> bool:
         inj.factor is not None
         and inj.base is not None
         and not inj.month_indexed
+        # And not the solar-weighted sibling, which is a month index too. The
+        # pair moves together with the fallback in _historical_injection_rate:
+        # relaxing one without the others either double-credits the feed-in or
+        # drops it.
+        and not inj.spp_indexed
         and (inj.current is None or inj.slot_indexed)
     )
 
