@@ -574,6 +574,17 @@ def test_historical_injection_rate_prefers_formula_over_current() -> None:
     static = InjectionRates(current=0.0476)
     assert _historical_injection_rate(static, 0.10) == pytest.approx(0.0476)
     assert _historical_injection_rate(None, 0.10) is None
+    # A card that calls its printed figure an illustration of the formula
+    # (slot_indexed: every Bolt fixed and variable card) has no indicative to
+    # fall back on. Answering "no rate" is what leaves the credit to the
+    # per-hour replay instead of billing a figure the card disowns.
+    illustrated = InjectionRates(
+        current=0.0531, factor=0.94, base=-0.01133, slot_indexed=True
+    )
+    assert _historical_injection_rate(illustrated, 0.005) == pytest.approx(
+        0.94 * 0.005 - 0.01133
+    )
+    assert _historical_injection_rate(illustrated, None) is None
 
 
 def test_historical_injection_rate_picks_tou_slot() -> None:
@@ -1048,6 +1059,81 @@ async def test_ytd_spot_injection_credit_replays_hourly_spots(
         assert (
             await _ytd_spot_injection_credit(hass, monthly, entry, today, spots) == 0.0
         )
+
+
+async def test_year_cost_credits_a_slot_indexed_card_off_the_spot(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A card that prints a feed-in indicative and calls it an illustration
+    must be credited at its formula by the year-to-date walk, not at the
+    printed figure.
+
+    Bolt's fixed and variable cards are the shape: they carry the Belpex
+    formula and say the printed column only illustrates it. The
+    injection_price sensor, the backfill and the compare page all bill the
+    formula; the static per-day walk credited the printed figure, because
+    the walk hands it no spot and the per-hour replay excluded it on the
+    strength of that same printed figure. At a sunny-midday quote the two
+    answers do not even share a sign.
+    """
+
+    freezer.move_to("2026-01-03 12:00:00+01:00")
+    snap = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=FixedRates(single=0.18),
+        injection=InjectionRates(
+            current=0.0531, factor=0.94, base=-0.01133, slot_indexed=True
+        ),
+    )
+    entry = _entry(
+        supplier="test",
+        contract="test",
+        solar_regime="injection",
+        meter="mono",
+        consumption_kwh="sensor.cons_total",
+        injection_kwh="sensor.inj_total",
+    )
+    hours = [
+        dt_util.start_of_local_day(datetime(2026, 1, day)).astimezone(UTC)
+        + timedelta(hours=11)
+        for day in (1, 2, 3)
+    ]
+    # 5 EUR/MWh is an ordinary sunny midday quotation, and the formula is
+    # below its own break-even (12,1 EUR/MWh) there.
+    spots = {hour: 0.005 for hour in hours}
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.inj_total":
+            return {date(2026, 1, day): 10.0 for day in (1, 2, 3)}
+        return {}
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.inj_total":
+            return {hour: 10.0 for hour in hours}
+        return {}
+
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily),
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+    ):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            snap,
+            entry,
+            historical_spots=spots,
+        )
+    live = _injection_price_for_slot(snap.injection, snap.energy, 0.005, dt_util.now())
+    assert live is not None and live < 0.0
+    # No consumption wired, so the whole bill is the feed-in credit and it
+    # has to be the rate the sensor beside it shows, not the printed 0,0531.
+    assert cost == pytest.approx(-30.0 * live)
 
 
 async def test_ytd_spot_injection_credit_uses_each_month_own_card(

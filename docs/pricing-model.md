@@ -758,7 +758,8 @@ otherwise so the caller falls back to the current / factor+base path.
 
 `_historical_injection_rate(injection, spot, *, energy, when)` mirrors the live
 priority for a past hour: TOU slot first, then `factor*spot+base` when both the
-formula and a historical spot exist, then `current` (`injection.py:362-383`).
+formula and a historical spot exist, then `current` unless the card calls that
+figure an illustration (`injection.py:519-534`).
 The ordering (formula before `current`) is a bug fix: several dynamic-injection
 contracts (Engie, Luminus, Mega, OCTA+, TotalEnergies) publish BOTH a `current`
 indicative and `factor`/`base`, and checking `current` first made the YTD credit
@@ -798,13 +799,23 @@ context):
   profile loaded the slices are priced as metered, still clamped per register.
   The coordinator fetches the profile for every compensation entry.
 - `injection`: per-hour `cons * all_in - inj * inj_rate`, where `inj_rate` comes
-  from `_historical_injection_rate` (`injection.py:444-500`).
+  from `_historical_injection_rate` (`injection.py:471-534`).
 
 Shape (c) has a dedicated YTD helper `_ytd_spot_injection_credit`
-(`ytd_cost.py:444`) that credits a static-energy contract whose injection is a
-pure BELPEX formula with no fixed credit; it is a no-op unless the injection is
-exactly that shape and an injection sensor is wired, and it skips hours with no
-cached spot (`ytd_cost.py:478-480`).
+(`ytd_cost.py:599`) that replays the hour's own spot for a static-energy
+contract whose injection prices off BELPEX; it is a no-op unless the injection
+is that shape and an injection sensor is wired, and it skips hours with no
+cached spot (`ytd_cost.py:657-658`).
+
+Both of shape (c)'s tells reach it, and the guard reads them through the one
+predicate `_injection_replays_hourly_spot` that also decides whether
+`_historical_injection_rate` may fall back on a printed figure. Reading only
+the absent-`current` tell excluded every Bolt fixed and variable card, so the
+per-day walk credited the illustration while the `injection_price` sensor, the
+backfill and the compare page all billed the formula: at a 5 EUR/MWh sunny
+midday quotation the two answers do not share a sign. The two guards move
+together, because relaxing either one alone would double the feed-in or drop
+it.
 
 ## Capacity tariff
 

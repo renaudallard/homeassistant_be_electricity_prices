@@ -87,6 +87,7 @@ from .fees import (
 from .injection import (
     _historical_injection_rate,
     _injection_hourly_on_cohort,
+    _injection_replays_hourly_spot,
 )
 from .pricing import (
     MeterType,
@@ -614,9 +615,17 @@ async def _ytd_spot_injection_credit(
     day), so this isolated term replays the spots the same way the
     dynamic energy path does, and the caller subtracts it from the bill.
 
-    Returns 0.0 (a no-op) unless the injection is exactly that shape
-    (``factor``/``base`` set, ``current is None``), spots are cached, and
-    an injection sensor is wired. Hours with no cached spot are skipped.
+    Returns 0.0 (a no-op) unless the injection is one of the two shapes
+    ``_injection_replays_hourly_spot`` names, spots are cached, and an
+    injection sensor is wired. Hours with no cached spot are skipped.
+
+    The second of those shapes is the card that prints an indicative and
+    calls it an illustration (every Bolt fixed and variable card). It used to
+    be excluded here on the printed figure alone, so the walk credited that
+    figure while the injection_price sensor, the backfill and the compare
+    page all billed the Belpex formula. The two guards move together with the
+    fallback in ``_historical_injection_rate``: relaxing one without the
+    other either double-credits the feed-in or drops it.
 
     ``snap_for`` resolves each hour to its own delivery month's card, the way
     the sibling walks and the backfill already do. Without it every past hour
@@ -627,13 +636,7 @@ async def _ytd_spot_injection_credit(
     crediting it twice would double the feed-in.
     """
     inj = snapshot.injection
-    if (
-        inj is None
-        or inj.factor is None
-        or inj.base is None
-        or inj.current is not None
-        or not historical_spots
-    ):
+    if inj is None or not historical_spots or not _injection_replays_hourly_spot(inj):
         return 0.0
     inj_ids = _hourly_injection_sensors(entry)
     if not inj_ids:
@@ -657,12 +660,7 @@ async def _ytd_spot_injection_credit(
         if snap_for is not None:
             local = dt_util.as_local(utc_hour)
             inj_h = (await snap_for(date(local.year, local.month, 1))).injection
-            if (
-                inj_h is None
-                or inj_h.factor is None
-                or inj_h.base is None
-                or inj_h.current is not None
-            ):
+            if inj_h is None or not _injection_replays_hourly_spot(inj_h):
                 # That month is not this shape, so its own card was already
                 # credited by the walk this term is added to.
                 continue

@@ -327,6 +327,33 @@ def _injection_is_spot_formula(inj: InjectionRates, energy: EnergyRates) -> bool
     )
 
 
+def _injection_replays_hourly_spot(inj: InjectionRates) -> bool:
+    """True when this feed-in leg settles on the hour's own spot, so a walk
+    holding no spot must not credit the printed figure.
+
+    Two shapes reach it, the same pair ``_injection_needs_spot`` collects an
+    ENTSO-E key for: a card that prints no indicative at all (Cociter Tarif
+    Variable) and one whose indicative it calls an illustration
+    (``slot_indexed``: every Bolt fixed and variable card). For the first the
+    walk already credited nothing, because there was nothing to credit; for
+    the second it credited a figure the card says is not the rate, while the
+    injection_price sensor beside it billed the formula. Bolt's printed
+    5,31 c/kWh is the formula at a Belpex of 68,5 EUR/MWh, and the formula
+    turns negative below 12,1, so the flat figure over-credits every sunny
+    quarter the panels actually export in.
+
+    Judged on the leg alone, not on the energy kind: this decides who owns
+    the credit, and the per-hour replay owns it on both shapes whatever the
+    consumption side is billed on.
+    """
+    return (
+        inj.factor is not None
+        and inj.base is not None
+        and not inj.month_indexed
+        and (inj.current is None or inj.slot_indexed)
+    )
+
+
 def _injection_needs_spot_quarters(
     snapshot: SupplierSnapshot, entry: ConfigEntry
 ) -> bool:
@@ -461,7 +488,9 @@ def _historical_injection_rate(
     first made the YTD credit use the flat indicative while the live
     injection-price sensor used the spot formula, so the two user-facing
     numbers diverged. Static contracts have no spot, so they fall through
-    to ``current``.
+    to ``current`` - unless the card calls that figure an illustration, and
+    then nothing here credits it and the per-hour replay does
+    (``_injection_replays_hourly_spot``).
 
     ``quarters`` are the hour's own slot spots and win over ``spot`` when
     given. Pass them only for an hour that is priced off its own spot, never
@@ -495,6 +524,11 @@ def _historical_injection_rate(
             return tou_rate
     if injection.factor is not None and injection.base is not None and spot is not None:
         return _floor_injection(injection.factor * spot + injection.base, injection)
+    if _injection_replays_hourly_spot(injection):
+        # No spot, and the printed figure is an illustration of the formula
+        # rather than a rate. Answer "no rate" so the per-hour replay is the
+        # only thing that credits this leg, instead of both crediting it.
+        return None
     if injection.current is not None:
         return _floor_injection(injection.current, injection)
     return None
