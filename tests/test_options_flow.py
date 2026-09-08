@@ -3236,6 +3236,89 @@ def test_annual_fees_exclude_capacity_for_ytd() -> None:
     assert without_cap == pytest.approx(70.0)
 
 
+def test_the_ytd_what_if_accrues_capacity_like_the_live_sensor() -> None:
+    """The year-to-date what-if is meant to match current_year_cost to the
+    cent, and the capacity leg is what pulled the two apart.
+
+    _annual_fees used to hold the charge under the VREG ceiling against the
+    volume its caller happened to pass, and the YTD caller passes the WINDOW's
+    kWh: in March that measured a full year's capacity charge against a
+    quarter of a year's consumption, so the cap bit where it does not belong.
+    The per-month proration correction then re-added the UNCAPPED figure, so
+    the two terms stopped cancelling and the page quoted about half the
+    capacity leg. The ceiling now belongs to _compute_capacity, on the year
+    the entry states, and both terms read the same number.
+    """
+    from custom_components.be_electricity_prices.compare_quote import _annual_bill
+    from custom_components.be_electricity_prices.fees import (
+        _capped_capacity_monthly_eur,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        FixedRates,
+        TaxOverlay,
+    )
+    from tests import make_snapshot
+
+    overlay = DsoOverlay(
+        distribution_single=0.1128,
+        transport=0.0184,
+        capacity_eur_per_kw_year=52.0,
+        network_ceiling_eur_per_kwh=0.3473,
+    )
+    snap = make_snapshot(
+        energy=FixedRates(single=0.18, yearly_fixed_fee=0.0),
+        dsos={"fluvius_antwerpen": overlay},
+        taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0),
+    )
+    days_in_month = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+    peak_kw = 5.0
+
+    # Two households: one ordinary, one small enough for the ceiling to bind.
+    for annual_kwh in (3500.0, 400.0):
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                "supplier": "eneco",
+                "contract": "power_fix",
+                "region": "flanders",
+                "dso": "fluvius_antwerpen",
+                "meter": "mono",
+                "solar_regime": "none",
+                "annual_consumption_kwh": annual_kwh,
+            },
+        )
+        monthly = _capped_capacity_monthly_eur(overlay, entry, peak_kw)
+        for months in range(1, 13):
+            fee_proration = sum(days_in_month[:months]) / 365
+            quoted = _annual_bill(
+                snap,
+                entry,
+                peak_kw,
+                0.0,
+                annual_kwh * months / 12.0,
+                fee_proration=fee_proration,
+                prosumer_proration=float(months),
+                capacity_proration=float(months),
+            )
+            # _ytd_capacity accrues each elapsed month whole.
+            assert quoted == pytest.approx(monthly * months), (annual_kwh, months)
+    # And the small household really is capped, or the loop above proves
+    # nothing about the ceiling.
+    small = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "annual_consumption_kwh": 400.0,
+        },
+    )
+    assert _capped_capacity_monthly_eur(overlay, small, peak_kw) < peak_kw * 52.0 / 12.0
+
+
 # --- Contract start/end date (discussion #38) ---------------------------------
 
 

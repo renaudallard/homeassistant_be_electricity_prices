@@ -663,7 +663,7 @@ convex and the two orders give different money:
   each slot at its own rate; the compare estimate (`_compare_injection_credit`,
   `compare_quote.py:171`) has to collapse the window to one number, so it takes
   the mean of the floored rates weighted by the household's own export shape
-  (`_export_weighted_credit`, `compare_quote.py:169`), which is the basis the
+  (`_export_weighted_credit`, `compare_quote.py:168`), which is the basis the
   year-to-date walk bills on.
 - a MONTH-MEAN formula floors once, on the delivery month's tariff, because such
   a card publishes one number a month and the guarantee is written against that
@@ -949,7 +949,7 @@ overlay, gated the same Walloon-only way (`ytd_cost.py:203-229`).
 
 The Brussels Brugel OSP (Obligations de Service Public) fee is a flat annual
 Sibelga charge scaled by contractual connection power
-(`_brussels_osp_fee`, `fees.py:186-195`):
+(`_brussels_osp_fee`, `fees.py:197-206`):
 
 ```python
 def _brussels_osp_fee(overlay, entry) -> float:      # fees.py:87

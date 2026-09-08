@@ -100,7 +100,10 @@ def _annual_consumption_kwh(entry: ConfigEntry) -> float:
 
 
 def _capped_capacity_monthly_eur(
-    overlay: DsoOverlay | None, entry: ConfigEntry, peak_kw: float
+    overlay: DsoOverlay | None,
+    entry: ConfigEntry,
+    peak_kw: float,
+    meter: MeterType | None = None,
 ) -> float:
     """One month of the Flemish capacity charge after the VREG ceiling.
 
@@ -112,6 +115,11 @@ def _capped_capacity_monthly_eur(
 
     Evaluated annually and divided back, because that is the shape of the
     rule; the caller then prorates the month it is accruing.
+
+    ``meter`` overrides the entry's own, for the comparison page quoting a
+    meter the household need not have: the headroom is measured against the
+    per-kWh network term, and that term follows the meter the rest of the
+    quote is priced on.
     """
     monthly = _capacity_monthly_eur(overlay, peak_kw)
     if not monthly:
@@ -120,13 +128,16 @@ def _capped_capacity_monthly_eur(
         overlay,
         12.0 * monthly,
         _annual_consumption_kwh(entry),
-        entry.data.get(CONF_METER, METER_MONO),
+        meter or entry.data.get(CONF_METER, METER_MONO),
     )
     return capped / 12.0
 
 
 def _compute_capacity(
-    snapshot: SupplierSnapshot, entry: ConfigEntry, peak_kw: float
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    peak_kw: float,
+    meter: MeterType | None = None,
 ) -> float:
     # Read CONF_DSO defensively: a corrupt entry that lost the key
     # would otherwise KeyError here and tear the whole tick down via
@@ -134,7 +145,7 @@ def _compute_capacity(
     dso = entry.data.get(CONF_DSO)
     if dso is None:
         return 0.0
-    return _capped_capacity_monthly_eur(snapshot.dsos.get(dso), entry, peak_kw)
+    return _capped_capacity_monthly_eur(snapshot.dsos.get(dso), entry, peak_kw, meter)
 
 
 def _capped_capacity_annual(

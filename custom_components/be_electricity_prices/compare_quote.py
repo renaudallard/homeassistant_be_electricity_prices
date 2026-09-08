@@ -52,7 +52,6 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
-    CONF_DSO,
     CONF_REGION,
     CONF_SOLAR_REGIME,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
@@ -1071,8 +1070,7 @@ def _annual_bill(
       injection income exceeds consumption + fees.
     """
     fees = (
-        _annual_fees(snapshot, entry, peak_kw, meter, include_capacity, consumption_kwh)
-        * fee_proration
+        _annual_fees(snapshot, entry, peak_kw, meter, include_capacity) * fee_proration
     )
     if prosumer_proration is not None:
         # _annual_fees prorated the prosumer term uniformly by fee_proration;
@@ -1098,10 +1096,15 @@ def _annual_bill(
         # February close measured 36,37 against the live sensor's 37,50 -- and
         # the what-if is meant to be comparable to that sensor to the cent.
         # Counted in MONTHS (0..12), like prosumer_proration.
+        #
+        # The SAME figure _annual_fees prorated, ceiling included. Recomputing
+        # it uncapped left the correction and the term it corrects on two
+        # different numbers, so they no longer cancelled and a capped entry
+        # was quoted about half its capacity leg.
         from .fees import _compute_capacity
 
         if entry.data.get(CONF_REGION) == REGION_FLANDERS:
-            capacity_annual = 12.0 * _compute_capacity(snapshot, entry, peak_kw)
+            capacity_annual = 12.0 * _compute_capacity(snapshot, entry, peak_kw, meter)
             fees += capacity_annual * (capacity_proration / 12.0 - fee_proration)
     regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     if regime == "compensation":
@@ -1129,7 +1132,6 @@ def _annual_fees(
     peak_kw: float,
     meter: Any,
     include_capacity: bool = True,
-    annual_kwh: float = 0.0,
 ) -> float:
     """Just the EUR/year fee components (no per-kWh term).
 
@@ -1143,12 +1145,15 @@ def _annual_fees(
     through ``_ytd_capacity``, so a what-if that dropped it would quote a
     lower bill than the sensor it sits next to.
 
-    ``annual_kwh`` lets the Flemish capacity charge be held under the VREG
-    ceiling the cards print as "maximumtarief", which caps capacity plus the
-    per-kWh network term together and so cannot be applied without a volume."""
+    The VREG ceiling is applied by ``_compute_capacity`` itself, against the
+    year the entry states. It used to be applied here instead, against the
+    volume the CALLER happened to hold, and the YTD what-if holds the window's
+    kWh rather than the year's: in the early months that measured a full
+    year's capacity charge against a quarter of a year's consumption, so the
+    cap bit where it does not belong and the page quoted 11 to 18 EUR under
+    the sensor it is meant to match, on an ordinary 3 500 kWh household."""
     from .fees import (
         _annual_static_fees,
-        _capped_capacity_annual,
         _compute_capacity,
         _compute_prosumer,
     )
@@ -1156,13 +1161,7 @@ def _annual_fees(
     static = _annual_static_fees(snapshot, meter, entry)
     capacity = 0.0
     if include_capacity and entry.data.get(CONF_REGION) == REGION_FLANDERS:
-        capacity = 12.0 * _compute_capacity(snapshot, entry, peak_kw)
-        capacity = _capped_capacity_annual(
-            snapshot.dsos.get(entry.data.get(CONF_DSO, "")),
-            capacity,
-            annual_kwh,
-            meter,
-        )
+        capacity = 12.0 * _compute_capacity(snapshot, entry, peak_kw, meter)
     prosumer = 12.0 * _compute_prosumer(snapshot, entry)
     return static + capacity + prosumer
 
