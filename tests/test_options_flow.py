@@ -6518,3 +6518,195 @@ def test_the_quoted_rate_tracks_the_year_it_stands_in_for() -> None:
             f"{type(snap.energy).__name__} on {mode}: "
             f"quoted {quoted:.6f} against {exact:.6f}"
         )
+
+
+def test_which_month_index_a_feed_in_credit_settles_on() -> None:
+    """Which delivery-month index each side's credit settles on.
+
+    The compare page resolved a month mean only for a leg that carries a flag
+    naming one. A feed-in formula on the expert custom monthly contract names
+    no index at all, because its ENERGY leg does, so it fell through to the
+    two-day day-ahead WINDOW mean -- not what such a contract bills, and it
+    moves with the day the dialog was opened. Measured on a realistic
+    September curve, 63 EUR a year at 3000 kWh exported.
+    """
+    from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices.compare_flow import (
+        _credit_index_for,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        InjectionRates,
+        SpotMonthlyRates,
+        VariableRates,
+    )
+    from tests import make_snapshot
+
+    custom_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+            const.CONF_SUPPLIER: const.SUPPLIER_CUSTOM,
+            const.CONF_CONTRACT: const.CUSTOM_CONTRACT_MONTHLY,
+            const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_FORMULA,
+        },
+    )
+    plain_entry = MockConfigEntry(
+        domain=DOMAIN, data={const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION}
+    )
+    formula = InjectionRates(factor=0.9, base=-0.01)
+
+    # The energy leg names the index and the credit rides it.
+    monthly = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.02), injection=formula
+    )
+    assert _credit_index_for(custom_entry, monthly, own=True) == "plain"
+
+    # A card that names the month on the credit itself.
+    named = make_snapshot(
+        energy=VariableRates(current=0.19),
+        injection=InjectionRates(
+            current=0.05, factor=0.9, base=-0.01, month_indexed=True
+        ),
+    )
+    assert _credit_index_for(plain_entry, named, own=True) == "plain"
+    assert _credit_index_for(plain_entry, named, own=False) == "plain"
+
+    # A card that names Belpex_SPP takes the solar-weighted mean on either
+    # side; the entry-side opt-in is the own side only.
+    spp_card = make_snapshot(
+        energy=VariableRates(current=0.19),
+        injection=InjectionRates(
+            current=0.05, factor=0.9, base=-0.01, spp_indexed=True
+        ),
+    )
+    assert _credit_index_for(plain_entry, spp_card, own=False) == "spp"
+    # The entry-side opt-in does NOT reach a target: judged on that card
+    # alone this is a plain month, not the solar-weighted one. Applying the
+    # household's choice to a foreign formula inverted a credit once already.
+    assert _credit_index_for(custom_entry, monthly, own=False) == "plain"
+    assert _credit_index_for(custom_entry, monthly, own=True) == "plain"
+    spp_opted_in = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **custom_entry.data,
+            const.CONF_CUSTOM_INJECTION_SPP_WEIGHTED: True,
+        },
+    )
+    assert _credit_index_for(spp_opted_in, monthly, own=True) == "spp"
+    assert _credit_index_for(spp_opted_in, monthly, own=False) == "plain"
+
+    # A per-slot credit is not a month at all.
+    slot = make_snapshot(
+        energy=FixedRates(single=0.20),
+        injection=InjectionRates(
+            current=0.053, factor=0.9, base=-0.01, slot_indexed=True
+        ),
+    )
+    assert _credit_index_for(plain_entry, slot, own=True) is None
+
+    # Cociter Tarif Variable indexes its two legs on different periods, and a
+    # signing cohort splices a month-priced energy leg onto it. Judged on the
+    # spliced snapshot it looks exactly like the first case above, so the RAW
+    # card is what decides and the credit keeps its per-hour rate.
+    cociter_raw = make_snapshot(
+        energy=VariableRates(current=0.19),
+        injection=InjectionRates(factor=0.97, base=-0.021),
+    )
+    spliced = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.02),
+        injection=InjectionRates(factor=0.97, base=-0.021),
+    )
+    assert _credit_index_for(plain_entry, spliced, own=True) == "plain"
+    assert _credit_index_for(plain_entry, spliced, own=True, raw=cociter_raw) is None
+
+
+async def test_a_month_priced_energy_leg_carries_its_credit_to_the_month(
+    hass: HomeAssistant,
+) -> None:
+    """A feed-in formula that names no index of its own settles on the one its
+    ENERGY leg names, which is the delivery month.
+
+    The expert custom monthly contract is the shape: coefficients and no flag,
+    because the index is the energy leg's. The page resolved a month mean only
+    for a leg carrying month_indexed or spp_indexed, so this one fell through
+    to the two-day day-ahead WINDOW mean -- not what such a contract bills,
+    and it moves with the day the dialog was opened. Measured on a realistic
+    September curve: 63 EUR a year at 3000 kWh exported.
+    """
+    from statistics import fmean
+
+    from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.injection import (
+        _bake_monthly_injection,
+        _compute_injection_price,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        SpotMonthlyRates,
+        VariableRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+            const.CONF_SUPPLIER: const.SUPPLIER_CUSTOM,
+            const.CONF_CONTRACT: const.CUSTOM_CONTRACT_MONTHLY,
+            const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_FORMULA,
+        },
+    )
+    leg = InjectionRates(factor=0.9, base=-0.01)
+    snap = make_snapshot(
+        supplier=const.SUPPLIER_CUSTOM,
+        contract=const.CUSTOM_CONTRACT_MONTHLY,
+        energy=SpotMonthlyRates(factor=1.0, base=0.02),
+        injection=leg,
+    )
+    # A month, and the two-day window the dialog would have in front of it.
+    spots = {
+        dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+        + timedelta(hours=h): 0.04 + 0.05 * (h / 96.0)
+        for h in range(96)
+    }
+    month_mean = 0.0659
+    window_mean = fmean(spots.values())
+    assert window_mean != pytest.approx(month_mean, abs=1e-3)
+
+    live = _compute_injection_price(
+        _bake_monthly_injection(snap, month_mean), entry, {}
+    )
+    quoted = _compare_injection_credit(
+        snap, entry, dict(spots), window_mean, month_mean, None, raw_snapshot=snap
+    )
+    assert quoted == pytest.approx(live)
+    assert quoted == pytest.approx(0.9 * month_mean - 0.01)
+
+    # And the shape this must NOT sweep in: a signing cohort splices a
+    # month-priced energy leg onto Cociter Tarif Variable, whose card indexes
+    # the two legs on different periods -- consumption monthly, injection per
+    # hour. Judged on the spliced snapshot it would lose its per-hour credit,
+    # so the raw card is what decides.
+    cociter_raw = make_snapshot(
+        energy=VariableRates(current=0.19),
+        injection=InjectionRates(factor=0.97, base=-0.021),
+    )
+    spliced = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.02),
+        injection=InjectionRates(factor=0.97, base=-0.021),
+    )
+    per_slot = _compare_injection_credit(
+        spliced,
+        entry,
+        dict(spots),
+        window_mean,
+        None,
+        None,
+        raw_snapshot=cociter_raw,
+    )
+    assert per_slot is not None
+    assert per_slot != pytest.approx(0.97 * month_mean - 0.021)
