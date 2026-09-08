@@ -109,7 +109,7 @@ Note what is deliberately absent from the per-kWh formula:
   `databeheer` and the Brussels `mesure` plus fixed-term pair are billed
   whatever the mode says.
 - The Wallonia `region_connection_fee` is a per-kWh term and IS billed, but
-  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:822`), not
+  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:801`), not
   `taxes_eur_per_kwh`. Engie's Walloon card prints `Redevance raccordement(8)`
   and footnote (8) reads *"Vous ne payez pas de TVA sur ces couts"* — the same
   footnote that exempts the Flemish energy fund on its Flanders edition.
@@ -558,13 +558,13 @@ Source cited in the docstring: TotalEnergies Impact card footnote 7 / ORES
 quarter-hourly meter and an opt-in to the DSO Impact tariff
 (`providers/base.py:244-245`).
 
-`impact_band_hours()` counts the table above off `dso_impact_band` rather than
-restating it, returning the hours in each band (5 / 7 / 12 per day, the 35 / 49
-/ 84 per week the cards quote). The OptionsFlow annual estimate takes both its
-representative hour and its weight from it. Those were literals beside a
-comment repeating the schedule, which put the regulated CWaPE table in a second
-place: move a boundary in `dso_impact_band` and the estimate kept the old
-weighting silently. The weighted mean is exactly the mean over all 24 hours.
+The bands are 5 / 7 / 12 hours a day, the 35 / 49 / 84 per week the cards
+quote, and `dso_impact_band` is the only place that says so. The OptionsFlow
+annual estimate used to count them into a per-band weighting and price each
+band from one representative hour; it averages a representative WEEK instead,
+because one sample per band is exact only when both the energy and the network
+leg are banded on this schedule, and an Impact card on a standard bi-horaire
+connection (or a time-of-use card on an Impact one) is not.
 
 ## Meter routing
 
@@ -585,24 +585,24 @@ else falls back to single/current (`pricing.py:264-270`, `pricing.py:281-290`).
 ### DSO (network) side
 
 `network_eur_per_kwh` returns `distribution + dso.transport`
-(`pricing.py:506-582`). Distribution selection, in strict precedence order:
+(`pricing.py:704-780`). Distribution selection, in strict precedence order:
 
-1. **Exclusive night** (`pricing.py:529-544`), resolved BEFORE the Impact band so
+1. **Exclusive night** (`pricing.py:727-742`), resolved BEFORE the Impact band so
    a dedicated night circuit bills its own rate even under Impact mode. Fallback
    chain: `distribution_exclusive_night` -> `distribution_offpeak` ->
-   `distribution_single` (`pricing.py:757-763`). Each step is closer to the real
+   `distribution_single` (`pricing.py:736-742`). Each step is closer to the real
    bill than the day rate.
-2. **Impact** (`pricing.py:545-568`), only when `dso_tariff_mode == "impact"` AND
+2. **Impact** (`pricing.py:743-766`), only when `dso_tariff_mode == "impact"` AND
    all three of `distribution_pic`/`medium`/`eco` are non-`None`. The all-three
    guard exists because `python -O` strips `assert`, and a partially populated
    triplet would otherwise raise `TypeError` on `None + transport`; treating
    Impact as available only when complete falls through to bi-horaire/single on
    cards that omit it (Brussels Sibelga, Flanders Fluvius)
-   (`pricing.py:551-560`).
-3. **Bi-horaire** (`pricing.py:569-579`), when `dso_tariff_mode != "simple"`, the
+   (`pricing.py:744-762`).
+3. **Bi-horaire** (`pricing.py:767-778`), when `dso_tariff_mode != "simple"`, the
    meter is `bi`/`dynamic`, and both `distribution_peak`/`offpeak` are published:
    `is_offpeak(when, region)` picks the rate.
-4. **Single** (`pricing.py:580-581`), the fallback for everything else, including
+4. **Single** (`pricing.py:779-780`), the fallback for everything else, including
    `dso_tariff_mode == "simple"` and mono meters.
 
 `DsoTariffMode` (`"simple" | "bi_horaire" | "impact"`, `pricing.py:681`,

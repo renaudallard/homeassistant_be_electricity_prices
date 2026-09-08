@@ -6369,3 +6369,152 @@ def test_the_projection_credits_the_month_baked_leg_when_given_one() -> None:
     )
     src = inspect.getsource(coordinator.BePricesCoordinator._update_body)
     assert "credited=injection_snapshot" in src
+
+
+def test_the_quoted_rate_tracks_the_year_it_stands_in_for() -> None:
+    """The compare page's per-kWh figure is a sampling of the year, and a
+    sampling that misses by percent mis-ranks contracts.
+
+    The Impact branch took one representative hour per CWaPE band, which is
+    exact only when BOTH legs are banded on that schedule. They need not be:
+    the CWaPE bands run every day of the week and the bi-horaire network bands
+    do not, so an Impact card on a standard connection had its whole MEDIUM
+    band priced at the distribution rate of the one hour sampled, and a
+    time-of-use card on an Impact connection had the mirror done to its
+    energy. Checked against the exact hour-weighted year, which is what the
+    current_year_cost sensor beside this figure actually bills.
+    """
+    from datetime import timedelta
+
+    from custom_components.be_electricity_prices.compare_quote import (
+        _tou_weighted_per_kwh,
+    )
+    from custom_components.be_electricity_prices.pricing import (
+        DsoTariffMode,
+        MeterType,
+        compute_breakdown,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        ImpactRates,
+        TaxOverlay,
+        TimeOfUseRates,
+    )
+    from tests import make_snapshot
+
+    dsos = {
+        "ores": DsoOverlay(
+            distribution_single=0.10,
+            distribution_peak=0.12,
+            distribution_offpeak=0.07,
+            distribution_pic=0.15,
+            distribution_medium=0.11,
+            distribution_eco=0.06,
+            transport=0.0145,
+        )
+    }
+    taxes = TaxOverlay(
+        federal_excise=0.05, energy_contribution=0.002, wallonia_renewables=0.031
+    )
+    # An evening-heavy residential shape, which is where a band mis-weighting
+    # shows up worst.
+    raw = [
+        0.6,
+        0.5,
+        0.45,
+        0.4,
+        0.4,
+        0.5,
+        0.8,
+        1.2,
+        1.3,
+        1.1,
+        1.0,
+        1.0,
+        1.1,
+        1.0,
+        0.95,
+        1.0,
+        1.3,
+        1.8,
+        2.0,
+        1.9,
+        1.6,
+        1.3,
+        1.0,
+        0.8,
+    ]
+    weights = {h: raw[h] / sum(raw) for h in range(24)}
+    now = dt_util.now()
+
+    def _exact(snap: Any, meter: MeterType, mode: DsoTariffMode) -> float:
+        total = w = 0.0
+        when = dt_util.start_of_local_day(date(now.year, 1, 1))
+        end = dt_util.start_of_local_day(date(now.year + 1, 1, 1))
+        while when < end:
+            total += (
+                compute_breakdown(
+                    snap, "ores", "wallonia", when, None, meter, mode
+                ).all_in
+                * weights[when.hour]
+            )
+            w += weights[when.hour]
+            when += timedelta(hours=1)
+        return total / w
+
+    cases: tuple[tuple[Any, MeterType, DsoTariffMode], ...] = (
+        # An Impact card on a standard bi-horaire connection.
+        (
+            make_snapshot(
+                energy=ImpactRates(pic=0.22, medium=0.18, eco=0.14),
+                dsos=dsos,
+                taxes=taxes,
+            ),
+            "bi",
+            "bi_horaire",
+        ),
+        # Engie Empower Flextime on an Impact connection.
+        (
+            make_snapshot(
+                energy=TimeOfUseRates(
+                    peak=0.22,
+                    transition=0.18,
+                    offpeak=0.14,
+                    weekend_rule="weekend_no_peak",
+                ),
+                dsos=dsos,
+                taxes=taxes,
+            ),
+            "bi",
+            "impact",
+        ),
+        # Luminus SmartFlex on an Impact connection: seasonal bands, so one
+        # week is not enough whatever the network does.
+        (
+            make_snapshot(
+                energy=TimeOfUseRates(
+                    peak=0.22,
+                    transition=0.18,
+                    offpeak=0.14,
+                    weekend_rule="smartflex_seasonal",
+                ),
+                dsos=dsos,
+                taxes=taxes,
+            ),
+            "mono",
+            "impact",
+        ),
+    )
+    for snap, meter, mode in cases:
+        quoted = _tou_weighted_per_kwh(
+            snap, "ores", "wallonia", now, None, meter, mode, weights
+        )
+        exact = _exact(snap, meter, mode)
+        assert quoted is not None
+        # 0,5% is the residual a holiday-free representative week carries
+        # against a year that has holidays in it, which every branch here has
+        # always accepted. The sampling error this pins was seven times that.
+        assert abs(quoted - exact) / exact < 0.005, (
+            f"{type(snap.energy).__name__} on {mode}: "
+            f"quoted {quoted:.6f} against {exact:.6f}"
+        )
