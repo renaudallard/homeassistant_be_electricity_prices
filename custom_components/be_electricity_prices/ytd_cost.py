@@ -295,6 +295,7 @@ async def _ytd_capacity(
     billed_peak_kw: float,
     *,
     contract: str | None = None,
+    meter: MeterType | None = None,
     cached_only: bool = False,
 ) -> float:
     """Sum the monthly Flemish capacity charge across YTD, reading each
@@ -306,6 +307,12 @@ async def _ytd_capacity(
     per-kWh network term together against the household's yearly volume. The
     ceiling used to be applied on the quote paths only, so the compare page
     and the projection honoured a cap this sensor billed straight through.
+
+    ``meter`` defaults to the entry's, and the comparison page overrides it for
+    the same reason it overrides the supplier fee: the VREG ceiling is measured
+    against the per-kWh network term, and an exclusive-night circuit has its
+    own. Quoting a meter the household need not have has to cap it on the meter
+    the rest of the quote is priced on.
 
     ``billed_peak_kw`` is the CURRENT gemiddelde maandpiek, applied to every
     month of the year rather than reconstructed per month. Reconstruction is
@@ -336,7 +343,8 @@ async def _ytd_capacity(
             snap_m.dsos.get(dso),
             entry,
             billed_peak_kw,
-            vat_rate=snap_m.taxes.vat_rate,
+            meter,
+            snap_m.taxes.vat_rate,
         )
         total += monthly * (days_in_ytd / days_in_full_month)
     return total
@@ -874,6 +882,7 @@ async def _compute_current_year_cost(
         today,
         billed_peak_kw,
         contract=contract,
+        meter=meter,
         cached_only=cached_only,
     )
     fees = static_fees + prosumer_ytd + capacity_ytd

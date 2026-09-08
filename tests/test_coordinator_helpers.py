@@ -6655,3 +6655,48 @@ def test_the_vreg_ceiling_and_its_network_term_share_a_vat_basis() -> None:
     assert capped_gross == pytest.approx(capped_net * 1.21)
     # The cap really is binding here, or the assertion above proves nothing.
     assert capped_net < 12.0 * 50.0
+
+
+async def test_the_capacity_cap_follows_the_meter_the_quote_is_priced_on(
+    hass: HomeAssistant,
+) -> None:
+    """The comparison page quotes a meter the household need not have.
+
+    Every other leg of that quote already follows the override -- the energy
+    rate, the band split, the supplier's yearly fee. The VREG ceiling did not:
+    it is measured against the per-kWh network term, an exclusive-night
+    circuit bills its own, and _ytd_capacity read the entry's meter whatever
+    the quote was priced on.
+    """
+    overlay = DsoOverlay(
+        distribution_single=0.20,
+        distribution_exclusive_night=0.02,
+        transport=0.0145,
+        capacity_eur_per_kw_year=50.0,
+        network_ceiling_eur_per_kwh=0.16,
+    )
+    snap = make_snapshot(dsos={"fluvius": overlay})
+    entry = _yearly_entry(
+        region="flanders", dso="fluvius", meter="mono", annual_consumption_kwh=3500.0
+    )
+    today = dt_util.now().date()
+
+    async def _capacity(meter: Any) -> float:
+        return await ytd_cost._ytd_capacity(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            today,
+            4.0,
+            meter=meter,
+            cached_only=True,
+        )
+
+    # On the mono rate the per-kWh term eats the whole allowance, so the cap
+    # binds down to the regulated 2,5 kW minimum. The night circuit's own rate
+    # leaves headroom, so the charge stands.
+    assert await _capacity("mono") < await _capacity("exclusive_night")
+    # And the entry's own meter is still the default.
+    assert await _capacity(None) == pytest.approx(await _capacity("mono"))
