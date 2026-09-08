@@ -47,6 +47,7 @@ from .api import (
 )
 from .const import (
     CONF_API_KEY,
+    DOMAIN,
 )
 from .injection import (
     _injection_needs_spot_quarters,
@@ -180,6 +181,35 @@ _RLP_RETRY_TTL = timedelta(hours=12)
 
 
 _LOGGER = logging.getLogger(__name__)
+
+# One Synergrid profile serves every entry: it is a national curve, keyed by
+# year (and, for the RLP, by DSO blend), with nothing per-household in it.
+# Each coordinator used to download and parse its own copy -- 18 s for the
+# 3,4 MB RLP workbook on a Raspberry Pi -- and deferring that fetch to a
+# background task made it worse rather than better, because every entry then
+# started its copy at the same moment instead of one after another. Rows carry
+# the instant they were fetched so the freshness rule below is applied to the
+# row and a stale one is not handed on.
+_PROFILE_CACHE_KEY = "synergrid_profile_cache"
+_PROFILE_LOCKS_KEY = "synergrid_profile_locks"
+
+
+def _profile_cache(
+    hass: HomeAssistant,
+) -> dict[tuple[str, int, str], tuple[Any, datetime]]:
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_PROFILE_CACHE_KEY, {})  # type: ignore[no-any-return]
+
+
+def _profile_lock(hass: HomeAssistant, key: tuple[str, int, str]) -> asyncio.Lock:
+    """One lock per profile so concurrent entries fetch it once, not N times."""
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    locks: dict[tuple[str, int, str], asyncio.Lock] = bucket.setdefault(
+        _PROFILE_LOCKS_KEY, {}
+    )
+    if key not in locks:
+        locks[key] = asyncio.Lock()
+    return locks[key]
 
 
 class _SpotsMixin:
@@ -698,6 +728,39 @@ class _SpotsMixin:
             except ValueError:
                 self._spp_fetched_at = None
 
+    async def _shared_profile(
+        self,
+        kind: str,
+        year: int,
+        blend: str,
+        refresh_days: int,
+        fetch: Any,
+        *args: Any,
+    ) -> Any:
+        """Fetch one Synergrid profile at most once per process, per key.
+
+        The two callers own their own freshness and back-off state, which is
+        per entry and persisted; this layer is only about not downloading the
+        same national curve twice. A cached row is re-used while it is younger
+        than the caller's own refresh window, so a second entry starting a
+        month later still gets a fresh file rather than the first entry's.
+
+        The lock is what makes the deferral in ``_update_body`` safe: several
+        entries schedule their background fill at the same moment, and without
+        it a Raspberry Pi would run N downloads and N xlsb parses at once.
+        """
+        key = (kind, year, blend)
+        cache = _profile_cache(self.hass)
+        now = dt_util.utcnow()
+        async with _profile_lock(self.hass, key):
+            row = cache.get(key)
+            if row is not None and (now - row[1]) < timedelta(days=refresh_days):
+                return row[0]
+            weights = await fetch(self._session, *args)
+            if weights:
+                cache[key] = (weights, now)
+            return weights
+
     async def _ensure_spp_weights(self) -> None:
         """Refresh the Synergrid SPP profile for the current year if stale.
 
@@ -723,7 +786,9 @@ class _SpotsMixin:
             and (now - self._spp_failed_at) < _SPP_RETRY_TTL
         ):
             return
-        weights = await fetch_spp_weights(self._session, year)
+        weights = await self._shared_profile(
+            "spp", year, "", _SPP_REFRESH_DAYS, fetch_spp_weights, year
+        )
         if weights:
             self._spp_weights = weights
             self._spp_weights_year = year
@@ -788,7 +853,9 @@ class _SpotsMixin:
             and (now - self._rlp_failed_at) < _RLP_RETRY_TTL
         ):
             return
-        weights = await fetch_rlp_weights(self._session, year, blend)
+        weights = await self._shared_profile(
+            "rlp", year, blend, _RLP_REFRESH_DAYS, fetch_rlp_weights, year, blend
+        )
         if weights:
             self._rlp_weights = weights
             self._rlp_weights_year = year

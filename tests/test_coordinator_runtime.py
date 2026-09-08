@@ -4575,6 +4575,82 @@ async def test_fill_month_cards_warms_the_year_then_asks_for_a_refresh(
         coord.async_request_refresh.assert_not_awaited()
 
 
+async def test_the_first_tick_defers_the_synergrid_profile(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The Synergrid load profile is 18 s of download and xlsb parse on a
+    Raspberry Pi, and EVERY compensation entry wants one. Awaiting it inside
+    config-entry setup is the same mistake the archived cards were, so the
+    first tick schedules it and prices the plain mean meanwhile, which is what
+    a failed fetch already degrades to.
+    """
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "solar_regime": "compensation", "solar_kva": 5.0}
+    )
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=DynamicRates(factor=1.0, base=0.01))
+    coord._year_spots_deferred = False
+    coord._month_cards_deferred = False
+
+    scheduled: list[Any] = []
+
+    def _capture_task(_hass: Any, coro: Any, _name: str) -> Any:
+        scheduled.append(coro)
+        return None
+
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_rlp_weights = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_spp_weights = AsyncMock()  # type: ignore[method-assign]
+
+    with (
+        patch.object(coord._store, "async_save", AsyncMock()),
+        patch.object(entry, "async_create_background_task", _capture_task),
+    ):
+        await coord._update_body()
+        coord._ensure_rlp_weights.assert_not_awaited()
+        assert [coro.__name__ for coro in scheduled] == ["_fill_profiles"]
+        scheduled[0].close()
+
+        # Once per coordinator: the next tick asks for it inline, where a
+        # 30-day-old profile is refreshed without anyone waiting on setup.
+        await coord._update_body()
+        coord._ensure_rlp_weights.assert_awaited_once()
+        assert len(scheduled) == 1
+
+
+async def test_fill_profiles_refreshes_only_when_a_profile_landed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A restart restores both profiles from the Store, so the deferred fill
+    fetches nothing and must not spend a full tick per entry on saying so."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_spp_weights = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_rlp_weights = AsyncMock()  # type: ignore[method-assign]
+
+    await coord._fill_profiles(spp=False, rlp=True, blend="distinct")
+    coord._ensure_rlp_weights.assert_awaited_once_with("distinct")
+    coord.async_request_refresh.assert_not_awaited()
+
+    # And when one does land, the tick that priced without it is asked to run
+    # again so the weighted mean replaces the plain one.
+    async def _land(_blend: str) -> None:
+        coord._rlp_fetched_at = dt_util.utcnow()
+
+    coord._ensure_rlp_weights = _land  # type: ignore[method-assign,assignment]
+    await coord._fill_profiles(spp=False, rlp=True, blend="distinct")
+    coord.async_request_refresh.assert_awaited_once()
+
+
 def _ranking(ran_at: datetime) -> Any:
     from custom_components.be_electricity_prices.compare_quote import (
         DailyCompare,

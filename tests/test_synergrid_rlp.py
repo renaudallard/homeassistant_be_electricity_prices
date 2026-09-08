@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -323,6 +324,47 @@ async def test_ensure_rlp_weights_fetches_when_stale(
     assert mock.await_count == 1
     assert coord._rlp_weights == fake
     assert coord._rlp_weights_year == 2026
+
+
+async def test_two_entries_share_one_profile_download(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The RLP curve is national: one year, one blend, one file. Each entry
+    used to download and parse its own copy, 18 s of it on a Raspberry Pi, and
+    deferring the fetch to a background task made that worse rather than
+    better because every entry then started at the same moment instead of one
+    after another. The second entry must find the first one's row."""
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    first, second = _entry(), _entry()
+    first.add_to_hass(hass)
+    second.add_to_hass(hass)
+    coord_a = BePricesCoordinator(hass, first)
+    coord_b = BePricesCoordinator(hass, second)
+    fake = {(9, 15, 10): 2.0}
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_weights",
+        new=AsyncMock(return_value=fake),
+    ) as mock:
+        await asyncio.gather(
+            coord_a._ensure_rlp_weights("distinct"),
+            coord_b._ensure_rlp_weights("distinct"),
+        )
+    assert mock.await_count == 1, "two entries, one national curve, one download"
+    assert coord_a._rlp_weights == fake
+    assert coord_b._rlp_weights == fake
+
+    # A month later the row has aged past the entry's own refresh window, so
+    # the shared layer does not hand it on.
+    freezer.move_to("2026-10-20 12:00:00+02:00")
+    third = _entry()
+    third.add_to_hass(hass)
+    coord_c = BePricesCoordinator(hass, third)
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_spots.fetch_rlp_weights",
+        new=AsyncMock(return_value=fake),
+    ) as mock:
+        await coord_c._ensure_rlp_weights("distinct")
+    assert mock.await_count == 1
 
 
 async def test_ensure_rlp_weights_refetches_when_the_blend_changes(

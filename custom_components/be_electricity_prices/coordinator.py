@@ -418,6 +418,8 @@ class BePricesCoordinator(
         # Same deal for the archived tariff cards the year-to-date walk bills
         # each past month with. See _fill_month_cards.
         self._month_cards_deferred = True
+        # And for the Synergrid load / production profiles. See _fill_profiles.
+        self._profiles_deferred = True
         # Synergrid solar production profile: hourly weights keyed by UTC
         # (month, day, hour), for SPP-weighted custom injection. Persisted so a
         # restart doesn't force a fresh 52 MB download; refreshed monthly (the
@@ -833,8 +835,7 @@ class BePricesCoordinator(
         # Vast offers its ENTSO-E key as optional, so an entry that skipped it
         # reaches here with no spots at all and would otherwise pull 52 MB to
         # weight nothing, every restart.
-        if spp_weighted and (spot_prices or self._historical_spots):
-            await self._ensure_spp_weights()
+        wants_spp = bool(spp_weighted and (spot_prices or self._historical_spots))
         # And the RLP profile when the ENERGY leg resolves against the
         # RLP-weighted month mean (Eneco Flex and Flex One, whose Belpex-RLP-M
         # weights each hour's Belpex by the residential load profile). Same
@@ -844,8 +845,28 @@ class BePricesCoordinator(
         # A compensation entry wants the same profile for another reason: its
         # yearly net is settled by spreading the volume over the year on it.
         allocating = self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_COMPENSATION
-        if (rlp_weighted and (spot_prices or self._historical_spots)) or allocating:
-            await self._ensure_rlp_weights(_rlp_blend_for(priced.energy))
+        wants_rlp = bool(
+            (rlp_weighted and (spot_prices or self._historical_spots)) or allocating
+        )
+        blend = _rlp_blend_for(priced.energy)
+        # FIRST tick only, same reason as the spots and the archived cards
+        # above: this one runs inside config-entry setup. A cold profile is
+        # 18 s of download and xlsb parse on a Raspberry Pi, and every
+        # compensation entry wants one. The flag is cleared whether or not a
+        # profile is wanted, so only the tick setup waits on can defer.
+        first_tick = self._profiles_deferred
+        self._profiles_deferred = False
+        if first_tick and (wants_spp or wants_rlp):
+            self.entry.async_create_background_task(
+                self.hass,
+                self._fill_profiles(wants_spp, wants_rlp, blend),
+                f"{DOMAIN}_profiles_{self.entry.entry_id}",
+            )
+        else:
+            if wants_spp:
+                await self._ensure_spp_weights()
+            if wants_rlp:
+                await self._ensure_rlp_weights(blend)
 
         # A spot-monthly contract bills a flat rate = factor * this month's
         # mean spot + base. Compute the running mean once (over the persisted
@@ -1140,6 +1161,34 @@ class BePricesCoordinator(
         before = (len(self._historical_spots), len(self._historical_spot_quarters))
         await self._ensure_historical_spots(ytd_window_start(self.entry, today), today)
         after = (len(self._historical_spots), len(self._historical_spot_quarters))
+        if self._unloaded or after == before:
+            return
+        await self.async_request_refresh()
+
+    async def _fill_profiles(self, spp: bool, rlp: bool, blend: str) -> None:
+        """Fetch the Synergrid profiles, off the setup path.
+
+        Scheduled by the first tick, which priced without them. Both are
+        national curves fetched at most once per process (see
+        ``_shared_profile``), so N entries scheduling this at the same moment
+        cost one download, not N.
+
+        Failures need no handling here: both ensures soft-fail, keep whatever
+        is held and back off, and the caller then prices the plain arithmetic
+        mean -- which is what every RLP-indexed card was billed on before the
+        profile existed, and what a compensation entry falls back to when its
+        allocation cannot be weighted.
+
+        The refresh is asked for only when a profile actually landed. A restart
+        restores both from the Store, so the usual case fetches nothing and an
+        extra full tick per entry would buy nothing.
+        """
+        before = (self._spp_fetched_at, self._rlp_fetched_at, self._rlp_blend)
+        if spp:
+            await self._ensure_spp_weights()
+        if rlp:
+            await self._ensure_rlp_weights(blend)
+        after = (self._spp_fetched_at, self._rlp_fetched_at, self._rlp_blend)
         if self._unloaded or after == before:
             return
         await self.async_request_refresh()
