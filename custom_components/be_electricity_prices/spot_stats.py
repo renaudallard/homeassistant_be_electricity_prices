@@ -439,8 +439,12 @@ def _hour_spot(
     someone re-runs the service.
     """
     if isinstance(energy, SpotMonthlyRates):
-        if not spots:
-            return None
+        # Straight to the resolver even with an empty cache: its FIRST answer
+        # is the value the supplier published for that month, spliced onto the
+        # leg from the month's own card, and that one needs no spots at all.
+        # Short-circuiting on the cache threw it away and forfeited the
+        # commodity leg of a month whose index is known exactly. It answers
+        # None on its own when there is nothing left to average.
         return _energy_month_spot(
             energy, bucket, local.year, local.month, today, rlp_weights, mean_cache
         )

@@ -281,8 +281,9 @@ settlement that falls inside it is the index "berekend op basis van de tot dan
 toe gekende waarden van Belpex Day Ahead Market". So the Flex cards carry
 `month_indexed` and `rlp_indexed`, `_month_indexed_leg` re-prices them like
 Cociter, and `_energy_month_spot` resolves the leg in this order: the month's
-published `index_realised` when the splice found one, else the RLP-weighted mean
-of the cached hours (`_rlp_month_mean`, Synergrid's profile as `synergrid.py`
+published `index_realised` when the splice found one -- which is asked FIRST
+and needs no day-ahead cache at all, so an empty one still bills a settled
+month exactly -- else the RLP-weighted mean of the cached hours (`_rlp_month_mean`, Synergrid's profile as `synergrid.py`
 reduces it, reproducing Eneco's seven published 2026 values to the cent), else
 the plain mean while the profile is not loaded. The feed-in credit keeps the
 plain mean: Belpex-injectie is the arithmetic one, and the live tick computes the

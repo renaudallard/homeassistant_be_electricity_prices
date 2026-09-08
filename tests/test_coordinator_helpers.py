@@ -6766,3 +6766,35 @@ async def test_the_projection_nets_each_side_on_its_own_shape(
     assert got == pytest.approx(expected, rel=0.01)
     # And the two rates really do differ, or the assertion proves nothing.
     assert peak.all_in != pytest.approx(offpeak.all_in)
+
+
+def test_a_published_month_index_is_billed_without_any_spots() -> None:
+    """The supplier's own settled index for a month needs no day-ahead cache.
+
+    ``_energy_month_spot`` answers with it first, before any mean, because a
+    published value settles the month exactly. ``_hour_spot`` short-circuited
+    on an empty spot cache before asking, so a month whose index is known
+    forfeited its whole commodity leg on a cold start or after a failed
+    ENTSO-E fetch, and billed network and taxes alone.
+    """
+    from custom_components.be_electricity_prices.spot_stats import (
+        _energy_month_spot,
+        _hour_spot,
+    )
+    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+
+    leg = SpotMonthlyRates(factor=1.0, base=0.02, index_realised=0.0912)
+    local = datetime(2026, 5, 15, 13, 0, tzinfo=ZoneInfo("Europe/Brussels"))
+    today = date(2026, 9, 8)
+    assert _energy_month_spot(leg, {}, 2026, 5, today, None, {}) == pytest.approx(
+        0.0912
+    )
+    assert _hour_spot(
+        leg, local, local.astimezone(UTC), {}, {}, {}, today, None
+    ) == pytest.approx(0.0912)
+    # A leg with no published value still has nothing to bill on an empty
+    # cache, and says so rather than inventing a rate.
+    bare = SpotMonthlyRates(factor=1.0, base=0.02)
+    assert (
+        _hour_spot(bare, local, local.astimezone(UTC), {}, {}, {}, today, None) is None
+    )
