@@ -1,0 +1,24 @@
+# Pinned so a green run here means a green run anywhere, and so a release of
+# something upstream cannot turn the daily live check red while the
+# integration itself still works.
+#
+# The workflows that need only a couple of these install them by name and
+# take the version from this file with pip's -c, so each version is written
+# down once.
+#
+# pytest and pytest-asyncio are pinned by
+# pytest-homeassistant-custom-component itself, as is pytest-freezer, which
+# the time-pinned tests use. They are spelled out anyway so that bumping the
+# harness shows what else it moved.
+aiohttp==3.13.3
+defusedxml==0.7.1
+homeassistant==2026.2.3
+mypy==2.3.1
+pdfplumber==0.11.9
+pypdf==6.18.0
+pytest==9.0.0
+pytest-asyncio==1.3.0
+pytest-freezer==0.4.9
+pytest-homeassistant-custom-component==0.13.316
+pyxlsb==1.0.10
+ruff==0.16.0

@@ -1009,6 +1009,7 @@ and backfill data sources, the provider framework, and one reference page per
 supplier extractor. Start with [`docs/README.md`](./docs/README.md).
 
 ```bash
+pip install -r requirements-dev.txt
 ruff check .
 ruff format --check .
 mypy --strict custom_components/be_electricity_prices

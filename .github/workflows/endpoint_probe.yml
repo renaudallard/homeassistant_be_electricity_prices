@@ -49,7 +49,7 @@ jobs:
       # aiohttp alone: the probe imports USER_AGENT from the providers package
       # but touches no Home Assistant code, so the full test extra would just
       # slow the answer down.
-      - run: pip install aiohttp
+      - run: pip install -c requirements-dev.txt aiohttp
       - name: Probe
         # Inputs reach the shell through env, never interpolated into the
         # script: a workflow_dispatch input is attacker-controlled text and

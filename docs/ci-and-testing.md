@@ -172,7 +172,7 @@ almost always name the symbol a reference points at, in backticks, on the same l
 (``_extract_energy`` (`_mega_cards.py:257`)), so the checker resolves that symbol's real definition
 line from an AST index and, with `--write`, repins it.
 
-It runs in the `test` job (`.github/workflows/test.yml:62`), before the suite, and needs no
+It runs in the `test` job (`.github/workflows/test.yml:54`), before the suite, and needs no
 network or fixtures.
 
 **It fails the build on a reference that is provably broken** (past the end of the file it
@@ -727,19 +727,22 @@ Four workflows live under `.github/workflows/`.
 ### test.yml - Tests
 
 Runs on push to `main`, on every pull request, and on manual dispatch (`.github/workflows/test.yml:3`).
-It pins Python 3.13 and installs a pinned toolchain: `homeassistant==2026.2.3`,
-`pytest-homeassistant-custom-component==0.13.316` and `ruff==0.16.0` (plus `pytest-freezer==0.4.9`,
-`pypdf`, `pdfplumber`, `defusedxml`, `pyxlsb`), so an upstream HA-core, test-shim or linter release cannot
-silently turn the suite red on `main` (`.github/workflows/test.yml:37`). The lint rule set is itself
+It pins Python 3.13 and installs the toolchain from `requirements-dev.txt`
+(`.github/workflows/test.yml:33`), where every version is pinned: `homeassistant==2026.2.3`,
+`pytest-homeassistant-custom-component==0.13.316`, `ruff==0.16.0`, `pytest-freezer==0.4.9`,
+`pypdf`, `pdfplumber`, `defusedxml` and `pyxlsb`, so an upstream HA-core, test-shim or linter
+release cannot silently turn the suite red on `main`. The live check and the endpoint probe take
+their versions from that same file with pip's `-c`, so a version is written down once. The lint
+rule set is itself
 pinned in `pyproject.toml` (`[tool.ruff.lint] select`), so a ruff upgrade cannot expand what is
 linted for; `[tool.ruff.format] exclude` keeps the formatter off Markdown. The steps are:
 
 | Step | Command | Notes |
 | --- | --- | --- |
-| Lint | `ruff check .` then `ruff format --check .` | `.github/workflows/test.yml:48` |
-| Type check (production) | `mypy --strict custom_components/be_electricity_prices` | strict; production code must be strict-clean (`.github/workflows/test.yml:52`) |
-| Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next 06:17 UTC scheduled run (`.github/workflows/test.yml:54`) |
-| Tests | `pytest tests/ -q` | `.github/workflows/test.yml:69` |
+| Lint | `ruff check .` then `ruff format --check .` | `.github/workflows/test.yml:36` |
+| Type check (production) | `mypy --strict custom_components/be_electricity_prices` | strict; production code must be strict-clean (`.github/workflows/test.yml:39`) |
+| Type check (tests + scripts) | `mypy custom_components/ tests/ scripts/` | non-strict; covers `live_check.py` so a regression surfaces on PR rather than in the next 06:17 UTC scheduled run (`.github/workflows/test.yml:47`) |
+| Tests | `pytest tests/ -q` | `.github/workflows/test.yml:56` |
 
 `concurrency` cancels a stale push/PR run when a new commit lands (`.github/workflows/test.yml:17`).
 The non-strict pass over `tests/` and `scripts/` is why the `# type: ignore[arg-type]` convention
@@ -806,15 +809,15 @@ catch these comments):
 
 The extractor issue body keeps only the failures table and the per-supplier metrics block, dropping
 the `## All checks` checklist: the full report outgrew GitHub's 65,536-character issue body limit,
-which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml:189`). A
+which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml:192`). A
 defensive cap truncates the body at a line boundary near 60,000 bytes in case a mass failure
 inflates the failures table itself. The full report is always in the run log.
 
 On `pull_request` events the issue-creation steps are skipped; instead a final step fails the PR
 check if any bit other than the catalog-only bit is set (`rc & ~2`), since a new-product signal is
-informational, not a regression (`.github/workflows/live_check.yml:358`). A separate step fails the
+informational, not a regression (`.github/workflows/live_check.yml:361`). A separate step fails the
 run on `rc=8` (harness crash) so a top-level traceback shows red on the Actions tab instead of
-ending green (`.github/workflows/live_check.yml:372`).
+ending green (`.github/workflows/live_check.yml:375`).
 
 ### autorelease.yml - Autorelease
 
