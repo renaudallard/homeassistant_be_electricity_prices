@@ -98,7 +98,7 @@ Note what is deliberately absent from the per-kWh formula:
   table, and `taxes.energy_fund_eur_per_month` are per-year or per-month EUR
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
-  levies (`pricing.py:697-712`); `energy_fund_eur_per_month` is defined on the
+  levies (`pricing.py:783-799`); `energy_fund_eur_per_month` is defined on the
   `TaxOverlay` (`providers/base.py:774`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon

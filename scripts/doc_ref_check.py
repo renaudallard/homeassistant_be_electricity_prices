@@ -113,7 +113,22 @@ _MD_UNANCHORED_BASELINE = 1
 # 2026-08 sweep the only thing checked about a range was that neither end ran
 # past EOF, so a span could sit on entirely unrelated code and pass: five of
 # the eight const.py ranges did exactly that.
-_RANGE_UNANCHORED_BASELINE = 30
+#
+# Held at 30 for a month, which was hiding real drift behind a false positive:
+# markdown wraps, so a name and the pin it belongs to routinely land on
+# different physical lines and the pin before the break was judged against a
+# name it could never hold. Reading the SENTENCE for anchors (see
+# ``_sentence_at``) cleared six, and the remaining twenty-two were genuine --
+# spans that had drifted onto unrelated code, and pins naming a test while
+# pointing at the provider.
+#
+# The two left are the honest kind. Both point into the luminus module
+# docstring, which explains a fact the sentence names a symbol for:
+# ``luminus.md:37`` names ``brussels`` against prose that writes "Brussels",
+# and ``luminus.md:181`` names ``vat_rate`` against prose that writes "6% VAT
+# inclusive". Anchoring those would mean writing the docstring for this script
+# rather than for the reader.
+_RANGE_UNANCHORED_BASELINE = 2
 
 
 def _source_for(rel: str) -> Path | None:
@@ -153,6 +168,40 @@ def _symbol_lines(path: Path) -> dict[str, int]:
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             out.setdefault(node.target.id, node.lineno)
     return out
+
+
+def _sentence_at(lines: list[str], i: int) -> str:
+    """The prose a pin on line ``i`` belongs to, not just its physical line.
+
+    Markdown wraps. A sentence like "(`ecopower.py:667-677`;
+    `test_may_card_injection_label_is_matched`, `test_ecopower.py:385-393`)"
+    breaks across two lines, and read line by line the provider pin appears
+    beside a test name it will never contain while the test pin appears with
+    no name at all. Six of the pins this check reported were that, and they
+    are the reason its baseline sat at 30: real drift could not be told from
+    a line break.
+
+    Scoped to the run of non-blank lines around ``i``, which is what a reader
+    means by the sentence. TABLE rows are excluded and keep per-line scoping:
+    a table packs one pin per row, so pooling the column names across it would
+    let any row's span answer for any other's, which is the opposite of what
+    this check is for.
+    """
+    if lines[i].lstrip().startswith("|"):
+        return lines[i]
+    lo = i
+    while (
+        lo > 0 and lines[lo - 1].strip() and not lines[lo - 1].lstrip().startswith("|")
+    ):
+        lo -= 1
+    hi = i
+    while (
+        hi + 1 < len(lines)
+        and lines[hi + 1].strip()
+        and not lines[hi + 1].lstrip().startswith("|")
+    ):
+        hi += 1
+    return " ".join(lines[lo : hi + 1])
 
 
 def _symbol_blocks(path: Path) -> dict[str, list[tuple[int, int]]]:
@@ -316,31 +365,42 @@ def main() -> int:
                         f"{doc.name}:{i + 1} {r.group(0).strip('`')} (inverted)"
                     )
                     continue
+
                 # Does the span hold anything the sentence names? Every
                 # backticked identifier on the line is a candidate, because
                 # taking only the nearest one mistakes prose (`None`, a field
                 # named descriptively) for the symbol the pin is about.
-                range_names = {
-                    ident.split(".")[-1]
-                    for ident in IDENT.findall(line)
-                    if not ident.endswith(".py")
-                    and ident not in _RANGE_LITERALS
-                    and len(ident) > 2
-                }
+                def _named(text: str) -> set[str]:
+                    return {
+                        ident.split(".")[-1]
+                        for ident in IDENT.findall(text)
+                        if not ident.endswith(".py")
+                        and ident not in _RANGE_LITERALS
+                        and len(ident) > 2
+                    }
+
+                # WHICH pins are checked is decided by the pin's own line: a
+                # bare pin, with nothing named beside it, is deliberately not
+                # held to this and pooling names from its neighbours would put
+                # roughly 180 of them under a rule they were never written to.
+                range_names = _named(line)
                 if not range_names:
                     continue
+                # What COUNTS as an anchor is the sentence, because markdown
+                # wraps: a name and the pin it belongs to routinely land on
+                # different physical lines, and read line by line the pin
+                # before the break appears beside a name it will never hold.
+                anchors = _named(_sentence_at(lines, i))
                 blocks = _symbol_blocks(src)
                 span = "\n".join(body[lo - 1 : hi])
                 inside = any(
                     b_lo <= lo and hi <= b_hi
-                    for c in range_names
+                    for c in anchors
                     for b_lo, b_hi in blocks.get(c, ())
                 )
                 if inside:
                     continue
-                if not any(
-                    re.search(rf"\b{re.escape(c)}\b", span) for c in range_names
-                ):
+                if not any(re.search(rf"\b{re.escape(c)}\b", span) for c in anchors):
                     range_unanchored.append(
                         f"{doc.name}:{i + 1} {r.group(0).strip('`')} -> holds none of "
                         f"{sorted(range_names)[:4]}"

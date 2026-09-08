@@ -97,7 +97,7 @@ both reject a (contract, region) pair that is not in the contract's `regions`
 constructs the URL with `_document_url` and downloads via `fetch_pdf_text_layout`,
 handing the extracted text to `parse_snapshot`. There is no listing scrape on the
 hot path: the `/latest/` segment guarantees the URL always points at the current
-month (`totalenergies.py:26-36`). `fetch_pdf_text_layout` treats an HTTP 200 that
+month (`totalenergies.py:237-252`). `fetch_pdf_text_layout` treats an HTTP 200 that
 returns `text/html` (a disguised 404) as a fetch failure, so a product that is
 not actually published in a region raises rather than parsing an HTML error page
 (`_pdf.py:337-344`).

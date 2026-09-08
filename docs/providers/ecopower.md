@@ -209,7 +209,7 @@ parse time, and carrying a variable cost without a live spot is what `VariableRa
 
 **dbs** (`_extract_dbs_energy`, `ecopower.py:424-450`): the card prints
 `Dynamische burgerstroom elk kwartier 0,00102 × EPEX DA +0,004 euro/kWh` (illustrative,
-`test_ecopower.py:413-422`). `_DBS_ENERGY_RE` (`ecopower.py:414-419`) captures factor, sign, base.
+`test_dbs_card_energy_is_dynamic_formula_htva`, `test_ecopower.py:414-422`). `_DBS_ENERGY_RE` (`ecopower.py:414-419`) captures factor, sign, base.
 
 - **Factor is scaled by 1000** because the card multiplies EPEX DA in EUR/MWh while the pricing
   engine feeds the spot in EUR/kWh (`0,00102 × MWh = 1.02 × kWh`).
@@ -250,7 +250,7 @@ Digital row layout (comment `ecopower.py:487-493`):
 <label> | databeheer EUR/yr | capacity EUR/kW/yr | - | enkelvoudig EUR/kWh | uitsluitend_nacht EUR/kWh | [maximumtarief] | -
 ```
 
-Row regex `ecopower.py:494-499`. The optional 7th `Maximumtarief` column slides in between the
+Row regex, inside `_extract_dsos` (`ecopower.py:494-499`). The optional 7th `Maximumtarief` column slides in between the
 exclusive-night rate and the trailing dash on rows where Fluvius publishes a maximum (the Imewo
 April 2026 card has one, `test_ecopower.py:124-134`); the `(?:\s+[\d,]+)?` group skips it without
 mis-aligning the distribution rate.
@@ -312,7 +312,7 @@ through per-kWh, so they belong in `flanders_renewables` rather than being baked
 `energy.current` (which would move their value silently when Fluvius changes the certificate
 quota, docstring `ecopower.py:614-619`). **Both are mandatory**: a missing GSC or WKK raises,
 because treating them as optional would let a relabel silently drop a per-kWh charge
-(`ecopower.py:649-650`; `test_missing_gsc_or_wkk_surcharge_is_fatal`, `test_ecopower.py:75-81`).
+(the `ExtractorError` raise at `ecopower.py:649-650`; `test_missing_gsc_or_wkk_surcharge_is_fatal`, `test_ecopower.py:75-81`).
 
 ### Injection parsing
 
@@ -479,7 +479,7 @@ Ranked by likelihood of breaking when Ecopower re-renders a card:
    `_INJECTION_FIXED_RE`, `_fixed_note_in_effect` (`ecopower.py:650-720`). Injection is nullable,
    so a miss shows as an unavailable injection sensor, not a hard error (watch for silent loss).
 3. **DSO table column shuffle or new sub-area label** -> `_DSO_LABELS` (`ecopower.py:138-138`),
-   the gbs row regex (`ecopower.py:494-500`), the dbs row regex + `_DBS_WRAPPED_LABEL_RE`
+   the gbs row regex (`ecopower.py:554-575`), the dbs row regex + `_DBS_WRAPPED_LABEL_RE`
    (`ecopower.py:514`, `517-521`). Symptom: `Ecopower: no DSO rows parsed` or a missing sub-area.
 4. **Tax row relabelled** -> `_extract_taxes` regexes (`ecopower.py:623-651`). Symptom: `could not
    parse Ecopower federal tax block` or `GSC/WKK renewable surcharge`.

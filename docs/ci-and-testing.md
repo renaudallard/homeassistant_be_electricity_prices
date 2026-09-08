@@ -212,7 +212,7 @@ to index, so `MDREF` (`scripts/doc_ref_check.py:81`) scores each pin on the DIST
 claim shares with the passage it lands on. A word is distinctive when it appears on at most 3% of
 the target file's lines, which drops "the" and "energy" and keeps "energiefonds" and "picker";
 the passage is the paragraph or list item around the pinned line
-(`_md_passage` (`scripts/doc_ref_check.py:228`)), because README prose is hard-wrapped and the
+(`_md_passage` (`scripts/doc_ref_check.py:277`)), because README prose is hard-wrapped and the
 claim rarely fits on one line. Fewer than
 `_MD_MIN_SHARED` (`scripts/doc_ref_check.py:100`) shared words is reported, never rewritten: there
 is no AST truth to rewrite to. The threshold was measured against the pins as they stood before

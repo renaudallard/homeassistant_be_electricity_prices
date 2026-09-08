@@ -28,8 +28,8 @@ or a test assertion and labelled as such.
 | Label | `Luminus` | `luminus.py:690` |
 | Regions served | Flanders, Wallonia | `luminus.py:686`, `_LUMINUS_REGIONS` |
 | Publication | one fresh PDF per (product, region) via REST endpoint | `luminus.py:89`, `luminus.py:127` |
-| Probe | none (`EXTRACTOR.probe` unset -> `None`) | `luminus.py:906-920` |
-| Archive (`fetch_for_month`) | none (API-only, overwrite-in-place) | `luminus.py:906-920` |
+| Probe | none: the `SupplierExtractor` is built without a `probe` argument, so it defaults to `None` | `luminus.py:913-929` |
+| Archive | none: the `SupplierExtractor` is built without a `fetch_for_month` argument (API-only, overwrite-in-place) | `luminus.py:913-929` |
 
 Brussels is deliberately out of scope. Luminus sells only the regulated Social
 tariff there, which is auto-assigned to protected customers, carries an all-in
@@ -331,7 +331,7 @@ Two column layouts (`luminus.py:643-670`):
 
 Band-ordering gotcha: Luminus prints the Impact triplet **ECO | MEDIUM | PIC in
 ascending order**, unlike OCTA+/Bolt where the columns are PIC-first descending
-(`luminus.py:855-858`). They are mapped to `distribution_eco` / `_medium` /
+(`luminus.py:830-883`). They are mapped to `distribution_eco` / `_medium` /
 `_pic` accordingly (`luminus.py:874-885`). Illustrative
 (`test_comfy_wallonia_fixed_rates_and_dso`): AIEG mono `0.1087`, pleines
 `0.1205`, creuses `0.0666`, transport `0.0274`, prosumer `81.03`.

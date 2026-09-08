@@ -227,7 +227,7 @@ BELIX the cap sits 7 to 11 c€/kWh above the billed rate, so it binds only in a
 price spike: above a BELIX monthly mean of about 267 EUR/MWh on the mono row
 and about 200 on the Impact PIC band.
 
-For `cociter_dynamic` (`cociter.py:617-622`) the SMR3 formula
+For `cociter_dynamic` (`cociter.py:623-628`) the SMR3 formula
 `(factor x QUARTER HOURLY BELPEX sign base) + N% TVA` is parsed. Note the
 regex tolerates the pypdf-split spelling `QUARTER HOURL Y` (the space inside
 "HOURLY") via `QUARTER\s*HOURL\s*Y`. The unit conversion (`cociter.py:388-398`)
