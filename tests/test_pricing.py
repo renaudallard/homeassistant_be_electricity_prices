@@ -884,6 +884,64 @@ def test_the_variable_ceiling_binds_on_both_costing_walks() -> None:
     ) == pytest.approx(0.18)
 
 
+def test_a_half_published_dso_pair_bands_on_neither_walk() -> None:
+    """A DSO overlay carrying one of the two distribution columns is not a
+    bi-hourly rate sheet, and neither costing walk may treat it as one.
+
+    network_eur_per_kwh needs both columns before it bands, so the hourly
+    engine bills the single rate around the clock. static_breakdown tested
+    one band at a time and billed the published half for its own hours, so
+    the same entry cost two different amounts depending on which path priced
+    it. Only the custom supplier reaches this: its day and night distribution
+    boxes are independently optional, while every parsed card binds the pair
+    together."""
+    from custom_components.be_electricity_prices.pricing import (
+        compute_breakdown,
+        static_breakdown,
+    )
+
+    half = make_snapshot(
+        energy=FixedRates(single=0.18, peak=0.20, offpeak=0.16),
+        dsos={
+            "d": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.14,
+                distribution_offpeak=None,
+                transport=0.01,
+            )
+        },
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.0),
+    )
+    for band, hour in (("peak", 9), ("offpeak", 23)):
+        when = datetime(2026, 3, 4, hour, tzinfo=UTC)
+        hourly = compute_breakdown(half, "d", "flanders", when, None, "bi")
+        static = static_breakdown(half, "d", "flanders", band)
+        assert static is not None
+        assert static.network == pytest.approx(hourly.network)
+        assert static.network == pytest.approx(0.11)
+
+    # A complete pair still bands, on both walks.
+    whole = make_snapshot(
+        energy=FixedRates(single=0.18, peak=0.20, offpeak=0.16),
+        dsos={
+            "d": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.14,
+                distribution_offpeak=0.08,
+                transport=0.01,
+            )
+        },
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.0),
+    )
+    for band, hour, expected in (("peak", 9, 0.15), ("offpeak", 23, 0.09)):
+        when = datetime(2026, 3, 4, hour, tzinfo=UTC)
+        hourly = compute_breakdown(whole, "d", "flanders", when, None, "bi")
+        static = static_breakdown(whole, "d", "flanders", band)
+        assert static is not None
+        assert static.network == pytest.approx(expected)
+        assert hourly.network == pytest.approx(expected)
+
+
 def test_spot_monthly_impact_bands_follow_the_cwape_schedule() -> None:
     """A month-priced leg carrying the three Impact pairs bills each hour on
     the CWaPE band, every day of the week, capped per band. The coefficients

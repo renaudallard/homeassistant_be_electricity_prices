@@ -109,7 +109,7 @@ Note what is deliberately absent from the per-kWh formula:
   `databeheer` and the Brussels `mesure` plus fixed-term pair are billed
   whatever the mode says.
 - The Wallonia `region_connection_fee` is a per-kWh term and IS billed, but
-  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:812`), not
+  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:822`), not
   `taxes_eur_per_kwh`. Engie's Walloon card prints `Redevance raccordement(8)`
   and footnote (8) reads *"Vous ne payez pas de TVA sur ces couts"* — the same
   footnote that exempts the Flemish energy fund on its Flanders edition.
@@ -540,7 +540,7 @@ else falls back to single/current (`pricing.py:264-270`, `pricing.py:281-290`).
 1. **Exclusive night** (`pricing.py:529-544`), resolved BEFORE the Impact band so
    a dedicated night circuit bills its own rate even under Impact mode. Fallback
    chain: `distribution_exclusive_night` -> `distribution_offpeak` ->
-   `distribution_single` (`pricing.py:747-753`). Each step is closer to the real
+   `distribution_single` (`pricing.py:757-763`). Each step is closer to the real
    bill than the day rate.
 2. **Impact** (`pricing.py:545-568`), only when `dso_tariff_mode == "impact"` AND
    all three of `distribution_pic`/`medium`/`eco` are non-`None`. The all-three
@@ -555,7 +555,7 @@ else falls back to single/current (`pricing.py:264-270`, `pricing.py:281-290`).
 4. **Single** (`pricing.py:580-581`), the fallback for everything else, including
    `dso_tariff_mode == "simple"` and mono meters.
 
-`DsoTariffMode` (`"simple" | "bi_horaire" | "impact"`, `pricing.py:671`,
+`DsoTariffMode` (`"simple" | "bi_horaire" | "impact"`, `pricing.py:681`,
 `const.py:173-177`) is orthogonal to the supplier meter: it is the billing mode
 set on the user's grid connection, and the coordinator falls back automatically
 when the DSO does not publish Impact rates (`const.py:168-172`).
@@ -616,8 +616,14 @@ energy has no stable rate, and also when `dso_tariff_mode == "impact"` and the D
 publishes Impact distribution: Impact distribution cannot collapse to
 single/peak/offpeak, so the YTD path must read hourly statistics instead
 (`pricing.py:465-469`). Distribution selection here mirrors the network side:
-`simple` -> single, `peak`/`offpeak` band when published, else single
-(inside `static_breakdown`, `pricing.py:652-659`).
+`simple` -> single, the band when the overlay publishes BOTH columns, else
+single (inside `static_breakdown`, `pricing.py:652-670`). A half-published
+pair counts as no split here for the same reason it does on the energy leg:
+`network_eur_per_kwh` needs both columns before it bands, so testing one band
+at a time billed the published half for its own hours while the hourly engine
+billed the single rate around the clock. Only a custom entry can be in that
+state, since its two distribution boxes are independently optional and every
+parsed card binds the pair together.
 A missing `dso_key` raises `KeyError` with the available
 keys (`pricing.py:824-856`, same guard in `compute_breakdown` at
 `pricing.py:401-579`).

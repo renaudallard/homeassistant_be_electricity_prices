@@ -649,12 +649,22 @@ def static_breakdown(
         # ECO) and can't collapse to single/peak/offpeak; the caller
         # must route through the per-hour path.
         return None
-    if dso_tariff_mode == "simple":
+    # A HALF-published pair counts as no split, the same rule the energy leg
+    # follows just above and the same one network_eur_per_kwh applies, which
+    # needs both columns before it bands. Testing one band at a time billed
+    # the published half for its own hours and the single rate for the other,
+    # so the two walks disagreed by the gap between them: 4 c/kWh on peak
+    # hours for a custom entry that filled in only the day box, since those
+    # two boxes are independently optional and no parsed card ever leaves one
+    # of them blank.
+    peak_dist = overlay.distribution_peak
+    offpeak_dist = overlay.distribution_offpeak
+    if dso_tariff_mode == "simple" or peak_dist is None or offpeak_dist is None:
         dist = overlay.distribution_single
-    elif band == "peak" and overlay.distribution_peak is not None:
-        dist = overlay.distribution_peak
-    elif band == "offpeak" and overlay.distribution_offpeak is not None:
-        dist = overlay.distribution_offpeak
+    elif band == "peak":
+        dist = peak_dist
+    elif band == "offpeak":
+        dist = offpeak_dist
     else:
         dist = overlay.distribution_single
     network = dist + overlay.transport
