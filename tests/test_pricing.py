@@ -832,6 +832,58 @@ def test_a_half_published_band_pair_is_not_a_split() -> None:
     assert static_energy_eur_per_kwh(whole_var, "offpeak") == pytest.approx(0.16)
 
 
+def test_the_variable_ceiling_binds_on_both_costing_walks() -> None:
+    """A variable card's plafond caps the energy component on every path.
+
+    The hourly engine has always applied it per slot and per meter; the
+    per-day walk read the rate straight off the card, so a month priced above
+    the cap was billed uncapped into current_year_cost while the price sensor
+    beside it sat at the plafond. Cociter's variable cards carry one today and
+    Mega Cap carried one until it was retired."""
+    from custom_components.be_electricity_prices.pricing import (
+        energy_eur_per_kwh,
+        static_energy_eur_per_kwh,
+    )
+    from custom_components.be_electricity_prices.providers.base import VariableRates
+
+    capped = VariableRates(
+        current=0.20,
+        peak=0.22,
+        offpeak=0.16,
+        ceiling_single=0.15,
+        ceiling_peak=0.17,
+        ceiling_offpeak=0.13,
+    )
+    peak_hour = datetime(2026, 3, 4, 9, tzinfo=UTC)
+    off_hour = datetime(2026, 3, 4, 23, tzinfo=UTC)
+    assert static_energy_eur_per_kwh(capped, "single") == pytest.approx(0.15)
+    assert static_energy_eur_per_kwh(capped, "peak") == pytest.approx(0.17)
+    assert static_energy_eur_per_kwh(capped, "offpeak") == pytest.approx(0.13)
+    assert energy_eur_per_kwh(
+        capped, peak_hour, None, meter="bi", region="wallonia"
+    ) == pytest.approx(0.17)
+    assert energy_eur_per_kwh(
+        capped, off_hour, None, meter="bi", region="wallonia"
+    ) == pytest.approx(0.13)
+
+    # A cap that does not bind leaves the rate alone, and a card with no cap
+    # prices exactly as it always did.
+    loose = VariableRates(current=0.20, peak=0.22, offpeak=0.16, ceiling_single=0.40)
+    assert static_energy_eur_per_kwh(loose, "single") == pytest.approx(0.20)
+    uncapped = VariableRates(current=0.20, peak=0.22, offpeak=0.16)
+    assert static_energy_eur_per_kwh(uncapped, "peak") == pytest.approx(0.22)
+
+    # A mono-only cap against a bi-hourly rate pair caps every band at the
+    # mono figure, which is the routing the hourly path gets from handing the
+    # ceilings to _routed_rate as a rate sheet of their own.
+    mono_cap = VariableRates(current=0.20, peak=0.22, offpeak=0.16, ceiling_single=0.18)
+    assert static_energy_eur_per_kwh(mono_cap, "peak") == pytest.approx(0.18)
+    assert static_energy_eur_per_kwh(mono_cap, "offpeak") == pytest.approx(0.16)
+    assert energy_eur_per_kwh(
+        mono_cap, peak_hour, None, meter="bi", region="wallonia"
+    ) == pytest.approx(0.18)
+
+
 def test_spot_monthly_impact_bands_follow_the_cwape_schedule() -> None:
     """A month-priced leg carrying the three Impact pairs bills each hour on
     the CWaPE band, every day of the week, capped per band. The coefficients

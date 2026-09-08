@@ -506,6 +506,13 @@ def static_energy_eur_per_kwh(energy: EnergyRates, band: StaticBand) -> float | 
     billed the peak rate for peak hours. A card in that state is malformed
     rather than mono-only, and the conservative reading is the one that does
     not invent the missing half.
+
+    A variable card's contractual ceiling is applied here for the same reason
+    the hourly branch applies it: "vous payez le minimum entre les prix
+    variables mensuels et ce plafond". Leaving it off meant the year-to-date
+    kept billing a rate the contract caps, so the running bill would climb
+    past the plafond in exactly the spike the plafond exists for, while the
+    price sensor beside it sat at the cap.
     """
     if isinstance(energy, FixedRates):
         if band == "single" or energy.peak is None or energy.offpeak is None:
@@ -513,9 +520,29 @@ def static_energy_eur_per_kwh(energy: EnergyRates, band: StaticBand) -> float | 
         return energy.offpeak if band == "offpeak" else energy.peak
     if isinstance(energy, VariableRates):
         if band == "single" or energy.peak is None or energy.offpeak is None:
-            return energy.current
-        return energy.offpeak if band == "offpeak" else energy.peak
+            rate = energy.current
+        else:
+            rate = energy.offpeak if band == "offpeak" else energy.peak
+        ceiling = _static_ceiling(energy, band)
+        return rate if ceiling is None else min(rate, ceiling)
     return None
+
+
+def _static_ceiling(energy: VariableRates, band: StaticBand) -> float | None:
+    """The energy ceiling for one band, or ``None`` when the card caps nothing.
+
+    Routed on its OWN half-pair rule rather than the rate's, which is what the
+    hourly path does by handing the ceilings to ``_routed_rate`` as a rate
+    sheet of their own: a card may print a mono cap against a bi-hourly rate
+    pair, and then every band is capped at the mono figure.
+    """
+    if (
+        band == "single"
+        or energy.ceiling_peak is None
+        or energy.ceiling_offpeak is None
+    ):
+        return energy.ceiling_single
+    return energy.ceiling_offpeak if band == "offpeak" else energy.ceiling_peak
 
 
 def yearly_fixed_fee_for_meter(energy: EnergyRates, meter: MeterType) -> float:
