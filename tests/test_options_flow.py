@@ -6137,3 +6137,87 @@ async def test_ranking_shows_your_own_contract_and_measures_against_it(
             expected,
         )
     assert any(v < own_value for _label, v in others), "no cheaper alternative"
+
+
+def test_the_compare_page_reads_the_solar_profile_for_the_side_that_names_it() -> None:
+    """The SPP profile is a per-side answer, not a per-household one.
+
+    The household's own opt-in belongs to the side it was made on; a target
+    card is judged only by what it prints. Handing a target's formula a
+    weighting its card never names is what inverted a compared feed-in credit
+    once already, and this helper is the gate that keeps the two apart.
+    """
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.compare_flow import (
+        _coordinator_spp_weights,
+    )
+    from custom_components.be_electricity_prices.providers.base import InjectionRates
+    from tests import make_snapshot
+
+    weights = {(7, 1, 12): 1.0}
+    entry = SimpleNamespace(
+        data={
+            "solar_regime": "injection",
+            "supplier": "eneco",
+            "contract": "power_fix",
+        },
+        runtime_data=SimpleNamespace(_spp_weights=weights),
+    )
+    spp_card = make_snapshot(
+        injection=InjectionRates(current=0.05, factor=0.9, base=-0.01, spp_indexed=True)
+    )
+    plain_card = make_snapshot(injection=InjectionRates(current=0.05))
+
+    # A card that names Belpex_SPP gets the profile on either side.
+    assert (
+        _coordinator_spp_weights(entry, spp_card, own=True) == weights  # type: ignore[arg-type]
+    )
+    assert (
+        _coordinator_spp_weights(entry, spp_card, own=False) == weights  # type: ignore[arg-type]
+    )
+    # One that does not gets nothing, and the walk keeps its printed figure.
+    assert _coordinator_spp_weights(entry, plain_card, own=False) is None  # type: ignore[arg-type]
+    # No coordinator loaded yet: nothing to read, and nothing downloaded here.
+    bare = SimpleNamespace(data=dict(entry.data))
+    assert _coordinator_spp_weights(bare, spp_card, own=True) is None  # type: ignore[arg-type]
+
+
+def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
+    """The year-to-date engine takes its pricing inputs as keyword arguments,
+    and a call site that omits one degrades silently rather than failing.
+
+    That is how the compare page came to resolve a month-indexed feed-in
+    credit against nothing while the sensor beside it resolved it properly:
+    the spot cache, the quarter slots and the load profile were threaded
+    through and the solar profile was not, at all four call sites. Read the
+    source rather than any one flow, so a fifth call site added later is held
+    to the same list.
+    """
+    import ast
+    import inspect
+
+    from custom_components.be_electricity_prices import compare_flow
+
+    required = {
+        "historical_spots",
+        "spot_quarters",
+        "billed_peak_kw",
+        "rlp_weights",
+        "spp_weights",
+    }
+    tree = ast.parse(inspect.getsource(compare_flow))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_compute_current_year_cost"
+    ]
+    assert calls, "the compare page must still price a year-to-date somewhere"
+    for call in calls:
+        passed = {kw.arg for kw in call.keywords}
+        missing = required - passed
+        assert not missing, (
+            f"_compute_current_year_cost call at line {call.lineno} omits {missing}"
+        )

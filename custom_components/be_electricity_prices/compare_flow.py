@@ -76,7 +76,7 @@ from .spot_stats import (
     _injection_is_spp_indexed,
     _spp_weighting_enabled,
 )
-from .synergrid import RlpWeights
+from .synergrid import RlpWeights, SppWeights
 from .injection import _injection_needs_spot
 
 from .cohort import ytd_window_start
@@ -328,6 +328,39 @@ def _coordinator_rlp_weights(entry: ConfigEntry) -> RlpWeights | None:
     from the dialog."""
     coord = getattr(entry, "runtime_data", None)
     weights = getattr(coord, "_rlp_weights", None)
+    return weights or None
+
+
+def _coordinator_spp_weights(
+    entry: ConfigEntry, snapshot: SupplierSnapshot | None, *, own: bool
+) -> SppWeights | None:
+    """The Synergrid solar profile the entry's coordinator holds, or ``None``.
+
+    Its sibling above carries the load profile; this one carries the solar
+    weighting an SPP-indexed feed-in formula settles on. The year-to-date
+    column has to resolve that credit exactly as the sensor beside it does,
+    and it was the one input never passed: with no profile
+    ``_spp_injection_spot`` is strict and answers nothing, so the walk
+    credited the card's printed indicative and the household's own row
+    contradicted its own current_year_cost.
+
+    ``own`` splits the gate the same way ``_spp_spot_for`` does, and for the
+    same reason: the entry-side opt-in belongs to the side it was made on,
+    while a foreign card is judged only by what it prints. Handing a target's
+    formula a weighting its card never names inverts the credit.
+
+    Never downloaded from the dialog; a household whose own contract does not
+    want the profile simply has none, and the walk keeps the printed figure as
+    it always did.
+    """
+    if not (
+        _spp_weighting_enabled(entry, snapshot)
+        if own
+        else _injection_is_spp_indexed(snapshot)
+    ):
+        return None
+    coord = getattr(entry, "runtime_data", None)
+    weights = getattr(coord, "_spp_weights", None)
     return weights or None
 
 
@@ -628,6 +661,9 @@ class _SweepEngine:
                     spot_quarters=hist_quarters,
                     billed_peak_kw=hh.peak_kw,
                     rlp_weights=_coordinator_rlp_weights(self.config_entry),
+                    spp_weights=_coordinator_spp_weights(
+                        self.config_entry, hh.current_snapshot, own=True
+                    ),
                 )
         baseline = archived_months_present(
             self.hass,
@@ -712,6 +748,9 @@ class _SweepEngine:
                     spot_quarters=hist_quarters,
                     billed_peak_kw=hh.peak_kw,
                     rlp_weights=_coordinator_rlp_weights(self.config_entry),
+                    spp_weights=_coordinator_spp_weights(
+                        self.config_entry, snap, own=False
+                    ),
                 )
             except Exception:  # noqa: BLE001 - one row loses its history
                 rows.append(row)
@@ -2286,6 +2325,9 @@ class _CompareStepsMixin(OptionsFlow):
                     spot_quarters=hist_quarters,
                     billed_peak_kw=peak_kw,
                     rlp_weights=_coordinator_rlp_weights(self.config_entry),
+                    spp_weights=_coordinator_spp_weights(
+                        self.config_entry, current_snapshot, own=True
+                    ),
                 )
                 compare_ytd_val = await _compute_current_year_cost(
                     self.hass,
@@ -2299,6 +2341,9 @@ class _CompareStepsMixin(OptionsFlow):
                     spot_quarters=hist_quarters,
                     billed_peak_kw=peak_kw,
                     rlp_weights=_coordinator_rlp_weights(self.config_entry),
+                    spp_weights=_coordinator_spp_weights(
+                        self.config_entry, other_snap, own=False
+                    ),
                 )
             except Exception:  # noqa: BLE001 - degrade to '-'
                 current_ytd_val = None
