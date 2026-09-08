@@ -761,6 +761,15 @@ async def test_ytd_injection_uses_spp_not_flat_mean(
             const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
             const.CONF_INJECTION_KWH: "sensor.inj_total",
             const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_BI_HORAIRE,
+            # The opt-in this test is ABOUT. It carries no card flag -- a
+            # hand-entered contract has no card to read one off -- so the
+            # answer lives on the entry, and both keys are load-bearing:
+            # _spp_weighting_enabled wants the monthly contract on the formula
+            # injection mode with the box ticked. Without them the engine is
+            # right to ignore a profile nobody asked for, and the coordinator
+            # would never have passed one for such an entry either.
+            const.CONF_CUSTOM_INJECTION_SPP_WEIGHTED: True,
+            const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_FORMULA,
         }
     )
     # flat mean 0.20; SPP-weighted 0.15 (hour 10 weighted 3x vs hour 11)

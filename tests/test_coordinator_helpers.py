@@ -6798,3 +6798,72 @@ def test_a_published_month_index_is_billed_without_any_spots() -> None:
     assert (
         _hour_spot(bare, local, local.astimezone(UTC), {}, {}, {}, today, None) is None
     )
+
+
+async def test_a_plain_month_index_ignores_a_solar_profile_it_was_handed(
+    hass: HomeAssistant,
+) -> None:
+    """``_spp_injection_spot`` weights whatever profile it is given.
+
+    It cannot tell a deliberate opt-in from a caller that simply passed the
+    profile it happened to hold, and the plain and solar-weighted means are
+    DIFFERENT indices, not one coarser than the other. A card that names the
+    plain arithmetic mean (Eneco's Belpex-injectie, the EPEXDAM cards) must
+    therefore be credited on it whatever arrives alongside. Five call sites
+    now pass this argument, so the gate belongs at the engine rather than in
+    each of them.
+    """
+    today = dt_util.now().date()
+    # Midday-heavy, so the two means are far apart and the test can see which
+    # one was used.
+    spots = {
+        utc: 0.09 - 0.06 * max(0.0, 1 - abs(dt_util.as_local(utc).hour - 13) / 7)
+        for utc in _flat_month_spots(today)
+    }
+    plain = sum(spots.values()) / len(spots)
+    spp = {
+        (
+            dt_util.as_local(u).month,
+            dt_util.as_local(u).day,
+            dt_util.as_local(u).hour,
+        ): (2.0 if 9 <= dt_util.as_local(u).hour < 17 else 0.02)
+        for u in spots
+    }
+    snap = make_snapshot(
+        energy=VariableRates(current=0.19),
+        injection=InjectionRates(
+            current=0.0432, factor=0.9, base=-0.01, month_indexed=True
+        ),
+    )
+    days = _days_through(date(today.year, today.month, 1), today)
+    per_day = {d: 24.0 for d in days}
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _s: date, _e: date
+    ) -> dict[date, float]:
+        return dict(per_day) if entity_id == "sensor.inj" else {}
+
+    entry = _yearly_entry(
+        meter="mono",
+        solar_regime="injection",
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+        day_consumption_kwh=None,
+        night_consumption_kwh=None,
+        day_injection_kwh=None,
+        night_injection_kwh=None,
+    )
+    with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+        total = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots=dict(spots),
+            spp_weights=spp,
+        )
+    assert total is not None
+    credit = -total / sum(per_day.values())
+    # The plain mean, which is what this card names.
+    assert credit == pytest.approx(0.9 * plain - 0.01)

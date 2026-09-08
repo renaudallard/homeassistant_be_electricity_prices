@@ -113,6 +113,7 @@ from .spot_stats import (
     _hour_spot,
     _injection_is_spp_indexed,
     _injection_on_month_mean,
+    _spp_weighting_enabled,
     _register_for,
     _rlp_hour_weight,
     _spp_injection_spot,
@@ -824,6 +825,16 @@ async def _compute_current_year_cost(
     the cache is missing: they bill against the current card instead of their
     own, exactly as a supplier with no archive does all year, until the
     warm-up refresh lands.
+
+    ``spp_weights`` is ignored for a card that does not name Belpex_SPP, and
+    that gate is here rather than left to the callers. ``_spp_injection_spot``
+    applies the weighting to whatever profile it is handed: it cannot tell a
+    deliberate opt-in from a caller that passed the profile it had, and the
+    two means are different indices rather than one being coarser, so an
+    unmeant profile re-prices a plain month-indexed credit onto the
+    solar-weighted mean. Five call sites now pass this argument, and asking
+    each to remember is the shape of mistake that got the argument dropped in
+    the first place.
     """
     today = dt_util.now().date()
     # contract / meter overrides let the OptionsFlow's compare path run
@@ -845,6 +856,18 @@ async def _compute_current_year_cost(
     # contracts without a start date, leaving the current card's kind. The
     # per-month walk resolves the same cohort leg through
     # _effective_snapshot_for_month, so dispatch and per-month pricing agree.
+    # The entry's own opt-in belongs to the side it was made on; a contract
+    # that is not this entry's is judged only by what its card prints. Same
+    # split the comparison page's own month-mean resolver makes, and for the
+    # same reason: a custom monthly entry that ticked the SPP box must not
+    # re-price a foreign card's formula onto an index that card never names.
+    if spp_weights is not None and not (
+        _spp_weighting_enabled(entry, snapshot)
+        if contract == entry.data.get(CONF_CONTRACT)
+        else _injection_is_spp_indexed(snapshot)
+    ):
+        spp_weights = None
+
     cohort_energy = await _cohort_energy_leg(
         hass, session, extractor, contract, region, entry, snapshot
     )
