@@ -129,6 +129,7 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.pricing import (
     energy_eur_per_kwh,
+    static_breakdown,
     yearly_fixed_fee_for_meter,
 )
 from tests import make_snapshot, make_stub_extractor
@@ -6700,3 +6701,68 @@ async def test_the_capacity_cap_follows_the_meter_the_quote_is_priced_on(
     assert await _capacity("mono") < await _capacity("exclusive_night")
     # And the entry's own meter is still the default.
     assert await _capacity(None) == pytest.approx(await _capacity("mono"))
+
+
+async def test_the_projection_nets_each_side_on_its_own_shape(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A reversing meter nets against the rate in force at the time.
+
+    The projection netted the two annual totals first and priced the residue
+    at the CONSUMPTION-weighted rate, which values exported kWh at the hours
+    the household draws them. The two shapes are opposites: consumption is
+    evening-heavy and export is a midday bell, and on a bi-hourly card those
+    hours carry different rates. The compare page and the live sensor both
+    price each side on its own shape; this one now does too.
+    """
+    freezer.move_to("2026-10-01 12:00:00+02:00")
+    entry = _projection_entry(
+        solar_regime="compensation", injection_kwh="sensor.inj", meter="bi"
+    )
+
+    async def _daily_rows(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        days = (end - start).days + 1
+        per = {"sensor.cons": 10.0, "sensor.inj": 6.0}.get(entity_id)
+        if per is None:
+            return {}
+        return {start + timedelta(days=i): per for i in range(days)}
+
+    # Consumption in the evening peak, export at midday: on the bi-hourly
+    # schedule those are the peak and the off-peak band respectively.
+    async def _hourly_deltas(
+        _hass: object, entity_id: str, start: date, end: date, _bucket: str
+    ) -> list[tuple[datetime, float]]:
+        hours = {"sensor.cons": (19,), "sensor.inj": (2,)}.get(entity_id)
+        if hours is None:
+            return []
+        base = dt_util.start_of_local_day(start)
+        return [(base + timedelta(hours=h), 1.0) for h in hours]
+
+    with (
+        patch.object(energy_meters, "_recorder_daily_kwh", new=_daily_rows),
+        patch.object(energy_meters, "_recorder_deltas", new=_hourly_deltas),
+    ):
+        diag: dict[str, Any] = {}
+        got = await _compute_projected_year_cost(
+            hass,
+            entry,  # type: ignore[arg-type]
+            _yearly_snapshot(),
+            _yearly_snapshot(),
+            billed_peak_kw=0.0,
+            today=dt_util.now().date(),
+            breakdown=diag,
+        )
+    assert got is not None
+    snap = _yearly_snapshot()
+    peak = static_breakdown(snap, "ores", "wallonia", "peak")
+    offpeak = static_breakdown(snap, "ores", "wallonia", "offpeak")
+    assert peak is not None and offpeak is not None
+    # Drawn at the peak rate, exported at the off-peak one, netted once.
+    expected = (
+        diag["annual_kwh"] * peak.all_in - diag["annual_injection_kwh"] * offpeak.all_in
+    )
+    assert got == pytest.approx(expected, rel=0.01)
+    # And the two rates really do differ, or the assertion proves nothing.
+    assert peak.all_in != pytest.approx(offpeak.all_in)

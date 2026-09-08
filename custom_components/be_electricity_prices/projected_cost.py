@@ -222,6 +222,7 @@ async def _compute_projected_year_cost(
     annual_inj = 0.0
     injection_basis = "not applicable"
     inj_rate: float | None = None
+    inj_hour_weights: dict[int, float] | None = None
     regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
     if regime != SOLAR_REGIME_NONE:
         measured_inj = await _measured_kwh(
@@ -288,6 +289,21 @@ async def _compute_projected_year_cost(
     # and the compare page by re-pointing its own snapshot at the spliced one.
     # The overlays are untouched by the splice, so the network, tax, prosumer
     # and capacity legs are the same either way.
+    # Under netting each side has to be priced on its own hour-of-day shape.
+    # A reversing meter nets against the rate in force at the time, and the two
+    # shapes are opposites: consumption is evening-heavy, export is a midday
+    # bell. Netting the annual totals first and pricing the residue at the
+    # CONSUMPTION-weighted rate values exported kWh at hours they were never
+    # produced in, which is what the compare page and the live sensor both
+    # stopped doing. ``None`` keeps that older behaviour for an entry with no
+    # measured export shape, which under this regime cannot happen: the branch
+    # above refuses a compensation year without a full trailing year of
+    # feed-in.
+    export_per_kwh: float | None = None
+    if regime == SOLAR_REGIME_COMPENSATION and inj_hour_weights:
+        export_per_kwh = _tou_weighted_per_kwh(
+            priced, dso, region, dt_util.now(), None, meter, dso_mode, inj_hour_weights
+        )
     projected = _annual_bill(
         priced,
         entry,
@@ -296,6 +312,7 @@ async def _compute_projected_year_cost(
         annual.kwh,
         annual_inj,
         inj_rate,
+        export_per_kwh=export_per_kwh,
         meter=meter,
     )
 
