@@ -44,7 +44,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from datetime import date
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 import aiohttp
 
@@ -352,6 +352,20 @@ class SpotMonthlyRates:
     # is the month's. When present it settles the month exactly and no mean is
     # computed. Always None on the live tick's leg.
     index_realised: float | None = None
+    # A card that prices a first tranche of the YEAR's volume at a flat rate
+    # and only the remainder on the formula above. EnergyVision's tiered range
+    # is the case: "de vaste tariefcomponent ... is van toepassing op de eerste
+    # 1.800 kWh verbruik", with the rest on 1,12 x Belpex-RLP-M + 20 EUR/MWh.
+    #
+    # Carried as data rather than priced here, because the engine bills per
+    # slot and cannot know where in the year's cumulative volume an hour sits.
+    # ``resolve_volume_tier`` folds the pair into the coefficients above
+    # against the entry's annual volume, so nothing downstream learns the word
+    # tier -- the same arrangement ``federal_excise_bands`` has with
+    # ``resolve_excise_band``. Both are None on every card that prices its
+    # whole volume one way, which is all of them but that range.
+    tier_kwh: float | None = None
+    tier_rate: float | None = None
     weekend_rule: WeekendRule = "weekend_offpeak"
     yearly_fixed_fee: float = 0.0
     # Dedicated yearly fixed fee for an exclusive-night meter circuit, carried
@@ -1042,6 +1056,102 @@ def resolve_excise_band(
     if rate == snapshot.taxes.federal_excise:
         return snapshot
     return replace(snapshot, taxes=replace(snapshot.taxes, federal_excise=rate))
+
+
+def resolve_volume_tier(
+    snapshot: SupplierSnapshot, annual_kwh: float
+) -> SupplierSnapshot:
+    """Fold a volume-tiered energy leg into one formula, or leave it alone.
+
+    A card without ``tier_kwh`` prices its whole volume one way and is returned
+    unchanged (identity), which is every card but EnergyVision's tiered range.
+
+    Such a card bills the year's first ``tier_kwh`` at ``tier_rate`` and the
+    remainder on ``factor * mean + base``. A fixed tranche blended with a
+    formula that is linear in the index is STILL a formula linear in the index:
+    with ``w`` the tranche's share of the year,
+
+        w * rate + (1 - w) * (factor * mean + base)
+            == ((1 - w) * factor) * mean + ((1 - w) * base + w * rate)
+
+    so the pair collapses into the coefficients the engine already prices and
+    no new rate kind is needed. Resolving it once here keeps the pricing engine
+    reading one formula and knowing nothing about tranches, exactly as
+    :func:`resolve_excise_band` does for the degressive excise.
+
+    The blend is the ANNUAL bill exactly, not an approximation of it, and the
+    card is what makes that true: its Voordeelzekerheid clause settles the year
+    so the full tranche is charged at the fixed rate whenever the volume
+    allowed it ("Als je op je jaarlijkse afrekeningsfactuur geen 1.800 kWh aan
+    het vast tarief kreeg aangerekend, terwijl je wel voldoende verbruik had
+    doorheen het jaar, dan berekenen wij een Voordeelzekerheid"). So the year
+    costs ``tier_kwh * rate + (rest) * formula`` however the pro-rata-per-day
+    allowance fell across the months, and that is what this reproduces. It also
+    makes the bi-hourly split (900 kWh on each register) free: the tranche and
+    the remainder are billed at the same two rates in both bands, so splitting
+    the allowance per register and blending once over the year reach the same
+    annual total.
+
+    What is NOT exact is ``annual_kwh`` itself, which is the household's own
+    estimate. A wrong estimate moves the split proportionally, the same
+    exposure the excise schedule already carries.
+
+    A household inside the tranche has no variable leg at all, so it comes back
+    as ``FixedRates``: leaving it here with a zeroed factor would price
+    correctly but still demand a monthly mean, and an entry with no spot for
+    the month would fail its tick over a coefficient that cannot matter.
+    """
+    energy = snapshot.energy
+    if not isinstance(energy, SpotMonthlyRates):
+        return snapshot
+    if energy.tier_kwh is None or energy.tier_rate is None:
+        return snapshot
+    if annual_kwh <= 0.0:
+        # Nothing to measure the tranche against. The config flow always
+        # carries a positive estimate, so this is the degenerate guard rather
+        # than a pricing decision.
+        return snapshot
+    within = min(energy.tier_kwh, annual_kwh)
+    if within >= annual_kwh:
+        return replace(
+            snapshot,
+            energy=FixedRates(
+                single=energy.tier_rate,
+                yearly_fixed_fee=energy.yearly_fixed_fee,
+                yearly_fixed_fee_exclusive_night=(
+                    energy.yearly_fixed_fee_exclusive_night
+                ),
+            ),
+        )
+    share = within / annual_kwh
+    rest = 1.0 - share
+    fixed_part = share * energy.tier_rate
+
+    def blend(factor: float | None, base: float | None) -> tuple[float, float]:
+        return rest * (factor or 0.0), rest * (base or 0.0) + fixed_part
+
+    factor, base = blend(energy.factor, energy.base)
+    changes: dict[str, Any] = {
+        "factor": factor,
+        "base": base,
+        "tier_kwh": None,
+        "tier_rate": None,
+    }
+    # Every band pair the leg happens to carry moves with the mono one. No
+    # tiered card publishes a per-band formula today, and the blend is exact
+    # only while the tranche is billed at one rate across the bands, which is
+    # what the current range does; blending them is still nearer than leaving
+    # a populated pair to price the remainder as though the tranche were not
+    # there at all.
+    for suffix in ("peak", "offpeak", "exclusive_night", "transition"):
+        band_factor = getattr(energy, f"factor_{suffix}")
+        band_base = getattr(energy, f"base_{suffix}")
+        if band_factor is None and band_base is None:
+            continue
+        blended_factor, blended_base = blend(band_factor, band_base)
+        changes[f"factor_{suffix}"] = blended_factor
+        changes[f"base_{suffix}"] = blended_base
+    return replace(snapshot, energy=replace(energy, **changes))
 
 
 SnapshotFetcher = Callable[

@@ -970,6 +970,95 @@ def test_resolve_excise_band_is_identity_without_bands() -> None:
     assert resolve_excise_band(snap, 900_000.0) is snap
 
 
+# EV-0926-GS1800V-nl: 1.800 kWh at 10,60 c/kWh, the remainder on
+# "1,12 x Belpex-RLP-M + 20 EUR/MWh" excl. btw against a VAT-inclusive card.
+_TIER_KWH, _TIER_RATE = 1800.0, 0.1060
+_TIER_FACTOR, _TIER_BASE = 1.12 * 1.06, 0.020 * 1.06
+
+
+def _tiered_snapshot() -> Any:
+    from custom_components.be_electricity_prices.providers.base import SpotMonthlyRates
+
+    return make_snapshot(
+        energy=SpotMonthlyRates(
+            factor=_TIER_FACTOR,
+            base=_TIER_BASE,
+            tier_kwh=_TIER_KWH,
+            tier_rate=_TIER_RATE,
+            yearly_fixed_fee=50.0,
+            rlp_indexed=True,
+            rlp_blend="flanders",
+        )
+    )
+
+
+@pytest.mark.parametrize("annual_kwh", [2500.0, 3500.0, 6000.0])
+@pytest.mark.parametrize("mean", [0.060, 0.090])
+def test_resolve_volume_tier_reproduces_the_annual_bill(
+    annual_kwh: float, mean: float
+) -> None:
+    """The tranche blended into the formula has to cost what the card bills.
+
+    EnergyVision's Voordeelzekerheid settles the year so the full 1.800 kWh is
+    charged at the fixed rate whenever the volume allowed it, so the year costs
+    ``1800 x fixed + rest x formula`` however the pro-rata-per-day allowance
+    fell across the months. The blend is that number exactly rather than an
+    approximation of it, which is what lets the engine keep pricing one
+    formula and never learn about tranches.
+    """
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers.base import (
+        resolve_volume_tier,
+    )
+
+    resolved = resolve_volume_tier(_tiered_snapshot(), annual_kwh)
+    rate = energy_eur_per_kwh(
+        resolved.energy, datetime(2026, 3, 4, 9, tzinfo=UTC), mean
+    )
+    variable = _TIER_FACTOR * mean + _TIER_BASE
+    billed = _TIER_KWH * _TIER_RATE + (annual_kwh - _TIER_KWH) * variable
+    assert rate * annual_kwh == pytest.approx(billed)
+    # And the tranche is spent, so a second pass cannot charge it twice.
+    again = resolve_volume_tier(resolved, annual_kwh)
+    assert again.energy == resolved.energy
+
+
+def test_resolve_volume_tier_inside_the_tranche_drops_the_formula() -> None:
+    """A household that never leaves the tranche is on a flat rate, and has to
+    come back as one. Leaving it here with a zeroed factor prices correctly and
+    still demands a monthly mean, so a month with no cached spot would fail the
+    tick over a coefficient that cannot matter."""
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        resolve_volume_tier,
+    )
+
+    resolved = resolve_volume_tier(_tiered_snapshot(), 1200.0)
+    assert isinstance(resolved.energy, FixedRates)
+    assert resolved.energy.single == pytest.approx(_TIER_RATE)
+    # The standing charge rides along; it is not part of the tranche.
+    assert resolved.energy.yearly_fixed_fee == pytest.approx(50.0)
+
+
+def test_resolve_volume_tier_is_identity_without_a_tranche() -> None:
+    """Every card but EnergyVision's tiered range prices its whole volume one
+    way, and a resolver that copied them would churn every snapshot read."""
+    from custom_components.be_electricity_prices.providers.base import (
+        FixedRates,
+        SpotMonthlyRates,
+        resolve_volume_tier,
+    )
+
+    plain = make_snapshot(energy=SpotMonthlyRates(factor=1.0, base=0.0))
+    assert resolve_volume_tier(plain, 3500.0) is plain
+    flat = make_snapshot(energy=FixedRates(single=0.2))
+    assert resolve_volume_tier(flat, 3500.0) is flat
+    # No volume to measure the tranche against: leave the card alone rather
+    # than guess which side of it the household sits on.
+    tiered = _tiered_snapshot()
+    assert resolve_volume_tier(tiered, 0.0) is tiered
+
+
 def test_resolve_excise_band_leaves_the_rest_of_the_card_alone() -> None:
     snap = make_snapshot(
         taxes=TaxOverlay(

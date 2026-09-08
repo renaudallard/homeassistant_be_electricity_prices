@@ -99,7 +99,7 @@ Note what is deliberately absent from the per-kWh formula:
   charges, not EUR/kWh. They are billed by the coordinator's cost sensors, not
   folded into the hourly all-in rate. `taxes_eur_per_kwh` sums only the per-kWh
   levies (`pricing.py:697-712`); `energy_fund_eur_per_month` is defined on the
-  `TaxOverlay` (`providers/base.py:759`) but is not touched here.
+  `TaxOverlay` (`providers/base.py:773`) but is not touched here.
 - `data_management_per_year` carries three different charges depending on the
   region, and one of them is tied to the tariff configuration. The Walloon
   `terme fixe` is not billed under the CWaPE incitative configuration that the
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1024`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1038`)
 resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
 rate to `federal_excise`. The pricing engine never sees a band.
 
@@ -338,6 +338,49 @@ the flat Normal credit the moment its energy re-prices.
 Month coefficients are never a per-hour formula, and without that guard a card
 that stopped printing its indicative would flip to crediting the current slot's
 spot, which is the 0.6.7 mis-credit and is silent.
+
+### Volume-tiered energy
+
+EnergyVision's tiered range prices a first tranche of the YEAR's volume at a
+flat rate and only the remainder on a monthly formula: *"de vaste
+tariefcomponent van het product Groene stroom is geldig voor 10 jaar en is van
+toepassing op de eerste 1.800 kWh verbruik"*, with the rest on
+`1,12 x Belpex-RLP-M + 20 EUR/MWh`.
+
+The engine bills per slot and cannot know where in the year's cumulative volume
+an hour sits, so the tranche never reaches it. `SpotMonthlyRates` carries the
+pair as data (`tier_kwh` / `tier_rate`) and `resolve_volume_tier` folds it into
+the coefficients before the snapshot is priced, the same arrangement
+`federal_excise_bands` has with `resolve_excise_band`. A fixed tranche blended
+with a formula that is linear in the index is still a formula linear in the
+index, so no new rate kind is needed:
+
+```
+w * rate + (1 - w) * (factor * mean + base)
+    == ((1 - w) * factor) * mean + ((1 - w) * base + w * rate)
+```
+
+with `w` the tranche's share of the entry's annual volume.
+
+The blend is the annual bill exactly rather than an approximation of it, and
+the card is what makes that true. Its *Voordeelzekerheid* clause settles the
+year so the full tranche is charged at the fixed rate whenever the volume
+allowed it, so the year costs `tier_kwh * rate + rest * formula` however the
+pro-rata-per-day allowance fell across the months. That also makes the
+bi-hourly split free: the card puts 900 kWh of allowance on each register, and
+since both registers bill the same two rates, splitting per register and
+blending once over the year reach the same annual total.
+
+What is not exact is the annual volume itself, which is the household's own
+estimate; a wrong estimate moves the split proportionally, the same exposure
+the degressive excise carries. And `current_price` shows the blend, because a
+tiered contract genuinely has two rates at once and the blend is the annual
+average of them, which is also the basis the card's own headline figures use.
+
+A household inside the tranche has no variable leg at all and comes back as
+`FixedRates`: leaving it as a zeroed-factor formula would price correctly and
+still demand a monthly mean, and a month with no cached spot would then fail
+the tick over a coefficient that cannot matter.
 
 ### Contractual price ceilings
 
@@ -501,7 +544,7 @@ discount and is out of scope (`pricing.py:214-219`).
 `ImpactRates` (`tou_impact` kind) is Wallonia's Tarif Impact, distinct from TOU
 because its schedule is the CWaPE-defined Impact one with no weekend exception,
 matching the DSO Impact distribution tariff that gates eligibility
-(`providers/base.py:422-425`). Fields: `pic`, `medium`, `eco`
+(`providers/base.py:436-439`). Fields: `pic`, `medium`, `eco`
 (`providers/base.py:370-372`). `dso_impact_band` (`pricing.py:675-691`):
 
 | Band | Hours (every day) |
@@ -640,11 +683,11 @@ keys (`pricing.py:824-856`, same guard in `compute_breakdown` at
 Injection is computed in `coordinator.py`, not `pricing.py`, but it consumes the
 same snapshot and `tou_slot` rule. `InjectionRates` carries a monthly indicative
 `current`, an hourly formula `factor`/`base`, an optional per-slot TOU triplet
-`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:482-497`).
+`peak`/`transition`/`offpeak`, and a `formula` string (`providers/base.py:496-511`).
 
 **VAT-exempt invariant.** Belgian residential injection is exempt from VAT, so
 `InjectionRates` values are NEVER VAT-inclusive regardless of the consumption
-snapshot's `vat_rate` (`providers/base.py:795-795`). None of the injection code
+snapshot's `vat_rate` (`providers/base.py:809-809`). None of the injection code
 paths multiply by `1.0 + vat_rate`.
 
 Injection formulas can go negative at low spot (the producer pays to inject) and

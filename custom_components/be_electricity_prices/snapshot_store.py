@@ -74,6 +74,7 @@ from .providers.base import (
     VariableRates,
     apply_vat,
     resolve_excise_band,
+    resolve_volume_tier,
 )
 
 # Coordinator probes the supplier on every update tick (UPDATE_INTERVAL_MINUTES);
@@ -872,17 +873,16 @@ def _include_vat(entry: ConfigEntry) -> bool:
 def _resolve_snapshot(entry: ConfigEntry, snap: SupplierSnapshot) -> SupplierSnapshot:
     """Resolve a card against the site facts only this entry knows.
 
-    Both steps are identity on a residential card, so this is free for
-    every existing entry. Order is irrelevant: the excise band is a
-    per-kWh rate and ``apply_vat`` never touches those.
+    All three steps are identity on a card that carries none of them, so this
+    is free for every existing entry. Order is irrelevant: the excise band and
+    the volume tier are both per-kWh rates, and ``apply_vat`` never touches
+    those (it grosses the fees and the feed-in leg).
     """
     resolved = apply_vat(snap, include_vat=_include_vat(entry))
-    return resolve_excise_band(
-        resolved,
-        float(
-            entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH, DEFAULT_ANNUAL_CONSUMPTION_KWH)
-        ),
+    annual_kwh = float(
+        entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH, DEFAULT_ANNUAL_CONSUMPTION_KWH)
     )
+    return resolve_volume_tier(resolve_excise_band(resolved, annual_kwh), annual_kwh)
 
 
 _LOGGER = logging.getLogger(__name__)
