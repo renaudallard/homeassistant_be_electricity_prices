@@ -2845,6 +2845,16 @@ _NO_STANDING_CHARGE: frozenset[str] = frozenset(
 )
 
 
+# A product that bundles hardware into its abonnement sits in a different band
+# from every supply-only card: EnergyVision's Laadpunt prints 410 EUR/yr where
+# its siblings charge 50. Carved out rather than widening the shared ceiling to
+# fit it, which would stop that ceiling catching a ten-fold misread on the
+# 50-EUR cards it exists for. Same shape as _NO_STANDING_CHARGE above and for
+# the same reason: this is the product's structure, not its current price, so
+# it does not drift the way a re-pricing would.
+_BUNDLED_STANDING_CHARGE: frozenset[str] = frozenset({"energyvision_laadpunt"})
+
+
 def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
     # The supplier's standing charge, on every rate shape. The floor is the
     # half that pays: the field defaults to 0,0, so an anchor that stops
@@ -2858,9 +2868,15 @@ def _validate_energy(prefix: str, contract_id: str, energy: object) -> None:
     # assertion here.
     fee = getattr(energy, "yearly_fixed_fee", None)
     floor = 0.0 if contract_id in _NO_STANDING_CHARGE else 5.0
+    # The ceiling is sized on the misread it catches, not on what an abonnement
+    # ought to cost: 600 admits the 410 a bundled product prints, with room for
+    # it to be re-priced, and still catches the ten-fold slip that would put it
+    # in the thousands. A ceiling picked from tariff economics reds the run on
+    # a card that is simply expensive, which is how this one first fired.
+    ceiling = 600.0 if contract_id in _BUNDLED_STANDING_CHARGE else 300.0
     _expect(
-        f"{prefix}: standing charge in [{floor:.0f}, 300] EUR/yr",
-        fee is not None and floor <= fee <= 300.0,
+        f"{prefix}: standing charge in [{floor:.0f}, {ceiling:.0f}] EUR/yr",
+        fee is not None and floor <= fee <= ceiling,
         detail=f"yearly_fixed_fee={fee}",
     )
     # Bounded from above only: a card that prints "-" for the exclusive-night
