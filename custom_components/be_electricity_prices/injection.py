@@ -322,11 +322,16 @@ def _injection_is_spot_formula(inj: InjectionRates, energy: EnergyRates) -> bool
     decides whether the display array varies intraday. A drift between them
     mis-gates the array against the billed value.
     """
-    if inj.month_indexed:
+    if inj.month_indexed or inj.spp_indexed:
         # Month coefficients are never a per-hour formula, whatever else is
         # true. Without this a card that stopped printing its indicative would
         # flip to pricing the credit at the current slot's spot, which is the
-        # 0.6.7 mis-credit and is silent.
+        # 0.6.7 mis-credit and is silent. Both flags, because the
+        # solar-weighted index is a month too and the pair is only ever
+        # mutually exclusive by convention: on a DYNAMIC energy leg, where the
+        # branch below fires on the energy kind alone, the plain flag was the
+        # only thing standing between an SPP formula and the current quarter's
+        # spot.
         return False
     return (
         inj.factor is not None

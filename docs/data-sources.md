@@ -473,7 +473,7 @@ hour is skipped, because `factor * spot + base` needs both terms
 month, or a non-static rate kind reaching the static path) skips just that hour
 rather than tearing the whole backfill down (`backfill.py:441`).
 
-The injection credit reuses `_historical_injection_rate` (`injection.py:490`,
+The injection credit reuses `_historical_injection_rate` (`injection.py:495`,
 called at `backfill.py:479`), the same coordinator helper the live YTD path uses, so a
 monthly-indexed, spot-indexed, or fixed injection rate is resolved identically in
 both places.
@@ -718,7 +718,7 @@ weights in the entry's Store blob so a restart does not force a fresh download.
 Two things bound what a cold profile costs. **The first tick never waits on
 one**: it runs inside config-entry setup, and the RLP workbook alone is 18 s of
 download and parse on a Raspberry Pi while every compensation entry wants it,
-so the tick schedules `_fill_profiles` (`coordinator.py:1221`) and prices the
+so the tick schedules `_fill_profiles` (`coordinator.py:1225`) and prices the
 plain arithmetic mean meanwhile -- the same degradation a failed fetch already
 has. **And one file serves every entry**: `_shared_profile`
 (`coordinator_spots.py:731`) keys a process-wide row by `(kind, year, blend)`

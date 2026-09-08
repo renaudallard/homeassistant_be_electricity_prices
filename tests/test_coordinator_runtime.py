@@ -5129,3 +5129,77 @@ async def test_a_transient_cold_start_failure_still_retries_setup(
         await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_a_month_indexed_credit_bakes_on_a_dynamic_contract_too(
+    hass: HomeAssistant,
+) -> None:
+    """The month bake was gated on the ENERGY leg needing a mean.
+
+    That is the wrong question for the feed-in leg. A dynamic contract fetches
+    its own spots through the energy path, which is exactly what excluded it
+    from ``_injection_needs_month_spot``, and the gate borrowed that predicate:
+    a credit indexed on the delivery month was then left unbaked and the
+    sensor showed the figure the card prints for the PREVIOUS month, while the
+    year-to-date walk credited the month's own. The question the bake asks is
+    whether the CREDIT settles on a month, and nothing else.
+    """
+    from custom_components.be_electricity_prices.providers.base import (
+        DynamicRates,
+        InjectionRates,
+    )
+
+    entry = make_entry(solar_regime="injection", api_key="k")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.02),
+        injection=InjectionRates(
+            current=0.0638, factor=0.84, base=-0.028, month_indexed=True
+        ),
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    now = dt_util.now()
+    spots = {
+        dt_util.start_of_local_day(now).astimezone(UTC) + timedelta(hours=h): 0.09
+        for h in range(24)
+    }
+    coord._historical_spots = dict(spots)
+    coord._fetch_spot_prices = AsyncMock(return_value=dict(spots))  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_spp_weights = AsyncMock()  # type: ignore[method-assign]
+
+    data = await coord._async_update_data()
+
+    # The month's own mean, not the 6,38 c/kWh the card printed.
+    assert data.injection_price_eur_per_kwh == pytest.approx(0.84 * 0.09 - 0.028)
+
+
+def test_a_solar_weighted_formula_is_never_priced_at_one_slot() -> None:
+    """``_injection_is_spot_formula`` excluded the plain month flag and not
+    its solar-weighted sibling.
+
+    On a static energy leg the exclusion never mattered, because such a card
+    reaches the bake and comes back with no coefficients at all. On a DYNAMIC
+    one the branch fires on the energy kind alone, so the plain flag was the
+    only thing standing between an SPP month formula and the current
+    quarter's spot -- and the two indices part company by roughly a factor of
+    two in a sunny month, which is why the flag exists.
+    """
+    from custom_components.be_electricity_prices.injection import (
+        _injection_is_spot_formula,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DynamicRates,
+        InjectionRates,
+    )
+
+    energy = DynamicRates(factor=1.0, base=0.02)
+    for flag in ("month_indexed", "spp_indexed"):
+        leg = InjectionRates(current=0.05, factor=0.9, base=-0.01)
+        leg = replace(leg, **{flag: True})  # type: ignore[arg-type]
+        assert _injection_is_spot_formula(leg, energy) is False, flag
+    # A leg carrying neither still prices per slot on a dynamic card.
+    plain = InjectionRates(current=0.05, factor=0.9, base=-0.01)
+    assert _injection_is_spot_formula(plain, energy) is True

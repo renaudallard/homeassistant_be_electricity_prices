@@ -79,6 +79,7 @@ from .spot_stats import (
     _energy_is_rlp_indexed,
     _rlp_blend_for,
     _injection_is_spp_indexed,
+    _injection_on_month_mean,
     _spp_weighting_enabled,
 )
 from .projected_cost import (
@@ -963,12 +964,16 @@ class BePricesCoordinator(
         # bake below keeps the plain mean whatever the energy did.
         plain_mean: float | None = None
         energy_mean: float | None = None
-        if isinstance(priced.energy, SpotMonthlyRates) or _injection_needs_month_spot(
-            self._snapshot, self.entry
+        if _injection_on_month_mean(priced) or isinstance(
+            priced.energy, SpotMonthlyRates
         ):
             # Also for a card whose ENERGY needs no mean but whose feed-in
             # credit is indexed on one: without it the bake below would resolve
-            # against None and wipe the credit instead of resolving it.
+            # against None and wipe the credit instead of resolving it. Asked
+            # of the EFFECTIVE leg, and of the injection's own flags, so a
+            # month-indexed credit is resolved whatever the energy is priced
+            # on -- a dynamic energy leg fetches its own spots and used to
+            # take the credit out of this question with them.
             now_local = dt_util.now()
             plain_mean = self._monthly_spot_mean(
                 now_local.year, now_local.month, spot_prices
@@ -1025,10 +1030,9 @@ class BePricesCoordinator(
         # systematically over-credits. _injection_needs_spot identifies that
         # shape (factor/base with no printed indicative), so leave it alone.
         injection_snapshot = priced
-        if (
-            isinstance(priced.energy, SpotMonthlyRates)
-            or _injection_needs_month_spot(self._snapshot, self.entry)
-        ) and not _injection_hourly_on_cohort(self._snapshot, self.entry):
+        if _injection_on_month_mean(priced) and not _injection_hourly_on_cohort(
+            self._snapshot, self.entry
+        ):
             inj_mean = plain_mean
             spp_only = _injection_is_spp_indexed(self._snapshot)
             # A card that prints an indicative has something to fall back to
