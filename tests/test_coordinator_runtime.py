@@ -60,6 +60,7 @@ from custom_components.be_electricity_prices.coordinator_issues import (
 )
 from custom_components.be_electricity_prices.snapshot_store import (
     _SNAPSHOT_SCHEMA_VERSION,
+    _monthly_fetched_at,
     _monthly_snapshots,
     _shared_failed_fetches,
     _shared_lock,
@@ -3969,6 +3970,50 @@ def _dynamic_entry() -> MockConfigEntry:
             "api_key": "test-token",
         },
     )
+
+
+async def test_the_signing_month_card_is_kept_on_disk(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A contract start date makes _cohort_legs resolve the signing month's
+    card on every tick, and it does that INSIDE setup, because the live price
+    table is built from the rate it freezes. The signing month is usually
+    outside the year-to-date window, so it fell outside what was persisted and
+    was re-fetched on every restart. One extra row on disk retires that.
+
+    A deadline was the other option and is the wrong one: a slow supplier
+    would fail setup, and the retry rebuilds the coordinator and hits the same
+    deadline, so the entry never comes up at all."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "contract_start_date": "2024-11-18"}
+    )
+    coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coord
+    tuple_key = ("cociter", "cociter_dynamic", "wallonia")
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    _monthly_snapshots(hass)[(*tuple_key, "2024-11")] = make_snapshot(
+        publication_label="2024-11"
+    )
+
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+    assert "2024-11" in saved["monthly_cards"]
+
+    _monthly_snapshots(hass).clear()
+    fresh = BePricesCoordinator(hass, entry)
+    with patch.object(fresh._store, "async_load", AsyncMock(return_value=saved)):
+        await fresh.async_load_persistent()
+    signing = _monthly_snapshots(hass)[(*tuple_key, "2024-11")]
+    assert signing is not None and signing.publication_label == "2024-11"
 
 
 async def test_archived_month_cards_survive_a_restart(

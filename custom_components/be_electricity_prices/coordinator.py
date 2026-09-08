@@ -43,6 +43,7 @@ from .coordinator_spots import _SpotsMixin
 
 from .cohort import (
     _cohort_legs,
+    _contract_start_month,
     _effective_snapshot_for_month,
     ytd_window_start,
 )
@@ -1197,6 +1198,22 @@ class BePricesCoordinator(
             return
         await self.async_request_refresh()
 
+    def _persisted_months(self, today: date) -> list[date]:
+        """The months whose archived card is worth keeping on disk.
+
+        The year-to-date window, plus the SIGNING month when the entry has a
+        contract start date. That one is not part of the walk -- it can be
+        years back -- but ``_cohort_legs`` resolves it on every tick to freeze
+        the rate the customer signed for, and it does so INSIDE config-entry
+        setup, because the live price table is built from it. One row on disk
+        is what keeps that from being a card fetch on every restart.
+        """
+        months = self._ytd_months(today)
+        signing = _contract_start_month(self.entry)
+        if signing is not None and signing not in months:
+            months.append(signing)
+        return months
+
     async def _fill_profiles(self, spp: bool, rlp: bool, blend: str) -> None:
         """Fetch the Synergrid profiles, off the setup path.
 
@@ -1539,7 +1556,7 @@ class BePricesCoordinator(
         monthly_cards = monthly_rows_to_store(
             self.hass,
             *self._supplier_tuple,
-            self._ytd_months(dt_util.now().date()),
+            self._persisted_months(dt_util.now().date()),
         )
         if monthly_cards:
             payload["monthly_cards"] = monthly_cards
