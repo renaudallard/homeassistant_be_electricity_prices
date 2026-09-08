@@ -148,16 +148,23 @@ async def _compute_projected_year_cost(
     *,
     billed_peak_kw: float,
     today: date,
+    credited: SupplierSnapshot | None = None,
     breakdown: dict[str, Any] | None = None,
 ) -> float | None:
     """Cost of a full year on this contract at today's tariffs, or ``None``.
 
-    Two snapshots. ``priced`` is the cohort-spliced one, whose energy leg is
-    what the live sensors actually bill, so a signing-cohort entry takes both
-    its per-kWh rate and its yearly fixed fee from there rather than from the
-    card a new customer would get today. ``snapshot`` is the card as resolved,
-    and is read only to tell a contract that is natively spot-indexed from one
-    the splice moved onto that axis, which the basis string reports.
+    Three snapshots, and each answers a different question. ``priced`` is the
+    cohort-spliced one, whose energy leg is what the live sensors actually
+    bill, so a signing-cohort entry takes both its per-kWh rate and its yearly
+    fixed fee from there rather than from the card a new customer would get
+    today. ``snapshot`` is the card as resolved, and is read only to tell a
+    contract that is natively spot-indexed from one the splice moved onto that
+    axis, which the basis string reports. ``credited`` is the one the feed-in
+    leg is read off: the coordinator resolves a month-indexed credit against
+    the delivery month's own index once per tick, and this is that result, so
+    the projection credits the rate the injection_price sensor shows instead
+    of the figure the card prints for the PREVIOUS month. Defaults to
+    ``priced``, which is what a card with no month index carries anyway.
 
     Returns ``None`` when the contract cannot be projected or the rate cannot
     be resolved. It never raises: the caller runs inside the coordinator tick,
@@ -232,7 +239,12 @@ async def _compute_projected_year_cost(
             hass, entry, trailing_start, today, side="injection"
         )
         inj_rate = _compare_injection_credit(
-            priced, entry, {}, None, None, inj_hour_weights
+            credited if credited is not None else priced,
+            entry,
+            {},
+            None,
+            None,
+            inj_hour_weights,
         )
         if _covers_a_year(measured_inj.days_with_data) and measured_inj.kwh > 0:
             # Scaled across any missing days, the same way the consumption leg

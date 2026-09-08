@@ -213,7 +213,7 @@ def _compare_injection_credit(
     entry: Any,
     spot_dict: dict[datetime, float],
     avg_spot: float | None,
-    spp_spot: float | None = None,
+    month_spot: float | None = None,
     inj_hour_weights: dict[int, float] | None = None,
     raw_snapshot: Any = None,
 ) -> float | None:
@@ -236,17 +236,27 @@ def _compare_injection_credit(
     Variable), and a card that prints one but settles per slot anyway, which
     is every Bolt fixed and variable card.
 
-    An SPP-INDEXED credit (energie.be Variabel and Vast) resolves against
-    ``spp_spot``, the solar-weighted month mean, because that is the index
-    its card names and the number the live sensor and the YTD walk use;
-    quoting the card's printed indicative here instead made the page
-    contradict the user's own injection_price sensor. Without the Synergrid
-    profile there is no honest resolution -- the plain window mean is a
-    DIFFERENT index, not a coarser one -- so that case falls through to the
-    printed indicative below. Every other monthly-indexed injection is
-    spot-independent and delegates to the live helper too.
+    A MONTH-INDEXED credit resolves against ``month_spot``, the delivery
+    month's mean: the solar-weighted one for a card that names Belpex_SPP
+    (energie.be Variabel and Vast, Ecofix Flexy, EBEM Variabel and B@sic+,
+    Ecopower, Energy Knights Essentia, EnergyVision, OCTA+ Fixed Impact,
+    DATS 24), the plain arithmetic one for a card that names that instead
+    (Eneco's Belpex-injectie, Engie's and Luminus' EPEXDAM cards,
+    TotalEnergies Impact). WHICH mean is the caller's business, because only
+    it knows the side and can resolve it; this only requires that a mean was
+    named. Without one there is no honest resolution -- for an SPP card the
+    plain mean is a DIFFERENT index, not a coarser one -- so that case falls
+    through to the printed indicative below.
+
+    Delegating a month-indexed credit to the live helper instead does NOT
+    work, and reading that it does is what left this branch SPP-only: the
+    helper answers the printed indicative unless the snapshot has already had
+    the month baked into it, and only the coordinator bakes. The page then
+    quoted last month's index beside a sensor showing this month's, by
+    ``factor`` times the gap between the two.
     """
     from .injection import (
+        _bake_monthly_injection,
         _compute_injection_price,
         _floor_injection,
         _tou_weekend_rule,
@@ -254,6 +264,18 @@ def _compare_injection_credit(
     from .providers.base import DynamicRates
     from .spot_stats import _injection_on_month_mean
 
+    raw = snapshot if raw_snapshot is None else raw_snapshot
+    if month_spot is not None and _injection_on_month_mean(raw):
+        # Resolve the month index the way the coordinator resolves it for the
+        # live sensor, by calling the same helper, so the two agree band by
+        # band rather than by a rule written out twice. Asked of the RAW card
+        # for the reason the per-slot branch below is: a cohort re-price puts a
+        # SpotMonthlyRates leg on a contract whose feed-in still varies per
+        # hour, and baking that to a month mean is the one thing this must not
+        # do. It leaves a per-slot triplet resolved on the month and a
+        # coefficient pair collapsed into ``current``, which the branches below
+        # then read as printed rates.
+        snapshot = _bake_monthly_injection(snapshot, month_spot)
     inj = getattr(snapshot, "injection", None)
     energy = getattr(snapshot, "energy", None)
     weekend_rule = _tou_weekend_rule(energy)
@@ -268,19 +290,6 @@ def _compare_injection_credit(
         return float(
             (inj.peak * wp + inj.transition * wt + inj.offpeak * wo) / (wp + wt + wo)
         )
-    if (
-        inj is not None
-        and inj.factor is not None
-        and inj.base is not None
-        # NOT gated on inj.spp_indexed. The caller decides whether an
-        # SPP-weighted mean applies, because the custom supplier's answer
-        # lives on the ENTRY rather than on any card, and a second narrower
-        # copy of the rule here made the caller's work unreachable: the page
-        # then quoted the credit at the two-day day-ahead window mean while
-        # the sensor beside it showed the month's SPP-weighted one.
-        and spp_spot is not None
-    ):
-        return _floor_injection(inj.factor * spp_spot + inj.base, inj)
     if (
         inj is not None
         and inj.factor is not None

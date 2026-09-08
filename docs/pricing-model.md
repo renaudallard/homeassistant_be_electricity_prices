@@ -711,7 +711,12 @@ convex and the two orders give different money:
 - a MONTH-MEAN formula floors once, on the delivery month's tariff, because such
   a card publishes one number a month and the guarantee is written against that
   number. `_bake_monthly_injection` (`injection.py:104`) produces it and the floor
-  lands on the flat `current` path.
+  lands on the flat `current` path. Every quote path calls that one helper: the
+  compare estimate used to resolve only the Belpex_SPP cards and leave the rest
+  to the live helper, which answers the card's printed figure on a snapshot
+  nothing has baked, so the page quoted last month's index beside a sensor
+  showing this month's. The projection reads the coordinator's already-baked leg
+  for the same reason.
 
 The per-slot TOU triplet is never clamped. No card ships both a triplet and a
 floor, and `tests/test_custom.py` pins that rather than the pricing code

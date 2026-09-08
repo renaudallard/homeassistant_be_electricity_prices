@@ -395,7 +395,7 @@ def test_compare_honours_the_entry_level_spp_opt_in() -> None:
     # spp_indexed is False - no card said so - yet the caller resolved an
     # SPP mean, and that mean must be what the credit is priced at.
     assert snap.injection.spp_indexed is False
-    credit = _compare_injection_credit(snap, entry, {}, 0.1142, spp_spot=0.0634)
+    credit = _compare_injection_credit(snap, entry, {}, 0.1142, month_spot=0.0634)
     assert credit == pytest.approx(0.9 * 0.0634 - 0.01)
 
 

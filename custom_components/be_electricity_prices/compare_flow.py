@@ -344,7 +344,7 @@ def _coordinator_spp_weights(
     credited the card's printed indicative and the household's own row
     contradicted its own current_year_cost.
 
-    ``own`` splits the gate the same way ``_spp_spot_for`` does, and for the
+    ``own`` splits the gate the same way ``_credit_month_spot_for`` does, and for the
     same reason: the entry-side opt-in belongs to the side it was made on,
     while a foreign card is judged only by what it prints. Handing a target's
     formula a weighting its card never names inverts the credit.
@@ -513,7 +513,7 @@ class _HouseholdQuote:
     current_per_kwh: float | None
     current_export_per_kwh: float | None
     spot_for: Any
-    spp_spot_for: Any
+    credit_month_spot_for: Any
     export_rate_for: Any
 
 
@@ -1102,18 +1102,33 @@ class _SweepEngine:
             )
             return spp_spot_resolved[0]
 
-        async def _spp_spot_for(
+        async def _credit_month_spot_for(
             snapshot: SupplierSnapshot | None, *, own: bool
         ) -> float | None:
-            """The SPP month mean, for a card indexed on it OR, on the
-            household's OWN side, an entry that opted into the weighting.
+            """The delivery month's mean this side's FEED-IN settles on.
 
-            Gating on the card flag alone silently excluded the one supplier
-            the opt-in exists for: providers/custom.py never sets
-            spp_indexed, because a hand-entered contract has no card to read
-            it off, and the answer lives on the entry instead
-            (CONF_CUSTOM_INJECTION_SPP_WEIGHTED). _spp_weighting_enabled is
-            the predicate the live tick already uses for that question.
+            Two indices, and the card names which. A formula on Belpex_SPP
+            takes the solar-weighted mean; one on the plain arithmetic mean
+            takes that. Either way the answer is a month, never the two-day
+            day-ahead window the energy leg is quoted at, and never the
+            printed indicative, which is that formula on the PREVIOUS month.
+
+            The plain branch is what the page was missing: it resolved the
+            SPP cards and let every other month-indexed card (Eneco Fix, Flex
+            and Flex One, Engie's and Luminus' EPEXDAM cards, TotalEnergies
+            Impact) fall through to the live helper, which answers the
+            printed figure unless the snapshot has been baked and only the
+            coordinator bakes. The gap is ``factor`` times one month of index
+            drift, about 25 EUR a year on an Eneco card at 10 EUR/MWh and
+            3000 kWh exported.
+
+            The SPP gate is per side. Gating on the card flag alone silently
+            excluded the one supplier the opt-in exists for:
+            providers/custom.py never sets spp_indexed, because a
+            hand-entered contract has no card to read it off, and the answer
+            lives on the entry instead (CONF_CUSTOM_INJECTION_SPP_WEIGHTED).
+            _spp_weighting_enabled is the predicate the live tick already
+            uses for that question.
 
             But its custom-opt-in route reads the ENTRY and never looks at
             the snapshot, so asking it about a TARGET answered for the
@@ -1130,12 +1145,20 @@ class _SweepEngine:
             no target can legitimately need the entry-side route.
             """
             if own:
-                enabled = _spp_weighting_enabled(self.config_entry, snapshot)
+                spp = _spp_weighting_enabled(self.config_entry, snapshot)
             else:
-                enabled = _injection_is_spp_indexed(snapshot)
-            if not enabled:
-                return None
-            return await _spp_month_spot()
+                spp = _injection_is_spp_indexed(snapshot)
+            if spp:
+                return await _spp_month_spot()
+            # The CARD's own flag, not _injection_on_month_mean: a signing
+            # cohort splices a SpotMonthlyRates leg onto a contract whose
+            # feed-in still varies per hour (Cociter Tarif Variable indexes
+            # the two legs on different periods and says so), and that one
+            # must keep its per-hour credit.
+            inj = getattr(snapshot, "injection", None)
+            if inj is not None and getattr(inj, "month_indexed", False):
+                return await _month_spot()
+            return None
 
         async def _spot_for(snapshot: SupplierSnapshot | None) -> float | None:
             """The spot this side's energy shape actually bills on.
@@ -1423,7 +1446,7 @@ class _SweepEngine:
             current_per_kwh=current_per_kwh,
             current_export_per_kwh=current_export_per_kwh,
             spot_for=_spot_for,
-            spp_spot_for=_spp_spot_for,
+            credit_month_spot_for=_credit_month_spot_for,
             export_rate_for=_export_rate_for,
         )
 
@@ -1461,7 +1484,7 @@ class _SweepEngine:
                     hh.quote_entry,
                     hh.spot_dict,
                     hh.avg_spot,
-                    await hh.spp_spot_for(hh.current_snapshot, own=True),
+                    await hh.credit_month_spot_for(hh.current_snapshot, own=True),
                     hh.inj_hour_weights,
                     raw_snapshot=hh.raw_snapshot,
                 ),
@@ -1571,7 +1594,7 @@ class _SweepEngine:
                 target_entry,
                 hh.spot_dict,
                 hh.avg_spot,
-                await hh.spp_spot_for(resolved, own=False),
+                await hh.credit_month_spot_for(resolved, own=False),
                 hh.inj_hour_weights,
             ),
             # EXPORT RATE: under compensation the bill nets consumption
@@ -1966,7 +1989,7 @@ class _CompareStepsMixin(OptionsFlow):
         current_per_kwh = hh.current_per_kwh
         current_export_per_kwh = hh.current_export_per_kwh
         _spot_for = hh.spot_for
-        _spp_spot_for = hh.spp_spot_for
+        _credit_month_spot_for = hh.credit_month_spot_for
         _export_rate_for = hh.export_rate_for
 
         # The target side. Unlike everything above, each of these is a
@@ -2088,7 +2111,7 @@ class _CompareStepsMixin(OptionsFlow):
                     quote_entry,
                     spot_dict,
                     avg_spot,
-                    await _spp_spot_for(current_snapshot, own=True),
+                    await _credit_month_spot_for(current_snapshot, own=True),
                     inj_hour_weights,
                     raw_snapshot=raw_snapshot,
                 )
@@ -2105,7 +2128,7 @@ class _CompareStepsMixin(OptionsFlow):
                     quote_entry,
                     spot_dict,
                     avg_spot,
-                    await _spp_spot_for(other_snap, own=False),
+                    await _credit_month_spot_for(other_snap, own=False),
                     inj_hour_weights,
                 )
                 if compare_inj_price is None and rolling_inj_kwh > 0:
@@ -2154,7 +2177,7 @@ class _CompareStepsMixin(OptionsFlow):
                     self.config_entry,
                     spot_dict,
                     avg_spot,
-                    await _spp_spot_for(baseline_snapshot, own=True),
+                    await _credit_month_spot_for(baseline_snapshot, own=True),
                     inj_hour_weights,
                     raw_snapshot=raw_snapshot,
                 )

@@ -1124,6 +1124,10 @@ class BePricesCoordinator(
             priced,
             billed_peak_kw=billed_peak,
             today=dt_util.now().date(),
+            # The month-baked leg, so the projection credits feed-in at the
+            # rate the injection_price sensor shows rather than at the card's
+            # printed figure, which is that formula on the previous month.
+            credited=injection_snapshot,
             breakdown=projection_breakdown,
         )
 

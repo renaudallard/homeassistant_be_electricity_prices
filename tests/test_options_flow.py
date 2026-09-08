@@ -3084,7 +3084,7 @@ def test_compare_prices_an_spp_indexed_credit_on_the_solar_weighted_mean() -> No
     entry = SimpleNamespace(data={"solar_regime": "injection"})
     spot_dict = {datetime(2026, 4, 29, h, 0, tzinfo=UTC): 0.20 for h in range(24)}
     credit = _compare_injection_credit(
-        snap, entry, spot_dict, avg_spot=0.20, spp_spot=0.0292
+        snap, entry, spot_dict, avg_spot=0.20, month_spot=0.0292
     )
     assert credit == pytest.approx(0.6 * 0.0292 - 0.008)
 
@@ -3111,7 +3111,7 @@ def test_compare_keeps_the_indicative_when_the_spp_profile_is_missing() -> None:
         ),
     )
     entry = SimpleNamespace(data={"solar_regime": "injection"})
-    credit = _compare_injection_credit(snap, entry, {}, avg_spot=0.20, spp_spot=None)
+    credit = _compare_injection_credit(snap, entry, {}, avg_spot=0.20, month_spot=None)
     assert credit == pytest.approx(0.0343)
 
 
@@ -4723,11 +4723,12 @@ def test_spp_opt_in_does_not_reach_a_foreign_card() -> None:
 
 
 def test_spp_month_mean_would_invert_a_foreign_credit() -> None:
-    """Why the gate matters: branch 2 of _compare_injection_credit is not
-    itself gated on inj.spp_indexed, deliberately, because the custom
-    supplier's answer lives on the entry rather than on any card. So whatever
-    spp_spot the caller hands it is applied, and handing one to a card that
-    names a different index turns its credit negative."""
+    """Why the gate matters: _compare_injection_credit is not itself gated on
+    inj.spp_indexed, deliberately, because the custom supplier's answer lives
+    on the entry rather than on any card. So whatever month mean the caller
+    hands it is what the formula resolves against, and handing a card the
+    SOLAR-weighted mean when it names the plain one turns its credit
+    negative. The gate that keeps them apart is in the caller."""
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices import const
@@ -4738,8 +4739,9 @@ def test_spp_month_mean_would_invert_a_foreign_credit() -> None:
         FixedRates,
         InjectionRates,
     )
+    from tests import make_snapshot
 
-    foreign = SimpleNamespace(
+    foreign = make_snapshot(
         energy=FixedRates(single=0.16),
         injection=InjectionRates(
             factor=0.84,
@@ -6221,3 +6223,149 @@ def test_every_compare_year_to_date_call_passes_the_profiles() -> None:
         assert not missing, (
             f"_compute_current_year_cost call at line {call.lineno} omits {missing}"
         )
+
+
+def test_a_month_indexed_credit_is_quoted_at_the_month_it_settles_on() -> None:
+    """The compare page and the injection_price sensor must credit one rate.
+
+    A card that indexes its feed-in on the delivery month prints the formula
+    resolved on the PREVIOUS month, and only the coordinator baked the current
+    one in. The page resolved the Belpex_SPP cards and let every other
+    month-indexed card fall through to the live helper, which answers the
+    printed figure on an unbaked snapshot. The gap is the coefficient times one
+    month of index drift.
+    """
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.injection import (
+        _bake_monthly_injection,
+        _compute_injection_price,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        VariableRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={"solar_regime": "injection", "region": "flanders"}
+    )
+    month_mean = 0.09
+    # Eneco Zon & Wind Flex, August 2026 card.
+    snap = make_snapshot(
+        energy=VariableRates(current=0.19),
+        injection=InjectionRates(
+            current=0.0638, factor=0.84, base=-0.028, month_indexed=True
+        ),
+    )
+    live = _compute_injection_price(
+        _bake_monthly_injection(snap, month_mean), entry, {}
+    )
+    quoted = _compare_injection_credit(snap, entry, {}, month_mean, month_mean, None)
+    assert quoted == pytest.approx(live)
+    assert quoted == pytest.approx(0.84 * month_mean - 0.028)
+    # With no mean resolved there is nothing honest to put here, and the
+    # card's printed figure stands, exactly as it did before.
+    assert _compare_injection_credit(
+        snap, entry, {}, None, None, None
+    ) == pytest.approx(0.0638)
+
+
+def test_a_per_slot_credit_is_quoted_on_the_month_it_settles_on() -> None:
+    """Engie Empower Flextime prints one EPEXDAM formula per time-of-use band
+    and a triplet resolved on last month's index. Each band re-prices on the
+    delivery month, so the quote weights this month's three rates rather than
+    last month's."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        TimeOfUseRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={"solar_regime": "injection", "region": "wallonia"}
+    )
+    month_mean = 0.09
+    snap = make_snapshot(
+        energy=TimeOfUseRates(
+            peak=0.16738,
+            transition=0.13072,
+            offpeak=0.09796,
+            weekend_rule="weekend_no_peak",
+        ),
+        injection=InjectionRates(
+            current=0.04918,
+            peak=0.08417,
+            transition=0.04834,
+            offpeak=0.01465,
+            month_indexed=True,
+            factor_peak=0.906,
+            base_peak=0.0,
+            factor_transition=0.52,
+            base_transition=0.0,
+            factor_offpeak=0.155,
+            base_offpeak=0.0,
+        ),
+    )
+    quoted = _compare_injection_credit(snap, entry, {}, month_mean, month_mean, None)
+    assert quoted is not None
+    # Between this month's cheapest and dearest band, and clear of the
+    # printed triplet's own range.
+    assert 0.155 * month_mean <= quoted <= 0.906 * month_mean
+    printed = _compare_injection_credit(snap, entry, {}, None, None, None)
+    assert printed is not None
+    assert quoted != pytest.approx(printed)
+
+
+def test_a_cohort_respliced_hourly_credit_is_not_baked_to_a_month() -> None:
+    """Cociter Tarif Variable indexes its two legs on different periods and
+    says so: consumption monthly on BELIX, injection per hour. A signing
+    cohort re-prices the ENERGY leg to a monthly one, and the feed-in must not
+    follow it onto that index."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        InjectionRates,
+        SpotMonthlyRates,
+        VariableRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={"solar_regime": "injection", "region": "wallonia"}
+    )
+    inj = InjectionRates(factor=0.97, base=-0.021)
+    raw = make_snapshot(energy=VariableRates(current=0.19), injection=inj)
+    spliced = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.02), injection=inj
+    )
+    spots = {
+        dt_util.utcnow().replace(minute=0, second=0, microsecond=0): 0.05,
+    }
+    quoted = _compare_injection_credit(
+        spliced, entry, dict(spots), 0.05, 0.09, None, raw_snapshot=raw
+    )
+    # Priced off the day-ahead slots, not off the 0.09 month mean the energy
+    # leg was handed.
+    assert quoted == pytest.approx(0.97 * 0.05 - 0.021)
+
+
+def test_the_projection_credits_the_month_baked_leg_when_given_one() -> None:
+    """The coordinator resolves a month-indexed credit once per tick; the
+    projection reads that result rather than re-deriving it off the card,
+    which would credit the previous month's index for a whole year."""
+    import inspect
+
+    from custom_components.be_electricity_prices import coordinator, projected_cost
+
+    assert (
+        "credited"
+        in inspect.signature(projected_cost._compute_projected_year_cost).parameters
+    )
+    src = inspect.getsource(coordinator.BePricesCoordinator._update_body)
+    assert "credited=injection_snapshot" in src
