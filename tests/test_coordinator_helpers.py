@@ -5603,6 +5603,71 @@ async def test_ytd_capacity_accrues_the_monthly_charge(hass: HomeAssistant) -> N
     assert total == pytest.approx(4.0 * 52.37)
 
 
+async def test_ytd_capacity_honours_the_vreg_ceiling(hass: HomeAssistant) -> None:
+    """The maximumtarief caps what the year-to-date accrues, not only what
+    the compare page quotes.
+
+    The ceiling used to be applied on the quote paths alone, so a card that
+    prints one had its cap honoured in the what-if and billed straight
+    through by current_year_cost and by every backfilled row, on a connection
+    small enough for the capacity term to dominate. The two figures sit side
+    by side, and only one of them was the bill.
+    """
+    from custom_components.be_electricity_prices.fees import _capped_capacity_annual
+    from custom_components.be_electricity_prices.ytd_cost import _ytd_capacity
+
+    snap = make_snapshot(
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(
+                distribution_single=0.0535329,
+                transport=0.0,
+                capacity_eur_per_kw_year=52.3679,
+                network_ceiling_eur_per_kwh=0.3472738,
+            )
+        }
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "capacity_mode": "sensor",
+            # A garage box, which is the connection the ceiling is about.
+            "annual_consumption_kwh": 400.0,
+        },
+    )
+
+    async def _fake_walk(*_a: Any, **_k: Any):
+        for month in range(1, 13):
+            days = calendar.monthrange(2026, month)[1]
+            yield snap, date(2026, month, 1), days, days
+
+    with patch(
+        "custom_components.be_electricity_prices.ytd_cost._walk_ytd_months",
+        new=_fake_walk,
+    ):
+        total = await _ytd_capacity(
+            hass,
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            snap,
+            entry,
+            date(2026, 12, 31),
+            8.0,
+        )
+    uncapped = 8.0 * 52.3679
+    expected = _capped_capacity_annual(
+        snap.dsos["fluvius_antwerpen"], uncapped, 400.0, "mono"
+    )
+    assert expected < uncapped, "the ceiling has to bite for this to test it"
+    assert total == pytest.approx(expected)
+    # And the live capacity_cost sensor reads the same capped month.
+    assert _compute_capacity(snap, entry, 8.0) == pytest.approx(expected / 12.0)
+
+
 async def test_ytd_capacity_is_flanders_only(hass: HomeAssistant) -> None:
     """Wallonia and Brussels do not bill a capacity tariff; a leftover rate on
     the overlay must not accrue there."""

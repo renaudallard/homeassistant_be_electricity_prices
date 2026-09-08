@@ -36,15 +36,19 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 
 from .const import (
+    CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_CONNECTION_KVA_TIER,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
+    CONF_METER,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONNECTION_KVA_TIERS_ABOVE_13,
+    DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_CONNECTION_KVA_TIER,
     DSO_MODE_IMPACT,
+    METER_MONO,
     REGION_WALLONIA,
     SOLAR_REGIME_COMPENSATION,
     VREG_CAPACITY_FLOOR_KW,
@@ -65,15 +69,60 @@ def _capacity_monthly_eur(overlay: DsoOverlay | None, peak_kw: float) -> float:
     The annual EUR/kW rate over twelve, with the two "nothing to bill" cases
     folded in: no overlay for this DSO, or a card that prints no capacity row.
 
-    Shared because three paths bill this and must agree -- the live tick, the
-    year-to-date walk and the backfill's per-hour accrual. ``_annual_static_fees``
-    is shared across the same three for the same reason; capacity is the fee
-    that was left out of it, so it drifted here instead. Deliberately region
-    -agnostic: each caller keeps its own Flanders gate.
+    The raw rate, before the VREG ceiling. Every path that bills the charge
+    goes through ``_capped_capacity_monthly_eur`` instead, which is the one
+    that must agree across the live tick, the year-to-date walk and the
+    backfill's per-hour accrual. ``_annual_static_fees`` is shared across the
+    same three for the same reason; capacity is the fee that was left out of
+    it, so it drifted here instead. Deliberately region-agnostic: each caller
+    keeps its own Flanders gate.
     """
     if overlay is None or overlay.capacity_eur_per_kw_year is None:
         return 0.0
     return peak_kw * overlay.capacity_eur_per_kw_year / 12.0
+
+
+def _annual_consumption_kwh(entry: ConfigEntry) -> float:
+    """The household's yearly volume, in kWh, as the entry states it.
+
+    The VREG network ceiling is a rule about a YEAR: it caps the capacity
+    charge plus the per-kWh network term against the volume the year carries,
+    so it cannot be measured against a window. This is the same figure the
+    excise band already resolves on, which keeps one answer to "how much does
+    this household use" rather than one per leg.
+    """
+    try:
+        return float(
+            entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH, DEFAULT_ANNUAL_CONSUMPTION_KWH)
+        )
+    except (TypeError, ValueError):
+        return float(DEFAULT_ANNUAL_CONSUMPTION_KWH)
+
+
+def _capped_capacity_monthly_eur(
+    overlay: DsoOverlay | None, entry: ConfigEntry, peak_kw: float
+) -> float:
+    """One month of the Flemish capacity charge after the VREG ceiling.
+
+    The cap belongs on every path that BILLS the charge, not only on the ones
+    that quote it. It used to sit on the compare page and the projection
+    alone, so a card printing a maximumtarief had its ceiling honoured in the
+    what-if and ignored by the sensor the what-if is meant to match, and a
+    low-volume connection was over-billed by the whole gap between them.
+
+    Evaluated annually and divided back, because that is the shape of the
+    rule; the caller then prorates the month it is accruing.
+    """
+    monthly = _capacity_monthly_eur(overlay, peak_kw)
+    if not monthly:
+        return 0.0
+    capped = _capped_capacity_annual(
+        overlay,
+        12.0 * monthly,
+        _annual_consumption_kwh(entry),
+        entry.data.get(CONF_METER, METER_MONO),
+    )
+    return capped / 12.0
 
 
 def _compute_capacity(
@@ -85,7 +134,7 @@ def _compute_capacity(
     dso = entry.data.get(CONF_DSO)
     if dso is None:
         return 0.0
-    return _capacity_monthly_eur(snapshot.dsos.get(dso), peak_kw)
+    return _capped_capacity_monthly_eur(snapshot.dsos.get(dso), entry, peak_kw)
 
 
 def _capped_capacity_annual(

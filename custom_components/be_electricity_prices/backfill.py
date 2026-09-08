@@ -102,7 +102,7 @@ from .energy_meters import (
 )
 from .fees import (
     _annual_static_fees,
-    _capacity_monthly_eur,
+    _capped_capacity_monthly_eur,
     _compensation_kva,
     _prosumer_monthly_fee,
 )
@@ -890,7 +890,9 @@ async def _backfill_cost_sensor(
         # meets the live _ytd_capacity proration (days_in_ytd /
         # days_in_full_month) at the seam rather than trailing it.
         if billed_peak_kw:
-            monthly = _capacity_monthly_eur(snap_h.dsos.get(dso), billed_peak_kw)
+            monthly = _capped_capacity_monthly_eur(
+                snap_h.dsos.get(dso), entry, billed_peak_kw
+            )
             if monthly:
                 days_in_full_month = calendar.monthrange(
                     month_first.year, month_first.month

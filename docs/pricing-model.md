@@ -219,12 +219,19 @@ exceed the ceiling times the volume, and `_capped_capacity_annual`
 (`fees.py:90`) takes the excess off the capacity term, which is the leg that
 produced it.
 
-It cannot be applied without a volume, so it lands in `_annual_fees`
-(`compare_quote.py:813`), where the year's kWh is in hand. The live
-`current_year_cost` sensor accrues capacity month by month before its
-consumption total is known and is NOT capped there; at the 2026 rates and the
-regulated 2,5 kW floor the ceiling binds under about 470 kWh a year, so the two
-agree for any household and part company only on a garage box or a second home.
+It cannot be applied without a volume, and the volume it wants is a YEAR's:
+the rule caps the two network legs against what the year carries, so a running
+total cannot measure itself against it. `_annual_consumption_kwh` supplies the
+figure the entry already states for the excise band, and
+`_capped_capacity_monthly_eur` divides the capped year back into the month the
+caller is accruing. Every path that bills the charge goes through it -- the
+live `capacity_cost` sensor, the year-to-date walk and the backfill's per-hour
+accrual -- because it used to sit on the quote paths alone, and a card printing
+a ceiling then had it honoured in the compare page and billed straight through
+by the sensor the compare page is meant to match. At the 2026 rates and the
+regulated 2,5 kW floor the ceiling binds under about 470 kWh a year, so nothing
+moves for a household and the gap only ever showed on a garage box or a second
+home.
 
 ### Monthly-indexed variable cards
 
@@ -838,11 +845,14 @@ it.
 The Flanders capaciteitstarief is billed by the coordinator, not folded into the
 per-kWh all-in. It is surfaced on its own `capacity_cost` sensor AND accrued into
 `current_year_cost` through `_ytd_capacity`, so the running bill reflects what
-Fluvius actually charges rather than the energy side alone. Monthly cost (`_compute_capacity`, `fees.py:75-84`):
+Fluvius actually charges rather than the energy side alone. Monthly cost (`_compute_capacity`, `fees.py:128-137`):
 
 ```
-capacity_cost_eur = peak_kw * overlay.capacity_eur_per_kw_year / 12.0
+capacity_cost_eur = capped(peak_kw * overlay.capacity_eur_per_kw_year) / 12.0
 ```
+
+where `capped` is the VREG network ceiling above, applied to the year and
+divided back, so the sensor and the running bill charge what the card allows.
 
 Returns `0.0` when the entry lost its `CONF_DSO` key, the overlay is missing, or
 `capacity_eur_per_kw_year is None` (`fees.py:58-72`). The rate lives on
@@ -905,7 +915,7 @@ full year of history has accumulated.
 ## Prosumer term
 
 The prosumer (compensation-regime) fee is Walloon-only and monthly
-(`_compute_prosumer`, `fees.py:252-267`):
+(`_compute_prosumer`, `fees.py:316-331`):
 
 ```
 prosumer_cost_eur = kva * (dso_rate + supplier_rate) / 12.0
@@ -939,7 +949,7 @@ overlay, gated the same Walloon-only way (`ytd_cost.py:203-229`).
 
 The Brussels Brugel OSP (Obligations de Service Public) fee is a flat annual
 Sibelga charge scaled by contractual connection power
-(`_brussels_osp_fee`, `fees.py:137-146`):
+(`_brussels_osp_fee`, `fees.py:186-195`):
 
 ```python
 def _brussels_osp_fee(overlay, entry) -> float:      # fees.py:87

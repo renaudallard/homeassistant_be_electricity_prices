@@ -80,7 +80,7 @@ from .energy_meters import (
 )
 from .fees import (
     _annual_static_fees,
-    _capacity_monthly_eur,
+    _capped_capacity_monthly_eur,
     _compensation_kva,
     _prosumer_monthly_fee,
 )
@@ -299,6 +299,12 @@ async def _ytd_capacity(
     month's archived DSO overlay so a VREG indexation landing mid-year is
     honoured for the months it applies to.
 
+    Each month's charge is held under the VREG network ceiling the Flemish
+    cards print as ``maximumtarief``, which caps the capacity term plus the
+    per-kWh network term together against the household's yearly volume. The
+    ceiling used to be applied on the quote paths only, so the compare page
+    and the projection honoured a cap this sensor billed straight through.
+
     ``billed_peak_kw`` is the CURRENT gemiddelde maandpiek, applied to every
     month of the year rather than reconstructed per month. Reconstruction is
     not available in general: the rolling window holds at most twelve months
@@ -324,7 +330,9 @@ async def _ytd_capacity(
         contract=contract,
         cached_only=cached_only,
     ):
-        monthly = _capacity_monthly_eur(snap_m.dsos.get(dso), billed_peak_kw)
+        monthly = _capped_capacity_monthly_eur(
+            snap_m.dsos.get(dso), entry, billed_peak_kw
+        )
         total += monthly * (days_in_ytd / days_in_full_month)
     return total
 
