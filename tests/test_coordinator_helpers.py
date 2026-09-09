@@ -797,6 +797,14 @@ def test_injection_needs_spot_quarters_truth_table() -> None:
         inj_regime,
     )
     assert not _injection_needs_spot_quarters(_snap(quarter_energy, None), inj_regime)
+    # A stated minimum is a floor too, and just as convex: the live sensor
+    # clamps every slot at it, so the walk needs the slots to agree. Gating
+    # on floor_at_zero alone replayed it off the hourly mean, 8 EUR/MWh
+    # apart on quarters that straddle the floor.
+    assert _injection_needs_spot_quarters(
+        _snap(quarter_energy, InjectionRates(factor=1.0, base=0.0, minimum=0.01)),
+        inj_regime,
+    )
 
 
 def test_replayed_hour_rate_equals_the_mean_of_the_published_slots() -> None:

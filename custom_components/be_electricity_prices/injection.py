@@ -385,20 +385,30 @@ def _injection_needs_spot_quarters(
     quarter spots rather than their mean.
 
     Every pricing formula in the package is linear in the spot, and the mean
-    of an hour's quarters prices a linear formula exactly. ``floor_at_zero``
-    is the exception: ``max(0, factor * spot + base)`` is convex, so the mean
-    of the floored quarters is at least the floored mean and an hour whose
-    spot crossed the floor inside it is worth more than flooring its mean
-    says. The live array already floors per slot, which is what the contract
-    bills, so without the quarters the year-to-date credit and the backfilled
-    rows sit below the injection_price sensor the user is watching, always in
-    the same direction.
+    of an hour's quarters prices a linear formula exactly. A floor is the
+    exception: ``max(floor, factor * spot + base)`` is convex, so the mean of
+    the floored quarters is at least the floored mean and an hour whose spot
+    crossed the floor inside it is worth more than flooring its mean says.
+    The live array already floors per slot, which is what the contract bills,
+    so without the quarters the year-to-date credit and the backfilled rows
+    sit below the injection_price sensor the user is watching, always in the
+    same direction.
 
-    Only an expert custom entry reaches it: nothing else sets
-    ``floor_at_zero``, and the 15-minute grid needs ``quarter_hourly`` energy.
-    Quarter-hourly energy is always DynamicRates, so the formula branch is the
-    one that fires and neither the TOU triplet nor a month mean can be in
-    play. Callers do not have to re-ask those questions.
+    Both floors ``_floor_injection`` applies count, since the argument is the
+    same for each: the common ``floor_at_zero`` and the rarer stated
+    ``minimum`` (EnergyVision's 1 c/kWh guarantee). Gating on the first alone
+    left a ``minimum`` clamped per slot on the live sensor and replayed off
+    the hourly mean in the walk, 8 EUR/MWh apart on quarters that straddle
+    the floor. No shipped card puts a ``minimum`` on a per-slot formula today
+    (EnergyVision prints its guarantee on the month-indexed fixed cards only),
+    so this is the two halves agreeing before a card makes them disagree.
+
+    Reachable from an expert custom entry, and from any card whose parser
+    reads a never-negative clause (Ecopower's dynamic extractor looks for one;
+    the 2026 cards do not print it). The 15-minute grid needs
+    ``quarter_hourly`` energy, which is always DynamicRates, so the formula
+    branch is the one that fires and neither the TOU triplet nor a month mean
+    can be in play. Callers do not have to re-ask those questions.
 
     Deliberately NOT folded into ``_injection_needs_spot``, which means "this
     injection carries a per-hour index" and is read that way elsewhere.
@@ -408,7 +418,7 @@ def _injection_needs_spot_quarters(
     inj = snapshot.injection
     return (
         inj is not None
-        and inj.floor_at_zero
+        and (inj.floor_at_zero or inj.minimum is not None)
         and _energy_is_quarter_hourly(snapshot.energy)
         and _injection_is_spot_formula(inj, snapshot.energy)
     )
