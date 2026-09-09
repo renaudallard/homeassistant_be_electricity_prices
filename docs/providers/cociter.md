@@ -159,12 +159,12 @@ field to helper:
 | `taxes` | `_extract_taxes` | `cociter.py:755-801` |
 | `injection` | `_extract_injection` | `cociter.py:263-313` |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` | `cociter.py:271-291` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:1004` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:1053` |
 
-Shared numeric helpers: `to_float` (`_pdf.py:665-677`) parses Belgian decimals
+Shared numeric helpers: `to_float` (`_pdf.py:714-726`) parses Belgian decimals
 (`15,93`) and strips every Unicode space variant used as a thousands separator;
-`parse_sign` (`_pdf.py:710-721`) turns any hyphen/dash/Unicode-minus into
-`-1.0`; `SIGN_CHARS` (`_pdf.py:713`) is the character class of accepted sign
+`parse_sign` (`_pdf.py:759-770`) turns any hyphen/dash/Unicode-minus into
+`-1.0`; `SIGN_CHARS` (`_pdf.py:762`) is the character class of accepted sign
 glyphs. `fetch_pdf_text` (`_pdf.py:179-186`) downloads the PDF and extracts
 text with pypdf off the event loop.
 
@@ -244,7 +244,7 @@ result literally: from `(0.103 x BELPEX + 3) x 1.06`, `factor == 1.0918` and
 `base == 0.0318` (illustrative), and it checks `factor*0.10 + base == 0.14098`
 at a spot of 100 EUR/MWh so a unit-conversion swap cannot cancel out. The
 `quarter_hourly=True` flag (`cociter.py:400`) keeps the native 15-minute slots
-(see `DynamicRates`, `base.py:206-246`).
+(see `DynamicRates`, `base.py:223-263`).
 
 ### DSO overlay: `_extract_dsos`
 
@@ -320,7 +320,7 @@ number, while distribution rates still parse. The variable DSO test
 0.1087`, `distribution_peak 0.1205`, `distribution_offpeak 0.0666`, `transport
 0.0274252`, `data_management_per_year 19.49`, `prosumer_eur_per_kva_year 81.03`.
 
-Each row produces a `DsoOverlay` (`base.py:566-616`) with the four distribution
+Each row produces a `DsoOverlay` (`base.py:588-638`) with the four distribution
 rates, the shared transport rate, `data_management_per_year` (column 1, not
 divided), the optional prosumer forfait, and the optional Impact triplet.
 
@@ -355,7 +355,7 @@ Mapping into `TaxOverlay` (`cociter.py:808-814`): `energy_contribution`
 
 Critically `vat_rate=0.0` (`cociter.py:511`): the whole card is TVAC, so the
 snapshot's prices are already VAT-inclusive and the pricing engine must not
-re-apply VAT (see `TaxOverlay` comment, `base.py:727-774`). The tax test
+re-apply VAT (see `TaxOverlay` comment, `base.py:749-796`). The tax test
 (`test_cociter.py:166-179`) pins illustrative Wallonian values and asserts
 `vat_rate == 0.0` and `flanders_renewables == 0.0`.
 
@@ -377,7 +377,7 @@ TVAC (illustrative, pinned by `test_variable_extracts_supplier_prosumer_forfait`
 `test_cociter.py:102-111`). The anchor is deliberately the "EUR/kVA/an TVAC"
 footnote wording, not the bare "(EUR/kVA/an)" DSO prosumer column header, so the
 two do not collide. The value is already TVAC and must NOT be VAT-scaled
-(`SupplierSnapshot` comment, `base.py:795-825`). A miss on the variable card is
+(`SupplierSnapshot` comment, `base.py:817-847`). A miss on the variable card is
 fatal (`cociter.py:258-259`): every variable card prints it, so absence is a
 layout drift, not a fee-free contract.
 
@@ -421,7 +421,7 @@ card, those four plus the three Tarif Impact bands PIC/MEDIUM/ECO on the
 dynamic SMR3 card, and the three Impact bands plus exclusive-night alone on the
 trihoraire card. The Impact bands feed the
 CWaPE 3-band pricing when a customer opts into the DSO Impact tariff (see
-`DsoOverlay` and `ImpactRates`, `base.py:566-616`, `base.py:399-431`).
+`DsoOverlay` and `ImpactRates`, `base.py:588-638`, `base.py:421-453`).
 
 ## Tax overlay
 
@@ -500,7 +500,7 @@ comment:
   `base.py:166-206`). YTD statistics still aggregate to hourly.
 - **Split-glyph spellings.** pypdf can split "HOURLY" into `HOURL Y` and emit
   several apostrophe/quote/dash glyphs; the regexes tolerate all of these
-  (`cociter.py:340-352`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:713`).
+  (`cociter.py:340-352`, `cociter.py:382`, `SIGN_CHARS`, `_pdf.py:762`).
 - **Injection has no indicative fallback.** `current=None` always; the credit
   is spot-only, gated on `spot_indexed_injection` (`cociter.py:865-873`).
   Losing the gate zeros or drifts the solar credit.

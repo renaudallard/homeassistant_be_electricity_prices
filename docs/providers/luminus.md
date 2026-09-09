@@ -113,7 +113,7 @@ suppliers (Frank default, Mega, TotalEnergies, Eneco).
 ### Probe
 
 There is no probe. `EXTRACTOR` does not set `probe`, so it defaults to `None`
-(`base.py:570`). Per the `SnapshotProbe` contract (`base.py:1166-1170`), the
+(`base.py:570`). Per the `SnapshotProbe` contract (`base.py:1219-1223`), the
 `api-next/get-pricelist/` endpoint mints a fresh PDF per request with no cheap
 freshness key the coordinator can rely on, so the time-based TTL takes over.
 
@@ -163,7 +163,7 @@ Fields pulled and their helpers:
 | Yearly fixed fee | `_extract_yearly_fee` | `luminus.py:325-337` |
 | Exclusive-night fee | `_extract_excl_night_fee` | `luminus.py:340-357` |
 | VAT multiplier | `_vat_multiplier` | `luminus.py:317-322` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:922-1023` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:971-1072` |
 
 ### Numeric token
 

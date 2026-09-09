@@ -141,7 +141,7 @@ because the card lays out DSO and tax data as multi-column tables; the plain tex
 extractor would collapse the columns. `fetch_pdf_text_layout` also guards against
 CDNs that return HTTP 200 `text/html` for a missing PDF and rejects a
 pages-present-but-no-text document as a hard error (`_pdf.py:337-344`,
-`extract_pdf_text_layout` at `_pdf.py:311-332`).
+`extract_pdf_text_layout` at `_pdf.py:341-362`).
 
 ### Probe
 
@@ -151,7 +151,7 @@ There is no `probe`. `EXTRACTOR` (`dats24.py:565-587`) sets `id`, `label`,
 month-keyed URL is not a freshness signal either: within a month the file is
 replaced in place, so a HEAD tells us nothing a cheap diff could use, and the
 coordinator's time-based TTL governs refresh. This is the "DATS 24 single-PDF"
-case called out in the `SnapshotProbe` contract comment in `base.py:1166-1170`.
+case called out in the `SnapshotProbe` contract comment in `base.py:1219-1223`.
 
 Note the module does define a `discover` coroutine (`dats24.py:239-252`), but it
 is a catalog-drift check for the live-check harness, not a coordinator probe. It
@@ -195,10 +195,10 @@ the running month, and the permanent state after the transfer to EnergyVision.
 | `taxes` | `_extract_taxes` | `dats24.py:371-442` |
 | `injection` | `_extract_injection` | `dats24.py:463-506` |
 | `publication_label` | `_extract_publication` | `dats24.py:556-558` |
-| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:1004` |
+| `valid_until` | `parse_valid_until` (shared) | `_pdf.py:1053` |
 | `supplier` / `contract` | literals | `dats24.py:258-259` |
 
-Every numeric value is parsed with `to_float` (`_pdf.py:665-677`), which strips
+Every numeric value is parsed with `to_float` (`_pdf.py:714-726`), which strips
 Unicode thousands separators and accepts both the Belgian comma decimal and a dot
 decimal. This dot tolerance is not cosmetic: the May 2026 card switched its
 separator from `,` to `.` (see Quirks).
@@ -397,7 +397,7 @@ Two hard invariants encoded in tests:
   `test_dats24.py:173-182`).
 - **Negative-safe sign parsing.** The indicative regex captures an optional leading
   sign, `Teruglevering2?\s*\(c€/kWh\)\s+([SIGN_CHARS]?)\s*(...)` (`dats24.py:491-493`),
-  and applies `parse_sign` (`_pdf.py:717`). When `BE_spotSPP` is low the monthly
+  and applies `parse_sign` (`_pdf.py:766`). When `BE_spotSPP` is low the monthly
   indicative goes negative (the producer pays to inject); an earlier version without
   the sign group silently dropped the credit (`dats24.py:488-490`,
   `test_injection_indicative_handles_negative_value` `test_dats24.py:185-203`, which
@@ -417,7 +417,7 @@ only prosumer charge, and it lives on the DSO overlay, not the supplier snapshot
 `TARIEFKAART\s+(\w+\s+20\d{2})` case-insensitive, lowercased. Illustrative:
 `april 2026` (`test_dats24.py:91`), `mei 2026` (`test_dats24.py:257`). Empty string
 on miss (non-fatal). `valid_until` is parsed separately by the shared
-`parse_valid_until` (`_pdf.py:1004`), which catches the explicit `GELDIG VAN 1 APRIL
+`parse_valid_until` (`_pdf.py:1053`), which catches the explicit `GELDIG VAN 1 APRIL
 2026 T.E.M 30 APRIL 2026` header (`test_dats24.py:92-94`, expects `date(2026, 4, 30)`).
 
 ## Quirks and historical bugs
@@ -498,6 +498,6 @@ pure parsers are the unit under test.
 | `DATS 24: Wallonia CV / connection fee not found` | `_extract_taxes` (`dats24.py:371-442`) | `Waals Gewest: CV` or the `Aansluitingsvergoeding Wallonië` footnote changed |
 | `could not parse DATS 24 federal tax block` | `_extract_taxes` (`dats24.py:440-445`) | `Energiebijdrage` or `Verbruik tussen 0 kWh en 3.000 kWh` moved |
 | `DATS 24 injection: monthly indicative missing` | `_extract_injection` (`dats24.py:448-491`) | the `Teruglevering2 (c€/kWh)` label changed, or the card went spot-formula |
-| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:556-558`), `parse_valid_until` (`_pdf.py:1004`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
+| Wrong publication label / `valid_until` | `_extract_publication` (`dats24.py:556-558`), `parse_valid_until` (`_pdf.py:1053`) | `TARIEFKAART <month> <year>` or the `GELDIG VAN` header changed |
 | Values off by 100x | the per-column `/100.0` divisions in the DSO/energy/tax parsers | a c€/kWh column became EUR/kWh (or a EUR/yr column got divided) |
 | `PDF layout parse error` / html-not-pdf | `_pdf.py:244-251`, `334-344` | the CDN returned HTML (file moved) or an undecodable PDF |

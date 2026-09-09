@@ -77,7 +77,7 @@ Notes:
   it the live price table would aggregate to hourly and the current / next-slot
   sensors and the cheapest-window service would lose the quarter-hour
   resolution. YTD billing stays hourly regardless (HA keeps only hourly
-  long-term statistics). See `DynamicRates` docs in `base.py:222-249`.
+  long-term statistics). See `DynamicRates` docs in `base.py:239-266`.
 - 6 of the 8 products carry `spot_indexed_injection=True`. The flag does not
   mean a per-hour index, which is what this said: it means the injection needs
   spots the ENERGY leg never fetches, and a monthly Epex SPP index needs them
@@ -148,7 +148,7 @@ unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 | `taxes.flanders_renewables` | `_extract_flanders_renewables` (`:516`) | Flanders only, green + cogen |
 | `taxes.wallonia_renewables` | `_extract_wallonia_renewables` (`:501`) | Wallonia only |
 | `dsos` | `_extract_flanders_dsos` (`:609`) or `_extract_wallonia_dsos` (`:557`) | region-branched |
-| `valid_until` | `parse_valid_until` (`_pdf.py:1004`) | shared helper |
+| `valid_until` | `parse_valid_until` (`_pdf.py:1053`) | shared helper |
 | `supplier_prosumer_eur_per_kva_year` | `_extract_supplier_prosumer` (`:239`) | PV forfait, annualised |
 
 ### Energy block (`_extract_energy`, `octaplus.py:318-386`)

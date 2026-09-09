@@ -232,14 +232,14 @@ mis-parsed. `test_num_parses_thousands_grouped_and_four_digit_values`
 (`tests/test_eneco.py:327-340`) locks both the NBSP-grouped and ungrouped
 four-digit round-trips. `_WS` (`eneco.py:152`) matches ASCII whitespace or NBSP
 and is used to span line wraps in the tax block. All numeric values are parsed via
-`to_float` (`_pdf.py:665-677`), which strips every Unicode space variant before
+`to_float` (`_pdf.py:714-726`), which strips every Unicode space variant before
 swapping comma for dot.
 
 ### Publication label and validity
 
 `_extract_publication_month` (`eneco.py:409-411`) captures `Tariefkaart <month>
 <year>` (for example `mei 2026`). `valid_until` comes from the shared
-`parse_valid_until` (`_pdf.py:1004`), which reads the "Geldig van ... t.e.m. ..."
+`parse_valid_until` (`_pdf.py:1053`), which reads the "Geldig van ... t.e.m. ..."
 line. `test_extracts_valid_until_from_geldig_line` (`tests/test_eneco.py:381-395`)
 pins April 30 2026 on all three fixtures so the `tomorrow_prices_available` binary
 sensor flips off at month end.
@@ -268,7 +268,7 @@ the earlier rigid four-newline skip and took Power Flex offline.
 `test_flex_yearly_fee_survives_extra_header_line` (`tests/test_eneco.py:315-324`)
 injects an extra header line to guard the anchor. The current rate is the first of
 four numbers before `Maandprijs`; the formula string accepts any sign character
-between the Belpex factor and the base (`SIGN_CHARS`, `_pdf.py:713`) so a polarity
+between the Belpex factor and the base (`SIGN_CHARS`, `_pdf.py:762`) so a polarity
 flip does not drop the display string. Illustrative:
 `current = 0.1390`, `yearly_fixed_fee = 65.0`
 (`test_flex_extracts_current_monthly_rate`, `tests/test_eneco.py:241-248`).

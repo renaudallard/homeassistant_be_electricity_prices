@@ -262,7 +262,7 @@ transition : 11:00-17:00 + 22:00-01:00
 offpeak    : 01:00-07:00
 ```
 
-`weekend_rule` (`WeekendRule`, `providers/base.py:379`) selects the weekend
+`weekend_rule` (`WeekendRule`, `providers/base.py:401`) selects the weekend
 schedule:
 
 - `weekend_offpeak` (generic CWaPE default): Saturday, Sunday and public holidays are entirely off-peak.
@@ -352,7 +352,7 @@ regardless of the consumption snapshot's `vat_rate`. At least one of (`current`,
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py:158`; illustrative only). |
+| `current` | `float \| None` | `None` | Supplier's monthly indicative price, used when no live spot is available. An illustrative value that appears in the source comment is Eneco Power Fix's "Maandprijs" of 4.76 c/kWh (`providers/base.py:175`; illustrative only). |
 | `factor` | `float \| None` | `None` | Multiplier for the hourly formula `injection = factor * spot + base`. |
 | `base` | `float \| None` | `None` | Additive term for that formula. Belgian formulas can produce negative values at low spot (the producer pays to inject) and the engine respects that. |
 | `formula` | `str \| None` | `None` | Formula text for diagnostics. |
@@ -520,12 +520,12 @@ consistent.
 | Symbol | Signature (async unless noted) | Solves |
 | --- | --- | --- |
 | `USER_AGENT` | module constant | `Home Assistant be_electricity_prices/<version>`, read from `manifest.json` (`_pdf.py:69`). Sent on every request. |
-| `fetch_text` | `fetch_text(session, url, *, timeout=20) -> str` | GET an HTML listing / index / plain-text source. Raises `ExtractorError` on non-2xx or network error (`_pdf.py:553`). |
-| `fetch_pdf_text` | `fetch_pdf_text(session, url, *, timeout=30) -> str` | Download a PDF and return concatenated pypdf text; parsing runs in a worker thread so a multi-page card never stalls the HA event loop (`_pdf.py:234`). |
-| `fetch_pdf_text_layout` | `fetch_pdf_text_layout(session, url, *, timeout=30) -> str` | Layout-preserving pdfplumber variant (`_pdf.py:411`). |
-| `fetch_pdf_text_aligned` | `fetch_pdf_text_aligned(session, url, x_join_threshold=0.0, *, timeout=30) -> str` | Word-coordinate aligned pdfplumber variant (`_pdf.py:397`). |
+| `fetch_text` | `fetch_text(session, url, *, timeout=20) -> str` | GET an HTML listing / index / plain-text source. Raises `ExtractorError` on non-2xx or network error (`_pdf.py:602`). |
+| `fetch_pdf_text` | `fetch_pdf_text(session, url, *, timeout=30) -> str` | Download a PDF and return concatenated pypdf text; parsing runs in a worker thread so a multi-page card never stalls the HA event loop (`_pdf.py:265`). |
+| `fetch_pdf_text_layout` | `fetch_pdf_text_layout(session, url, *, timeout=30) -> str` | Layout-preserving pdfplumber variant (`_pdf.py:446`). |
+| `fetch_pdf_text_aligned` | `fetch_pdf_text_aligned(session, url, x_join_threshold=0.0, *, timeout=30) -> str` | Word-coordinate aligned pdfplumber variant (`_pdf.py:427`). |
 | `flanders_tax_overlay` | `flanders_tax_overlay(text, *, supplier, excise, renewables, contribution=None, fund=None) -> TaxOverlay` | The tax block of a Flanders-only, VAT-inclusive card. Callers pass their own compiled anchors; this holds the POLICY, which is what drifted: excise mandatory (patterns tried in order, so a flat row wins over the tiered one being phased out), renewables mandatory and all summed, contribution optional (absent = the levy abolished on 2026-08-01, not a layout drift), fund optional and in EUR/month so unscaled. Used by energie.be, Energy Knights, EnergyVision and Frank. |
-| `head_freshness_key` | `head_freshness_key(session, url, *, prefer=("Last-Modified", "ETag")) -> str \| None` | Cheap `SnapshotProbe` implementation: HEAD the card and return the first present preferred header, else `None`. Bolt prefers `ETag` first (its `Last-Modified` flips per CDN edge); everyone else prefers `Last-Modified` (`_pdf.py:424`). |
+| `head_freshness_key` | `head_freshness_key(session, url, *, prefer=("Last-Modified", "ETag")) -> str \| None` | Cheap `SnapshotProbe` implementation: HEAD the card and return the first present preferred header, else `None`. Bolt prefers `ETag` first (its `Last-Modified` flips per CDN edge); everyone else prefers `Last-Modified` (`_pdf.py:460`). |
 
 Internals worth knowing:
 
@@ -594,32 +594,32 @@ downstream regex would miss silently.
 
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
-| `extract_pdf_text` | `extract_pdf_text(payload: bytes) -> str` | Default pypdf extraction. Logs and skips pages pypdf returns `None` for (undecodable fonts); raises only if every page fails (`_pdf.py:262`). |
-| `extract_pdf_text_layout` | `extract_pdf_text_layout(payload: bytes) -> str` | pdfplumber layout mode for cards with rotated DSO/tax columns that pypdf drops (TotalEnergies). Runs `dedupe_chars()` first to drop stacked duplicate glyphs (for example `55,,09` rendered instead of `5,09`) (`_pdf.py:321`). |
-| `extract_pdf_text_aligned` | `extract_pdf_text_aligned(payload, y_tolerance=3, x_join_threshold=0.0) -> str` | Re-groups `extract_words()` output into visual rows by y-coordinate for column-major cards (OCTA+). `x_join_threshold` is opt-in: leave `0.0` to keep words separate; pass ~1.0pt to glue sub-point-gap glyphs (`5 ,0 3 2 9` into `5,0329`). Pages joined with form-feeds (`_pdf.py:345`). |
+| `extract_pdf_text` | `extract_pdf_text(payload: bytes) -> str` | Default pypdf extraction. Logs and skips pages pypdf returns `None` for (undecodable fonts); raises only if every page fails (`_pdf.py:292`). |
+| `extract_pdf_text_layout` | `extract_pdf_text_layout(payload: bytes) -> str` | pdfplumber layout mode for cards with rotated DSO/tax columns that pypdf drops (TotalEnergies). Runs `dedupe_chars()` first to drop stacked duplicate glyphs (for example `55,,09` rendered instead of `5,09`) (`_pdf.py:351`). |
+| `extract_pdf_text_aligned` | `extract_pdf_text_aligned(payload, y_tolerance=3, x_join_threshold=0.0) -> str` | Re-groups `extract_words()` output into visual rows by y-coordinate for column-major cards (OCTA+). `x_join_threshold` is opt-in: leave `0.0` to keep words separate; pass ~1.0pt to glue sub-point-gap glyphs (`5 ,0 3 2 9` into `5,0329`). Pages joined with form-feeds (`_pdf.py:375`). |
 
 ### Number, sign and VAT parsing
 
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
-| `to_float` | `to_float(text: str) -> float` | Parse a Belgian/French decimal (`15,93` or `0.102`). Strips every Unicode space variant used as a thousands separator (NBSP, thin space, NNBSP, line separator) before swapping comma for dot, so `5 029` does not raise (`_pdf.py:672`). |
-| `parse_sign` | `parse_sign(char: str) -> float` | Return `-1.0` for any hyphen/dash/Unicode-minus, `+1.0` otherwise. Use as `base = parse_sign(m.group(N)) * to_float(m.group(N+1))` so a card that swaps to U+2212 or flips polarity does not silently break the parser (`_pdf.py:717`). |
-| `SIGN_CHARS` | module constant | Character-class string `+\-` plus six dash variants, to drop into a regex as `[` + `SIGN_CHARS` + `]` (`_pdf.py:713`). Supplier PDFs flip silently between these on re-renders. |
-| `fold_accents` | `fold_accents(text: str) -> str` | Lowercase and strip Latin diacritics, so a literal test for `août` still matches an extraction that lost the accent to `aout`. Fold both haystack and needle (`_pdf.py:615`). |
-| `vat_multiplier` | `vat_multiplier(text, *patterns, default=1.06) -> float` | Read the VAT percentage from a card header (each supplier phrases it differently) and return `1 + N/100` via `to_float` (so `21,5%` works). Falls back to `default` (1.06, illustrative current Belgian residential rate) when no pattern matches (`_pdf.py:672`). |
+| `to_float` | `to_float(text: str) -> float` | Parse a Belgian/French decimal (`15,93` or `0.102`). Strips every Unicode space variant used as a thousands separator (NBSP, thin space, NNBSP, line separator) before swapping comma for dot, so `5 029` does not raise (`_pdf.py:721`). |
+| `parse_sign` | `parse_sign(char: str) -> float` | Return `-1.0` for any hyphen/dash/Unicode-minus, `+1.0` otherwise. Use as `base = parse_sign(m.group(N)) * to_float(m.group(N+1))` so a card that swaps to U+2212 or flips polarity does not silently break the parser (`_pdf.py:766`). |
+| `SIGN_CHARS` | module constant | Character-class string `+\-` plus six dash variants, to drop into a regex as `[` + `SIGN_CHARS` + `]` (`_pdf.py:762`). Supplier PDFs flip silently between these on re-renders. |
+| `fold_accents` | `fold_accents(text: str) -> str` | Lowercase and strip Latin diacritics, so a literal test for `août` still matches an extraction that lost the accent to `aout`. Fold both haystack and needle (`_pdf.py:664`). |
+| `vat_multiplier` | `vat_multiplier(text, *patterns, default=1.06) -> float` | Read the VAT percentage from a card header (each supplier phrases it differently) and return `1 + N/100` via `to_float` (so `21,5%` works). Falls back to `default` (1.06, illustrative current Belgian residential rate) when no pattern matches (`_pdf.py:721`). |
 
 ### Belgium-specific table and date parsers
 
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
-| `parse_brussels_osp` | `parse_brussels_osp(text: str) -> dict[str, float] \| None` | Parse the Brussels Brugel OSP annual-fee table off a Sibelga card. Anchors on the `Obligations de Service` block (case-insensitive: Bolt lowercases `s`) and each `<bound> kVA <value>` row, returning every band the card prints (`le1_44` through `gt56`) or `None` when absent. The open-ended top row is told apart by the `>` in front of its bound, since `> 36 et <= 56 kVA` and `> 56 kVA` both end in `56 kVA`. Populates `DsoOverlay.brussels_osp_by_tier` (`_pdf.py:747`). |
-| `parse_valid_until` | `parse_valid_until(text: str) -> date \| None` | Best-effort parse of the card's validity date, anchored within ~200 chars after a validity keyword (`geldig`/`valable`/`validit`/`valid `). Tries spelled-out `<day> <month> <year>`, numeric `DD/MM/YYYY` (or `DD/MM/YY`), then bare `<month> <year>` (last day of month). Clamps candidates to a symmetric 5-year horizon around Brussels-local today so a corrupted footer date does not produce a bogus year. Returns the latest match or `None`. Populates `SupplierSnapshot.valid_until` (`_pdf.py:1004`). |
-| `text_mentions_month` | `text_mentions_month(text, year_month: date, month_names: tuple[str, ...]) -> bool` | Heuristic that `text` references the requested month+year inside an anchored window (first 1000 chars where the card title prints, plus validity-keyword windows). Accent-folds both sides and collapses whitespace so `mei\n2026` matches (`_pdf.py:283`). |
-| `archive_validity_check` | `archive_validity_check(snap, text, year_month, *, month_names=None) -> SupplierSnapshot \| None` | Confirm an archived snapshot actually covers `year_month`. Returns `snap` on pass, `None` otherwise, so a provider's `fetch_for_month` can fall back to the proxy rather than mis-bill. Two tiers: authoritative `snap.valid_until` month check when present; otherwise require a textual month mention (when `month_names` given, as eneco/cociter do) or accept on the URL resolver alone (when `None`, as ebem does) (`_pdf.py:965`). |
+| `parse_brussels_osp` | `parse_brussels_osp(text: str) -> dict[str, float] \| None` | Parse the Brussels Brugel OSP annual-fee table off a Sibelga card. Anchors on the `Obligations de Service` block (case-insensitive: Bolt lowercases `s`) and each `<bound> kVA <value>` row, returning every band the card prints (`le1_44` through `gt56`) or `None` when absent. The open-ended top row is told apart by the `>` in front of its bound, since `> 36 et <= 56 kVA` and `> 56 kVA` both end in `56 kVA`. Populates `DsoOverlay.brussels_osp_by_tier` (`_pdf.py:796`). |
+| `parse_valid_until` | `parse_valid_until(text: str) -> date \| None` | Best-effort parse of the card's validity date, anchored within ~200 chars after a validity keyword (`geldig`/`valable`/`validit`/`valid `). Tries spelled-out `<day> <month> <year>`, numeric `DD/MM/YYYY` (or `DD/MM/YY`), then bare `<month> <year>` (last day of month). Clamps candidates to a symmetric 5-year horizon around Brussels-local today so a corrupted footer date does not produce a bogus year. Returns the latest match or `None`. Populates `SupplierSnapshot.valid_until` (`_pdf.py:1053`). |
+| `text_mentions_month` | `text_mentions_month(text, year_month: date, month_names: tuple[str, ...]) -> bool` | Heuristic that `text` references the requested month+year inside an anchored window (first 1000 chars where the card title prints, plus validity-keyword windows). Accent-folds both sides and collapses whitespace so `mei\n2026` matches (`_pdf.py:259`). |
+| `archive_validity_check` | `archive_validity_check(snap, text, year_month, *, month_names=None) -> SupplierSnapshot \| None` | Confirm an archived snapshot actually covers `year_month`. Returns `snap` on pass, `None` otherwise, so a provider's `fetch_for_month` can fall back to the proxy rather than mis-bill. Two tiers: authoritative `snap.valid_until` month check when present; otherwise require a textual month mention (when `month_names` given, as eneco/cociter do) or accept on the URL resolver alone (when `None`, as ebem does) (`_pdf.py:1014`). |
 
-Two supporting internals back these date parsers: `_MONTH_NAMES` (`_pdf.py:828`)
+Two supporting internals back these date parsers: `_MONTH_NAMES` (`_pdf.py:877`)
 maps Dutch, French (with and without accents) and English month names to their
-1-12 index, and `_validity_windows` (`_pdf.py:903`) returns the ~200-char
+1-12 index, and `_validity_windows` (`_pdf.py:952`) returns the ~200-char
 context after each validity keyword so a retrospective month mention elsewhere
 in the PDF does not masquerade as a validity statement. `_OSP_BOUND_TO_TIER`
 (`_pdf.py:545`) maps kVA upper bounds to the shared tier keys and is kept as
