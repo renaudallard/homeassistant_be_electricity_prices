@@ -339,45 +339,73 @@ def _compare_injection_credit(
     return _compute_injection_price(snapshot, entry, spot_dict)
 
 
-def _period_avg_all_in(
+def _year_avg_all_in(
     snapshot: Any,
     dso: str,
     region: str,
-    start: datetime,
+    first_day: date,
     num_days: int,
     spot: float | None,
     meter: Any,
     dso_mode: Any,
     hour_weights: dict[int, float] | None = None,
 ) -> float | None:
-    """Mean all-in EUR/kWh over ``num_days`` from ``start``.
+    """Mean all-in EUR/kWh over the ``num_days`` from ``first_day``, priced
+    once per kind of day.
 
-    Sampling every hour lets each hour carry its true energy slot AND network
-    band, so the TOU energy windows and the bi-horaire network bands - which
-    don't align, and both differ on weekends - are each weighted correctly.
-    A three-sample-per-slot weighting instead assigns one network band to a
-    whole energy slot and mis-prices it. Returns None on any compute failure.
+    Every hour has to carry its true energy slot AND network band, since the
+    TOU windows and the bi-horaire network bands do not align and both change
+    on weekends; sampling a whole day does that, where one sample per slot
+    assigned one network band to a whole energy slot and mis-priced it.
+
+    Which days, and how many of each, is what this gets right that a
+    representative week could not. The rate depends on the calendar only
+    through the weekday, whether the day is a public holiday (billed under
+    the weekend rule for both energy and network) and, for a seasonal card,
+    the season. So the window is walked day by day, the days are grouped on
+    exactly those three, one date per group is priced hour by hour, and each
+    group counts for the days it holds. That is the full year priced in at
+    most 28 days of breakdowns. A holiday-free week priced the ten weekday
+    holidays Belgium bills as weekend days at their weekday rate, 0,33% high
+    on a weekend-offpeak card against the hour-weighted year; a week that
+    contained one was worse the other way, which is why the old code walked
+    back until it found none.
 
     ``hour_weights`` is the household's measured share of consumption per hour
     of the day. With it, each hour carries the kWh actually recorded in it,
     which is how the bill beside this figure is computed. Without it the hours
     weigh equally, which assumes a household that consumes uniformly around
-    the clock.
+    the clock. Returns None on any compute failure so the caller can fall back.
     """
-    from .pricing import compute_breakdown
+    from .pricing import _is_smartflex_summer, compute_breakdown, is_belgian_holiday
 
+    counts: dict[tuple[bool, int, bool], int] = {}
+    representative: dict[tuple[bool, int, bool], date] = {}
+    for offset in range(num_days):
+        day = first_day + timedelta(days=offset)
+        key = (_is_smartflex_summer(day), day.weekday(), is_belgian_holiday(day))
+        counts[key] = counts.get(key, 0) + 1
+        representative.setdefault(key, day)
     total = 0.0
-    count = 0.0
-    for hour in range(num_days * 24):
-        when = start + timedelta(hours=hour)
-        try:
-            bd = compute_breakdown(snapshot, dso, region, when, spot, meter, dso_mode)
-        except Exception:  # noqa: BLE001
-            return None
-        weight = 1.0 if hour_weights is None else hour_weights.get(when.hour, 0.0)
-        total += bd.all_in * weight
-        count += weight
-    return total / count if count else None
+    weight_sum = 0.0
+    for key, days in counts.items():
+        midnight = datetime.combine(
+            representative[key], time(), tzinfo=dt_util.get_default_time_zone()
+        )
+        for hour in range(24):
+            # Wall-clock arithmetic on purpose: the breakdown reads the local
+            # hour, and a seam day still yields 24 distinct ones this way.
+            when = midnight + timedelta(hours=hour)
+            try:
+                bd = compute_breakdown(
+                    snapshot, dso, region, when, spot, meter, dso_mode
+                )
+            except Exception:  # noqa: BLE001
+                return None
+            w = (1.0 if hour_weights is None else hour_weights.get(hour, 0.0)) * days
+            total += bd.all_in * w
+            weight_sum += w
+    return total / weight_sum if weight_sum else None
 
 
 def _tou_weighted_per_kwh(
@@ -410,10 +438,9 @@ def _tou_weighted_per_kwh(
     time-averaged annual figure. For TOU contracts (Luminus SmartFlex, Engie
     Empower Flextime) and Impact contracts (Mega Off-peak Impact)
     ``compute_breakdown`` returns one of three slot rates depending on
-    the hour the user opens the dialog -- biased. Compute breakdowns
-    at three representative weekday hours (one per slot) and weight by
-    the published slot durations across a week, so the annual estimate
-    isn't dragged toward whichever slot the user happens to be in.
+    the hour the user opens the dialog -- biased. So the coming year is
+    walked and priced per kind of day (``_year_avg_all_in``), which is the
+    exact hour-weighted annual figure rather than a sample of it.
 
     Returns ``None`` on compute failure so the caller can render '-'
     on the result page rather than tear the flow down.
@@ -421,8 +448,6 @@ def _tou_weighted_per_kwh(
     from .injection import _tou_weekend_rule
     from .pricing import (
         compute_breakdown,
-        is_belgian_holiday,
-        is_offpeak,
     )
     from .providers.base import ImpactRates
 
@@ -472,132 +497,23 @@ def _tou_weighted_per_kwh(
     ):
         return bd.all_in
 
-    # Weekday holidays bill under the weekend rule, so a single week that
-    # happens to contain one would skew the slot mix. Walk back to a
-    # holiday-free Mon-Sun week (matches the prior clean-week assumption).
-    def _holiday_free_week(anchor: date) -> date:
-        mon = anchor - timedelta(days=anchor.weekday())
-        for _ in range(12):
-            if not any(is_belgian_holiday(mon + timedelta(days=d)) for d in range(7)):
-                return mon
-            mon -= timedelta(days=7)
-        return mon
-
-    # Pick a recent non-holiday weekday so each slot lookup hits the
-    # weekday rule. Walk back from today's local date.
-    weekday = when_now.date()
-    for _ in range(8):
-        if not is_belgian_holiday(weekday) and weekday.weekday() < 5:
-            break
-        weekday -= timedelta(days=1)
-    base = datetime.combine(weekday, time(), tzinfo=when_now.tzinfo)
-    if weekend_rule == "smartflex_seasonal":
-        # SmartFlex bills seasonal bands, so blend a summer and a winter
-        # representative WEEK by season length (21/03-20/09 = 184 days, the
-        # rest 181). A full week captures both the seasonal energy bands and
-        # any weekday/weekend network split.
-        #
-        # Decided before the Impact branch below, because the number of
-        # representative periods is a property of the ENERGY schedule while
-        # Impact comptage only says the network is banded, which one week
-        # already covers. Tested the other way round a SmartFlex card on an
-        # Impact connection was quoted on whichever season the dialog opened
-        # in, 1,3% out against the year.
-        acc = 0.0
-        wsum = 0.0
-        for probe, days in (
-            (date(when_now.year, 7, 1), 184.0),
-            (date(when_now.year, 1, 15), 181.0),
-        ):
-            season_monday = datetime.combine(
-                _holiday_free_week(probe), time(), tzinfo=when_now.tzinfo
-            )
-            avg = _period_avg_all_in(
-                snapshot,
-                dso,
-                region,
-                season_monday,
-                7,
-                spot,
-                meter,
-                dso_mode,
-                hour_weights,
-            )
-            if avg is None:
-                return bd.all_in
-            acc += avg * days
-            wsum += days
-        return acc / wsum
-    if isinstance(snapshot.energy, ImpactRates) or impact_network:
-        # Average a full representative week, for the reason the TOU branch
-        # below gives: one sample per band is only right when BOTH legs are
-        # banded on that schedule, and here they need not be. The CWaPE bands
-        # run every day of the week while the bi-horaire network bands do not,
-        # so an Impact card quoted on a standard connection had its whole
-        # MEDIUM band (07:00-11:00 as well as 22:00-01:00) priced at the
-        # off-peak distribution rate its first hour happens to fall in, and a
-        # time-of-use card on an Impact connection had the mirror of that done
-        # to its energy leg. Measured against the exact hour-weighted year:
-        # 3,5% low on the first, 2,4% on the second, and a week average brings
-        # both inside 0,2%.
-        week_start = datetime.combine(
-            _holiday_free_week(when_now.date()), time(), tzinfo=when_now.tzinfo
-        )
-        avg = _period_avg_all_in(
-            snapshot, dso, region, week_start, 7, spot, meter, dso_mode, hour_weights
-        )
-        return avg if avg is not None else bd.all_in
-    if weekend_rule is None:
-        # Fixed/Variable on a bi-hourly/dynamic meter: weight the peak and
-        # off-peak all-in by the region's bi-horaire hour split (uniform
-        # consumption across a representative week, region-aware via
-        # is_offpeak so the Wallonia 11-17 off-peak window and the Brussels
-        # holiday rule are honoured). Any peak/off-peak hour is a valid
-        # sample since the rate is constant within each band.
-        peak_when: datetime | None = None
-        off_when: datetime | None = None
-        peak_weight = 0.0
-        off_weight = 0.0
-        for day_offset in range(7):
-            for hour in range(24):
-                when = base + timedelta(days=day_offset, hours=hour)
-                w = 1.0 if hour_weights is None else hour_weights.get(hour, 0.0)
-                if is_offpeak(when, region):
-                    off_when = off_when or when
-                    off_weight += w
-                else:
-                    peak_when = peak_when or when
-                    peak_weight += w
-        if peak_when is None or off_when is None:
-            return bd.all_in
-        try:
-            bd_peak = compute_breakdown(
-                snapshot, dso, region, peak_when, spot, meter, dso_mode
-            )
-            bd_off = compute_breakdown(
-                snapshot, dso, region, off_when, spot, meter, dso_mode
-            )
-        except Exception:  # noqa: BLE001
-            return bd.all_in
-        total_weight = peak_weight + off_weight
-        if total_weight <= 0:
-            return bd.all_in
-        return (
-            bd_peak.all_in * peak_weight + bd_off.all_in * off_weight
-        ) / total_weight
-
-    # A TOU energy slot spans hours with different bi-horaire network bands
-    # (and the weekend rule shifts hours between energy slots), so weighting
-    # one sample per slot mis-prices the network. Average a full
-    # representative week (Mon-Sun) so each hour carries its true energy slot
-    # and network band.
-    week_start = datetime.combine(
-        _holiday_free_week(when_now.date()), time(), tzinfo=when_now.tzinfo
+    # A TOU energy slot spans hours with different bi-horaire network bands,
+    # the weekend rule shifts hours between energy slots, a seasonal card
+    # moves its bands twice a year, and an Impact connection bands the network
+    # on three CWaPE bands every day of the week while the bi-horaire one has
+    # two and rests on weekends. One walk over the coming year, priced per
+    # kind of day, carries all of that at once; see _year_avg_all_in for why a
+    # representative week could not. The bi-hourly split used to take a
+    # two-sample shortcut here (one breakdown per band, weighted by band
+    # hours), which is exact only while BOTH legs have two bands: put an
+    # Impact connection under it and the three network bands were priced at
+    # whichever two hours the samples fell in, 11% high on a Walloon fixed
+    # card. The walk costs at most a few hundred breakdowns and needs no such
+    # assumption.
+    year_avg = _year_avg_all_in(
+        snapshot, dso, region, when_now.date(), 365, spot, meter, dso_mode, hour_weights
     )
-    week_avg = _period_avg_all_in(
-        snapshot, dso, region, week_start, 7, spot, meter, dso_mode, hour_weights
-    )
-    return week_avg if week_avg is not None else bd.all_in
+    return year_avg if year_avg is not None else bd.all_in
 
 
 def _populate_charts(

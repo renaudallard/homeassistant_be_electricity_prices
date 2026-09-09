@@ -2649,9 +2649,9 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     """A TOU contract's per-kWh number for the annual estimate must
     be a time-weighted average across peak / transition / offpeak
     slots, not whichever slot the user happens to be in when they
-    open the dialog. The helper computes breakdowns at three
-    representative weekday hours and weights by the standard CWaPE
-    slot durations."""
+    open the dialog. The helper prices the coming year once per kind of
+    day, so the slot durations are weighted by how many weekdays, weekend
+    days and public holidays the year actually holds."""
     from custom_components.be_electricity_prices.compare_quote import (
         _tou_weighted_per_kwh,
     )
@@ -2679,19 +2679,32 @@ async def test_compare_tou_uses_weighted_average_across_slots(
         snap, "ores", "wallonia", weekday_peak, None, "dynamic", "bi_horaire"
     )
     assert avg is not None
-    # Energy weights for weekend_offpeak: peak=45h, transition=45h,
-    # offpeak=78h, total 168h. Weighted-avg energy =
-    # (45*0.30 + 45*0.20 + 78*0.10) / 168 = 30.30 / 168 = 0.1804 EUR.
-    # Plus DSO + transport + taxes (no VAT in the stub) -> roughly
-    # 0.1804 + 0.10 + 0.0145 + 0.052 = ~0.347 EUR/kWh.
-    expected_energy = (45 * 0.30 + 45 * 0.20 + 78 * 0.10) / 168
+    # Derived from the calendar, not from the helper: a weekday under the
+    # weekend_offpeak rule bills 9h peak, 9h transition and 6h offpeak; a
+    # weekend day or a public holiday bills 24h offpeak. Count the days of
+    # each kind over the coming year and weight the published slot
+    # durations by them. A representative week put the ten weekday
+    # holidays at their weekday mix, 0,0026 EUR/kWh high on this card.
+    from custom_components.be_electricity_prices.pricing import is_belgian_holiday
+
+    weekday_day = 9 * 0.30 + 9 * 0.20 + 6 * 0.10
+    offpeak_day = 24 * 0.10
+    total = 0.0
+    for offset in range(365):
+        day = weekday_peak.date() + timedelta(days=offset)
+        total += (
+            offpeak_day
+            if day.weekday() >= 5 or is_belgian_holiday(day)
+            else weekday_day
+        )
+    expected_energy = total / (365 * 24)
     # Live peak rate would be 0.30 + ... ~0.466 EUR/kWh; weighted
     # average must be materially lower.
     assert avg < 0.40
-    # And the energy component of the weighted avg matches our hand
+    # And the energy component of the weighted avg matches the hand
     # calculation: avg minus the constants leaves the energy term.
     constants = 0.10 + 0.0145 + (0.05 + 0.002)
-    assert abs((avg - constants) - expected_energy) < 0.001
+    assert abs((avg - constants) - expected_energy) < 1e-6
 
 
 def test_compare_ytd_prorates_capacity_per_month_like_the_live_sensor() -> None:
