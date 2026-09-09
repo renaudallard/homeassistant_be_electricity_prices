@@ -599,7 +599,7 @@ _BELPEX_FORMULA_RE = re.compile(
 
 def _consumption_formula(
     text: str, *, professional: bool = False
-) -> tuple[float, float]:
+) -> tuple[float, float] | None:
     """The card's consumption formula as (factor, base) in the EUR/kWh basis.
 
     Bolt prints one tariff formula per card, ``Belpex * <factor> <sign>
@@ -609,15 +609,25 @@ def _consumption_formula(
     dimensionless ratio (* VAT), the base goes EUR/MWh -> EUR/kWh (/1000 *
     VAT). VAT is baked because the snapshot's vat_rate is 0.
 
+    ``None`` when the card carries no formula table, which is not an error:
+    the printed monthly rate is a complete variable card on its own, and
+    ``_with_slot_formula`` already handles the same absence on the injection
+    side ("no formula on this card generation: the printed figure is all
+    there is"). Raising here instead would fail the WHOLE snapshot for every
+    Bolt variable contract the day the row moved, turning a card that still
+    prices perfectly into a dead entry; the quarter-hourly settlement is the
+    only thing that actually needs the pair, and it goes inert without it
+    while the live check reports the loss.
+
     The professional card prices everything excluding VAT, so there is
     nothing to bake and the snapshot's vat_rate carries the 21% instead. It
     also drops the "N% TVA" phrase the multiplier reads, which would
     otherwise fall back to the residential 6% default and scale the formula
-    twice over.
+    twice over. That one IS an error, because a formula was found and read.
     """
     matches = _BELPEX_FORMULA_RE.findall(text)
     if not matches:
-        raise ExtractorError("Bolt: could not parse the Belpex tariff formula")
+        return None
     factor_s, sign, base_s = matches[0]
     if professional:
         if "HTVA" not in text:
@@ -793,14 +803,21 @@ def _extract_energy(
         # dynamic leg out of them when the entry says so. Carried on every
         # variable card, not only where the box is ticked, because the parser
         # has no entry to consult and the pair is free to read.
-        factor, base = _consumption_formula(text, professional=professional)
+        #
+        # A card with no formula table still prices: the printed rate is the
+        # whole variable contract, and only the quarter-hourly settlement
+        # needs the pair. It goes inert rather than taking the entry down.
+        coefficients = _consumption_formula(text, professional=professional)
+        factor, base = coefficients or (None, None)
         return VariableRates(
             current=mono,
             peak=peak,
             offpeak=offpeak,
             exclusive_night=excl,
             yearly_fixed_fee=yearly_fee,
-            formula=f"Belpex * {factor:.6g} + {base:.6g}",
+            formula=(
+                None if coefficients is None else f"Belpex * {factor:.6g} + {base:.6g}"
+            ),
             formula_factor=factor,
             formula_base=base,
             impact_pic=bands.get("pic"),

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, patch
 
@@ -1117,6 +1118,51 @@ def test_every_variable_card_offers_the_settlement_choice() -> None:
     for c in bolt_mod._CONTRACTS:
         assert c.settlement is (c.folder == "var"), c.contract_id
         assert c.kind == ("variable" if c.folder == "var" else "fixed"), c.contract_id
+
+
+def test_a_card_with_no_formula_table_still_prices() -> None:
+    """The printed monthly rate is a complete variable card on its own.
+
+    Only the quarter-hourly settlement needs the coefficients, so a card
+    generation that stops printing the Belpex row leaves the box inert rather
+    than taking the whole snapshot down. Raising instead would kill every Bolt
+    variable entry on a card that still prices perfectly, and the injection
+    side already handles the same absence this way (``_with_slot_formula``:
+    "no formula on this card generation: the printed figure is all there is").
+    The live check reports the loss so it does not go unnoticed.
+    """
+    text = (
+        "Bolt Variable\n"
+        "Avril 2026 /Residentiel\n"
+        "6 % TVA\n"
+        "Prix mensuel 13,25 11,53 11,53 11,53\n"
+        "Prix de l'electricite verte\n Jour  Nuit\n 13,25 11,53\n Jour  Nuit\n"
+        "Injection\nPrix mensuel 5,31 4,03 Compteur\n"
+        "\u20ac 8,99 / mois\n"
+    )
+    energy = bolt_mod._extract_energy(text, "variable")
+    assert isinstance(energy, VariableRates)
+    assert energy.current == pytest.approx(0.1325)
+    assert energy.yearly_fixed_fee == pytest.approx(107.88)
+    # The pair, and the string built from it, are absent rather than wrong.
+    assert energy.formula_factor is None
+    assert energy.formula_base is None
+    assert energy.formula is None
+
+
+def test_the_settlement_box_goes_inert_without_the_coefficients() -> None:
+    """A ticked entry on such a card keeps billing the printed rate rather
+    than silently losing its energy leg."""
+    snap = parse_snapshot(
+        "bolt_variable", fixture_text("bolt_variable.pdf", layout=True), "wallonia"
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    stripped = replace(
+        snap,
+        energy=replace(energy, formula_factor=None, formula_base=None, formula=None),
+    )
+    assert resolve_settlement_grid(stripped, quarter_hourly=True) is stripped
 
 
 def test_the_settlement_answer_moves_the_contract_kind() -> None:
