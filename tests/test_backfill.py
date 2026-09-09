@@ -50,7 +50,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
-from tests import make_entry, make_snapshot
+from tests import make_entry, make_snapshot, make_stub_extractor
 
 # Belgian integration: tests pin Europe/Brussels via conftest, but
 # tz-sensitive constants in this file spell it out so the intent is
@@ -954,6 +954,137 @@ async def test_backfill_service_without_snapshot_raises_validation() -> None:
 
 
 # ---- _ensure_dynamic_spots gate -----------------------------------------------
+
+
+async def test_cost_backfill_meets_the_live_walk_across_the_spring_change(
+    hass: HomeAssistant,
+) -> None:
+    """The backfilled cost series and the live year-to-date figure have to
+    agree at the seam on a per-hour kind, over a window that contains the
+    spring clock change.
+
+    Static kinds bill per day from a date-keyed dict and cannot see the seam
+    day; a dynamic kind walks the hour list, and that list is the one place a
+    duplicated or missing instant shows up. Hours are generated in UTC here
+    on purpose: adding timedeltas to a local datetime fabricates the 02:00
+    that does not exist on the change day and maps it onto 03:00's instant,
+    and a harness that did exactly that reported the backfill 0,11 EUR high
+    on Q1 2026 and sent an audit after a seam bug that was never there.
+    """
+    from custom_components.be_electricity_prices import cohort, energy_meters, ytd_cost
+    from custom_components.be_electricity_prices.providers.base import DynamicRates
+
+    snap = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.02, yearly_fixed_fee=48.0)
+    )
+    entry = make_entry(
+        region="wallonia",
+        dso="ores",
+        meter="dynamic",
+        title="Dynamic across the change",
+        solar_regime="none",
+        consumption_kwh="sensor.cons_total",
+    )
+    entry.add_to_hass(hass)
+    _register_sensors(hass, entry, ["current_year_cost"])
+
+    start = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    stop = (
+        dt_util.start_of_local_day(date(2026, 3, 31)) + timedelta(days=1)
+    ).astimezone(UTC)
+    hours: list[datetime] = []
+    when = start
+    while when < stop:
+        hours.append(when)
+        when += timedelta(hours=1)
+    assert len(hours) == 2159, "Q1 2026 has 2159 local hours, one short of 90 x 24"
+    spots = {h: 0.06 for h in hours}
+    per_hour = {h: 0.4 for h in hours}
+    per_day: dict[date, float] = {}
+    for h in hours:
+        local_day = dt_util.as_local(h).date()
+        per_day[local_day] = per_day.get(local_day, 0.0) + 0.4
+
+    coordinator = SimpleNamespace(
+        hass=hass,
+        _snapshot=snap,
+        _session=None,
+        _historical_spots=dict(spots),
+        _historical_spot_quarters={},
+        _spp_weights={},
+        _rlp_weights={},
+        _ensure_historical_spots=AsyncMock(),
+        _ensure_spp_weights=AsyncMock(),
+        _ensure_rlp_weights=AsyncMock(),
+        _billed_peak_kw=lambda: 0.0,
+    )
+    entry.runtime_data = coordinator
+
+    async def fake_hourly(
+        _h: Any, entity_id: str, _s: Any, _e: Any
+    ) -> dict[datetime, float]:
+        return dict(per_hour) if entity_id == "sensor.cons_total" else {}
+
+    async def fake_daily(
+        _h: Any, entity_id: str, _s: Any, _e: Any
+    ) -> dict[date, float]:
+        return dict(per_day) if entity_id == "sensor.cons_total" else {}
+
+    async def noop(*_a: Any, **_k: Any) -> None:
+        return None
+
+    captured: list[list[dict[str, Any]]] = []
+
+    def fake_import(_h: Any, _meta: Any, stats: Any) -> None:
+        captured.append(list(stats))
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
+        patch.object(energy_meters, "_recorder_daily_kwh", new=fake_daily),
+        patch.object(ytd_cost, "_top_up_today_hourly", side_effect=noop),
+        patch.object(
+            cohort, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
+        ),
+        patch.object(
+            ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
+        ),
+        patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+        patch(
+            "homeassistant.util.dt.now",
+            lambda: (
+                dt_util.start_of_local_day(date(2026, 3, 31))
+                + timedelta(hours=23, minutes=59)
+            ),
+        ),
+    ):
+        await bf._backfill_cost_sensor(
+            hass,
+            entry,
+            coordinator,  # type: ignore[arg-type]
+            hours,
+            dict(spots),
+            {},
+        )
+        live = await ytd_cost._compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            snap,
+            entry,
+            historical_spots=dict(spots),
+        )
+    rows = [row for batch in captured for row in batch]
+    assert rows, "the backfill imported nothing"
+    assert live is not None
+    assert rows[-1]["sum"] == pytest.approx(live, abs=1e-3)
 
 
 async def test_ensure_dynamic_spots_fetches_for_spot_indexed_injection() -> None:
