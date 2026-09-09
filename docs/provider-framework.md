@@ -529,6 +529,19 @@ consistent.
 
 Internals worth knowing:
 
+- `_pdf_text` (`_pdf.py`) sits between the three `fetch_pdf_text*` variants and
+  the download, holding the one thing they share besides the bytes: an opt-in
+  memo. `memoise_text_fetches` covers `fetch_text` and the PDF readers alike,
+  so a block that will read the same document twice reads it once. That is the
+  compare sweep: it already collapsed the per-supplier listing GETs, and where
+  two products share one card it now also skips the second parse. On a tariff
+  card the parse is the expensive half, not the download (a 2,4 MB Bolt
+  variable card is about 38 s through pdfplumber on a Pi against well under a
+  second to fetch), and Bolt sells each of its four variable cards on both
+  settlements. What is memoised is the extracted TEXT, a few kB, not the
+  payload; the key carries the variant (and the aligned threshold) because the
+  same document read two ways is two different strings and handing one back for
+  the other would feed a parser a shape it has no regexes for.
 - `_fetch_validated_pdf_bytes` (`_pdf.py:180`) is shared by the three
   `fetch_pdf_text*` variants. It catches both `aiohttp.ClientError` and
   `TimeoutError` (aiohttp's `ClientTimeout` fires `asyncio.TimeoutError`, which

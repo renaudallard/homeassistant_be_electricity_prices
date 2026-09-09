@@ -231,14 +231,44 @@ async def _fetch_validated_pdf_bytes(
     return payload
 
 
+async def _pdf_text(
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    variant: str,
+    timeout: int,
+    render: Callable[[bytes], str],
+) -> str:
+    """Download ``url`` and extract its text, or serve both from the memo.
+
+    The three ``fetch_pdf_text*`` variants differ only in ``render``, so the
+    memo lookup lives here rather than three times over. Keyed by variant as
+    well as URL: the same document read aligned and read layout-preserving are
+    different strings, and handing one back for the other would feed a parser
+    a shape it has no regexes for.
+
+    Extraction is offloaded to a worker thread: every variant is pure-Python
+    parsing, and a multi-page tariff card would otherwise stall Home
+    Assistant's event loop.
+    """
+    memo = _TEXT_MEMO.get()
+    key = f"{variant}\0{url}"
+    if memo is not None and key in memo:
+        return memo[key]
+    payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
+    text = await asyncio.to_thread(render, payload)
+    if memo is not None:
+        memo[key] = text
+    return text
+
+
 async def fetch_pdf_text(
     session: aiohttp.ClientSession, url: str, *, timeout: int = 30
 ) -> str:
     """Download ``url`` and return the concatenated extracted text."""
-    payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
-    # pypdf does pure-Python parsing; offload to a worker thread so a
-    # multi-page tariff card never stalls Home Assistant's event loop.
-    return await asyncio.to_thread(extract_pdf_text, payload)
+    return await _pdf_text(
+        session, url, variant="plain", timeout=timeout, render=extract_pdf_text
+    )
 
 
 # A tariff card that carries a text layer is never anywhere near this small:
@@ -402,9 +432,14 @@ async def fetch_pdf_text_aligned(
     timeout: int = 30,
 ) -> str:
     """Word-coordinate aligned variant of :func:`fetch_pdf_text`."""
-    payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
-    return await asyncio.to_thread(
-        extract_pdf_text_aligned, payload, 3, x_join_threshold
+    return await _pdf_text(
+        session,
+        url,
+        # The threshold changes the output, so it belongs in the memo key: two
+        # callers reading one card at different thresholds want two strings.
+        variant=f"aligned:{x_join_threshold}",
+        timeout=timeout,
+        render=lambda payload: extract_pdf_text_aligned(payload, 3, x_join_threshold),
     )
 
 
@@ -417,8 +452,9 @@ async def fetch_pdf_text_layout(
     pages disguised as success). We treat those as fetch failures so the
     parser never tries to read a PDF that isn't.
     """
-    payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
-    return await asyncio.to_thread(extract_pdf_text_layout, payload)
+    return await _pdf_text(
+        session, url, variant="layout", timeout=timeout, render=extract_pdf_text_layout
+    )
 
 
 async def head_freshness_key(
@@ -515,31 +551,44 @@ def vat_multiplier(
     return default
 
 
-# A caller that will GET the same listing many times in quick succession can
-# ask fetch_text to serve repeats from memory. Off by default: every existing
-# caller wants a live read, and a global time-based cache would quietly hand a
-# coordinator tick a stale page. This is opt-in, explicit, and scoped to the
-# block that entered it.
+# A caller that will read the same document many times in quick succession can
+# ask fetch_text and the PDF readers to serve repeats from memory. Off by
+# default: every existing caller wants a live read, and a global time-based
+# cache would quietly hand a coordinator tick a stale page. This is opt-in,
+# explicit, and scoped to the block that entered it.
 _TEXT_MEMO: ContextVar[dict[str, str] | None] = ContextVar("_TEXT_MEMO", default=None)
 
 
 @contextmanager
 def memoise_text_fetches(store: dict[str, str]) -> Iterator[None]:
-    """Serve repeat text GETs of one URL from ``store`` inside this block.
+    """Serve repeat reads of one URL from ``store`` inside this block.
 
-    Nine providers resolve a per-supplier listing page inside ``fetch()`` and
-    then pick one product out of it, so pricing a whole supplier re-downloads
-    the same page once per contract: a Flanders static sweep pulls Mega's
-    listing nine times, Engie's eight and Luminus's eight, about 3 MB and 25
-    round trips that buy nothing. Under a wall-clock budget that is rows the
-    user does not get.
+    Two kinds of repeat, both of them a sweep pricing several products of one
+    supplier:
+
+    Listing pages. Nine providers resolve a per-supplier listing inside
+    ``fetch()`` and then pick one product out of it, so pricing a whole
+    supplier re-downloads the same page once per contract: a Flanders static
+    sweep pulls Mega's listing nine times, Engie's eight and Luminus's eight,
+    about 3 MB and 25 round trips that buy nothing.
+
+    Tariff cards. Where two products share one document the sweep parsed it
+    twice, and the parse is the expensive half, not the download: a Bolt
+    variable card is 2,4 MB and takes about 38 s through pdfplumber on a
+    Raspberry Pi against well under a second to fetch. Bolt sells each of its
+    four variable cards on both settlements, so a Flanders sweep was spending
+    four of those parses on text it already held, against a 120 s budget.
+
+    What is memoised is the EXTRACTED TEXT, not the bytes. It is the parse
+    that is worth skipping, and a card's text is a few kB against a couple of
+    MB of payload, so a whole sweep's worth stays small enough to hold.
 
     ``store`` is passed in rather than created here so a caller can share one
     memo across several tasks - an ``asyncio.Task`` copies the context at
     creation, which copies the reference and not the dict, so every candidate
     in a sweep sees what the first one fetched.
 
-    Deliberately not a TTL cache inside fetch_text: the coordinator and the
+    Deliberately not a TTL cache inside the fetchers: the coordinator and the
     one-off quote both want a live read, and the failure mode of guessing a
     TTL for them is a stale card nobody asked for.
     """

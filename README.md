@@ -519,7 +519,10 @@ opens a three-option menu:
   downloaded. On a Raspberry Pi the 50-candidate Flanders static cell prices
   about 15 rows in the first ten seconds, 34 in the first minute and 39 within
   the two-minute budget, the tail being Bolt and TotalEnergies at 13 to 45
-  seconds a card.
+  seconds a card. Where two products share one tariff card the sweep reads it
+  once and reuses the text, which matters most on Bolt: each of its four
+  variable cards is sold on both settlements, and the parse, not the download,
+  is what the budget is spent on.
   Rows that could not be priced are **shown, not dropped**, saying whether the
   card was unreadable or the supplier unreachable, because a missing row reads
   as *not competitive* and that is the one thing it does not mean. Suppliers

@@ -4924,7 +4924,8 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # Every spot cell gained three residential and three professional rows
         # when Bolt's Plenty, Online and Plenty Online cards each got their
         # dynamic settlement, in all three regions. Cheap to re-cost: a
-        # sibling reads the same document as the variable contract beside it.
+        # sibling reads the same document as the variable contract beside it,
+        # so the pair is one download and one parse.
         ("flanders", "spot", False): 32,
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
@@ -6027,6 +6028,69 @@ async def test_text_memo_collapses_repeat_listing_fetches() -> None:
     calls.clear()
     await _pdf.fetch_text(session, "https://x/listing")  # type: ignore[arg-type]
     assert calls == ["https://x/listing"], "the memo leaked past its block"
+
+
+async def test_text_memo_spares_the_second_parse_of_a_shared_card() -> None:
+    """Two products off one document parsed it twice, and on a tariff card the
+    parse is the expensive half: a Bolt variable card is 2,4 MB and takes about
+    38 s through pdfplumber on a Pi against well under a second to fetch. Bolt
+    sells each of its four variable cards on both settlements, so a sweep was
+    spending four of those on text it already held.
+
+    Asserts on the EXTRACTION, not just the download: memoising the bytes and
+    re-parsing them would leave the cost exactly where it was."""
+    from custom_components.be_electricity_prices.providers import _pdf
+
+    fetches: list[str] = []
+    renders: list[str] = []
+
+    async def _bytes(_session: object, url: str, **_kw: object) -> bytes:
+        fetches.append(url)
+        return b"%PDF-1.4 payload"
+
+    def _layout(payload: bytes) -> str:
+        renders.append("layout")
+        return "LAYOUT"
+
+    def _aligned(payload: bytes, _pages: int, threshold: float) -> str:
+        renders.append(f"aligned:{threshold}")
+        return f"ALIGNED{threshold}"
+
+    with (
+        patch.object(_pdf, "_fetch_validated_pdf_bytes", _bytes),
+        patch.object(_pdf, "extract_pdf_text_layout", _layout),
+        patch.object(_pdf, "extract_pdf_text_aligned", _aligned),
+    ):
+        url = "https://x/pricelists/var/plenty_res_el_fr_13.pdf"
+        # Unmemoised: both halves run every time, which is what the
+        # coordinator and the one-off quote still want.
+        for _ in range(2):
+            await _pdf.fetch_pdf_text_layout(None, url)  # type: ignore[arg-type]
+        assert len(fetches) == 2
+        assert renders == ["layout", "layout"]
+
+        fetches.clear()
+        renders.clear()
+        store: dict[str, str] = {}
+        with _pdf.memoise_text_fetches(store):
+            # The variable contract and its dynamic sibling, same document.
+            first = await _pdf.fetch_pdf_text_layout(None, url)  # type: ignore[arg-type]
+            second = await _pdf.fetch_pdf_text_layout(None, url)  # type: ignore[arg-type]
+        assert first == second == "LAYOUT"
+        assert fetches == [url]
+        assert renders == ["layout"], "the card was parsed twice inside the memo"
+
+        # A different extraction of the same URL is a different string, so it
+        # must not be served from the layout entry.
+        fetches.clear()
+        renders.clear()
+        with _pdf.memoise_text_fetches(store):
+            aligned = await _pdf.fetch_pdf_text_aligned(None, url, 1.0)  # type: ignore[arg-type]
+            again = await _pdf.fetch_pdf_text_aligned(None, url, 1.0)  # type: ignore[arg-type]
+            other = await _pdf.fetch_pdf_text_aligned(None, url, 0.0)  # type: ignore[arg-type]
+        assert aligned == again == "ALIGNED1.0"
+        assert other == "ALIGNED0.0"
+        assert renders == ["aligned:1.0", "aligned:0.0"]
 
 
 async def test_text_memo_is_shared_across_the_sweep_s_tasks() -> None:
