@@ -5065,6 +5065,41 @@ def test_contract_group_is_empty_for_a_contract_that_left_the_catalogue() -> Non
     assert _contract_group("engie", "engie_empower_flextime") == "slot"
     assert _contract_group("eneco", "a_product_eneco_withdrew") == ""
     assert _contract_group("no_such_supplier", "whatever") == ""
+    # A stale contract stays groupless whatever the stored settlement says.
+    assert (
+        _contract_group("eneco", "a_product_eneco_withdrew", quarter_hourly=True) == ""
+    )
+
+
+def test_the_settlement_decides_which_cell_the_household_is_ranked_in() -> None:
+    """The ranking only ranks within one KIND_GROUP, and on Bolt the
+    settlement is what puts the household in a group.
+
+    Read off the registered kind alone, a quarter-hourly Bolt household landed
+    in the static cell: their own row is priced from the coordinator and so is
+    a real quarter-hourly bill, measured against a table of monthly contracts
+    and none of the dynamic ones they could actually move to.
+    """
+    from custom_components.be_electricity_prices.flow_schemas import (
+        _contract_group,
+        _sweep_candidates,
+    )
+    from custom_components.be_electricity_prices.providers import effective_kind
+
+    assert _contract_group("bolt", "bolt_plenty") == "static"
+    assert _contract_group("bolt", "bolt_plenty", quarter_hourly=True) == "spot"
+    # Frank settles on both sides as a dynamic contract, so its answer moves
+    # the grid and not the cell.
+    assert _contract_group("frank", "frank_dynamic") == "spot"
+    assert _contract_group("frank", "frank_dynamic", quarter_hourly=True) == "spot"
+
+    # And the cell it now lands in is one it can actually be ranked against.
+    cell = _sweep_candidates("flanders", "spot", False, "bolt_plenty")
+    assert cell, "the spot cell must not be empty for a quarter-hourly household"
+    assert all(
+        effective_kind(sup, c.id, quarter_hourly=q) in ("dynamic", "spot_monthly")
+        for sup, c, q in cell
+    )
 
 
 async def _compare_placeholders(

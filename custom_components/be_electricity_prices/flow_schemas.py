@@ -416,7 +416,9 @@ def _sweep_candidates(
     return out
 
 
-def _contract_group(supplier_id: str, contract_id: str) -> str:
+def _contract_group(
+    supplier_id: str, contract_id: str, *, quarter_hourly: bool = False
+) -> str:
     """The household's own kind group, or '' when it cannot be resolved.
 
     ``_contract_kind`` returns '' for an entry whose stored contract has left
@@ -431,9 +433,15 @@ def _contract_group(supplier_id: str, contract_id: str) -> str:
     ``_contract_kind`` would change what every other caller sees for an entry
     whose supplier is gone, and this is the only caller that needs an answer
     rather than an exception.
+
+    ``quarter_hourly`` is the household's settlement answer, and it decides
+    the group as much as the contract does: a Bolt variable card is ``static``
+    settled monthly and ``spot`` settled per quarter-hour. The ranking only
+    ranks within one group, so reading the registered kind alone put a
+    quarter-hourly household in a cell of monthly contracts.
     """
     try:
-        kind = _contract_kind(supplier_id, contract_id)
+        kind = _contract_kind(supplier_id, contract_id, quarter_hourly=quarter_hourly)
     except ExtractorError:
         return ""
     return KIND_GROUP.get(kind, "")

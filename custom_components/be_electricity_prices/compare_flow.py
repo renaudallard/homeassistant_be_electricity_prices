@@ -943,7 +943,17 @@ class _SweepEngine:
         """
         current = self.config_entry.data
         region = current[CONF_REGION]
-        group = _contract_group(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        # Through the household's own settlement, not the registered kind: a
+        # Bolt variable card is a static contract settled monthly and a spot
+        # one settled per quarter-hour, and the ranking only ranks within one
+        # group. Read off the registry alone it put a quarter-hourly household
+        # in the static cell, measuring their bill against 52 monthly
+        # contracts and none of the dynamic ones they could actually move to.
+        group = _contract_group(
+            current[CONF_SUPPLIER],
+            current[CONF_CONTRACT],
+            quarter_hourly=_settlement_of(current),
+        )
         if not group:
             # The entry's contract has left the catalogue, so there is no
             # group to rank it within. Distinct from an empty cell: nothing is
