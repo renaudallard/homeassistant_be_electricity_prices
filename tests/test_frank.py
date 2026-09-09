@@ -36,6 +36,7 @@ from custom_components.be_electricity_prices import snapshot_store
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import (
     EXTRACTORS,
+    effective_kind,
     offers_quarter_hourly,
 )
 from custom_components.be_electricity_prices.providers.base import (
@@ -452,17 +453,18 @@ def test_every_tier_offers_the_quarter_hourly_choice() -> None:
         assert offers_quarter_hourly("frank", c.id), c.id
 
 
-def test_only_frank_offers_the_quarter_hourly_choice() -> None:
-    """Nobody else is left with the parameter unexposed, and nobody else
-    gains a box they should not have.
+def test_exactly_two_suppliers_offer_the_quarter_hourly_choice() -> None:
+    """Nobody is left with the parameter unexposed, and nobody gains a box
+    they should not have.
 
-    Everything else that bills per quarter says so on the card and the parser
-    sets ``quarter_hourly`` itself (Bolt Dynamisch, Cociter, EBEM, Ecofix,
+    Frank's five dynamic tiers and Bolt's four variable cards in both
+    segments. Everything else that bills per quarter says so on the card and
+    the parser sets ``quarter_hourly`` itself (Cociter, EBEM, Ecofix,
     Ecopower, energie.be, Engie, EnergyVision, OCTA+), sells the two grids as
     two products (Energy Knights Agilior on Belpex_15 against Agilis on
-    Belpex_h), or prices per clock hour with no choice offered (Luminus,
-    Mega, TotalEnergies, Eneco). The expert custom supplier asks for the grid
-    on its own formula step instead.
+    Belpex_h), or prices per clock hour with no choice offered (Luminus, Mega,
+    TotalEnergies, Eneco). The expert custom supplier asks for the grid on its
+    own formula step instead.
     """
     flagged = {
         (sid, c.id)
@@ -470,16 +472,37 @@ def test_only_frank_offers_the_quarter_hourly_choice() -> None:
         for c in ex.contracts
         if c.quarter_hourly_option
     }
-    assert flagged == {("frank", c.id) for c in EXTRACTORS["frank"].contracts}
+    assert flagged == {("frank", c.id) for c in EXTRACTORS["frank"].contracts} | {
+        ("bolt", cid)
+        for cid in (
+            "bolt_variable",
+            "bolt_plenty",
+            "bolt_online",
+            "bolt_plenty_online",
+            "bolt_pro_variable",
+            "bolt_pro_plenty",
+            "bolt_pro_online",
+            "bolt_pro_plenty_online",
+        )
+    }
 
 
-def test_the_flag_is_only_meaningful_on_a_dynamic_contract() -> None:
-    """``resolve_settlement_grid`` can only move ``DynamicRates``, so a flag
-    on any other kind would show a box that changes nothing."""
-    for ex in EXTRACTORS.values():
+def test_the_flag_always_resolves_to_a_dynamic_kind() -> None:
+    """The box only ever means one thing downstream: this household settles
+    per quarter-hour, so the contract is billed as a dynamic one.
+
+    Frank's tiers are already dynamic and only the grid moves; Bolt's are
+    variable and the kind moves with the leg. Either way the effective kind
+    has to come out dynamic, because that is what makes the flow ask for an
+    ENTSO-E key and narrow the meter list to SMR3.
+    """
+    for sid, ex in EXTRACTORS.items():
         for c in ex.contracts:
-            if c.quarter_hourly_option:
-                assert c.kind == "dynamic", c.id
+            if not c.quarter_hourly_option:
+                continue
+            assert c.kind in ("dynamic", "variable"), c.id
+            assert effective_kind(sid, c.id, quarter_hourly=False) == c.kind, c.id
+            assert effective_kind(sid, c.id, quarter_hourly=True) == "dynamic", c.id
 
 
 def test_the_card_still_parses_to_the_hourly_default() -> None:

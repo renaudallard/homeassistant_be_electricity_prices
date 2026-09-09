@@ -1147,7 +1147,12 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v56: energie.be Variabel carries rlp_indexed with the columns blend, so its
 # Belpex_RLP resolves against the column-weighted profile rather than the plain
 # mean.
-_SNAPSHOT_SCHEMA_VERSION = 56
+# v57: Bolt's variable cards carry formula_factor / formula_base, the printed
+# Belpex coefficients its quarter-hourly settlement is billed on. A v56
+# snapshot has neither, so an entry that ticked the settlement box would keep
+# being billed the printed monthly rate until Bolt next republished, which is
+# exactly the stale-parse case this version exists for.
+_SNAPSHOT_SCHEMA_VERSION = 57
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

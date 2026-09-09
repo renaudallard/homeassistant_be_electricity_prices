@@ -35,6 +35,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import effective_kind
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.pricing import compute_breakdown
 from tests import FIXTURES, fixture_text
@@ -43,8 +44,8 @@ from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
     FixedRates,
-    InjectionRates,
     VariableRates,
+    resolve_settlement_grid,
 )
 from custom_components.be_electricity_prices.providers.bolt import parse_snapshot
 
@@ -55,11 +56,11 @@ def test_bolt_is_registered() -> None:
     contract_ids = {c.id for c in EXTRACTORS["bolt"].contracts}
     assert "bolt_fix" in contract_ids
     assert "bolt_variable" in contract_ids
-    assert "bolt_dynamic" in contract_ids
-    # Ten residential products, plus the ten professional editions. Each of
-    # the four variable cards is sold on either settlement, so each carries a
-    # dynamic sibling reading the same document.
-    assert len(contract_ids) == 20
+    # Six residential products, plus the six professional editions. The
+    # quarter-hourly settlement is NOT a product of its own: it is the same
+    # card read the other way, which the settlement box on the entry selects.
+    assert len(contract_ids) == 12
+    assert "bolt_dynamic" not in contract_ids
 
 
 def test_fix_yearly_fee_is_monthly_x_12() -> None:
@@ -136,7 +137,7 @@ def test_injection_accepts_negative_second_column() -> None:
     # is billed, but the second is a required anchor token, so the parser
     # must tolerate its minus sign instead of returning None.
     text = "Injection\nPrix mensuel 3,40 -0,43 Compteur\n"
-    inj = bolt_mod._extract_injection(text, "fixed")
+    inj = bolt_mod._extract_injection(text)
     assert inj is not None
     assert inj.current == pytest.approx(0.034)
     # This stub carries no formula table, so the figure is all there is and
@@ -323,7 +324,7 @@ def test_fetch_for_month_covers_the_whole_fix_folder() -> None:
                 )
                 assert got is not None, contract_id
             # The variable folder still has no month-addressable card.
-            for contract_id in ("bolt_variable", "bolt_plenty", "bolt_dynamic"):
+            for contract_id in ("bolt_variable", "bolt_plenty", "bolt_online"):
                 assert (
                     await bolt.fetch_for_month(
                         None,  # type: ignore[arg-type]
@@ -337,68 +338,72 @@ def test_fetch_for_month_covers_the_whole_fix_folder() -> None:
     asyncio.run(_run())
 
 
-def test_dynamic_extracts_belpex_formula() -> None:
-    """Bolt Dynamic reads the same variable card but applies the printed
-    formula to the quarter-hourly Belpex spot. The card prints EUR/MWh HTVA:
-    consumption ``Belpex * 1,1192 + 13,94``, injection ``Belpex * 0,94 - 11,33``.
-    Converted to EUR/kWh on the EUR/kWh spot, VAT-baked for energy (snapshot
-    vat_rate 0), VAT-exempt for injection."""
-    snap = parse_snapshot(
-        "bolt_dynamic", fixture_text("bolt_variable.pdf", layout=True), "wallonia"
-    )
-    assert isinstance(snap.energy, DynamicRates)
-    assert snap.energy.quarter_hourly is True
-    assert snap.energy.factor == pytest.approx(1.1192 * 1.06)
-    assert snap.energy.base == pytest.approx(13.94 / 1000.0 * 1.06)
-    # Cross-check: at the card's implied Belpex (~0.0992 EUR/kWh) the formula
-    # reproduces Bolt Variable's validated resolved rate (0.1325 EUR/kWh TVAC).
-    assert snap.energy.factor * 0.0992 + snap.energy.base == pytest.approx(
-        0.1325, abs=1e-3
-    )
-    # Injection is spot-indexed (factor/base, current None), VAT-exempt.
-    assert isinstance(snap.injection, InjectionRates)
-    assert snap.injection.current is None
-    assert snap.injection.factor == pytest.approx(0.94)
-    assert snap.injection.base == pytest.approx(-11.33 / 1000.0)
+def test_variable_card_carries_both_settlements() -> None:
+    """One card, two readings, and the parser has to produce both halves.
 
-
-def test_dynamic_injection_selected_by_factor_not_position() -> None:
-    """The dynamic injection row is the Belpex formula whose factor is < 1
-    (Bolt redistributes a fraction of the spot). Even when the card prints
-    per-meter-type consumption rows with DIFFERING factors, the parser must
-    pick the injection row, not the first consumption row that differs from
-    the first."""
-    text = (
-        "Consommation\n"
-        "Simple Belpex * 1,10 + 13,94\n"
-        "Jour Belpex * 1,12 + 13,94\n"
-        "Nuit Belpex * 1,11 + 13,94\n"
-        "Injection\n"
-        "Injection nuit Belpex * 0,94 - 11,33\n"
-    )
-    inj = bolt_mod._extract_injection(text, "dynamic")
-    assert inj is not None
-    assert inj.current is None
-    assert inj.factor == pytest.approx(0.94)
-    assert inj.base == pytest.approx(-11.33 / 1000.0)
-
-
-def test_variable_energy_unchanged_by_dynamic_addition() -> None:
-    """Adding the dynamic contract must not change how the variable card
-    prices its resolved monthly ENERGY rate.
-
-    This used to assert that the variable card's INJECTION carried no
-    factor/base either. That was never what the card said - the same Belpex
-    formula table sits on the variable card as on the dynamic one - so the
-    assertion pinned the defect rather than the intent. The energy half is
-    the part this test exists for.
+    The printed Prix mensuel is what a household settling against the
+    RLP-weighted month is billed; the coefficients beside it are the same
+    formula read per quarter-hour, which is the other settlement Bolt sells on
+    the same contract. The card prints EUR/MWh HTVA ("Belpex * 1,1192 +
+    13,94"), converted here to the EUR/kWh basis applied against the EUR/kWh
+    spot and VAT-baked, since the snapshot's vat_rate is 0.
     """
     snap = parse_snapshot(
         "bolt_variable", fixture_text("bolt_variable.pdf", layout=True), "wallonia"
     )
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.current == pytest.approx(0.1325)
-    assert snap.energy.formula_factor is None
+    factor, base = snap.energy.formula_factor, snap.energy.formula_base
+    assert factor is not None and base is not None
+    assert factor == pytest.approx(1.1192 * 1.06)
+    assert base == pytest.approx(13.94 / 1000.0 * 1.06)
+    # Cross-check the two readings against each other: at the card's implied
+    # Belpex (~0.0992 EUR/kWh) the formula reproduces the printed rate.
+    assert factor * 0.0992 + base == pytest.approx(0.1325, abs=1e-3)
+
+
+def test_ticking_the_settlement_box_yields_the_dynamic_leg() -> None:
+    """What the retired bolt_dynamic contract used to be, now reached through
+    the entry.
+
+    Same coefficients, same standing charge, same card: only the index the
+    formula reads changes, which is exactly what Bolt's own clause says.
+    """
+    snap = parse_snapshot(
+        "bolt_variable", fixture_text("bolt_variable.pdf", layout=True), "wallonia"
+    )
+    moved = resolve_settlement_grid(snap, quarter_hourly=True)
+    assert isinstance(moved.energy, DynamicRates)
+    assert moved.energy.quarter_hourly is True
+    assert moved.energy.factor == pytest.approx(1.1192 * 1.06)
+    assert moved.energy.base == pytest.approx(13.94 / 1000.0 * 1.06)
+    assert moved.energy.yearly_fixed_fee == snap.energy.yearly_fixed_fee
+    # Injection does not move with it: the card bills the feed-in per
+    # quarter-hour on either settlement, so both readings share this leg.
+    assert moved.injection == snap.injection
+    assert moved.injection is not None
+    assert moved.injection.factor == pytest.approx(0.94)
+
+
+def test_injection_is_read_the_same_way_on_either_settlement() -> None:
+    """The injection row is the Belpex formula whose factor is < 1 (Bolt
+    redistributes a fraction of the spot). Even when the card prints
+    per-meter-type consumption rows with DIFFERING factors, the parser must
+    pick the injection row, not the first consumption row that differs from
+    the first."""
+    text = (
+        "Injection\n"
+        "Prix mensuel 3,40 -0,43 Compteur\n"
+        "Simple Belpex * 1,10 + 13,94\n"
+        "Jour Belpex * 1,12 + 13,94\n"
+        "Nuit Belpex * 1,11 + 13,94\n"
+        "Injection nuit Belpex * 0,94 - 11,33\n"
+    )
+    inj = bolt_mod._extract_injection(text)
+    assert inj is not None
+    assert inj.factor == pytest.approx(0.94)
+    assert inj.base == pytest.approx(-11.33 / 1000.0)
+    assert inj.slot_indexed is True
 
 
 def test_publication_month_tolerates_a_misspelled_accent() -> None:
@@ -425,7 +430,8 @@ def test_pro_contracts_are_registered_and_flagged() -> None:
     contracts = {c.id: c for c in EXTRACTORS["bolt"].contracts}
     assert contracts["bolt_pro_variable"].professional is True
     assert contracts["bolt_variable"].professional is False
-    assert "bolt_pro_dynamic" in contracts
+    assert contracts["bolt_pro_variable"].quarter_hourly_option is True
+    assert contracts["bolt_pro_fix"].quarter_hourly_option is False
 
 
 def test_pro_document_url_swaps_the_segment() -> None:
@@ -631,30 +637,34 @@ def test_pro_inline_bihourly_row_is_not_read_as_exclusive_night() -> None:
     assert snap.energy.exclusive_night == pytest.approx(0.1153)
 
 
-def test_pro_dynamic_formula_is_not_vat_scaled() -> None:
+def test_pro_formula_is_not_vat_scaled() -> None:
     """The professional card drops the "N% TVA" phrase the multiplier
     reads. Falling back to the residential 6% default would scale the
     formula on a card that is already ex-VAT, and vat_rate would then
     scale it again."""
     snap = parse_snapshot(
-        "bolt_pro_dynamic",
+        "bolt_pro_variable",
         fixture_text("bolt_pro_variable.pdf", layout=True),
         "flanders",
     )
-    assert isinstance(snap.energy, DynamicRates)
+    assert isinstance(snap.energy, VariableRates)
     # Card formula: 1,1192 x Belpex + 15,10 EUR/MWh HTVA.
-    assert snap.energy.factor == pytest.approx(1.1192)
-    assert snap.energy.base == pytest.approx(0.01510)
+    assert snap.energy.formula_factor == pytest.approx(1.1192)
+    assert snap.energy.formula_base == pytest.approx(0.01510)
+    # And it survives the move onto the quarter-hourly grid unscaled.
+    moved = resolve_settlement_grid(snap, quarter_hourly=True)
+    assert isinstance(moved.energy, DynamicRates)
+    assert moved.energy.factor == pytest.approx(1.1192)
 
 
 def test_pro_card_without_htva_is_refused() -> None:
     from custom_components.be_electricity_prices.providers.bolt import (
-        _extract_dynamic_energy,
+        _consumption_formula,
     )
 
-    text = fixture_text("bolt_pro_variable.pdf", layout=True).replace("HTVA", "TTC")
+    text = fixture_text("bolt_pro_variable.pdf", layout=True)
     with pytest.raises(ExtractorError, match="HTVA"):
-        _extract_dynamic_energy(text.replace(" ", "\n"), 0.0, professional=True)
+        _consumption_formula(text.replace("HTVA", "TTC"), professional=True)
 
 
 def test_pro_fixed_card_still_parses() -> None:
@@ -1096,53 +1106,54 @@ def test_a_dashed_excise_row_still_raises() -> None:
         bolt_mod._extract_taxes(dashed_excise, "wallonia")
 
 
-def test_every_variable_card_has_a_dynamic_sibling() -> None:
+def test_every_variable_card_offers_the_settlement_choice() -> None:
     """All four variable cards print the same facturation dynamique clause, so
-    all four are sold on either settlement.
+    all four are sold on either settlement, in both segments.
 
-    Only the `bolt` slug had a dynamic contract, which left a Plenty Online
-    household with nothing to pick but the variable one, or the wrong card:
-    Bolt Dynamisch reads `Belpex * 1,168 + 16,90` at 8,99 EUR/month against
-    Plenty Online's `Belpex * 1,145 + 16,45` at 0,99, about 106 EUR/yr apart
-    at 3500 kWh.
+    The fixed cards are not: a fixed price has no formula to settle. Pinned
+    because the box is what makes the quarter-hourly reading reachable at all,
+    and a card that lost the flag would silently stop offering it.
     """
-    by_kind: dict[tuple[str, str], set[str]] = {}
     for c in bolt_mod._CONTRACTS:
-        if c.folder != "var":
-            continue
-        by_kind.setdefault((c.slug, c.segment), set()).add(c.kind)
-    assert by_kind, "no variable-folder contracts found"
-    for key, kinds in by_kind.items():
-        assert kinds == {"variable", "dynamic"}, key
+        assert c.settlement is (c.folder == "var"), c.contract_id
+        assert c.kind == ("variable" if c.folder == "var" else "fixed"), c.contract_id
 
 
-def test_a_dynamic_sibling_reads_its_own_slug_not_the_base_card() -> None:
-    """The pair shares one document, and it has to be the sibling's own: the
-    four cards carry different coefficients and different standing charges,
-    so pointing a dynamic contract at var/bolt would quietly price every
-    Plenty and Online household on the base product."""
-    for var_id, dyn_id in (
-        ("bolt_variable", "bolt_dynamic"),
-        ("bolt_plenty", "bolt_plenty_dynamic"),
-        ("bolt_online", "bolt_online_dynamic"),
-        ("bolt_plenty_online", "bolt_plenty_online_dynamic"),
-        ("bolt_pro_plenty", "bolt_pro_plenty_dynamic"),
-    ):
-        variable = bolt_mod._CONTRACTS_BY_ID[var_id]
-        dynamic = bolt_mod._CONTRACTS_BY_ID[dyn_id]
-        assert bolt_mod._document_url(dynamic) == bolt_mod._document_url(variable), (
-            dyn_id
+def test_the_settlement_answer_moves_the_contract_kind() -> None:
+    """Bolt's two settlements are not one rate on two grids: variable resolves
+    the printed formula against the RLP-weighted month and dynamic against the
+    quarter's own Belpex, which are different rate kinds.
+
+    That is why the kind has to follow the entry rather than sit in the
+    registry, and why the settlement step runs before everything that reads
+    it (the meter list, the mandatory ENTSO-E key, the signing-rate boxes and
+    the ranking cell).
+    """
+    assert effective_kind("bolt", "bolt_plenty") == "variable"
+    assert effective_kind("bolt", "bolt_plenty", quarter_hourly=True) == "dynamic"
+    # A fixed card offers no choice, so a stray answer cannot move it.
+    assert effective_kind("bolt", "bolt_fix", quarter_hourly=True) == "fixed"
+
+
+def test_each_card_keeps_its_own_coefficients_and_standing_charge() -> None:
+    """The four cards are not interchangeable, which is what made the missing
+    settlement a mis-price rather than a missing label: Plenty Online is
+    ``Belpex * 1,145 + 16,45`` at 0,99 EUR/month against the base card's
+    ``1,168 + 16,90`` at 8,99, about 106 EUR/yr apart at 3500 kWh.
+
+    Pinned on the document each contract resolves to, since sharing one card
+    across the four slugs is the way that mistake would come back.
+    """
+    urls = {
+        cid: bolt_mod._document_url(bolt_mod._CONTRACTS_BY_ID[cid], suffix="13")
+        for cid in (
+            "bolt_variable",
+            "bolt_plenty",
+            "bolt_online",
+            "bolt_plenty_online",
         )
-
-
-def test_a_dynamic_sibling_parses_its_own_cards_coefficients() -> None:
-    """The dynamic branch is card-agnostic, so the sibling needs no parser of
-    its own; this pins that the registry entry actually reaches its card."""
-    snap = parse_snapshot(
-        "bolt_plenty_dynamic",
-        fixture_text("bolt_variable.pdf", layout=True),
-        "wallonia",
-    )
-    assert isinstance(snap.energy, DynamicRates)
-    assert snap.energy.quarter_hourly is True
-    assert snap.energy.factor == pytest.approx(1.1192 * 1.06)
+    }
+    assert len(set(urls.values())) == 4, urls
+    for cid, url in urls.items():
+        slug = bolt_mod._CONTRACTS_BY_ID[cid].slug
+        assert url.endswith(f"/var/{slug}_res_el_fr_13.pdf"), cid

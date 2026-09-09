@@ -31,8 +31,8 @@ Related docs:
 | `BePricesConfigFlow` | `_WizardStepsMixin, ConfigFlow` | Install-time flow; entry step `async_step_user`, finalizes with `async_create_entry` (`config_flow.py:730`) |
 | `BePricesOptionsFlow` | `_WizardStepsMixin, OptionsFlow` | Post-install; menu -> `edit` (re-runs the chain pre-filled) or `compare` (throwaway quote) (`config_flow.py:755`) |
 
-Both flows walk the *same* chain: `supplier/region -> contract -> (signed_rate) ->
-dso -> meter ->
+Both flows walk the *same* chain: `supplier/region -> contract -> (settlement) ->
+(signed_rate) -> dso -> meter ->
 (dso_tariff_mode) -> (api_key) -> (custom_energy) -> (capacity) ->
 (connection_power) -> solar -> (injection_api_key) -> (custom_injection) ->
 (custom_dso) -> (custom_tax) -> meters`. The four `custom_*` steps run only for
@@ -58,7 +58,8 @@ the "Shown when" column gives the gate.
 | `contract` | `async_step_contract` (`config_flow.py:201`) | Contract (region-filtered), optional start / end date | `CONF_CONTRACT`, `CONF_CONTRACT_START_DATE`, `CONF_CONTRACT_END_DATE` | Always. A supplier/region mismatch is now caught on the step where BOTH are chosen (`_region_mismatch_error`) and re-shows that form with `supplier_region_unavailable` on the supplier field, instead of aborting a step later and discarding every other edit made in the same options run; rejects a future start or an end not after the start |
 | `signed_rate` | `async_step_signed_rate` (`config_flow.py:261`) | The rate actually signed at: single / peak / offpeak / exclusive night, or spot factor / base, plus the yearly fee | The 6 `CONF_MANUAL_*` keys (`_MANUAL_RATE_KEYS`) | `_needs_manual_rate` true (`config_flow.py:233`): a start date is set on a fixed, dynamic or spot-monthly contract of a non-custom supplier (the two spot-priced kinds sign a coefficient pair, so they get the factor / base boxes; fixed gets the rate boxes). Offered whether or not the supplier archives past cards, because what is typed wins over the archived card |
 | `dso` | `async_step_dso` (`config_flow.py:278`) | Distribution operator | `CONF_DSO` | Always |
-| `meter` | `async_step_meter` (`config_flow.py:289`) | Meter type, plus the quarter-hour settlement box | `CONF_METER`, `CONF_QUARTER_HOURLY` | Always; option list narrows by contract kind, and the box appears only on a contract whose supplier offers the choice |
+| `settlement` | `async_step_settlement` (`config_flow.py`) | Which settlement this household is on | `CONF_QUARTER_HOURLY` | Only on a contract whose supplier sells both (`Contract.quarter_hourly_option`); runs directly after `contract` |
+| `meter` | `async_step_meter` (`config_flow.py:289`) | Meter type | `CONF_METER` | Always; option list narrows by the EFFECTIVE contract kind, which the settlement step may have moved |
 | `dso_tariff_mode` | `async_step_dso_tariff_mode` (`config_flow.py:552`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia AND the contract is not `tou_impact` (`config_flow.py:552`) |
 | `api_key` | `async_step_api_key` (`config_flow.py:395`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
 | `custom_energy` | `async_step_custom_energy` | Commodity formula (mode-dependent fields) | `CONF_CUSTOM_ENERGY_*`, `CONF_CUSTOM_YEARLY_FIXED_FEE` | Custom supplier only, after the energy/api-key step. The peak / off-peak energy boxes carry **no default** (`_add_custom_num(..., fallback=True)`): the pricing engine falls back to the single rate when they are absent, and a `vol.Optional` default is submitted verbatim when the user leaves the box alone, which wrote 0,00 into the entry and billed zero. They are shown for **both** `bi` and `dynamic` meters, matching `bi_capable` in `pricing.py:291`; gating on `bi` alone billed a fixed contract on a smart meter at the single rate for all 24 hours |
@@ -174,6 +175,36 @@ keys are canonical and stored verbatim in `CONF_DSO`; `const.py:145` warns they 
 step, a stored value is only defaulted when it is still a valid slug for the region
 (`config_flow.py:440`).
 
+### `settlement`: which settlement this household is on
+
+Schema `_settlement_schema` (`flow_schemas.py`), shown only when the chosen contract's
+registry entry sets `quarter_hourly_option` (`offers_quarter_hourly`,
+`providers/__init__.py`). Two suppliers sell one card on both settlements:
+
+- **Frank Energie** prices per clock hour and its app moves the account onto the
+  15-minute grid from the start of any month, on the same coefficients. Both sides are
+  `kind="dynamic"`, so only `DynamicRates.quarter_hourly` moves.
+- **Bolt** settles the same printed `Belpex * factor + base` formula either against the
+  RLP-weighted month or per quarter-hour. Those are different `EnergyRates` kinds, so
+  the CONTRACT KIND moves with the answer (`effective_kind`).
+
+That second case is why this is its own step, and why it sits directly after `contract`.
+It cannot live on the contract step, whose schema is built before the contract it depends
+on is picked; it cannot live on the meter step, because on Bolt the answer decides what
+that step may offer; and it has to precede `signed_rate`, which offers a coefficient pair
+for a dynamic settlement and per-meter rates for a monthly one. The mandatory ENTSO-E key
+(`_after_dso_tariff_mode`) and the ranking page's `KIND_GROUP` cell read the same kind.
+
+`resolve_settlement_grid` applies the answer beside the VAT treatment and the excise band,
+which puts it on every path that produces a snapshot and means unticking the box takes
+effect without a refetch.
+
+Answering leaves the entry, so `_after_contract` also has to un-answer: a contract that
+does not offer the choice pops `CONF_QUARTER_HOURLY`, exactly as `_ask_professional` pops
+the VAT treatment. Left behind, a stored `True` sits inert on the new card and comes back
+into force the day the user switches to a supplier that does offer the choice, for a
+reason they long since forgot agreeing to.
+
 ### `meter`: type, narrowed by contract kind
 
 Schema `_meter_schema` (`flow_schemas.py:896`). The key rule (`flow_schemas.py:896`):
@@ -192,20 +223,10 @@ registry and returns `""` when the stored contract is no longer in the catalogue
 so a stale OptionsFlow entry still renders the meter step with a sensible default
 rather than raising.
 
-The step also carries the **Bill per quarter-hour** box, shown only when the chosen
-contract's registry entry sets `quarter_hourly_option` (`offers_quarter_hourly`,
-`providers/__init__.py`). Frank Energie is the only supplier that offers it: its
-cards price per clock hour and its app moves the account onto the 15-minute grid
-from the start of any month, on the same coefficients, so the card cannot say which
-side a household is on. `resolve_settlement_grid` applies the answer beside the VAT
-treatment and the excise band, which puts it on every path that produces a snapshot
-and means unticking the box takes effect without a refetch.
-
-Answering leaves the entry, so the step also has to un-answer: a contract that does
-not offer the choice pops `CONF_QUARTER_HOURLY` on submit, exactly as
-`_ask_professional` pops the VAT treatment. Left behind, a stored `True` sits inert
-on the new card and comes back into force the day the user switches to a supplier
-that does offer the choice, for a reason they long since forgot agreeing to.
+The option list is read through the EFFECTIVE kind, not the registered one: a Bolt
+variable card settled per quarter-hour IS one of the smart-meter kinds, and offering
+it a mono meter would bill a 15-minute energy leg against the bi-horaire distribution
+split. The `settlement` step below is what answers that first.
 
 The `exclusive_night` meter is not a first-class branch of the wizard: per
 `const.py:158`, a dedicated night circuit (electric water heater, night-storage

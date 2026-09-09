@@ -119,6 +119,50 @@ def offers_quarter_hourly(supplier_id: str | None, contract_id: str | None) -> b
     return any(c.id == contract_id and c.quarter_hourly_option for c in contracts)
 
 
+def effective_kind(
+    supplier_id: str | None, contract_id: str | None, *, quarter_hourly: bool = False
+) -> str:
+    """The ``TariffKind`` this contract is billed on for this household.
+
+    The registered kind for every product that fixes its own settlement, which
+    is all but Bolt's variable cards and Frank's dynamic tiers.
+
+    Where the customer chooses, the answer moves the kind, because the two
+    settlements are not one rate on two grids for both suppliers:
+
+    * Frank is. Both sides are ``dynamic``, so this is identity and only
+      ``DynamicRates.quarter_hourly`` moves.
+    * Bolt is not. Its variable card settles the same printed formula either
+      against the RLP-weighted month (``variable``) or per quarter-hour
+      (``dynamic``), which are different ``EnergyRates`` kinds, so the kind
+      has to follow the answer.
+
+    That is what makes this a function rather than a field. Everything the
+    config flow decides before it has ever seen a card reads the kind: which
+    meters the product is sold on, whether the ENTSO-E key is mandatory, which
+    boxes the signing-rate step offers, and which cell the ranking page puts
+    the household in. All of them have to see the settlement the household
+    actually picked, which is why the flow asks for it directly after the
+    contract and before any of those.
+
+    Returns ``""`` for a contract the registry does not know, exactly as
+    ``_contract_kind`` did, so a stale OptionsFlow entry still renders.
+    """
+    if not supplier_id or not contract_id:
+        return ""
+    try:
+        contracts = get(supplier_id).contracts
+    except ExtractorError:
+        return ""
+    for c in contracts:
+        if c.id != contract_id:
+            continue
+        if quarter_hourly and c.quarter_hourly_option:
+            return "dynamic"
+        return c.kind
+    return ""
+
+
 __all__ = [
     "Contract",
     "DsoOverlay",
@@ -133,6 +177,7 @@ __all__ = [
     "TaxOverlay",
     "VariableRates",
     "all_extractors",
+    "effective_kind",
     "offers_quarter_hourly",
     "get",
 ]

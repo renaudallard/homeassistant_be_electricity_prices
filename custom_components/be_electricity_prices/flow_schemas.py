@@ -169,7 +169,7 @@ from .const import (
     VREG_CAPACITY_FLOOR_KW,
 )
 from .providers import get as get_extractor
-from .providers import offers_quarter_hourly
+from .providers import effective_kind
 
 
 def _supplier_options(
@@ -238,18 +238,25 @@ def _region_dso_slugs(region: str) -> tuple[str, ...]:
     return tuple(slug for slug, _ in DSO_CHOICES.get(region, ()))
 
 
-def _contract_kind(supplier_id: str, contract_id: str) -> str:
+def _contract_kind(
+    supplier_id: str, contract_id: str, *, quarter_hourly: bool = False
+) -> str:
     """Return the TariffKind for a contract, or '' if it can't be resolved.
 
     OptionsFlow can re-open a stale entry whose stored ``contract`` is
     no longer in the supplier's catalogue (supplier dropped a product,
     or the catalogue moved). Returning empty instead of raising lets
     the meter step still render with a sensible default.
+
+    ``quarter_hourly`` is the household's settlement answer, and it MOVES the
+    kind on a product sold on both (Bolt's variable cards settle either
+    against the RLP-weighted month or per quarter-hour, which are different
+    rate kinds). Defaulted rather than required so every caller that asks
+    about a card in the abstract keeps the registered kind; a caller holding
+    an entry passes its answer, and a caller holding a compare TARGET passes
+    that target's, never the user's. See :func:`effective_kind`.
     """
-    for c in _contracts_for(supplier_id):
-        if c.id == contract_id:
-            return c.kind
-    return ""
+    return effective_kind(supplier_id, contract_id, quarter_hourly=quarter_hourly)
 
 
 def _contract_is_professional(supplier_id: str | None, contract_id: str | None) -> bool:
@@ -338,7 +345,7 @@ def _contract_is_month_indexed(
 
 def _sweep_candidates(
     region: str, group: str, professional: bool, own_contract: str
-) -> list[tuple[str, Contract]]:
+) -> list[tuple[str, Contract, bool]]:
     """Every contract the ranking page may quote for this household.
 
     The five conditions, and where each already existed for the 1:1 page:
@@ -361,10 +368,20 @@ def _sweep_candidates(
     baseline the household is already being quoted against, not fetched again
     as a candidate.
 
-    Returns ``(supplier_id, Contract)`` pairs, because a contract does not
-    carry its supplier and every caller needs both.
+    Returns ``(supplier_id, Contract, quarter_hourly)`` triples, because a
+    contract does not carry its supplier and a product sold on two settlements
+    is two candidates.
+
+    That expansion is what keeps the page whole. A contract the customer may
+    settle either way belongs to a different KIND GROUP on each side (Bolt's
+    variable cards are ``static`` unticked and ``spot`` ticked), and the
+    ranking only ever ranks within one group. Offering just the registered
+    settlement would hide Bolt from every dynamic household and hide its
+    quarter-hourly settlement from every static one, which is a row the page
+    used to have when the two were separate contract ids. Costs nothing to
+    fetch: the pair shares one document and the sweep now reads it once.
     """
-    out: list[tuple[str, Contract]] = []
+    out: list[tuple[str, Contract, bool]] = []
     for ext in all_extractors():
         if ext.id == SUPPLIER_CUSTOM or ext.deprecated_until is not None:
             continue
@@ -373,14 +390,29 @@ def _sweep_candidates(
                 continue
             if c.professional != professional:
                 continue
-            # Subscripted, not .get(): KIND_GROUP is total over TariffKind and
-            # a KeyError here is a new kind nobody grouped, which must fail
-            # loudly in CI rather than quietly drop every contract of it.
-            if KIND_GROUP[c.kind] != group:
-                continue
             if c.id == own_contract:
                 continue
-            out.append((ext.id, c))
+            # Expanded only where the settlement changes the KIND, which is
+            # Bolt: its variable card is a different rate kind read either
+            # way, so the two readings are two bills and belong in different
+            # cells. Frank's tiers are dynamic on both settlements, so the
+            # second candidate would be the same product priced identically
+            # (the ranking's annual figure is hourly whatever the live
+            # sensors show) and cost a duplicate row and a duplicate fetch.
+            settlements = [False]
+            if c.quarter_hourly_option and effective_kind(
+                ext.id, c.id, quarter_hourly=True
+            ) != effective_kind(ext.id, c.id):
+                settlements.append(True)
+            for quarter_hourly in settlements:
+                kind = effective_kind(ext.id, c.id, quarter_hourly=quarter_hourly)
+                # Subscripted, not .get(): KIND_GROUP is total over TariffKind
+                # and a KeyError here is a new kind nobody grouped, which must
+                # fail loudly in CI rather than quietly drop every contract of
+                # it.
+                if KIND_GROUP[kind] != group:
+                    continue
+                out.append((ext.id, c, quarter_hourly))
     return out
 
 
@@ -585,7 +617,9 @@ def _signed_rate_schema(defaults: dict[str, Any]) -> vol.Schema:
     here regardless of which one the user will pick.
     """
     kind = _contract_kind(
-        defaults.get(CONF_SUPPLIER, ""), defaults.get(CONF_CONTRACT, "")
+        defaults.get(CONF_SUPPLIER, ""),
+        defaults.get(CONF_CONTRACT, ""),
+        quarter_hourly=bool(defaults.get(CONF_QUARTER_HOURLY, False)),
     )
     fields: dict[Any, Any] = {}
     # Both spot-priced kinds sign a coefficient pair, not a rate: dynamic
@@ -904,7 +938,17 @@ def _meter_schema(
     # still billed energy by TOU slot -- two billing modes that don't
     # mix. Off-peak Impact additionally requires the user to have the
     # CWaPE Tarif réseau IMPACT subscription on the DSO side.
-    kind = _contract_kind(supplier_id, contract_id)
+    #
+    # Read through the settlement answer, not off the registry: a Bolt
+    # variable card settled per quarter-hour IS one of those contracts, and
+    # offering it a mono meter would bill a 15-minute energy leg against the
+    # bi-horaire distribution split. That is why the settlement step runs
+    # before this one.
+    kind = _contract_kind(
+        supplier_id,
+        contract_id,
+        quarter_hourly=bool(defaults.get(CONF_QUARTER_HOURLY, False)),
+    )
     if kind in SMART_METER_CONTRACT_KINDS:
         options = [METER_DYNAMIC]
         fallback = METER_DYNAMIC
@@ -913,28 +957,39 @@ def _meter_schema(
         fallback = METER_MONO
     current = defaults.get(CONF_METER) if defaults.get(CONF_METER) in options else None
     current = current or fallback
-    fields: dict[Any, Any] = {
-        vol.Required(CONF_METER, default=current): SelectSelector(
-            SelectSelectorConfig(
-                options=options,
-                mode=SelectSelectorMode.LIST,
-                translation_key="meter",
-            )
-        ),
-    }
-    # Asked beside the meter because it is the same question one level down:
-    # the meter says which registers are read, this says how often the one
-    # rate applies. Only shown where the supplier actually offers the choice
-    # (Frank Energie); every other card fixes the grid and answering here
-    # would move the bill away from what the supplier invoices.
-    if offers_quarter_hourly(supplier_id, contract_id):
-        fields[
+    return vol.Schema(
+        {
+            vol.Required(CONF_METER, default=current): SelectSelector(
+                SelectSelectorConfig(
+                    options=options,
+                    mode=SelectSelectorMode.LIST,
+                    translation_key="meter",
+                )
+            ),
+        }
+    )
+
+
+def _settlement_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """The one box of the settlement step.
+
+    Its own step, directly after the contract, rather than a field on one of
+    the steps around it. It cannot sit on the CONTRACT step, whose schema is
+    built before the user has picked the contract the question depends on, and
+    it cannot sit on the METER step, because on Bolt the answer decides what
+    that step may offer: a quarter-hourly settlement requires an SMR3 meter,
+    so the option list is narrowed by the answer. It also has to be asked
+    before the signing-rate step, which offers a coefficient pair for a
+    dynamic settlement and per-meter rates for a monthly one.
+    """
+    return vol.Schema(
+        {
             vol.Optional(
                 CONF_QUARTER_HOURLY,
                 default=bool(defaults.get(CONF_QUARTER_HOURLY, False)),
-            )
-        ] = BooleanSelector()
-    return vol.Schema(fields)
+            ): BooleanSelector()
+        }
+    )
 
 
 def _api_key_schema(defaults: dict[str, Any]) -> vol.Schema:

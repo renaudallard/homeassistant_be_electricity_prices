@@ -687,7 +687,7 @@ async def test_the_scheduled_sweep_fills_the_year_to_date_column(
         patch.object(
             _SweepEngine,
             "build_sweep",
-            return_value={"candidates": [("mega", "x")], "rows": []},
+            return_value={"candidates": [("mega", "x", False)], "rows": []},
         ),
         patch.object(_SweepEngine, "_resolve_household", AsyncMock(return_value=None)),
         patch.object(_SweepEngine, "_sweep_own_row", AsyncMock(return_value=None)),
@@ -719,7 +719,7 @@ async def test_a_failed_year_to_date_pass_keeps_the_annual_ranking(
         patch.object(
             _SweepEngine,
             "build_sweep",
-            return_value={"candidates": [("mega", "x")], "rows": []},
+            return_value={"candidates": [("mega", "x", False)], "rows": []},
         ),
         patch.object(_SweepEngine, "_resolve_household", AsyncMock(return_value=None)),
         patch.object(_SweepEngine, "_sweep_own_row", AsyncMock(return_value=None)),

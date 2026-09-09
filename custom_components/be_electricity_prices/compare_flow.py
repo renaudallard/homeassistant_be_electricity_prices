@@ -68,6 +68,7 @@ from homeassistant.helpers.selector import (
 )
 
 from .providers import all_extractors, get as get_extractor
+from .providers import offers_quarter_hourly
 from .energy_meters import memoise_meter_reads
 from .providers._pdf import memoise_text_fetches
 from .providers.base import SpotMonthlyRates, SupplierSnapshot
@@ -88,6 +89,7 @@ from .const import (
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
+    CONF_QUARTER_HOURLY,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
@@ -136,6 +138,7 @@ from .flow_schemas import (
     _contract_is_professional,
     _contract_kind,
     _contracts_for,
+    _settlement_schema,
     _sweep_candidates,
     _validate_entsoe_key,
 )
@@ -296,6 +299,32 @@ def _label_for_contract(supplier_id: str, contract_id: str) -> str:
     return contract_id
 
 
+def _settlement_of(data: Mapping[str, Any]) -> bool:
+    """The settlement answer held in one side's config data.
+
+    Gated on that side's OWN contract, so a value left behind by an earlier
+    pick, or carried in from the household when the target is a different
+    product, can never move a kind it does not belong to.
+    """
+    if not offers_quarter_hourly(data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT)):
+        return False
+    return bool(data.get(CONF_QUARTER_HOURLY, False))
+
+
+def _candidate_label(supplier_id: str, contract_id: str, quarter_hourly: bool) -> str:
+    """One ranking row's name, settlement included.
+
+    A card sold on both settlements is two rows off one document, and they are
+    two different bills. Without the marker they would render identically,
+    collide in the label -> candidate map the year-to-date pass reads back
+    through, and leave the user unable to tell which row is which.
+    """
+    label = _label_for_contract(supplier_id, contract_id)
+    if quarter_hourly:
+        label = f"{label} (quarter-hourly)"
+    return _row_label(_label_for_supplier(supplier_id), label)
+
+
 @dataclass(frozen=True)
 class _QuoteEntry:
     """Read-only stand-in for the ConfigEntry, carrying a what-if regime.
@@ -454,10 +483,14 @@ def _months_billed(start: date, today: date) -> float:
 
 
 def _quote_entry(
-    entry: ConfigEntry, regime: str, dso_mode: str | None = None
+    entry: ConfigEntry,
+    regime: str,
+    dso_mode: str | None = None,
+    *,
+    quarter_hourly: bool | None = None,
 ) -> ConfigEntry:
     """``entry`` itself when the what-if matches it, else a proxy holding
-    the overridden regime and DSO tariff mode.
+    the overridden regime, DSO tariff mode and settlement.
 
     Returning the real entry unchanged on the common path keeps every
     quote that does not use the what-if on exactly the code it ran
@@ -468,6 +501,13 @@ def _quote_entry(
     incitative one. It rides the proxy rather than a parameter for the same
     reason the regime does, and it reaches further, because the fee leg and
     the year-to-date engine both read it straight off ``entry.data``.
+
+    ``quarter_hourly`` is the TARGET's settlement, and it has to be stated
+    rather than inherited. ``_resolve_snapshot`` reads the answer off the
+    entry it is handed, so a proxy carrying the household's own would settle
+    a Bolt card per quarter-hour because the user happens to be on Frank's
+    quarter-hourly tariff. ``None`` leaves the household's answer in place,
+    which is what the own side wants.
     """
     overrides: dict[str, Any] = {}
     if regime != entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE):
@@ -476,6 +516,10 @@ def _quote_entry(
         CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE
     ):
         overrides[CONF_DSO_TARIFF_MODE] = dso_mode
+    if quarter_hourly is not None and quarter_hourly != bool(
+        entry.data.get(CONF_QUARTER_HOURLY, False)
+    ):
+        overrides[CONF_QUARTER_HOURLY] = quarter_hourly
     if not overrides:
         return entry
     # Only entry.data is ever read through this (audited across the quote,
@@ -735,11 +779,19 @@ class _SweepEngine:
                 rows.append(row if own_ytd is None else replace(row, ytd=own_ytd))
                 continue
             pair = sweep["labels"].get(row.label)
-            snap = cached.get((sweep["region"], *pair)) if pair is not None else None
+            # Keyed by the CARD, not by the settlement: the two readings of one
+            # card share a fetch, so splatting the whole candidate here builds a
+            # four-element key that matches nothing and silently skipped every
+            # row of the year-to-date pass.
+            snap = (
+                cached.get((sweep["region"], pair[0], pair[1]))
+                if pair is not None
+                else None
+            )
             if row.annual is None or pair is None or snap is None or not baseline:
                 rows.append(row)
                 continue
-            supplier, contract = pair
+            supplier, contract, quarter_hourly = pair
             # Spot-priced kinds are excluded for the same reason the
             # one-to-one page excludes them: the archive engine bills each
             # past hour at factor*spot+base and needs a historical spot for
@@ -747,7 +799,10 @@ class _SweepEngine:
             # to hold. Called without it the energy leg silently vanishes --
             # measured 33,7% low on a dynamic card -- in a column the table
             # sorts.
-            if _contract_kind(supplier, contract) in SPOT_PRICED_CONTRACT_KINDS:
+            if (
+                _contract_kind(supplier, contract, quarter_hourly=quarter_hourly)
+                in SPOT_PRICED_CONTRACT_KINDS
+            ):
                 rows.append(row)
                 continue
             # A static card can still carry a spot-indexed FEED-IN, which the
@@ -842,18 +897,17 @@ class _SweepEngine:
         own = await self._sweep_own_row(sweep["household"])
         if own is not None:
             rows.append(own)
-        for supplier, contract in sweep["candidates"]:
+        for supplier, contract, quarter_hourly in sweep["candidates"]:
             try:
-                rows.append(await self._sweep_one(sweep, supplier, contract))
+                rows.append(
+                    await self._sweep_one(sweep, supplier, contract, quarter_hourly)
+                )
             except Exception as err:  # noqa: BLE001 - one row, not the sweep
                 # Same rule as the dialog: a row that raised is still a row,
                 # because dropping it would read as "not competitive".
                 rows.append(
                     RankedRow(
-                        label=_row_label(
-                            _label_for_supplier(supplier),
-                            _label_for_contract(supplier, contract),
-                        ),
+                        label=_candidate_label(supplier, contract, quarter_hourly),
                         annual=None,
                         status=f"could not be priced: {err}",
                     )
@@ -912,12 +966,17 @@ class _SweepEngine:
         # broken on the label so the order is stable between opens and the
         # table does not reshuffle when a user reopens to finish it.
         candidates.sort(
-            key=lambda pair: (get_extractor(pair[0]).sweep_cost_s, pair[0], pair[1].id)
+            key=lambda cand: (
+                get_extractor(cand[0]).sweep_cost_s,
+                cand[0],
+                cand[1].id,
+                cand[2],
+            )
         )
         return {
             "region": region,
             "group": group,
-            "candidates": [(supplier, c.id) for supplier, c in candidates],
+            "candidates": [(supplier, c.id, q) for supplier, c, q in candidates],
             "index": 0,
             "rows": [],
             # One listing memo for the whole sweep; see _sweep_one.
@@ -925,10 +984,8 @@ class _SweepEngine:
             # A row carries only its rendered label, so the year-to-date pass
             # needs a way back to the contract that produced it.
             "labels": {
-                _row_label(
-                    _label_for_supplier(supplier), _label_for_contract(supplier, c.id)
-                ): (supplier, c.id)
-                for supplier, c in candidates
+                _candidate_label(supplier, c.id, q): (supplier, c.id, q)
+                for supplier, c, q in candidates
             },
         }
 
@@ -936,7 +993,7 @@ class _SweepEngine:
         self,
         coord: Any,
         *,
-        candidates: Sequence[tuple[str, str]],
+        candidates: Sequence[tuple[str, str, bool]],
         meter: str,
     ) -> _HouseholdQuote:
         """Everything a quote needs that does not depend on which contract is
@@ -1023,7 +1080,11 @@ class _SweepEngine:
         # A spot-monthly side counts: without a spot its energy leg cannot be
         # priced at all and the quote renders a bare "-" for a contract the
         # user explicitly asked about.
-        current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        current_kind = _contract_kind(
+            current[CONF_SUPPLIER],
+            current[CONF_CONTRACT],
+            quarter_hourly=_settlement_of(self.config_entry.data),
+        )
         # A Tarif Impact product is sold only on the CWaPE incitative
         # configuration: its energy carries three band rates and no
         # mono/bi structure at all, so the band schedule prices it whatever
@@ -1059,14 +1120,15 @@ class _SweepEngine:
             _contract_has_spot_injection(current[CONF_SUPPLIER], current[CONF_CONTRACT])
             or any(
                 _contract_has_spot_injection(supplier, contract)
-                for supplier, contract in candidates
+                for supplier, contract, _q in candidates
             )
         )
         need_spot = (
             current_kind in SPOT_PRICED_CONTRACT_KINDS
             or any(
-                _contract_kind(supplier, contract) in SPOT_PRICED_CONTRACT_KINDS
-                for supplier, contract in candidates
+                _contract_kind(supplier, contract, quarter_hourly=q)
+                in SPOT_PRICED_CONTRACT_KINDS
+                for supplier, contract, q in candidates
             )
             or compare_spot_injection
         )
@@ -1521,18 +1583,24 @@ class _SweepEngine:
         return RankedRow(label=label, annual=annual, is_own=True)
 
     async def _sweep_one(
-        self, sweep: dict[str, Any], supplier: str, contract: str
+        self,
+        sweep: dict[str, Any],
+        supplier: str,
+        contract: str,
+        quarter_hourly: bool = False,
     ) -> RankedRow:
-        """Fetch and price one candidate.
+        """Fetch and price one candidate on the settlement it was listed for.
 
         The sweep state is passed rather than held, so the same engine can
         price a dialog's sweep and a scheduled one without either owning it.
+
+        A card sold on both settlements arrives here twice. The fetch is
+        shared (the row cache is keyed by the card, not by the settlement) and
+        only the pricing differs, so the second row costs a dict lookup.
         """
         from .snapshot_store import _resolve_snapshot, fetch_shared
 
-        label = _row_label(
-            _label_for_supplier(supplier), _label_for_contract(supplier, contract)
-        )
+        label = _candidate_label(supplier, contract, quarter_hourly)
         region = sweep["region"]
         cached = _sweep_rows(self.hass, self.config_entry.entry_id, region)
         snap = cached.get((region, supplier, contract))
@@ -1569,7 +1637,7 @@ class _SweepEngine:
             cached[(region, supplier, contract)] = snap
 
         hh = sweep["household"]
-        kind = _contract_kind(supplier, contract)
+        kind = _contract_kind(supplier, contract, quarter_hourly=quarter_hourly)
         # The three target-side adjustments the one-to-one page makes, which a
         # ranking needs for exactly the same reasons. Left out, a sweep is a
         # second pricing path that quietly disagrees with the first.
@@ -1589,7 +1657,9 @@ class _SweepEngine:
         # follow the mode. Quoting it on the household's own mode bands the
         # energy and then bills the network off the standard columns.
         dso_mode = DSO_MODE_IMPACT if kind == "tou_impact" else hh.dso_mode
-        target_entry = _quote_entry(self.config_entry, hh.regime, dso_mode)
+        target_entry = _quote_entry(
+            self.config_entry, hh.regime, dso_mode, quarter_hourly=quarter_hourly
+        )
         resolved = _resolve_snapshot(target_entry, snap)
         if hh.dso not in resolved.dsos:
             return RankedRow(
@@ -1659,7 +1729,11 @@ class _CompareStepsMixin(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         current = self.config_entry.data
-        current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        current_kind = _contract_kind(
+            current[CONF_SUPPLIER],
+            current[CONF_CONTRACT],
+            quarter_hourly=_settlement_of(self.config_entry.data),
+        )
         own_professional = _contract_is_professional(
             current[CONF_SUPPLIER], current[CONF_CONTRACT]
         )
@@ -1692,13 +1766,17 @@ class _CompareStepsMixin(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         current = self.config_entry.data
-        current_kind = _contract_kind(current[CONF_SUPPLIER], current[CONF_CONTRACT])
+        current_kind = _contract_kind(
+            current[CONF_SUPPLIER],
+            current[CONF_CONTRACT],
+            quarter_hourly=_settlement_of(self.config_entry.data),
+        )
         own_professional = _contract_is_professional(
             current[CONF_SUPPLIER], current[CONF_CONTRACT]
         )
         if user_input is not None:
             self._compare.update(user_input)
-            return await self.async_step_compare_meter()
+            return await self._after_compare_contract()
         # The contract picker spans both static and dynamic kinds (the
         # compare flow supports cross-kind quotes) and includes the user's
         # OWN contract.
@@ -1732,6 +1810,49 @@ class _CompareStepsMixin(OptionsFlow):
             ),
         )
 
+    async def _after_compare_contract(self) -> ConfigFlowResult:
+        if offers_quarter_hourly(
+            self._compare.get(CONF_SUPPLIER), self._compare.get(CONF_CONTRACT)
+        ):
+            return await self.async_step_compare_settlement()
+        self._compare.pop(CONF_QUARTER_HOURLY, None)
+        return await self.async_step_compare_meter()
+
+    async def async_step_compare_settlement(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Which settlement to quote the TARGET on.
+
+        Asked on the target's own side, defaulted from the household's answer
+        only where their own contract offers the same choice. Reading it off
+        the entry unconditionally would quote a Bolt card per quarter-hour
+        because the user happens to be on Frank's quarter-hourly settlement,
+        which is the target-side hazard this page keeps having to relearn.
+        """
+        if user_input is not None:
+            self._compare.update(user_input)
+            return await self.async_step_compare_meter()
+        current = self.config_entry.data
+        own_answer = (
+            bool(current.get(CONF_QUARTER_HOURLY, False))
+            if offers_quarter_hourly(
+                current.get(CONF_SUPPLIER), current.get(CONF_CONTRACT)
+            )
+            else False
+        )
+        defaults = {
+            CONF_QUARTER_HOURLY: self._compare.get(CONF_QUARTER_HOURLY, own_answer)
+        }
+        return self.async_show_form(
+            step_id="compare_settlement",
+            description_placeholders={
+                "contract": _label_for_contract(
+                    self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+                )
+            },
+            data_schema=_settlement_schema(defaults),
+        )
+
     async def async_step_compare_meter(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -1748,7 +1869,9 @@ class _CompareStepsMixin(OptionsFlow):
             self._compare.update(user_input)
             return await self.async_step_compare_solar()
         other_kind = _contract_kind(
-            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+            self._compare[CONF_SUPPLIER],
+            self._compare[CONF_CONTRACT],
+            quarter_hourly=_settlement_of(self._compare),
         )
         # Dynamic, TOU and TOU-Impact contracts all require a smart
         # meter, so don't offer mono/bi for them -- matching the install
@@ -1846,7 +1969,9 @@ class _CompareStepsMixin(OptionsFlow):
         _build_compare_placeholders, which values both sides."""
         current = self.config_entry.data
         other_kind = _contract_kind(
-            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+            self._compare[CONF_SUPPLIER],
+            self._compare[CONF_CONTRACT],
+            quarter_hourly=_settlement_of(self._compare),
         )
         needs_spot = other_kind in SPOT_PRICED_CONTRACT_KINDS or (
             _effective_regime(current, self._compare) == SOLAR_REGIME_INJECTION
@@ -1979,7 +2104,13 @@ class _CompareStepsMixin(OptionsFlow):
         meter = self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
         hh = await self._engine._resolve_household(
             coord,
-            candidates=[(self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT])],
+            candidates=[
+                (
+                    self._compare[CONF_SUPPLIER],
+                    self._compare[CONF_CONTRACT],
+                    _settlement_of(self._compare),
+                )
+            ],
             meter=meter,
         )
         region = hh.region
@@ -2021,7 +2152,9 @@ class _CompareStepsMixin(OptionsFlow):
         # property of the ONE contract being quoted, and a ranking recomputes
         # them per row against the household context resolved once.
         other_kind = _contract_kind(
-            self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+            self._compare[CONF_SUPPLIER],
+            self._compare[CONF_CONTRACT],
+            quarter_hourly=_settlement_of(self._compare),
         )
         # A Tarif Impact product is sold only on the CWaPE incitative
         # configuration: its energy carries three band rates and no
@@ -2093,7 +2226,14 @@ class _CompareStepsMixin(OptionsFlow):
             # failure and no exception of its own.
             placeholders["error"] = f"could not fetch quote: {fetched.error_message}"
         else:
-            other_snap = _resolve_snapshot(quote_entry, fetched.row.snapshot)
+            other_snap = _resolve_snapshot(
+                _quote_entry(
+                    self.config_entry,
+                    regime,
+                    quarter_hourly=_settlement_of(self._compare),
+                ),
+                fetched.row.snapshot,
+            )
             if dso not in other_snap.dsos:
                 placeholders["error"] = (
                     f"{self._compare[CONF_SUPPLIER]} doesn't serve DSO {dso}"
@@ -2571,11 +2711,12 @@ class _SweepStepsMixin(_CompareStepsMixin):
         candidates = self._sweep["candidates"]
         needs_key = _effective_regime(current, {}) == SOLAR_REGIME_INJECTION and any(
             _contract_has_spot_injection(supplier, contract)
-            for supplier, contract in candidates
+            for supplier, contract, _q in candidates
         )
         needs_key = needs_key or any(
-            _contract_kind(supplier, contract) in SPOT_PRICED_CONTRACT_KINDS
-            for supplier, contract in candidates
+            _contract_kind(supplier, contract, quarter_hourly=q)
+            in SPOT_PRICED_CONTRACT_KINDS
+            for supplier, contract, q in candidates
         )
         if needs_key and not current.get(CONF_API_KEY):
             self._api_key_next_step = self.async_step_compare_all_progress
@@ -2648,13 +2789,10 @@ class _SweepStepsMixin(_CompareStepsMixin):
             except Exception as err:  # noqa: BLE001 - one row, not the sweep
                 # A row that raised is still a row: dropping it would read as
                 # "not competitive". Recorded with its reason and moved past.
-                supplier, contract = sweep["candidates"][sweep["index"]]
+                supplier, contract, quarter_hourly = sweep["candidates"][sweep["index"]]
                 sweep["rows"].append(
                     RankedRow(
-                        label=_row_label(
-                            _label_for_supplier(supplier),
-                            _label_for_contract(supplier, contract),
-                        ),
+                        label=_candidate_label(supplier, contract, quarter_hourly),
                         annual=None,
                         status=f"could not be priced: {err}",
                     )
@@ -2667,9 +2805,9 @@ class _SweepStepsMixin(_CompareStepsMixin):
         # Anything skipped on the way here could not fit and is left pending.
         sweep["skipped"] = sweep.get("skipped", 0) + (nxt - sweep["index"])
         sweep["index"] = nxt
-        supplier, contract = sweep["candidates"][sweep["index"]]
+        supplier, contract, quarter_hourly = sweep["candidates"][sweep["index"]]
         self._sweep_task = self.hass.async_create_task(
-            self._engine._sweep_one(sweep, supplier, contract),
+            self._engine._sweep_one(sweep, supplier, contract, quarter_hourly),
             f"be_electricity_prices sweep {supplier}/{contract}",
             # Not eagerly: an eager start runs the coroutine up to its first
             # await inside the HTTP request the frontend is still waiting on.
@@ -2708,7 +2846,7 @@ class _SweepStepsMixin(_CompareStepsMixin):
         sweep = self._sweep
         remaining = self._sweep_remaining_s()
         for index in range(sweep["index"], len(sweep["candidates"])):
-            supplier, _contract = sweep["candidates"][index]
+            supplier, _contract, _quarter_hourly = sweep["candidates"][index]
             if not sweep["rows"]:
                 return index
             if get_extractor(supplier).sweep_cost_s <= remaining:

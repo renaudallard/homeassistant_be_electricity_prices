@@ -2327,11 +2327,11 @@ _INJECTION_SHAPE: dict[str, str] = {
     # "spot" shape.
     "ecofix_flexy": "spp",
     "ecofix_flexy_online": "spp",
-    # Every non-dynamic Bolt card prints the quarter-hourly Belpex formula
-    # beside its illustrative figure and says the billing multiplies each
-    # quarter by that quarter's own index. Losing the formula puts the credit
-    # back on a quarterly-lagged constant that can never go negative, and 15%
-    # of Apr-Aug 2026 quarters are.
+    # Every Bolt card prints the quarter-hourly Belpex formula beside its
+    # illustrative figure and says the billing multiplies each quarter by that
+    # quarter's own index, whichever settlement the consumption side is on.
+    # Losing the formula puts the credit back on a quarterly-lagged constant
+    # that can never go negative, and 15% of Apr-Aug 2026 quarters are.
     "bolt_fix": "spot",
     "bolt_plenty_fix": "spot",
     "bolt_variable": "spot",
@@ -2777,20 +2777,35 @@ def _expect_month_indexed_registry(
 def _expect_quarter_hourly_registry(
     prefix: str, contract_id: str, energy: object
 ) -> None:
-    """A contract that offers the customer the 15-minute grid must still parse
-    to the hourly default, because that is the half the toggle assumes.
+    """A contract that offers the customer the 15-minute grid must parse to a
+    leg the entry's answer can actually move.
 
-    ``quarter_hourly_option`` says the supplier lets the household choose and
-    the card prints the hourly index; the entry's own answer flips the parsed
-    leg. If the card ever printed the quarter-hourly index in a shape the
-    parser accepted, the flag would leave a ticked box flipping a leg already
-    on that grid and an unticked one claiming the hourly grid the supplier no
-    longer sells. Contracts the harness does not know are left alone.
+    ``quarter_hourly_option`` says the supplier lets the household choose, and
+    ``resolve_settlement_grid`` reads the parsed leg to build the other half.
+    Only two shapes give it anything to work with:
+
+    * ``DynamicRates`` still on the hourly grid, which is Frank Energie. Its
+      card must keep printing the hourly index, because that is the half the
+      unticked box claims; a card that started printing the quarter-hourly one
+      would leave a ticked box flipping a leg already there and an unticked
+      one claiming a grid the supplier no longer sells.
+    * ``VariableRates`` carrying ``formula_factor``, which is Bolt. Losing
+      those coefficients silently disables the box: the leg cannot become the
+      dynamic one and the entry keeps billing the printed monthly rate.
+
+    Contracts the harness does not know are left alone.
     """
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None or energy is None:
         return
     if not bool(getattr(contract, "quarter_hourly_option", False)):
+        return
+    if type(energy).__name__ == "VariableRates":
+        _expect(
+            f"{prefix}: card still prints the coefficients the choice sits on",
+            getattr(energy, "formula_factor", None) is not None,
+            detail="no formula_factor on a contract that offers the choice",
+        )
         return
     _expect(
         f"{prefix}: card still prints the hourly index the choice sits on",

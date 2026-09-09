@@ -84,6 +84,7 @@ from .flow_schemas import (
     _meter_schema,
     _meters_schema,
     _professional_schema,
+    _settlement_schema,
     _region_mismatch_error,
     _signed_rate_schema,
     _solar_schema,
@@ -230,6 +231,43 @@ class _WizardStepsMixin:
             errors=errors,
         )
 
+    async def async_step_settlement(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask which settlement this household is on.
+
+        Its own step because of where it has to sit. The contract step cannot
+        carry it (its schema is built before the contract is picked) and the
+        meter step cannot either: on Bolt the answer decides which meters the
+        product is even sold on, and the signing-rate step in between offers a
+        coefficient pair or per-meter rates depending on it.
+        """
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self._after_settlement()
+        return self.async_show_form(
+            step_id="settlement",
+            data_schema=_settlement_schema(self._data),
+        )
+
+    async def _after_settlement(self) -> ConfigFlowResult:
+        if self._needs_manual_rate():
+            return await self.async_step_signed_rate()
+        return await self.async_step_dso()
+
+    def _quarter_hourly(self) -> bool:
+        """This entry's settlement answer, ignored where it cannot apply.
+
+        Gated on the registry flag as well as the stored value, the same pair
+        ``_resolve_snapshot`` uses, so a stored answer left over from another
+        contract never moves the kind.
+        """
+        if not offers_quarter_hourly(
+            self._data.get(CONF_SUPPLIER), self._data.get(CONF_CONTRACT)
+        ):
+            return False
+        return bool(self._data.get(CONF_QUARTER_HOURLY, False))
+
     def _needs_manual_rate(self) -> bool:
         """Offer the signing-rate override for a start date on a fixed /
         dynamic contract of a real (non-custom) supplier.
@@ -244,7 +282,11 @@ class _WizardStepsMixin:
             return False
         if not self._data.get(CONF_CONTRACT_START_DATE):
             return False
-        return _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT]) in (
+        return _contract_kind(
+            self._data[CONF_SUPPLIER],
+            self._data[CONF_CONTRACT],
+            quarter_hourly=self._quarter_hourly(),
+        ) in (
             "fixed",
             "dynamic",
             # A spot-monthly card is a coefficient pair like a dynamic one, so
@@ -254,9 +296,16 @@ class _WizardStepsMixin:
         )
 
     async def _after_contract(self) -> ConfigFlowResult:
-        if self._needs_manual_rate():
-            return await self.async_step_signed_rate()
-        return await self.async_step_dso()
+        if offers_quarter_hourly(
+            self._data.get(CONF_SUPPLIER), self._data.get(CONF_CONTRACT)
+        ):
+            return await self.async_step_settlement()
+        # The box was not asked, so an answer stored against a previous
+        # contract has to go: on a card that fixes its own settlement it is
+        # inert, and it would come back into force the day the user switched
+        # to a supplier that does offer the choice.
+        self._data.pop(CONF_QUARTER_HOURLY, None)
+        return await self._after_settlement()
 
     async def async_step_signed_rate(
         self, user_input: dict[str, Any] | None = None
@@ -291,15 +340,6 @@ class _WizardStepsMixin:
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
-            if not offers_quarter_hourly(
-                self._data.get(CONF_SUPPLIER), self._data.get(CONF_CONTRACT)
-            ):
-                # The box was not on the form, so an answer stored against a
-                # previous contract survived the edit. Drop it: on a card that
-                # fixes its own grid the setting is inert, and it would come
-                # back into force the day the user switched to a supplier that
-                # does offer the choice, for a reason long forgotten.
-                self._data.pop(CONF_QUARTER_HOURLY, None)
             return await self._ask_professional()
         return self.async_show_form(
             step_id="meter",
@@ -566,7 +606,11 @@ class _WizardStepsMixin:
         # Sibelga, Flanders bills via the capacity tariff).
         if self._data[CONF_REGION] == REGION_WALLONIA:
             if (
-                _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
+                _contract_kind(
+                    self._data[CONF_SUPPLIER],
+                    self._data[CONF_CONTRACT],
+                    quarter_hourly=self._quarter_hourly(),
+                )
                 == "tou_impact"
             ):
                 # Not a question for these products. An Impact card bands its
@@ -612,7 +656,11 @@ class _WizardStepsMixin:
         # Dynamic and spot-monthly energy both price off ENTSO-E spots, so
         # both collect the API key first.
         if (
-            _contract_kind(self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT])
+            _contract_kind(
+                self._data[CONF_SUPPLIER],
+                self._data[CONF_CONTRACT],
+                quarter_hourly=self._quarter_hourly(),
+            )
             in SPOT_PRICED_CONTRACT_KINDS
         ):
             return await self.async_step_api_key()

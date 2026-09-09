@@ -493,13 +493,13 @@ that reads the value 100x too large — and that part still holds.
   one, so a card that gains or loses its monthly formula changes what the key buys, and this
   is where that shows; a contract the harness does not know is left alone.
 
-- `_expect_quarter_hourly_registry` holds a contract carrying `quarter_hourly_option` to a
-  card that still prints the hourly index. The flag says the supplier lets the household pick
-  the grid and the card prints the hourly default, so the entry's answer is what flips the
-  parsed leg. A card that started printing the quarter-hourly index in a shape the parser
-  accepted would leave a ticked box flipping a leg already on that grid and an unticked one
-  claiming a grid the supplier no longer sells. Frank Energie is the only supplier this
-  currently covers.
+- `_expect_quarter_hourly_registry` holds a contract carrying `quarter_hourly_option` to a card
+  the entry's answer can actually move, which is two shapes. A `DynamicRates` leg must still be
+  on the hourly grid (Frank Energie): a card that started printing the quarter-hourly index in a
+  shape the parser accepted would leave a ticked box flipping a leg already there and an unticked
+  one claiming a grid the supplier no longer sells. A `VariableRates` leg must still carry
+  `formula_factor` (Bolt): losing those coefficients silently disables the box, and the entry
+  keeps billing the printed monthly rate.
 
 - `_validate_energy` (`scripts/live_check.py:2884`) dispatches on the energy dataclass type and
   bounds-checks the rate(s). Fixed/variable/TOU/Impact rates must sit in a loose plausibility band

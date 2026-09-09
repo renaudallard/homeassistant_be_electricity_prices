@@ -47,11 +47,7 @@
         "title": "Zaehlertyp",
         "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege.",
         "data": {
-          "meter": "Zaehler",
-          "quarter_hourly": "Abrechnung je Viertelstunde"
-        },
-        "data_description": {
-          "quarter_hourly": "Nur für Lieferanten, die die Wahl lassen (Frank Energie). Aus lassen für die Stundenpreise der Tarifkarte; einschalten, wenn Sie Ihr Konto auf Viertelstundenpreise umgestellt haben. Die Formel bleibt gleich, nur der gelesene Marktpreis ändert sich."
+          "meter": "Zaehler"
         }
       },
       "professional": {
@@ -196,6 +192,16 @@
           "custom_tax_energy_fund_per_month": "Energiefonds (EUR/Monat)",
           "custom_vat_rate": "MwSt.-Satz (z. B. 0.06)"
         }
+      },
+      "settlement": {
+        "title": "Abrechnung",
+        "description": "Wie Ihr Lieferant diesen Vertrag abrechnet. Aus lassen, sofern Sie die Umstellung nicht selbst verlangt haben.",
+        "data": {
+          "quarter_hourly": "Abrechnung je Viertelstunde"
+        },
+        "data_description": {
+          "quarter_hourly": "Nur sichtbar, wenn Ihr Lieferant die Wahl lässt. Frank Energie: aus für die Stundenpreise der Tarifkarte, ein, wenn Sie Ihr Konto in der App auf Viertelstundenpreise umgestellt haben. Bolt: aus für die variable Abrechnung, bei der Ihr Monat auf dem RLP-gewichteten Monatsmittel abgerechnet wird, ein für die dynamische Abrechnung, bei der jede Viertelstunde zu ihrem eigenen Belpex-Wert abgerechnet wird. Die Formel bleibt gleich, nur der gelesene Marktpreis ändert sich."
+        }
       }
     },
     "abort": {
@@ -330,11 +336,7 @@
         "title": "Zaehlertyp",
         "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege.",
         "data": {
-          "meter": "Zaehler",
-          "quarter_hourly": "Abrechnung je Viertelstunde"
-        },
-        "data_description": {
-          "quarter_hourly": "Nur für Lieferanten, die die Wahl lassen (Frank Energie). Aus lassen für die Stundenpreise der Tarifkarte; einschalten, wenn Sie Ihr Konto auf Viertelstundenpreise umgestellt haben. Die Formel bleibt gleich, nur der gelesene Marktpreis ändert sich."
+          "meter": "Zaehler"
         }
       },
       "professional": {
@@ -481,6 +483,26 @@
         "data": {
           "with_ytd": "Auch den Jahreswert berechnen (langsamer: holt das Preisblatt jedes vergangenen Monats)",
           "refresh": "Jetzt neu berechnen (dauert etwa zwei Minuten)"
+        }
+      },
+      "settlement": {
+        "title": "Abrechnung",
+        "description": "Wie Ihr Lieferant diesen Vertrag abrechnet. Aus lassen, sofern Sie die Umstellung nicht selbst verlangt haben.",
+        "data": {
+          "quarter_hourly": "Abrechnung je Viertelstunde"
+        },
+        "data_description": {
+          "quarter_hourly": "Nur sichtbar, wenn Ihr Lieferant die Wahl lässt. Frank Energie: aus für die Stundenpreise der Tarifkarte, ein, wenn Sie Ihr Konto in der App auf Viertelstundenpreise umgestellt haben. Bolt: aus für die variable Abrechnung, bei der Ihr Monat auf dem RLP-gewichteten Monatsmittel abgerechnet wird, ein für die dynamische Abrechnung, bei der jede Viertelstunde zu ihrem eigenen Belpex-Wert abgerechnet wird. Die Formel bleibt gleich, nur der gelesene Marktpreis ändert sich."
+        }
+      },
+      "compare_settlement": {
+        "title": "Abzurechnende Variante",
+        "description": "Auf welcher Abrechnung {contract} berechnet wird.",
+        "data": {
+          "quarter_hourly": "Abrechnung je Viertelstunde"
+        },
+        "data_description": {
+          "quarter_hourly": "Nur sichtbar, wenn Ihr Lieferant die Wahl lässt. Frank Energie: aus für die Stundenpreise der Tarifkarte, ein, wenn Sie Ihr Konto in der App auf Viertelstundenpreise umgestellt haben. Bolt: aus für die variable Abrechnung, bei der Ihr Monat auf dem RLP-gewichteten Monatsmittel abgerechnet wird, ein für die dynamische Abrechnung, bei der jede Viertelstunde zu ihrem eigenen Belpex-Wert abgerechnet wird. Die Formel bleibt gleich, nur der gelesene Marktpreis ändert sich."
         }
       }
     },

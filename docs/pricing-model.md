@@ -469,10 +469,12 @@ meter type (`providers/base.py:108-109`).
 `ValueError("dynamic tariff needs a spot price")` when `spot` is `None`
 (`pricing.py:312-315`). The spot is the ENTSO-E BE day-ahead price for the slot.
 `DynamicRates.quarter_hourly` selects whether the contract bills on the native
-15-minute grid (Bolt Dynamisch, Cociter, EBEM, Ecofix, Ecopower Dynamische
-Burgerstroom, energie.be, Energy Knights Agilior Online, EnergyVision, Engie,
-OCTA+) or the hourly-aggregated curve (Eneco, Frank default, Luminus, Mega,
-TotalEnergies); YTD billing stays hourly regardless
+15-minute grid (Cociter, EBEM, Ecofix, Ecopower Dynamische Burgerstroom,
+energie.be, Energy Knights Agilior Online, EnergyVision, Engie, OCTA+) or the
+hourly-aggregated curve (Eneco, Frank by default, Luminus, Mega, TotalEnergies).
+Bolt and Frank sell one card on both settlements, so their entries answer for
+themselves and `resolve_settlement_grid` sets the flag; YTD billing stays hourly
+regardless
 (`providers/base.py:139-159`). See [data-sources.md](data-sources.md) for how the
 curve is fetched and the grid helpers `slots_per_hour` / `slot_delta` /
 `slot_start` (`pricing.py:84-105`).

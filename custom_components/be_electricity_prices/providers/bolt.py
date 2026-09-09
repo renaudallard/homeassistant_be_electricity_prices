@@ -102,7 +102,6 @@ from .base import (
     CardNotReadableError,
     Contract,
     DsoOverlay,
-    DynamicRates,
     EnergyRates,
     ExtractorError,
     FixedRates,
@@ -163,6 +162,9 @@ class _ContractDef:
     # edition of every product at the same path with the segment
     # swapped: same layout, priced excluding VAT.
     segment: str = "res"
+    # True when the customer chooses whether this card settles per quarter-hour
+    # or against the RLP-weighted month. Every variable card, no fixed one.
+    settlement: bool = False
 
     @property
     def professional(self) -> bool:
@@ -174,27 +176,27 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     _ContractDef(
         "bolt_plenty_fix", "Bolt Plenty Fixe (1 year)", "fixed", "fix", "plenty_fix"
     ),
-    _ContractDef("bolt_variable", "Bolt Variable", "variable", "var", "bolt"),
-    # Same card + formula as its variable sibling, but the formula is applied
-    # to the live quarter-hourly Belpex spot instead of the monthly average,
-    # and the pair shares one document. Every variable card carries the
-    # choice, in the same paragraph: "Dans le cadre d'une facturation
-    # dynamique, la consommation ou l'injection enregistree est multipliee,
-    # pour chaque quart d'heure, par la valeur Belpex correspondante pour ce
-    # meme quart d'heure. En optant pour une facturation variable, nous
-    # redistribuerons la consommation ponderee RLP." Two contracts rather
-    # than one contract and a flag, because the two settlements are not one
-    # rate on two grids: variable resolves a monthly RLP-weighted mean and
-    # dynamic a per-quarter price, so they parse to different rate kinds off
-    # different parts of the card.
-    _ContractDef("bolt_dynamic", "Bolt Dynamisch", "dynamic", "var", "bolt"),
-    _ContractDef("bolt_plenty", "Bolt Plenty Variable", "variable", "var", "plenty"),
+    # Every variable card is sold on either settlement, and says so in the same
+    # paragraph: "Dans le cadre d'une facturation dynamique, la consommation ou
+    # l'injection enregistree est multipliee, pour chaque quart d'heure, par la
+    # valeur Belpex correspondante pour ce meme quart d'heure. En optant pour
+    # une facturation variable, nous redistribuerons la consommation ponderee
+    # RLP." One printed formula, two ways of settling it, and the card cannot
+    # say which one a given account is on -- so the entry answers, and
+    # ``quarter_hourly_option`` is what puts the question in the flow.
     _ContractDef(
-        "bolt_plenty_dynamic", "Bolt Plenty Dynamisch", "dynamic", "var", "plenty"
+        "bolt_variable", "Bolt Variable", "variable", "var", "bolt", settlement=True
     ),
-    _ContractDef("bolt_online", "Bolt Online", "variable", "var", "online"),
     _ContractDef(
-        "bolt_online_dynamic", "Bolt Online Dynamisch", "dynamic", "var", "online"
+        "bolt_plenty",
+        "Bolt Plenty Variable",
+        "variable",
+        "var",
+        "plenty",
+        settlement=True,
+    ),
+    _ContractDef(
+        "bolt_online", "Bolt Online", "variable", "var", "online", settlement=True
     ),
     _ContractDef(
         "bolt_plenty_online",
@@ -202,13 +204,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "variable",
         "var",
         "plenty_online",
-    ),
-    _ContractDef(
-        "bolt_plenty_online_dynamic",
-        "Bolt Plenty Online Dynamisch",
-        "dynamic",
-        "var",
-        "plenty_online",
+        settlement=True,
     ),
     # The professional editions: same paths with the segment swapped.
     _ContractDef(
@@ -229,14 +225,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "var",
         "bolt",
         segment="pro",
-    ),
-    _ContractDef(
-        "bolt_pro_dynamic",
-        "Bolt Dynamisch (pro)",
-        "dynamic",
-        "var",
-        "bolt",
-        segment="pro",
+        settlement=True,
     ),
     _ContractDef(
         "bolt_pro_plenty",
@@ -245,14 +234,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "var",
         "plenty",
         segment="pro",
-    ),
-    _ContractDef(
-        "bolt_pro_plenty_dynamic",
-        "Bolt Plenty Dynamisch (pro)",
-        "dynamic",
-        "var",
-        "plenty",
-        segment="pro",
+        settlement=True,
     ),
     _ContractDef(
         "bolt_pro_online",
@@ -261,14 +243,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "var",
         "online",
         segment="pro",
-    ),
-    _ContractDef(
-        "bolt_pro_online_dynamic",
-        "Bolt Online Dynamisch (pro)",
-        "dynamic",
-        "var",
-        "online",
-        segment="pro",
+        settlement=True,
     ),
     _ContractDef(
         "bolt_pro_plenty_online",
@@ -277,14 +252,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "var",
         "plenty_online",
         segment="pro",
-    ),
-    _ContractDef(
-        "bolt_pro_plenty_online_dynamic",
-        "Bolt Plenty Online Dynamisch (pro)",
-        "dynamic",
-        "var",
-        "plenty_online",
-        segment="pro",
+        settlement=True,
     ),
 )
 
@@ -543,7 +511,7 @@ def parse_snapshot(
 
     professional = contract.professional
     energy = _extract_energy(text, contract.kind, professional=professional)
-    injection = _extract_injection(text, contract.kind)
+    injection = _extract_injection(text)
     if professional and injection is not None:
         injection = replace(injection, vat_applies=True)
     publication_label = _extract_publication_month(text)
@@ -629,25 +597,27 @@ _BELPEX_FORMULA_RE = re.compile(
 )
 
 
-def _extract_dynamic_energy(
-    text: str, yearly_fee: float, *, professional: bool = False
-) -> DynamicRates:
-    """Bolt Dynamic: factor * quarter-hourly Belpex spot + base.
+def _consumption_formula(
+    text: str, *, professional: bool = False
+) -> tuple[float, float]:
+    """The card's consumption formula as (factor, base) in the EUR/kWh basis.
 
-    The card formula is EUR/MWh HTVA; convert to the EUR/kWh basis applied
-    against the EUR/kWh spot and bake VAT (snapshot vat_rate is 0): the factor
-    is a dimensionless ratio (* VAT), the base goes EUR/MWh -> EUR/kWh (/1000 *
-    VAT). Bills per quarter-hour, so keep the native 15-minute grid.
+    Bolt prints one tariff formula per card, ``Belpex * <factor> <sign>
+    <base>`` in EUR/MWh HTVA, and settles it either per quarter-hour or
+    against the RLP-weighted month depending on what the customer chose. Both
+    readings want the same pair, so it is parsed once here: the factor is a
+    dimensionless ratio (* VAT), the base goes EUR/MWh -> EUR/kWh (/1000 *
+    VAT). VAT is baked because the snapshot's vat_rate is 0.
 
     The professional card prices everything excluding VAT, so there is
-    nothing to bake here and the snapshot's vat_rate carries the 21%
-    instead. It also drops the "N% TVA" phrase the multiplier reads,
-    which would otherwise fall back to the residential 6% default and
-    scale the formula twice over.
+    nothing to bake and the snapshot's vat_rate carries the 21% instead. It
+    also drops the "N% TVA" phrase the multiplier reads, which would
+    otherwise fall back to the residential 6% default and scale the formula
+    twice over.
     """
     matches = _BELPEX_FORMULA_RE.findall(text)
     if not matches:
-        raise ExtractorError("Bolt: could not parse dynamic Belpex formula")
+        raise ExtractorError("Bolt: could not parse the Belpex tariff formula")
     factor_s, sign, base_s = matches[0]
     if professional:
         if "HTVA" not in text:
@@ -658,12 +628,7 @@ def _extract_dynamic_energy(
             text, re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE)
         )
     base_eur_mwh = parse_sign(sign) * to_float(base_s)
-    return DynamicRates(
-        factor=to_float(factor_s) * vat,
-        base=base_eur_mwh / 1000.0 * vat,
-        yearly_fixed_fee=yearly_fee,
-        quarter_hourly=True,
-    )
+    return to_float(factor_s) * vat, base_eur_mwh / 1000.0 * vat
 
 
 def _extract_legacy_energy(
@@ -736,8 +701,6 @@ def _extract_energy(
     text: str, kind: TariffKind, *, professional: bool = False
 ) -> EnergyRates:
     yearly_fee = _extract_yearly_fee(text)
-    if kind == "dynamic":
-        return _extract_dynamic_energy(text, yearly_fee, professional=professional)
     # Bolt's 'Prix mensuel' line is the current month's price for all
     # contract kinds. Static cards have only this; variable cards also
     # show 'Prix annuel estimé' which we ignore.
@@ -823,18 +786,30 @@ def _extract_energy(
                 text, re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE)
             ),
         )
+        # ``current`` is the printed Prix mensuel, which is what a household
+        # settling against the RLP-weighted month is billed. The coefficients
+        # beside it are the same formula read per quarter-hour, which is the
+        # other settlement the card sells; resolve_settlement_grid builds the
+        # dynamic leg out of them when the entry says so. Carried on every
+        # variable card, not only where the box is ticked, because the parser
+        # has no entry to consult and the pair is free to read.
+        factor, base = _consumption_formula(text, professional=professional)
         return VariableRates(
             current=mono,
             peak=peak,
             offpeak=offpeak,
             exclusive_night=excl,
             yearly_fixed_fee=yearly_fee,
+            formula=f"Belpex * {factor:.6g} + {base:.6g}",
+            formula_factor=factor,
+            formula_base=base,
             impact_pic=bands.get("pic"),
             impact_medium=bands.get("medium"),
             impact_eco=bands.get("eco"),
         )
-    # Dynamic is handled up front by _extract_dynamic_energy; any other kind is
-    # a registry mistake.
+    # Bolt sells no tou / tou_impact product, and its dynamic settlement is a
+    # per-entry reading of the variable card rather than a kind of its own, so
+    # anything else here is a registry mistake.
     raise ExtractorError(f"Bolt: unexpected contract kind {kind!r}")
 
 
@@ -924,38 +899,28 @@ def _with_slot_formula(text: str, current: float) -> InjectionRates:
     )
 
 
-def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
-    if kind == "dynamic":
-        # Dynamic injection is spot-indexed: the same Belpex formula table
-        # prints an injection row whose factor is < 1 (Bolt redistributes a
-        # fraction of the spot), while every consumption row marks the spot up
-        # with a factor > 1. Keying on factor < 1 rather than "the first row
-        # that differs from consumption[0]" stays correct even if the card ever
-        # prints per-meter-type consumption rows with differing factors.
-        # Feed-in is VAT-exempt for residential, so no VAT bake; base goes
-        # EUR/MWh -> EUR/kWh.
-        matches = _BELPEX_FORMULA_RE.findall(text)
-        inj = next((m for m in matches if to_float(m[0]) < 1.0), None)
-        if inj is None:
-            return None
-        return InjectionRates(
-            current=None,
-            factor=to_float(inj[0]),
-            base=parse_sign(inj[1]) * to_float(inj[2]) / 1000.0,
-            formula=None,
-        )
-    # Injection is a flat monthly indicative ("Prix mensuel 5,31 4,03")
-    # in the block that follows the "Injection" header, on both fix and
-    # variable cards (the consumption "Prix mensuel" sits above it).
-    # Anchor on the header rather than counting "Prix mensuel"
-    # occurrences, so a third consumption-side row can't shift the match.
-    # factor/base stay None: Bolt's feed-in is a printed indicative, not a
-    # spot formula. The July 2026 fix cards print a NEGATIVE second
-    # ("Exclusif nuit") column ("Prix mensuel 3,40 -0,43"); only the first
-    # column is billed but the second is a required anchor token, so allow
-    # its optional minus sign. The billed first column carries an optional
-    # minus too, so a month that ever prints a negative feed-in indicative
-    # is captured instead of failing the match and dropping the credit.
+def _extract_injection(text: str) -> InjectionRates | None:
+    """The feed-in leg, which is the same on either settlement.
+
+    Bolt's card says the injection formula is applied per quarter-hour
+    whatever the consumption side settles on ("la consommation ou l'injection
+    enregistree est multipliee, pour chaque quart d'heure"), so there is one
+    reading here and no branch on the contract kind. ``_with_slot_formula``
+    keeps both halves: the printed indicative, which is the fallback for an
+    entry with no ENTSO-E key, and the formula that is actually billed.
+
+    Injection is a flat monthly indicative ("Prix mensuel 5,31 4,03")
+    in the block that follows the "Injection" header, on both fix and
+    variable cards (the consumption "Prix mensuel" sits above it).
+    Anchored on the header rather than counting "Prix mensuel"
+    occurrences, so a third consumption-side row cannot shift the match.
+    The July 2026 fix cards print a NEGATIVE second ("Exclusif nuit")
+    column ("Prix mensuel 3,40 -0,43"); only the first column is billed
+    but the second is a required anchor token, so its optional minus sign
+    is allowed. The billed first column carries an optional minus too, so
+    a month that ever prints a negative feed-in indicative is captured
+    instead of failing the match and dropping the credit.
+    """
     m = re.search(r"Injection\b.*?Prix mensuel\s+(-?[\d.,]+)\s+-?[\d.,]+", text, re.S)
     if m:
         current = to_float(m.group(1)) / 100.0
@@ -1417,11 +1382,15 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             professional=c.professional,
-            # Every non-dynamic card bills injection per quarter-hour off the
-            # Belpex index, so the credit needs spots the fixed or variable
-            # energy leg never fetches. The dynamic pair collects the key
-            # through its own energy formula.
-            spot_indexed_injection=c.kind != "dynamic",
+            # Every Bolt card bills injection per quarter-hour off the Belpex
+            # index, so the credit needs spots the fixed or variable energy leg
+            # never fetches. Set on the variable cards too, settlement box or
+            # not: with it unticked the energy leg is a printed monthly rate
+            # that asks for no spot, and the feed-in still needs one. With it
+            # ticked the energy formula collects the key anyway and this is
+            # merely redundant, which is the harmless direction.
+            spot_indexed_injection=True,
+            quarter_hourly_option=c.settlement,
         )
         for c in _CONTRACTS
     ),

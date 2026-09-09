@@ -1190,26 +1190,57 @@ def resolve_settlement_grid(
     whose supplier does not offer the choice, so the cost is one boolean for
     all of them.
 
-    Only :class:`DynamicRates` can move. A card that already prints a
-    quarter-hourly index carries ``quarter_hourly`` from its own parser and
-    comes back untouched; so does a monthly-indexed leg, whose rate is one
-    figure for the whole month and has no sub-hour shape to take.
+    Two legs can move, because the suppliers that offer the choice print two
+    different defaults:
+
+    * :class:`DynamicRates` on the hourly grid, which is Frank Energie. Its
+      card prints one formula against ``BELPEX per uur``; ticking the box
+      applies the same coefficients to the quarter-hourly index instead.
+    * :class:`VariableRates` carrying the coefficients of its own indexation
+      formula, which is Bolt. Its card prints a resolved monthly price AND the
+      ``Belpex * factor + base`` formula behind it, and says the customer
+      chooses whether that formula is settled per quarter-hour or against the
+      RLP-weighted month. Ticking the box takes the second reading, so the leg
+      becomes the dynamic one the card describes rather than the printed
+      monthly figure.
+
+    Anything else comes back untouched: a card that already prints a
+    quarter-hourly index carries ``quarter_hourly`` from its own parser, a
+    fixed leg has no formula to settle, and a variable card that exposes only
+    a resolved rate has no coefficients to move onto the spot.
 
     Deliberately applied here rather than in the extractor. The grid is an
-    account setting the supplier lets the customer flip from one month to the
-    next (Frank Energie's app), so the card cannot say which side a given
-    household is on, and two contract ids for one product would ask the user
-    to re-pick their contract to change a billing preference. Resolving it
-    beside the VAT treatment and the excise band keeps it on every path that
-    produces a snapshot, the cached and archived ones included, so unticking
-    the box takes effect without a refetch.
+    account setting the supplier lets the customer flip (Frank monthly through
+    its app, Bolt as a settlement option on the same contract), so the card
+    cannot say which side a given household is on, and a second contract id
+    per product would ask the user to re-pick their contract to change a
+    billing preference. Resolving it beside the VAT treatment and the excise
+    band keeps it on every path that produces a snapshot, the cached and
+    archived ones included, so unticking the box takes effect without a
+    refetch.
+
+    Note this changes the leg's TYPE, which is why the contract's effective
+    kind has to move with it: see ``offers_quarter_hourly`` and
+    ``effective_kind``.
     """
     if not quarter_hourly:
         return snapshot
     energy = snapshot.energy
-    if not isinstance(energy, DynamicRates) or energy.quarter_hourly:
-        return snapshot
-    return replace(snapshot, energy=replace(energy, quarter_hourly=True))
+    if isinstance(energy, DynamicRates):
+        if energy.quarter_hourly:
+            return snapshot
+        return replace(snapshot, energy=replace(energy, quarter_hourly=True))
+    if isinstance(energy, VariableRates) and energy.formula_factor is not None:
+        return replace(
+            snapshot,
+            energy=DynamicRates(
+                factor=energy.formula_factor,
+                base=energy.formula_base or 0.0,
+                yearly_fixed_fee=energy.yearly_fixed_fee,
+                quarter_hourly=True,
+            ),
+        )
+    return snapshot
 
 
 SnapshotFetcher = Callable[

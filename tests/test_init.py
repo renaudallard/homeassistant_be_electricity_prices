@@ -12,6 +12,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from custom_components.be_electricity_prices import (
+    _migrate_bolt_dynamic_contract,
     _migrate_current_year_cost_unique_id,
     async_setup_entry,
 )
@@ -200,3 +201,71 @@ async def test_setup_keeps_the_hourly_slot_boundary_push(hass: HomeAssistant) ->
 
     action(dt_util.now().replace(hour=13, minute=0))
     assert refresh.await_count == 0
+
+
+# ---- the retired Bolt dynamic contracts ------------------------------------------
+
+
+def _bolt_entry(hass: HomeAssistant, contract: str) -> Any:
+    entry = make_entry(
+        supplier="bolt",
+        contract=contract,
+        region="flanders",
+        dso="fluvius_antwerpen",
+        meter="dynamic",
+        title=f"Bolt - {contract} (Flanders)",
+    )
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, unique_id=f"bolt:{contract}:flanders:fluvius_antwerpen"
+    )
+    return entry
+
+
+def test_retired_bolt_dynamic_entry_moves_to_its_variable_card(
+    hass: HomeAssistant,
+) -> None:
+    """The quarter-hourly settlement stopped being a product of its own, so an
+    entry stored under the old id points at a contract the registry no longer
+    knows and has no card to fetch. It moves to the variable card with the
+    settlement box ticked, which bills exactly what it billed before."""
+    entry = _bolt_entry(hass, "bolt_plenty_online_dynamic")
+
+    _migrate_bolt_dynamic_contract(hass, entry)
+
+    assert entry.data["contract"] == "bolt_plenty_online"
+    assert entry.data["quarter_hourly"] is True
+    # The unique id and the title both name the contract, so both move.
+    assert entry.unique_id == "bolt:bolt_plenty_online:flanders:fluvius_antwerpen"
+    assert entry.title == "Bolt - Bolt Plenty Online (Flanders)"
+
+
+def test_migration_leaves_every_other_entry_alone(hass: HomeAssistant) -> None:
+    """Only the eight retired ids move, and only on Bolt."""
+    kept = _bolt_entry(hass, "bolt_variable")
+    _migrate_bolt_dynamic_contract(hass, kept)
+    assert kept.data["contract"] == "bolt_variable"
+    assert "quarter_hourly" not in kept.data
+
+    other = make_entry(supplier="frank", contract="bolt_dynamic")
+    other.add_to_hass(hass)
+    _migrate_bolt_dynamic_contract(hass, other)
+    assert other.data["contract"] == "bolt_dynamic"
+
+
+def test_migration_keeps_its_unique_id_when_the_target_is_taken(
+    hass: HomeAssistant,
+) -> None:
+    """A household that deliberately ran both readings as two entries would
+    otherwise have the second claim the first's key. The data migration still
+    happens for both; only the id stays put, which costs nothing but a
+    duplicate check the user has already passed."""
+    existing = _bolt_entry(hass, "bolt_variable")
+    entry = _bolt_entry(hass, "bolt_dynamic")
+
+    _migrate_bolt_dynamic_contract(hass, entry)
+
+    assert entry.data["contract"] == "bolt_variable"
+    assert entry.data["quarter_hourly"] is True
+    assert entry.unique_id == "bolt:bolt_dynamic:flanders:fluvius_antwerpen"
+    assert existing.unique_id == "bolt:bolt_variable:flanders:fluvius_antwerpen"

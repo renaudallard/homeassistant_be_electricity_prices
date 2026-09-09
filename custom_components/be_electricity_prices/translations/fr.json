@@ -47,11 +47,7 @@
         "title": "Type de compteur",
         "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique.",
         "data": {
-          "meter": "Compteur",
-          "quarter_hourly": "Facturation au quart d'heure"
-        },
-        "data_description": {
-          "quarter_hourly": "Uniquement pour les fournisseurs qui laissent le choix (Frank Energie). Laissez désactivé pour garder les prix horaires imprimés sur la carte tarifaire ; activez si vous avez basculé votre compte sur les prix au quart d'heure. La formule est identique, seul l'indice de marché qu'elle lit change."
+          "meter": "Compteur"
         }
       },
       "professional": {
@@ -196,6 +192,16 @@
           "custom_tax_energy_fund_per_month": "Fonds energie (EUR/mois)",
           "custom_vat_rate": "Taux de TVA (ex. 0.06)"
         }
+      },
+      "settlement": {
+        "title": "Mode de facturation",
+        "description": "La manière dont votre fournisseur facture ce contrat. Laissez désactivé sauf si vous avez demandé le changement.",
+        "data": {
+          "quarter_hourly": "Facturation au quart d'heure"
+        },
+        "data_description": {
+          "quarter_hourly": "Affiché uniquement si votre fournisseur laisse le choix. Frank Energie : désactivé pour les prix horaires imprimés sur la carte, activé si vous avez basculé votre compte sur les prix au quart d'heure dans l'application. Bolt : désactivé pour la facturation variable, où votre mois est facturé sur la moyenne pondérée RLP, activé pour la facturation dynamique, où chaque quart d'heure est facturé à sa propre valeur Belpex. La formule est identique, seul l'indice de marché qu'elle lit change."
+        }
       }
     },
     "abort": {
@@ -330,11 +336,7 @@
         "title": "Type de compteur",
         "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique.",
         "data": {
-          "meter": "Compteur",
-          "quarter_hourly": "Facturation au quart d'heure"
-        },
-        "data_description": {
-          "quarter_hourly": "Uniquement pour les fournisseurs qui laissent le choix (Frank Energie). Laissez désactivé pour garder les prix horaires imprimés sur la carte tarifaire ; activez si vous avez basculé votre compte sur les prix au quart d'heure. La formule est identique, seul l'indice de marché qu'elle lit change."
+          "meter": "Compteur"
         }
       },
       "professional": {
@@ -481,6 +483,26 @@
         "data": {
           "with_ytd": "Calculer aussi le cumul depuis janvier (plus lent : recupere la fiche de chaque mois passe)",
           "refresh": "Recalculer maintenant (environ deux minutes)"
+        }
+      },
+      "settlement": {
+        "title": "Mode de facturation",
+        "description": "La manière dont votre fournisseur facture ce contrat. Laissez désactivé sauf si vous avez demandé le changement.",
+        "data": {
+          "quarter_hourly": "Facturation au quart d'heure"
+        },
+        "data_description": {
+          "quarter_hourly": "Affiché uniquement si votre fournisseur laisse le choix. Frank Energie : désactivé pour les prix horaires imprimés sur la carte, activé si vous avez basculé votre compte sur les prix au quart d'heure dans l'application. Bolt : désactivé pour la facturation variable, où votre mois est facturé sur la moyenne pondérée RLP, activé pour la facturation dynamique, où chaque quart d'heure est facturé à sa propre valeur Belpex. La formule est identique, seul l'indice de marché qu'elle lit change."
+        }
+      },
+      "compare_settlement": {
+        "title": "Mode de facturation à chiffrer",
+        "description": "Le mode de facturation sur lequel chiffrer {contract}.",
+        "data": {
+          "quarter_hourly": "Facturation au quart d'heure"
+        },
+        "data_description": {
+          "quarter_hourly": "Affiché uniquement si votre fournisseur laisse le choix. Frank Energie : désactivé pour les prix horaires imprimés sur la carte, activé si vous avez basculé votre compte sur les prix au quart d'heure dans l'application. Bolt : désactivé pour la facturation variable, où votre mois est facturé sur la moyenne pondérée RLP, activé pour la facturation dynamique, où chaque quart d'heure est facturé à sa propre valeur Belpex. La formule est identique, seul l'indice de marché qu'elle lit change."
         }
       }
     },

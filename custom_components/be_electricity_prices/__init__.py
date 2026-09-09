@@ -27,9 +27,10 @@
 
 from __future__ import annotations
 
+import logging
 import zlib
 from datetime import datetime
-from typing import Any
+from typing import Any, Final
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
@@ -58,6 +59,7 @@ from .const import (
     CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
     CONF_DSO_TARIFF_MODE,
     CONF_REGION,
+    CONF_QUARTER_HOURLY,
     CONF_SUPPLIER,
     DAILY_COMPARE_WINDOW_MINUTES,
     DEFAULT_DAILY_COMPARE,
@@ -75,6 +77,8 @@ from .snapshot_store import evict_shared_caches
 from .pricing import PriceBreakdown, slot_delta, slot_start, slots_per_hour
 
 type BePricesConfigEntry = ConfigEntry[BePricesCoordinator]
+
+_LOGGER = logging.getLogger(__name__)
 
 SERVICE_REFRESH = "refresh"
 SERVICE_CHEAPEST_WINDOW = "cheapest_window"
@@ -178,6 +182,72 @@ def _migrate_current_year_cost_unique_id(
     registry.async_update_entity(entity_id, new_unique_id=new_unique_id)
 
 
+# The eight Bolt contract ids that used to model the quarter-hourly settlement
+# as a product of its own, mapped to the variable contract they were the other
+# reading of. Bolt sells one card per slug and lets the customer settle it
+# either way, so the pair collapsed into one contract plus the settlement box.
+_RETIRED_BOLT_DYNAMIC: Final[dict[str, str]] = {
+    "bolt_dynamic": "bolt_variable",
+    "bolt_plenty_dynamic": "bolt_plenty",
+    "bolt_online_dynamic": "bolt_online",
+    "bolt_plenty_online_dynamic": "bolt_plenty_online",
+    "bolt_pro_dynamic": "bolt_pro_variable",
+    "bolt_pro_plenty_dynamic": "bolt_pro_plenty",
+    "bolt_pro_online_dynamic": "bolt_pro_online",
+    "bolt_pro_plenty_online_dynamic": "bolt_pro_plenty_online",
+}
+
+
+def _migrate_bolt_dynamic_contract(
+    hass: HomeAssistant, entry: BePricesConfigEntry
+) -> None:
+    """Point a retired Bolt dynamic entry at its variable card, box ticked.
+
+    The entry keeps billing exactly what it billed: the settlement box applies
+    the same printed Belpex coefficients to the same quarter-hourly spot, and
+    the standing charge and the feed-in formula come off the same card. Only
+    the id it is stored under changes.
+
+    Without this the entry holds a contract the registry no longer knows, and
+    the coordinator has no card to fetch at all.
+
+    The unique id embeds the contract, so it moves too -- but only when it is
+    free. A household that deliberately ran the variable and the dynamic
+    reading as two entries would otherwise have the second one claim the
+    first's key; the data migration still happens for both, and a stale unique
+    id costs nothing but a duplicate check the user has already passed.
+    """
+    old_contract = entry.data.get(CONF_CONTRACT)
+    new_contract = _RETIRED_BOLT_DYNAMIC.get(str(old_contract))
+    if entry.data.get(CONF_SUPPLIER) != "bolt" or new_contract is None:
+        return
+    data = {**entry.data, CONF_CONTRACT: new_contract, CONF_QUARTER_HOURLY: True}
+    unique_id = entry.unique_id
+    if unique_id is not None and old_contract is not None:
+        candidate = unique_id.replace(f":{old_contract}:", f":{new_contract}:", 1)
+        taken = {
+            other.unique_id
+            for other in hass.config_entries.async_entries(DOMAIN)
+            if other.entry_id != entry.entry_id
+        }
+        if candidate != unique_id and candidate not in taken:
+            unique_id = candidate
+    # The title names the contract, so it would otherwise keep advertising a
+    # product that no longer exists. Imported inside the function: config_flow
+    # is a leaf HA loads on its own, and pulling it in at module scope would
+    # tie setup to it.
+    from .config_flow import _entry_title
+
+    hass.config_entries.async_update_entry(
+        entry, data=data, unique_id=unique_id, title=_entry_title(data)
+    )
+    _LOGGER.info(
+        "Bolt %s is now %s with quarter-hourly settlement; the bill is unchanged",
+        old_contract,
+        new_contract,
+    )
+
+
 def _migrate_zeroed_custom_impact_bands(
     hass: HomeAssistant, entry: BePricesConfigEntry
 ) -> None:
@@ -216,6 +286,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     """Set up one config entry."""
     _migrate_current_year_cost_unique_id(hass, entry)
     _migrate_zeroed_custom_impact_bands(hass, entry)
+    _migrate_bolt_dynamic_contract(hass, entry)
     coordinator = BePricesCoordinator(hass, entry)
     await coordinator.async_load_persistent()
     try:

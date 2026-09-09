@@ -232,12 +232,17 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_meter_step_offers_the_quarter_hourly_box_only_where_it_is_sold(
+async def test_settlement_step_appears_only_where_the_choice_is_sold(
     hass: HomeAssistant,
 ) -> None:
-    """Frank lets the customer settle per quarter-hour and every other card
-    fixes its own grid, so the box has to follow the contract rather than the
-    step."""
+    """Two suppliers let the customer settle per quarter-hour and every other
+    card fixes its own grid, so the step has to follow the contract.
+
+    It runs directly after the contract, which is where it has to be: on Bolt
+    the answer decides which meters the product is sold on and whether the
+    ENTSO-E key is mandatory, and the signing-rate step in between offers a
+    coefficient pair or per-meter rates depending on it.
+    """
     entry = make_entry(
         supplier="frank",
         contract="frank_dynamic",
@@ -254,15 +259,31 @@ async def test_meter_step_offers_the_quarter_hourly_box_only_where_it_is_sold(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"contract": "frank_dynamic"}
     )
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"dso": "fluvius_zenne_dijle"}
-    )
-    assert result["step_id"] == "meter"
+    assert result["step_id"] == "settlement"
     schema = result["data_schema"]
     assert schema is not None
     assert "quarter_hourly" in {str(k) for k in schema.schema}
 
-    # The same step on a supplier that prices per clock hour with no choice.
+    # Bolt's variable card offers the same choice, and there the answer moves
+    # the contract kind rather than just the grid.
+    bolt = make_entry(
+        supplier="bolt",
+        contract="bolt_plenty_online",
+        region="flanders",
+        dso="fluvius_zenne_dijle",
+        meter="mono",
+    )
+    bolt.add_to_hass(hass)
+    result = await _enter_edit_branch(hass, bolt)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "bolt", "region": "flanders"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "bolt_plenty_online"}
+    )
+    assert result["step_id"] == "settlement"
+
+    # A supplier that prices per clock hour with no choice skips it entirely.
     other = make_entry(
         supplier="mega",
         contract="mega_dynamic",
@@ -277,13 +298,62 @@ async def test_meter_step_offers_the_quarter_hourly_box_only_where_it_is_sold(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"contract": "mega_dynamic"}
     )
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"dso": "ores"}
-    )
-    assert result["step_id"] == "meter"
-    schema = result["data_schema"]
-    assert schema is not None
-    assert "quarter_hourly" not in {str(k) for k in schema.schema}
+    assert result["step_id"] == "dso"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_ticking_the_settlement_box_makes_the_key_mandatory(
+    hass: HomeAssistant,
+) -> None:
+    """On Bolt the answer moves the contract kind, and everything the flow
+    decides before it has ever seen a card reads that kind.
+
+    Unticked the card is variable: the meter step offers the full list and no
+    ENTSO-E key is demanded. Ticked it is dynamic, so the meter narrows to the
+    smart-meter option and the key step becomes mandatory.
+    """
+
+    async def _walk(quarter_hourly: bool) -> list[str]:
+        entry = make_entry(
+            supplier="bolt",
+            contract="bolt_plenty",
+            region="flanders",
+            dso="fluvius_zenne_dijle",
+            meter="mono",
+        )
+        entry.add_to_hass(hass)
+        result = await _enter_edit_branch(hass, entry)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "bolt", "region": "flanders"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "bolt_plenty"}
+        )
+        assert result["step_id"] == "settlement"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"quarter_hourly": quarter_hourly}
+        )
+        assert result["step_id"] == "dso"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"dso": "fluvius_zenne_dijle"}
+        )
+        assert result["step_id"] == "meter"
+        schema = result["data_schema"]
+        assert schema is not None
+        meters = list(schema.schema.values())[0].config["options"]
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": meters[0]}
+        )
+        return meters + [result["step_id"]]
+
+    assert await _walk(False) == [
+        "mono",
+        "bi",
+        "dynamic",
+        "exclusive_night",
+        "capacity",
+    ]
+    assert await _walk(True) == ["dynamic", "api_key"]
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -4962,18 +5032,25 @@ def test_sweep_candidates_apply_every_condition() -> None:
         SUPPLIER_CUSTOM,
     )
     from custom_components.be_electricity_prices.flow_schemas import _sweep_candidates
+    from custom_components.be_electricity_prices.providers import effective_kind
 
     rows = _sweep_candidates("flanders", "static", False, "power_fix")
-    ids = {contract.id for _supplier, contract in rows}
+    ids = {contract.id for _supplier, contract, _q in rows}
 
     assert "power_fix" not in ids, "own contract must not be a candidate"
-    assert all(sup != SUPPLIER_CUSTOM for sup, _c in rows)
+    assert all(sup != SUPPLIER_CUSTOM for sup, _c, _q in rows)
     # dats24 is deprecated_until 2026-08-31 and must not be offered.
-    assert all(sup != "dats24" for sup, _c in rows)
-    for _sup, contract in rows:
+    assert all(sup != "dats24" for sup, _c, _q in rows)
+    for sup, contract, quarter_hourly in rows:
         assert "flanders" in contract.regions
         assert contract.professional is False
-        assert KIND_GROUP[contract.kind] == "static"
+        # The GROUP follows the settlement, not the registered kind: a Bolt
+        # variable card is static unticked and spot ticked, and listing it in
+        # the wrong cell would rank a quarter-hourly bill against monthly ones.
+        assert (
+            KIND_GROUP[effective_kind(sup, contract.id, quarter_hourly=quarter_hourly)]
+            == "static"
+        )
 
 
 def test_contract_group_is_empty_for_a_contract_that_left_the_catalogue() -> None:
@@ -5520,7 +5597,7 @@ def test_sweep_cost_ordering_front_loads_the_cheap_cards() -> None:
     from custom_components.be_electricity_prices.providers import get as get_extractor
 
     rows = _sweep_candidates("flanders", "static", False, "")
-    costs = [get_extractor(supplier).sweep_cost_s for supplier, _c in rows]
+    costs = [get_extractor(supplier).sweep_cost_s for supplier, _c, _q in rows]
 
     def priced_within(budget: float, order: list[float]) -> int:
         spent = 0.0
@@ -6218,8 +6295,8 @@ async def test_sweep_does_not_start_a_card_that_cannot_fit(hass: HomeAssistant) 
     flow = _SweepStepsMixin()
     flow._sweep = {
         "candidates": [
-            ("bolt", "bolt_fix"),  # 45.3s
-            ("engie", "engie_easy_fixed"),  # 0.3s
+            ("bolt", "bolt_fix", False),  # 45.3s
+            ("engie", "engie_easy_fixed", False),  # 0.3s
         ],
         "index": 0,
         "rows": [RankedRow("already priced", 900.0)],
@@ -6235,7 +6312,7 @@ async def test_sweep_does_not_start_a_card_that_cannot_fit(hass: HomeAssistant) 
 
     # And when nothing left fits, the sweep stops rather than overrunning.
     flow._sweep["rows"] = [RankedRow("already priced", 900.0)]
-    flow._sweep["candidates"] = [("bolt", "bolt_fix")]
+    flow._sweep["candidates"] = [("bolt", "bolt_fix", False)]
     flow._sweep["index"] = 0
     assert flow._sweep_next_index() is None
 

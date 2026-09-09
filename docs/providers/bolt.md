@@ -59,30 +59,43 @@ all three regions still live inside that one French document. The listing page
 
 ## Contracts
 
-Bolt declares ten residential-electricity contracts and a professional edition of each, twenty
-in all (`bolt.py:144`). All are region-unrestricted (default `regions` = all three). Six are
-fixed / variable, all billing injection per quarter-hour off Belpex; the other four are
-`quarter_hourly` dynamic contracts that depend on the ENTSO-E spot and take their injection
-from the card's own Belpex formula (see Contracts / Injection below).
+Bolt declares six residential-electricity contracts and a professional edition of each, twelve
+in all (`bolt.py:144`). All are region-unrestricted (default `regions` = all three). Two are
+fixed and four are variable, and every one of them bills injection per quarter-hour off Belpex.
 
-Each of the four variable cards is sold on either settlement, and the pair shares one document.
-The card says so in the same paragraph on all four:
+### One card, two settlements
+
+Each variable card is sold on either settlement, and says so in the same paragraph on all four:
 
 > Dans le cadre d'une facturation dynamique, la consommation ou l'injection enregistree est
 > multipliee, pour chaque quart d'heure, par la valeur Belpex correspondante pour ce meme quart
 > d'heure. En optant pour une facturation variable, nous redistribuerons la consommation ponderee
 > RLP (publication par Synergrid). Pour l'injection, nous redistribuerons l'injection ponderee SPP.
 
-Two contracts rather than one contract and a settlement flag, which is what Frank Energie's
-`quarter_hourly_option` is: the two settlements here are not one rate read on two grids. Variable
-resolves a monthly RLP-weighted mean and dynamic a per-quarter price, so they parse to different
-`EnergyRates` kinds off different parts of the card, and nothing downstream of the parser could
-convert one into the other.
+One printed formula, two ways of settling it, and nothing on the card says which one a given
+account is on. So the variable contracts carry `quarter_hourly_option` and the config flow asks;
+`resolve_settlement_grid` then builds the dynamic leg out of the coefficients the parser put on
+the variable one.
 
-Only the `bolt` slug had a dynamic sibling until then, so a Plenty, Online or Plenty Online
-household settling dynamically had nothing to pick. `bolt_dynamic` is not a stand-in for them:
-it reads `Belpex * 1,168 + 16,90` at 8,99 EUR/month against Plenty Online's `Belpex * 1,145 +
-16,45` at 0,99, about 106 EUR/yr apart at 3500 kWh, almost all of it the standing charge.
+This used to be modelled as a second contract id per card (`bolt_dynamic` and friends). It is not
+any more, and the difference matters for more than tidiness: the settlement changes the contract
+KIND, and everything the flow decides before it has ever fetched a card reads the kind. Unticked
+the product is `variable`, so the meter step offers the full list and no ENTSO-E key is demanded;
+ticked it is `dynamic`, so the meter narrows to SMR3 and the key becomes mandatory. That is why
+`effective_kind` is a function of the entry rather than a field on the contract, and why the
+settlement step runs directly after the contract step and before the signing-rate one.
+
+Only the `bolt` slug ever had a dynamic sibling, which left a Plenty, Online or Plenty Online
+household settling dynamically with nothing in the picker that matched their contract, and no
+usable stand-in: the four cards carry different coefficients and different standing charges.
+Plenty Online is `Belpex * 1,145 + 16,45` at 0,99 EUR/month against the base card's
+`1,168 + 16,90` at 8,99, about 106 EUR/yr apart at 3500 kWh, almost all of it the standing charge.
+
+`_migrate_bolt_dynamic_contract` (`__init__.py`) moves an entry stored under one of the eight
+retired ids onto its variable card with the box ticked, and moves the unique id and the title with
+it. The bill does not change: same coefficients, same standing charge, same feed-in formula, same
+card. The unique id stays put in the one case where the target is already taken, which is a
+household that deliberately ran both readings as two entries.
 
 ### The professional editions
 
@@ -117,18 +130,14 @@ source — every number in a `SupplierSnapshot` comes from a live fetch. Sourcin
 Brugel/Sibelga publication the way the Brussels OSP table is handled would be a real fix; putting
 the figure in the extractor would not. Left as a known gap.
 
-| id | label | kind | folder / slug | `spot_indexed_injection` | Notes |
-| --- | --- | --- | --- | --- | --- |
-| `bolt_fix` | Bolt Fixe (1 year) | fixed | `fix` / `fix` | yes | The only card with a real monthly archive |
-| `bolt_plenty_fix` | Bolt Plenty Fixe (1 year) | fixed | `fix` / `plenty_fix` | yes | Fixed, month archive like `bolt_fix` |
-| `bolt_variable` | Bolt Variable | variable | `var` / `bolt` | yes | Monthly-indexed variable |
-| `bolt_dynamic` | Bolt Dynamisch | dynamic | `var` / `bolt` | via energy | Same variable card, formula on the 15-min Belpex spot |
-| `bolt_plenty` | Bolt Plenty Variable | variable | `var` / `plenty` | yes | |
-| `bolt_plenty_dynamic` | Bolt Plenty Dynamisch | dynamic | `var` / `plenty` | via energy | Dynamic settlement of the Plenty card |
-| `bolt_online` | Bolt Online | variable | `var` / `online` | yes | |
-| `bolt_online_dynamic` | Bolt Online Dynamisch | dynamic | `var` / `online` | via energy | Dynamic settlement of the Online card |
-| `bolt_plenty_online` | Bolt Plenty Online | variable | `var` / `plenty_online` | yes | The one card with its own coefficients |
-| `bolt_plenty_online_dynamic` | Bolt Plenty Online Dynamisch | dynamic | `var` / `plenty_online` | via energy | Dynamic settlement of the Plenty Online card |
+| id | label | registered kind | folder / slug | `spot_indexed_injection` | `quarter_hourly_option` | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| `bolt_fix` | Bolt Fixe (1 year) | fixed | `fix` / `fix` | yes | no | The only card with a real monthly archive |
+| `bolt_plenty_fix` | Bolt Plenty Fixe (1 year) | fixed | `fix` / `plenty_fix` | yes | no | Fixed, month archive like `bolt_fix` |
+| `bolt_variable` | Bolt Variable | variable | `var` / `bolt` | yes | yes | `Belpex * 1,168 + 16,90`, 8,99 EUR/month |
+| `bolt_plenty` | Bolt Plenty Variable | variable | `var` / `plenty` | yes | yes | Same formula, 3,99 EUR/month |
+| `bolt_online` | Bolt Online | variable | `var` / `online` | yes | yes | Same formula, 5,99 EUR/month |
+| `bolt_plenty_online` | Bolt Plenty Online | variable | `var` / `plenty_online` | yes | yes | The one card with its own coefficients: `1,145 + 16,45`, 0,99 EUR/month |
 
 The `spot_indexed_injection` column is the registry flag verbatim, and it reads the way it does
 because the flag answers "does this product's feed-in need spots its ENERGY leg never fetches".
@@ -139,19 +148,26 @@ own formula already collects the ENTSO-E key, so the flag would offer a second t
 has. The column used to read `no` down the whole non-dynamic half, which is the exact inverse of
 `bolt.py:1378`.
 
-`test_bolt_is_registered` (`tests/test_bolt.py:52`) pins the count at exactly twenty and asserts
-`bolt_fix`, `bolt_variable` and `bolt_dynamic` are present, so adding or removing a product must
-update that test. `test_every_variable_card_has_a_dynamic_sibling` pins the pairing itself, and
-`test_a_dynamic_sibling_reads_its_own_slug_not_the_base_card` pins that each sibling resolves to
-its own document rather than to `var/bolt`.
+`test_bolt_is_registered` (`tests/test_bolt.py:52`) pins the count at exactly twelve, so adding or
+removing a product must update that test. `test_every_variable_card_offers_the_settlement_choice`
+pins which cards carry the box, `test_the_settlement_answer_moves_the_contract_kind` pins that the
+answer reaches `effective_kind`, and `test_each_card_keeps_its_own_coefficients_and_standing_charge`
+pins that the four slugs resolve to four different documents, which is how the mis-price above
+would come back.
 
-`bolt_dynamic` reuses the `var` / `bolt` card (Bolt's dynamic option on the variable contract): the
-card prints its tariff formula as `Belpex * <factor> <sign> <base>` in EUR/MWh HTVA, and
-`_extract_dynamic_energy` builds a `DynamicRates(quarter_hourly=True)` by applying the consumption
-formula to the live 15-minute spot (factor stays a ratio, base is EUR/MWh -> EUR/kWh, both VAT-baked
-since `vat_rate=0`). Injection is the first formula that differs from consumption (factor < 1),
-returned as a spot-indexed `InjectionRates` (VAT-exempt). Bolt has no `tou` / `tou_impact` product;
-`_extract_energy` still raises on any other kind.
+The variable branch of `_extract_energy` reads both halves of the card. The printed `Prix mensuel`
+becomes `VariableRates.current`, which is what a household settling against the RLP-weighted month
+is billed; `_consumption_formula` reads the `Belpex * <factor> <sign> <base>` row beside it into
+`formula_factor` / `formula_base`, converted to the EUR/kWh basis applied against the EUR/kWh spot
+(factor stays a ratio, base is EUR/MWh -> EUR/kWh, both VAT-baked since `vat_rate=0`).
+`resolve_settlement_grid` turns that pair into a `DynamicRates(quarter_hourly=True)` for an entry
+that ticked the box. The professional branch asserts `HTVA` and scales by 1.0 instead, because the
+pro card drops the `N% TVA` phrase the multiplier reads.
+
+`_extract_injection` does not branch on the settlement at all: the card applies the injection
+formula per quarter-hour whichever way consumption is settled, so both readings share one leg, with
+the printed indicative kept as the fallback for an entry with no ENTSO-E key. Bolt has no `tou` /
+`tou_impact` product; `_extract_energy` still raises on any other kind.
 
 ## Fetch strategy
 
@@ -307,7 +323,7 @@ newline is expected, replacing them with `\n` so one set of regexes covers every
 | Snapshot field | Extractor | Notes |
 | --- | --- | --- |
 | `energy` | `_extract_energy` (`bolt.py:735`) | `FixedRates` or `VariableRates` |
-| `injection` | `_extract_injection` | printed figure PLUS the quarter-hourly `factor`/`base`, flagged `slot_indexed`; `current=None` with `factor`/`base` for `bolt_dynamic` |
+| `injection` | `_extract_injection` | printed figure PLUS the quarter-hourly `factor`/`base`, flagged `slot_indexed`, on every card and either settlement |
 | `publication_label` | `_extract_publication_month` (`bolt.py:841`) | `<Month> <Year>` header. The accent classes span the whole Latin-1 range rather than the accents French month names actually use: Bolt's August 2026 fixed card prints "Aôut 2026" (circumflex on the wrong vowel) and an exact class blanked the label on that typo. The value is display-only and never feeds pricing, so a misspelling is tolerated verbatim rather than corrected or dropped. |
 | `taxes.federal_excise`, `energy_contribution`, `region_connection_fee` | `_extract_taxes` (`bolt.py:1063`) | 3-column FL/WAL/BX rows, sliced by region |
 | `taxes.energy_fund_eur_per_month` | `_extract_energy_fund` (`bolt.py:1132`) | Flanders only. The card prints both categories: a domiciled residential connection pays the `résidentiel` row, which is `-` (0); a **professional** contract pays the `non-résidentiel` row (10,07 EUR/month on the August 2026 card). The two rows need separate patterns, since the residential value sits after a U+2028 and the non-residential values are inline on the label line |
@@ -377,7 +393,7 @@ formula.
 marking the leg `slot_indexed`. That flag is what stops the pricing engine preferring a printed
 `current` on a card whose ENERGY is static — correct for a card publishing a realized monthly rate,
 wrong for this one. The figure is kept as the fallback for an entry with no ENTSO-E key. This is
-INJECTION SHAPE (c): per-slot formula on a static-energy card, the same shape `bolt_dynamic` has
+INJECTION SHAPE (c): per-slot formula on a static-energy card, the same shape a ticked settlement has
 always had, and VAT-exempt on both. A card generation that prints no formula table keeps the figure
 alone rather than losing the credit.
 

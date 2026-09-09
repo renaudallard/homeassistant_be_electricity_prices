@@ -9,10 +9,13 @@ from custom_components.be_electricity_prices.const import (
     DSO_CHOICES,
     SPOT_PRICED_CONTRACT_KINDS,
 )
-from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import EXTRACTORS, effective_kind
 
+# Every contract, and both settlements of the ones sold on two: the whole point
+# of the settlement step is that the answer moves what the flow does next, so
+# walking only one side would leave the other landing unpinned.
 CASES = [
-    (sid, c)
+    (sid, c, quarter_hourly)
     for sid, ex in EXTRACTORS.items()
     # A supplier that has announced its exit is dropped from the picker the
     # moment the flag lands, not on the exit date, so a new setup can never
@@ -21,6 +24,7 @@ CASES = [
     # existing entry being edited.
     if ex.deprecated_until is None
     for c in ex.contracts
+    for quarter_hourly in ((False, True) if c.quarter_hourly_option else (False,))
 ]
 
 
@@ -34,15 +38,22 @@ def _no_setup() -> Any:
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-@pytest.mark.parametrize("sid,contract", CASES, ids=[f"{s}:{c.id}" for s, c in CASES])
+@pytest.mark.parametrize(
+    "sid,contract,quarter_hourly",
+    CASES,
+    ids=[f"{s}:{c.id}{':qh' if q else ''}" for s, c, q in CASES],
+)
 async def test_where_the_flow_lands(
-    hass: HomeAssistant, sid: str, contract: Any
+    hass: HomeAssistant, sid: str, contract: Any, quarter_hourly: bool
 ) -> None:
     region = sorted(contract.regions)[0]
     dso = DSO_CHOICES[region][0][0]
+    # The EFFECTIVE kind, not the registered one: on Bolt the settlement answer
+    # moves it, and with it the meter list and whether the key is mandatory.
+    kind = effective_kind(sid, contract.id, quarter_hourly=quarter_hourly)
     meter = (
         const.METER_DYNAMIC
-        if contract.kind in ("dynamic", "tou", "tou_impact")
+        if kind in ("dynamic", "tou", "tou_impact")
         else const.METER_MONO
     )
     result = await hass.config_entries.flow.async_init(
@@ -53,6 +64,9 @@ async def test_where_the_flow_lands(
     result = await cfg(flow, {const.CONF_SUPPLIER: sid, const.CONF_REGION: region})
     assert result["step_id"] == "contract", result
     result = await cfg(flow, {const.CONF_CONTRACT: contract.id})
+    if contract.quarter_hourly_option:
+        assert result["step_id"] == "settlement", result
+        result = await cfg(flow, {const.CONF_QUARTER_HOURLY: quarter_hourly})
     assert result["step_id"] == "dso", result
     result = await cfg(flow, {const.CONF_DSO: dso})
     assert result["step_id"] == "meter", result
@@ -65,8 +79,8 @@ async def test_where_the_flow_lands(
     if result.get("step_id") == "dso_tariff_mode":
         result = await cfg(flow, {const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_SIMPLE})
     landed = result.get("step_id")
-    expect_key = contract.kind in SPOT_PRICED_CONTRACT_KINDS
-    print(f"LANDED {sid}:{contract.id} kind={contract.kind} -> {landed}")
+    expect_key = kind in SPOT_PRICED_CONTRACT_KINDS
+    print(f"LANDED {sid}:{contract.id} qh={quarter_hourly} kind={kind} -> {landed}")
     if expect_key:
         assert landed == "api_key", (sid, contract.id, landed)
         # Required: an empty submission is rejected, not skipped, and the
