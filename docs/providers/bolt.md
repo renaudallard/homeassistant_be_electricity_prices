@@ -117,18 +117,27 @@ source — every number in a `SupplierSnapshot` comes from a live fetch. Sourcin
 Brugel/Sibelga publication the way the Brussels OSP table is handled would be a real fix; putting
 the figure in the extractor would not. Left as a known gap.
 
-| id | label | kind | folder / slug | spot-indexed injection | Notes |
+| id | label | kind | folder / slug | `spot_indexed_injection` | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `bolt_fix` | Bolt Fixe (1 year) | fixed | `fix` / `fix` | no | The only card with a real monthly archive |
-| `bolt_plenty_fix` | Bolt Plenty Fixe (1 year) | fixed | `fix` / `plenty_fix` | no | Fixed, month archive like `bolt_fix` |
-| `bolt_variable` | Bolt Variable | variable | `var` / `bolt` | no | Monthly-indexed variable |
+| `bolt_fix` | Bolt Fixe (1 year) | fixed | `fix` / `fix` | yes | The only card with a real monthly archive |
+| `bolt_plenty_fix` | Bolt Plenty Fixe (1 year) | fixed | `fix` / `plenty_fix` | yes | Fixed, month archive like `bolt_fix` |
+| `bolt_variable` | Bolt Variable | variable | `var` / `bolt` | yes | Monthly-indexed variable |
 | `bolt_dynamic` | Bolt Dynamisch | dynamic | `var` / `bolt` | via energy | Same variable card, formula on the 15-min Belpex spot |
-| `bolt_plenty` | Bolt Plenty Variable | variable | `var` / `plenty` | no | |
+| `bolt_plenty` | Bolt Plenty Variable | variable | `var` / `plenty` | yes | |
 | `bolt_plenty_dynamic` | Bolt Plenty Dynamisch | dynamic | `var` / `plenty` | via energy | Dynamic settlement of the Plenty card |
-| `bolt_online` | Bolt Online | variable | `var` / `online` | no | |
+| `bolt_online` | Bolt Online | variable | `var` / `online` | yes | |
 | `bolt_online_dynamic` | Bolt Online Dynamisch | dynamic | `var` / `online` | via energy | Dynamic settlement of the Online card |
-| `bolt_plenty_online` | Bolt Plenty Online | variable | `var` / `plenty_online` | no | The one card with its own coefficients |
+| `bolt_plenty_online` | Bolt Plenty Online | variable | `var` / `plenty_online` | yes | The one card with its own coefficients |
 | `bolt_plenty_online_dynamic` | Bolt Plenty Online Dynamisch | dynamic | `var` / `plenty_online` | via energy | Dynamic settlement of the Plenty Online card |
+
+The `spot_indexed_injection` column is the registry flag verbatim, and it reads the way it does
+because the flag answers "does this product's feed-in need spots its ENERGY leg never fetches".
+Every fixed and variable Bolt card sets it: they print the quarter-hourly Belpex injection formula
+beside the illustrative figure and settle on it, while their energy leg is a printed rate that asks
+for no spot at all. The dynamic contracts leave it `False` and are marked *via energy* here: their
+own formula already collects the ENTSO-E key, so the flag would offer a second time what the entry
+has. The column used to read `no` down the whole non-dynamic half, which is the exact inverse of
+`bolt.py:1378`.
 
 `test_bolt_is_registered` (`tests/test_bolt.py:52`) pins the count at exactly twenty and asserts
 `bolt_fix`, `bolt_variable` and `bolt_dynamic` are present, so adding or removing a product must
