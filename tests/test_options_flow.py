@@ -5071,6 +5071,40 @@ def test_contract_group_is_empty_for_a_contract_that_left_the_catalogue() -> Non
     )
 
 
+def test_a_row_is_named_for_the_settlement_it_was_priced_on() -> None:
+    """Two rows off one document have to be tellable apart.
+
+    The household's own row shares the helper, so a ticked Bolt entry is not
+    listed under a bare name while the alternatives beside it carry the
+    marker. Marked on exactly the condition the sweep expands on, so a marker
+    always separates two rows that can appear together: Frank's settlement
+    leaves its kind alone, is never expanded, and its annual figure is the
+    hourly one either way, so marking it would advertise a difference this
+    column does not carry.
+    """
+    from custom_components.be_electricity_prices.compare_flow import _candidate_label
+
+    assert _candidate_label("bolt", "bolt_plenty", False) == "Bolt Plenty Variable"
+    assert (
+        _candidate_label("bolt", "bolt_plenty", True)
+        == "Bolt Plenty Variable (quarter-hourly)"
+    )
+    assert _candidate_label("frank", "frank_dynamic", True) == "Frank Energie Dynamisch"
+    # A contract with no settlement box cannot be marked by a stray answer.
+    assert _candidate_label("bolt", "bolt_fix", True) == "Bolt Fixe (1 year)"
+
+    # And every label in a cell stays distinct, which the label -> candidate
+    # map the year-to-date pass reads back through depends on.
+    from custom_components.be_electricity_prices.flow_schemas import _sweep_candidates
+
+    for group in ("static", "spot", "slot"):
+        labels = [
+            _candidate_label(sup, c.id, q)
+            for sup, c, q in _sweep_candidates("flanders", group, False, "")
+        ]
+        assert len(labels) == len(set(labels)), group
+
+
 def test_the_settlement_decides_which_cell_the_household_is_ranked_in() -> None:
     """The ranking only ranks within one KIND_GROUP, and on Bolt the
     settlement is what puts the household in a group.

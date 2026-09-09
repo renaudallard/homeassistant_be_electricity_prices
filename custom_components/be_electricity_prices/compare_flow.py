@@ -68,6 +68,7 @@ from homeassistant.helpers.selector import (
 )
 
 from .providers import all_extractors, get as get_extractor
+from .providers import effective_kind
 from .providers import offers_quarter_hourly
 from .energy_meters import memoise_meter_reads
 from .providers._pdf import memoise_text_fetches
@@ -312,15 +313,23 @@ def _settlement_of(data: Mapping[str, Any]) -> bool:
 
 
 def _candidate_label(supplier_id: str, contract_id: str, quarter_hourly: bool) -> str:
-    """One ranking row's name, settlement included.
+    """One ranking row's name, settlement included where it separates rows.
 
-    A card sold on both settlements is two rows off one document, and they are
-    two different bills. Without the marker they would render identically,
-    collide in the label -> candidate map the year-to-date pass reads back
-    through, and leave the user unable to tell which row is which.
+    A card whose settlement changes its KIND is two rows off one document, and
+    they are two different bills. Without the marker they would render
+    identically, collide in the label -> candidate map the year-to-date pass
+    reads back through, and leave the user unable to tell which row is which.
+
+    Marked on exactly the condition ``_sweep_candidates`` expands on, so a
+    marker always distinguishes two rows that can appear together. Frank's
+    settlement leaves the kind alone and is never expanded, and its rows are
+    all priced on the hourly grid the annual figure uses anyway, so marking
+    one would advertise a difference this column does not carry.
     """
     label = _label_for_contract(supplier_id, contract_id)
-    if quarter_hourly:
+    if quarter_hourly and effective_kind(
+        supplier_id, contract_id, quarter_hourly=True
+    ) != effective_kind(supplier_id, contract_id):
         label = f"{label} (quarter-hourly)"
     return _row_label(_label_for_supplier(supplier_id), label)
 
@@ -1562,9 +1571,16 @@ class _SweepEngine:
         current = self.config_entry.data
         if hh.current_snapshot is None or hh.current_per_kwh is None:
             return None
-        label = _row_label(
-            _label_for_supplier(current[CONF_SUPPLIER]),
-            _label_for_contract(current[CONF_SUPPLIER], current[CONF_CONTRACT]),
+        # Named the way the candidates are, settlement included: on a card
+        # sold both ways the alternatives beside it carry the marker, and a
+        # bare name would read as the monthly settlement while the row below
+        # it prices the same card per quarter-hour. Its label is never looked
+        # up in the sweep's map -- the own row is handled before that -- so
+        # sharing the helper costs nothing but keeps the column readable.
+        label = _candidate_label(
+            current[CONF_SUPPLIER],
+            current[CONF_CONTRACT],
+            _settlement_of(current),
         )
         try:
             annual = _annual_bill(
