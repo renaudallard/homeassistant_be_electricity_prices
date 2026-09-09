@@ -591,3 +591,17 @@ column.** At the Q2 2026 indices Eco resolves to 9,912 against a printed 9,91 an
 Pic to 19,232 against 19,23, but Medium resolves to 15,636 against a printed
 14,64 — a one-digit supplier typo that reading the column would bake into every
 Medium hour.
+
+**The bands belong to the monthly settlement, so ticking the quarter-hour box drops
+them.** `resolve_settlement_grid` produces `DynamicRates`, which carries no
+`impact_*` fields, and it is right that it does: the CWaPE band schedule prices a
+month-indexed rate by hour of day, while a quarter-hourly settlement already prices
+each quarter at its own Belpex. Measured on the Plenty card in Wallonia at a
+0,10 EUR/kWh spot, the energy leg goes from 0,09912 / 0,15636 / 0,19232 by band to a
+flat 0,14172. That is not a change of behaviour — the retired `bolt_dynamic`
+contract produced exactly the same leg, and a differential across 135 priced
+combinations confirms the two are identical — but it is now reachable by ticking a
+box rather than by picking a different product, so a Walloon household on the
+incitative network tariff should know that its energy stops being banded when it
+switches settlement. The network leg and the Walloon terme fixe still follow
+`dso_tariff_mode`, which is the connection and does not move with the contract.
