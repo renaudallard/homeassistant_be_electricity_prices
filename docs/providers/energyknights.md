@@ -231,7 +231,7 @@ published for 2026 to 0,01 EUR/MWh. Energy Knights sells in Flanders only, so th
 customer's DSO curve is always that one.
 
 `spot_monthly` is in `SPOT_PRICED_CONTRACT_KINDS` (`const.py:264`), which routes the
-config flow through `async_step_api_key` (`config_flow.py:395`) with a `vol.Required`
+config flow through `async_step_api_key` (`config_flow.py:435`) with a `vol.Required`
 field validated live against ENTSO-E. So the coefficients always resolve, at the cost
 that a user without a key cannot add this contract at all: they reach a password field
 with no skip and the only exit is closing the dialog. That is exactly energie.be

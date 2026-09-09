@@ -346,16 +346,16 @@ of the month.
 
 ## Services
 
-Registered once in `async_setup` (`__init__.py:116`), so they exist even before
+Registered once in `async_setup` (`__init__.py:120`), so they exist even before
 any entry finishes loading. Names and field descriptions are declared in
 `services.yaml` and localized under `services.*` in `strings.json`.
 
 | Service | Handler | Response mode | Targets an entry? |
 | --- | --- | --- | --- |
-| `refresh` | `_async_refresh_service` (`__init__.py:453`) | none | no, hits every loaded entry |
-| `cheapest_window` | `_async_cheapest_window_service` (`__init__.py:680`) | `ONLY` | optional `entry_id` |
-| `most_expensive_window` | `_async_most_expensive_window_service` (`__init__.py:688`) | `ONLY` | optional `entry_id` |
-| `backfill_statistics` | `_async_backfill_service` (`__init__.py:696`) | `OPTIONAL` | optional `entry_id` |
+| `refresh` | `_async_refresh_service` (`__init__.py:524`) | none | no, hits every loaded entry |
+| `cheapest_window` | `_async_cheapest_window_service` (`__init__.py:751`) | `ONLY` | optional `entry_id` |
+| `most_expensive_window` | `_async_most_expensive_window_service` (`__init__.py:759`) | `ONLY` | optional `entry_id` |
+| `backfill_statistics` | `_async_backfill_service` (`__init__.py:767`) | `OPTIONAL` | optional `entry_id` |
 
 ### `refresh`
 
@@ -378,7 +378,7 @@ Same shape; one minimizes the window average, the other maximizes. Fields
 | `earliest_start` | no | datetime | earliest window start; defaults to now |
 | `latest_end` | no | datetime | latest window end; defaults to the end of the cached table |
 
-Both call `_resolve_window_inputs` (`__init__.py:626`) then `_find_window`
+Both call `_resolve_window_inputs` (`__init__.py:697`) then `_find_window`
 (`__init__.py:408`). Key behaviors:
 
 - `duration_hours` is rounded half-up and scaled to the table's slot grid:
@@ -390,7 +390,7 @@ Both call `_resolve_window_inputs` (`__init__.py:626`) then `_find_window`
   (`slot_start`, `__init__.py:410`), so 14:30 still considers the 14:00 slot
   (14:30 on a 15-minute contract). A naive datetime from YAML is interpreted in
   the HA time zone (typically Europe/Brussels), not the host's tz
-  (`_to_utc`, `__init__.py:663`).
+  (`_to_utc`, `__init__.py:734`).
 - `latest_end` filters out any slot whose end (`slot + width`) falls after it.
 - Only strictly time-contiguous runs are considered: a run must span exactly
   `delta * (duration_slots - 1)` so a gap ENTSO-E omitted cannot let the window
@@ -429,7 +429,7 @@ predating the entry's first live tick. Fields (`services.yaml:65`):
 | `end` | no | datetime (exclusive) | the current hour |
 | `clear` | no | boolean | false |
 
-The handler `_async_backfill_service` (`__init__.py:696`) resolves the target
+The handler `_async_backfill_service` (`__init__.py:767`) resolves the target
 coordinator, then raises `ServiceValidationError` translation_key
 `snapshot_not_loaded` if `coordinator._snapshot is None`, before delegating to
 `backfill_range` (see [data-sources.md](data-sources.md)). It returns

@@ -149,7 +149,7 @@ onto these canonical keys.
 
 ### Supplier and contract
 
-A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:1237`). It declares
+A supplier is one registry entry, a `SupplierExtractor` (`providers/base.py:1268`). It declares
 the `Contract`s it sells (`providers/base.py:74`), each carrying a `TariffKind`
 (`providers/base.py:53`):
 
@@ -234,7 +234,7 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
 Numbered walkthrough:
 
 1. The user completes the config flow; HA stores the selections in `entry.data` and calls
-   `async_setup_entry` (`__init__.py:215`).
+   `async_setup_entry` (`__init__.py:285`).
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
    tuple (`coordinator.py:888`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
@@ -301,7 +301,7 @@ A new supplier is a self-contained change; the contract is in
 [provider-framework.md](provider-framework.md). In outline:
 
 1. Add `providers/<supplier>.py` exposing a top-level `EXTRACTOR: SupplierExtractor`
-   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:1291`). It declares the
+   (`providers/base.py:531`, `SupplierProtocol` at `providers/base.py:1322`). It declares the
    `contracts` it sells, a `fetch` that returns a `SupplierSnapshot`, and optionally a `probe`
    (for cheap freshness) and a `fetch_for_month` (for historical year-to-date billing). No EUR
    value goes in the module; everything comes from the live card.
