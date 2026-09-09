@@ -59,11 +59,30 @@ all three regions still live inside that one French document. The listing page
 
 ## Contracts
 
-Bolt declares seven residential-electricity contracts and a professional edition of each, fourteen
-in all (`bolt.py:144`). All are region-unrestricted (default `regions` = all three). Six of the
-seven are fixed / variable, all billing injection per quarter-hour off Belpex; the seventh, `bolt_dynamic`,
-is a `quarter_hourly` dynamic contract that depends on the ENTSO-E spot and has a spot-indexed
-injection (see Contracts / Injection below).
+Bolt declares ten residential-electricity contracts and a professional edition of each, twenty
+in all (`bolt.py:144`). All are region-unrestricted (default `regions` = all three). Six are
+fixed / variable, all billing injection per quarter-hour off Belpex; the other four are
+`quarter_hourly` dynamic contracts that depend on the ENTSO-E spot and take their injection
+from the card's own Belpex formula (see Contracts / Injection below).
+
+Each of the four variable cards is sold on either settlement, and the pair shares one document.
+The card says so in the same paragraph on all four:
+
+> Dans le cadre d'une facturation dynamique, la consommation ou l'injection enregistree est
+> multipliee, pour chaque quart d'heure, par la valeur Belpex correspondante pour ce meme quart
+> d'heure. En optant pour une facturation variable, nous redistribuerons la consommation ponderee
+> RLP (publication par Synergrid). Pour l'injection, nous redistribuerons l'injection ponderee SPP.
+
+Two contracts rather than one contract and a settlement flag, which is what Frank Energie's
+`quarter_hourly_option` is: the two settlements here are not one rate read on two grids. Variable
+resolves a monthly RLP-weighted mean and dynamic a per-quarter price, so they parse to different
+`EnergyRates` kinds off different parts of the card, and nothing downstream of the parser could
+convert one into the other.
+
+Only the `bolt` slug had a dynamic sibling until then, so a Plenty, Online or Plenty Online
+household settling dynamically had nothing to pick. `bolt_dynamic` is not a stand-in for them:
+it reads `Belpex * 1,168 + 16,90` at 8,99 EUR/month against Plenty Online's `Belpex * 1,145 +
+16,45` at 0,99, about 106 EUR/yr apart at 3500 kWh, almost all of it the standing charge.
 
 ### The professional editions
 
@@ -105,12 +124,17 @@ the figure in the extractor would not. Left as a known gap.
 | `bolt_variable` | Bolt Variable | variable | `var` / `bolt` | no | Monthly-indexed variable |
 | `bolt_dynamic` | Bolt Dynamisch | dynamic | `var` / `bolt` | via energy | Same variable card, formula on the 15-min Belpex spot |
 | `bolt_plenty` | Bolt Plenty Variable | variable | `var` / `plenty` | no | |
+| `bolt_plenty_dynamic` | Bolt Plenty Dynamisch | dynamic | `var` / `plenty` | via energy | Dynamic settlement of the Plenty card |
 | `bolt_online` | Bolt Online | variable | `var` / `online` | no | |
-| `bolt_plenty_online` | Bolt Plenty Online | variable | `var` / `plenty_online` | no | |
+| `bolt_online_dynamic` | Bolt Online Dynamisch | dynamic | `var` / `online` | via energy | Dynamic settlement of the Online card |
+| `bolt_plenty_online` | Bolt Plenty Online | variable | `var` / `plenty_online` | no | The one card with its own coefficients |
+| `bolt_plenty_online_dynamic` | Bolt Plenty Online Dynamisch | dynamic | `var` / `plenty_online` | via energy | Dynamic settlement of the Plenty Online card |
 
-`test_bolt_is_registered` (`tests/test_bolt.py:52`) pins the count at exactly seven and asserts
+`test_bolt_is_registered` (`tests/test_bolt.py:52`) pins the count at exactly twenty and asserts
 `bolt_fix`, `bolt_variable` and `bolt_dynamic` are present, so adding or removing a product must
-update that test.
+update that test. `test_every_variable_card_has_a_dynamic_sibling` pins the pairing itself, and
+`test_a_dynamic_sibling_reads_its_own_slug_not_the_base_card` pins that each sibling resolves to
+its own document rather than to `var/bolt`.
 
 `bolt_dynamic` reuses the `var` / `bolt` card (Bolt's dynamic option on the variable contract): the
 card prints its tariff formula as `Belpex * <factor> <sign> <base>` in EUR/MWh HTVA, and

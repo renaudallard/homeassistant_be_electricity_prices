@@ -4921,20 +4921,24 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # in the spot cell rather than the static one. Re-costed with them:
         # they parse in 6,4 to 8,2 s against the older pair's 4,3 to 5,2, so
         # the supplier's reservation moved from 5,7 s to 9,1.
-        ("flanders", "spot", False): 29,
-        ("flanders", "spot", True): 3,
+        # Every spot cell gained three residential and three professional rows
+        # when Bolt's Plenty, Online and Plenty Online cards each got their
+        # dynamic settlement, in all three regions. Cheap to re-cost: a
+        # sibling reads the same document as the variable contract beside it.
+        ("flanders", "spot", False): 32,
+        ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,
         ("wallonia", "static", False): 51,
         ("wallonia", "static", True): 21,
-        ("wallonia", "spot", False): 10,
-        ("wallonia", "spot", True): 3,
+        ("wallonia", "spot", False): 13,
+        ("wallonia", "spot", True): 6,
         ("wallonia", "slot", False): 5,
         ("wallonia", "slot", True): 1,
         ("brussels", "static", False): 29,
         ("brussels", "static", True): 21,
-        ("brussels", "spot", False): 4,
-        ("brussels", "spot", True): 3,
+        ("brussels", "spot", False): 7,
+        ("brussels", "spot", True): 6,
         ("brussels", "slot", False): 1,
         ("brussels", "slot", True): 1,
     }

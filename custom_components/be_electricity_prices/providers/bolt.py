@@ -175,16 +175,38 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "bolt_plenty_fix", "Bolt Plenty Fixe (1 year)", "fixed", "fix", "plenty_fix"
     ),
     _ContractDef("bolt_variable", "Bolt Variable", "variable", "var", "bolt"),
-    # Same card + formula as Bolt Variable, but the formula is applied to the
-    # live quarter-hourly Belpex spot instead of the monthly average (Bolt's
-    # dynamic option on the variable contract). Shares the var/bolt document.
+    # Same card + formula as its variable sibling, but the formula is applied
+    # to the live quarter-hourly Belpex spot instead of the monthly average,
+    # and the pair shares one document. Every variable card carries the
+    # choice, in the same paragraph: "Dans le cadre d'une facturation
+    # dynamique, la consommation ou l'injection enregistree est multipliee,
+    # pour chaque quart d'heure, par la valeur Belpex correspondante pour ce
+    # meme quart d'heure. En optant pour une facturation variable, nous
+    # redistribuerons la consommation ponderee RLP." Two contracts rather
+    # than one contract and a flag, because the two settlements are not one
+    # rate on two grids: variable resolves a monthly RLP-weighted mean and
+    # dynamic a per-quarter price, so they parse to different rate kinds off
+    # different parts of the card.
     _ContractDef("bolt_dynamic", "Bolt Dynamisch", "dynamic", "var", "bolt"),
     _ContractDef("bolt_plenty", "Bolt Plenty Variable", "variable", "var", "plenty"),
+    _ContractDef(
+        "bolt_plenty_dynamic", "Bolt Plenty Dynamisch", "dynamic", "var", "plenty"
+    ),
     _ContractDef("bolt_online", "Bolt Online", "variable", "var", "online"),
+    _ContractDef(
+        "bolt_online_dynamic", "Bolt Online Dynamisch", "dynamic", "var", "online"
+    ),
     _ContractDef(
         "bolt_plenty_online",
         "Bolt Plenty Online",
         "variable",
+        "var",
+        "plenty_online",
+    ),
+    _ContractDef(
+        "bolt_plenty_online_dynamic",
+        "Bolt Plenty Online Dynamisch",
+        "dynamic",
         "var",
         "plenty_online",
     ),
@@ -225,6 +247,14 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         segment="pro",
     ),
     _ContractDef(
+        "bolt_pro_plenty_dynamic",
+        "Bolt Plenty Dynamisch (pro)",
+        "dynamic",
+        "var",
+        "plenty",
+        segment="pro",
+    ),
+    _ContractDef(
         "bolt_pro_online",
         "Bolt Online (pro)",
         "variable",
@@ -233,9 +263,25 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         segment="pro",
     ),
     _ContractDef(
+        "bolt_pro_online_dynamic",
+        "Bolt Online Dynamisch (pro)",
+        "dynamic",
+        "var",
+        "online",
+        segment="pro",
+    ),
+    _ContractDef(
         "bolt_pro_plenty_online",
         "Bolt Plenty Online (pro)",
         "variable",
+        "var",
+        "plenty_online",
+        segment="pro",
+    ),
+    _ContractDef(
+        "bolt_pro_plenty_online_dynamic",
+        "Bolt Plenty Online Dynamisch (pro)",
+        "dynamic",
         "var",
         "plenty_online",
         segment="pro",

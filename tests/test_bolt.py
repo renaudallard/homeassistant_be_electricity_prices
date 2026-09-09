@@ -56,8 +56,10 @@ def test_bolt_is_registered() -> None:
     assert "bolt_fix" in contract_ids
     assert "bolt_variable" in contract_ids
     assert "bolt_dynamic" in contract_ids
-    # Seven residential products, plus the seven professional editions.
-    assert len(contract_ids) == 14
+    # Ten residential products, plus the ten professional editions. Each of
+    # the four variable cards is sold on either settlement, so each carries a
+    # dynamic sibling reading the same document.
+    assert len(contract_ids) == 20
 
 
 def test_fix_yearly_fee_is_monthly_x_12() -> None:
@@ -1092,3 +1094,55 @@ def test_a_dashed_excise_row_still_raises() -> None:
     )
     with pytest.raises(ExtractorError, match="Droit d'accise"):
         bolt_mod._extract_taxes(dashed_excise, "wallonia")
+
+
+def test_every_variable_card_has_a_dynamic_sibling() -> None:
+    """All four variable cards print the same facturation dynamique clause, so
+    all four are sold on either settlement.
+
+    Only the `bolt` slug had a dynamic contract, which left a Plenty Online
+    household with nothing to pick but the variable one, or the wrong card:
+    Bolt Dynamisch reads `Belpex * 1,168 + 16,90` at 8,99 EUR/month against
+    Plenty Online's `Belpex * 1,145 + 16,45` at 0,99, about 106 EUR/yr apart
+    at 3500 kWh.
+    """
+    by_kind: dict[tuple[str, str], set[str]] = {}
+    for c in bolt_mod._CONTRACTS:
+        if c.folder != "var":
+            continue
+        by_kind.setdefault((c.slug, c.segment), set()).add(c.kind)
+    assert by_kind, "no variable-folder contracts found"
+    for key, kinds in by_kind.items():
+        assert kinds == {"variable", "dynamic"}, key
+
+
+def test_a_dynamic_sibling_reads_its_own_slug_not_the_base_card() -> None:
+    """The pair shares one document, and it has to be the sibling's own: the
+    four cards carry different coefficients and different standing charges,
+    so pointing a dynamic contract at var/bolt would quietly price every
+    Plenty and Online household on the base product."""
+    for var_id, dyn_id in (
+        ("bolt_variable", "bolt_dynamic"),
+        ("bolt_plenty", "bolt_plenty_dynamic"),
+        ("bolt_online", "bolt_online_dynamic"),
+        ("bolt_plenty_online", "bolt_plenty_online_dynamic"),
+        ("bolt_pro_plenty", "bolt_pro_plenty_dynamic"),
+    ):
+        variable = bolt_mod._CONTRACTS_BY_ID[var_id]
+        dynamic = bolt_mod._CONTRACTS_BY_ID[dyn_id]
+        assert bolt_mod._document_url(dynamic) == bolt_mod._document_url(variable), (
+            dyn_id
+        )
+
+
+def test_a_dynamic_sibling_parses_its_own_cards_coefficients() -> None:
+    """The dynamic branch is card-agnostic, so the sibling needs no parser of
+    its own; this pins that the registry entry actually reaches its card."""
+    snap = parse_snapshot(
+        "bolt_plenty_dynamic",
+        fixture_text("bolt_variable.pdf", layout=True),
+        "wallonia",
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.quarter_hourly is True
+    assert snap.energy.factor == pytest.approx(1.1192 * 1.06)
