@@ -116,6 +116,23 @@ class Contract:
     # parsed offers a key nothing resolves, and a formula parsed with no flag
     # here is a re-price no flow step can ever switch on.
     month_indexed_energy: bool = False
+    # True when the supplier lets the customer settle this product on the
+    # 15-minute grid instead of the hourly one, and the card says so. Frank
+    # Energie is the case: every Dynamisch tier prices "BELPEX per uur" by
+    # default and its footnote offers "kwartierprijzen [Quarter Hourly
+    # BELPEX]" through the app, switchable from one month to the next. The
+    # coefficients do not change, only the index the formula reads, so the
+    # choice cannot be read off the card and cannot be a second contract
+    # either: it is a per-entry fact the config flow asks for and
+    # ``resolve_settlement_grid`` applies.
+    #
+    # Not the same thing as a supplier selling both grids as two products
+    # (Energy Knights Agilior on Belpex_15 against Agilis on Belpex_h), which
+    # the contract picker already separates, nor as a card that mandates one
+    # grid (OCTA+ requires an SMR3 meter and bills per quarter regardless).
+    # Only set it where the card documents a choice, or the flow offers a
+    # toggle that moves the bill away from what the supplier actually invoices.
+    quarter_hourly_option: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -247,17 +264,22 @@ class DynamicRates:
     """Dynamic energy contract: ``factor x spot + base`` per price slot.
 
     ``quarter_hourly`` selects the spot grid the contract bills on. Some
-    Belgian dynamic suppliers (Frank Energie by default, Luminus, Mega,
-    TotalEnergies, Eneco) price per clock hour, so the integration
-    aggregates ENTSO-E's 15-minute day-ahead curve to hourly. Engie,
-    Cociter, EBEM, Ecofix, OCTA+, Ecopower (Dynamische Burgerstroom),
-    Bolt (Dynamisch), energie.be, EnergyVision and Energy Knights
-    (Agilior Online) bill per quarter-hour (their cards multiply the
-    15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot); those
+    Belgian dynamic suppliers (Frank Energie, Luminus, Mega, TotalEnergies,
+    Eneco, Energy Knights Agilis Online) price per clock hour, so the
+    integration aggregates ENTSO-E's 15-minute day-ahead curve to hourly.
+    Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower (Dynamische
+    Burgerstroom), Bolt (Dynamisch), energie.be, EnergyVision and Energy
+    Knights (Agilior Online) bill per quarter-hour (their cards multiply
+    the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot); those
     extractors set this True so the live price table, current /
     next-slot sensors and the cheapest-window service keep the native
     15-minute slots. YTD billing stays hourly regardless: Home Assistant
     only retains hourly long-term statistics.
+
+    Where the supplier lets the customer pick the grid rather than fixing
+    it on the card, the extractor parses the hourly default the card
+    prints and the entry's own answer flips it in
+    :func:`resolve_settlement_grid`; see ``Contract.quarter_hourly_option``.
     """
 
     factor: float
@@ -1157,6 +1179,37 @@ def resolve_volume_tier(
         changes[f"factor_{suffix}"] = blended_factor
         changes[f"base_{suffix}"] = blended_base
     return replace(snapshot, energy=replace(energy, **changes))
+
+
+def resolve_settlement_grid(
+    snapshot: SupplierSnapshot, *, quarter_hourly: bool
+) -> SupplierSnapshot:
+    """Move a dynamic card onto the 15-minute grid the entry settles on.
+
+    Identity unless the household actually asked for it, which is every entry
+    whose supplier does not offer the choice, so the cost is one boolean for
+    all of them.
+
+    Only :class:`DynamicRates` can move. A card that already prints a
+    quarter-hourly index carries ``quarter_hourly`` from its own parser and
+    comes back untouched; so does a monthly-indexed leg, whose rate is one
+    figure for the whole month and has no sub-hour shape to take.
+
+    Deliberately applied here rather than in the extractor. The grid is an
+    account setting the supplier lets the customer flip from one month to the
+    next (Frank Energie's app), so the card cannot say which side a given
+    household is on, and two contract ids for one product would ask the user
+    to re-pick their contract to change a billing preference. Resolving it
+    beside the VAT treatment and the excise band keeps it on every path that
+    produces a snapshot, the cached and archived ones included, so unticking
+    the box takes effect without a refetch.
+    """
+    if not quarter_hourly:
+        return snapshot
+    energy = snapshot.energy
+    if not isinstance(energy, DynamicRates) or energy.quarter_hourly:
+        return snapshot
+    return replace(snapshot, energy=replace(energy, quarter_hourly=True))
 
 
 SnapshotFetcher = Callable[

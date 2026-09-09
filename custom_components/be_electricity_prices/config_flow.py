@@ -110,6 +110,7 @@ from .const import (
     DSO_MODE_IMPACT,
     CONF_INCLUDE_VAT,
     CONF_METER,
+    CONF_QUARTER_HOURLY,
     CONF_REGION,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
@@ -123,6 +124,7 @@ from .const import (
     REGION_WALLONIA,
 )
 from .providers import get as get_extractor
+from .providers import offers_quarter_hourly
 
 
 # ---- shared schema builders ---------------------------------------------------
@@ -289,6 +291,15 @@ class _WizardStepsMixin:
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
+            if not offers_quarter_hourly(
+                self._data.get(CONF_SUPPLIER), self._data.get(CONF_CONTRACT)
+            ):
+                # The box was not on the form, so an answer stored against a
+                # previous contract survived the edit. Drop it: on a card that
+                # fixes its own grid the setting is inert, and it would come
+                # back into force the day the user switched to a supplier that
+                # does offer the choice, for a reason long forgotten.
+                self._data.pop(CONF_QUARTER_HOURLY, None)
             return await self._ask_professional()
         return self.async_show_form(
             step_id="meter",

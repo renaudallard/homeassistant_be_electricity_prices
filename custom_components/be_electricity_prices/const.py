@@ -189,6 +189,13 @@ CONF_MANUAL_ENERGY_BASE: Final = "manual_energy_base"
 CONF_MANUAL_YEARLY_FEE: Final = "manual_yearly_fee"
 
 CONF_METER: Final = "meter"
+
+# Whether this household settles its dynamic contract on the 15-minute grid
+# rather than the hourly one the card prints. Only meaningful on a contract
+# whose supplier offers the choice (``Contract.quarter_hourly_option``);
+# every other card fixes the grid itself and the setting cannot change it.
+CONF_QUARTER_HOURLY: Final = "quarter_hourly"
+
 CONF_API_KEY: Final = "api_key"
 
 # Whether prices include VAT. Only meaningful on a contract whose card

@@ -35,6 +35,21 @@ with different formula parameters (factor, base, monthly fee):
   - Dynamisch JN (lower subscription, different formula)
   - Dynamisch Slim (requires smart devices: solar, EV, battery, heat pump)
 
+Every tier prices "BELPEX per uur" and carries the same footnote offering
+the 15-minute grid instead:
+
+    *Afrekening uur- of kwartierprijzen
+    De energieprijs wordt standaard berekend op basis van uurprijzen (EPEX
+    Spot Belgie / Belpex). Je kan er via de Frank Energie app voor kiezen om
+    de energieprijs te laten berekenen op basis van kwartierprijzen. In dat
+    geval wordt het verbruik per kwartier afgerekend volgens de bijbehorende
+    kwartiermarktprijzen [Quarter Hourly BELPEX]. De keuze voor uurprijzen of
+    kwartierprijzen kan maandelijks aangepast worden.
+
+The formula is the same on either grid, so the card cannot say which side a
+household is on and nothing here can read it. The tiers carry
+``quarter_hourly_option`` and the config flow asks; see ``_TIERS``.
+
 Data source: Sanity file asset API (public, no auth required).
 Region: Flanders only (all 8 Fluvius sub-areas).
 """
@@ -486,6 +501,11 @@ EXTRACTOR = SupplierExtractor(
             label=clabel,
             kind="dynamic",
             regions=_FRANK_REGIONS,
+            # The asterisk on both printed formulas points at the
+            # uur- / kwartierprijzen footnote (module docstring): the
+            # customer picks the grid in Frank's app, so the entry answers
+            # for the card. Set on every tier because every tier prints it.
+            quarter_hourly_option=True,
         )
         for cid, clabel, _ in _TIERS
     ),

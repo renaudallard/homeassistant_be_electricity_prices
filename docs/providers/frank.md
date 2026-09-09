@@ -61,18 +61,52 @@ objects by the `EXTRACTOR` comprehension (`providers/frank.py:479`). Every one i
 `kind="dynamic"`, `regions=_FRANK_REGIONS` (Flanders only), and leaves
 `spot_indexed_injection` at its default `False` (a dynamic contract already collects the
 ENTSO-E key via its energy formula, so the injection regime does not need to gate it; see
-`base.py:71`). None of them sets `quarter_hourly`, so all bill per clock hour: Frank is
-listed in the `DynamicRates` docstring as an hourly-billing supplier
-(`base.py:144`). The integration aggregates the ENTSO-E 15-minute curve to hourly for
-these contracts.
+`base.py:71`). No parser here sets `quarter_hourly`, because the card always prints the
+hourly formula; the household's own answer flips it, and every tier carries
+`quarter_hourly_option=True` to say the choice exists.
 
-| contract id | label | TariffKind | regions | filename suffix | quarter_hourly | note |
+| contract id | label | TariffKind | regions | filename suffix | quarter-hour choice | note |
 | --- | --- | --- | --- | --- | --- | --- |
-| `frank_dynamic` | Frank Energie Dynamisch | dynamic | flanders | none (bare month) | False | standard tier |
-| `frank_dynamic_hv` | Frank Energie Dynamisch HV | dynamic | flanders | `HV` | False | higher subscription, lower per-kWh margin |
-| `frank_dynamic_korting` | Frank Energie Dynamisch Korting | dynamic | flanders | `VT` | False | 120 EUR cashback after 1 year |
-| `frank_dynamic_jn` | Frank Energie Dynamisch JN | dynamic | flanders | `JN` | False | lower subscription, different formula and injection base |
-| `frank_dynamic_slim` | Frank Energie Dynamisch Slim | dynamic | flanders | `SL` | False | requires smart devices (solar, EV, battery, heat pump) |
+| `frank_dynamic` | Frank Energie Dynamisch | dynamic | flanders | none (bare month) | offered | standard tier |
+| `frank_dynamic_hv` | Frank Energie Dynamisch HV | dynamic | flanders | `HV` | offered | higher subscription, lower per-kWh margin |
+| `frank_dynamic_korting` | Frank Energie Dynamisch Korting | dynamic | flanders | `VT` | offered | 120 EUR cashback after 1 year |
+| `frank_dynamic_jn` | Frank Energie Dynamisch JN | dynamic | flanders | `JN` | offered | lower subscription, different formula and injection base |
+| `frank_dynamic_slim` | Frank Energie Dynamisch Slim | dynamic | flanders | `SL` | offered | requires smart devices (solar, EV, battery, heat pump) |
+
+### Hourly or quarter-hourly settlement
+
+Frank is the only supplier here that sells one product on either grid. Both printed
+formulas carry an asterisk pointing at the same footnote:
+
+> \*Afrekening uur- of kwartierprijzen. De energieprijs wordt standaard berekend op basis
+> van uurprijzen (EPEX Spot Belgie / Belpex). Je kan er via de Frank Energie app voor
+> kiezen om de energieprijs te laten berekenen op basis van kwartierprijzen. In dat geval
+> wordt het verbruik per kwartier afgerekend volgens de bijbehorende kwartiermarktprijzen
+> [Quarter Hourly BELPEX]. De keuze voor uurprijzen of kwartierprijzen kan maandelijks
+> aangepast worden en geldt vanaf de start van de volgende kalendermaand.
+
+The coefficients are identical on both grids, so there is nothing in the PDF that says
+which side a given account is on and nothing this parser could read. It is also not a
+second product: the customer flips it in the app from one month to the next, and two
+contract ids would make a billing preference look like a contract change and cost the
+compare sweep a second download of a byte-identical card.
+
+So the tiers carry `quarter_hourly_option` (`base.py`, beside `spot_indexed_injection` and
+`month_indexed_energy`), the meter step shows a **Bill per quarter-hour** box for a
+contract that has it, and `resolve_settlement_grid` applies the answer where the VAT
+treatment and the excise band are already resolved. Two consequences worth knowing:
+
+- The answer is applied on every path that produces a snapshot, cached and archived ones
+  included, so unticking the box takes effect without waiting for a refetch and no schema
+  bump was needed to ship it.
+- The registry half of the gate is asked about the snapshot in hand, not about the entry's
+  own contract. The compare page prices an alternative supplier's card through a proxy
+  entry carrying the user's `supplier` / `contract`, so reading those would settle a Mega
+  card per quarter-hour on the strength of a Frank customer's answer.
+
+The footnote's wording covers `verbruik` explicitly; the asterisk sits on the
+terugleveringsvergoeding formula too, and the injection leg moves with the energy one on
+the assumption that Frank settles both on whichever grid the account is on.
 
 The tier descriptions come from the module docstring (`providers/frank.py:30`). Note the
 suffix mapping is not identity: the Korting tier's PDF filename token is `VT`, not

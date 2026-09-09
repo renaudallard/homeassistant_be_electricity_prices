@@ -29,12 +29,21 @@ from __future__ import annotations
 
 import pytest
 
+from dataclasses import replace
+from types import SimpleNamespace
+
+from custom_components.be_electricity_prices import snapshot_store
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
-from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import (
+    EXTRACTORS,
+    offers_quarter_hourly,
+)
 from custom_components.be_electricity_prices.providers.base import (
     DynamicRates,
     ExtractorError,
     SupplierSnapshot,
+    VariableRates,
+    resolve_settlement_grid,
 )
 from custom_components.be_electricity_prices.providers.frank import (
     _CARD_SELECT,
@@ -426,3 +435,150 @@ def test_matches_suffix_handles_the_september_naming() -> None:
     assert not _matches_suffix(
         "Frank Energie Tariefkaart Dynamisch September 2026.pdf", "HV"
     )
+
+
+# ---- the uur- / kwartierprijzen choice -------------------------------------------
+
+
+def test_every_tier_offers_the_quarter_hourly_choice() -> None:
+    """The footnote is on all five cards, so all five carry the flag.
+
+    Set per contract rather than per supplier: the flow reads it off the
+    contract the user picked, and a tier that lost the footnote would have to
+    lose the box with it.
+    """
+    for c in EXTRACTORS["frank"].contracts:
+        assert c.quarter_hourly_option, c.id
+        assert offers_quarter_hourly("frank", c.id), c.id
+
+
+def test_only_frank_offers_the_quarter_hourly_choice() -> None:
+    """Nobody else is left with the parameter unexposed, and nobody else
+    gains a box they should not have.
+
+    Everything else that bills per quarter says so on the card and the parser
+    sets ``quarter_hourly`` itself (Bolt Dynamisch, Cociter, EBEM, Ecofix,
+    Ecopower, energie.be, Engie, EnergyVision, OCTA+), sells the two grids as
+    two products (Energy Knights Agilior on Belpex_15 against Agilis on
+    Belpex_h), or prices per clock hour with no choice offered (Luminus,
+    Mega, TotalEnergies, Eneco). The expert custom supplier asks for the grid
+    on its own formula step instead.
+    """
+    flagged = {
+        (sid, c.id)
+        for sid, ex in EXTRACTORS.items()
+        for c in ex.contracts
+        if c.quarter_hourly_option
+    }
+    assert flagged == {("frank", c.id) for c in EXTRACTORS["frank"].contracts}
+
+
+def test_the_flag_is_only_meaningful_on_a_dynamic_contract() -> None:
+    """``resolve_settlement_grid`` can only move ``DynamicRates``, so a flag
+    on any other kind would show a box that changes nothing."""
+    for ex in EXTRACTORS.values():
+        for c in ex.contracts:
+            if c.quarter_hourly_option:
+                assert c.kind == "dynamic", c.id
+
+
+def test_the_card_still_parses_to_the_hourly_default() -> None:
+    """The toggle only makes sense while the card prints the hourly index.
+
+    If Frank ever moves the printed formula to Quarter Hourly BELPEX the
+    parser has to set ``quarter_hourly`` itself and the flag has to go, or
+    an untouched box would keep the entry on the wrong grid.
+    """
+    snap = parse_snapshot(
+        fixture_text("frank_dynamic_aug.pdf", layout=True),
+        "https://example.invalid/card.pdf",
+        "frank_dynamic",
+        "augustus 2026",
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert not snap.energy.quarter_hourly
+
+
+def _entry(**data: object) -> SimpleNamespace:
+    """A stand-in config entry. Only ``.data`` is ever read through
+    ``_resolve_snapshot``, which is what lets the compare flow pass a proxy
+    too; the call sites carry the ignore, so the production signature keeps
+    asking for a real ConfigEntry."""
+    base: dict[str, object] = {"supplier": "frank", "contract": "frank_dynamic"}
+    base.update(data)
+    return SimpleNamespace(data=base)
+
+
+def _frank_snapshot() -> SupplierSnapshot:
+    return parse_snapshot(
+        fixture_text("frank_dynamic_aug.pdf", layout=True),
+        "https://example.invalid/card.pdf",
+        "frank_dynamic",
+        "augustus 2026",
+    )
+
+
+def _dynamic(snap: SupplierSnapshot) -> DynamicRates:
+    """The snapshot's energy leg, narrowed. Every Frank card parses to this,
+    and a card that stopped would fail here rather than further down."""
+    energy = snap.energy
+    assert isinstance(energy, DynamicRates)
+    return energy
+
+
+def test_resolve_settlement_grid_moves_only_what_it_is_asked_to() -> None:
+    snap = _frank_snapshot()
+    assert resolve_settlement_grid(snap, quarter_hourly=False) is snap
+
+    moved = resolve_settlement_grid(snap, quarter_hourly=True)
+    assert _dynamic(moved).quarter_hourly
+    # Nothing but the grid: same formula, same fee, same card.
+    assert _dynamic(moved).factor == _dynamic(snap).factor
+    assert _dynamic(moved).base == _dynamic(snap).base
+    assert _dynamic(moved).yearly_fixed_fee == _dynamic(snap).yearly_fixed_fee
+    assert moved.injection == snap.injection
+    assert moved.taxes == snap.taxes
+
+
+def test_resolve_settlement_grid_leaves_other_legs_alone() -> None:
+    """A card that already bills per quarter, and one with no sub-hour shape
+    at all, both come back untouched rather than raising."""
+    snap = _frank_snapshot()
+    already = replace(snap, energy=replace(_dynamic(snap), quarter_hourly=True))
+    assert resolve_settlement_grid(already, quarter_hourly=True) is already
+
+    static = replace(snap, energy=VariableRates(current=0.30))
+    assert resolve_settlement_grid(static, quarter_hourly=True) is static
+
+
+def test_entry_toggle_flips_the_grid_through_resolve_snapshot() -> None:
+    snap = _frank_snapshot()
+    off = snapshot_store._resolve_snapshot(_entry(), snap)  # type: ignore[arg-type]
+    on = snapshot_store._resolve_snapshot(
+        _entry(quarter_hourly=True),  # type: ignore[arg-type]
+        snap,
+    )
+    assert not _dynamic(off).quarter_hourly
+    assert _dynamic(on).quarter_hourly
+
+
+def test_a_stored_answer_is_inert_on_a_card_that_fixes_its_own_grid() -> None:
+    """The compare page resolves an alternative supplier's card through a
+    proxy carrying the USER's supplier and contract, so the registry half of
+    the gate has to be asked about the card in hand. Read off the entry it
+    would settle a Mega card per quarter-hour, which Mega does not sell."""
+    snap = _frank_snapshot()
+    other = replace(snap, supplier="mega", contract="mega_dynamic")
+    resolved = snapshot_store._resolve_snapshot(
+        _entry(quarter_hourly=True),  # type: ignore[arg-type]
+        other,
+    )
+    assert not _dynamic(resolved).quarter_hourly
+
+    # A Frank-to-Frank comparison does carry the household's own answer over.
+    sibling = replace(snap, contract="frank_dynamic_hv")
+    carried = snapshot_store._resolve_snapshot(
+        _entry(quarter_hourly=True),  # type: ignore[arg-type]
+        sibling,
+    )
+    assert _dynamic(carried).quarter_hourly

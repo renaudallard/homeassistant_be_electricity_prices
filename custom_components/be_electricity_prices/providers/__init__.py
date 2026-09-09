@@ -99,6 +99,26 @@ def all_extractors() -> tuple[SupplierExtractor, ...]:
     return tuple(EXTRACTORS.values())
 
 
+def offers_quarter_hourly(supplier_id: str | None, contract_id: str | None) -> bool:
+    """True when the supplier lets this product settle per quarter-hour.
+
+    Read from the registry rather than from the entry alone, so the choice
+    disappears by itself if a supplier stops offering it: the config flow
+    stops showing the box and ``_resolve_snapshot`` stops applying a stored
+    answer, on the same flag, instead of the two drifting apart.
+
+    Tolerates an unknown supplier or contract, which the OptionsFlow can hold
+    after a catalogue change, for the same reason ``_contract_kind`` does.
+    """
+    if not supplier_id or not contract_id:
+        return False
+    try:
+        contracts = get(supplier_id).contracts
+    except ExtractorError:
+        return False
+    return any(c.id == contract_id and c.quarter_hourly_option for c in contracts)
+
+
 __all__ = [
     "Contract",
     "DsoOverlay",
@@ -113,5 +133,6 @@ __all__ = [
     "TaxOverlay",
     "VariableRates",
     "all_extractors",
+    "offers_quarter_hourly",
     "get",
 ]

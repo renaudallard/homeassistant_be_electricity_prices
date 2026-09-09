@@ -47,7 +47,11 @@
         "title": "Meter type",
         "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts.",
         "data": {
-          "meter": "Meter"
+          "meter": "Meter",
+          "quarter_hourly": "Bill per quarter-hour"
+        },
+        "data_description": {
+          "quarter_hourly": "Only for suppliers that let you choose (Frank Energie). Leave off to keep the hourly prices the tariff card prints; turn it on if you switched your account to quarter-hourly prices. The formula is the same either way, only the market price it reads changes."
         }
       },
       "professional": {
@@ -326,7 +330,11 @@
         "title": "[%key:component::be_electricity_prices::config::step::meter::title%]",
         "description": "[%key:component::be_electricity_prices::config::step::meter::description%]",
         "data": {
-          "meter": "[%key:component::be_electricity_prices::config::step::meter::data::meter%]"
+          "meter": "[%key:component::be_electricity_prices::config::step::meter::data::meter%]",
+          "quarter_hourly": "[%key:component::be_electricity_prices::config::step::meter::data::quarter_hourly%]"
+        },
+        "data_description": {
+          "quarter_hourly": "[%key:component::be_electricity_prices::config::step::meter::data_description::quarter_hourly%]"
         }
       },
       "professional": {

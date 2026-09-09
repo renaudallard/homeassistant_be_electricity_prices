@@ -47,7 +47,11 @@
         "title": "Metertype",
         "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten.",
         "data": {
-          "meter": "Meter"
+          "meter": "Meter",
+          "quarter_hourly": "Afrekening per kwartier"
+        },
+        "data_description": {
+          "quarter_hourly": "Alleen voor leveranciers die de keuze laten (Frank Energie). Laat uit voor de uurprijzen die de tariefkaart afdrukt; zet aan als je je account op kwartierprijzen hebt gezet. De formule blijft dezelfde, alleen de marktprijs die ze leest verandert."
         }
       },
       "professional": {
@@ -326,7 +330,11 @@
         "title": "Metertype",
         "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten.",
         "data": {
-          "meter": "Meter"
+          "meter": "Meter",
+          "quarter_hourly": "Afrekening per kwartier"
+        },
+        "data_description": {
+          "quarter_hourly": "Alleen voor leveranciers die de keuze laten (Frank Energie). Laat uit voor de uurprijzen die de tariefkaart afdrukt; zet aan als je je account op kwartierprijzen hebt gezet. De formule blijft dezelfde, alleen de marktprijs die ze leest verandert."
         }
       },
       "professional": {

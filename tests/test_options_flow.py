@@ -232,6 +232,117 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_meter_step_offers_the_quarter_hourly_box_only_where_it_is_sold(
+    hass: HomeAssistant,
+) -> None:
+    """Frank lets the customer settle per quarter-hour and every other card
+    fixes its own grid, so the box has to follow the contract rather than the
+    step."""
+    entry = make_entry(
+        supplier="frank",
+        contract="frank_dynamic",
+        region="flanders",
+        dso="fluvius_zenne_dijle",
+        meter="dynamic",
+    )
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "frank", "region": "flanders"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "frank_dynamic"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "fluvius_zenne_dijle"}
+    )
+    assert result["step_id"] == "meter"
+    schema = result["data_schema"]
+    assert schema is not None
+    assert "quarter_hourly" in {str(k) for k in schema.schema}
+
+    # The same step on a supplier that prices per clock hour with no choice.
+    other = make_entry(
+        supplier="mega",
+        contract="mega_dynamic",
+        region="wallonia",
+        meter="dynamic",
+    )
+    other.add_to_hass(hass)
+    result = await _enter_edit_branch(hass, other)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "mega", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "mega_dynamic"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    assert result["step_id"] == "meter"
+    schema = result["data_schema"]
+    assert schema is not None
+    assert "quarter_hourly" not in {str(k) for k in schema.schema}
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_switching_off_frank_drops_a_stored_quarter_hourly_answer(
+    hass: HomeAssistant,
+) -> None:
+    """The box is not on the form for the new contract, so nothing would
+    overwrite the stored True. Left behind it is inert until the day the user
+    comes back to a supplier that does offer the choice, and then it silently
+    moves their bill."""
+    entry = make_entry(
+        supplier="frank",
+        contract="frank_dynamic",
+        region="flanders",
+        dso="fluvius_zenne_dijle",
+        meter="dynamic",
+        quarter_hourly=True,
+        solar_regime="none",
+        solar_kva=0.0,
+    )
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "luminus", "region": "flanders"}
+    )
+    # Comfyflex rather than Luminus Dynamisch: a dynamic contract stops on the
+    # mandatory ENTSO-E key step, and this test is about the meter step.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "luminus_comfyflex"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "fluvius_zenne_dijle"}
+    )
+    assert result["step_id"] == "meter"
+    # The box is gone with the contract, so nothing on this form can clear the
+    # stored answer; the step has to drop it itself.
+    schema = result["data_schema"]
+    assert schema is not None
+    assert "quarter_hourly" not in {str(k) for k in schema.schema}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "mono"}
+    )
+    # Walk the rest of the wizard on its defaults. Bounded rather than a plain
+    # while: a step that re-shows itself on an empty answer would otherwise
+    # hang the suite instead of failing it, and the trail says which one did.
+    seen: list[str] = []
+    for _ in range(12):
+        if result["type"] != data_entry_flow.FlowResultType.FORM:
+            break
+        seen.append(result["step_id"])
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {}
+        )
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY, seen
+    assert "quarter_hourly" not in entry.data
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_invalid_api_key_keeps_user_on_form(
     hass: HomeAssistant,
     _bypass_entsoe_validation: MagicMock,

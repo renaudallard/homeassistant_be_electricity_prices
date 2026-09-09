@@ -2747,6 +2747,7 @@ def _validate_snapshot(
     _expect_card_period(prefix, contract_id, snap)
     _validate_energy(prefix, contract_id, getattr(snap, "energy", None))
     _expect_month_indexed_registry(prefix, contract_id, getattr(snap, "energy", None))
+    _expect_quarter_hourly_registry(prefix, contract_id, getattr(snap, "energy", None))
     shape = injection_shape or _expected_injection_shape(contract_id)
     _validate_injection(prefix, snap, shape)
     _validate_dsos(prefix, snap, require_capacity=require_capacity)
@@ -2770,6 +2771,31 @@ def _expect_month_indexed_registry(
         f"{prefix}: month-indexed energy matches the registry flag",
         parsed == flagged,
         detail=f"parsed month_indexed={parsed}, registry month_indexed_energy={flagged}",
+    )
+
+
+def _expect_quarter_hourly_registry(
+    prefix: str, contract_id: str, energy: object
+) -> None:
+    """A contract that offers the customer the 15-minute grid must still parse
+    to the hourly default, because that is the half the toggle assumes.
+
+    ``quarter_hourly_option`` says the supplier lets the household choose and
+    the card prints the hourly index; the entry's own answer flips the parsed
+    leg. If the card ever printed the quarter-hourly index in a shape the
+    parser accepted, the flag would leave a ticked box flipping a leg already
+    on that grid and an unticked one claiming the hourly grid the supplier no
+    longer sells. Contracts the harness does not know are left alone.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None or energy is None:
+        return
+    if not bool(getattr(contract, "quarter_hourly_option", False)):
+        return
+    _expect(
+        f"{prefix}: card still prints the hourly index the choice sits on",
+        not bool(getattr(energy, "quarter_hourly", False)),
+        detail="parsed quarter_hourly=True on a contract that offers the choice",
     )
 
 

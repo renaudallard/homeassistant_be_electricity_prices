@@ -58,7 +58,7 @@ the "Shown when" column gives the gate.
 | `contract` | `async_step_contract` (`config_flow.py:199`) | Contract (region-filtered), optional start / end date | `CONF_CONTRACT`, `CONF_CONTRACT_START_DATE`, `CONF_CONTRACT_END_DATE` | Always. A supplier/region mismatch is now caught on the step where BOTH are chosen (`_region_mismatch_error`) and re-shows that form with `supplier_region_unavailable` on the supplier field, instead of aborting a step later and discarding every other edit made in the same options run; rejects a future start or an end not after the start |
 | `signed_rate` | `async_step_signed_rate` (`config_flow.py:259`) | The rate actually signed at: single / peak / offpeak / exclusive night, or spot factor / base, plus the yearly fee | The 6 `CONF_MANUAL_*` keys (`_MANUAL_RATE_KEYS`) | `_needs_manual_rate` true (`config_flow.py:231`): a start date is set on a fixed, dynamic or spot-monthly contract of a non-custom supplier (the two spot-priced kinds sign a coefficient pair, so they get the factor / base boxes; fixed gets the rate boxes). Offered whether or not the supplier archives past cards, because what is typed wins over the archived card |
 | `dso` | `async_step_dso` (`config_flow.py:276`) | Distribution operator | `CONF_DSO` | Always |
-| `meter` | `async_step_meter` (`config_flow.py:287`) | Meter type | `CONF_METER` | Always; option list narrows by contract kind |
+| `meter` | `async_step_meter` (`config_flow.py:287`) | Meter type, plus the quarter-hour settlement box | `CONF_METER`, `CONF_QUARTER_HOURLY` | Always; option list narrows by contract kind, and the box appears only on a contract whose supplier offers the choice |
 | `dso_tariff_mode` | `async_step_dso_tariff_mode` (`config_flow.py:541`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia AND the contract is not `tou_impact` (`config_flow.py:541`) |
 | `api_key` | `async_step_api_key` (`config_flow.py:384`) | ENTSO-E token (required) | `CONF_API_KEY` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
 | `custom_energy` | `async_step_custom_energy` | Commodity formula (mode-dependent fields) | `CONF_CUSTOM_ENERGY_*`, `CONF_CUSTOM_YEARLY_FIXED_FEE` | Custom supplier only, after the energy/api-key step. The peak / off-peak energy boxes carry **no default** (`_add_custom_num(..., fallback=True)`): the pricing engine falls back to the single rate when they are absent, and a `vol.Optional` default is submitted verbatim when the user leaves the box alone, which wrote 0,00 into the entry and billed zero. They are shown for **both** `bi` and `dynamic` meters, matching `bi_capable` in `pricing.py:291`; gating on `bi` alone billed a fixed contract on a smart meter at the single rate for all 24 hours |
@@ -191,6 +191,21 @@ comment). `_contract_kind` (`flow_schemas.py:239`) resolves the kind from the
 registry and returns `""` when the stored contract is no longer in the catalogue,
 so a stale OptionsFlow entry still renders the meter step with a sensible default
 rather than raising.
+
+The step also carries the **Bill per quarter-hour** box, shown only when the chosen
+contract's registry entry sets `quarter_hourly_option` (`offers_quarter_hourly`,
+`providers/__init__.py`). Frank Energie is the only supplier that offers it: its
+cards price per clock hour and its app moves the account onto the 15-minute grid
+from the start of any month, on the same coefficients, so the card cannot say which
+side a household is on. `resolve_settlement_grid` applies the answer beside the VAT
+treatment and the excise band, which puts it on every path that produces a snapshot
+and means unticking the box takes effect without a refetch.
+
+Answering leaves the entry, so the step also has to un-answer: a contract that does
+not offer the choice pops `CONF_QUARTER_HOURLY` on submit, exactly as
+`_ask_professional` pops the VAT treatment. Left behind, a stored `True` sits inert
+on the new card and comes back into force the day the user switches to a supplier
+that does offer the choice, for a reason they long since forgot agreeing to.
 
 The `exclusive_night` meter is not a first-class branch of the wizard: per
 `const.py:158`, a dedicated night circuit (electric water heater, night-storage

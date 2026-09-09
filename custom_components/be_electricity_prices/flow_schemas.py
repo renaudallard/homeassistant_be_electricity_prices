@@ -128,6 +128,7 @@ from .const import (
     CONF_METER,
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
+    CONF_QUARTER_HOURLY,
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
@@ -168,6 +169,7 @@ from .const import (
     VREG_CAPACITY_FLOOR_KW,
 )
 from .providers import get as get_extractor
+from .providers import offers_quarter_hourly
 
 
 def _supplier_options(
@@ -911,17 +913,28 @@ def _meter_schema(
         fallback = METER_MONO
     current = defaults.get(CONF_METER) if defaults.get(CONF_METER) in options else None
     current = current or fallback
-    return vol.Schema(
-        {
-            vol.Required(CONF_METER, default=current): SelectSelector(
-                SelectSelectorConfig(
-                    options=options,
-                    mode=SelectSelectorMode.LIST,
-                    translation_key="meter",
-                )
-            ),
-        }
-    )
+    fields: dict[Any, Any] = {
+        vol.Required(CONF_METER, default=current): SelectSelector(
+            SelectSelectorConfig(
+                options=options,
+                mode=SelectSelectorMode.LIST,
+                translation_key="meter",
+            )
+        ),
+    }
+    # Asked beside the meter because it is the same question one level down:
+    # the meter says which registers are read, this says how often the one
+    # rate applies. Only shown where the supplier actually offers the choice
+    # (Frank Energie); every other card fixes the grid and answering here
+    # would move the bill away from what the supplier invoices.
+    if offers_quarter_hourly(supplier_id, contract_id):
+        fields[
+            vol.Optional(
+                CONF_QUARTER_HOURLY,
+                default=bool(defaults.get(CONF_QUARTER_HOURLY, False)),
+            )
+        ] = BooleanSelector()
+    return vol.Schema(fields)
 
 
 def _api_key_schema(defaults: dict[str, Any]) -> vol.Schema:

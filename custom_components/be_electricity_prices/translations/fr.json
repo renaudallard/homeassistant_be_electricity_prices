@@ -47,7 +47,11 @@
         "title": "Type de compteur",
         "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique.",
         "data": {
-          "meter": "Compteur"
+          "meter": "Compteur",
+          "quarter_hourly": "Facturation au quart d'heure"
+        },
+        "data_description": {
+          "quarter_hourly": "Uniquement pour les fournisseurs qui laissent le choix (Frank Energie). Laissez désactivé pour garder les prix horaires imprimés sur la carte tarifaire ; activez si vous avez basculé votre compte sur les prix au quart d'heure. La formule est identique, seul l'indice de marché qu'elle lit change."
         }
       },
       "professional": {
@@ -326,7 +330,11 @@
         "title": "Type de compteur",
         "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique.",
         "data": {
-          "meter": "Compteur"
+          "meter": "Compteur",
+          "quarter_hourly": "Facturation au quart d'heure"
+        },
+        "data_description": {
+          "quarter_hourly": "Uniquement pour les fournisseurs qui laissent le choix (Frank Energie). Laissez désactivé pour garder les prix horaires imprimés sur la carte tarifaire ; activez si vous avez basculé votre compte sur les prix au quart d'heure. La formule est identique, seul l'indice de marché qu'elle lit change."
         }
       },
       "professional": {

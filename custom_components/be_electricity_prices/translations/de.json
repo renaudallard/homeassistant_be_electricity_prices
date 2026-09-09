@@ -47,7 +47,11 @@
         "title": "Zaehlertyp",
         "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege.",
         "data": {
-          "meter": "Zaehler"
+          "meter": "Zaehler",
+          "quarter_hourly": "Abrechnung je Viertelstunde"
+        },
+        "data_description": {
+          "quarter_hourly": "Nur für Lieferanten, die die Wahl lassen (Frank Energie). Aus lassen für die Stundenpreise der Tarifkarte; einschalten, wenn Sie Ihr Konto auf Viertelstundenpreise umgestellt haben. Die Formel bleibt gleich, nur der gelesene Marktpreis ändert sich."
         }
       },
       "professional": {
@@ -326,7 +330,11 @@
         "title": "Zaehlertyp",
         "description": "Eintarifzaehler (mono), Doppeltarifzaehler (Tag/Nacht), oder intelligenter Zaehler fuer dynamische Vertraege.",
         "data": {
-          "meter": "Zaehler"
+          "meter": "Zaehler",
+          "quarter_hourly": "Abrechnung je Viertelstunde"
+        },
+        "data_description": {
+          "quarter_hourly": "Nur für Lieferanten, die die Wahl lassen (Frank Energie). Aus lassen für die Stundenpreise der Tarifkarte; einschalten, wenn Sie Ihr Konto auf Viertelstundenpreise umgestellt haben. Die Formel bleibt gleich, nur der gelesene Marktpreis ändert sich."
         }
       },
       "professional": {

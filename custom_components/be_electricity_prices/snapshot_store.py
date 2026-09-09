@@ -54,11 +54,13 @@ import asyncio
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_INCLUDE_VAT,
+    CONF_QUARTER_HOURLY,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_INCLUDE_VAT,
     DOMAIN,
     STORAGE_VERSION,
 )
+from .providers import offers_quarter_hourly
 from .providers.base import (
     DsoOverlay,
     DynamicRates,
@@ -74,6 +76,7 @@ from .providers.base import (
     VariableRates,
     apply_vat,
     resolve_excise_band,
+    resolve_settlement_grid,
     resolve_volume_tier,
 )
 
@@ -870,19 +873,47 @@ def _include_vat(entry: ConfigEntry) -> bool:
     return bool(entry.data.get(CONF_INCLUDE_VAT, DEFAULT_INCLUDE_VAT))
 
 
+def _quarter_hourly(entry: ConfigEntry, snap: SupplierSnapshot) -> bool:
+    """Whether this snapshot should settle per quarter-hour for this entry.
+
+    Both halves have to agree, exactly as the injection and month-index
+    registry flags do. The stored answer alone would keep billing per quarter
+    after a supplier withdrew the option; the registry flag alone knows the
+    product offers a choice but not which side this household took.
+
+    The registry half is asked about the CARD in hand, not about the entry's
+    own contract, because the compare page resolves an alternative supplier's
+    snapshot through a proxy that carries the user's ``supplier`` /
+    ``contract``. Reading those would take a Frank customer's answer and
+    settle a Mega card per quarter-hour, which Mega does not sell. Asking the
+    snapshot keeps the entry's own card on exactly the same path (the two
+    contracts are the same one there) and carries the preference across only
+    where the target really offers the choice.
+    """
+    if not bool(entry.data.get(CONF_QUARTER_HOURLY, False)):
+        return False
+    return offers_quarter_hourly(snap.supplier, snap.contract)
+
+
 def _resolve_snapshot(entry: ConfigEntry, snap: SupplierSnapshot) -> SupplierSnapshot:
     """Resolve a card against the site facts only this entry knows.
 
-    All three steps are identity on a card that carries none of them, so this
+    All four steps are identity on a card that carries none of them, so this
     is free for every existing entry. Order is irrelevant: the excise band and
-    the volume tier are both per-kWh rates, and ``apply_vat`` never touches
-    those (it grosses the fees and the feed-in leg).
+    the volume tier are both per-kWh rates, ``apply_vat`` never touches those
+    (it grosses the fees and the feed-in leg), and the settlement grid moves
+    no rate at all.
     """
     resolved = apply_vat(snap, include_vat=_include_vat(entry))
     annual_kwh = float(
         entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH, DEFAULT_ANNUAL_CONSUMPTION_KWH)
     )
-    return resolve_volume_tier(resolve_excise_band(resolved, annual_kwh), annual_kwh)
+    resolved = resolve_volume_tier(
+        resolve_excise_band(resolved, annual_kwh), annual_kwh
+    )
+    return resolve_settlement_grid(
+        resolved, quarter_hourly=_quarter_hourly(entry, snap)
+    )
 
 
 _LOGGER = logging.getLogger(__name__)
