@@ -895,6 +895,42 @@ def _quarter_hourly(entry: ConfigEntry, snap: SupplierSnapshot) -> bool:
     return offers_quarter_hourly(snap.supplier, snap.contract)
 
 
+def entry_annual_kwh(entry: ConfigEntry) -> float:
+    """How much this household uses in a year, in kWh. One answer for every leg.
+
+    Three legs resolve against a yearly volume -- the degressive excise band,
+    the Flemish network ceiling and EnergyVision's volume tranche -- and they
+    have to agree, or one card is priced against two different households.
+
+    The metered figure wins, because the typed one barely exists: the config
+    flow asks for a yearly volume on a PROFESSIONAL card only, and drops the
+    key again on a residential one, so every residential entry fell through to
+    the 3.500 kWh default whatever it really used. On a plain card that is
+    harmless (the excise has been flat since August 2026 and the ceiling only
+    binds on a very low-volume connection), but a volume-tiered card splits its
+    tranche against it: measured on the September GS1800V card at August's
+    index, a 6.000 kWh household was billed 88 EUR/year under its own card and
+    a 2.000 kWh one 53 EUR over it.
+
+    The coordinator measures it once a day through ``_annual_volume``, the same
+    read the compare page quotes its rows from, so the price here and the
+    ranking beside it are built on one volume. Read off the entry the way the
+    RLP and SPP profiles are (``_coordinator_rlp_weights``), which is what
+    keeps the compare page's read-only entry proxy working: it carries no
+    coordinator, so a what-if falls back to the typed figure and then to the
+    default exactly as before.
+    """
+    measured = getattr(getattr(entry, "runtime_data", None), "_annual_kwh", None)
+    if measured:
+        return float(measured)
+    try:
+        return float(
+            entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH, DEFAULT_ANNUAL_CONSUMPTION_KWH)
+        )
+    except (TypeError, ValueError):
+        return float(DEFAULT_ANNUAL_CONSUMPTION_KWH)
+
+
 def _resolve_snapshot(entry: ConfigEntry, snap: SupplierSnapshot) -> SupplierSnapshot:
     """Resolve a card against the site facts only this entry knows.
 
@@ -905,9 +941,7 @@ def _resolve_snapshot(entry: ConfigEntry, snap: SupplierSnapshot) -> SupplierSna
     no rate at all.
     """
     resolved = apply_vat(snap, include_vat=_include_vat(entry))
-    annual_kwh = float(
-        entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH, DEFAULT_ANNUAL_CONSUMPTION_KWH)
-    )
+    annual_kwh = entry_annual_kwh(entry)
     resolved = resolve_volume_tier(
         resolve_excise_band(resolved, annual_kwh), annual_kwh
     )

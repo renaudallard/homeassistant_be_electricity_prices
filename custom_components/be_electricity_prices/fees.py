@@ -36,7 +36,6 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 
 from .const import (
-    CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_CONNECTION_KVA_TIER,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
@@ -45,7 +44,6 @@ from .const import (
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
     CONNECTION_KVA_TIERS_ABOVE_13,
-    DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_CONNECTION_KVA_TIER,
     DSO_MODE_IMPACT,
     METER_MONO,
@@ -61,6 +59,7 @@ from .providers.base import (
     DsoOverlay,
     SupplierSnapshot,
 )
+from .snapshot_store import entry_annual_kwh
 
 
 def _capacity_monthly_eur(overlay: DsoOverlay | None, peak_kw: float) -> float:
@@ -83,20 +82,19 @@ def _capacity_monthly_eur(overlay: DsoOverlay | None, peak_kw: float) -> float:
 
 
 def _annual_consumption_kwh(entry: ConfigEntry) -> float:
-    """The household's yearly volume, in kWh, as the entry states it.
+    """The household's yearly volume, in kWh.
 
     The VREG network ceiling is a rule about a YEAR: it caps the capacity
     charge plus the per-kWh network term against the volume the year carries,
-    so it cannot be measured against a window. This is the same figure the
-    excise band already resolves on, which keeps one answer to "how much does
-    this household use" rather than one per leg.
+    so it cannot be measured against a window.
+
+    Delegates rather than reading ``entry.data`` itself, which is what it used
+    to do. The comment here already claimed one answer to "how much does this
+    household use", and there were two: this one saw only the estimate typed
+    on a professional card, while the compare page beside it measured the
+    meter. Now both go through :func:`entry_annual_kwh`.
     """
-    try:
-        return float(
-            entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH, DEFAULT_ANNUAL_CONSUMPTION_KWH)
-        )
-    except (TypeError, ValueError):
-        return float(DEFAULT_ANNUAL_CONSUMPTION_KWH)
+    return entry_annual_kwh(entry)
 
 
 def _capped_capacity_monthly_eur(

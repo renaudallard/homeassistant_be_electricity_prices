@@ -377,6 +377,15 @@ class BePricesCoordinator(
         # listener update is the whole delivery path, with no dispatcher.
         self.daily_compare: Any = None
         self._snapshot_raw: SupplierSnapshot | None = None
+        # The household's measured yearly consumption, and the day it was
+        # measured on. ``None`` until the recorder holds enough of it to be
+        # worth trusting, which is what makes entry_annual_kwh fall back to
+        # the typed estimate. _snapshot_annual_kwh is the figure _snapshot was
+        # resolved against, so a card already in hand can be re-resolved when
+        # the measurement lands or moves.
+        self._annual_kwh: float | None = None
+        self._annual_kwh_day: date | None = None
+        self._snapshot_annual_kwh: float | None = None
         self._snapshot_fetched_at: datetime | None = None
         self._snapshot_probe_key: str | None = None
         # Which schema the snapshot in hand was parsed under, and what
@@ -736,10 +745,15 @@ class BePricesCoordinator(
 
     async def _update_body(self) -> CoordinatorData:
         self._sync_deprecated_supplier_issue()
+        # Before the snapshot, because _set_snapshot resolves the volume
+        # tranche and the network ceiling against it; _reresolve_snapshot
+        # below catches the card that was already in hand.
+        await self._ensure_annual_volume()
         if self.entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
             self._refresh_custom_snapshot()
         else:
             await self._maybe_refresh_snapshot()
+        self._reresolve_snapshot()
         await self._track_monthly_peak()
 
         if self._snapshot is None:

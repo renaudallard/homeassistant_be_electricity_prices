@@ -1124,6 +1124,14 @@ class _AnnualVolume:
     kwh: float
     days_with_data: int
     source: str
+    # Whether the METER produced this figure, rather than the entry's typed
+    # estimate or the household default. Stated here rather than re-derived
+    # from the coverage: a wired meter reading zero clears both measured
+    # bands while still carrying a full year of days, so a day count alone
+    # cannot tell the two apart. The coordinator keys off this to decide
+    # whether it has a volume worth pricing the tranche and the network
+    # ceiling against.
+    measured: bool = False
 
 
 async def _annual_volume(
@@ -1169,12 +1177,13 @@ async def _annual_volume(
         # Scaled across whatever few days are missing. At this coverage the
         # correction is under 5% and carries no seasonal bias worth the name.
         kwh = measured.kwh * MEASURED_FULL_YEAR_DAYS / days
-        return _AnnualVolume(kwh, days, f"measured ({days} days)")
+        return _AnnualVolume(kwh, days, f"measured ({days} days)", measured=True)
     if measured.kwh > 0 and days >= MEASURED_MIN_DAYS:
         return _AnnualVolume(
             measured.kwh * MEASURED_FULL_YEAR_DAYS / days,
             days,
             f"scaled from {days} days, not seasonally corrected",
+            measured=True,
         )
     typed = entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH)
     if typed:

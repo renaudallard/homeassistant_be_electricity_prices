@@ -44,6 +44,7 @@ from .const import (
     CONF_DSO,
     CONF_REGION,
     CONF_SUPPLIER,
+    MEASURED_FULL_YEAR_DAYS,
 )
 from .providers.base import (
     ExtractorError,
@@ -58,7 +59,7 @@ from .snapshot_store import (
     _shared_failed_fetches,
 )
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
@@ -95,6 +96,9 @@ class _SnapshotMixin:
     _unloaded: bool
     _snapshot: SupplierSnapshot | None
     _snapshot_raw: SupplierSnapshot | None
+    _annual_kwh: float | None
+    _annual_kwh_day: date | None
+    _snapshot_annual_kwh: float | None
     _snapshot_fetched_at: datetime | None
     _snapshot_probe_key: str | None
     _snapshot_schema_version: int
@@ -144,6 +148,66 @@ class _SnapshotMixin:
             self.entry.data[CONF_REGION],
         )
 
+    async def _ensure_annual_volume(self) -> None:
+        """Measure how much this household uses in a year, once a day.
+
+        Three legs price against a yearly volume (the excise band, the Flemish
+        network ceiling, a volume-tiered energy card) and the config flow only
+        ever asks a professional entry for one, so without this they all fell
+        back to the 3.500 kWh default. Measured through ``_annual_volume``, the
+        same read the compare page quotes its rows from, so a tiered card is
+        split against the volume the ranking beside it used.
+
+        Daily, not per tick: a trailing year moves by at most one day of kWh
+        between two hourly ticks, and the read walks a year of recorder
+        statistics. Kept as ``None`` while the meter has under 90 days of
+        history, which is what hands the answer back to the typed estimate
+        rather than to a winter quarter scaled by four.
+
+        Soft-fail like the profile fetches around it: the recorder can be busy
+        or mid-purge, and a yearly volume is not worth failing a tick over.
+        """
+        from .compare_quote import _annual_volume
+
+        today = dt_util.now().date()
+        if self._annual_kwh_day == today:
+            return
+        try:
+            volume = await _annual_volume(
+                self.hass,
+                self.entry,
+                today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1),
+                today,
+            )
+        except Exception as err:  # noqa: BLE001 - never fail a tick over this
+            # Stamped on success only, so a recorder that was busy this tick is
+            # asked again on the next one rather than leaving the entry on the
+            # default for the rest of the day.
+            _LOGGER.debug("%s: annual volume unavailable: %s", self.entry.entry_id, err)
+            return
+        self._annual_kwh_day = today
+        self._annual_kwh = volume.kwh if volume.measured else None
+
+    def _reresolve_snapshot(self) -> None:
+        """Re-apply the site facts to the card already in hand, if they moved.
+
+        ``_set_snapshot`` resolves against whatever yearly volume was known
+        when it ran, and the first tick knows none: it runs inside config-entry
+        setup, before Home Assistant assigns ``runtime_data``, so nothing can
+        reach the measured figure yet. Nothing calls ``_set_snapshot`` again
+        until the supplier publishes, so without this an entry kept the split
+        it booted with for up to a month.
+
+        Identity while the figure has not moved, which is every tick but the
+        first of a day the measurement changed on.
+        """
+        if self._snapshot_raw is None:
+            return
+        if self._snapshot_annual_kwh == self._annual_kwh:
+            return
+        self._snapshot = _resolve_snapshot(self.entry, self._snapshot_raw)
+        self._snapshot_annual_kwh = self._annual_kwh
+
     def _set_snapshot(self, snap: SupplierSnapshot | None) -> None:
         """Keep the card as parsed and resolve this entry's VAT preference.
 
@@ -154,6 +218,7 @@ class _SnapshotMixin:
         """
         self._snapshot_raw = snap
         self._snapshot = None if snap is None else _resolve_snapshot(self.entry, snap)
+        self._snapshot_annual_kwh = self._annual_kwh
         # Every snapshot that reaches here was parsed by the running extractor,
         # so this is what _save_persistent stamps. _replay_stale_snapshot is
         # the one caller that overrides it afterwards, and it has to: without

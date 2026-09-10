@@ -191,8 +191,8 @@ The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
 (`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1065`)
-resolves it against the entry's `CONF_ANNUAL_CONSUMPTION_KWH` and writes one
-rate to `federal_excise`. The pricing engine never sees a band.
+resolves it against the entry's yearly volume (`entry_annual_kwh`) and writes
+one rate to `federal_excise`. The pricing engine never sees a band.
 
 The schedule is billed PER TRANCHE, which the cards state outright: *"un tarif
 degressif par tranche de consommation, calcule sur une base annuelle"*. So the
@@ -222,7 +222,8 @@ produced it.
 It cannot be applied without a volume, and the volume it wants is a YEAR's:
 the rule caps the two network legs against what the year carries, so a running
 total cannot measure itself against it. `_annual_consumption_kwh` supplies the
-figure the entry already states for the excise band, and
+same figure the excise band and the volume tranche resolve against
+(`entry_annual_kwh`: measured, then typed, then the household default), and
 `_capped_capacity_monthly_eur` divides the capped year back into the month the
 caller is accruing.
 
@@ -381,9 +382,18 @@ bi-hourly split free: the card puts 900 kWh of allowance on each register, and
 since both registers bill the same two rates, splitting per register and
 blending once over the year reach the same annual total.
 
-What is not exact is the annual volume itself, which is the household's own
-estimate; a wrong estimate moves the split proportionally, the same exposure
-the degressive excise carries. And `current_price` shows the blend, because a
+The volume comes from `entry_annual_kwh`, which is the one answer three legs
+share (this tranche, the degressive excise band and the Flemish network
+ceiling): the coordinator's daily `_annual_volume` measurement first, then the
+figure typed on the entry, then the 3.500 kWh household default. Only a
+professional card is ever asked for a typed figure, so before the measurement
+was wired in every residential tiered entry split against that default: at
+August 2026's index a 6.000 kWh household was billed 88 EUR/year under its own
+card and a 2.000 kWh one 53 EUR over it. What is still not exact is the volume
+itself, since a household under 90 days of history has none measured and a
+wrong estimate moves the split proportionally.
+
+And `current_price` shows the blend, because a
 tiered contract genuinely has two rates at once and the blend is the annual
 average of them, which is also the basis the card's own headline figures use.
 
@@ -977,7 +987,7 @@ full year of history has accumulated.
 ## Prosumer term
 
 The prosumer (compensation-regime) fee is Walloon-only and monthly
-(`_compute_prosumer`, `fees.py:341-356`):
+(`_compute_prosumer`, `fees.py:339-354`):
 
 ```
 prosumer_cost_eur = kva * (dso_rate + supplier_rate) / 12.0
@@ -1011,7 +1021,7 @@ overlay, gated the same Walloon-only way (`ytd_cost.py:203-229`).
 
 The Brussels Brugel OSP (Obligations de Service Public) fee is a flat annual
 Sibelga charge scaled by contractual connection power
-(`_brussels_osp_fee`, `fees.py:211-220`):
+(`_brussels_osp_fee`, `fees.py:209-218`):
 
 ```python
 def _brussels_osp_fee(overlay, entry) -> float:      # fees.py:87

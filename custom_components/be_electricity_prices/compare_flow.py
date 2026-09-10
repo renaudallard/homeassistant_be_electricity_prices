@@ -85,6 +85,7 @@ from .injection import _injection_needs_spot
 from .cohort import ytd_window_start
 from .const import (
     COMPARE_SWEEP_BUDGET_S,
+    CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_API_KEY,
     CONF_CONTRACT,
     CONF_DSO,
@@ -113,6 +114,7 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .energy_meters import _measured_hour_weights, _measured_kwh
+from .snapshot_store import entry_annual_kwh
 from .compare_quote import (
     DailyCompare,
     RankedRow,
@@ -531,6 +533,19 @@ def _quote_entry(
         overrides[CONF_QUARTER_HOURLY] = quarter_hourly
     if not overrides:
         return entry
+    # The yearly volume is the one site fact that does NOT live in entry.data:
+    # entry_annual_kwh prefers the coordinator's measured figure, and a proxy
+    # carries no coordinator. Freezing the resolved answer into the mapping is
+    # what keeps a what-if row splitting a volume tranche and measuring the
+    # network ceiling against the same volume as the row above it, instead of
+    # silently dropping back to the 3.500 kWh default.
+    #
+    # It lands under the TYPED key, which is the mapping's own vocabulary for
+    # "this entry states this volume" and true of a what-if by construction.
+    # The one thing that must not read a proxy is ``_annual_volume``: it treats
+    # that key as a figure the user typed and would label a measured or default
+    # volume "entered on the entry". Both of its call sites pass the real entry.
+    overrides[CONF_ANNUAL_CONSUMPTION_KWH] = entry_annual_kwh(entry)
     # Only entry.data is ever read through this (audited across the quote,
     # fee, injection and year-to-date helpers), so the mapping is a
     # complete stand-in; the cast is what tells mypy that.

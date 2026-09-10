@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -712,3 +713,71 @@ def test_tiered_card_bills_the_year_the_card_says() -> None:
         assert rate * annual == pytest.approx(
             1800 * 0.1060 + (annual - 1800) * variable
         )
+
+
+def _entry(runtime: object = None, **data: object) -> SimpleNamespace:
+    """A stand-in config entry. ``_resolve_snapshot`` reads ``.data`` and, for
+    the yearly volume, ``.runtime_data``; the call sites carry the ignore so
+    the production signature keeps asking for a real ConfigEntry."""
+    base: dict[str, object] = {
+        "supplier": "energyvision",
+        "contract": _TIERED_1800,
+        "meter": "mono",
+    }
+    base.update(data)
+    entry = SimpleNamespace(data=base)
+    if runtime is not None:
+        entry.runtime_data = runtime
+    return entry
+
+
+def _blended_rate(entry: SimpleNamespace, mean: float) -> float:
+    from custom_components.be_electricity_prices import snapshot_store
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+
+    resolved = snapshot_store._resolve_snapshot(entry, _tiered_1800())  # type: ignore[arg-type]
+    return energy_eur_per_kwh(
+        resolved.energy, datetime(2026, 3, 4, 9, tzinfo=UTC), mean
+    )
+
+
+def test_tranche_splits_against_the_measured_volume_not_the_default() -> None:
+    """The config flow asks for a yearly volume on a PROFESSIONAL card only and
+    drops the key on a residential one, so every residential tiered entry used
+    to split its tranche against the 3.500 kWh household default. At August
+    2026's index that billed a 6.000 kWh household 88 EUR/year under its own
+    card. The coordinator's measured figure is what the split has to use."""
+    mean = 129.317 / 1000.0
+    formula = 1.12 * 1.06 * mean + 0.020 * 1.06
+
+    for annual in (2000.0, 3500.0, 6000.0):
+        entry = _entry(SimpleNamespace(_annual_kwh=annual))
+        billed = _blended_rate(entry, mean) * annual
+        assert billed == pytest.approx(1800 * 0.1060 + (annual - 1800) * formula)
+
+    # What it did before, kept as the arithmetic that made it wrong: the
+    # 3.500 kWh blend applied to a 6.000 kWh year.
+    stale = _blended_rate(_entry(), mean) * 6000.0
+    correct = _blended_rate(_entry(SimpleNamespace(_annual_kwh=6000.0)), mean) * 6000.0
+    assert correct - stale == pytest.approx(88.4, abs=0.5)
+
+
+def test_tranche_falls_back_to_the_typed_volume_then_the_default() -> None:
+    """A meter with under 90 days of history leaves the coordinator holding
+    nothing, and a compare-page proxy carries no coordinator at all. Both have
+    to keep working: the typed figure first, the household default last."""
+    mean = 129.317 / 1000.0
+    formula = 1.12 * 1.06 * mean + 0.020 * 1.06
+
+    typed = _blended_rate(_entry(annual_consumption_kwh=6000.0), mean) * 6000.0
+    assert typed == pytest.approx(1800 * 0.1060 + 4200 * formula)
+
+    default = _blended_rate(_entry(), mean) * 3500.0
+    assert default == pytest.approx(1800 * 0.1060 + 1700 * formula)
+
+    # A measured figure outranks a typed one, the same order _annual_volume
+    # itself resolves in, so the two never disagree on one entry.
+    both = _entry(SimpleNamespace(_annual_kwh=2000.0), annual_consumption_kwh=6000.0)
+    assert _blended_rate(both, mean) * 2000.0 == pytest.approx(
+        1800 * 0.1060 + 200 * formula
+    )

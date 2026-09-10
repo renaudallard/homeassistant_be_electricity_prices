@@ -238,9 +238,9 @@ Numbered walkthrough:
 2. The coordinator is constructed and immediately snapshots the `(supplier, contract, region)`
    tuple (`coordinator.py:888`) so a later options edit that mutates `entry.data` can still evict
    the previous tuple's cache.
-3. `async_load_persistent` (`coordinator.py:488`) loads the last snapshot from `.storage` so an
+3. `async_load_persistent` (`coordinator.py:497`) loads the last snapshot from `.storage` so an
    offline boot can still serve last-known prices.
-4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:700`). It runs
+4. `async_config_entry_first_refresh` runs `_async_update_data` (`coordinator.py:709`). It runs
    the supplier's cheap `probe()`; only when the probe key changed (or a probe-less supplier's
    24-hour TTL expired) does it call the extractor's `fetch`. Note the ordering gotcha:
    `entry.runtime_data` is assigned only after the first refresh completes (`__init__.py:177`),
@@ -288,7 +288,7 @@ shared process-wide across config entries keyed by `(supplier, contract, region)
 shared rows are evicted on unload only when no sibling entry still references the tuple
 (`__init__.py:291`, `evict_shared_caches`). Second, a failed fetch is negatively cached briefly
 (`coordinator.py:243`) and the user-facing "extractor failed" repair issue is raised only after
-the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator_snapshot.py:79`), so
+the failure survives `_EXTRACTOR_ISSUE_THRESHOLD` consecutive attempts (`coordinator_snapshot.py:80`), so
 a single transient CDN timeout does not false-alarm.
 
 The ENTSO-E spot curve is fetched only for contracts that need it: dynamic contracts, and the

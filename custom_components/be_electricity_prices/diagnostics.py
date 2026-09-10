@@ -44,6 +44,7 @@ from .const import (
 from .coordinator import (
     BePricesCoordinator,
 )
+from .snapshot_store import entry_annual_kwh
 from .energy_meters import (
     _kwh_sensor_ids,
     _recorder_daily_kwh,
@@ -227,6 +228,14 @@ async def async_get_config_entry_diagnostics(
             "injection_price_current_slot": _current_injection(data),
             "current_year_cost_eur": data.current_year_cost_eur,
             "projected_year_cost_eur": data.projected_year_cost_eur,
+            # The yearly volume the excise band, the network ceiling and a
+            # volume tranche were all resolved against, which is otherwise
+            # invisible: a tiered card publishes one blended rate and nothing
+            # says which side of the tranche the split put the household on.
+            # Not the same as consumption.rolling_year_kwh below, which is the
+            # raw window sum; this is what survived the coverage gate, or the
+            # typed estimate, or the household default.
+            "annual_kwh_priced": round(entry_annual_kwh(entry), 1),
             "hourly": [breakdown_row(dt_util.as_local(h), bd) for h, bd in hourly],
         },
         "consumption": {
