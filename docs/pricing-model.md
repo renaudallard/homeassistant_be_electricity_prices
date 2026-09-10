@@ -393,6 +393,13 @@ card and a 2.000 kWh one 53 EUR over it. What is still not exact is the volume
 itself, since a household under 90 days of history has none measured and a
 wrong estimate moves the split proportionally.
 
+The tranche is dropped rather than folded on an exclusive-night entry. The same
+footnote that grants it withholds it there: *"van toepassing op de eerste 1.800
+kWh verbruik van je enkelvoudig tarief ... Niet van toepassing op het exclusief
+nacht tarief"*, with a day/night pair splitting it 900/900. The card prints no
+per-register formula, so a night circuit falls through to the mono pair, and
+folding the tranche into that pair credited it a discount it never receives.
+
 And `current_price` shows the blend, because a
 tiered contract genuinely has two rates at once and the blend is the annual
 average of them, which is also the basis the card's own headline figures use.

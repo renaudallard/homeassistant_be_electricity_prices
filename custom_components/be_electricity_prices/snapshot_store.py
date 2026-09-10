@@ -54,10 +54,12 @@ import asyncio
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_INCLUDE_VAT,
+    CONF_METER,
     CONF_QUARTER_HOURLY,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_INCLUDE_VAT,
     DOMAIN,
+    METER_MONO,
     STORAGE_VERSION,
 )
 from .providers import offers_quarter_hourly
@@ -939,11 +941,19 @@ def _resolve_snapshot(entry: ConfigEntry, snap: SupplierSnapshot) -> SupplierSna
     the volume tier are both per-kWh rates, ``apply_vat`` never touches those
     (it grosses the fees and the feed-in leg), and the settlement grid moves
     no rate at all.
+
+    The tranche is dropped rather than folded on an exclusive-night entry: the
+    cards that carry one put it on the single register, or split it 900/900
+    across a day/night pair, and say in the same footnote that it is "niet van
+    toepassing op het exclusief nacht tarief". Folding it there billed a night
+    circuit a share of a tranche it never receives.
     """
     resolved = apply_vat(snap, include_vat=_include_vat(entry))
     annual_kwh = entry_annual_kwh(entry)
     resolved = resolve_volume_tier(
-        resolve_excise_band(resolved, annual_kwh), annual_kwh
+        resolve_excise_band(resolved, annual_kwh),
+        annual_kwh,
+        meter=entry.data.get(CONF_METER, METER_MONO),
     )
     return resolve_settlement_grid(
         resolved, quarter_hourly=_quarter_hourly(entry, snap)

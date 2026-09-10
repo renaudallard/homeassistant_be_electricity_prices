@@ -1129,3 +1129,30 @@ def test_apply_vat_never_touches_an_exempt_injection() -> None:
     snap = _pro_snapshot(vat_applies=False)
     out = apply_vat(snap, include_vat=True)
     assert out.injection is snap.injection
+
+
+def test_resolve_volume_tier_withholds_the_tranche_from_a_night_circuit() -> None:
+    """Footnote a grants the tranche and withholds it in the same breath:
+    *"van toepassing op de eerste 1.800 kWh verbruik van je enkelvoudig tarief
+    ... Niet van toepassing op het exclusief nacht tarief."* The card prints no
+    per-register formula, so an exclusive-night entry falls through to the mono
+    pair, and folding the tranche into that pair handed a night circuit a
+    discount the card never gives it."""
+    from custom_components.be_electricity_prices.providers.base import (
+        SpotMonthlyRates,
+        resolve_volume_tier,
+    )
+
+    resolved = resolve_volume_tier(_tiered_snapshot(), 3500.0, meter="exclusive_night")
+    energy = resolved.energy
+    assert isinstance(energy, SpotMonthlyRates)
+    # The formula as the card prints it, untouched by the tranche.
+    assert energy.factor == pytest.approx(_TIER_FACTOR)
+    assert energy.base == pytest.approx(_TIER_BASE)
+    # And spent, so no later pass can fold it in after all.
+    assert energy.tier_kwh is None
+    assert energy.tier_rate is None
+    # A mono entry on the same card still gets it.
+    mono = resolve_volume_tier(_tiered_snapshot(), 3500.0).energy
+    assert isinstance(mono, SpotMonthlyRates)
+    assert mono.factor != pytest.approx(_TIER_FACTOR)

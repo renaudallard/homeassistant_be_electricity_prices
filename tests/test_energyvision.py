@@ -781,3 +781,12 @@ def test_tranche_falls_back_to_the_typed_volume_then_the_default() -> None:
     assert _blended_rate(both, mean) * 2000.0 == pytest.approx(
         1800 * 0.1060 + 200 * formula
     )
+
+
+def test_night_circuit_entry_is_billed_the_formula_alone() -> None:
+    """Footnote a: *"Niet van toepassing op het exclusief nacht tarief."*"""
+    mean = 129.317 / 1000.0
+    entry = _entry(SimpleNamespace(_annual_kwh=3500.0), meter="exclusive_night")
+    assert _blended_rate(entry, mean) == pytest.approx(
+        1.12 * 1.06 * mean + 0.020 * 1.06
+    )

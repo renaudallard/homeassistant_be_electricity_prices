@@ -48,7 +48,7 @@ from typing import Any, Literal, Protocol
 
 import aiohttp
 
-from ..const import REGIONS
+from ..const import METER_EXCLUSIVE_NIGHT, METER_MONO, REGIONS
 
 TariffKind = Literal[
     "fixed", "variable", "dynamic", "tou", "tou_impact", "spot_monthly"
@@ -1086,12 +1086,23 @@ def resolve_excise_band(
 
 
 def resolve_volume_tier(
-    snapshot: SupplierSnapshot, annual_kwh: float
+    snapshot: SupplierSnapshot, annual_kwh: float, meter: str = METER_MONO
 ) -> SupplierSnapshot:
     """Fold a volume-tiered energy leg into one formula, or leave it alone.
 
     A card without ``tier_kwh`` prices its whole volume one way and is returned
     unchanged (identity), which is every card but EnergyVision's tiered range.
+
+    An exclusive-night entry gets the formula with the tranche REMOVED rather
+    than folded in. The footnote that grants the tranche is also what withholds
+    it from that register: *"is van toepassing op de eerste 1.800 kWh verbruik
+    van je enkelvoudig tarief. Heb je een dag/nacht teller dan verdelen we de
+    1.800 kWh als volgt, 900 kWh verbruik via je dag tarief en 900 kWh verbruik
+    via je nacht tarief. Niet van toepassing op het exclusief nacht tarief."*
+    The card prints no per-register formula, so a night circuit falls through
+    to the mono pair, and folding the tranche into that pair credited it a
+    discount it never receives: at the September card's rates and a 3.500 kWh
+    entry that is 1,1 cent/kWh, roughly 9% under the billed rate.
 
     Such a card bills the year's first ``tier_kwh`` at ``tier_rate`` and the
     remainder on ``factor * mean + base``. A fixed tranche blended with a
@@ -1133,6 +1144,11 @@ def resolve_volume_tier(
         return snapshot
     if energy.tier_kwh is None or energy.tier_rate is None:
         return snapshot
+    if meter == METER_EXCLUSIVE_NIGHT:
+        # Cleared, not carried: every other consumer reads the coefficients
+        # and nothing else, so a leg still holding the pair would look
+        # unresolved to the next reader of it.
+        return replace(snapshot, energy=replace(energy, tier_kwh=None, tier_rate=None))
     if annual_kwh <= 0.0:
         # Nothing to measure the tranche against. The config flow always
         # carries a positive estimate, so this is the degenerate guard rather
