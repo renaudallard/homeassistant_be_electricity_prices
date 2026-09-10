@@ -78,7 +78,7 @@
       },
       "api_key": {
         "title": "ENTSO-E API-Schluessel",
-        "description": "Erforderlich fuer dynamische Vertraege. Kostenlos bei transparency.entsoe.eu anfordern.",
+        "description": "Erforderlich fuer diesen Vertrag. Der Energiepreis wird vom belgischen Day-Ahead-Markt bestimmt: pro Slot bei einem dynamischen Vertrag, oder auf dem Durchschnitt des Liefermonats bei einem monatlich indexierten Vertrag. Kostenlos bei transparency.entsoe.eu anfordern.",
         "data": {
           "api_key": "ENTSO-E API-Schluessel"
         }
@@ -367,7 +367,7 @@
       },
       "api_key": {
         "title": "ENTSO-E API-Schluessel",
-        "description": "Erforderlich fuer dynamische Vertraege. Kostenlos bei transparency.entsoe.eu anfordern.",
+        "description": "Erforderlich fuer diesen Vertrag. Der Energiepreis wird vom belgischen Day-Ahead-Markt bestimmt: pro Slot bei einem dynamischen Vertrag, oder auf dem Durchschnitt des Liefermonats bei einem monatlich indexierten Vertrag. Kostenlos bei transparency.entsoe.eu anfordern.",
         "data": {
           "api_key": "ENTSO-E API-Schluessel"
         }

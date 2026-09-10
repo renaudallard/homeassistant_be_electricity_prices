@@ -78,7 +78,7 @@
       },
       "api_key": {
         "title": "ENTSO-E API key",
-        "description": "Required for dynamic contracts. Request one for free at transparency.entsoe.eu.",
+        "description": "Required for this contract. Its energy price is set by the Belgian day-ahead market: per slot on a dynamic contract, or on the delivery month's average on a monthly-indexed one. Request one for free at transparency.entsoe.eu.",
         "data": {
           "api_key": "ENTSO-E API key"
         }
@@ -367,7 +367,7 @@
       },
       "api_key": {
         "title": "ENTSO-E API key",
-        "description": "Required for dynamic contracts. Request one for free at transparency.entsoe.eu.",
+        "description": "Required for this contract. Its energy price is set by the Belgian day-ahead market: per slot on a dynamic contract, or on the delivery month's average on a monthly-indexed one. Request one for free at transparency.entsoe.eu.",
         "data": {
           "api_key": "ENTSO-E API key"
         }

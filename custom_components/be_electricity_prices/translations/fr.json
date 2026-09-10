@@ -78,7 +78,7 @@
       },
       "api_key": {
         "title": "Cle API ENTSO-E",
-        "description": "Necessaire pour les contrats dynamiques. Cle gratuite sur transparency.entsoe.eu.",
+        "description": "Necessaire pour ce contrat. Son prix de l'energie est fixe par le marche day-ahead belge: par slot pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexe mensuellement. Cle gratuite sur transparency.entsoe.eu.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }
@@ -367,7 +367,7 @@
       },
       "api_key": {
         "title": "Cle API ENTSO-E",
-        "description": "Necessaire pour les contrats dynamiques. Cle gratuite sur transparency.entsoe.eu.",
+        "description": "Necessaire pour ce contrat. Son prix de l'energie est fixe par le marche day-ahead belge: par slot pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexe mensuellement. Cle gratuite sur transparency.entsoe.eu.",
         "data": {
           "api_key": "Cle API ENTSO-E"
         }

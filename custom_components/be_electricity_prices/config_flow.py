@@ -31,7 +31,8 @@ Both ConfigFlow and OptionsFlow walk the same chain of steps:
   contract  -> contract (filtered by supplier)
   dso       -> DSO (filtered by region)
   meter     -> mono / bi / dynamic
-  api_key   -> ENTSO-E key (only when chosen contract is dynamic)
+  api_key   -> ENTSO-E key (when the contract is priced off the day-ahead
+               market: dynamic per slot, spot-monthly on the month mean)
   capacity  -> Flemish capacity peak source (only when region = flanders)
 
 OptionsFlow pre-fills every field with the current value, so the user can

@@ -78,7 +78,7 @@
       },
       "api_key": {
         "title": "ENTSO-E API-sleutel",
-        "description": "Vereist voor dynamische contracten. Gratis aan te vragen op transparency.entsoe.eu.",
+        "description": "Vereist voor dit contract. De energieprijs wordt bepaald door de Belgische day-ahead markt: per slot bij een dynamisch contract, of op het gemiddelde van de leveringsmaand bij een maandelijks geindexeerd contract. Gratis aan te vragen op transparency.entsoe.eu.",
         "data": {
           "api_key": "ENTSO-E API-sleutel"
         }
@@ -367,7 +367,7 @@
       },
       "api_key": {
         "title": "ENTSO-E API-sleutel",
-        "description": "Vereist voor dynamische contracten. Gratis aan te vragen op transparency.entsoe.eu.",
+        "description": "Vereist voor dit contract. De energieprijs wordt bepaald door de Belgische day-ahead markt: per slot bij een dynamisch contract, of op het gemiddelde van de leveringsmaand bij een maandelijks geindexeerd contract. Gratis aan te vragen op transparency.entsoe.eu.",
         "data": {
           "api_key": "ENTSO-E API-sleutel"
         }

@@ -453,7 +453,8 @@ formula** supplier, which has no card and asks for the whole set.
 ### Getting an ENTSO-E API key
 
 Required for dynamic and monthly-indexed contracts (energie.be Variabel,
-Energy Knights Essentia Online and Essentia Online Green, and the custom
+Energy Knights Essentia Online and Essentia Online Green, EnergyVision's
+1.800 kWh vast, vaste injectieprijs 3 jaar and Laadpunt, and the custom
 supplier's monthly-average formula), which is where the setup flow asks
 for it as a mandatory, validated field.
 It is optional everywhere else, but two features use it when present: an
