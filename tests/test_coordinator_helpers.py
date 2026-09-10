@@ -3758,8 +3758,15 @@ async def test_ytd_static_fees_honours_meter_override(hass: HomeAssistant) -> No
             date(2026, 12, 31),
             meter="exclusive_night",
         )
-    assert fee_entry == pytest.approx(85.0)
-    assert fee_override == pytest.approx(35.04)
+    assert fee_entry.total == pytest.approx(85.0)
+    assert fee_override.total == pytest.approx(35.04)
+    # The supplier's share follows the same meter. A welcome credit is capped
+    # against it, so an exclusive-night override that kept the standard
+    # abonnement here would cap the credit against a charge the entry is not
+    # billed. This snapshot carries no energy fund or network fixed term, so
+    # the two figures coincide; what is pinned is that they move together.
+    assert fee_entry.supplier_fee == pytest.approx(85.0)
+    assert fee_override.supplier_fee == pytest.approx(35.04)
 
 
 # ---- ytd_window_start (issue #84) ---------------------------------------------
@@ -3856,8 +3863,8 @@ async def test_ytd_fees_prorate_over_the_contract_window(hass: HomeAssistant) ->
             date(2026, 12, 31),
         )
     # 365 EUR/year at 1 EUR/day: the full year, then 1 July to 31 December.
-    assert whole_year == pytest.approx(365.0)
-    assert half_year == pytest.approx(184.0)
+    assert whole_year.total == pytest.approx(365.0)
+    assert half_year.total == pytest.approx(184.0)
 
 
 async def test_the_ytd_attributes_describe_the_window_they_bill(
@@ -6875,3 +6882,173 @@ async def test_a_plain_month_index_ignores_a_solar_profile_it_was_handed(
     credit = -total / sum(per_day.values())
     # The plain mean, which is what this card names.
     assert credit == pytest.approx(0.9 * plain - 0.01)
+
+
+# ---- welcome credit ---------------------------------------------------------
+
+
+def _credit_entry(start: str | None = None) -> Any:
+    data: dict[str, Any] = {"contract": "test"}
+    if start is not None:
+        data["contract_start_date"] = start
+    return SimpleNamespace(data=data)
+
+
+def _credit(
+    amount: float | None,
+    start: str | None,
+    window_start: date,
+    today: date,
+    eligible: float = 900.0,
+) -> float:
+    from custom_components.be_electricity_prices.fees import _welcome_credit_eur
+
+    return _welcome_credit_eur(
+        make_snapshot(welcome_credit_eur=amount),
+        _credit_entry(start),
+        window_start,
+        today,
+        eligible,
+    )
+
+
+def test_welcome_credit_needs_a_contract_start_date() -> None:
+    """Without one there is no first year to place the credit in, which is
+    every entry that sets no date, so nothing changes for them."""
+    assert _credit(200.0, None, date(2026, 1, 1), date(2026, 9, 10)) == 0.0
+    # And a card that grants none never credits, dated or not.
+    assert _credit(None, "2026-03-01", date(2026, 1, 1), date(2026, 9, 10)) == 0.0
+
+
+def test_welcome_credit_accrues_pro_rata_and_totals_the_printed_amount() -> None:
+    """*"De korting wordt toegekend pro rata per dag"*, and a full first year
+    accrues exactly what the card printed."""
+    assert _credit(200.0, "2026-03-01", date(2026, 3, 1), date(2027, 2, 28)) == (
+        pytest.approx(200.0)
+    )
+    # 1 March to 10 September is 194 of the 365 days.
+    assert _credit(200.0, "2026-03-01", date(2026, 1, 1), date(2026, 9, 10)) == (
+        pytest.approx(200.0 * 194 / 365)
+    )
+
+
+def test_welcome_credit_expires_after_the_first_year() -> None:
+    """*"Dit geldt enkel tijdens je eerste inschrijvingsjaar"*. A negative fee
+    would have kept taking it off every year with nothing to flag it, which is
+    the whole reason the fee box floors at zero."""
+    assert _credit(200.0, "2025-01-01", date(2026, 1, 1), date(2026, 9, 10)) == 0.0
+    # The year the contract started still gets its share, and only its share.
+    assert _credit(200.0, "2025-06-01", date(2026, 1, 1), date(2026, 9, 10)) == (
+        pytest.approx(200.0 * 151 / 365)
+    )
+    # A start date in the future credits nothing yet.
+    assert _credit(200.0, "2027-01-01", date(2026, 1, 1), date(2026, 9, 10)) == 0.0
+
+
+def test_welcome_credit_is_capped_at_what_the_period_charged() -> None:
+    """*"Indien de som van deze componenten lager is dan de vermelde
+    welkomstkorting, wordt de korting beperkt tot maximaal het bedrag van deze
+    som."* The cap is prorated onto the credited days, so a running figure
+    never credits more than those days were charged."""
+    # 194 credited days out of a 253-day window: 120 EUR of eligible cost over
+    # the window is 92,02 over the credited part, under the 106,30 accrued.
+    assert _credit(200.0, "2026-03-01", date(2026, 1, 1), date(2026, 9, 10), 120.0) == (
+        pytest.approx(120.0 * 194 / 253)
+    )
+    # A window that charged nothing eligible credits nothing.
+    assert _credit(200.0, "2026-03-01", date(2026, 1, 1), date(2026, 9, 10), 0.0) == 0.0
+    # A negative eligible base (compensation banking its injection) is a floor,
+    # not a debt.
+    assert _credit(200.0, "2026-03-01", date(2026, 1, 1), date(2026, 9, 10), -50.0) == (
+        0.0
+    )
+
+
+async def test_year_cost_subtracts_the_welcome_credit(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The credit has to reach the BILL, not just exist on the snapshot, and
+    it has to reach it on every path this engine prices a window with. A fixed
+    card walks per day, so this pins that one; the branch that returns before
+    the per-day walk is what the shared finaliser exists for."""
+    freezer.move_to("2026-03-31 12:00:00+01:00")
+    entry = _entry(
+        region="flanders",
+        solar_regime="none",
+        meter="mono",
+        contract="test",
+        contract_start_date="2026-01-01",
+        consumption_kwh="sensor.cons_total",
+    )
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.cons_total":
+            return {date(2026, 1, 1) + timedelta(days=n): 10.0 for n in range(90)}
+        return {}
+
+    async def _cost(credit: float | None) -> float:
+        snap = replace(
+            _snapshot(prosumer=None, capacity=None), welcome_credit_eur=credit
+        )
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+            return cast(
+                float,
+                await _compute_current_year_cost(
+                    hass,
+                    None,  # type: ignore[arg-type]
+                    make_stub_extractor(),
+                    snap,
+                    entry,
+                ),
+            )
+
+    without = await _cost(None)
+    with_credit = await _cost(200.0)
+    # 1 January to 31 March is 90 of the 365 days of the first year.
+    assert without - with_credit == pytest.approx(200.0 * 90 / 365)
+
+
+async def test_welcome_credit_is_never_given_to_another_supplier_contract(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The compare page walks this same engine for a contract the household
+    never signed. Its own start date says nothing about when it would have
+    signed that one, so crediting a first-year discount there would rank an
+    alternative on a promotion nobody was granted."""
+    freezer.move_to("2026-03-31 12:00:00+01:00")
+    entry = _entry(
+        region="flanders",
+        solar_regime="none",
+        meter="mono",
+        contract="test",
+        contract_start_date="2026-01-01",
+        consumption_kwh="sensor.cons_total",
+    )
+    snap = replace(_snapshot(prosumer=None, capacity=None), welcome_credit_eur=200.0)
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.cons_total":
+            return {date(2026, 1, 1) + timedelta(days=n): 10.0 for n in range(90)}
+        return {}
+
+    async def _cost(contract_override: str | None) -> float:
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+            return cast(
+                float,
+                await _compute_current_year_cost(
+                    hass,
+                    None,  # type: ignore[arg-type]
+                    make_stub_extractor(),
+                    snap,
+                    entry,
+                    contract_override=contract_override,
+                ),
+            )
+
+    own = await _cost(None)
+    other = await _cost("someone_elses_contract")
+    assert other - own == pytest.approx(200.0 * 90 / 365)

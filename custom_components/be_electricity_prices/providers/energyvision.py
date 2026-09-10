@@ -266,6 +266,14 @@ _GUARANTEE_RE = re.compile(
 
 _FEE_RE = re.compile(rf"Vaste\s+vergoeding\s+{_NUM}\s*€\s*/\s*jaar", re.IGNORECASE)
 
+# "Eenmalige welkomstkorting  200 €", the one-off first-year credit, printed
+# above the standing charge on four of the six cards. Optional on purpose:
+# Laadpunt prints no such row, and the Walloon card carries footnote e
+# describing the credit while printing no amount for it, so there is nothing
+# to grant. Only the Dutch wording is matched, because that is the only one
+# any card has ever printed a figure next to.
+_WELCOME_RE = re.compile(rf"Eenmalige\s+welkomstkorting\s+{_NUM}\s*€", re.IGNORECASE)
+
 # Taxes (Flanders). GSC + WKC print as a single combined value; the
 # energiefonds shows a domiciled (standard residential = 0 EUR/month) and a
 # non-domiciled row; bill the domiciled one.
@@ -474,6 +482,7 @@ def parse_snapshot(
         publication_label=publication_label or _publication_label(text),
         valid_until=parse_valid_until(text),
         injection=injection,
+        welcome_credit_eur=_welcome_credit(text),
     )
 
 
@@ -508,6 +517,16 @@ def _publication_label(text: str) -> str:
 def _publication_label_fr(text: str) -> str:
     m = _LABEL_FR_RE.search(text)
     return m.group(1).lower() if m else ""
+
+
+def _welcome_credit(text: str) -> float | None:
+    """The one-off welcome credit in EUR, or ``None`` where the card prints none.
+
+    Optional where the standing charge is mandatory: a missing row here is a
+    card that grants no credit, not a layout drift, so it must not raise.
+    """
+    m = _WELCOME_RE.search(text)
+    return None if m is None else to_float(m.group(1))
 
 
 def _fee(text: str) -> float:

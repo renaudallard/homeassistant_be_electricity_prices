@@ -202,7 +202,7 @@ constructs `SupplierExtractor` with only `fetch` and `probe`). Filenames are
 overwrite-in-place and Ecofix publishes no public archive of past months
 (`ecofix.py:45`), so the coordinator's proxy-forward fallback bills past
 consumption windows at the current snapshot's rates. If Ecofix ever exposes a
-dated archive, add an `ArchivedSnapshotFetcher` (see `providers/base.py:1278`).
+dated archive, add an `ArchivedSnapshotFetcher` (see `providers/base.py:1300`).
 
 ### discover()
 
@@ -336,7 +336,7 @@ A second `Vlaams gewest Analoge meter` table below carries the analog-meter pros
 rate in its 5th column, attached to every Flanders overlay as
 `prosumer_eur_per_kva_year`, digital rows included (`ecofix.py:707`). Nothing
 filters it by meter type, which this said for a long time: the only gate is
-`_compensation_kva` (`fees.py:316`), which bills the prosumer fee on Walloon
+`_compensation_kva` (`fees.py:320`), which bills the prosumer fee on Walloon
 compensation entries alone, so on a Flemish overlay the value is never read at
 all (`tests/test_ecofix.py:170`).
 

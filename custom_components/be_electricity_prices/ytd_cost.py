@@ -45,7 +45,7 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from typing import Any
+from typing import Any, NamedTuple
 import aiohttp
 import calendar
 
@@ -83,6 +83,7 @@ from .fees import (
     _capped_capacity_monthly_eur,
     _compensation_kva,
     _prosumer_monthly_fee,
+    _welcome_credit_eur,
 )
 from .injection import (
     _historical_injection_rate,
@@ -94,7 +95,9 @@ from .pricing import (
     MeterType,
     compute_breakdown,
     compute_network_and_taxes,
+    renewables_eur_per_kwh,
     static_breakdown,
+    yearly_fixed_fee_for_meter,
 )
 from .providers.base import (
     DynamicRates,
@@ -205,6 +208,13 @@ async def _walk_ytd_months(
         cur = next_first
 
 
+class _StaticFees(NamedTuple):
+    """The pro-rated year-to-date static fees, and the supplier's share of them."""
+
+    total: float
+    supplier_fee: float
+
+
 async def _ytd_static_fees(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -216,7 +226,7 @@ async def _ytd_static_fees(
     contract: str | None = None,
     meter: MeterType | None = None,
     cached_only: bool = False,
-) -> float:
+) -> _StaticFees:
     """Pro-rated YTD total of yearly_fixed_fee + 12*energy_fund using each
     month's archived snapshot.
 
@@ -228,9 +238,17 @@ async def _ytd_static_fees(
     archived snapshot for each past month, so a supplier indexation
     that lands mid-year is honoured for the months it applies to.
     Falls back to the current snapshot for months with no archive.
+
+    The second figure is the SUPPLIER's standing charge alone, out of a total
+    that also carries the energy fund, the data-management charge and the
+    Brussels OSP fee. A welcome credit may come off the standing charge and
+    off none of the other three, so it needs them told apart; the same walk
+    answers both rather than a second one drifting from this.
     """
     days_in_year = 366 if calendar.isleap(today.year) else 365
     total = 0.0
+    supplier_fee = 0.0
+    for_meter = meter or entry.data.get(CONF_METER, METER_MONO)
     async for snap_m, _, _, days_in_ytd in _walk_ytd_months(
         hass,
         session,
@@ -241,11 +259,12 @@ async def _ytd_static_fees(
         contract=contract,
         cached_only=cached_only,
     ):
-        annual = _annual_static_fees(
-            snap_m, meter or entry.data.get(CONF_METER, METER_MONO), entry
+        share = days_in_ytd / days_in_year
+        total += _annual_static_fees(snap_m, for_meter, entry) * share
+        supplier_fee += (
+            float(yearly_fixed_fee_for_meter(snap_m.energy, for_meter) or 0.0) * share
         )
-        total += annual * (days_in_ytd / days_in_year)
-    return total
+    return _StaticFees(total, supplier_fee)
 
 
 async def _ytd_prosumer(
@@ -908,23 +927,61 @@ async def _compute_current_year_cost(
         meter=meter,
         cached_only=cached_only,
     )
-    fees = static_fees + prosumer_ytd + capacity_ytd
-    if breakdown is not None:
-        # Reported on every contract kind, not just the static path: the fees
-        # floor is what a low bill rests on whichever way energy is priced.
-        breakdown["fees_ytd_eur"] = fees
-        # And split, because the lump hid the leg most able to move it. The
-        # Flanders capacity tariff is billed per kW of monthly peak per year
-        # (52 to 60 EUR/kW across the Fluvius areas), so two entries reading
-        # the same meter and the same card still differ by hundreds of euro
-        # when they resolve different peaks. None of that shows on the price
-        # graph, which is per kWh, so the only way a user could see it was to
-        # download diagnostics. One comparison of this attribute now answers
-        # "why do my two entries disagree".
-        breakdown["capacity_ytd_eur"] = capacity_ytd
-        breakdown["prosumer_ytd_eur"] = prosumer_ytd
-        breakdown["standing_charges_ytd_eur"] = static_fees
-        breakdown["billed_peak_kw"] = billed_peak_kw
+    fees = static_fees.total + prosumer_ytd + capacity_ytd
+    # The breakdown when the caller asked for one, a throwaway otherwise. Every
+    # figure written into it is a sum already computed, so filling one nobody
+    # reads costs nothing, and it means the credit's cap can read the window's
+    # consumption on every path instead of only on the ones being diagnosed.
+    stats: dict[str, float] = breakdown if breakdown is not None else {}
+    # Reported on every contract kind, not just the static path: the fees
+    # floor is what a low bill rests on whichever way energy is priced.
+    stats["fees_ytd_eur"] = fees
+    # And split, because the lump hid the leg most able to move it. The
+    # Flanders capacity tariff is billed per kW of monthly peak per year
+    # (52 to 60 EUR/kW across the Fluvius areas), so two entries reading
+    # the same meter and the same card still differ by hundreds of euro
+    # when they resolve different peaks. None of that shows on the price
+    # graph, which is per kWh, so the only way a user could see it was to
+    # download diagnostics. One comparison of this attribute now answers
+    # "why do my two entries disagree".
+    stats["capacity_ytd_eur"] = capacity_ytd
+    stats["prosumer_ytd_eur"] = prosumer_ytd
+    stats["standing_charges_ytd_eur"] = static_fees.total
+    stats["billed_peak_kw"] = billed_peak_kw
+
+    def _bill(energy: float) -> float:
+        """The window's bill: energy plus fees, less any welcome credit.
+
+        Every branch below returns through here. This function prices a window
+        four different ways (per hour on a dynamic, spot-monthly or TOU /
+        night-circuit contract, per day otherwise) and falls back to a
+        fees-only floor in four more places, and a credit applied on one of
+        those is a credit missing from the other seven.
+
+        The credit is only ever the entry's OWN. The start date belongs to the
+        contract the household actually signed, and the compare page walks this
+        same function for one it did not, where a first-year discount would
+        rank an alternative on a promotion nobody was granted.
+        """
+        credit = 0.0
+        if contract == entry.data.get(CONF_CONTRACT):
+            credit = _welcome_credit_eur(
+                snapshot,
+                entry,
+                window_start,
+                today,
+                # The three components a welcome credit may come off and no
+                # others: the energy leg, the SUPPLIER's standing charge (not
+                # the energy fund, the data-management charge or the Brussels
+                # OSP fee sitting beside it in static_fees) and the region's
+                # green electricity / CHP contribution.
+                max(energy, 0.0)
+                + static_fees.supplier_fee
+                + stats.get("consumption_ytd_kwh", 0.0)
+                * renewables_eur_per_kwh(snapshot.taxes, region),
+            )
+        stats["welcome_credit_eur"] = credit
+        return energy + fees - credit
 
     # Dynamic contracts replay historical hourly ENTSO-E spots so each
     # past kWh hits its actual factor*spot+base rate. Caller passes the
@@ -944,7 +1001,7 @@ async def _compute_current_year_cost(
             today,
             contract=contract,
             meter=meter,
-            breakdown=breakdown,
+            breakdown=stats,
             historical_spots=historical_spots or {},
             spot_quarters=spot_quarters,
             spp_weights=spp_weights,
@@ -952,8 +1009,8 @@ async def _compute_current_year_cost(
             cached_only=cached_only,
         )
         if dyn_energy is None:
-            return fees
-        return dyn_energy + fees
+            return _bill(0.0)
+        return _bill(dyn_energy)
 
     # Spot-monthly contracts bill each past hour at its delivery month's mean
     # spot (a flat rate within the month); the hourly replay threads that mean
@@ -968,7 +1025,7 @@ async def _compute_current_year_cost(
             today,
             contract=contract,
             meter=meter,
-            breakdown=breakdown,
+            breakdown=stats,
             historical_spots=historical_spots or {},
             spot_quarters=spot_quarters,
             monthly_mean=True,
@@ -977,8 +1034,8 @@ async def _compute_current_year_cost(
             cached_only=cached_only,
         )
         if monthly_energy is None:
-            return fees
-        return monthly_energy + fees
+            return _bill(0.0)
+        return _bill(monthly_energy)
 
     # Per-hour billing is required when the supplier's energy rates
     # vary by hour (TOU + Impact energy contracts), when the DSO bills
@@ -1004,7 +1061,7 @@ async def _compute_current_year_cost(
             today,
             contract=contract,
             meter=meter,
-            breakdown=breakdown,
+            breakdown=stats,
             historical_spots=historical_spots or {},
             spot_quarters=spot_quarters,
             spp_weights=spp_weights,
@@ -1012,11 +1069,11 @@ async def _compute_current_year_cost(
             cached_only=cached_only,
         )
         if hourly_energy is None:
-            return fees
+            return _bill(0.0)
         # No separate feed-in term here, unlike the per-day walk below: this
         # branch holds the spot cache, so the walk itself credits a per-hour
         # formula hour by hour. Adding one would credit it twice.
-        return hourly_energy + fees
+        return _bill(hourly_energy)
 
     # The EFFECTIVE meter, not the entry's. The comparison page quotes a
     # target contract on a meter the household need not have, and the band
@@ -1028,7 +1085,7 @@ async def _compute_current_year_cost(
     )
     if daily_kwh is None:
         # No meter inputs at all - fees-only floor.
-        return fees
+        return _bill(0.0)
 
     # Precompute the snapshot + breakdowns for each month touched, so
     # the per-day loop stays O(days) without repeating the breakdown
@@ -1190,8 +1247,8 @@ async def _compute_current_year_cost(
         # already the raw energy term.
         energy_ytd_raw = energy_cost
 
+    stats["consumption_ytd_kwh"] = sum(r[0] + r[1] for r in daily_kwh.values())
     if breakdown is not None:
-        breakdown["consumption_ytd_kwh"] = sum(r[0] + r[1] for r in daily_kwh.values())
         # The per-day counterpart of hours_seen / hours_elapsed above: the
         # static branch reported no coverage at all, so a gap here was
         # invisible even in principle.
@@ -1206,4 +1263,4 @@ async def _compute_current_year_cost(
         breakdown["injection_today_kwh"] = today_kwh[2] + today_kwh[3]
         breakdown["energy_ytd_raw_eur"] = energy_ytd_raw
 
-    return energy_cost + fees
+    return _bill(energy_cost)

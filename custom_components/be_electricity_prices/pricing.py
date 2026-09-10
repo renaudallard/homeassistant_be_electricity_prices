@@ -780,6 +780,22 @@ def network_eur_per_kwh(
     return dist + dso.transport
 
 
+def renewables_eur_per_kwh(taxes: TaxOverlay, region: str) -> float:
+    """The region's green-energy / cogeneration contribution alone, EUR/kWh.
+
+    Split out of the levy total because one rule needs this component on its
+    own: a welcome credit is capped at what the period charged for energy, the
+    standing charge and this contribution, and comes off nothing else.
+    """
+    if region == REGION_WALLONIA:
+        return taxes.wallonia_renewables
+    if region == REGION_FLANDERS:
+        return taxes.flanders_renewables
+    if region == REGION_BRUSSELS:
+        return taxes.brussels_renewables
+    return 0.0
+
+
 def taxes_eur_per_kwh(taxes: TaxOverlay, region: str) -> float:
     """Per-kWh levies for the configured region that VAT applies to.
 
@@ -788,14 +804,11 @@ def taxes_eur_per_kwh(taxes: TaxOverlay, region: str) -> float:
     into the taxes component, so the total is unchanged on a VAT-inclusive
     card (``vat_rate == 0``) and only differs on an ex-VAT professional one.
     """
-    out = taxes.federal_excise + taxes.energy_contribution
-    if region == REGION_WALLONIA:
-        out += taxes.wallonia_renewables
-    elif region == REGION_FLANDERS:
-        out += taxes.flanders_renewables
-    elif region == REGION_BRUSSELS:
-        out += taxes.brussels_renewables
-    return out
+    return (
+        taxes.federal_excise
+        + taxes.energy_contribution
+        + renewables_eur_per_kwh(taxes, region)
+    )
 
 
 def taxes_vat_exempt_eur_per_kwh(taxes: TaxOverlay, region: str) -> float:

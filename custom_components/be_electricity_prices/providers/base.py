@@ -882,6 +882,20 @@ class SupplierSnapshot:
     # its TTL instead of keeping it as a closed month's historical fact. Never
     # set on a live card.
     provisional: bool = False
+    # One-off welcome credit the card prints, in EUR, or None where it prints
+    # none. Granted only during the customer's FIRST subscription year and
+    # accrued pro rata per day, so it needs a contract start date to mean
+    # anything and expires on its own a year later. It is capped at what the
+    # same period charged for energy, the standing charge and the green
+    # electricity / CHP contribution, and never comes off network tariffs,
+    # taxes or levies. Carried on the basis its card prints it, TVAC on a
+    # residential card, the way the prosumer forfait above is.
+    #
+    # It belongs to the product VERSION signed rather than to the current
+    # card: EnergyVision moved this figure four times between March and
+    # September 2026 (300, 200, 250, 200), so a cohort with an archive should
+    # read it from its signing month.
+    welcome_credit_eur: float | None = None
 
 
 def _vat_energy(energy: EnergyRates, factor: float) -> EnergyRates:
@@ -1018,6 +1032,14 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
             None
             if snapshot.supplier_prosumer_eur_per_kva_year is None
             else snapshot.supplier_prosumer_eur_per_kva_year * factor
+        ),
+        # A credit against energy, the standing charge and the green
+        # contribution, which are all billed with VAT, so it moves onto the
+        # entry's basis with them rather than staying as the card printed it.
+        welcome_credit_eur=(
+            None
+            if snapshot.welcome_credit_eur is None
+            else snapshot.welcome_credit_eur * factor
         ),
     )
 

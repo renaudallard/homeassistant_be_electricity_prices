@@ -790,3 +790,20 @@ def test_night_circuit_entry_is_billed_the_formula_alone() -> None:
     assert _blended_rate(entry, mean) == pytest.approx(
         1.12 * 1.06 * mean + 0.020 * 1.06
     )
+
+
+def test_welcome_credit_is_read_where_the_card_prints_one() -> None:
+    """Four of the six cards print a one-off welcome credit and two do not.
+    Laadpunt has no such row, and the Walloon card carries footnote e
+    describing the credit while printing no amount for it, so there is nothing
+    to grant. A missing row is a card that grants nothing rather than a layout
+    drift, so unlike the standing charge it must not raise."""
+    assert _dyn().welcome_credit_eur == pytest.approx(180.0)
+    assert _fixed().welcome_credit_eur == pytest.approx(240.0)
+    assert _tiered_1800().welcome_credit_eur == pytest.approx(200.0)
+    vi3 = _tiered(_TIERED_VI3, "energyvision_vast_injectie_sep.pdf")
+    assert vi3.welcome_credit_eur == pytest.approx(50.0)
+
+    lp = _tiered(_TIERED_LP, "energyvision_laadpunt_sep.pdf")
+    assert lp.welcome_credit_eur is None
+    assert _wal_aug().welcome_credit_eur is None

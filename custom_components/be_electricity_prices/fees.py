@@ -33,10 +33,14 @@ why they must not be duplicated per caller."""
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from homeassistant.config_entries import ConfigEntry
 
+from .cohort import _parse_iso_date
 from .const import (
     CONF_CONNECTION_KVA_TIER,
+    CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
@@ -352,3 +356,56 @@ def _compute_prosumer(snapshot: SupplierSnapshot, entry: ConfigEntry) -> float:
         return 0.0
     overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
     return _prosumer_monthly_fee(overlay, snapshot, kva)
+
+
+# The first subscription year, counted as a flat 365 days from the start date
+# so the span and the daily rate agree: a full year then accrues exactly the
+# amount the card printed, whatever leap day it happened to span.
+_WELCOME_YEAR_DAYS = 365
+
+
+def _welcome_credit_eur(
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    window_start: date,
+    today: date,
+    eligible_eur: float,
+) -> float:
+    """The one-off welcome credit accrued over ``[window_start, today]``, in EUR.
+
+    A welcome credit is an invoice line rather than a tariff, and the cards
+    that grant one say exactly how: *"Dit geldt enkel tijdens je eerste
+    inschrijvingsjaar voor deze productversie ... De korting wordt toegekend
+    pro rata per dag over de facturatie periode"*. So it needs a contract start
+    date, accrues by the day over the first year from it, and stops there on
+    its own. Without a start date there is no first year to place it in and
+    this returns 0.0, which is what every entry that sets no date keeps doing.
+
+    ``eligible_eur`` is what the WINDOW charged for the three components the
+    credit may come off: *"De korting heeft uitsluitend betrekking op de
+    energiekost, de vaste vergoeding, de bijdrage groene stroom en WKK ... De
+    korting is niet van toepassing op nettarieven, taksen en heffingen"*. The
+    cap is prorated onto the credited days, so a running figure can never
+    credit more than the same days were charged. It binds only on a very small
+    connection: against a 200 EUR credit and a 50 EUR standing charge it needs
+    a year under roughly 900 kWh.
+
+    Returns a POSITIVE number; the caller subtracts it.
+    """
+    amount = snapshot.welcome_credit_eur
+    if not amount or amount <= 0.0:
+        return 0.0
+    start = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
+    if start is None:
+        return 0.0
+    first = max(start, window_start)
+    last = min(today, start + timedelta(days=_WELCOME_YEAR_DAYS - 1))
+    days = (last - first).days + 1
+    if days <= 0:
+        return 0.0
+    accrued = amount * days / _WELCOME_YEAR_DAYS
+    window_days = (today - window_start).days + 1
+    if window_days <= 0:
+        return 0.0
+    cap = max(eligible_eur, 0.0) * days / window_days
+    return min(accrued, cap)

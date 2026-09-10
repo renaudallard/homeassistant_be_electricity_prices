@@ -109,7 +109,7 @@ Note what is deliberately absent from the per-kWh formula:
   `databeheer` and the Brussels `mesure` plus fixed-term pair are billed
   whatever the mode says.
 - The Wallonia `region_connection_fee` is a per-kWh term and IS billed, but
-  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:801`), not
+  through `taxes_vat_exempt_eur_per_kwh` (`pricing.py:814`), not
   `taxes_eur_per_kwh`. Engie's Walloon card prints `Redevance raccordement(8)`
   and footnote (8) reads *"Vous ne payez pas de TVA sur ces couts"* — the same
   footnote that exempts the Flemish energy fund on its Flanders edition.
@@ -190,7 +190,7 @@ not in the per-component path either (see
 The federal special excise is normally one rate, but a card may print it as a
 schedule that decreases by annual consumption band. `TaxOverlay` then carries
 `federal_excise_bands` as `((upper_kwh, eur_per_kwh), ...)` ascending
-(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1065`)
+(`providers/base.py:473`), and `resolve_excise_band` (`providers/base.py:1087`)
 resolves it against the entry's yearly volume (`entry_annual_kwh`) and writes
 one rate to `federal_excise`. The pricing engine never sees a band.
 

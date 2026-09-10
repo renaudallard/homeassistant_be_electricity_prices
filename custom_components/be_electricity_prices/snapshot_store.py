@@ -1196,7 +1196,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # snapshot has neither, so an entry that ticked the settlement box would keep
 # being billed the printed monthly rate until Bolt next republished, which is
 # exactly the stale-parse case this version exists for.
-_SNAPSHOT_SCHEMA_VERSION = 57
+# v58: snapshots carry welcome_credit_eur, the one-off first-year credit four
+# of EnergyVision's cards print. A v57 snapshot has None there, so an entry
+# with a contract start date would be credited nothing until its supplier next
+# republished, which on a monthly card is up to a month.
+_SNAPSHOT_SCHEMA_VERSION = 58
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
@@ -1244,6 +1248,7 @@ def _snapshot_to_dict(
         "valid_until": snap.valid_until.isoformat() if snap.valid_until else None,
         "injection": snap.injection.__dict__ if snap.injection else None,
         "supplier_prosumer_eur_per_kva_year": snap.supplier_prosumer_eur_per_kva_year,
+        "welcome_credit_eur": snap.welcome_credit_eur,
     }
 
 
@@ -1315,6 +1320,7 @@ def _snapshot_from_dict(
         supplier_prosumer_eur_per_kva_year=data.get(
             "supplier_prosumer_eur_per_kva_year"
         ),
+        welcome_credit_eur=data.get("welcome_credit_eur"),
     )
 
 
