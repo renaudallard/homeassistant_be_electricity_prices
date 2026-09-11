@@ -153,7 +153,7 @@ month at the current rate. Return-value semantics:
 - A `SupplierSnapshot` for the requested month when the archive resolves.
 - `None` when the supplier has no accessible archive for that month. This
   applies to overwrite-in-place suppliers (Ecofix, OCTA+, TotalEnergies),
-  suppliers with no archive at all (OCTA+, TotalEnergies, Ecofix), the
+  suppliers with no archive at all (TotalEnergies, Ecofix), the
   running month on a supplier that publishes in arrears (energie.be), and any
   month before the supplier's archive horizon (Engie's 2023 cards predate the
   layout its parser reads, energie.be's mid-2025 cards are page images). On

@@ -41,8 +41,14 @@ on a single line.
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import json
 import re
 from dataclasses import dataclass, replace
+from datetime import date
+from typing import Any
+from urllib.parse import urlencode
 
 import aiohttp
 
@@ -57,9 +63,12 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    _is_pdf_payload,
     require_contract,
     FR_MONTHS,
     SIGN_CHARS,
+    archive_validity_check,
+    extract_pdf_text_aligned,
     fetch_pdf_text_aligned,
     fetch_text,
     fold_accents,
@@ -134,6 +143,14 @@ _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
 _LISTING_URL = "https://www.octaplus.be/fr/electricite-gaz-naturel/tarifs"
 
+# The month archive behind the site's "archive fiches tarifaires" page, which
+# is a Next.js page calling these two endpoints: the first names the cards a
+# month had for a region and customer segment, the second serves one of them
+# as a base64 data URL inside JSON rather than as a file. Residential only
+# here (TypeContrat=RE), electricity only (Nrj=E).
+_ARCHIVE_LISTING_URL = "https://srv.octaplus.be/websiterest/getTarifArchive"
+_ARCHIVE_SHEET_URL = "https://srv.octaplus.be/websiterest/getTariffSheet"
+
 
 def _document_url(contract: _ContractDef, region: str) -> str:
     return f"{_BASE_URL}/E_OCTA_{contract.slug}_RE_{_REGION_TO_CODE[region]}_FR.pdf"
@@ -187,6 +204,130 @@ async def fetch(
     # still keeping real word spacing intact.
     text = await fetch_pdf_text_aligned(session, url, x_join_threshold=1.0)
     return parse_snapshot(contract_id, text, region, url)
+
+
+def _archive_name_key(name: str) -> str:
+    """Fold an archive file name for comparison: the listing prints
+    ``2026-06 E OCTA+DYNAMIC RE VL FR.pdf`` where the live URL spells the same
+    card ``E_OCTA_DYNAMIC_RE_VL_FR.pdf``, so spacing, underscores, the plus
+    sign and case are noise."""
+    return re.sub(r"[\s_+]", "", name).upper()
+
+
+def _archive_json(body: str, what: str) -> Any:
+    """The ``Response`` member of an archive endpoint's JSON, or raise.
+
+    Every shape the endpoints can answer with is funnelled into
+    ExtractorError, for the reason the sibling resolvers give: a payload that
+    is JSON but not the expected shape must read as a failed fetch, never
+    escape as a TypeError.
+    """
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as err:
+        raise ExtractorError(f"OCTA+ archive {what}: parse error: {err}") from err
+    if not isinstance(payload, dict) or "Response" not in payload:
+        raise ExtractorError(f"OCTA+ archive {what}: no 'Response' in the reply")
+    return payload["Response"]
+
+
+async def _resolve_archive_name(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    region: str,
+    month_first: date,
+) -> str | None:
+    """The archive's file name for ``contract`` in ``region`` for one month,
+    or ``None`` when that month lists no such card."""
+    query = urlencode(
+        {
+            "Lang": "FR",
+            "Region": _REGION_TO_CODE[region],
+            "AnneeMois": f"{month_first.year:04d}{month_first.month:02d}",
+            "Nrj": "E",
+            "Canal": "website",
+            "TypeContrat": "RE",
+        }
+    )
+    rows = _archive_json(
+        await fetch_text(session, f"{_ARCHIVE_LISTING_URL}?{query}", timeout=15),
+        "listing",
+    )
+    if not isinstance(rows, list):
+        raise ExtractorError("OCTA+ archive listing: 'Response' is not a list")
+    wanted = _archive_name_key(
+        f"{month_first.year:04d}-{month_first.month:02d} E OCTA+{contract.slug}"
+        f" RE {_REGION_TO_CODE[region]} FR.pdf"
+    )
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("NomPdf")
+        if isinstance(name, str) and _archive_name_key(name) == wanted:
+            return name
+    return None
+
+
+async def _fetch_archive_pdf(session: aiohttp.ClientSession, name: str) -> bytes:
+    """The archived card ``name`` as PDF bytes, unwrapped from the JSON data
+    URL the sheet endpoint serves it in."""
+    query = urlencode({"Canal": "website", "RequestedPDF": name})
+    reply = _archive_json(
+        await fetch_text(session, f"{_ARCHIVE_SHEET_URL}?{query}", timeout=60),
+        "sheet",
+    )
+    sheet = reply.get("TariffSheet") if isinstance(reply, dict) else None
+    if not isinstance(sheet, str) or "base64," not in sheet:
+        raise ExtractorError(f"OCTA+ archive sheet: no PDF data for {name!r}")
+    try:
+        payload = base64.b64decode(sheet.split("base64,", 1)[1], validate=False)
+    except (ValueError, TypeError) as err:
+        raise ExtractorError(f"OCTA+ archive sheet: bad base64 for {name!r}") from err
+    if not _is_pdf_payload(payload):
+        raise ExtractorError(f"OCTA+ archive sheet: {name!r} is not a PDF")
+    return payload
+
+
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """The card OCTA+ published for one past month, or ``None``.
+
+    The live cards overwrite in place, but the site's archive page is backed
+    by two endpoints: one lists the month's cards for a region, the other
+    hands one of them back as a base64 data URL in JSON. The text is
+    extracted with the same word-coordinate alignment ``fetch`` uses, in a
+    worker thread like the shared helper does, since a tariff card is a lot
+    of pure-Python parsing to run on the event loop. The dynamic cards print
+    a validity date, the authoritative cross-check; the fixed ones print the
+    month as ``MM/YYYY`` in their title, which the fallback tier reads.
+
+    Until this existed a contract start date did nothing on an OCTA+ entry:
+    the signing-cohort splice had no card to read, and every past month of
+    the year-to-date billed on the current card as a proxy. Every failure
+    comes back as ``None``, the one-month answer the month cache expects.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None or region not in _REGION_TO_CODE:
+        return None
+    if contract.regions is not None and region not in contract.regions:
+        return None
+    first = date(year_month.year, year_month.month, 1)
+    try:
+        name = await _resolve_archive_name(session, contract, region, first)
+        if name is None:
+            return None
+        payload = await _fetch_archive_pdf(session, name)
+        text = await asyncio.to_thread(extract_pdf_text_aligned, payload, 3, 1.0)
+        snap = parse_snapshot(
+            contract_id, text, region, f"{_ARCHIVE_SHEET_URL}?RequestedPDF={name}"
+        )
+    except ExtractorError:
+        return None
+    return archive_validity_check(snap, text, first, month_names=FR_MONTHS)
 
 
 def parse_snapshot(
@@ -814,4 +955,5 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     probe=probe,
+    fetch_for_month=fetch_for_month,
 )

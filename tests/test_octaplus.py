@@ -28,6 +28,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
+from datetime import date
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -557,3 +561,177 @@ def test_missing_wallonia_connection_fee_fails_loud() -> None:
     )
     with pytest.raises(ExtractorError, match="connection fee"):
         parse_snapshot("octaplus_fixed", text, "wallonia")
+
+
+# ---- month archive (fetch_for_month) ------------------------------------------
+
+
+def _archive_router(
+    listing: list[dict[str, str]],
+    sheet: bytes | None,
+    asked: list[str],
+    ok: str = "True",
+) -> object:
+    """Answer the listing endpoint with ``listing`` and the sheet endpoint
+    with ``sheet`` wrapped the way the site wraps it: a base64 data URL in
+    JSON."""
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        if "getTarifArchive" in url:
+            return json.dumps({"Response": listing})
+        if "getTariffSheet" in url:
+            data = "" if sheet is None else base64.b64encode(sheet).decode()
+            return json.dumps(
+                {
+                    "Response": {
+                        "Ok": ok,
+                        "TariffSheet": f"data:application/pdf;base64,{data}",
+                    }
+                }
+            )
+        raise AssertionError(url)
+
+    return _fake_fetch_text
+
+
+async def test_archive_resolves_the_months_card_by_its_listed_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The archive lists a month's cards by a file name that spells the same
+    card the live URL does, spacing and plus sign aside, and serves the card
+    as a base64 data URL in JSON. Until this was wired a contract start date
+    did nothing on an OCTA+ entry."""
+    from custom_components.be_electricity_prices.providers import octaplus
+
+    asked: list[str] = []
+    listing = [
+        {
+            "NomProduitFR": "ELECTRICITE - DYNAMIC",
+            "NomPdf": "2026-04 E OCTA+DYNAMIC RE WL FR.pdf",
+        },
+        {
+            "NomProduitFR": "ELECTRICITE - ECO DYNAMIC",
+            "NomPdf": "2026-04 E OCTA+ECODYNAMIC RE WL FR.pdf",
+        },
+    ]
+    monkeypatch.setattr(
+        octaplus,
+        "fetch_text",
+        _archive_router(
+            listing, (FIXTURES / "octaplus_dynamic_w.pdf").read_bytes(), asked
+        ),
+    )
+    snap = await octaplus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "octaplus_dynamic",
+        "wallonia",
+        date(2026, 4, 12),
+    )
+    assert snap is not None
+    listing_q = parse_qs(urlsplit(asked[0]).query)
+    assert listing_q["Region"] == ["WL"] and listing_q["AnneeMois"] == ["202604"]
+    assert listing_q["TypeContrat"] == ["RE"] and listing_q["Nrj"] == ["E"]
+    sheet_q = parse_qs(urlsplit(asked[1]).query)
+    assert sheet_q["RequestedPDF"] == ["2026-04 E OCTA+DYNAMIC RE WL FR.pdf"]
+    assert snap.publication_label == "04/2026"
+    assert snap.valid_until == date(2026, 4, 30)
+    assert isinstance(snap.energy, DynamicRates)
+    assert len(snap.dsos) > 0
+
+
+async def test_archive_answers_none_without_the_card_or_for_another_month(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from custom_components.be_electricity_prices.providers import octaplus
+
+    asked: list[str] = []
+    listing = [{"NomPdf": "2026-04 E OCTA+DYNAMIC RE WL FR.pdf"}]
+    monkeypatch.setattr(
+        octaplus,
+        "fetch_text",
+        _archive_router(
+            listing, (FIXTURES / "octaplus_dynamic_w.pdf").read_bytes(), asked
+        ),
+    )
+    # A month whose listing lacks the product fetches no sheet.
+    assert (
+        await octaplus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "octaplus_fixed",
+            "wallonia",
+            date(2026, 4, 1),
+        )
+        is None
+    )
+    assert len(asked) == 1
+    # A listing row that points at a card naming another month is rejected.
+    listing[0]["NomPdf"] = "2026-06 E OCTA+DYNAMIC RE WL FR.pdf"
+    assert (
+        await octaplus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "octaplus_dynamic",
+            "wallonia",
+            date(2026, 6, 1),
+        )
+        is None
+    )
+
+
+async def test_archive_swallows_bad_payloads_and_unsold_combinations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from custom_components.be_electricity_prices.providers import octaplus
+    from custom_components.be_electricity_prices.providers.base import ExtractorError
+
+    asked: list[str] = []
+    listing = [{"NomPdf": "2026-04 E OCTA+DYNAMIC RE WL FR.pdf"}]
+    # A sheet that is not a PDF once decoded.
+    monkeypatch.setattr(
+        octaplus, "fetch_text", _archive_router(listing, b"<html>nope</html>", asked)
+    )
+    assert (
+        await octaplus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "octaplus_dynamic",
+            "wallonia",
+            date(2026, 4, 1),
+        )
+        is None
+    )
+
+    async def _boom(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        raise ExtractorError("archive down")
+
+    monkeypatch.setattr(octaplus, "fetch_text", _boom)
+    assert (
+        await octaplus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "octaplus_dynamic",
+            "wallonia",
+            date(2026, 4, 1),
+        )
+        is None
+    )
+    before = len(asked)
+    # Fixed Impact is Walloon only; Brussels is not served; gas is not ours.
+    for contract_id, region in (
+        ("octaplus_fixed_impact", "flanders"),
+        ("octaplus_dynamic", "brussels"),
+        ("octaplus_gas", "wallonia"),
+    ):
+        assert (
+            await octaplus.fetch_for_month(
+                None,  # type: ignore[arg-type]
+                contract_id,
+                region,
+                date(2026, 4, 1),
+            )
+            is None
+        )
+    assert len(asked) == before
+    assert EXTRACTORS["octaplus"].fetch_for_month is octaplus.fetch_for_month
+    assert octaplus._archive_name_key("2026-04 E OCTA+DYNAMIC RE WL FR.pdf") == (
+        octaplus._archive_name_key("2026-04_E_OCTA_DYNAMIC_RE_WL_FR.PDF")
+    )
