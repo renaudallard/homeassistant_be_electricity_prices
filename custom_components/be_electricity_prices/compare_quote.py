@@ -349,9 +349,11 @@ def _year_avg_all_in(
     meter: Any,
     dso_mode: Any,
     hour_weights: dict[int, float] | None = None,
+    component: str = "all_in",
 ) -> float | None:
     """Mean all-in EUR/kWh over the ``num_days`` from ``first_day``, priced
-    once per kind of day.
+    once per kind of day. ``component`` names another field of the breakdown
+    to average instead, ``energy`` for the supplier's component alone.
 
     Every hour has to carry its true energy slot AND network band, since the
     TOU windows and the bi-horaire network bands do not align and both change
@@ -403,7 +405,7 @@ def _year_avg_all_in(
             except Exception:  # noqa: BLE001
                 return None
             w = (1.0 if hour_weights is None else hour_weights.get(hour, 0.0)) * days
-            total += bd.all_in * w
+            total += float(getattr(bd, component)) * w
             weight_sum += w
     return total / weight_sum if weight_sum else None
 
@@ -417,10 +419,15 @@ def _tou_weighted_per_kwh(
     meter: Any,
     dso_mode: Any,
     hour_weights: dict[int, float] | None = None,
+    component: str = "all_in",
 ) -> float | None:
     """Per-kWh EUR/kWh for the compare flow's annual estimate, with a
     TOU-aware weighted average when the snapshot's energy rate splits by
     hour-of-day.
+
+    ``component`` selects another field of the breakdown, weighted the same
+    way: ``energy`` gives the supplier's component alone, which is what a
+    welcome credit is capped against.
 
     ``hour_weights`` is the household's measured share of consumption per hour
     of the day (:func:`energy_meters._measured_hour_weights`). Weighting the
@@ -495,7 +502,7 @@ def _tou_weighted_per_kwh(
         and not bi_split
         and not impact_network
     ):
-        return bd.all_in
+        return float(getattr(bd, component))
 
     # A TOU energy slot spans hours with different bi-horaire network bands,
     # the weekend rule shifts hours between energy slots, a seasonal card
@@ -511,9 +518,18 @@ def _tou_weighted_per_kwh(
     # card. The walk costs at most a few hundred breakdowns and needs no such
     # assumption.
     year_avg = _year_avg_all_in(
-        snapshot, dso, region, when_now.date(), 365, spot, meter, dso_mode, hour_weights
+        snapshot,
+        dso,
+        region,
+        when_now.date(),
+        365,
+        spot,
+        meter,
+        dso_mode,
+        hour_weights,
+        component=component,
     )
-    return year_avg if year_avg is not None else bd.all_in
+    return year_avg if year_avg is not None else float(getattr(bd, component))
 
 
 def _populate_charts(
@@ -952,9 +968,15 @@ def _annual_bill(
     capacity_proration: float | None = None,
     meter: Any = METER_MONO,
     include_capacity: bool = True,
+    welcome_credit_eur: float = 0.0,
 ) -> float:
     """Estimated EUR bill for ``snapshot`` over the period that produced
     ``consumption_kwh`` and ``injection_kwh``.
+
+    ``welcome_credit_eur`` is a one-off credit the period grants, subtracted
+    last, after every regime's arithmetic: the card's welcome credit for a
+    first subscription year (:func:`fees._year_ahead_welcome_credit`), which
+    the caller resolves because only it knows whose first year the period is.
 
     ``fee_proration`` scales the EUR/year fee components (1.0 for a
     full year, ``days_elapsed/days_in_year`` for YTD). ``prosumer_proration``,
@@ -1026,7 +1048,7 @@ def _annual_bill(
     if regime == "compensation":
         if export_per_kwh is None:
             billable = max(consumption_kwh - injection_kwh, 0.0)
-            return fees + per_kwh * billable
+            return fees + per_kwh * billable - welcome_credit_eur
         # A reversing meter nets against the rate in force at the time, which
         # is what the live sensor bills: it nets each hour and clamps the year
         # once. Netting the two annual totals first and pricing the residue at
@@ -1036,10 +1058,15 @@ def _annual_bill(
         # per side: consumption at its own weighted rate, export credited at
         # its own, with the single annual clamp the live path also applies.
         netted = consumption_kwh * per_kwh - injection_kwh * export_per_kwh
-        return fees + max(netted, 0.0)
+        return fees + max(netted, 0.0) - welcome_credit_eur
     if regime == "injection" and injection_price is not None:
-        return fees + per_kwh * consumption_kwh - injection_price * injection_kwh
-    return fees + per_kwh * consumption_kwh
+        return (
+            fees
+            + per_kwh * consumption_kwh
+            - injection_price * injection_kwh
+            - welcome_credit_eur
+        )
+    return fees + per_kwh * consumption_kwh - welcome_credit_eur
 
 
 def _annual_fees(
@@ -1080,6 +1107,59 @@ def _annual_fees(
         capacity = 12.0 * _compute_capacity(snapshot, entry, peak_kw, meter)
     prosumer = 12.0 * _compute_prosumer(snapshot, entry)
     return static + capacity + prosumer
+
+
+def _annual_welcome_credit(
+    snapshot: Any,
+    credited: Any,
+    start: date | None,
+    when_now: datetime,
+    dso: str,
+    region: str,
+    spot: float | None,
+    meter: Any,
+    dso_mode: Any,
+    hour_weights: dict[int, float] | None,
+    consumption_kwh: float,
+) -> float:
+    """The welcome credit the coming year takes off ``snapshot``'s annual quote.
+
+    ``credited`` is the card the amount and its rule are read off: the signing
+    month's card for the household's own contract, and the card itself for a
+    candidate, since a new customer signing today is granted what today's card
+    prints. ``start`` is the entry's own start date for the own contract and
+    the quote date for a candidate (see :func:`fees._year_ahead_welcome_credit`
+    for the window). A card that grants nothing costs no walk at all.
+
+    The cap is measured against what the year would charge for the supplier's
+    energy component alone, the standing charge and the green contribution,
+    so the energy leg is re-walked on its ``energy`` component with the same
+    weights the all-in rate carries.
+    """
+    from .fees import _year_ahead_welcome_credit
+    from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
+
+    if not getattr(credited, "welcome_credit_eur", None):
+        return 0.0
+    energy_per_kwh = _tou_weighted_per_kwh(
+        snapshot,
+        dso,
+        region,
+        when_now,
+        spot,
+        meter,
+        dso_mode,
+        hour_weights,
+        component="energy",
+    )
+    if energy_per_kwh is None:
+        return 0.0
+    eligible = (
+        consumption_kwh * energy_per_kwh
+        + float(yearly_fixed_fee_for_meter(snapshot.energy, meter) or 0.0)
+        + consumption_kwh * renewables_eur_per_kwh(snapshot.taxes, region)
+    )
+    return _year_ahead_welcome_credit(credited, start, when_now.date(), eligible)
 
 
 async def _read_total_kwh(

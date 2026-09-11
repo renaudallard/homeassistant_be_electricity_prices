@@ -72,6 +72,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
@@ -89,6 +90,7 @@ from .synergrid import RlpWeights, SppWeights
 from .cohort import (
     _cohort_energy_leg,
     _month_snapshot_cache,
+    _parse_iso_date,
     signing_month_snapshot,
     ytd_window_start,
 )
@@ -797,8 +799,10 @@ async def _backfill_cost_sensor(
     running_supplier_fee = 0.0
     running_green = 0.0
     # The window the credit accrues over is the sensor's own, whichever year
-    # the caller anchored the hours on.
+    # the caller anchored the hours on, and the first year it counts from is
+    # the entry's own start date, as on the live side.
     credit_window_start = ytd_window_start(entry, dt_util.as_local(hours[0]).date())
+    credit_start = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
     netting = _NetAllocation()
     allocated = ctx.rlp_weights is not None
     for utc_hour in hours:
@@ -943,7 +947,7 @@ async def _backfill_cost_sensor(
         # kind of intra-day lead the fee proration above carries.
         credit = _welcome_credit_eur(
             ctx.signing,
-            entry,
+            credit_start,
             credit_window_start,
             local.date(),
             running_energy_component + running_supplier_fee + running_green,

@@ -342,9 +342,12 @@ subtracts it through the one finaliser every branch returns by. Three gates matt
   between March and September 2026 (300, 200, 250, 200), so the amount is read off the
   SIGNING month's card through `signing_month_snapshot`, not today's. A March cohort
   reading September's card would be credited 200 where its own card promised 300.
-- **Never on another supplier's contract.** The compare page walks the same engine for a
-  contract the household never signed, where its own start date says nothing about when it
-  would have signed that one.
+- **Credited on both sides of a comparison.** The compare page credits a card being quoted
+  what a customer signing it today is granted over the coming year, and in the year-to-date
+  column what it would have granted had it been signed on the household's own start date,
+  while the household's own row carries whatever is left of its first year. Crediting one
+  side only put the real bill beside alternatives priced as though the credit did not
+  exist.
 
 ## Month archive
 

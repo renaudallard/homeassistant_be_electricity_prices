@@ -37,10 +37,8 @@ from datetime import date, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 
-from .cohort import _parse_iso_date
 from .const import (
     CONF_CONNECTION_KVA_TIER,
-    CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
@@ -367,7 +365,7 @@ _WELCOME_YEAR_DAYS = 365
 
 def _welcome_credit_eur(
     snapshot: SupplierSnapshot,
-    entry: ConfigEntry,
+    start: date | None,
     window_start: date,
     today: date,
     eligible_eur: float,
@@ -379,8 +377,11 @@ def _welcome_credit_eur(
     inschrijvingsjaar voor deze productversie ... De korting wordt toegekend
     pro rata per dag over de facturatie periode"*. So it needs a contract start
     date, accrues by the day over the first year from it, and stops there on
-    its own. Without a start date there is no first year to place it in and
-    this returns 0.0, which is what every entry that sets no date keeps doing.
+    its own. ``start`` is that date: the entry's own for the contract the
+    household signed, or the day a prospective customer would sign for a card
+    being quoted against it. ``None`` means there is no first year to place
+    the credit in and this returns 0.0, which is what every entry that sets
+    no date keeps doing.
 
     ``eligible_eur`` is what the WINDOW charged for the three components the
     credit may come off: *"De korting heeft uitsluitend betrekking op de
@@ -407,7 +408,6 @@ def _welcome_credit_eur(
     amount = snapshot.welcome_credit_eur
     if not amount or amount <= 0.0:
         return 0.0
-    start = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
     if start is None:
         return 0.0
     if snapshot.welcome_credit_kind == WELCOME_CREDIT_ANNIVERSARY:
@@ -429,3 +429,33 @@ def _welcome_credit_eur(
         return 0.0
     cap = max(eligible_eur, 0.0) * days / window_days
     return min(accrued, cap)
+
+
+def _year_ahead_welcome_credit(
+    snapshot: SupplierSnapshot,
+    start: date | None,
+    today: date,
+    eligible_eur: float,
+) -> float:
+    """The welcome credit the coming year takes off a bill quoted today, in EUR.
+
+    The window is the 365 days from ``today`` plus the day after them, which
+    is the day a card that grants its credit *"na een jaar ononderbroken
+    verbruik"* pays it out to a customer who signs today: a strict 365-day
+    window would drop that lump by one day and quote the tier as though its
+    whole reason for existing were not there. A pro-rata card accrues its
+    full year inside the same window, so a fresh signing is credited the
+    printed amount and an existing customer whatever share of the first year
+    is still ahead of them; ``eligible_eur`` caps it the way the first-year
+    rule does (see :func:`_welcome_credit_eur`).
+
+    ``start`` is ``today`` for a card the household has not signed, which is
+    what a quote is, and the entry's own start date for the contract it holds.
+    """
+    return _welcome_credit_eur(
+        snapshot,
+        start,
+        today,
+        today + timedelta(days=_WELCOME_YEAR_DAYS),
+        eligible_eur,
+    )

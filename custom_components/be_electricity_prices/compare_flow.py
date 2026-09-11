@@ -82,12 +82,13 @@ from .spot_stats import (
 from .synergrid import RlpWeights, SppWeights
 from .injection import _injection_needs_spot
 
-from .cohort import ytd_window_start
+from .cohort import _parse_iso_date, signing_month_snapshot, ytd_window_start
 from .const import (
     COMPARE_SWEEP_BUDGET_S,
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_API_KEY,
     CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
@@ -120,6 +121,7 @@ from .compare_quote import (
     RankedRow,
     _annual_bill,
     _annual_volume,
+    _annual_welcome_credit,
     _card_caveats,
     _compare_injection_credit,
     _consumption_weighted_spot,
@@ -627,6 +629,12 @@ class _HouseholdQuote:
     inj_hour_weights: Any
     current_per_kwh: float | None
     current_export_per_kwh: float | None
+    # The card the household's welcome credit is read off (the signing
+    # month's where the supplier keeps an archive), and what is left of that
+    # credit over the coming year. A candidate's is priced per row instead,
+    # since it depends on the card being ranked.
+    signing_snapshot: Any
+    own_welcome_credit: float
     spot_for: Any
     credit_month_spot_for: Any
     export_rate_for: Any
@@ -1518,6 +1526,8 @@ class _SweepEngine:
                 inj_hour_weights,
             )
 
+        signing_snapshot = current_snapshot
+        own_welcome_credit = 0.0
         if current_snapshot is not None:
             current_per_kwh = _tou_weighted_per_kwh(
                 current_snapshot,
@@ -1531,6 +1541,31 @@ class _SweepEngine:
             )
             current_export_per_kwh = await _export_rate_for(
                 current_snapshot, current_meter, dso_mode
+            )
+            # What the household's own first year still has to give over the
+            # coming one, read off the card it signed: the live tick resolves
+            # the same row every hour, so this is a cache hit.
+            signing_snapshot = await signing_month_snapshot(
+                self.hass,
+                async_get_clientsession(self.hass),
+                get_extractor(current[CONF_SUPPLIER]),
+                current[CONF_CONTRACT],
+                region,
+                quote_entry,
+                current_snapshot,
+            )
+            own_welcome_credit = _annual_welcome_credit(
+                current_snapshot,
+                signing_snapshot,
+                _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
+                dt_util.as_local(now_utc),
+                dso,
+                region,
+                await _spot_for(current_snapshot),
+                current_meter,
+                dso_mode,
+                hour_weights,
+                annual_kwh,
             )
         return _HouseholdQuote(
             region=region,
@@ -1564,6 +1599,8 @@ class _SweepEngine:
             inj_hour_weights=inj_hour_weights,
             current_per_kwh=current_per_kwh,
             current_export_per_kwh=current_export_per_kwh,
+            signing_snapshot=signing_snapshot,
+            own_welcome_credit=own_welcome_credit,
             spot_for=_spot_for,
             credit_month_spot_for=_credit_month_spot_for,
             export_rate_for=_export_rate_for,
@@ -1618,6 +1655,7 @@ class _SweepEngine:
                 ),
                 export_per_kwh=hh.current_export_per_kwh,
                 meter=hh.current_meter,
+                welcome_credit_eur=hh.own_welcome_credit,
             )
         except Exception:  # noqa: BLE001 - the alternatives are still useful
             return None
@@ -1718,6 +1756,24 @@ class _SweepEngine:
         )
         if per_kwh is None:
             return RankedRow(label=label, annual=None, status="could not be priced")
+        # WELCOME CREDIT: what a customer signing this card today is granted
+        # over the coming year, off the card as it prints today. The own row
+        # carries what is left of its own first year, so a tier that exists
+        # for its cashback (Frank's Korting) ranks on the year it would cost,
+        # not on the year it would cost someone the credit was never offered.
+        welcome_credit = _annual_welcome_credit(
+            resolved,
+            resolved,
+            hh.today_local,
+            dt_util.as_local(hh.now_utc),
+            hh.dso,
+            region,
+            await hh.spot_for(resolved),
+            meter,
+            dso_mode,
+            hh.hour_weights,
+            hh.annual_kwh,
+        )
         annual = _annual_bill(
             resolved,
             target_entry,
@@ -1740,6 +1796,7 @@ class _SweepEngine:
             # produce. Omitted, a compensation row came out 23% low.
             export_per_kwh=await hh.export_rate_for(resolved, meter, dso_mode),
             meter=meter,
+            welcome_credit_eur=welcome_credit,
         )
         return RankedRow(label=label, annual=annual)
 
@@ -2228,6 +2285,7 @@ class _CompareStepsMixin(OptionsFlow):
         session = async_get_clientsession(self.hass)
         other_extractor = get_extractor(self._compare[CONF_SUPPLIER])
         other_per_kwh: float | None = None
+        other_welcome_credit = 0.0
         other_snap = None
         # Resolve the quote against this entry's site facts through the same
         # helper the coordinator uses, not apply_vat alone. Both transforms are
@@ -2295,6 +2353,23 @@ class _CompareStepsMixin(OptionsFlow):
                 )
                 if other_per_kwh is None:
                     placeholders["error"] = "compute failed"
+                else:
+                    # A customer signing this card today, over the coming
+                    # year, off the card as it prints today. The own side
+                    # carries what is left of its own first year.
+                    other_welcome_credit = _annual_welcome_credit(
+                        other_snap,
+                        other_snap,
+                        today_local,
+                        dt_util.as_local(now_utc),
+                        dso,
+                        region,
+                        await _spot_for(other_snap),
+                        meter,
+                        other_dso_mode,
+                        hour_weights,
+                        annual_kwh,
+                    )
 
         # Per-supplier injection price (only used in the "injection"
         # regime; compensation regime nets at the meter, none has
@@ -2359,13 +2434,14 @@ class _CompareStepsMixin(OptionsFlow):
                 current_inj_price,
                 export_per_kwh=current_export_per_kwh,
                 meter=current_meter,
+                welcome_credit_eur=hh.own_welcome_credit,
             )
             placeholders["current_per_kwh"] = f"{current_per_kwh:.4f}"
             placeholders["current_annual"] = f"{current_annual:.2f}"
         if other_per_kwh is not None and other_snap is not None:
             placeholders["compare_per_kwh"] = f"{other_per_kwh:.4f}"
             placeholders["compare_annual"] = (
-                f"{_annual_bill(other_snap, target_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, export_per_kwh=other_export_per_kwh, meter=meter):.2f}"
+                f"{_annual_bill(other_snap, target_entry, peak_kw, other_per_kwh, annual_kwh, rolling_inj_kwh, compare_inj_price, export_per_kwh=other_export_per_kwh, meter=meter, welcome_credit_eur=other_welcome_credit):.2f}"
             )
 
         # A what-if moves BOTH sides together, so the printed supplier delta
@@ -2404,6 +2480,22 @@ class _CompareStepsMixin(OptionsFlow):
                 baseline_inj_price,
                 export_per_kwh=current_export_per_kwh,
                 meter=current_meter,
+                # The same first-year share the what-if side carries, on the
+                # card as configured: a what-if moves the regime or the meter,
+                # never the day the household signed.
+                welcome_credit_eur=_annual_welcome_credit(
+                    baseline_snapshot,
+                    hh.signing_snapshot,
+                    _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
+                    dt_util.as_local(now_utc),
+                    dso,
+                    region,
+                    await _spot_for(baseline_snapshot),
+                    current_meter,
+                    dso_mode,
+                    hour_weights,
+                    annual_kwh,
+                ),
             )
         placeholders["solar_note"] = _whatif_note(
             _solar_note(regime, rolling_inj_kwh, uncredited),
@@ -2448,6 +2540,7 @@ class _CompareStepsMixin(OptionsFlow):
                 compare_inj_price,
                 export_per_kwh=other_export_per_kwh,
                 meter=meter,
+                welcome_credit_eur=other_welcome_credit,
             ) - _annual_bill(
                 current_snapshot,
                 quote_entry,
@@ -2458,6 +2551,7 @@ class _CompareStepsMixin(OptionsFlow):
                 current_inj_price,
                 export_per_kwh=current_export_per_kwh,
                 meter=current_meter,
+                welcome_credit_eur=hh.own_welcome_credit,
             )
             placeholders["delta_annual"] = f"{'+' if delta >= 0 else ''}{delta:.2f}"
 

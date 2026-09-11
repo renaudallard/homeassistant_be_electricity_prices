@@ -53,11 +53,13 @@ from .cohort import (
     _cohort_energy_leg,
     _effective_snapshot_for_month,
     _month_snapshot_cache,
+    _parse_iso_date,
     signing_month_snapshot,
     ytd_window_start,
 )
 from .const import (
     CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
@@ -1003,16 +1005,22 @@ async def _compute_current_year_cost(
         fees-only floor in four more places, and a credit applied on one of
         those is a credit missing from the other seven.
 
-        The credit is only ever the entry's OWN. The start date belongs to the
-        contract the household actually signed, and the compare page walks this
-        same function for one it did not, where a first-year discount would
-        rank an alternative on a promotion nobody was granted.
+        Own contract and candidate alike, on the entry's own start date. The
+        compare page walks this function for a contract the household never
+        signed, and the question that column answers is what THIS year would
+        have cost on it, signed when the household signed its own; a welcome
+        credit is part of that answer. Crediting the own row and not the
+        candidate's put the household's real bill, credit included, beside
+        alternatives priced as though nobody was ever granted one, up to a
+        whole credit in the household's favour. The signing snapshot resolves
+        to the candidate's current card, so a candidate is credited what its
+        card prints today, where the own contract reads the month it signed.
         """
         credit = 0.0
-        if contract == entry.data.get(CONF_CONTRACT):
+        if signing_snapshot.welcome_credit_eur:
             credit = _welcome_credit_eur(
                 signing_snapshot,
-                entry,
+                _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),
                 window_start,
                 today,
                 # The three components a welcome credit may come off and no

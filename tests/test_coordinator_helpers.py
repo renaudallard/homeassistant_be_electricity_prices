@@ -6918,13 +6918,6 @@ async def test_a_plain_month_index_ignores_a_solar_profile_it_was_handed(
 # ---- welcome credit ---------------------------------------------------------
 
 
-def _credit_entry(start: str | None = None) -> Any:
-    data: dict[str, Any] = {"contract": "test"}
-    if start is not None:
-        data["contract_start_date"] = start
-    return SimpleNamespace(data=data)
-
-
 def _credit(
     amount: float | None,
     start: str | None,
@@ -6936,7 +6929,7 @@ def _credit(
 
     return _welcome_credit_eur(
         make_snapshot(welcome_credit_eur=amount),
-        _credit_entry(start),
+        None if start is None else date.fromisoformat(start),
         window_start,
         today,
         eligible,
@@ -7041,13 +7034,17 @@ async def test_year_cost_subtracts_the_welcome_credit(
     assert without - with_credit == pytest.approx(200.0 * 90 / 365)
 
 
-async def test_welcome_credit_is_never_given_to_another_supplier_contract(
+async def test_welcome_credit_is_given_to_a_candidate_on_the_same_start_date(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """The compare page walks this same engine for a contract the household
-    never signed. Its own start date says nothing about when it would have
-    signed that one, so crediting a first-year discount there would rank an
-    alternative on a promotion nobody was granted."""
+    never signed, and the column it fills answers what THIS year would have
+    cost on it, signed when the household signed its own. A welcome credit is
+    part of that answer: crediting the own row and not the candidate's put the
+    household's real bill beside alternatives priced as though nobody had
+    ever been granted one, a whole credit in the household's favour. The
+    candidate reads its credit off its current card, on the entry's own start
+    date."""
     freezer.move_to("2026-03-31 12:00:00+01:00")
     entry = _entry(
         region="flanders",
@@ -7066,23 +7063,46 @@ async def test_welcome_credit_is_never_given_to_another_supplier_contract(
             return {date(2026, 1, 1) + timedelta(days=n): 10.0 for n in range(90)}
         return {}
 
-    async def _cost(contract_override: str | None) -> float:
+    async def _cost(contract_override: str | None) -> tuple[float, float]:
+        stats: dict[str, float] = {}
         with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
-            return cast(
-                float,
-                await _compute_current_year_cost(
-                    hass,
-                    None,  # type: ignore[arg-type]
-                    make_stub_extractor(),
-                    snap,
-                    entry,
-                    contract_override=contract_override,
-                ),
+            total = await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                snap,
+                entry,
+                contract_override=contract_override,
+                breakdown=stats,
             )
+        return cast(float, total), stats["welcome_credit_eur"]
 
-    own = await _cost(None)
-    other = await _cost("someone_elses_contract")
-    assert other - own == pytest.approx(200.0 * 90 / 365)
+    own, own_credit = await _cost(None)
+    other, other_credit = await _cost("someone_elses_contract")
+    assert own_credit == pytest.approx(200.0 * 90 / 365)
+    assert other_credit == pytest.approx(own_credit)
+    assert other == pytest.approx(own)
+
+    # And with no start date on the entry neither side is credited.
+    undated = _entry(
+        region="flanders",
+        solar_regime="none",
+        meter="mono",
+        contract="test",
+        consumption_kwh="sensor.cons_total",
+    )
+    stats: dict[str, float] = {}
+    with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+        await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            snap,
+            undated,
+            contract_override="someone_elses_contract",
+            breakdown=stats,
+        )
+    assert stats["welcome_credit_eur"] == 0.0
 
 
 def test_anniversary_credit_lands_whole_in_the_window_that_holds_it() -> None:
@@ -7099,15 +7119,12 @@ def test_anniversary_credit_lands_whole_in_the_window_that_holds_it() -> None:
     snap = make_snapshot(
         welcome_credit_eur=120.0, welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY
     )
-    entry = SimpleNamespace(
-        data={"contract": "test", "contract_start_date": "2026-01-10"}
-    )
     anniversary = date(2026, 1, 10) + timedelta(days=365)
 
     def credit(window_start: date, today: date, eligible: float = 900.0) -> float:
         return _welcome_credit_eur(
             snap,
-            cast(Any, entry),
+            date(2026, 1, 10),
             window_start,
             today,
             eligible,
@@ -7637,3 +7654,85 @@ async def test_annual_volume_and_entry_annual_kwh_resolve_the_same_volume() -> N
     # And under the floor, typed then the default, on both sides.
     assert await _resolve(30000.0, 500.0, 30) == (30000.0, 30000.0)
     assert await _resolve(None, 500.0, 30) == (3500.0, 3500.0)
+
+
+def test_year_ahead_welcome_credit_covers_a_fresh_signing_and_a_running_year() -> None:
+    """The coming year of a quote: a customer signing today is granted the
+    printed amount, whether the card accrues it by the day or pays it as a
+    lump *"na een jaar ononderbroken verbruik"*, which lands the day after
+    365 have passed and so needs the window to reach it. An existing customer
+    is credited what is left of their first year, and one whose first year is
+    over gets nothing."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import (
+        _year_ahead_welcome_credit,
+    )
+
+    today = date(2026, 9, 11)
+    pro_rata = make_snapshot(welcome_credit_eur=200.0)
+    lump = make_snapshot(
+        welcome_credit_eur=120.0, welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY
+    )
+    # Signing today.
+    assert _year_ahead_welcome_credit(pro_rata, today, today, 900.0) == (
+        pytest.approx(200.0)
+    )
+    assert _year_ahead_welcome_credit(lump, today, today, 900.0) == pytest.approx(120.0)
+    # Signed 100 days ago: 265 days of the first year are still ahead.
+    signed = today - timedelta(days=100)
+    assert _year_ahead_welcome_credit(pro_rata, signed, today, 900.0) == (
+        pytest.approx(200.0 * 265 / 365)
+    )
+    assert _year_ahead_welcome_credit(lump, signed, today, 900.0) == pytest.approx(
+        120.0
+    )
+    # A first year that ended before today credits nothing more.
+    old = today - timedelta(days=400)
+    assert _year_ahead_welcome_credit(pro_rata, old, today, 900.0) == 0.0
+    assert _year_ahead_welcome_credit(lump, old, today, 900.0) == 0.0
+    # No start date, no credit; and the cap still binds on a tiny connection,
+    # prorated onto the 365 credited days of the 366-day window.
+    assert _year_ahead_welcome_credit(pro_rata, None, today, 900.0) == 0.0
+    assert _year_ahead_welcome_credit(pro_rata, today, today, 80.0) == pytest.approx(
+        80.0 * 365 / 366
+    )
+
+
+def test_annual_bill_subtracts_a_welcome_credit_last() -> None:
+    """The credit comes off after every regime's arithmetic, so it is the
+    same money whichever way the year was priced."""
+    from custom_components.be_electricity_prices.compare_quote import _annual_bill
+
+    snap = _snapshot(prosumer=None, capacity=None)
+    for regime in ("none", "injection", "compensation"):
+        entry = _entry(region="flanders", solar_regime=regime, meter="mono")
+        plain = _annual_bill(snap, entry, 0.0, 0.30, 3500.0, 1000.0, 0.05)
+        credited = _annual_bill(
+            snap, entry, 0.0, 0.30, 3500.0, 1000.0, 0.05, welcome_credit_eur=200.0
+        )
+        assert plain - credited == pytest.approx(200.0), regime
+
+
+def test_weighted_per_kwh_can_return_the_energy_component_alone() -> None:
+    """The cap of a welcome credit wants the supplier's energy component, not
+    the all-in rate, weighted exactly the way the all-in one is."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _tou_weighted_per_kwh,
+    )
+    from custom_components.be_electricity_prices.pricing import static_breakdown
+
+    snap = _snapshot(prosumer=None, capacity=None)
+    when = datetime(2026, 9, 11, 13, tzinfo=ZoneInfo("Europe/Brussels"))
+    all_in = _tou_weighted_per_kwh(
+        snap, "ores", "wallonia", when, None, "mono", "bi_horaire"
+    )
+    energy = _tou_weighted_per_kwh(
+        snap, "ores", "wallonia", when, None, "mono", "bi_horaire", component="energy"
+    )
+    bd = static_breakdown(snap, "ores", "wallonia", "single", "bi_horaire")
+    assert bd is not None and all_in is not None and energy is not None
+    assert all_in == pytest.approx(bd.all_in)
+    assert energy == pytest.approx(bd.energy)
+    assert energy < all_in

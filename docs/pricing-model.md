@@ -443,12 +443,21 @@ grants 26,28, and capped a site exporting more than it used below its own energi
 It binds only on a very small connection: around 1.100 kWh a year against a 200 EUR
 credit.
 
-Two gates keep it honest. The amount is read from the SIGNING month's card
-(`signing_month_snapshot`), because the credit belongs to the product version signed and
-EnergyVision moved its figure four times between March and September 2026. And it is never
-applied to another supplier's contract: the compare page walks the same year-to-date
-engine for a contract the household never signed, where its own start date says nothing
-about when it would have signed that one.
+The amount is read from the SIGNING month's card (`signing_month_snapshot`), because the
+credit belongs to the product version signed and EnergyVision moved its figure four times
+between March and September 2026.
+
+The compare page credits both sides, or the household's real bill sits beside alternatives
+priced as though nobody had ever been granted one, up to a whole credit in the household's
+favour. The year-to-date column walks the same engine for a candidate and credits it on
+the entry's own start date, off the candidate's current card: what this year would have
+cost on it, signed when the household signed its own. The annual column credits a
+candidate what a customer signing it today is granted over the coming year
+(`_year_ahead_welcome_credit`: 365 days plus the day a lump paid *"na een jaar"* lands on),
+and the household's own row whatever is left of its first year. `_annual_welcome_credit`
+re-walks the energy leg on its `energy` component for the cap, and `_annual_bill` takes
+the credit off last. A Frank Korting tier therefore ranks on the year it would cost,
+cashback included, instead of as JN's loser.
 
 A negative `yearly_fixed_fee` was the obvious shortcut and is the wrong model: a fee box
 has no expiry and no cap, so it would keep taking the discount off every year with nothing

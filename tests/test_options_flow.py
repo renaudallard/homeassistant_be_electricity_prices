@@ -7056,3 +7056,72 @@ async def test_a_month_priced_energy_leg_carries_its_credit_to_the_month(
     )
     assert per_slot is not None
     assert per_slot != pytest.approx(0.97 * month_mean - 0.021)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_credits_the_welcome_credit_on_both_sides(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A card being quoted is credited what a customer signing it today is
+    granted over the coming year, and the household's own row whatever is left
+    of its first year. Crediting the own side alone put the real bill beside
+    alternatives priced as though nobody had ever been granted one: Frank's
+    Korting tier, which exists for its cashback, ranked as JN's loser."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices import cohort, compare_flow
+
+    freezer.move_to("2026-09-11 12:00:00+02:00")
+    own_plain = _stub_snapshot("eneco", "power_fix", 0.18)
+    own_credited = replace(own_plain, welcome_credit_eur=200.0)
+    other_plain = _stub_snapshot("cociter", "cociter_variable", 0.16)
+    other_credited = replace(other_plain, welcome_credit_eur=200.0)
+
+    async def _no_rows(
+        _hass: HomeAssistant, _entity_id: str, _start: Any, _end: Any
+    ) -> dict[Any, float]:
+        return {}
+
+    async def _quote(
+        own_snap: Any, other_snap: Any, start: str | None
+    ) -> tuple[float, float]:
+        data: dict[str, Any] = {
+            "supplier": "eneco",
+            "contract": "power_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "consumption_kwh": "sensor.house_total",
+        }
+        if start is not None:
+            data["contract_start_date"] = start
+        entry = MockConfigEntry(domain=DOMAIN, data=data, title="Eneco - Wallonia")
+        entry.add_to_hass(hass)
+        entry.runtime_data = _real_coordinator(hass, entry, own_snap)
+        with (
+            patch(
+                "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+                new=_no_rows,
+            ),
+            # The signing month's card is the current one here, and the
+            # archive is not to be fetched from a test.
+            patch.object(
+                compare_flow, "signing_month_snapshot", AsyncMock(return_value=own_snap)
+            ),
+            patch.object(cohort, "_cohort_energy_leg", AsyncMock(return_value=None)),
+        ):
+            ph = await _drive_compare(hass, entry, other_snap=other_snap)
+        assert ph["error"] == "", ph["error"]
+        return float(ph["current_annual"]), float(ph["compare_annual"])
+
+    # Signed 100 days ago: 265 of the own first year are still ahead.
+    own0, other0 = await _quote(own_plain, other_plain, "2026-06-03")
+    own1, other1 = await _quote(own_credited, other_credited, "2026-06-03")
+    assert own0 - own1 == pytest.approx(200.0 * 265 / 365, abs=0.01)
+    assert other0 - other1 == pytest.approx(200.0, abs=0.01)
+
+    # With no start date the own side has no first year to place a credit in,
+    # while a card being quoted is still a signing today.
+    own2, other2 = await _quote(own_credited, other_credited, None)
+    assert own2 == pytest.approx(own0, abs=0.01)
+    assert other0 - other2 == pytest.approx(200.0, abs=0.01)

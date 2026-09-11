@@ -78,8 +78,11 @@ hourly formula; the household's own answer flips it, and every tier carries
 Three of the five tiers print `Korting <amount> EUR (incl. btw)` and they disagree on the
 figure: 120 on Korting, 115 on HV, 35 on JN, nothing on the standard and Slim tiers. It is
 the entire reason the Korting tier exists, since its formula and its subscription are both
-worse than JN's; without the credit the ranking page calls it the cheaper tier's loser
-while in year one it is about 93 EUR better.
+worse than JN's; without the credit the ranking page called it the cheaper tier's loser
+while in year one it is about 93 EUR better. The ranking and the one-off quote now credit a
+tier being quoted its cashback over the coming year (`_annual_welcome_credit`), and the
+year-to-date column credits it as if signed on the household's own start date, so the
+tier ranks on the year it would actually cost.
 
 `_welcome_credit` reads it with `welcome_credit_kind = "anniversary"`, because Frank
 grants a LUMP rather than an accrual: *"De korting wordt toegekend via de factuur na een
