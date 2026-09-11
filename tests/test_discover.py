@@ -670,3 +670,42 @@ def test_issue_form_offers_every_dso() -> None:
         f"missing from the form: {sorted(known - offered)}; "
         f"offered but not a DSO: {sorted(offered - known)}"
     )
+
+
+def test_readme_archive_lists_name_every_supplier_that_keeps_one() -> None:
+    """The README names the archive suppliers in three places, and these lists
+    drift: EnergyVision gained an archive and none of them said so, while one
+    had been missing DATS 24 since before that. Pin them to the registry so a
+    supplier that gains or loses ``fetch_for_month`` cannot leave them stale."""
+    import re
+    from pathlib import Path
+
+    from custom_components.be_electricity_prices.providers import all_extractors
+
+    labels = {
+        "bolt": "Bolt fix",
+        "cociter": "Cociter",
+        "dats24": "DATS 24",
+        "ebem": "EBEM",
+        "ecopower": "Ecopower",
+        "eneco": "Eneco",
+        "energyknights": "Energy Knights",
+        "energyvision": "EnergyVision",
+        "frank": "Frank",
+        "mega": "Mega",
+    }
+    archived = sorted(
+        labels[e.id] for e in all_extractors() if e.fetch_for_month is not None
+    )
+    missing = [
+        e.id for e in all_extractors() if e.fetch_for_month and e.id not in labels
+    ]
+    assert not missing, f"new archive supplier {missing}: add its README label here"
+
+    readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
+    found = re.findall(
+        r"(?:archive past cards|archives historical cards) \(([^)]*)\)", readme
+    )
+    assert len(found) == 3, f"expected three archive lists, found {len(found)}"
+    for listed in found:
+        assert sorted(x.strip() for x in listed.split("/")) == archived, listed
