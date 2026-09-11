@@ -945,7 +945,7 @@ step runs. They cannot live on the archive branch: one walk downloads about 100 
 (214 distinct files, measured), so three years would be around 3.5 GB in a repository every clone
 of `main` also pulls; and a release on this repository would be offered to HACS users as an update.
 The step needs a fine-grained personal access token with contents read and write on the cards
-repository in the `CARDS_TOKEN` secret. A release needs a commit to tag, so a repository created
+repository in the `BE_ELECTRICITY_CARDS` secret. A release needs a commit to tag, so a repository created
 empty is given a first commit by the step itself, once. Without the secret the step says so and exits green: the parsed
 cards and their texts still land on the branch, and the PDFs of that day are offered again by the
 next run that has the token. Releases older than the retention are deleted on the same cutoff the
