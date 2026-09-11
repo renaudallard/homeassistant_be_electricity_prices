@@ -705,6 +705,70 @@ def test_prune_drops_manifest_entries_older_than_the_retention(tmp_path: Path) -
     }
 
 
+async def test_a_supplier_not_answering_is_given_up_on_for_the_day(
+    tmp_path: Path,
+) -> None:
+    """Three network failures in a row and the rest of that supplier's cards
+    are skipped, live and backfill alike; a parse failure does not count,
+    and another supplier is unaffected."""
+    asked: list[str] = []
+
+    async def blocked(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        asked.append(contract)
+        raise ExtractorError(f"network error fetching {contract}: timeout")
+
+    async def blocked_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        asked.append(f"{contract}/{month:%Y-%m}")
+        raise ExtractorError("network error fetching x: timeout")
+
+    mega = SupplierExtractor(
+        id="mega",
+        label="Mega",
+        contracts=tuple(
+            Contract(id=c, label=c, kind="fixed", regions=frozenset({"wallonia"}))
+            for c in ("a", "b", "c", "d", "e")
+        ),
+        fetch=blocked,
+        fetch_for_month=blocked_month,
+    )
+    fine = _extractor(_card_fetch("september 2026"))
+    summary = await ac.archive(
+        tmp_path, extractors=[mega, fine], backfill_months=2, now=NOW, sleep=_no_sleep
+    )
+    # Each card is retried, so count the cards asked, not the attempts.
+    assert list(dict.fromkeys(asked)) == ["a", "b", "c"]
+    assert summary.given_up == ["mega"]
+    assert len(summary.failed) == 3
+    assert summary.stored == 1
+
+    # A parse failure is not the network: it resets the count.
+    asked.clear()
+    calls = 0
+
+    async def flaky(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        nonlocal calls
+        calls += 1
+        asked.append(contract)
+        if calls % 3 == 0:
+            raise ExtractorError("could not parse the card")
+        raise ExtractorError("network error fetching x: timeout")
+
+    mixed = SupplierExtractor(
+        id="mixed",
+        label="Mixed",
+        contracts=tuple(
+            Contract(id=c, label=c, kind="fixed", regions=frozenset({"wallonia"}))
+            for c in ("a", "b", "c", "d", "e")
+        ),
+        fetch=flaky,
+    )
+    summary = await ac.archive(tmp_path, extractors=[mixed], now=NOW, sleep=_no_sleep)
+    assert list(dict.fromkeys(asked)) == ["a", "b", "c", "d", "e"]
+    assert summary.given_up == []
+
+
 def test_targets_skip_the_custom_and_withdrawn_suppliers() -> None:
     live = _extractor(_card_fetch("x"))
     gone = _extractor(

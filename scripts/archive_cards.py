@@ -111,6 +111,13 @@ _T = TypeVar("_T")
 _BRUSSELS = ZoneInfo("Europe/Brussels")
 _ATTEMPTS = 3
 _RETRY_BACKOFF_S = (10, 30)
+# A supplier whose cards fail on the network this many times in a row is
+# not answering this runner today (Mega has blocked the runner range
+# before), and every further card would cost the same three timeouts and
+# two sleeps, a couple of minutes each: sixty Mega cards would run the job
+# into its timeout with nothing committed. Skip the rest of the supplier
+# and say so; tomorrow is another run.
+_GIVE_UP_AFTER = 3
 # One card, fetch and parse together. The PDF helpers cap each download on
 # their own; this bounds a parse that never returns so the rest of the
 # registry is still archived and the summary still prints.
@@ -178,6 +185,29 @@ class _Summary:
     reparsed: int = 0
     unreplayable: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
+    given_up: list[str] = field(default_factory=list)
+
+
+class _Patience:
+    """Per-supplier count of network failures in a row, and the verdict."""
+
+    def __init__(self) -> None:
+        self.failures: dict[str, int] = {}
+        self.given_up: set[str] = set()
+
+    def note(self, supplier: str, err: BaseException) -> bool:
+        """Record one failed card; True when the supplier is now given up on."""
+        if not _transient(err):
+            self.failures[supplier] = 0
+            return False
+        self.failures[supplier] = self.failures.get(supplier, 0) + 1
+        if self.failures[supplier] >= _GIVE_UP_AFTER:
+            self.given_up.add(supplier)
+            return True
+        return False
+
+    def ok(self, supplier: str) -> None:
+        self.failures[supplier] = 0
 
 
 _MANIFEST = "pdfs.json"
@@ -684,12 +714,15 @@ async def archive(
         readme.write_text(_README, encoding="utf-8")
     summary = _Summary()
     memo = _RecordingMemo()
+    patience = _Patience()
     cards = _Cards(out, pdf_dir, seen_month, serve_texts=not rerender)
     registry = tuple(all_extractors() if extractors is None else extractors)
     targets = _targets(registry, only or set(), today)
     async with aiohttp.ClientSession() as session:
         with memoise_text_fetches(memo), render_through(cards.render):
             for ex, contract, region in targets:
+                if ex.id in patience.given_up:
+                    continue
                 label = f"{ex.id}/{contract}/{region}"
                 memo.touched.clear()
                 try:
@@ -698,7 +731,10 @@ async def archive(
                     )
                 except Exception as err:  # noqa: BLE001 - one card must not stop the walk
                     summary.failed.append(f"{label}: {type(err).__name__}: {err}")
+                    if patience.note(ex.id, err):
+                        summary.given_up.append(ex.id)
                     continue
+                patience.ok(ex.id)
                 sources = [
                     _source_entry(key, _write_text(out, seen_month, memo[key]), cards)
                     for key in sorted(memo.touched)
@@ -712,9 +748,11 @@ async def archive(
                     summary.unchanged += 1
             for ex, contract, region in targets:
                 fetch_for_month = ex.fetch_for_month
-                if fetch_for_month is None:
+                if fetch_for_month is None or ex.id in patience.given_up:
                     continue
                 for back in range(1, backfill_months + 1):
+                    if ex.id in patience.given_up:
+                        break
                     month_id = _months_before(today, back)
                     if (out / ex.id / contract / region / f"{month_id}.json").exists():
                         continue
@@ -728,7 +766,10 @@ async def archive(
                         )
                     except Exception as err:  # noqa: BLE001 - one month must not stop the walk
                         summary.failed.append(f"{label}: {type(err).__name__}: {err}")
+                        if patience.note(ex.id, err):
+                            summary.given_up.append(ex.id)
                         continue
+                    patience.ok(ex.id)
                     if past is None or past.provisional:
                         # Not out yet, past the horizon, or still carrying an
                         # estimate: leave the month for a later backfill.
@@ -780,6 +821,10 @@ async def archive(
     )
     for line in summary.failed:
         print(f"  failed {line[:300]}")
+    for supplier in summary.given_up:
+        print(
+            f"  gave up on {supplier} after {_GIVE_UP_AFTER} network failures in a row"
+        )
     for line in summary.unreplayable:
         print(f"  not replayable {line[:300]}")
     return summary

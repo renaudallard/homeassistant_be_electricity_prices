@@ -752,15 +752,15 @@ Three design points:
   month.
 - **What each parse read is kept too.** The run shares one text memo
   (`memoise_text_fetches`) so a listing page or a shared card is fetched and parsed once, and a
-  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:144`) notes which memo
+  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:151`) notes which memo
   entries each fetch touched. Those texts are stored content-addressed under
   `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:432`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:462`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:476`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:506`).
 
 The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
 The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:617`): inside that
@@ -779,13 +779,13 @@ manifest entries older than the retention alongside the rows.
 
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_store.py`,
-`_parser_digest`, `scripts/archive_cards.py:359`) with the one stamped in the branch's
+`_parser_digest`, `scripts/archive_cards.py:389`) with the one stamped in the branch's
 `parser.txt`; when they differ it replays every stored row (`_replay_row`,
 `scripts/archive_cards.py:552`): the texts the row's `_sources` name are seeded into the memo,
 the clock is pinned with freezegun to the row's `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
-`_ReplaySession` (`scripts/archive_cards.py:299`) in place of aiohttp. That session reaches no
+`_ReplaySession` (`scripts/archive_cards.py:329`) in place of aiohttp. That session reaches no
 supplier: the only request it honours is for a kept PDF, which a parser that now reads a card
 with another PDF reader asks for, served from the `--pdfs` directory or downloaded from the
 cards releases (`--pdf-base-url`); anything else is refused as a network error, and the row is
@@ -959,9 +959,37 @@ and `autorelease.yml` only listen on `main` anyway. Concurrency is queued rather
 same day twice and lose the second push as non-fast-forward.
 
 Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
-Actions, from 2026-07-06 on), and on such a day its cards fail and are simply reported. The first
-run, on 2026-09-11, stored all 61 of them, so the block is not permanent; either way Mega has its
-own archive and the month cache rarely needs the repository's copy for it.
+Actions, from 2026-07-06 on). On such a day the script gives the supplier up after three network
+failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:120`) and skips the rest of its
+cards, live and backfill alike, because every further card would cost the same three timeouts and
+two sleeps and sixty of them would run the job into its timeout with nothing committed; a parse
+failure does not count. The first run, on 2026-09-11, stored all 61 Mega cards, so the block is
+not permanent; either way Mega has its own archive and the month cache rarely needs the
+repository's copy for it.
+
+The archive lives on its own branch on purpose: three years of daily commits would bury
+`main`'s history, race the maintainer's own pushes, and land in every HACS download. Pushes
+made with the workflow's `GITHUB_TOKEN` start no other workflow, and `test.yml`, `validate.yml`
+and `autorelease.yml` only listen on `main` anyway. Concurrency is queued rather than cancelled
+(`cancel-in-progress: false`): a manual run overlapping the schedule would otherwise push the
+same day twice and lose the second push as non-fast-forward.
+
+Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
+Actions, from 2026-07-06 on). On such a day the script gives the supplier up after three network
+failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:120`) and skips the rest of its
+cards, live and backfill alike, because every further card would cost the same three timeouts and
+two sleeps and sixty of them would run the job into its timeout with nothing committed; a parse
+failure does not count. The first run, on 2026-09-11, stored all 61 Mega cards, so the block is
+not permanent; either way Mega has its own archive and the month cache rarely needs the
+repository's copy for it.
+
+A failed run files an issue (`File the failure as an issue`, `.github/workflows/archive_cards.yml:170`),
+which is why the job also has `issues: write`: nobody watches the Actions tab, and a walk that
+stored nothing, a refused push or an expired upload token (fine-grained tokens live a year at
+most) would otherwise end the archive quietly. Same label-deduplicated shape as the live check's
+issues, label `archive-cards`: one open issue per problem, a comment per further failing run, and
+the body names the step that failed so the token case is told from the others. A job cancelled
+by its timeout runs no further step, which is what the give-up rule above is for.
 
 ### autorelease.yml - Autorelease
 
