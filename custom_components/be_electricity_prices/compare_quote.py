@@ -1153,8 +1153,14 @@ async def _annual_volume(
       six-week sum as a year (which is what this used to do) understates the
       bill by roughly the same factor.
 
-    Below the floor it falls back to the volume typed on the entry, which only
-    professional entries carry, and finally to the household default.
+    A volume typed on the entry, which only professional entries carry, sits
+    between the two measured bands: a full year of meter beats it, a scaled
+    quarter does not. That is the order ``entry_annual_kwh`` resolves the
+    excise band, the network ceiling and a volume tranche in, and the two
+    have to agree or the compare page prices a card on one volume and
+    multiplies by another: a 30.000 kWh business whose 90 days scaled to
+    52.000 had its rates resolved on the stated figure and its rows on the
+    extrapolated one. Below everything, the household default.
 
     Consumption only, deliberately. The injection leg looked like it wanted the
     same treatment and is harmed by it in both bands: refusing a short window
@@ -1178,17 +1184,17 @@ async def _annual_volume(
         # correction is under 5% and carries no seasonal bias worth the name.
         kwh = measured.kwh * MEASURED_FULL_YEAR_DAYS / days
         return _AnnualVolume(kwh, days, f"measured ({days} days)", measured=True)
+    typed = entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH)
+    if typed:
+        return _AnnualVolume(
+            float(typed), days, f"entered on the entry ({float(typed):.0f} kWh/year)"
+        )
     if measured.kwh > 0 and days >= MEASURED_MIN_DAYS:
         return _AnnualVolume(
             measured.kwh * MEASURED_FULL_YEAR_DAYS / days,
             days,
             f"scaled from {days} days, not seasonally corrected",
             measured=True,
-        )
-    typed = entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH)
-    if typed:
-        return _AnnualVolume(
-            float(typed), days, f"entered on the entry ({float(typed):.0f} kWh/year)"
         )
     if days:
         return _AnnualVolume(

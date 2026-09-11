@@ -223,7 +223,8 @@ It cannot be applied without a volume, and the volume it wants is a YEAR's:
 the rule caps the two network legs against what the year carries, so a running
 total cannot measure itself against it. `_annual_consumption_kwh` supplies the
 same figure the excise band and the volume tranche resolve against
-(`entry_annual_kwh`: measured, then typed, then the household default), and
+(`entry_annual_kwh`: a full year of meter, then the typed figure, then a shorter
+measurement scaled up, then the household default), and
 `_capped_capacity_monthly_eur` divides the capped year back into the month the
 caller is accruing.
 
@@ -384,8 +385,13 @@ blending once over the year reach the same annual total.
 
 The volume comes from `entry_annual_kwh`, which is the one answer three legs
 share (this tranche, the degressive excise band and the Flemish network
-ceiling): the coordinator's daily `_annual_volume` measurement first, then the
-figure typed on the entry, then the 3.500 kWh household default. Only a
+ceiling): a full year of the coordinator's daily `_annual_volume` measurement
+first, then the figure typed on the entry, then a shorter measurement scaled up
+to a year, then the 3.500 kWh household default. `_annual_volume` itself, which
+is also the kWh the compare page and the projection multiply, ranks them in the
+same order, so a card is never priced on one volume and multiplied by another:
+before the two agreed, a 30.000 kWh business whose 90 days scaled to 52.000 had
+its rates resolved on the stated figure and its rows on the extrapolation. Only a
 professional card is ever asked for a typed figure, so before the measurement
 was wired in every residential tiered entry split against that default: at
 August 2026's index a 6.000 kWh household was billed 88 EUR/year under its own

@@ -7592,3 +7592,48 @@ async def test_welcome_credit_cap_reads_the_energy_component_on_the_hourly_walk(
     assert plain - credited == pytest.approx(
         _card_rule_credit(without, "flanders", kwh, 90, 1.0 * 0.06 + 0.02)
     )
+
+
+async def test_annual_volume_and_entry_annual_kwh_resolve_the_same_volume() -> None:
+    """The compare page multiplies the kWh ``_annual_volume`` returns by rates
+    that ``entry_annual_kwh`` resolved, so the two have to rank a typed figure
+    and a scaled measurement the same way. They did not: a 30.000 kWh business
+    with 90 days of meter scaling to 52.000 had its excise band resolved on
+    30.000 and its rows priced on 52.000."""
+    from custom_components.be_electricity_prices import compare_quote, energy_meters
+    from custom_components.be_electricity_prices.energy_meters import MeasuredKwh
+    from custom_components.be_electricity_prices.snapshot_store import entry_annual_kwh
+
+    async def _resolve(
+        typed: float | None, kwh: float, days: int
+    ) -> tuple[float, float]:
+        data = {} if typed is None else {"annual_consumption_kwh": typed}
+        entry = SimpleNamespace(data=data)
+        with patch.object(
+            energy_meters,
+            "_measured_kwh",
+            AsyncMock(return_value=MeasuredKwh(kwh, days)),
+        ):
+            vol = await compare_quote._annual_volume(
+                cast(Any, None), cast(Any, entry), date(2025, 9, 12), date(2026, 9, 11)
+            )
+        # The coordinator keeps the figure only when the meter produced it,
+        # which is what entry_annual_kwh then reads.
+        runtime = SimpleNamespace(
+            _annual_kwh=vol.kwh if vol.measured else None,
+            _annual_kwh_full_year=vol.measured and compare_quote._covers_a_year(days),
+        )
+        entry.runtime_data = runtime
+        return vol.kwh, entry_annual_kwh(cast(Any, entry))
+
+    # A full year of meter beats the typed figure on both sides.
+    assert await _resolve(30000.0, 41000.0, 365) == (41000.0, 41000.0)
+    # A quarter scaled up does not: the typed figure wins on both sides.
+    page, priced = await _resolve(30000.0, 52000.0 * 90 / 365, 90)
+    assert (page, priced) == (30000.0, 30000.0)
+    # With nothing typed the scaled figure stands on both sides.
+    page, priced = await _resolve(None, 6000.0 * 90 / 365, 90)
+    assert page == pytest.approx(6000.0) and priced == pytest.approx(6000.0)
+    # And under the floor, typed then the default, on both sides.
+    assert await _resolve(30000.0, 500.0, 30) == (30000.0, 30000.0)
+    assert await _resolve(None, 500.0, 30) == (3500.0, 3500.0)
