@@ -967,22 +967,6 @@ failure does not count. The first run, on 2026-09-11, stored all 61 Mega cards, 
 not permanent; either way Mega has its own archive and the month cache rarely needs the
 repository's copy for it.
 
-The archive lives on its own branch on purpose: three years of daily commits would bury
-`main`'s history, race the maintainer's own pushes, and land in every HACS download. Pushes
-made with the workflow's `GITHUB_TOKEN` start no other workflow, and `test.yml`, `validate.yml`
-and `autorelease.yml` only listen on `main` anyway. Concurrency is queued rather than cancelled
-(`cancel-in-progress: false`): a manual run overlapping the schedule would otherwise push the
-same day twice and lose the second push as non-fast-forward.
-
-Mega has blocked the GitHub runner address range before (its listing fetch timed out only from
-Actions, from 2026-07-06 on). On such a day the script gives the supplier up after three network
-failures in a row (`_GIVE_UP_AFTER`, `scripts/archive_cards.py:120`) and skips the rest of its
-cards, live and backfill alike, because every further card would cost the same three timeouts and
-two sleeps and sixty of them would run the job into its timeout with nothing committed; a parse
-failure does not count. The first run, on 2026-09-11, stored all 61 Mega cards, so the block is
-not permanent; either way Mega has its own archive and the month cache rarely needs the
-repository's copy for it.
-
 A failed run files an issue (`File the failure as an issue`, `.github/workflows/archive_cards.yml:170`),
 which is why the job also has `issues: write`: nobody watches the Actions tab, and a walk that
 stored nothing, a refused push or an expired upload token (fine-grained tokens live a year at

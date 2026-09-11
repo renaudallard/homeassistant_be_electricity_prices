@@ -27,9 +27,11 @@ on:
         required: false
         type: boolean
 
-# The job pushes to the archive branch, and nothing else does.
+# The job pushes to the archive branch, and nothing else does; issues so a
+# failed run is filed rather than left on the Actions tab.
 permissions:
   contents: write
+  issues: write
 
 # A manual run overlapping the schedule would push the same day's cards
 # twice and the second push would be rejected as non-fast-forward. Queue
@@ -79,6 +81,7 @@ jobs:
           fi
 
       - name: Store today's cards
+        id: store
         env:
           CARDS_REPO: renaudallard/homeassistant_be_electricity_prices_cards
         run: >-
@@ -89,6 +92,7 @@ jobs:
           ${{ github.event.inputs.rerender == 'true' && '--rerender' || '' }}
 
       - name: Keep the cards themselves
+        id: keep
         # The PDFs go to a separate repository's releases, one per month,
         # named by their SHA-256: a month of cards is about 100 MB, which
         # no git branch of this repository should carry and which HACS
@@ -150,6 +154,7 @@ jobs:
             done
 
       - name: Commit and push what changed
+        id: push
         run: |
           cd tmp/archive
           git add -A
@@ -161,3 +166,47 @@ jobs:
               -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
               commit -q -m "Cards seen on $(date -u +%Y-%m-%d)"
           git push origin archive
+
+      - name: File the failure as an issue
+        # Nobody watches the Actions tab. A run that stored nothing, a push
+        # that was refused or an upload token that has expired (fine-grained
+        # tokens live a year at most) would otherwise end the archive quietly.
+        # Same label-deduplicated shape as the live check's issues: one open
+        # issue per problem, a comment per further failing run, and it says
+        # which step failed so the token case is told from the others.
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          label='archive-cards'
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          failed=''
+          [ "${{ steps.store.outcome }}" = 'failure' ] && failed='Store today'"'"'s cards (the walk stored nothing, or crashed)'
+          [ "${{ steps.keep.outcome }}" = 'failure' ] && failed='Keep the cards themselves (the upload to the cards repository; check the BE_ELECTRICITY_CARDS token, it expires)'
+          [ "${{ steps.push.outcome }}" = 'failure' ] && failed='Commit and push what changed (the push to the archive branch)'
+          {
+            echo "## Run"
+            echo
+            echo "$run_url"
+            echo
+            echo "## Failed step"
+            echo
+            echo "${failed:-an earlier step; see the run}"
+          } > issue_body.md
+          gh label create "$label" \
+            --color FBCA04 \
+            --description "Auto-filed by .github/workflows/archive_cards.yml" \
+            --force >/dev/null 2>&1 || true
+          existing=$(gh issue list \
+            --state open \
+            --label "$label" \
+            --json number \
+            --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file issue_body.md
+          else
+            gh issue create \
+              --title "[archive-cards] the card archive run failed ($(date -u +%Y-%m-%d))" \
+              --label "$label" \
+              --body-file issue_body.md
+          fi
