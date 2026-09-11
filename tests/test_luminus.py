@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from datetime import date
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from tests import fixture_text
@@ -484,3 +485,146 @@ def test_a_smartflex_cohort_prices_each_slot_on_the_month() -> None:
     printed = snap.energy
     assert isinstance(printed, TimeOfUseRates)
     assert at(8) < printed.peak
+
+
+# ---- month archive (fetch_for_month) ------------------------------------------
+
+
+def _archive_products(*rows: tuple[str, str]) -> str:
+    import json
+
+    return json.dumps([{"Product": name, "ProductId": pid} for name, pid in rows])
+
+
+async def test_archive_resolves_the_product_id_then_the_months_card(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The price-list archive names a month's products with an opaque id, so
+    the contract label is the join: "Luminus Comfy" is the archive's "Luminus
+    Comfy Electricité", and the PDF is asked for by that id, the month and the
+    region. Until this was wired a contract start date did nothing here."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    asked: list[str] = []
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        assert "region=Wallonia" in url and "signing=2026-04" in url
+        return _archive_products(
+            ("Luminus BasicFix Online Electricité", "id-basicfix"),
+            ("Luminus Comfy Electricité", "id-comfy"),
+            ("Luminus Comfy+ Electricité", "id-comfy-plus"),
+            ("Luminus Dynamic Online Electricité", "id-dynamic"),
+            ("Tarif social Electricité", "id-social"),
+        )
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        return fixture_text("luminus_comfy_w.pdf")  # "avril 2026"
+
+    monkeypatch.setattr(luminus, "fetch_text", _fake_fetch_text)
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _fake_pdf)
+    snap = await luminus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "luminus_comfy",
+        "wallonia",
+        date(2026, 4, 9),
+    )
+    assert snap is not None
+    assert "productId=id-comfy&" in asked[-1]
+    assert "date=2026-04" in asked[-1] and "region=Wallonia" in asked[-1]
+    assert snap.publication_label == "avril 2026"
+    assert snap.valid_until == date(2026, 4, 30)
+    assert len(snap.dsos) > 0
+    # The online marker folds away, "Comfy+" does not collide with "Comfy".
+    assert luminus._archive_product_name("Luminus Dynamic Online Electricité") == (
+        luminus._archive_product_name("Luminus Dynamic")
+    )
+    assert luminus._archive_product_name("Luminus Comfy+ Electricité") != (
+        luminus._archive_product_name("Luminus Comfy")
+    )
+
+
+async def test_archive_answers_none_without_the_product_or_for_another_month(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A month whose list lacks the product fetches no PDF, and a card naming
+    another month than the one asked for is rejected rather than billed."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    pdfs: list[str] = []
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        return _archive_products(("Luminus Comfy Electricité", "id-comfy"))
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        pdfs.append(url)
+        return fixture_text("luminus_comfy_w.pdf")  # "avril 2026"
+
+    monkeypatch.setattr(luminus, "fetch_text", _fake_fetch_text)
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _fake_pdf)
+    assert (
+        await luminus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "luminus_maxxfix",
+            "wallonia",
+            date(2026, 4, 1),
+        )
+        is None
+    )
+    assert pdfs == []
+    assert (
+        await luminus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "luminus_comfy",
+            "wallonia",
+            date(2026, 6, 1),
+        )
+        is None
+    )
+    assert len(pdfs) == 1
+
+
+async def test_archive_swallows_failures_and_unsold_regions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from custom_components.be_electricity_prices.providers import luminus
+    from custom_components.be_electricity_prices.providers.base import ExtractorError
+
+    asked: list[str] = []
+
+    async def _boom(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        raise ExtractorError("listing down")
+
+    monkeypatch.setattr(luminus, "fetch_text", _boom)
+    assert (
+        await luminus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "luminus_comfy",
+            "wallonia",
+            date(2026, 4, 1),
+        )
+        is None
+    )
+    assert len(asked) == 1
+    assert (
+        await luminus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "luminus_comfy",
+            "brussels",
+            date(2026, 4, 1),
+        )
+        is None
+    )
+    assert (
+        await luminus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "luminus_gas",
+            "wallonia",
+            date(2026, 4, 1),
+        )
+        is None
+    )
+    assert len(asked) == 1
+    assert EXTRACTORS["luminus"].fetch_for_month is luminus.fetch_for_month

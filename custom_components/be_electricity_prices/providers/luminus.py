@@ -46,7 +46,9 @@ base are scaled by the parsed VAT multiplier.
 
 from __future__ import annotations
 
+import json
 import re
+from datetime import date
 from dataclasses import dataclass, replace
 
 import aiohttp
@@ -62,8 +64,10 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    FR_MONTHS,
     require_contract,
     SIGN_CHARS,
+    archive_validity_check,
     fetch_pdf_text,
     fetch_text,
     parse_sign,
@@ -88,6 +92,15 @@ from .base import (
 )
 
 _API_URL = "https://www.luminus.be/api-next/get-pricelist/"
+
+# The price-list archive behind the site's "Archives de listes de prix" app:
+# one call names the products a month had (with the Salesforce-style product
+# id the PDF endpoint wants), the other serves the PDF for one product, month
+# and region. Sixty-one months on the app's own picker, back to September
+# 2021. The current month is on it too, so a miss means the month, region or
+# product genuinely has no card.
+_ARCHIVE_PRODUCTS_URL = "https://www.luminus.be/api/pricelist/products"
+_ARCHIVE_PDF_URL = "https://www.luminus.be/api/pricelist/pdf"
 
 _REGION_TO_TAB: dict[str, str] = {
     REGION_FLANDERS: "Flanders",
@@ -180,6 +193,105 @@ async def fetch(
     url = _document_url(contract.slug, region)
     text = await fetch_pdf_text(session, url)
     return parse_snapshot(contract_id, text, region, url)
+
+
+def _archive_product_name(name: str) -> str:
+    """Fold an archive product label onto a contract label.
+
+    The archive names products "Luminus Comfy Electricité", "Luminus BasicFix
+    Online Electricité" or "Luminus Dynamic Online Electricité" where the
+    catalogue says "Luminus Comfy", "Luminus BasicFix" and "Luminus Dynamic":
+    the energy word and the online marker are the only differences, and the
+    ids are opaque, so the label is the join.
+    """
+    folded = name.lower()
+    for word in (
+        " electricité",
+        " électricité",
+        " electricite",
+        " elektriciteit",
+        " online",
+    ):
+        folded = folded.replace(word, "")
+    return " ".join(folded.split())
+
+
+async def _resolve_archive_product_id(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    region: str,
+    month_first: date,
+) -> str | None:
+    """The archive's product id for ``contract`` in ``region`` for one month,
+    or ``None`` when that month lists no such product.
+
+    Every shape the endpoint can answer with is funnelled into ExtractorError,
+    for the reason the current-card resolver of a sibling extractor gives: a
+    payload that is JSON but not the expected shape must read as a failed
+    fetch rather than escape as a TypeError.
+    """
+    url = (
+        f"{_ARCHIVE_PRODUCTS_URL}?language=FR&customerSegment=Residential"
+        f"&energyType=Electricity&region={_REGION_TO_TAB[region]}"
+        f"&signing={month_first.year:04d}-{month_first.month:02d}"
+    )
+    body = await fetch_text(session, url, timeout=15)
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as err:
+        raise ExtractorError(f"Luminus archive parse error: {err}") from err
+    if not isinstance(payload, list):
+        raise ExtractorError("Luminus archive parse error: expected a product list")
+    wanted = _archive_product_name(contract.label)
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        if _archive_product_name(str(row.get("Product", ""))) != wanted:
+            continue
+        product_id = row.get("ProductId")
+        if isinstance(product_id, str) and product_id:
+            return product_id
+    return None
+
+
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """The card Luminus published for one past month, or ``None``.
+
+    Behind the site's price-list archive: the month's product list gives the
+    id, the PDF endpoint serves that product's card for the month and region.
+    The PDF comes with a UTF-8 byte-order mark in front of the magic bytes,
+    which the shared fetch helper already tolerates. The cards print a
+    validity date, which is the authoritative cross-check; the month name in
+    the title is the fallback.
+
+    Until this existed a contract start date did nothing on a Luminus entry:
+    the signing-cohort splice had no card to read, and every past month of the
+    year-to-date billed on the current card as a proxy. Every failure comes
+    back as ``None``, the one-month answer the month cache expects.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None or region not in _REGION_TO_TAB:
+        return None
+    first = date(year_month.year, year_month.month, 1)
+    try:
+        product_id = await _resolve_archive_product_id(session, contract, region, first)
+        if product_id is None:
+            return None
+        url = (
+            f"{_ARCHIVE_PDF_URL}?language=FR&productId={product_id}"
+            f"&date={first.year:04d}-{first.month:02d}"
+            f"&region={_REGION_TO_TAB[region]}&inline=true"
+        )
+        text = await fetch_pdf_text(session, url)
+        snap = parse_snapshot(contract_id, text, region, url)
+    except ExtractorError:
+        return None
+    return archive_validity_check(snap, text, first, month_names=FR_MONTHS)
 
 
 def parse_snapshot(
@@ -926,4 +1038,5 @@ EXTRACTOR = SupplierExtractor(
         for c in _CONTRACTS
     ),
     fetch=fetch,
+    fetch_for_month=fetch_for_month,
 )
