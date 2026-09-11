@@ -240,30 +240,16 @@ jobs:
             mv issue_body.tmp issue_body.md
           fi
 
-          # Make sure the label exists; idempotent.
-          gh label create "$label" \
-            --color FBCA04 \
-            --description "Auto-filed by .github/workflows/live_check.yml" \
-            --force >/dev/null 2>&1 || true
-
-          # Dedup on the deterministic label rather than a title
-          # substring so a manually-opened "Re: [live-check] ..."
-          # issue can never catch comments from this job.
-          existing=$(gh issue list \
-            --state open \
+          # One issue per problem, found by its label; the persistent
+          # failures are the fingerprint, so a supplier that stays broken
+          # gets one comment a week rather than one a day, and a failure
+          # that changes shape is posted at once.
+          bash scripts/file_ci_issue.sh \
             --label "$label" \
-            --json number \
-            --jq '.[0].number // empty')
-
-          if [ -n "$existing" ]; then
-            echo "appending comment to issue #$existing"
-            gh issue comment "$existing" --body-file issue_body.md
-          else
-            gh issue create \
-              --title "$title_prefix ($(date -u +%Y-%m-%d))" \
-              --label "$label" \
-              --body-file issue_body.md
-          fi
+            --title "$title_prefix" \
+            --body issue_body.md \
+            --fingerprint persistent_failures.txt \
+            --workflow .github/workflows/live_check.yml
 
       - name: Open or update drift issue
         # rc bit 2 (4): per-supplier latency or byte budget blown.
@@ -292,26 +278,12 @@ jobs:
             cat drift_report.md
           } > drift_issue_body.md
 
-          gh label create "$label" \
-            --color FBCA04 \
-            --description "Auto-filed by .github/workflows/live_check.yml" \
-            --force >/dev/null 2>&1 || true
-
-          existing=$(gh issue list \
-            --state open \
+          bash scripts/file_ci_issue.sh \
             --label "$label" \
-            --json number \
-            --jq '.[0].number // empty')
-
-          if [ -n "$existing" ]; then
-            echo "appending comment to issue #$existing"
-            gh issue comment "$existing" --body-file drift_issue_body.md
-          else
-            gh issue create \
-              --title "$title_prefix ($(date -u +%Y-%m-%d))" \
-              --label "$label" \
-              --body-file drift_issue_body.md
-          fi
+            --title "$title_prefix" \
+            --body drift_issue_body.md \
+            --fingerprint drift_report.md \
+            --workflow .github/workflows/live_check.yml
 
       - name: Open or update new-products issue
         # rc bit 1 set: a new product was detected at a supplier we
@@ -340,26 +312,12 @@ jobs:
             cat catalog_report.md
           } > catalog_issue_body.md
 
-          gh label create "$label" \
-            --color FBCA04 \
-            --description "Auto-filed by .github/workflows/live_check.yml" \
-            --force >/dev/null 2>&1 || true
-
-          existing=$(gh issue list \
-            --state open \
+          bash scripts/file_ci_issue.sh \
             --label "$label" \
-            --json number \
-            --jq '.[0].number // empty')
-
-          if [ -n "$existing" ]; then
-            echo "appending comment to issue #$existing"
-            gh issue comment "$existing" --body-file catalog_issue_body.md
-          else
-            gh issue create \
-              --title "$title_prefix ($(date -u +%Y-%m-%d))" \
-              --label "$label" \
-              --body-file catalog_issue_body.md
-          fi
+            --title "$title_prefix" \
+            --body catalog_issue_body.md \
+            --fingerprint catalog_report.md \
+            --workflow .github/workflows/live_check.yml
 
       - name: Fail PR job on extractor or drift signal
         # Surface live-check failures on the PR check status without

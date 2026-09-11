@@ -1050,7 +1050,8 @@ runs three phases against the live supplier endpoints:
   escalating backoff. Only a check that fails in *every* one of those
   runs opens or updates a GitHub issue titled
   `[live-check] supplier extractor broken …`, so a slow runner timing
-  out on a different supplier each time stays quiet.
+  out on a different supplier each time stays quiet, and a supplier that
+  stays broken is commented on once a week rather than once a day.
 - **Catalog phase** — the `discover()` of every supplier that implements one
   (all but energie.be and the expert custom supplier) is run against its
   public listing page; any product visible at the supplier but missing

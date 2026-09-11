@@ -193,20 +193,12 @@ jobs:
             echo
             echo "${failed:-an earlier step; see the run}"
           } > issue_body.md
-          gh label create "$label" \
-            --color FBCA04 \
-            --description "Auto-filed by .github/workflows/archive_cards.yml" \
-            --force >/dev/null 2>&1 || true
-          existing=$(gh issue list \
-            --state open \
+          # The failed step is the fingerprint: the same step failing again
+          # within the week adds nothing, a different one is posted at once.
+          echo "${failed:-unknown}" > failed_step.txt
+          bash scripts/file_ci_issue.sh \
             --label "$label" \
-            --json number \
-            --jq '.[0].number // empty')
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" --body-file issue_body.md
-          else
-            gh issue create \
-              --title "[archive-cards] the card archive run failed ($(date -u +%Y-%m-%d))" \
-              --label "$label" \
-              --body-file issue_body.md
-          fi
+            --title "[archive-cards] the card archive run failed" \
+            --body issue_body.md \
+            --fingerprint failed_step.txt \
+            --workflow .github/workflows/archive_cards.yml

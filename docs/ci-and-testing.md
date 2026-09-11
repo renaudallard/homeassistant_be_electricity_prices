@@ -900,9 +900,16 @@ until it becomes consistent.
 The extractor issue body leads with those persistent failures, because the report under them is the
 last attempt's and on a slow runner also lists checks that failed only that once.
 
-The job then branches on the captured `rc` to open or update three distinct, label-deduplicated
-issues (dedup is on a deterministic label, not a title substring, so a manually opened issue cannot
-catch these comments):
+The job then branches on the captured `rc` to open or update three distinct issues through
+`scripts/file_ci_issue.sh`, which finds the one open issue by its label (never by a title substring,
+so a manually opened issue cannot catch these comments) and posts a comment only when the failure
+changed or the last post is older than a week. Each body ends in a hidden fingerprint marker: for
+the extractor issue it is a hash of `persistent_failures.txt`, for the other two a hash of the
+report itself, and the script compares the marker on the issue's latest post with the one it is
+about to write. A supplier that stays broken therefore gets one issue and one comment a week
+rather than one a day, which was the last open piece of the live check's noise problem, while a
+failure that changes shape is still posted the same morning. `tests/test_file_ci_issue.py` drives
+the script through a fake `gh`.
 
 | rc bits set | Step | Label | Issue title prefix |
 | --- | --- | --- | --- |
@@ -970,9 +977,10 @@ repository's copy for it.
 A failed run files an issue (`File the failure as an issue`, `.github/workflows/archive_cards.yml:170`),
 which is why the job also has `issues: write`: nobody watches the Actions tab, and a walk that
 stored nothing, a refused push or an expired upload token (fine-grained tokens live a year at
-most) would otherwise end the archive quietly. Same label-deduplicated shape as the live check's
-issues, label `archive-cards`: one open issue per problem, a comment per further failing run, and
-the body names the step that failed so the token case is told from the others. A job cancelled
+most) would otherwise end the archive quietly. The same `scripts/file_ci_issue.sh` the live check
+uses, label `archive-cards`: one open issue per problem, the failed step's name as the fingerprint
+so the same step failing again within the week adds nothing and a different one is posted at once,
+and a body that names that step so the token case is told from the others. A job cancelled
 by its timeout runs no further step, which is what the give-up rule above is for.
 
 ### autorelease.yml - Autorelease
