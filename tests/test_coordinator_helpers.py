@@ -7207,3 +7207,38 @@ async def test_signing_month_is_resolved_for_the_entrys_own_contract_only(
     assert other is snap
     assert own is snap
 
+def test_annual_volume_precedence_puts_a_typed_figure_above_a_scaled_one() -> None:
+    """Four answers in order: a full year of meter, then what the entry typed,
+    then a shorter measurement scaled up, then the household default.
+
+    The middle pair is the one a business notices. Its card bands the excise,
+    and a seasonally uncorrected extrapolation of a winter quarter can cross a
+    band: a 30.000 kWh entry whose 90 days scale to 52.000 would be billed the
+    50.000+ rate on a volume it never reaches."""
+    from custom_components.be_electricity_prices.snapshot_store import (
+        entry_annual_kwh,
+    )
+
+    def entry(typed: float | None, kwh: float | None, full: bool) -> Any:
+        data = {} if typed is None else {"annual_consumption_kwh": typed}
+        if kwh is None:
+            return SimpleNamespace(data=data)
+        return SimpleNamespace(
+            data=data,
+            runtime_data=SimpleNamespace(_annual_kwh=kwh, _annual_kwh_full_year=full),
+        )
+
+    # A full year of meter beats a stated volume; a scaled quarter does not.
+    assert entry_annual_kwh(entry(30000.0, 41000.0, True)) == 41000.0
+    assert entry_annual_kwh(entry(30000.0, 52000.0, False)) == 30000.0
+    assert entry_annual_kwh(entry(30000.0, None, False)) == 30000.0
+
+    # A residential entry types nothing, so the scaled band still beats the
+    # default, which is the whole reason the measurement was wired in.
+    assert entry_annual_kwh(entry(None, 6000.0, False)) == 6000.0
+    assert entry_annual_kwh(entry(None, 6000.0, True)) == 6000.0
+    assert entry_annual_kwh(entry(None, None, False)) == 3500.0
+
+    # A corrupt stored value falls through rather than raising.
+    corrupt = cast(Any, SimpleNamespace(data={"annual_consumption_kwh": "x"}))
+    assert entry_annual_kwh(corrupt) == 3500.0

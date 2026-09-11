@@ -97,6 +97,7 @@ class _SnapshotMixin:
     _snapshot: SupplierSnapshot | None
     _snapshot_raw: SupplierSnapshot | None
     _annual_kwh: float | None
+    _annual_kwh_full_year: bool
     _annual_kwh_day: date | None
     _snapshot_annual_kwh: float | None
     _snapshot_fetched_at: datetime | None
@@ -164,10 +165,17 @@ class _SnapshotMixin:
         history, which is what hands the answer back to the typed estimate
         rather than to a winter quarter scaled by four.
 
+        Whether the figure covers a FULL year is recorded beside it, because
+        the two bands do not outrank the same things. A full year of meter
+        beats anything a business typed; a quarter scaled up to a year does
+        not, and a professional entry that stated its contracted volume was
+        having its excise band decided by a seasonally uncorrected
+        extrapolation of its winter.
+
         Soft-fail like the profile fetches around it: the recorder can be busy
         or mid-purge, and a yearly volume is not worth failing a tick over.
         """
-        from .compare_quote import _annual_volume
+        from .compare_quote import _annual_volume, _covers_a_year
 
         today = dt_util.now().date()
         if self._annual_kwh_day == today:
@@ -187,6 +195,9 @@ class _SnapshotMixin:
             return
         self._annual_kwh_day = today
         self._annual_kwh = volume.kwh if volume.measured else None
+        self._annual_kwh_full_year = volume.measured and _covers_a_year(
+            volume.days_with_data
+        )
 
     def _reresolve_snapshot(self) -> None:
         """Re-apply the site facts to the card already in hand, if they moved.

@@ -384,6 +384,9 @@ class BePricesCoordinator(
         # resolved against, so a card already in hand can be re-resolved when
         # the measurement lands or moves.
         self._annual_kwh: float | None = None
+        # Whether that figure covers a full year of meter or is a quarter
+        # scaled up to one. Only the first outranks a volume a business typed.
+        self._annual_kwh_full_year: bool = False
         self._annual_kwh_day: date | None = None
         self._snapshot_annual_kwh: float | None = None
         self._snapshot_fetched_at: datetime | None = None

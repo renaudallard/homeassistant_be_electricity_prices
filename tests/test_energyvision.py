@@ -775,11 +775,25 @@ def test_tranche_falls_back_to_the_typed_volume_then_the_default() -> None:
     default = _blended_rate(_entry(), mean) * 3500.0
     assert default == pytest.approx(1800 * 0.1060 + 1700 * formula)
 
-    # A measured figure outranks a typed one, the same order _annual_volume
-    # itself resolves in, so the two never disagree on one entry.
-    both = _entry(SimpleNamespace(_annual_kwh=2000.0), annual_consumption_kwh=6000.0)
-    assert _blended_rate(both, mean) * 2000.0 == pytest.approx(
+    # A FULL YEAR of meter outranks a typed figure: it measures the year the
+    # tranche is settled over rather than estimating it.
+    full = _entry(
+        SimpleNamespace(_annual_kwh=2000.0, _annual_kwh_full_year=True),
+        annual_consumption_kwh=6000.0,
+    )
+    assert _blended_rate(full, mean) * 2000.0 == pytest.approx(
         1800 * 0.1060 + 200 * formula
+    )
+
+    # A quarter scaled up to a year does not. A stated volume is a claim about
+    # the year; three months multiplied by four is not, and on a card that
+    # bands the excise the extrapolation can cross a band.
+    scaled = _entry(
+        SimpleNamespace(_annual_kwh=2000.0, _annual_kwh_full_year=False),
+        annual_consumption_kwh=6000.0,
+    )
+    assert _blended_rate(scaled, mean) * 6000.0 == pytest.approx(
+        1800 * 0.1060 + 4200 * formula
     )
 
 
