@@ -43,7 +43,8 @@ A GET on that URL answers `302 Found` and redirects to the current month's versi
 blob (e.g. `energie.blob.core.windows.net/cms/assets/..._Dynamisch_<hash>.pdf`); aiohttp
 follows the redirect automatically, so the extractor treats it as a single stable URL
 whose body is replaced each month. This is the DATS 24 fetch shape: no HTML scraping, no
-discovery, no cheap probe, no archive.
+discovery, no cheap probe. Past months come from a separate month-scoped listing (see
+[Probe and archive](#probe-and-archive)).
 
 The variable and fixed cards have **no document key of their own**. Their current PDFs
 are named by the site's contracts endpoint, `_CONTRACTS_URL`:
@@ -93,7 +94,7 @@ network tariffs, and a re-template would arm exactly the silent mis-billing this
 about. Hence no fallback, by design.
 
 The `publication_label` is a lowercased "month year" string ("juli 2026") reconstructed
-from the residential card header by `_publication_label` (`providers/energiebe.py:335`).
+from the residential card header by `_publication_label` (`providers/energiebe.py:427`).
 
 ## Contracts
 
@@ -139,7 +140,7 @@ The kind is also what makes the config flow collect an ENTSO-E key
 
 ### Download (`fetch`)
 
-`fetch` (`providers/energiebe.py:232`) validates the contract id and region, resolves the
+`fetch` (`providers/energiebe.py:252`) validates the contract id and region, resolves the
 card URL for the contract (`_CARD_URL` for the dynamic one, the contracts API for the
 variable one), calls `fetch_pdf_text_layout` to download and layout-extract the PDF (the
 layout extractor keeps column alignment, important for the DSO table), then
@@ -148,19 +149,32 @@ layout extractor keeps column alignment, important for the DSO table), then
 
 ### Probe and archive
 
-There is neither a probe nor an archive:
+There is no probe, and there is an archive:
 
 - `EXTRACTOR.probe` is `None`. A HEAD on `_CARD_URL` answers `405 Method Not Allowed`, so
   the shared `head_freshness_key` helper cannot produce a key. The coordinator falls back
   to its time-based TTL, which is adequate for a card that only rotates monthly (the live
   price comes from the ENTSO-E spot each tick, not from the card).
-- `EXTRACTOR.fetch_for_month` is `None`. Both cards' URLs are overwritten in place, so
-  past months bill at the current snapshot as a proxy, the same as Ecofix / EnergyVision.
-  energie.be *does* publish a month-scoped archive at
-  `www.energie.be/api/v1/data/tariff-cards?isProfessional=<bool>&tariffType=<type>` (33
-  months back, one PDF per month per product, uploaded in arrears in the first days of the
-  following month). Wiring it up would give this supplier signing-cohort retrieval and
-  per-month YTD billing; it is deliberately not done yet, and is the obvious next step.
+- `EXTRACTOR.fetch_for_month` reads the month-scoped listing at
+  `www.energie.be/api/v1/data/tariff-cards?isProfessional=false&tariffType=<Dynamic|Variable|Fixed>`
+  (`_ARCHIVE_URL`, `_resolve_archive_url`): 34 months back to November 2023, one PDF per
+  month per product, uploaded in arrears in the first days of the following month. The
+  running month is therefore never on it, and a miss comes back as `None` without a PDF
+  fetch; `_snapshot_for_month` keeps a `None` row provisional and asks again, so the month
+  fills in once the card is uploaded. Unlike the contracts API, this listing names the
+  dynamic product by the same `tariffType` word as the other two. The card prints no
+  validity date, so `archive_validity_check` cross-checks the month name in the title
+  (`particulier online - juni 2026`) through `NL_MONTHS`. The June 2025 card and its
+  neighbours are page images and answer `None` (`CardNotReadableError` is an
+  `ExtractorError`); December 2025 onwards parses whole, all eight DSO rows included.
+
+  This is what makes a contract start date work here (discussion #93): the card says the
+  agreement runs one year, so a July 2026 signing stays on the June card's `1,04 x Belpex
+  + 0,50` while the September card prints `1,02 x Belpex + 0,49`, and the archive is what
+  the cohort splice reads that from, feed-in coefficients included. Without it the start
+  date only unlocked the signing-rate step, whose boxes take the integration's stored
+  form (VAT-inclusive EUR/kWh: 1,1024 and 0,0053 for that card), not the c€ figures the
+  card prints.
 
 ## Residential scoping
 
@@ -172,7 +186,7 @@ around.
 The `?key=DynamicTariffs` PDF bundles a residential block (pages 1-2) and a professional
 block (pages 3-4). The two blocks share the same energy and injection formula but differ on
 GSC/WKK, the tax rows and the DSO net-tariff table (e.g. residential databeheer 18,92
-EUR/yr vs professional 17,85). `_residential` (`providers/energiebe.py:329`) slices the
+EUR/yr vs professional 17,85). `_residential` (`providers/energiebe.py:421`) slices the
 text at the professional section header `_PROF_MARKER = "dynamisch tarief professioneel"`
 (`providers/energiebe.py:138`) so no professional row can leak into a residential snapshot.
 `test_only_residential_block_is_parsed` (`tests/test_energiebe.py`) pins that the parsed
@@ -218,7 +232,7 @@ wrong would 10x the energy leg. See the conversion in `_extract_energy`
 
 ## Energy formula
 
-`_extract_energy` (`providers/energiebe.py:340`) parses the formula row with `_ENERGY_RE`
+`_extract_energy` (`providers/energiebe.py:432`) parses the formula row with `_ENERGY_RE`
 (`providers/energiebe.py:170`), anchored on "formule (excl. BTW):" so it binds the energy
 formula and not the injection one that shares the `(factor x Belpex +/- base)` shape:
 
@@ -331,7 +345,7 @@ Injection is the hourly `factor*spot+base` shape (shape (b) in the taxonomy in
 [../pricing-model.md](../pricing-model.md)); on a dynamic card it prices off the live spot
 the energy path already fetches, so `current` stays `None`. `_extract_injection`
 (`providers/energiebe.py:501`) parses the `terugleveringsvergoeding` row with
-`_INJECTION_RE` (`providers/energiebe.py:180`):
+`_INJECTION_RE` (`providers/energiebe.py:200`):
 
 ```
 Terugleveringsvergoeding ... (<factor_pdf> x Belpex <sign> <base_cents>)
@@ -405,12 +419,13 @@ the variable card.
 
 Storing only the indicative (what this extractor did before) froze the credit at the VNR
 forecast for the life of the card. Against energie.be's own published realized index that
-is 3,6x the contractual credit in April 2026 and 0,56x in January, and because energie.be
-keeps no archive the same frozen number reaches every past month of `current_year_cost`.
+is 3,6x the contractual credit in April 2026 and 0,56x in January, and while energie.be
+had no archive wired up the same frozen number reached every past month of
+`current_year_cost`; each past month now bills on its own card.
 
 ## Taxes
 
-`_extract_taxes` (`providers/energiebe.py:526`) parses four levy rows and builds a
+`_extract_taxes` (`providers/energiebe.py:618`) parses four levy rows and builds a
 `TaxOverlay`. All card values are VAT-inclusive (the federal excise and the energy fund are
 VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`).
 
@@ -435,8 +450,8 @@ pins GSC 1,17 + WKK 0,39 = 1,56 c€/kWh. All c€/kWh values are divided by 100
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/energiebe.py:544`) covers all eight Fluvius sub-areas via
-`_DSO_ROWS` (`providers/energiebe.py:144`), which maps each card label prefix to the
+`_extract_dsos` (`providers/energiebe.py:636`) covers all eight Fluvius sub-areas via
+`_DSO_ROWS` (`providers/energiebe.py:164`), which maps each card label prefix to the
 canonical DSO key:
 
 | card label | canonical key |
@@ -501,9 +516,10 @@ tomorrow prices come from the ENTSO-E day-ahead publication rather than the card
   the `[^\d]*` gap in the row regex absorbs it (`providers/energiebe.py:443`).
 - **Label differences from Frank.** Unit `(c€/kWh)` not `(EURct/kWh)`; "Bijdrage op de
   Energie" not "Bijdrage op Energie"; the tax regexes are energie.be-specific.
-- **No probe, no archive wired up.** HEAD is 405 and both card URLs overwrite in place;
-  the coordinator uses its time-based TTL and bills past months at the current snapshot.
-  A month-scoped archive API exists and is not used yet (see [Probe and archive]).
+- **No probe; the archive is a separate listing.** HEAD is 405 and both card URLs
+  overwrite in place, so the coordinator uses its time-based TTL for the current card;
+  past months come from the tariff-cards listing through `fetch_for_month` (see
+  [Probe and archive](#probe-and-archive)), the running month never does.
 - **All three cards share the `Energieprijs` column label.** The fixed one prints a rate
   there and the other two a formula, so the number alone cannot identify the card. The
   fixed parser refuses any card carrying an indexation formula and demands the "vaste

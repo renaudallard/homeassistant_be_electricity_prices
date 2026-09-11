@@ -56,6 +56,7 @@ Region: Flanders only (all 8 Fluvius sub-areas).
 from __future__ import annotations
 
 import json
+from datetime import date
 import logging
 import re
 
@@ -73,7 +74,9 @@ from ..const import (
     REGION_FLANDERS,
 )
 from ._pdf import (
+    NL_MONTHS,
     NUM_NO_THOUSANDS,
+    archive_validity_check,
     flanders_tax_overlay,
     SIGN_CHARS,
     fetch_pdf_text_layout,
@@ -122,6 +125,23 @@ _VALID_IDS = frozenset({_CONTRACT_ID, _VARIABLE_ID, _FIXED_ID})
 # The contracts API's own tariffType per contract id; the residential
 # electricity document of that entry is the card.
 _TARIFF_TYPE = {_VARIABLE_ID: "Variable", _FIXED_ID: "Fixed"}
+
+# The month-scoped archive, one PDF per month per product, 34 months back to
+# November 2023 and published in arrears: the "augustus 2026" card appeared on
+# this listing in the first days of September. The running month is therefore
+# never on it, which is what makes a miss for that month mean "not yet" rather
+# than "never" (_snapshot_for_month keeps a None row provisional and asks
+# again). Unlike the contracts API above, this one names every product by the
+# same tariffType word, the dynamic one included.
+_ARCHIVE_URL = (
+    "https://www.energie.be/api/v1/data/tariff-cards"
+    "?isProfessional=false&tariffType={tariff_type}"
+)
+_ARCHIVE_TARIFF_TYPE = {
+    _CONTRACT_ID: "Dynamic",
+    _VARIABLE_ID: "Variable",
+    _FIXED_ID: "Fixed",
+}
 
 # Belgian residential electricity VAT. energie.be quotes its energy and
 # injection formulas "(excl. BTW)" while stating every other value on the
@@ -289,6 +309,78 @@ async def _resolve_card_url(session: aiohttp.ClientSession, tariff_type: str) ->
     raise ExtractorError(
         f"energie.be: no residential {tariff_type} card in contracts API"
     )
+
+
+async def _resolve_archive_url(
+    session: aiohttp.ClientSession, tariff_type: str, month_first: date
+) -> str | None:
+    """URL of the archived residential card for ``month_first``, or ``None``
+    when the listing has no row for that month.
+
+    Same defensive shape checks as :func:`_resolve_card_url`, and for the
+    same reason: a payload that is JSON but not the expected shape must read
+    as a failed fetch, never escape as a TypeError. A month the listing lacks
+    is not a failure, it is the archive's answer.
+    """
+    body = await fetch_text(
+        session, _ARCHIVE_URL.format(tariff_type=tariff_type), timeout=15
+    )
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as err:
+        raise ExtractorError(f"energie.be archive API parse error: {err}") from err
+    cards = payload.get("tariffCards") if isinstance(payload, dict) else None
+    if not isinstance(cards, list):
+        raise ExtractorError(
+            "energie.be archive API parse error: no 'tariffCards' list in the response"
+        )
+    wanted = f"{month_first.year:04d}/{month_first.month:02d}"
+    for card in cards:
+        if not isinstance(card, dict) or card.get("date") != wanted:
+            continue
+        url = card.get("electricityDocument")
+        if isinstance(url, str) and url.startswith("https://"):
+            return url
+    return None
+
+
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """The card energie.be published for one past month, or ``None``.
+
+    This is what lets a contract start date do its work on this supplier: a
+    customer who signed in June 2026 is on the June card's formula for a year
+    (the card says the agreement runs one year), and without an archive the
+    start date left the entry on whichever card is current, so a July signing
+    was billed September's 1,02 x Belpex + 0,49 instead of June's 1,04 x
+    Belpex + 0,50. The signing-month card also carries the feed-in
+    coefficients the cohort locked in, and the year-to-date walk bills each
+    past month on its own card rather than on today's as a proxy.
+
+    The card prints no validity date, so the cross-check is the month name
+    the card prints in its title ("particulier online - juni 2026").
+    Every failure is swallowed: this runs inside the year-to-date walk, and
+    one month that is missing, unreadable (the mid-2025 cards are page
+    images) or misfiled must not take the whole year down.
+    """
+    if contract_id not in _VALID_IDS or region != REGION_FLANDERS:
+        return None
+    first = date(year_month.year, year_month.month, 1)
+    try:
+        url = await _resolve_archive_url(
+            session, _ARCHIVE_TARIFF_TYPE[contract_id], first
+        )
+        if url is None:
+            return None
+        text = await fetch_pdf_text_layout(session, url)
+        snap = parse_snapshot(text, url, contract_id)
+    except ExtractorError:
+        return None
+    return archive_validity_check(snap, text, first, month_names=NL_MONTHS)
 
 
 # ---- snapshot parser ---------------------------------------------------------
@@ -623,7 +715,8 @@ EXTRACTOR = SupplierExtractor(
         ),
     ),
     fetch=fetch,
+    fetch_for_month=fetch_for_month,
 )
 
 
-__all__ = ["EXTRACTOR", "fetch", "parse_snapshot"]
+__all__ = ["EXTRACTOR", "fetch", "fetch_for_month", "parse_snapshot"]

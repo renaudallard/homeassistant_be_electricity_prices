@@ -982,3 +982,216 @@ def test_the_residential_maximumtarief_is_captured() -> None:
             assert overlay.network_ceiling_eur_per_kwh == pytest.approx(0.3472738), (
                 f"{fixture}/{key}"
             )
+
+
+# ---- month archive (fetch_for_month) ------------------------------------------
+
+
+def _listing(*months: tuple[str, str]) -> str:
+    """The archive listing as the site serves it: one row per month."""
+    import json
+
+    return json.dumps(
+        {
+            "tariffCards": [
+                {"date": d, "nameNl": "x", "electricityDocument": url}
+                for d, url in months
+            ],
+            "success": True,
+        }
+    )
+
+
+async def test_archive_resolves_the_months_card_from_the_listing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A contract start date is only worth setting on a supplier that can
+    retrieve the signing month's card. energie.be publishes one PDF per month
+    per product on its tariff-cards listing, in arrears; a July signing on the
+    June card was billed September's formula until this was wired up."""
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    fetched: list[str] = []
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        fetched.append(url)
+        assert "tariffType=Dynamic" in url and "isProfessional=false" in url
+        return _listing(
+            ("2026/08", "https://blob/Augustus_Dynamisch.pdf"),
+            ("2026/07", "https://blob/Juli_Dynamisch.pdf"),
+            ("2026/06", "https://blob/Juni_Dynamisch.pdf"),
+        )
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        fetched.append(url)
+        return _text()  # the July 2026 card
+
+    monkeypatch.setattr(energiebe, "fetch_text", _fake_fetch_text)
+    monkeypatch.setattr(energiebe, "fetch_pdf_text_layout", _fake_pdf)
+    snap = await energiebe.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "energiebe_dynamic",
+        REGION_FLANDERS,
+        date(2026, 7, 15),
+    )
+    assert snap is not None
+    assert fetched[-1] == "https://blob/Juli_Dynamisch.pdf"
+    assert snap.publication_label == "juli 2026"
+    assert isinstance(snap.energy, DynamicRates)
+    # (1,04 x Belpex + 0,50) c€/kWh ex-VAT, stored VAT-inclusive in EUR/kWh.
+    assert snap.energy.factor == pytest.approx(1.04 * 1.06)
+    assert snap.energy.base == pytest.approx(0.0050 * 1.06)
+    assert snap.injection is not None and snap.injection.factor == pytest.approx(1.0)
+    assert len(snap.dsos) == 8
+
+
+async def test_archive_answers_none_for_a_month_the_listing_lacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The running month is never on the listing (published in arrears), and
+    that has to come back as None without a PDF fetch: the month cache keeps a
+    None row provisional and asks again, where a raised error would be cached
+    as a transient failure."""
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    pdf_calls: list[str] = []
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        return _listing(("2026/08", "https://blob/Augustus_Dynamisch.pdf"))
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        pdf_calls.append(url)
+        return _text()
+
+    monkeypatch.setattr(energiebe, "fetch_text", _fake_fetch_text)
+    monkeypatch.setattr(energiebe, "fetch_pdf_text_layout", _fake_pdf)
+    assert (
+        await energiebe.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "energiebe_dynamic",
+            REGION_FLANDERS,
+            date(2026, 9, 1),
+        )
+        is None
+    )
+    assert pdf_calls == []
+
+
+async def test_archive_rejects_a_card_that_names_another_month(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The card prints no validity date, so the month it names in its title is
+    the cross-check: a listing row pointing at the wrong PDF must not bill a
+    past month at another month's formula."""
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        return _listing(("2026/03", "https://blob/Maart_Dynamisch.pdf"))
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        return _text()  # says "juli 2026"
+
+    monkeypatch.setattr(energiebe, "fetch_text", _fake_fetch_text)
+    monkeypatch.setattr(energiebe, "fetch_pdf_text_layout", _fake_pdf)
+    assert (
+        await energiebe.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "energiebe_dynamic",
+            REGION_FLANDERS,
+            date(2026, 3, 1),
+        )
+        is None
+    )
+
+
+async def test_archive_swallows_an_unreadable_or_unreachable_card(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The mid-2025 cards are page images and a listing can go away; either
+    is one month's answer, never the whole year's."""
+    from custom_components.be_electricity_prices.providers import energiebe
+    from custom_components.be_electricity_prices.providers.base import (
+        CardNotReadableError,
+        ExtractorError,
+    )
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        return _listing(("2025/06", "https://blob/Juni_2025.pdf"))
+
+    async def _images(session: object, url: str, **kwargs: object) -> str:
+        raise CardNotReadableError("card has no text layer")
+
+    monkeypatch.setattr(energiebe, "fetch_text", _fake_fetch_text)
+    monkeypatch.setattr(energiebe, "fetch_pdf_text_layout", _images)
+    assert (
+        await energiebe.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "energiebe_dynamic",
+            REGION_FLANDERS,
+            date(2025, 6, 1),
+        )
+        is None
+    )
+
+    async def _boom(session: object, url: str, **kwargs: object) -> str:
+        raise ExtractorError("listing down")
+
+    monkeypatch.setattr(energiebe, "fetch_text", _boom)
+    assert (
+        await energiebe.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "energiebe_dynamic",
+            REGION_FLANDERS,
+            date(2026, 6, 1),
+        )
+        is None
+    )
+
+
+async def test_archive_is_flanders_only_and_per_product(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each product has its own listing, named by the same tariffType word the
+    dynamic one included, and nothing is fetched for a region or contract the
+    supplier does not sell."""
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    asked: list[str] = []
+
+    async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        return _listing()
+
+    monkeypatch.setattr(energiebe, "fetch_text", _fake_fetch_text)
+    assert (
+        await energiebe.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "energiebe_dynamic",
+            "wallonia",
+            date(2026, 6, 1),
+        )
+        is None
+    )
+    assert (
+        await energiebe.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "energiebe_gas",
+            REGION_FLANDERS,
+            date(2026, 6, 1),
+        )
+        is None
+    )
+    assert asked == []
+    for contract_id, word in (
+        ("energiebe_dynamic", "Dynamic"),
+        ("energiebe_variable", "Variable"),
+        ("energiebe_fixed", "Fixed"),
+    ):
+        await energiebe.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            contract_id,
+            REGION_FLANDERS,
+            date(2026, 6, 1),
+        )
+        assert asked[-1].endswith(f"tariffType={word}")
+    assert EXTRACTORS["energiebe"].fetch_for_month is energiebe.fetch_for_month
