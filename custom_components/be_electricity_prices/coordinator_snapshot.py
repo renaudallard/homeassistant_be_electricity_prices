@@ -57,6 +57,7 @@ from .snapshot_store import (
     fetch_shared,
     _resolve_snapshot,
     _shared_failed_fetches,
+    entry_annual_kwh,
 )
 
 from datetime import date, datetime, timedelta
@@ -202,22 +203,32 @@ class _SnapshotMixin:
     def _reresolve_snapshot(self) -> None:
         """Re-apply the site facts to the card already in hand, if they moved.
 
-        ``_set_snapshot`` resolves against whatever yearly volume was known
-        when it ran, and the first tick knows none: it runs inside config-entry
-        setup, before Home Assistant assigns ``runtime_data``, so nothing can
-        reach the measured figure yet. Nothing calls ``_set_snapshot`` again
-        until the supplier publishes, so without this an entry kept the split
-        it booted with for up to a month.
+        ``_set_snapshot`` resolves against the yearly volume known when it
+        ran, and a card restored from the store is resolved before the first
+        measurement exists. Nothing calls ``_set_snapshot`` again until the
+        supplier publishes, so without this an entry kept the split it booted
+        with for up to a month.
 
-        Identity while the figure has not moved, which is every tick but the
-        first of a day the measurement changed on.
+        Compared against what the resolver would use NOW, and stamped with
+        what it actually used, both through the same ``entry_annual_kwh``
+        call. The stamp used to be the raw measurement while the resolver read
+        the figure through ``entry.runtime_data``, and on the first tick those
+        two are not the same thing: runtime_data is not assigned yet, so the
+        card was split against the household default under a stamp saying
+        the measurement had been applied, and this method saw nothing to redo
+        until the trailing-year figure next moved. Identity while the resolved
+        figure has not moved, which is every tick but the first of a day the
+        measurement changed on.
         """
         if self._snapshot_raw is None:
             return
-        if self._snapshot_annual_kwh == self._annual_kwh:
+        annual_kwh = entry_annual_kwh(self.entry, self)
+        if self._snapshot_annual_kwh == annual_kwh:
             return
-        self._snapshot = _resolve_snapshot(self.entry, self._snapshot_raw)
-        self._snapshot_annual_kwh = self._annual_kwh
+        self._snapshot = _resolve_snapshot(
+            self.entry, self._snapshot_raw, annual_kwh=annual_kwh
+        )
+        self._snapshot_annual_kwh = annual_kwh
 
     def _set_snapshot(self, snap: SupplierSnapshot | None) -> None:
         """Keep the card as parsed and resolve this entry's VAT preference.
@@ -228,8 +239,20 @@ class _SnapshotMixin:
         what other entries on the same tuple see.
         """
         self._snapshot_raw = snap
-        self._snapshot = None if snap is None else _resolve_snapshot(self.entry, snap)
-        self._snapshot_annual_kwh = self._annual_kwh
+        # The volume is resolved HERE and handed down, not read back through
+        # entry.runtime_data inside _resolve_snapshot: Home Assistant assigns
+        # runtime_data only after the first refresh returns, so on that tick
+        # the resolver could not see the measurement, resolved the tranche
+        # against the household default, and the stamp below then claimed
+        # the measured figure had been used, which is exactly what stopped
+        # _reresolve_snapshot from ever correcting it.
+        annual_kwh = entry_annual_kwh(self.entry, self)
+        self._snapshot = (
+            None
+            if snap is None
+            else _resolve_snapshot(self.entry, snap, annual_kwh=annual_kwh)
+        )
+        self._snapshot_annual_kwh = annual_kwh
         # Every snapshot that reaches here was parsed by the running extractor,
         # so this is what _save_persistent stamps. _replay_stale_snapshot is
         # the one caller that overrides it afterwards, and it has to: without

@@ -898,7 +898,7 @@ def _quarter_hourly(entry: ConfigEntry, snap: SupplierSnapshot) -> bool:
     return offers_quarter_hourly(snap.supplier, snap.contract)
 
 
-def entry_annual_kwh(entry: ConfigEntry) -> float:
+def entry_annual_kwh(entry: ConfigEntry, coordinator: Any = None) -> float:
     """How much this household uses in a year, in kWh. One answer for every leg.
 
     Three legs resolve against a yearly volume -- the degressive excise band,
@@ -937,8 +937,17 @@ def entry_annual_kwh(entry: ConfigEntry) -> float:
     keeps the compare page's read-only entry proxy working: it carries no
     coordinator, so a what-if falls back to the typed figure and then to the
     default exactly as before.
+
+    ``coordinator`` is for the coordinator resolving its OWN card. Home
+    Assistant assigns ``entry.runtime_data`` only after the first refresh has
+    returned, so during that refresh the entry cannot lead here, and the
+    coordinator has to hand itself over: without that its first tick resolved
+    a volume-tiered card against the household default while believing it had
+    used the measurement, and nothing re-resolved it until the trailing-year
+    figure next moved, a day later on a live meter and never on a flat one.
     """
-    coordinator = getattr(entry, "runtime_data", None)
+    if coordinator is None:
+        coordinator = getattr(entry, "runtime_data", None)
     measured = getattr(coordinator, "_annual_kwh", None)
     if measured and getattr(coordinator, "_annual_kwh_full_year", False):
         return float(measured)
@@ -953,8 +962,16 @@ def entry_annual_kwh(entry: ConfigEntry) -> float:
     return float(DEFAULT_ANNUAL_CONSUMPTION_KWH)
 
 
-def _resolve_snapshot(entry: ConfigEntry, snap: SupplierSnapshot) -> SupplierSnapshot:
+def _resolve_snapshot(
+    entry: ConfigEntry, snap: SupplierSnapshot, *, annual_kwh: float | None = None
+) -> SupplierSnapshot:
     """Resolve a card against the site facts only this entry knows.
+
+    ``annual_kwh`` is the yearly volume to resolve the excise band, the network
+    ceiling and a volume tranche against, ``entry_annual_kwh(entry)`` when
+    omitted. The coordinator passes the figure it resolved itself, because on
+    its first tick the entry cannot lead to the coordinator yet (see
+    :func:`entry_annual_kwh`); every other caller leaves it to the entry.
 
     All four steps are identity on a card that carries none of them, so this
     is free for every existing entry. Order is irrelevant: the excise band and
@@ -969,7 +986,8 @@ def _resolve_snapshot(entry: ConfigEntry, snap: SupplierSnapshot) -> SupplierSna
     circuit a share of a tranche it never receives.
     """
     resolved = apply_vat(snap, include_vat=_include_vat(entry))
-    annual_kwh = entry_annual_kwh(entry)
+    if annual_kwh is None:
+        annual_kwh = entry_annual_kwh(entry)
     resolved = resolve_volume_tier(
         resolve_excise_band(resolved, annual_kwh),
         annual_kwh,

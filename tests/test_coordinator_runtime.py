@@ -5206,3 +5206,97 @@ def test_a_solar_weighted_formula_is_never_priced_at_one_slot() -> None:
     # A leg carrying neither still prices per slot on a dynamic card.
     plain = InjectionRates(current=0.05, factor=0.9, base=-0.01)
     assert _injection_is_spot_formula(plain, energy) is True
+
+
+async def test_the_first_tick_splits_a_tiered_card_on_the_measured_volume(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Home Assistant assigns ``entry.runtime_data`` only after the first
+    refresh has returned, and ``entry_annual_kwh`` reads the measured volume
+    through it. The first tick therefore resolved a volume-tiered card against
+    the 3.500 kWh household default, stamped the MEASURED figure as the one it
+    had used, and ``_reresolve_snapshot`` then saw nothing to redo: a 6.000 kWh
+    household on EnergyVision's 1.800 kWh vast was billed the default blend
+    (88 EUR/year under its own card) until the trailing-year measurement next
+    moved, which a flat meter never does. The three calls below are the ones
+    ``_update_body`` opens with, in its order, on an entry with no
+    ``runtime_data`` at all."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices import compare_quote, snapshot_store
+    from custom_components.be_electricity_prices.compare_quote import _AnnualVolume
+    from custom_components.be_electricity_prices.providers.base import (
+        SpotMonthlyRates,
+    )
+
+    freezer.move_to("2026-09-11 09:00:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "energyvision",
+            "contract": "energyvision_tiered_1800",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "api_key": "test-token",
+            "consumption_kwh": "sensor.cons",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    assert not hasattr(entry, "runtime_data"), "the first refresh runs before it exists"
+    raw = make_snapshot(
+        supplier="energyvision",
+        contract="energyvision_tiered_1800",
+        energy=SpotMonthlyRates(
+            factor=1.12, base=0.02, tier_kwh=1800.0, tier_rate=0.106
+        ),
+    )
+    measured = [6000.0]
+
+    async def _vol(_h: Any, _e: Any, _s: Any, _end: Any) -> _AnnualVolume:
+        return _AnnualVolume(measured[0], 365, "measured (365 days)", measured=True)
+
+    def _want(kwh: float) -> Any:
+        proxy = SimpleNamespace(
+            data=dict(entry.data),
+            runtime_data=SimpleNamespace(_annual_kwh=kwh, _annual_kwh_full_year=True),
+        )
+        return snapshot_store._resolve_snapshot(proxy, raw).energy  # type: ignore[arg-type]
+
+    async def _tick(fresh: bool) -> None:
+        with patch.object(compare_quote, "_annual_volume", _vol):
+            await coord._ensure_annual_volume()
+            if fresh:
+                coord._set_snapshot(raw)  # what _maybe_refresh_snapshot does on a fetch
+            coord._reresolve_snapshot()
+
+    await _tick(fresh=True)
+    assert coord._snapshot is not None
+    assert coord._snapshot.energy == _want(6000.0)
+    assert coord._snapshot.energy != _want(3500.0)
+    assert coord._snapshot_annual_kwh == 6000.0
+
+    # HA assigns runtime_data now; the next ticks of the day find nothing to redo.
+    entry.runtime_data = coord
+    await _tick(fresh=False)
+    assert coord._snapshot.energy == _want(6000.0)
+
+    # A card restored from the store is resolved before any measurement exists
+    # and has to be picked up by the first tick too, again with no runtime_data.
+    del entry.runtime_data
+    coord3 = BePricesCoordinator(hass, entry)
+    coord3._set_snapshot(raw)  # async_load_persistent, before the first tick
+    assert coord3._snapshot is not None and coord3._snapshot.energy == _want(3500.0)
+    with patch.object(compare_quote, "_annual_volume", _vol):
+        await coord3._ensure_annual_volume()
+        coord3._reresolve_snapshot()
+    assert coord3._snapshot.energy == _want(6000.0)
+
+    # And a moved measurement re-splits the card the next day.
+    freezer.move_to("2026-09-12 09:00:00+02:00")
+    measured[0] = 7000.0
+    with patch.object(compare_quote, "_annual_volume", _vol):
+        await coord3._ensure_annual_volume()
+        coord3._reresolve_snapshot()
+    assert coord3._snapshot.energy == _want(7000.0)
