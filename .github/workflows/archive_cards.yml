@@ -68,8 +68,50 @@ jobs:
 
       - name: Store today's cards
         run: >-
-          python scripts/archive_cards.py --out tmp/archive
+          python scripts/archive_cards.py --out tmp/archive --pdfs tmp/pdfs
           --backfill "${{ github.event.inputs.backfill_months || '0' }}"
+
+      - name: Keep the cards themselves
+        # The PDFs go to a separate repository's releases, one per month,
+        # named by their SHA-256: a month of cards is about 100 MB, which
+        # no git branch of this repository should carry and which HACS
+        # would mistake for a release if it lived here. Needs a fine-grained
+        # token with contents read and write on that repository in the
+        # CARDS_TOKEN secret; without it the step says so and the branch
+        # still gets the parsed cards and their texts.
+        env:
+          GH_TOKEN: ${{ secrets.CARDS_TOKEN }}
+          CARDS_REPO: renaudallard/be_electricity_prices_cards
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "CARDS_TOKEN is not set: today's PDFs are not kept" >&2
+            exit 0
+          fi
+          manifest=tmp/archive/pdfs.json
+          [ -s "$manifest" ] || echo '{}' > "$manifest"
+          for dir in tmp/pdfs/cards-*/; do
+            [ -d "$dir" ] || continue
+            tag=$(basename "$dir")
+            if ! gh release view "$tag" --repo "$CARDS_REPO" >/dev/null 2>&1; then
+              gh release create "$tag" --repo "$CARDS_REPO"                 --title "Tariff cards $tag"                 --notes "The PDF tariff cards the archive branch of homeassistant_be_electricity_prices refers to for ${tag#cards-}, each named by its SHA-256."
+            fi
+            have=$(gh release view "$tag" --repo "$CARDS_REPO" --json assets --jq '.assets[].name')
+            for pdf in "$dir"*.pdf; do
+              name=$(basename "$pdf")
+              if ! grep -qx "$name" <<<"$have"; then
+                gh release upload "$tag" "$pdf" --repo "$CARDS_REPO"
+              fi
+              jq --arg d "${name%.pdf}" --arg p "$tag/$name" '. + {($d): $p}'                 "$manifest" > "$manifest.tmp" && mv "$manifest.tmp" "$manifest"
+            done
+          done
+          # Same retention as the branch: a month older than three years goes.
+          cutoff="cards-$(date -u -d '-36 months' +%Y-%m)"
+          gh release list --repo "$CARDS_REPO" --json tagName --jq '.[].tagName'             | while read -r tag; do
+              case "$tag" in cards-*) ;; *) continue ;; esac
+              if [ "$tag" \< "$cutoff" ]; then
+                gh release delete "$tag" --repo "$CARDS_REPO" --yes --cleanup-tag
+              fi
+            done
 
       - name: Commit and push what changed
         run: |

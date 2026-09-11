@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from datetime import date
 
 import aiohttp
@@ -35,6 +36,7 @@ import pytest
 
 import re
 
+from custom_components.be_electricity_prices.providers import _pdf
 from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
 )
@@ -62,6 +64,76 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
+
+
+class _PdfResponse:
+    status = 200
+    content_length = None
+
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
+
+    async def read(self) -> bytes:
+        return self._payload
+
+    async def __aenter__(self) -> _PdfResponse:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+
+class _PdfSession:
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+
+    def get(self, _url: str, **_kw: object) -> _PdfResponse:
+        return _PdfResponse(self.payload)
+
+
+async def test_render_hook_sees_the_bytes_and_decides_the_text() -> None:
+    """Inside render_through the reader hands the validated bytes and its
+    own renderer to the hook and takes the hook's text; outside it renders
+    as always. Either way the memo stores what came back."""
+    rendered: list[bytes] = []
+
+    def render(payload: bytes) -> str:
+        rendered.append(payload)
+        return "rendered"
+
+    session = _PdfSession(b"%PDF-1.4 card")
+    seen: list[tuple[str, str, bytes]] = []
+
+    async def hook(
+        variant: str, url: str, payload: bytes, renderer: Callable[[bytes], str]
+    ) -> str:
+        seen.append((variant, url, payload))
+        assert renderer is render
+        return "from the hook"
+
+    store: dict[str, str] = {}
+    with _pdf.memoise_text_fetches(store), _pdf.render_through(hook):
+        text = await _pdf._pdf_text(
+            session,  # type: ignore[arg-type]
+            "https://acme.test/card.pdf",
+            variant="plain",
+            timeout=5,
+            render=render,
+        )
+    assert text == "from the hook"
+    assert seen == [("plain", "https://acme.test/card.pdf", b"%PDF-1.4 card")]
+    assert rendered == []
+    assert store == {"plain\0https://acme.test/card.pdf": "from the hook"}
+    # Outside the block the reader renders itself.
+    text = await _pdf._pdf_text(
+        session,  # type: ignore[arg-type]
+        "https://acme.test/card.pdf",
+        variant="plain",
+        timeout=5,
+        render=render,
+    )
+    assert text == "rendered"
+    assert rendered == [b"%PDF-1.4 card"]
 
 
 def test_parse_valid_until_dutch_geldig_van_tem() -> None:

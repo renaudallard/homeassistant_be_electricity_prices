@@ -33,7 +33,7 @@ import json
 import logging
 import re
 import unicodedata
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import TypeVar
@@ -256,7 +256,11 @@ async def _pdf_text(
     if memo is not None and key in memo:
         return memo[key]
     payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
-    text = await asyncio.to_thread(render, payload)
+    hook = _RENDER_HOOK.get()
+    if hook is None:
+        text = await asyncio.to_thread(render, payload)
+    else:
+        text = await hook(variant, url, payload, render)
     if memo is not None:
         memo[key] = text
     return text
@@ -597,6 +601,32 @@ def memoise_text_fetches(store: dict[str, str]) -> Iterator[None]:
         yield
     finally:
         _TEXT_MEMO.reset(token)
+
+
+# How a downloaded card becomes text, when someone other than the readers
+# wants a say. The card archiver (scripts/archive_cards.py) downloads every
+# card daily but keys the render on the bytes' hash, so a card that has not
+# changed since it was last stored is neither rendered nor parsed again, and
+# it keeps the bytes it has not seen before. None, the default everywhere in
+# Home Assistant, renders in a worker thread as always.
+RenderHook = Callable[[str, str, bytes, Callable[[bytes], str]], Awaitable[str]]
+_RENDER_HOOK: ContextVar[RenderHook | None] = ContextVar("_RENDER_HOOK", default=None)
+
+
+@contextmanager
+def render_through(hook: RenderHook) -> Iterator[None]:
+    """Route every PDF render inside this block through ``hook``.
+
+    The hook receives the reader variant, the URL, the validated bytes and
+    the renderer the reader would have used, and returns the text. Scoped
+    to the block, like the text memo above, so nothing in the integration
+    itself can end up on this path.
+    """
+    token = _RENDER_HOOK.set(hook)
+    try:
+        yield
+    finally:
+        _RENDER_HOOK.reset(token)
 
 
 async def fetch_text(

@@ -1090,6 +1090,17 @@ own label names, which is what a supplier publishing in arrears (Ecopower's
 definitive card) or ahead needs; a month is rewritten only when the parse
 changed, and months older than three years are dropped.
 
+The cards themselves are kept as well, as the real thing a parser can be
+re-run against later: every PDF the branch has not seen before is uploaded
+to a release of a separate repository,
+[`be_electricity_prices_cards`](https://github.com/renaudallard/be_electricity_prices_cards),
+one release per month, each file named by its SHA-256, and each card on the
+branch names its PDF that way under `_sources`. A month of cards is about
+100 MB, which is why they live in releases rather than on a branch. That
+digest also keeps the daily run cheap: a card whose bytes have not changed
+is served the text the branch already holds instead of being rendered
+again.
+
 The integration reads that branch for any past month a supplier's own
 archive does not serve, before falling back to the current card: one small
 JSON per month, straight from `raw.githubusercontent.com`. The request names
@@ -1105,7 +1116,7 @@ have one, so that archive is asked first. The archive has no PDF bytes (a
 month of cards is tens of megabytes, three years of them would not fit a
 repository), a supplier that blocks the GitHub runners for a day (Mega has,
 the live check's timeouts show) just misses that day's capture, and a card
-the parser cannot read (Ecofix's page images) is not stored at all.
+the parser cannot read (Ecofix's page images) is stored as a PDF only.
 
 ## License
 

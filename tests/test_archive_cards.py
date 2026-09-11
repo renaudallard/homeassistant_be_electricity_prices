@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
@@ -14,6 +16,7 @@ from unittest.mock import ANY
 import pytest
 
 from custom_components.be_electricity_prices.const import SUPPLIER_CUSTOM
+from custom_components.be_electricity_prices.providers import _pdf
 from custom_components.be_electricity_prices.providers._pdf import fetch_text
 from custom_components.be_electricity_prices.providers.base import (
     Contract,
@@ -299,6 +302,142 @@ async def test_backfill_mirrors_the_supplier_archive_for_months_not_held(
     )
     assert asked == [date(2026, 8, 1), date(2026, 5, 1)]
     assert (summary.backfilled, summary.absent) == (0, 2)
+
+
+class _PdfResponse:
+    status = 200
+    content_length = None
+
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
+
+    async def read(self) -> bytes:
+        return self._payload
+
+    async def __aenter__(self) -> _PdfResponse:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+
+class _PdfSession:
+    """Just enough of aiohttp for the PDF readers: one payload per URL."""
+
+    def __init__(self, pdfs: dict[str, bytes]) -> None:
+        self.pdfs = pdfs
+
+    def get(self, url: str, **_kw: Any) -> _PdfResponse:
+        return _PdfResponse(self.pdfs[url])
+
+
+PDF_URL = "https://acme.test/card.pdf"
+
+
+def _pdf_fetch(session: _PdfSession, renders: list[bytes]) -> Fetch:
+    """A fetch that reads its card through the PDF reader seam, the way the
+    real extractors do, with a renderer that counts what it rendered."""
+
+    def render(payload: bytes) -> str:
+        renders.append(payload)
+        return f"card text for {payload.decode()}"
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        text = await _pdf._pdf_text(
+            session,  # type: ignore[arg-type]
+            PDF_URL,
+            variant="plain",
+            timeout=5,
+            render=render,
+        )
+        price = 0.2 if "v1" in text else 0.3
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=price),
+            publication_label="september 2026",
+            source_url=PDF_URL,
+        )
+
+    return fetch
+
+
+async def test_an_unchanged_card_is_kept_once_and_never_rendered_again(
+    tmp_path: Path,
+) -> None:
+    """The bytes' digest decides: the first run renders the card and writes
+    it under the PDF directory for upload; a later run with the same bytes
+    serves the stored text and renders nothing. The PDF is offered again
+    until the manifest says it was uploaded, and a changed card is a new
+    digest, rendered and kept afresh."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _PdfSession({PDF_URL: b"%PDF v1"})
+    renders: list[bytes] = []
+    extractor = _extractor(_pdf_fetch(session, renders))
+    summary = await ac.archive(
+        out, extractors=[extractor], pdf_dir=pdfs, now=NOW, sleep=_no_sleep
+    )
+    assert (summary.rendered, summary.unrendered, summary.pdfs_saved) == (1, 0, 1)
+    digest = hashlib.sha256(b"%PDF v1").hexdigest()
+    assert (pdfs / f"cards-2026-09/{digest}.pdf").read_bytes() == b"%PDF v1"
+    card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    [source] = card["_sources"]
+    assert source["pdf"] == f"cards-2026-09/{digest}.pdf"
+    assert source["variant"] == "plain"
+    assert card["energy"]["single"] == 0.2
+
+    # Same bytes the next day: nothing rendered, the text came from the
+    # branch, the PDF is written again because nothing says it was uploaded.
+    shutil.rmtree(pdfs)
+    summary = await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        now=NOW.replace(day=12),
+        sleep=_no_sleep,
+    )
+    assert (summary.rendered, summary.unrendered, summary.pdfs_saved) == (0, 1, 1)
+    assert (summary.stored, summary.unchanged) == (0, 1)
+    assert renders == [b"%PDF v1"]
+
+    # Once the manifest records the upload it is neither written nor rendered.
+    (out / "pdfs.json").write_text(json.dumps({digest: f"cards-2026-09/{digest}.pdf"}))
+    shutil.rmtree(pdfs)
+    summary = await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        now=NOW.replace(day=13),
+        sleep=_no_sleep,
+    )
+    assert (summary.rendered, summary.unrendered, summary.pdfs_saved) == (0, 1, 0)
+    assert not pdfs.exists()
+
+    # A corrected card is new bytes: rendered, kept, and the row rewritten.
+    session.pdfs[PDF_URL] = b"%PDF v2"
+    summary = await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        now=NOW.replace(day=14),
+        sleep=_no_sleep,
+    )
+    assert (summary.rendered, summary.pdfs_saved, summary.stored) == (1, 1, 1)
+    digest2 = hashlib.sha256(b"%PDF v2").hexdigest()
+    assert (pdfs / f"cards-2026-09/{digest2}.pdf").exists()
+    card = json.loads((out / "acme/acme_fix/wallonia/2026-09.json").read_text())
+    assert card["_sources"][0]["pdf"] == f"cards-2026-09/{digest2}.pdf"
+    assert card["energy"]["single"] == 0.3
+
+
+def test_prune_drops_manifest_entries_older_than_the_retention(tmp_path: Path) -> None:
+    (tmp_path / "pdfs.json").write_text(
+        json.dumps({"old": "cards-2023-08/old.pdf", "kept": "cards-2023-09/kept.pdf"})
+    )
+    assert ac._prune(tmp_path, 36, date(2026, 9, 11)) == 1
+    assert json.loads((tmp_path / "pdfs.json").read_text()) == {
+        "kept": "cards-2023-09/kept.pdf"
+    }
 
 
 def test_targets_skip_the_custom_and_withdrawn_suppliers() -> None:

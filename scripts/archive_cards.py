@@ -17,6 +17,17 @@ already on disk is rewritten only when the parse changed, so a quiet day
 leaves nothing to commit, and months older than ``--keep-months`` are
 removed on every run.
 
+The cards themselves are kept too. With ``--pdfs DIR`` every PDF whose
+bytes the branch has not recorded yet is written to
+``DIR/cards-<YYYY-MM>/<sha256>.pdf``, and the workflow uploads that
+directory as release assets of a separate cards repository (one release per
+month, since a month of cards is about 100 MB and three years of them no
+git branch can hold), then records each upload in ``<out>/pdfs.json``. A
+card's ``_sources`` entry names its PDF by that release path. The same
+digest is what keeps a daily run cheap: a card whose bytes have not
+changed is served the text the branch already holds for it instead of
+being rendered again.
+
 ``--backfill N`` also asks every supplier that keeps an archive of its own
 for the N closed months before this one, through the same
 ``fetch_for_month`` the integration uses, and stores each month the branch
@@ -65,6 +76,7 @@ from custom_components.be_electricity_prices.providers import (  # noqa: E402
 from custom_components.be_electricity_prices.providers._pdf import (  # noqa: E402
     is_transient_fetch_error,
     memoise_text_fetches,
+    render_through,
 )
 from custom_components.be_electricity_prices.providers.base import (  # noqa: E402
     SupplierExtractor,
@@ -137,7 +149,90 @@ class _Summary:
     unchanged: int = 0
     backfilled: int = 0
     absent: int = 0
+    rendered: int = 0
+    unrendered: int = 0
+    pdfs_saved: int = 0
     failed: list[str] = field(default_factory=list)
+
+
+_MANIFEST = "pdfs.json"
+
+
+class _Cards:
+    """What the run knows about card bytes.
+
+    Seeded from the branch: ``pdfs.json`` maps every digest already uploaded
+    to its release path, and each row's ``_sources`` maps a (variant,
+    digest) pair to the text it rendered to. Installed as the readers'
+    render hook, so a downloaded card whose bytes the branch has already
+    seen is served that stored text instead of being rendered again, which
+    is what makes a daily walk over 250 cards cheap: the download is
+    seconds, the render is the cost. Bytes the branch has not recorded yet
+    are written under ``pdf_dir`` for the workflow to upload.
+    """
+
+    def __init__(self, out: Path, pdf_dir: Path | None, seen_month: str) -> None:
+        self.out = out
+        self.pdf_dir = pdf_dir
+        self.seen_month = seen_month
+        self.kept: dict[str, str] = {}
+        manifest = out / _MANIFEST
+        if manifest.exists():
+            self.kept = json.loads(manifest.read_text(encoding="utf-8"))
+        # (variant, digest) -> text path on the branch, from every stored row.
+        self.texts: dict[tuple[str, str], str] = {}
+        for row in out.glob("*/*/*/????-??.json"):
+            try:
+                sources = json.loads(row.read_text(encoding="utf-8")).get(
+                    "_sources", []
+                )
+            except ValueError:
+                continue
+            for source in sources:
+                if "pdf" in source:
+                    digest = Path(source["pdf"]).stem
+                    self.texts[(source["variant"], digest)] = source["text"]
+        self.fresh: dict[tuple[str, str], str] = {}
+        self.digests: dict[str, str] = {}
+        self.saved: dict[str, str] = {}
+        self.rendered = 0
+        self.unrendered = 0
+
+    def path_for(self, url: str) -> str | None:
+        """Where the PDF behind ``url`` is, or will be once uploaded."""
+        digest = self.digests.get(url)
+        if digest is None:
+            return None
+        return self.kept.get(digest) or self.saved.get(digest)
+
+    async def render(
+        self, variant: str, url: str, payload: bytes, renderer: Callable[[bytes], str]
+    ) -> str:
+        digest = hashlib.sha256(payload).hexdigest()
+        self.digests[url] = digest
+        if (
+            self.pdf_dir is not None
+            and digest not in self.kept
+            and digest not in self.saved
+        ):
+            rel = f"cards-{self.seen_month}/{digest}.pdf"
+            path = self.pdf_dir / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+            self.saved[digest] = rel
+        key = (variant, digest)
+        text = self.fresh.get(key)
+        if text is None:
+            stored = self.texts.get(key)
+            if stored is not None and (self.out / stored).exists():
+                text = (self.out / stored).read_text(encoding="utf-8")
+        if text is not None:
+            self.unrendered += 1
+            return text
+        text = await asyncio.to_thread(renderer, payload)
+        self.rendered += 1
+        self.fresh[key] = text
+        return text
 
 
 def _month_id(year: int, month: int) -> str:
@@ -158,13 +253,19 @@ def _card_month(snap: SupplierSnapshot, today: date) -> str:
     return _month_id(*named)
 
 
-def _source_entry(key: str, path: str) -> dict[str, str]:
+def _source_entry(key: str, path: str, cards: _Cards) -> dict[str, str]:
     """Describe one memo entry: the PDF helpers key a rendered document as
-    ``<variant>\\0<url>`` and a plain text fetch by its URL alone."""
+    ``<variant>\\0<url>`` and a plain text fetch by its URL alone. A
+    rendered document also names its PDF's release path when the bytes
+    were seen."""
     variant, sep, url = key.partition("\0")
     if not sep:
         return {"url": key, "variant": "text", "text": path}
-    return {"url": url, "variant": variant, "text": path}
+    entry = {"url": url, "variant": variant, "text": path}
+    pdf = cards.path_for(url)
+    if pdf is not None:
+        entry["pdf"] = pdf
+    return entry
 
 
 def _write_text(out: Path, seen_month: str, text: str) -> str:
@@ -248,6 +349,17 @@ def _prune(out: Path, keep_months: int, today: date) -> int:
     ):
         if not any(folder.iterdir()):
             folder.rmdir()
+    manifest = out / _MANIFEST
+    if manifest.exists():
+        kept = json.loads(manifest.read_text(encoding="utf-8"))
+        # A release path is cards-<YYYY-MM>/<digest>.pdf; the workflow
+        # deletes the release itself on the same cutoff.
+        current = {d: p for d, p in kept.items() if p[len("cards-") :][:7] >= cutoff}
+        if len(current) != len(kept):
+            removed += len(kept) - len(current)
+            manifest.write_text(
+                json.dumps(current, indent=1, sort_keys=True) + "\n", encoding="utf-8"
+            )
     return removed
 
 
@@ -301,6 +413,7 @@ async def archive(
     only: set[str] | None = None,
     keep_months: int = 36,
     backfill_months: int = 0,
+    pdf_dir: Path | None = None,
     extractors: Iterable[SupplierExtractor] | None = None,
     now: datetime | None = None,
     sleep: Callable[[float], Any] = asyncio.sleep,
@@ -315,11 +428,12 @@ async def archive(
         readme.write_text(_README, encoding="utf-8")
     summary = _Summary()
     memo = _RecordingMemo()
+    cards = _Cards(out, pdf_dir, seen_month)
     targets = _targets(
         all_extractors() if extractors is None else extractors, only or set(), today
     )
     async with aiohttp.ClientSession() as session:
-        with memoise_text_fetches(memo):
+        with memoise_text_fetches(memo), render_through(cards.render):
             for ex, contract, region in targets:
                 label = f"{ex.id}/{contract}/{region}"
                 memo.touched.clear()
@@ -331,7 +445,7 @@ async def archive(
                     summary.failed.append(f"{label}: {type(err).__name__}: {err}")
                     continue
                 sources = [
-                    _source_entry(key, _write_text(out, seen_month, memo[key]))
+                    _source_entry(key, _write_text(out, seen_month, memo[key]), cards)
                     for key in sorted(memo.touched)
                 ]
                 month_id = _card_month(snap, today)
@@ -366,7 +480,9 @@ async def archive(
                         summary.absent += 1
                         continue
                     sources = [
-                        _source_entry(key, _write_text(out, seen_month, memo[key]))
+                        _source_entry(
+                            key, _write_text(out, seen_month, memo[key]), cards
+                        )
                         for key in sorted(memo.touched)
                     ]
                     _write_card(
@@ -381,12 +497,17 @@ async def archive(
                         "archive",
                     )
                     summary.backfilled += 1
+    summary.rendered = cards.rendered
+    summary.unrendered = cards.unrendered
+    summary.pdfs_saved = len(cards.saved)
     removed = _prune(out, keep_months, today)
     print(
         f"{summary.stored} stored, {summary.unchanged} unchanged, "
         f"{summary.backfilled} backfilled, {summary.absent} absent, "
         f"{len(summary.failed)} failed, {removed} pruned, "
-        f"{len(targets)} cards asked"
+        f"{len(targets)} cards asked; {summary.rendered} rendered, "
+        f"{summary.unrendered} served from stored text, "
+        f"{summary.pdfs_saved} new PDFs kept"
     )
     for line in summary.failed:
         print(f"  failed {line[:300]}")
@@ -401,6 +522,13 @@ def main() -> int:
     )
     parser.add_argument("--keep-months", type=int, default=36)
     parser.add_argument(
+        "--pdfs",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="write every PDF the branch has not recorded yet under DIR",
+    )
+    parser.add_argument(
         "--backfill",
         type=int,
         default=0,
@@ -414,6 +542,7 @@ def main() -> int:
             only=set(args.only),
             keep_months=args.keep_months,
             backfill_months=args.backfill,
+            pdf_dir=args.pdfs,
         )
     )
     return 0 if summary.stored or summary.unchanged else 1

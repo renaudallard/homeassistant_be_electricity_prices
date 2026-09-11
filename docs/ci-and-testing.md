@@ -752,15 +752,30 @@ Three design points:
   month.
 - **What each parse read is kept too.** The run shares one text memo
   (`memoise_text_fetches`) so a listing page or a shared card is fetched and parsed once, and a
-  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:110`) notes which memo
+  small recording dict (`_RecordingMemo`, `scripts/archive_cards.py:122`) notes which memo
   entries each fetch touched. Those texts are stored content-addressed under
   `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
   tens of megabytes.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
-  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:191`),
+  what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py:292`),
   so the branch gains a commit only when a card changed. Months older than `--keep-months`
-  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:233`).
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py:334`).
+
+The cards themselves are kept too, and the same mechanism is what keeps the daily walk cheap.
+The readers in `providers/_pdf.py` expose one seam, `render_through` (`_pdf.py:617`): inside that
+block a downloaded card's validated bytes go to a hook instead of straight to the renderer. The
+archiver installs `_Cards.render` (`scripts/archive_cards.py:208`) there. It hashes the bytes, and
+for a (variant, digest) pair some stored row already names it serves that row's text from the
+branch instead of rendering, so a card that has not changed since it was last stored costs one
+download and no pdfplumber pass; on a Raspberry Pi the render is the 20 minutes of the walk, the
+downloads are seconds. Bytes the branch has not recorded yet are written to
+`--pdfs DIR/cards-<YYYY-MM>/<sha256>.pdf`, and the row's `_sources` entry names its PDF by that
+release path. The workflow uploads the directory as release assets of the separate cards
+repository (see `archive_cards.yml` below) and appends each upload to `<out>/pdfs.json`, the
+manifest the next run seeds `_Cards` from: a digest the manifest does not list is written again
+until an upload succeeds, so a day without the token loses nothing for good. `_prune` drops
+manifest entries older than the retention alongside the rows.
 
 `--backfill N` runs a second walk after the live one: every supplier that keeps an archive of its
 own is asked, through the same `fetch_for_month` the integration uses, for each of the N closed
@@ -782,8 +797,9 @@ confirmed unchanged and 1 when none was, which is a runner-wide problem rather t
 supplier's; it files no issues, the live check already does that.
 
 `tests/test_archive_cards.py` drives it with a stub extractor and a canned page: filing by
-label, the shared-page attribution, the no-op repeat run, the retry split, the skip rules, the
-backfill's absent and provisional months, the retention and the exit code.
+label, the shared-page attribution, the no-op repeat run, the digest-keyed render skip and PDF
+retention, the retry split, the skip rules, the backfill's absent and provisional months, the
+retention and the exit code.
 
 ## GitHub workflows
 
@@ -896,6 +912,20 @@ region and month on top of the daily walk. It checks out `main` for the script a
 `git worktree add --orphan`, so nothing has to be pushed by hand
 (`.github/workflows/archive_cards.yml:46`). It then runs `scripts/archive_cards.py --out
 tmp/archive`, and commits and pushes only when the tree changed.
+
+The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml:74`) uploads the
+PDFs the script wrote under `tmp/pdfs` to releases of a separate repository,
+`renaudallard/be_electricity_prices_cards`, one release per month (`cards-YYYY-MM`) with each
+file named by its SHA-256, then records every upload in the branch's `pdfs.json` before the commit
+step runs. They cannot live on the archive branch: one walk downloads about 100 MB of PDFs
+(214 distinct files, measured), so three years would be around 3.5 GB in a repository every clone
+of `main` also pulls; and a release on this repository would be offered to HACS users as an update.
+The step needs a fine-grained personal access token with contents read and write on the cards
+repository in the `CARDS_TOKEN` secret, and that repository must exist with at least one commit
+(a release needs a commit to tag). Without the secret the step says so and exits green: the parsed
+cards and their texts still land on the branch, and the PDFs of that day are offered again by the
+next run that has the token. Releases older than the retention are deleted on the same cutoff the
+script uses for the rows.
 
 The archive lives on its own branch on purpose: three years of daily commits would bury
 `main`'s history, race the maintainer's own pushes, and land in every HACS download. Pushes
