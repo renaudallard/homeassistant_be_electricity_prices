@@ -45,6 +45,7 @@ from .cohort import (
     _cohort_legs,
     _contract_start_month,
     _effective_snapshot_for_month,
+    signing_month_snapshot,
     ytd_window_start,
 )
 from .fees import (
@@ -1207,6 +1208,18 @@ class BePricesCoordinator(
             # rate the injection_price sensor shows rather than at the card's
             # printed figure, which is that formula on the previous month.
             credited=injection_snapshot,
+            # The card the welcome credit is read off, the same row the
+            # year-to-date walk just resolved, so a cache hit.
+            signing=await signing_month_snapshot(
+                self.hass,
+                self._session,
+                get_extractor(self.entry.data[CONF_SUPPLIER]),
+                self.entry.data[CONF_CONTRACT],
+                self.entry.data.get(CONF_REGION, ""),
+                self.entry,
+                self._snapshot,
+                cached_only=cached_months_only,
+            ),
             breakdown=projection_breakdown,
         )
 

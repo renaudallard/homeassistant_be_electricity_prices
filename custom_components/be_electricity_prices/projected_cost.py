@@ -66,6 +66,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_CONTRACT_END_DATE,
+    CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
@@ -149,9 +150,16 @@ async def _compute_projected_year_cost(
     billed_peak_kw: float,
     today: date,
     credited: SupplierSnapshot | None = None,
+    signing: SupplierSnapshot | None = None,
     breakdown: dict[str, Any] | None = None,
 ) -> float | None:
     """Cost of a full year on this contract at today's tariffs, or ``None``.
+
+    ``signing`` is the card the welcome credit is read off, the signing
+    month's where the supplier keeps an archive, the same row the running
+    bill reads; defaults to ``priced``. What is left of the household's first
+    year comes off the projected year the way it comes off the running bill,
+    or the two full-year figures on one entry disagreed by the credit.
 
     Three snapshots, and each answers a different question. ``priced`` is the
     cohort-spliced one, whose energy leg is what the live sensors actually
@@ -304,6 +312,26 @@ async def _compute_projected_year_cost(
         export_per_kwh = _tou_weighted_per_kwh(
             priced, dso, region, dt_util.now(), None, meter, dso_mode, inj_hour_weights
         )
+    # What is left of the household's first-year welcome credit over the
+    # coming year, off the card it signed and capped on the same three
+    # components as the running bill. Zero without a start date, and zero
+    # once the first year is over.
+    from .cohort import _parse_iso_date
+    from .compare_quote import _annual_welcome_credit
+
+    welcome_credit = _annual_welcome_credit(
+        priced,
+        signing if signing is not None else priced,
+        _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),
+        dt_util.now(),
+        dso,
+        region,
+        None,
+        meter,
+        dso_mode,
+        hour_weights,
+        annual.kwh,
+    )
     projected = _annual_bill(
         priced,
         entry,
@@ -314,7 +342,9 @@ async def _compute_projected_year_cost(
         inj_rate,
         export_per_kwh=export_per_kwh,
         meter=meter,
+        welcome_credit_eur=welcome_credit,
     )
+    breakdown["welcome_credit_eur"] = welcome_credit
 
     breakdown["energy_basis"] = "today's published rate, held for a full year"
     breakdown["contract_basis"] = _contract_basis(entry, today)

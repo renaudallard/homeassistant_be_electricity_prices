@@ -457,7 +457,10 @@ candidate what a customer signing it today is granted over the coming year
 and the household's own row whatever is left of its first year. `_annual_welcome_credit`
 re-walks the energy leg on its `energy` component for the cap, and `_annual_bill` takes
 the credit off last. A Frank Korting tier therefore ranks on the year it would cost,
-cashback included, instead of as JN's loser.
+cashback included, instead of as JN's loser. `projected_year_cost` takes the same
+remaining first-year share off its full year, read off the signing month's card the way
+the running bill reads it, and reports it as `welcome_credit_eur`; before that the two
+full-year figures on one entry disagreed by the credit.
 
 A negative `yearly_fixed_fee` was the obvious shortcut and is the wrong model: a fee box
 has no expiry and no cap, so it would keep taking the discount off every year with nothing

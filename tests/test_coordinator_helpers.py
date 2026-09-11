@@ -7736,3 +7736,51 @@ def test_weighted_per_kwh_can_return_the_energy_component_alone() -> None:
     assert all_in == pytest.approx(bd.all_in)
     assert energy == pytest.approx(bd.energy)
     assert energy < all_in
+
+
+async def test_projection_takes_the_remaining_welcome_credit_off_the_year(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The running bill subtracts the first-year welcome credit and the
+    projection did not, so the two full-year figures on one entry disagreed
+    by the credit. The projection now takes off what is left of the first
+    year over the coming one, read off the signing month's card the way the
+    running bill reads it, and says so in its attributes."""
+    freezer.move_to("2026-07-01 12:00:00+02:00")
+    plain = _yearly_snapshot()
+    signed_card = replace(_yearly_snapshot(), welcome_credit_eur=300.0)
+    todays_card = replace(_yearly_snapshot(), welcome_credit_eur=200.0)
+    # Signed 100 days before today: 265 days of the first year are ahead.
+    entry = _projection_entry(contract_start_date="2026-03-23")
+
+    without, diag0 = await _project(hass, entry, _daily(10.0), priced=plain)
+    with_today, diag1 = await _project(hass, entry, _daily(10.0), priced=todays_card)
+    with_signed, diag2 = await _project(
+        hass, entry, _daily(10.0), priced=todays_card, signing=signed_card
+    )
+    assert without is not None and with_today is not None and with_signed is not None
+    assert diag0["welcome_credit_eur"] == 0.0
+    assert without - with_today == pytest.approx(200.0 * 265 / 365, abs=0.01)
+    assert diag1["welcome_credit_eur"] == pytest.approx(200.0 * 265 / 365, abs=0.01)
+    # The amount belongs to the version signed, not to today's card.
+    assert without - with_signed == pytest.approx(300.0 * 265 / 365, abs=0.01)
+
+    # No start date, no first year to place it in; a finished first year
+    # credits nothing more.
+    undated, diag3 = await _project(
+        hass, _projection_entry(), _daily(10.0), priced=todays_card
+    )
+    assert (
+        undated == pytest.approx(without, abs=0.01)
+        and diag3["welcome_credit_eur"] == 0.0
+    )
+    expired, diag4 = await _project(
+        hass,
+        _projection_entry(contract_start_date="2025-03-01"),
+        _daily(10.0),
+        priced=todays_card,
+    )
+    assert (
+        expired == pytest.approx(without, abs=0.01)
+        and diag4["welcome_credit_eur"] == 0.0
+    )

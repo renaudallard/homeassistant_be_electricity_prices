@@ -724,7 +724,7 @@ weights in the entry's Store blob so a restart does not force a fresh download.
 Two things bound what a cold profile costs. **The first tick never waits on
 one**: it runs inside config-entry setup, and the RLP workbook alone is 18 s of
 download and parse on a Raspberry Pi while every compensation entry wants it,
-so the tick schedules `_fill_profiles` (`coordinator.py:1301`) and prices the
+so the tick schedules `_fill_profiles` (`coordinator.py:1314`) and prices the
 plain arithmetic mean meanwhile -- the same degradation a failed fetch already
 has. **And one file serves every entry**: `_shared_profile`
 (`coordinator_spots.py:731`) keys a process-wide row by `(kind, year, blend)`
