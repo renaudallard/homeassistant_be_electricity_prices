@@ -7151,3 +7151,59 @@ async def test_welcome_credit_is_read_from_the_signing_month_card(
     without_archive = await _cost(False)
     with_archive = await _cost(True)
     assert without_archive - with_archive == pytest.approx((300.0 - 200.0) * 90 / 365)
+
+async def test_signing_month_is_resolved_for_the_entrys_own_contract_only(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The compare sweep walks the year-to-date engine once per candidate.
+    Without this gate each one resolves an archived card addressed by a signing
+    month that belongs to a different contract, and the credit is gated again
+    where it is used, so every one of those lookups is discarded: a card fetch
+    per candidate off the sweep's budget for an answer nothing reads."""
+    freezer.move_to("2026-09-10 12:00:00+02:00")
+    asked: list[str] = []
+
+    async def _fake_for_month(
+        _hass: Any,
+        _session: Any,
+        _extractor: Any,
+        contract: str,
+        _region: str,
+        _month: date,
+        current: Any,
+        _entry: Any,
+        **_kw: Any,
+    ) -> Any:
+        asked.append(contract)
+        return current
+
+    entry = _entry(contract="mine", contract_start_date="2026-03-01")
+    extractor = SimpleNamespace(fetch_for_month=object(), id="x")
+    snap = _snapshot(prosumer=None, capacity=None)
+
+    with patch.object(cohort, "_snapshot_for_month", new=_fake_for_month):
+        own = await cohort.signing_month_snapshot(
+            hass,
+            None,  # type: ignore[arg-type]
+            cast(Any, extractor),
+            "mine",
+            "flanders",
+            entry,
+            snap,
+        )
+        other = await cohort.signing_month_snapshot(
+            hass,
+            None,  # type: ignore[arg-type]
+            cast(Any, extractor),
+            "someone_elses",
+            "flanders",
+            entry,
+            snap,
+        )
+
+    assert asked == ["mine"]
+    # The foreign contract comes back as the card it was handed, so a caller
+    # can use the result without checking which it got.
+    assert other is snap
+    assert own is snap
+

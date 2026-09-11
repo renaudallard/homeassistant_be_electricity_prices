@@ -627,10 +627,20 @@ async def signing_month_snapshot(
     March cohort 200 EUR where its own card promised 300.
 
     The current snapshot comes back unchanged where there is nothing to
-    retrieve: no start date, a start inside the running month, or a supplier
-    that keeps no archive. Identity in those cases, so a caller can use the
-    result unconditionally.
+    retrieve: a contract that is not the entry's own, no start date, a start
+    inside the running month, or a supplier that keeps no archive. Identity in
+    those cases, so a caller can use the result unconditionally.
+
+    The own-contract gate is the same one :func:`_cohort_legs` opens with, and
+    for a sharper reason here. The compare sweep walks the year-to-date engine
+    once per candidate, and this would then resolve an archived card for each
+    of them, addressed by a signing month belonging to a different contract
+    entirely. The credit is gated again where it is used, so every one of those
+    lookups is discarded: a card fetch per candidate, off the sweep's budget,
+    for an answer nothing reads.
     """
+    if contract != entry.data.get(CONF_CONTRACT):
+        return current_snapshot
     start = _contract_start_month(entry)
     if start is None or extractor.fetch_for_month is None:
         return current_snapshot
