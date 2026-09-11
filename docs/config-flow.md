@@ -127,7 +127,7 @@ in the mixin: `_after_meter` (`config_flow.py:604`), `_after_dso_tariff_mode`
 
 ### `user` / `edit`: supplier + region
 
-Schema `_user_schema` (`flow_schemas.py:450`). Two dropdowns:
+Schema `_user_schema` (`flow_schemas.py:452`). Two dropdowns:
 
 - Supplier: `_supplier_options()` (`config_flow.py:180`) lists every registered
   extractor by `id`/`label`, minus any carrying `deprecated_until` (a supplier that
@@ -152,7 +152,7 @@ The OptionsFlow's `edit` step seeds instead from `{**entry.data, **entry.options
 
 ### `contract`: region-filtered product list
 
-Schema `_contract_schema` (`flow_schemas.py:475`). Contracts come from
+Schema `_contract_schema` (`flow_schemas.py:477`). Contracts come from
 `_contracts_for(supplier_id, region)` (`config_flow.py:200`), which reads
 `get_extractor(supplier_id).contracts` and keeps only those whose
 `Contract.regions` frozenset contains the region. `Contract` is defined at
@@ -167,8 +167,8 @@ leaves the field unset so the user must repick.
 
 ### `dso`: distribution operator
 
-Schema `_dso_schema` (`flow_schemas.py:647`). Options come from `DSO_CHOICES[region]`
-(`const.py:101`) via `_region_dso_options` (`flow_schemas.py:230`): 8 Fluvius
+Schema `_dso_schema` (`flow_schemas.py:649`). Options come from `DSO_CHOICES[region]`
+(`const.py:101`) via `_region_dso_options` (`flow_schemas.py:232`): 8 Fluvius
 sub-areas in Flanders, 5 operators in Wallonia, Sibelga only in Brussels. The DSO
 keys are canonical and stored verbatim in `CONF_DSO`; `const.py:145` warns they are
 "stable forever" because they key into `SupplierSnapshot.dsos`. As with the contract
@@ -207,7 +207,7 @@ reason they long since forgot agreeing to.
 
 ### `meter`: type, narrowed by contract kind
 
-Schema `_meter_schema` (`flow_schemas.py:948`). The key rule (`flow_schemas.py:948`):
+Schema `_meter_schema` (`flow_schemas.py:950`). The key rule (`flow_schemas.py:950`):
 
 - If contract kind is `dynamic`, `tou`, or `tou_impact`, the only option is
   `METER_DYNAMIC` and the default is `METER_DYNAMIC`.
@@ -218,7 +218,7 @@ Why: dynamic/TOU/Impact contracts bill energy by quarter-hour or hour-of-day and
 require a smart (SMR3) meter. Picking `bi` on a TOU contract would route
 distribution through the bi-horaire DSO peak/offpeak split while the supplier still
 billed energy by TOU slot, two billing modes that do not mix (`config_flow.py:647`
-comment). `_contract_kind` (`flow_schemas.py:241`) resolves the kind from the
+comment). `_contract_kind` (`flow_schemas.py:243`) resolves the kind from the
 registry and returns `""` when the stored contract is no longer in the catalogue,
 so a stale OptionsFlow entry still renders the meter step with a sensible default
 rather than raising.
@@ -238,8 +238,8 @@ supplier:contract:region:dso tuple; see the unique-id note below.
 
 ### `dso_tariff_mode`: Wallonia-only DSO billing mode
 
-Schema `_dso_tariff_mode_schema` (`flow_schemas.py:677`), default `DSO_MODE_BI_HORAIRE`.
-Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:335`),
+Schema `_dso_tariff_mode_schema` (`flow_schemas.py:679`), default `DSO_MODE_BI_HORAIRE`.
+Options are `DSO_TARIFF_MODES` = `simple | bi_horaire | impact` (`const.py:342`),
 `translation_key="dso_tariff_mode"`.
 
 Reached only when region is Wallonia (`_after_meter`, `config_flow.py:604`). Tarif
@@ -252,12 +252,12 @@ capacity tariff; `config_flow.py:178` comment).
 
 ### `api_key`: ENTSO-E token for spot-indexed energy (required)
 
-Schema `_api_key_schema` (`flow_schemas.py:1013`), a `PASSWORD` text field. Reached
+Schema `_api_key_schema` (`flow_schemas.py:1015`), a `PASSWORD` text field. Reached
 from `_after_dso_tariff_mode` when the contract kind is `dynamic` or
 `spot_monthly` (both price off ENTSO-E spots — live per-slot for dynamic, monthly
 mean for spot-monthly). The typed key is stripped, rejected outright when what is
 left is empty, and otherwise validated live against the ENTSO-E day-ahead endpoint
-by `_validate_entsoe_key` (`flow_schemas.py:1024`) before the flow proceeds:
+by `_validate_entsoe_key` (`flow_schemas.py:1026`) before the flow proceeds:
 
 - returns `None` on success,
 - `"invalid_api_key"` when ENTSO-E returns 401, *and* on an HTTP 200 that comes
@@ -305,7 +305,7 @@ two error strings map to `config.error.invalid_api_key` /
 
 ### `capacity`: Flanders capacity-tariff peak source
 
-Schema `_capacity_schema` (`flow_schemas.py:1065`). Reached from `_after_api_key` or
+Schema `_capacity_schema` (`flow_schemas.py:1067`). Reached from `_after_api_key` or
 `_after_dso_tariff_mode` when region is Flanders (`config_flow.py:656`, `:507`).
 Fields:
 
@@ -349,9 +349,9 @@ forces a deliberate choice (issue #19 again, `flow_prefill.py:143`).
 
 ### `connection_power`: Brussels connection-power tier
 
-Schema `_connection_power_schema` (`flow_schemas.py:696`), default
-`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:373`). Options are the four
-residential tiers `CONNECTION_KVA_TIERS` (`const.py:354`): `le1_44`, `le6`,
+Schema `_connection_power_schema` (`flow_schemas.py:698`), default
+`DEFAULT_CONNECTION_KVA_TIER` = `le6` (`const.py:380`). Options are the four
+residential tiers `CONNECTION_KVA_TIERS` (`const.py:361`): `le1_44`, `le6`,
 `le9_6`, `le13`, `translation_key="connection_kva_tier"`. Reached from
 `_before_solar` when region is Brussels (`config_flow.py:648`). Brussels bills a
 Brugel OSP (Obligations de Service Public) annual fee scaled by contractual
@@ -364,12 +364,12 @@ straight to solar (`config_flow.py:206` comment).
 
 ### `solar`: inverter kVA + regime
 
-Schema `_solar_schema` (`flow_schemas.py:1217`). Fields:
+Schema `_solar_schema` (`flow_schemas.py:1228`). Fields:
 
 - `CONF_SOLAR_KVA`: `NumberSelector` box 0-50 step 0.1, default 0.0 (0 means no
   panels, no prosumer cost; `const.py:230`).
 - `CONF_SOLAR_REGIME`: `translation_key="solar_regime"`, options built from
-  `SOLAR_REGIMES` (`const.py:407`) with a region filter.
+  `SOLAR_REGIMES` (`const.py:414`) with a region filter.
 
 The region filter (`flow_prefill.py:169`): `SOLAR_REGIME_COMPENSATION` is offered
 only when `CONF_REGION == REGION_WALLONIA`. Compensation ("terugdraaiende teller" /
@@ -378,7 +378,7 @@ the prosumer tariff and no capacity tariff, so offering it in Flanders would
 double-count the Flemish capaciteitstarief. Outside Wallonia only `none` and
 `injection` apply. If the stored regime is not in the filtered list (for example a
 compensation entry re-edited after switching region away from Wallonia), the default
-falls back to `SOLAR_REGIME_NONE` (`const.py:404`).
+falls back to `SOLAR_REGIME_NONE` (`const.py:411`).
 
 ### `injection_api_key`: optional ENTSO-E token for an index-linked leg
 
@@ -399,7 +399,7 @@ collected one) and either:
 
 The step keeps its historical id, which is what the translations are keyed on.
 
-`_contract_has_spot_injection` (`flow_schemas.py:303`) reads the registry's
+`_contract_has_spot_injection` (`flow_schemas.py:305`) reads the registry's
 `Contract.spot_indexed_injection` flag (`providers/base.py:77`). That flag marks a
 non-dynamic product whose *feed-in* is index-linked while the energy leg fetches no
 spots, which is most of the static range across a dozen suppliers: the energy is
@@ -408,11 +408,11 @@ as a delivery-month mean. Unlike the required `api_key`
 step, this one is skippable (`flow_schemas.py:965` docstring): submitting blank pops
 `CONF_API_KEY` and continues to `meters`, leaving the injection price unavailable
 until a key is added via Reconfigure. A typed key is validated by
-`_validate_entsoe_key` the same way as the dynamic step (`flow_schemas.py:1024`).
+`_validate_entsoe_key` the same way as the dynamic step (`flow_schemas.py:1026`).
 
 ### `meters`: cumulative kWh sensors (current-year cost)
 
-Schema `_meters_schema` (`flow_schemas.py:1150`). All six fields are optional
+Schema `_meters_schema` (`flow_schemas.py:1152`). All six fields are optional
 `EntitySelector`s restricted to `device_class="energy"` (`flow_schemas.py:727`) so a
 power/temperature/unitless sensor cannot be read as raw kWh. A stored entity id is
 rendered as a `description={"suggested_value": ...}`, never a `default`: ha-form
@@ -425,7 +425,7 @@ wirings per side, both feeding the `current_year_cost` computation:
 | Wiring | Keys | Behaviour |
 | --- | --- | --- |
 | Day/night registers | `CONF_DAY_CONSUMPTION_KWH`, `CONF_NIGHT_CONSUMPTION_KWH`, `CONF_DAY_INJECTION_KWH`, `CONF_NIGHT_INJECTION_KWH` | Used as-is; exact from the start, no warm-up |
-| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`const.py:394` docstring; `const.py:394`) |
+| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`const.py:401` docstring; `const.py:401`) |
 
 When both are filled for the same side, the day/night registers win (more accurate;
 `flow_schemas.py:719`). Each side (consumption, injection) is resolved independently,
@@ -612,7 +612,7 @@ out on purpose: it is registered `variable` and its impact bands are read only i
 impact mode, so a household on the standard configuration quoting it still bills
 the target's network leg off the jour/nuit columns, worth about EUR 29/yr on a bi
 meter and EUR 113 on a mono one. It is left un-forced for the reason
-`_IMPACT_DEFAULT_CONTRACTS` gives (`flow_schemas.py:674`): that card states only
+`_IMPACT_DEFAULT_CONTRACTS` gives (`flow_schemas.py:676`): that card states only
 that a communicating digital meter is required, so a holder on the standard
 configuration genuinely exists and forcing would under-bill them by the same
 amount in the other direction. The install flow pre-selects the mode for it and
@@ -636,7 +636,7 @@ table below is the authority on what the picker excludes.
 `_SweepStepsMixin` (`compare_flow.py:2791`) is a separate branch reached from a
 third menu entry. It subclasses `_CompareStepsMixin` because it reuses
 `_resolve_household` and the live-validated key prompt; only the menu entry and
-the steps are separate. `_sweep_candidates` (`flow_schemas.py:346`) narrows to
+the steps are separate. `_sweep_candidates` (`flow_schemas.py:348`) narrows to
 the entry's own `KIND_GROUP`, region and professional segment, and drops the
 entry's own contract - the opposite of the one-to-one picker, which keeps it on
 purpose. An empty cell aborts `compare_all_no_alternatives`, which is an answer
@@ -660,7 +660,14 @@ that into an abort and the scheduled run into a log line.
 #### The scheduled ranking
 
 Opt-in per entry (`CONF_DAILY_COMPARE`, default off), a box on the `meters`
-step. `async_run_daily_compare` (`compare_flow.py:646`) drives
+step. The box after it, `CONF_CARD_ARCHIVE` (default on), is the one
+opt-out of the same step: it lets the entry keep the month cache from asking
+the repository's card archive for a past month the supplier no longer serves,
+which is the only call the integration makes to GitHub;
+`_card_archive_may_hold` (`snapshot_store.py:783`) reads it, and a caller with
+no entry in hand keeps the default. Those months are then priced on the
+current card, as they were before the archive existed.
+ `async_run_daily_compare` (`compare_flow.py:646`) drives
 `run_full_sweep` (`compare_flow.py:907`) and parks the result on
 `coordinator.daily_compare`, which is all the delivery the sensor needs: it is
 a `CoordinatorEntity`, so setting the attribute and calling
@@ -700,7 +707,7 @@ a cold sweep takes; cards move about monthly.
 | `compare` | `compare_flow.py:409` | Supplier picker via `_compare_supplier_options` (`compare_flow.py:195`): suppliers with at least one contract in the user's region **and the entry's own segment**, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
 | `compare_contract` | `compare_flow.py:319` | Contract picker via `_compare_contract_schema` (`compare_flow.py:228`), spans static and dynamic kinds but never crosses the residential/professional line: a pro card is published ex-VAT and bands the excise by annual volume, so `_resolve_snapshot` grosses it at the entry's own rate and the row is neither what the household would pay nor a contract it could sign. Excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
 | `compare_meter` | `compare_flow.py:355` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py:237`) |
-| `compare_solar` | `compare_flow.py:397` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:1245`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:1197`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
+| `compare_solar` | `compare_flow.py:397` | What-if solar regime via `_compare_solar_schema` (`flow_schemas.py:1256`), narrowed to the region by the shared `_regime_options` (`flow_schemas.py:1208`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
 | `compare_api_key` | `compare_flow.py:486` | Shown when `_after_compare_meter` (`compare_flow.py:2058`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved. Skippable like `injection_api_key`: a blank submission asks ENTSO-E nothing and goes straight on, since a quote is a one-off and every reader of the key falls back to the entry's own with `or` |
 | `compare_result` | `compare_flow.py:514` | Renders a side-by-side annual + YTD estimate via `_build_compare_placeholders` (`compare_flow.py:2155`); submit aborts `compare_done`. Each side is priced on the spot its own energy shape bills: a dynamic leg on the mean of the fetched day-ahead window (linear in spot, so the yearly average is that mean), a spot-monthly leg on the DELIVERY MONTH's mean, which is the flat rate it actually bills and does not move with the day the dialog opened |
 

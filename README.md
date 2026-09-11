@@ -1093,7 +1093,10 @@ archive does not serve, before falling back to the current card: one small
 JSON per month, straight from `raw.githubusercontent.com`. The request names
 the supplier, contract, region and month and nothing else, and it is only
 made for a month the branch can hold: a closed one, and for a supplier with
-no archive of its own not before September 2026, when the captures began. A row holds what
+no archive of its own not before September 2026, when the captures began.
+The *Read past cards from the project's archive* box on the meters step,
+on by default, switches it off per entry: the integration then never
+contacts GitHub, and those months are priced on the current card. A row holds what
 the extractor of that day parsed; a later parser fix does not re-parse it,
 which is what the supplier's own archive still gives the suppliers that
 have one, so that archive is asked first. The archive has no PDF bytes (a

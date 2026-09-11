@@ -125,7 +125,8 @@
           "night_injection_kwh": "Einspeisung Nacht (kWh)",
           "consumption_kwh": "Gesamtverbrauch (kWh)",
           "injection_kwh": "Gesamteinspeisung (kWh)",
-          "daily_compare": "Täglich alle Anbieter vergleichen"
+          "daily_compare": "Täglich alle Anbieter vergleichen",
+          "card_archive": "Frühere Tarifkarten aus dem Projektarchiv lesen"
         },
         "data_description": {
           "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
@@ -134,7 +135,8 @@
           "night_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
           "consumption_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
           "injection_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
-          "daily_compare": "Standardmäßig aus. Einmal täglich, zu einer aus diesem Eintrag abgeleiteten festen Zeit, damit nicht alle Installationen gleichzeitig abrufen, wird jeder Vertrag Ihrer Art in Ihrer Region berechnet und die jährliche Ersparnis des besten als Sensor veröffentlicht. An den meisten Tagen kostet das nur einige Prüfungen, da Tarifkarten etwa monatlich neu veröffentlicht werden."
+          "daily_compare": "Standardmäßig aus. Einmal täglich, zu einer aus diesem Eintrag abgeleiteten festen Zeit, damit nicht alle Installationen gleichzeitig abrufen, wird jeder Vertrag Ihrer Art in Ihrer Region berechnet und die jährliche Ersparnis des besten als Sensor veröffentlicht. An den meisten Tagen kostet das nur einige Prüfungen, da Tarifkarten etwa monatlich neu veröffentlicht werden.",
+          "card_archive": "Standardmäßig an. Für einen vergangenen Monat, für den Ihr Anbieter keine Karte mehr veröffentlicht, wird die Karte geholt, die das Archiv dieses Projekts dafür aufbewahrt hat: eine kleine Datei pro Monat von GitHub, die nur Anbieter, Vertrag, Region und Monat nennt. Ausschalten, damit die Integration GitHub nicht kontaktiert; diese Monate werden dann mit der aktuellen Karte berechnet."
         }
       },
       "custom_energy": {
@@ -406,7 +408,8 @@
           "night_injection_kwh": "Einspeisung Nacht (kWh)",
           "consumption_kwh": "Gesamtverbrauch (kWh)",
           "injection_kwh": "Gesamteinspeisung (kWh)",
-          "daily_compare": "Täglich alle Anbieter vergleichen"
+          "daily_compare": "Täglich alle Anbieter vergleichen",
+          "card_archive": "Frühere Tarifkarten aus dem Projektarchiv lesen"
         },
         "data_description": {
           "day_consumption_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
@@ -415,7 +418,8 @@
           "night_injection_kwh": "Kumulativer Zählerstand in kWh, der nur steigt. Ein Sensor, der zurückgesetzt wird, etwa ein Jahresgesamtwert, funktioniert nicht.",
           "consumption_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
           "injection_kwh": "Wird nur verwendet, wenn die vier Register oben leer sind: ein Zähler ohne Tag/Nacht-Trennung, ein Klemmzähler oder ein Wechselrichter, der nur eine Summe liefert. Gleiche Regel, er darf nur steigen.",
-          "daily_compare": "Standardmäßig aus. Einmal täglich, zu einer aus diesem Eintrag abgeleiteten festen Zeit, damit nicht alle Installationen gleichzeitig abrufen, wird jeder Vertrag Ihrer Art in Ihrer Region berechnet und die jährliche Ersparnis des besten als Sensor veröffentlicht. An den meisten Tagen kostet das nur einige Prüfungen, da Tarifkarten etwa monatlich neu veröffentlicht werden."
+          "daily_compare": "Standardmäßig aus. Einmal täglich, zu einer aus diesem Eintrag abgeleiteten festen Zeit, damit nicht alle Installationen gleichzeitig abrufen, wird jeder Vertrag Ihrer Art in Ihrer Region berechnet und die jährliche Ersparnis des besten als Sensor veröffentlicht. An den meisten Tagen kostet das nur einige Prüfungen, da Tarifkarten etwa monatlich neu veröffentlicht werden.",
+          "card_archive": "Standardmäßig an. Für einen vergangenen Monat, für den Ihr Anbieter keine Karte mehr veröffentlicht, wird die Karte geholt, die das Archiv dieses Projekts dafür aufbewahrt hat: eine kleine Datei pro Monat von GitHub, die nur Anbieter, Vertrag, Region und Monat nennt. Ausschalten, damit die Integration GitHub nicht kontaktiert; diese Monate werden dann mit der aktuellen Karte berechnet."
         }
       },
       "custom_energy": {

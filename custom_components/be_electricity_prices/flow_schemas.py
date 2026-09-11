@@ -115,6 +115,7 @@ from .const import (
     CONF_DAY_INJECTION_KWH,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
+    CONF_CARD_ARCHIVE,
     CONF_DAILY_COMPARE,
     CONF_INCLUDE_VAT,
     CONF_INJECTION_KWH,
@@ -144,6 +145,7 @@ from .const import (
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_CONNECTION_KVA_TIER,
     DEFAULT_CUSTOM_VAT_RATE,
+    DEFAULT_CARD_ARCHIVE,
     DEFAULT_DAILY_COMPARE,
     DEFAULT_INCLUDE_VAT,
     DSO_CHOICES,
@@ -1189,6 +1191,15 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
         vol.Optional(
             CONF_DAILY_COMPARE,
             default=bool(defaults.get(CONF_DAILY_COMPARE, DEFAULT_DAILY_COMPARE)),
+        )
+    ] = BooleanSelector()
+    # And the one box that is about where past cards come from rather than
+    # about a meter: on by default, and the only way to keep the integration
+    # from contacting GitHub for a month the supplier no longer serves.
+    fields[
+        vol.Optional(
+            CONF_CARD_ARCHIVE,
+            default=bool(defaults.get(CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE)),
         )
     ] = BooleanSelector()
     return vol.Schema(fields)

@@ -65,6 +65,7 @@ from custom_components.be_electricity_prices.const import (
     DOMAIN,
     SUPPLIER_CUSTOM,
 )
+from custom_components.be_electricity_prices.const import CONF_CARD_ARCHIVE
 from custom_components.be_electricity_prices.cohort import (
     _cohort_energy_from_archived,
     _cohort_energy_leg,
@@ -2596,6 +2597,37 @@ async def test_months_before_the_captures_began_are_not_asked_for(
         github.assert_awaited_once_with(
             ANY, "test2", "test", "wallonia", date(2026, 8, 1)
         )
+
+
+async def test_an_entry_can_switch_the_repository_archive_off(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The box is the household's way of keeping the integration off GitHub:
+    with it off the branch is never asked, the month settles as "no card"
+    and the current card stands in, exactly as before the archive existed."""
+
+    freezer.move_to("2026-11-05 09:00:00+01:00")
+    current = _archive_snapshot("2026-11")
+    extractor = SupplierExtractor(
+        id="test", label="Test", contracts=(), fetch=AsyncMock(), fetch_for_month=None
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_CARD_ARCHIVE: False})
+    _monthly_snapshots(hass).clear()
+    github = AsyncMock(return_value=_archive_snapshot("stored"))
+    with patch.object(snapshot_store, "_archived_card_from_github", github):
+        snap = await _snapshot_for_month(
+            hass,
+            MagicMock(),
+            extractor,
+            "test",
+            "wallonia",
+            date(2026, 9, 1),
+            current,
+            entry,
+        )
+    assert snap is current
+    github.assert_not_awaited()
+    assert _monthly_snapshots(hass)[("test", "test", "wallonia", "2026-09")] is None
 
 
 async def test_cached_only_never_asks_the_repository_archive(

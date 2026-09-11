@@ -56,10 +56,12 @@ from .const import (
     CARD_ARCHIVE_FIRST_MONTH,
     CARD_ARCHIVE_URL,
     CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_CARD_ARCHIVE,
     CONF_INCLUDE_VAT,
     CONF_METER,
     CONF_QUARTER_HOURLY,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
+    DEFAULT_CARD_ARCHIVE,
     DEFAULT_INCLUDE_VAT,
     DOMAIN,
     METER_MONO,
@@ -779,17 +781,27 @@ async def _archived_card_from_github(
 
 
 def _card_archive_may_hold(
-    extractor: "SupplierExtractor", year_month: date, today: date
+    extractor: "SupplierExtractor",
+    year_month: date,
+    today: date,
+    entry: ConfigEntry | None,
 ) -> bool:
-    """Whether the repository's card archive can hold this month for this card.
+    """Whether the repository's card archive may be asked for this month.
 
-    Only a closed month: the running month's card is the one being served
-    live, which is what the current snapshot holds, and the repository's
-    copy of it is a day behind at best. And a supplier with no archive of
-    its own has nothing on the branch from before the daily captures began:
-    a backfill can only mirror a supplier's archive, so asking for an earlier
-    month is a 404 a day for nothing.
+    Not when the entry has switched the archive off: that box exists so a
+    household can keep the integration from contacting GitHub, and a caller
+    with no entry in hand (the shared cache's own bookkeeping) keeps the
+    default. Only a closed month: the running month's card is the one being
+    served live, which is what the current snapshot holds, and the
+    repository's copy of it is a day behind at best. And a supplier with no
+    archive of its own has nothing on the branch from before the daily
+    captures began: a backfill can only mirror a supplier's archive, so
+    asking for an earlier month is a 404 a day for nothing.
     """
+    if entry is not None and not entry.data.get(
+        CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE
+    ):
+        return False
     month = (year_month.year, year_month.month)
     if month >= (today.year, today.month):
         return False
@@ -919,7 +931,9 @@ async def _snapshot_for_month(
                 snap = await extractor.fetch_for_month(
                     session, contract, region, year_month
                 )
-            if snap is None and _card_archive_may_hold(extractor, year_month, today):
+            if snap is None and _card_archive_may_hold(
+                extractor, year_month, today, entry
+            ):
                 snap = await _archived_card_from_github(
                     session, extractor.id, contract, region, year_month
                 )

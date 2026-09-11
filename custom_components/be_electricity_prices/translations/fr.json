@@ -125,7 +125,8 @@
           "night_injection_kwh": "Injection nuit (kWh)",
           "consumption_kwh": "Consommation totale (kWh)",
           "injection_kwh": "Injection totale (kWh)",
-          "daily_compare": "Comparer tous les fournisseurs chaque jour"
+          "daily_compare": "Comparer tous les fournisseurs chaque jour",
+          "card_archive": "Lire les anciennes cartes dans l'archive du projet"
         },
         "data_description": {
           "day_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
@@ -134,7 +135,8 @@
           "night_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
           "consumption_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
           "injection_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
-          "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois."
+          "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois.",
+          "card_archive": "Activé par défaut. Pour un mois passé dont votre fournisseur ne publie plus la carte, récupère celle que l'archive du projet a conservée pour ce mois : un petit fichier par mois depuis GitHub, ne nommant que le fournisseur, le contrat, la région et le mois. Désactivez pour que l'intégration ne contacte pas GitHub ; ces mois sont alors calculés sur la carte actuelle."
         }
       },
       "custom_energy": {
@@ -406,7 +408,8 @@
           "night_injection_kwh": "Injection nuit (kWh)",
           "consumption_kwh": "Consommation totale (kWh)",
           "injection_kwh": "Injection totale (kWh)",
-          "daily_compare": "Comparer tous les fournisseurs chaque jour"
+          "daily_compare": "Comparer tous les fournisseurs chaque jour",
+          "card_archive": "Lire les anciennes cartes dans l'archive du projet"
         },
         "data_description": {
           "day_consumption_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
@@ -415,7 +418,8 @@
           "night_injection_kwh": "Relevé cumulatif du compteur en kWh, qui ne fait qu'augmenter. Un capteur qui se remet à zéro, comme un total « année en cours », ne convient pas.",
           "consumption_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
           "injection_kwh": "Utilisé uniquement si les quatre registres ci-dessus sont vides : compteur sans distinction jour/nuit, pince ampèremétrique, ou onduleur ne fournissant qu'un total. Même règle, il ne doit faire qu'augmenter.",
-          "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois."
+          "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois.",
+          "card_archive": "Activé par défaut. Pour un mois passé dont votre fournisseur ne publie plus la carte, récupère celle que l'archive du projet a conservée pour ce mois : un petit fichier par mois depuis GitHub, ne nommant que le fournisseur, le contrat, la région et le mois. Désactivez pour que l'intégration ne contacte pas GitHub ; ces mois sont alors calculés sur la carte actuelle."
         }
       },
       "custom_energy": {

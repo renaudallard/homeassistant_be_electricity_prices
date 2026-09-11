@@ -42,8 +42,8 @@ knowledge of contracts: the coordinator owns all of that and calls this client.
 
 | Constant | Value | Source |
 | --- | --- | --- |
-| `ENTSOE_BASE_URL` | `https://web-api.tp.entsoe.eu/api` | `const.py:430` |
-| `ENTSOE_BE_DOMAIN` | `10YBE----------2` (BE bidding zone EIC) | `const.py:431` |
+| `ENTSOE_BASE_URL` | `https://web-api.tp.entsoe.eu/api` | `const.py:437` |
+| `ENTSOE_BE_DOMAIN` | `10YBE----------2` (BE bidding zone EIC) | `const.py:438` |
 
 The client is constructed with the user's ENTSO-E API key and Home Assistant's
 shared `aiohttp` session (`api.py:69`). The key is passed on every request as

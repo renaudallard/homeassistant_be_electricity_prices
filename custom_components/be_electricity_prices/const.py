@@ -315,6 +315,13 @@ COMPARE_SWEEP_BUDGET_S: Final = 120.0
 CONF_DAILY_COMPARE: Final = "daily_compare"
 DEFAULT_DAILY_COMPARE: Final = False
 
+# Whether this entry may read the repository's card archive (CARD_ARCHIVE_URL)
+# for a past month its supplier no longer serves. On by default; off keeps the
+# integration from contacting GitHub at all, at the price of pricing those
+# months on the current card.
+CONF_CARD_ARCHIVE: Final = "card_archive"
+DEFAULT_CARD_ARCHIVE: Final = True
+
 # The scheduled sweep runs once a day at a minute derived from the entry id,
 # so installs land all over the clock instead of stampeding every supplier at
 # midnight. Derived rather than random: an install that runs at a different

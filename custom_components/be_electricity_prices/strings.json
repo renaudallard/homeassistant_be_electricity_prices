@@ -125,7 +125,8 @@
           "night_injection_kwh": "Night injection (kWh)",
           "consumption_kwh": "Total consumption (kWh)",
           "injection_kwh": "Total injection (kWh)",
-          "daily_compare": "Compare every supplier daily"
+          "daily_compare": "Compare every supplier daily",
+          "card_archive": "Read past cards from the project's archive"
         },
         "data_description": {
           "day_consumption_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
@@ -134,7 +135,8 @@
           "night_injection_kwh": "Cumulative meter register in kWh, one that only ever climbs. A sensor that resets, such as a 'this year' total, will not work.",
           "consumption_kwh": "Only used when the four registers above are empty: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb.",
           "injection_kwh": "Only used when the four registers above are empty: a meter with no day/night split, a clamp meter, or an inverter that reports a single total. Same rule, it must only ever climb.",
-          "daily_compare": "Off by default. Once a day, at a fixed time derived from this entry so installs do not all fetch at once, price every contract of your kind sold in your region and publish the yearly saving of the best one as a sensor. Most days this costs a handful of freshness checks, because tariff cards are republished about once a month."
+          "daily_compare": "Off by default. Once a day, at a fixed time derived from this entry so installs do not all fetch at once, price every contract of your kind sold in your region and publish the yearly saving of the best one as a sensor. Most days this costs a handful of freshness checks, because tariff cards are republished about once a month.",
+          "card_archive": "On by default. For a past month your supplier no longer publishes a card for, fetch the card this project's own archive stored for it: one small file per month from GitHub, naming only the supplier, contract, region and month. Switch it off to keep the integration from contacting GitHub; those months are then priced on the current card."
         }
       },
       "custom_energy": {
@@ -406,7 +408,8 @@
           "night_injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::night_injection_kwh%]",
           "consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::consumption_kwh%]",
           "injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data::injection_kwh%]",
-          "daily_compare": "[%key:component::be_electricity_prices::config::step::meters::data::daily_compare%]"
+          "daily_compare": "[%key:component::be_electricity_prices::config::step::meters::data::daily_compare%]",
+          "card_archive": "[%key:component::be_electricity_prices::config::step::meters::data::card_archive%]"
         },
         "data_description": {
           "day_consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::day_consumption_kwh%]",
@@ -415,7 +418,8 @@
           "night_injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::night_injection_kwh%]",
           "consumption_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::consumption_kwh%]",
           "injection_kwh": "[%key:component::be_electricity_prices::config::step::meters::data_description::injection_kwh%]",
-          "daily_compare": "[%key:component::be_electricity_prices::config::step::meters::data_description::daily_compare%]"
+          "daily_compare": "[%key:component::be_electricity_prices::config::step::meters::data_description::daily_compare%]",
+          "card_archive": "[%key:component::be_electricity_prices::config::step::meters::data_description::card_archive%]"
         }
       },
       "custom_energy": {

@@ -232,6 +232,46 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_meters_step_offers_the_card_archive_box_on_by_default(
+    hass: HomeAssistant,
+) -> None:
+    """The archive opt-out sits on the meters step, defaults to on for an
+    entry that never saw it, and a cleared box lands in the entry."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "cociter", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": "cociter_variable"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso": "ores"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"meter": "bi"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["step_id"] == "meters"
+    schema = result["data_schema"]
+    assert schema is not None
+    box = next(k for k in schema.schema if k == "card_archive")
+    assert box.default() is True
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"card_archive": False}
+    )
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["card_archive"] is False
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_settlement_step_appears_only_where_the_choice_is_sold(
     hass: HomeAssistant,
 ) -> None:
