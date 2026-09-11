@@ -1093,7 +1093,7 @@ changed, and months older than three years are dropped.
 The cards themselves are kept as well, as the real thing a parser can be
 re-run against later: every PDF the branch has not seen before is uploaded
 to a release of a separate repository,
-[`be_electricity_prices_cards`](https://github.com/renaudallard/be_electricity_prices_cards),
+[`homeassistant_be_electricity_prices_cards`](https://github.com/renaudallard/homeassistant_be_electricity_prices_cards),
 one release per month, each file named by its SHA-256, and each card on the
 branch names its PDF that way under `_sources`. A month of cards is about
 100 MB, which is why they live in releases rather than on a branch. That

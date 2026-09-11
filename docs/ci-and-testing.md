@@ -939,14 +939,14 @@ tmp/archive`, and commits and pushes only when the tree changed.
 
 The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml:74`) uploads the
 PDFs the script wrote under `tmp/pdfs` to releases of a separate repository,
-`renaudallard/be_electricity_prices_cards`, one release per month (`cards-YYYY-MM`) with each
+`renaudallard/homeassistant_be_electricity_prices_cards`, one release per month (`cards-YYYY-MM`) with each
 file named by its SHA-256, then records every upload in the branch's `pdfs.json` before the commit
 step runs. They cannot live on the archive branch: one walk downloads about 100 MB of PDFs
 (214 distinct files, measured), so three years would be around 3.5 GB in a repository every clone
 of `main` also pulls; and a release on this repository would be offered to HACS users as an update.
 The step needs a fine-grained personal access token with contents read and write on the cards
-repository in the `CARDS_TOKEN` secret, and that repository must exist with at least one commit
-(a release needs a commit to tag). Without the secret the step says so and exits green: the parsed
+repository in the `CARDS_TOKEN` secret. A release needs a commit to tag, so a repository created
+empty is given a first commit by the step itself, once. Without the secret the step says so and exits green: the parsed
 cards and their texts still land on the branch, and the PDFs of that day are offered again by the
 next run that has the token. Releases older than the retention are deleted on the same cutoff the
 script uses for the rows.

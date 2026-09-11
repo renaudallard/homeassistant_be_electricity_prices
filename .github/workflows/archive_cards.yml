@@ -80,7 +80,7 @@ jobs:
 
       - name: Store today's cards
         env:
-          CARDS_REPO: renaudallard/be_electricity_prices_cards
+          CARDS_REPO: renaudallard/homeassistant_be_electricity_prices_cards
         run: >-
           python scripts/archive_cards.py --out tmp/archive --pdfs tmp/pdfs
           --pdf-base-url "https://github.com/${CARDS_REPO}/releases/download"
@@ -98,11 +98,30 @@ jobs:
         # still gets the parsed cards and their texts.
         env:
           GH_TOKEN: ${{ secrets.CARDS_TOKEN }}
-          CARDS_REPO: renaudallard/be_electricity_prices_cards
+          CARDS_REPO: renaudallard/homeassistant_be_electricity_prices_cards
         run: |
           if [ -z "$GH_TOKEN" ]; then
             echo "CARDS_TOKEN is not set: today's PDFs are not kept" >&2
             exit 0
+          fi
+          # A release needs a commit to tag, and a repository created empty
+          # has none: give it a first one, once.
+          cards_url="https://x-access-token:${GH_TOKEN}@github.com/${CARDS_REPO}.git"
+          if [ -z "$(git ls-remote --heads "$cards_url" 2>/dev/null)" ]; then
+            seed=$(mktemp -d)
+            printf '%s\n' \
+              "# Tariff cards" \
+              "" \
+              "The PDF tariff cards the archive branch of homeassistant_be_electricity_prices" \
+              "refers to, one release per month, each file named by its SHA-256. Written by" \
+              "its archive_cards.yml workflow; nothing here is edited by hand." \
+              > "$seed/README.md"
+            git -C "$seed" init -q -b main
+            git -C "$seed" add README.md
+            git -C "$seed" -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Start the card store"
+            git -C "$seed" push -q "$cards_url" main
           fi
           manifest=tmp/archive/pdfs.json
           [ -s "$manifest" ] || echo '{}' > "$manifest"
