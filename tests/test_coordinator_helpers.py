@@ -6027,10 +6027,17 @@ async def test_cohort_leg_bills_the_same_fee_on_every_call_path() -> None:
         assert leg is not None
         return float(leg.yearly_fixed_fee)
 
+    # Engie keeps an archive now, and the archived card is not what this
+    # test is about: answer "no archived card" the way the store does, by
+    # handing the current snapshot back, so the typed fee is the only overlay.
+    async def _no_archived_card(*args: Any, **kwargs: Any) -> Any:
+        return args[6]
+
     # The typed 121,00 is gross; an entry that deducts VAT bills 100,00. The
     # raw card (live tick) and the resolved card (YTD / monthly) must agree.
-    assert await fee(raw) == pytest.approx(100.0)
-    assert await fee(apply_vat(raw, include_vat=False)) == pytest.approx(100.0)
+    with patch.object(cohort, "_snapshot_for_month", new=_no_archived_card):
+        assert await fee(raw) == pytest.approx(100.0)
+        assert await fee(apply_vat(raw, include_vat=False)) == pytest.approx(100.0)
 
 
 def test_published_vat_rate_round_trips_and_tolerates_an_old_cache() -> None:

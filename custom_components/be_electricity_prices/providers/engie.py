@@ -52,6 +52,7 @@ snapshots carry ``vat_rate`` and their per-kWh values as printed;
 from __future__ import annotations
 
 import re
+from datetime import date
 from dataclasses import dataclass, replace
 
 import aiohttp
@@ -77,8 +78,10 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._pdf import (
+    FR_MONTHS,
     require_contract,
     SIGN_CHARS,
+    archive_validity_check,
     fetch_pdf_text,
     fetch_text,
     parse_brussels_osp,
@@ -343,10 +346,17 @@ def _slug(c: _ContractDef, region_code: str) -> str:
     return f"E_{c.family}_{c.segment}_{c.color}_C_{c.rate}_{months}_{region_code}_F"
 
 
-def _document_url(c: _ContractDef, region_code: str) -> str:
+def _document_url(c: _ContractDef, region_code: str, month_offset: int = 0) -> str:
+    """The document API URL for ``c`` in ``region_code``.
+
+    ``month_offset`` counts months back from the current card: 0 is the card
+    ``fetch`` reads, 1 the previous month's, and so on. The API keeps them
+    well past two years, so this is also the archive (see
+    :func:`fetch_for_month`).
+    """
     return (
         f"{_API_URL}?document={_slug(c, region_code)}"
-        f"&monthOffset=0&segment={c.segment}&language=F"
+        f"&monthOffset={month_offset}&segment={c.segment}&language=F"
     )
 
 
@@ -442,6 +452,51 @@ async def fetch(
 
     text = await fetch_pdf_text(session, _document_url(contract, region_code))
     return parse_snapshot(contract_id, {region: text})
+
+
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """The card Engie published for one past month, or ``None``.
+
+    The same document API serves them: its ``monthOffset`` parameter counts
+    months back from the current card, and Engie keeps the run well past two
+    years (September 2024 still answers, in the layout this parser knows;
+    the 2023 cards predate it and fail, which comes back as None). A card is
+    only ever addressed relative to the month the API is in, so the offset
+    is the calendar distance from today, and a month ahead of today is
+    refused up front rather than sent, since the API answers it with 404.
+
+    Until this existed a contract start date did nothing on an Engie entry:
+    the signing-cohort splice had no card to read and every past month of
+    the year-to-date billed on the current card as a proxy. The month the
+    card names is cross-checked (``contrats conclus en <mois> <annee>``),
+    and every failure is swallowed, since this runs inside the year-to-date
+    walk and one month must not take the whole year down.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    region_code = _REGION_TO_CODE.get(region)
+    if (
+        contract is None
+        or region_code is None
+        or region_code not in contract.months_per_region
+    ):
+        return None
+    first = date(year_month.year, year_month.month, 1)
+    today = date.today()
+    offset = (today.year - first.year) * 12 + (today.month - first.month)
+    if offset < 0:
+        return None
+    url = _document_url(contract, region_code, month_offset=offset)
+    try:
+        text = await fetch_pdf_text(session, url)
+        snap = parse_snapshot(contract_id, {region: text})
+    except ExtractorError:
+        return None
+    return archive_validity_check(snap, text, first, month_names=FR_MONTHS)
 
 
 def parse_snapshot(contract_id: str, region_texts: dict[str, str]) -> SupplierSnapshot:
@@ -1307,4 +1362,5 @@ EXTRACTOR = SupplierExtractor(
         for c in _CONTRACTS
     ),
     fetch=fetch,
+    fetch_for_month=fetch_for_month,
 )

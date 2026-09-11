@@ -690,6 +690,7 @@ def test_readme_archive_lists_name_every_supplier_that_keeps_one() -> None:
         "ecopower": "Ecopower",
         "eneco": "Eneco",
         "energiebe": "energie.be",
+        "engie": "Engie",
         "energyknights": "Energy Knights",
         "energyvision": "EnergyVision",
         "frank": "Frank",

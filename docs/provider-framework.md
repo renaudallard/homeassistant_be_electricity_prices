@@ -153,10 +153,11 @@ month at the current rate. Return-value semantics:
 - A `SupplierSnapshot` for the requested month when the archive resolves.
 - `None` when the supplier has no accessible archive for that month. This
   applies to overwrite-in-place suppliers (Ecofix, OCTA+, TotalEnergies),
-  API-only suppliers (energie.be, Engie, Luminus), EnergyVision (its listing
-  carries only the current month and the old versioned URLs are not reliably
-  reachable), and any month before the supplier's archive horizon. On `None`
-  the coordinator falls back to the current snapshot as a proxy.
+  suppliers with no archive at all (Luminus, OCTA+, TotalEnergies, Ecofix), the
+  running month on a supplier that publishes in arrears (energie.be), and any
+  month before the supplier's archive horizon (Engie's 2023 cards predate the
+  layout its parser reads, energie.be's mid-2025 cards are page images). On
+  `None` the coordinator falls back to the current snapshot as a proxy.
 
 An extractor whose `fetch_for_month` field is itself `None` means the supplier
 has no archive at all. Providers that do implement it typically cross-check the

@@ -30,6 +30,8 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from datetime import date
+from typing import Any
 
 from custom_components.be_electricity_prices.const import (
     REGION_BRUSSELS,
@@ -857,3 +859,121 @@ def test_flextime_credit_bakes_and_replays_on_the_month() -> None:
     assert _injection_price_for_slot(baked, leg, None, peak_hour) == pytest.approx(
         baked.peak
     )
+
+
+# ---- month archive (fetch_for_month) ------------------------------------------
+
+
+async def test_archive_addresses_a_past_month_by_its_offset_from_today(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """The document API's monthOffset counts months back from the current
+    card, so April 2026 is five months back from September 2026. Until this
+    was wired a contract start date did nothing on an Engie entry."""
+    from custom_components.be_electricity_prices.providers import engie
+
+    freezer.move_to("2026-09-11 12:00:00+02:00")
+    urls: list[str] = []
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        urls.append(url)
+        return fixture_text("engie_easy_indexed_v.pdf")  # "Avril 2026"
+
+    monkeypatch.setattr(engie, "fetch_pdf_text", _fake_pdf)
+    snap = await engie.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "engie_easy_variable",
+        REGION_FLANDERS,
+        date(2026, 4, 20),
+    )
+    assert snap is not None
+    assert "monthOffset=5" in urls[-1] and "segment=R" in urls[-1]
+    assert snap.publication_label == "Avril 2026"
+    assert snap.valid_until == date(2026, 4, 30)
+    assert len(snap.dsos) == 8
+
+
+async def test_archive_refuses_a_future_month_and_a_card_for_another_month(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A month ahead of today is refused before any request (the API answers
+    it with 404), and a card that names another month than the one asked for
+    is rejected rather than billed against it."""
+    from custom_components.be_electricity_prices.providers import engie
+
+    freezer.move_to("2026-09-11 12:00:00+02:00")
+    urls: list[str] = []
+
+    async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+        urls.append(url)
+        return fixture_text("engie_easy_indexed_v.pdf")  # "Avril 2026"
+
+    monkeypatch.setattr(engie, "fetch_pdf_text", _fake_pdf)
+    assert (
+        await engie.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "engie_easy_variable",
+            REGION_FLANDERS,
+            date(2026, 10, 1),
+        )
+        is None
+    )
+    assert urls == []
+    assert (
+        await engie.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "engie_easy_variable",
+            REGION_FLANDERS,
+            date(2026, 6, 1),
+        )
+        is None
+    )
+    assert "monthOffset=3" in urls[-1]
+
+
+async def test_archive_swallows_failures_and_unsold_combinations(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """One month the API cannot serve is that month's answer, never the whole
+    year's; a region the contract is not sold in asks nothing."""
+    from custom_components.be_electricity_prices.providers import engie
+    from custom_components.be_electricity_prices.providers.base import ExtractorError
+
+    freezer.move_to("2026-09-11 12:00:00+02:00")
+    asked: list[str] = []
+
+    async def _boom(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        raise ExtractorError("HTTP 404")
+
+    monkeypatch.setattr(engie, "fetch_pdf_text", _boom)
+    assert (
+        await engie.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "engie_easy_variable",
+            REGION_FLANDERS,
+            date(2023, 9, 1),
+        )
+        is None
+    )
+    assert len(asked) == 1
+    assert (
+        await engie.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "engie_easy_variable",
+            "germany",
+            date(2026, 6, 1),
+        )
+        is None
+    )
+    assert (
+        await engie.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "engie_gas",
+            REGION_FLANDERS,
+            date(2026, 6, 1),
+        )
+        is None
+    )
+    assert len(asked) == 1
+    assert EXTRACTORS["engie"].fetch_for_month is engie.fetch_for_month
