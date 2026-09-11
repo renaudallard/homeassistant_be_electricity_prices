@@ -53,6 +53,7 @@ from .cohort import (
     _cohort_energy_leg,
     _effective_snapshot_for_month,
     _month_snapshot_cache,
+    signing_month_snapshot,
     ytd_window_start,
 )
 from .const import (
@@ -893,6 +894,22 @@ async def _compute_current_year_cost(
     eff_energy = snapshot.energy if cohort_energy is None else cohort_energy
 
     window_start = ytd_window_start(entry, today)
+    # A welcome credit belongs to the product version signed, and EnergyVision
+    # moved that figure four times between March and September 2026, so the
+    # amount comes off the SIGNING month's card rather than today's. Identity
+    # for an entry with no start date and for a supplier with no archive, and
+    # the row is the one _cohort_legs already resolves every tick, so this is a
+    # cache hit rather than a second fetch.
+    signing_snapshot = await signing_month_snapshot(
+        hass,
+        session,
+        extractor,
+        contract,
+        region,
+        entry,
+        snapshot,
+        cached_only=cached_only,
+    )
 
     static_fees = await _ytd_static_fees(
         hass,
@@ -966,7 +983,7 @@ async def _compute_current_year_cost(
         credit = 0.0
         if contract == entry.data.get(CONF_CONTRACT):
             credit = _welcome_credit_eur(
-                snapshot,
+                signing_snapshot,
                 entry,
                 window_start,
                 today,

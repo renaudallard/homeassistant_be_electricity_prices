@@ -432,9 +432,12 @@ data-management charge or the Brussels OSP fee that sit beside the standing char
 separately. It binds only on a very small connection: around 900 kWh a year against a
 200 EUR credit.
 
-It is never applied to another supplier's contract: the compare page walks the same
-year-to-date engine for a contract the household never signed, where its own start date
-says nothing about when it would have signed that one.
+Two gates keep it honest. The amount is read from the SIGNING month's card
+(`signing_month_snapshot`), because the credit belongs to the product version signed and
+EnergyVision moved its figure four times between March and September 2026. And it is never
+applied to another supplier's contract: the compare page walks the same year-to-date
+engine for a contract the household never signed, where its own start date says nothing
+about when it would have signed that one.
 
 A negative `yearly_fixed_fee` was the obvious shortcut and is the wrong model: a fee box
 has no expiry and no cap, so it would keep taking the discount off every year with nothing

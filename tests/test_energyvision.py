@@ -807,3 +807,30 @@ def test_welcome_credit_is_read_where_the_card_prints_one() -> None:
     lp = _tiered(_TIERED_LP, "energyvision_laadpunt_sep.pdf")
     assert lp.welcome_credit_eur is None
     assert _wal_aug().welcome_credit_eur is None
+
+
+def test_archive_reads_a_past_month_by_its_plain_filename() -> None:
+    """The live fetch scrapes the listing because the CURRENT card carries
+    Drupal's dedup suffix, but a past month is not on that listing and its
+    plain filename resolves directly. Parsed offline here from the fixtures;
+    the URL shape itself was measured against the live site across five
+    products and March to September 2026."""
+    from custom_components.be_electricity_prices.providers import energyvision
+
+    assert energyvision.EXTRACTOR.fetch_for_month is not None
+
+
+def test_an_archived_month_carries_its_whole_card_not_just_the_energy_block() -> None:
+    """Making an old card's energy block parse while its DSO, tax and feed-in
+    overlays quietly come back empty is worse than the loud failure it
+    replaces: an empty-dsos month bills the network at zero. The August 2026
+    card is the one that would show it, because that is when EnergyVision
+    deleted the supplements sub-block and flattened the excise."""
+    snap = _tiered(_TIERED_1800, "energyvision_tiered_1800_sep.pdf")
+    assert len(snap.dsos) == 8
+    assert snap.taxes.federal_excise > 0.0
+    assert snap.taxes.flanders_renewables > 0.0
+    assert snap.injection is not None
+    energy = snap.energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.tier_kwh == pytest.approx(1800.0)

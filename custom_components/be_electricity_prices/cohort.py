@@ -607,6 +607,50 @@ async def _cohort_energy_leg(
     return legs.energy
 
 
+async def signing_month_snapshot(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: "SupplierExtractor",
+    contract: str,
+    region: str,
+    entry: ConfigEntry,
+    current_snapshot: "SupplierSnapshot",
+    *,
+    cached_only: bool = False,
+) -> "SupplierSnapshot":
+    """The card published the month this contract was signed, or the current one.
+
+    Rates are not the only thing that belongs to the version signed. A welcome
+    credit does too, by its own terms ("enkel tijdens je eerste inschrijvingsjaar
+    voor deze productversie"), and EnergyVision moved that figure four times
+    between March and September 2026, so reading it off today's card credits a
+    March cohort 200 EUR where its own card promised 300.
+
+    The current snapshot comes back unchanged where there is nothing to
+    retrieve: no start date, a start inside the running month, or a supplier
+    that keeps no archive. Identity in those cases, so a caller can use the
+    result unconditionally.
+    """
+    start = _contract_start_month(entry)
+    if start is None or extractor.fetch_for_month is None:
+        return current_snapshot
+    now = dt_util.now()
+    if start >= date(now.year, now.month, 1):
+        # The current card IS the signing-month card.
+        return current_snapshot
+    return await _snapshot_for_month(
+        hass,
+        session,
+        extractor,
+        contract,
+        region,
+        start,
+        current_snapshot,
+        entry,
+        cached_only=cached_only,
+    )
+
+
 async def _effective_snapshot_for_month(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,

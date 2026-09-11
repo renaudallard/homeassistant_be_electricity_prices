@@ -68,6 +68,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 
 import aiohttp
 
@@ -83,6 +84,7 @@ from ..const import (
 )
 from ._pdf import (
     NUM_NO_THOUSANDS,
+    archive_validity_check,
     flanders_tax_overlay,
     SIGN_CHARS,
     fetch_pdf_text_layout,
@@ -404,6 +406,49 @@ async def fetch(
     url = await _resolve_card_url(session, contract)
     text = await fetch_pdf_text_layout(session, url)
     return parse_snapshot(contract_id, text, url)
+
+
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """The card EnergyVision published for one past month, or ``None``.
+
+    The live fetch has to scrape the listing because the CURRENT card carries
+    Drupal's dedup suffix (``EV-0726-GS3JV-nl_0.pdf``), but a past month is not
+    on that listing at all and its plain filename resolves directly: every
+    product answered 200 for every month it existed, measured across GSDYN /
+    GS3JV / GS1800V / GSVI3 / GSLP and March to September 2026.
+
+    Each product has its own horizon rather than a shared one (GS1800V reaches
+    back to March 2026, GSDYN only to June), and there is nothing on the site
+    that states it. A month before it answers Drupal's 404 page, which is HTML
+    rather than a PDF, so ``fetch_pdf_text_layout`` rejects it on the magic
+    bytes and the ``except`` below turns that into "no archive here". Letting
+    the 404 be the horizon keeps a constant from going stale behind the site.
+
+    Every failure is swallowed: this runs inside the year-to-date walk, and one
+    unpublished month must not take the whole year down.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None or region not in contract.regions:
+        return None
+    first = date(year_month.year, year_month.month, 1)
+    url = (
+        f"{_SITE_BASE}/sites/default/files/inline-files/"
+        f"EV-{first.month:02d}{first.year % 100:02d}-{contract.code}-{contract.token}.pdf"
+    )
+    try:
+        text = await fetch_pdf_text_layout(session, url)
+        snap = parse_snapshot(contract_id, text, url)
+    except ExtractorError:
+        return None
+    # Every card prints "geldig ... tot en met" so valid_until is parsed and the
+    # authoritative tier of the cross-check applies. It is what catches a CDN
+    # serving the current card under an archived name.
+    return archive_validity_check(snap, text, first)
 
 
 async def probe(
@@ -855,7 +900,16 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     probe=probe,
+    fetch_for_month=fetch_for_month,
 )
 
 
-__all__ = ["DISCOVER_IDS", "EXTRACTOR", "discover", "fetch", "parse_snapshot", "probe"]
+__all__ = [
+    "DISCOVER_IDS",
+    "EXTRACTOR",
+    "discover",
+    "fetch",
+    "fetch_for_month",
+    "parse_snapshot",
+    "probe",
+]

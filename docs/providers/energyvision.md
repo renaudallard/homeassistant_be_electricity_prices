@@ -47,7 +47,7 @@ wording, so the Walloon card has its own parser set (the `*_fr` helpers) rather 
 bilingual alternations - see [Wallonia](#wallonia-gs1jv) below. Gas (GSG / GS1JVG) stays out
 of scope, and so do GSEZ / GSEZLP: they are tiered like the three above but also price
 self-consumed solar ("Groene stroom uit zonnepanelen op je dak 20 €cent/kWh"), a third
-energy leg with no representation in the model. GRSO is a transient group-buy SKU. `DISCOVER_IDS` (`providers/energyvision.py:179`) lists all of
+energy leg with no representation in the model. GRSO is a transient group-buy SKU. `DISCOVER_IDS` (`providers/energyvision.py:181`) lists all of
 them so `discover()` only flags a genuinely new code.
 
 EnergyVision publishes its cards as PDFs named `EV-<MMYY>-<CODE>-<lang>.pdf` under
@@ -69,7 +69,7 @@ config (contract_id) -> fetch(): GET listing -> regex the EV-<MMYY>-<CODE>-nl hr
 ```
 
 The `publication_label` is a lowercased "month year" string ("juli 2026") from the card
-header via `_publication_label` (`providers/energyvision.py:512`).
+header via `_publication_label` (`providers/energyvision.py:557`).
 
 ## Contracts
 
@@ -97,8 +97,8 @@ leg pays for the key, not about whether the index is hourly.
 
 ### Resolve + download (`fetch`, `_resolve_card_url`)
 
-`fetch` (`providers/energyvision.py:391`) validates the contract id and region, then
-`_resolve_card_url` (`providers/energyvision.py:439`) GETs the listing HTML and regexes the
+`fetch` (`providers/energyvision.py:393`) validates the contract id and region, then
+`_resolve_card_url` (`providers/energyvision.py:484`) GETs the listing HTML and regexes the
 first `href="/sites/default/files/inline-files/EV-<4 digits>-<CODE>-<token>...pdf"` for the
 contract's code and language token. The `[^"]*` before `.pdf` tolerates the Drupal `_0` dedup suffix. The
 resolved absolute URL is layout-extracted with `fetch_pdf_text_layout` (the layout
@@ -106,14 +106,14 @@ extractor keeps column alignment, important for the DSO table), then parsed.
 
 ### Probe
 
-`EXTRACTOR.probe` = `probe` (`providers/energyvision.py:409`): a cheap
+`EXTRACTOR.probe` = `probe` (`providers/energyvision.py:454`): a cheap
 `head_freshness_key` HEAD on the listing page (ETag / Last-Modified). That key flips when
 EnergyVision rotates the monthly cards, which is exactly when the resolved PDF URL changes,
 so the coordinator re-fetches on a month roll rather than on the time-based TTL.
 
 ### Discover + archive
 
-`discover` (`providers/energyvision.py:424`) returns the residential NL electricity product
+`discover` (`providers/energyvision.py:469`) returns the residential NL electricity product
 codes on the listing (`EV-<MMYY>-<CODE>-nl`), which live_check diffs against `DISCOVER_IDS`
 to flag a new SKU. `EXTRACTOR.fetch_for_month` is `None`: the listing only exposes the
 current month and old versioned URLs are not reliably reachable, so past months bill at the
@@ -121,7 +121,7 @@ current snapshot as a proxy, the same as Ecofix / energie.be.
 
 ## Parsing
 
-`parse_snapshot` (`providers/energyvision.py:457`) dispatches on the contract kind
+`parse_snapshot` (`providers/energyvision.py:502`) dispatches on the contract kind
 (dynamic -> `_extract_dynamic`, fixed -> `_extract_fixed`) for the energy + injection legs,
 and shares `_extract_dsos` + `_extract_taxes` across both cards (their DSO and tax tables
 are identical). `_NUM = r"([\d]+(?:[.,][\d]+)?)"` accepts both decimal separators; a
@@ -142,8 +142,8 @@ applying the x10 would 10x the energy leg.
 
 ## Energy formula (GSDYN)
 
-`_extract_dynamic` (`providers/energyvision.py:541`) does one `findall` with
-`_DYN_FORMULA_RE` (`providers/energyvision.py:205`), which matches both the `afnametarief`
+`_extract_dynamic` (`providers/energyvision.py:586`) does one `findall` with
+`_DYN_FORMULA_RE` (`providers/energyvision.py:207`), which matches both the `afnametarief`
 and `injectietarief` rows in the running formula sentence and keys them by group 1:
 
 ```
@@ -167,8 +167,8 @@ vergoeding.
 
 ## Fixed energy (GS3JV)
 
-`_extract_fixed` (`providers/energyvision.py:613`) parses the "Groene stroom - vast tarief
-13,57 €cent/kWh" row with `_FIXED_ENERGY_RE` (`providers/energyvision.py:213`). The fixed
+`_extract_fixed` (`providers/energyvision.py:658`) parses the "Groene stroom - vast tarief
+13,57 €cent/kWh" row with `_FIXED_ENERGY_RE` (`providers/energyvision.py:215`). The fixed
 rate is printed VAT-inclusive, so it is used as-is (`single = 13,57 / 100`), with the 75
 EUR/jaar vaste vergoeding as `yearly_fixed_fee`. `test_fixed_energy_is_fixed_rates` and
 `test_fixed_yearly_fixed_fee` pin both.
@@ -205,7 +205,7 @@ formula", `test_missing_dynamic_injection_is_fatal`) rather than silently credit
 
 ## Taxes
 
-`_extract_taxes` (`providers/energyvision.py:670`) passes this card's anchors to the shared
+`_extract_taxes` (`providers/energyvision.py:715`) passes this card's anchors to the shared
 `flanders_tax_overlay` helper (`providers/_pdf.py`), which parses the Flanders levy block
 into a `TaxOverlay`. The helper owns which rows may be missing; a lost GSC/WKC row now
 reports "GSC/WKK levies" rather than the generic "tax block" this extractor used for both. All card values are VAT-inclusive (the federal excise and energy fund
@@ -229,8 +229,8 @@ bills the domiciled one, and its regex anchors on "Standaard tarief gedomiciliee
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/energyvision.py:687`) covers all eight Fluvius sub-areas via
-`_DSO_ROWS` (`providers/energyvision.py:385`). EnergyVision prints the area names in **upper
+`_extract_dsos` (`providers/energyvision.py:732`) covers all eight Fluvius sub-areas via
+`_DSO_ROWS` (`providers/energyvision.py:387`). EnergyVision prints the area names in **upper
 case** ("FLUVIUS ANTWERPEN", "FLUVIUS KEMPEN", ...), so the shared Title-case
 `FLUVIUS_CARD_LABELS` map does not apply and this module carries its own:
 
@@ -251,7 +251,7 @@ asserts all eight are present on both cards.
 
 The card prints two meter tables (`Vlaams Gewest Digitale Meter` then
 `Vlaams Gewest Analoge Meter`); the parser slices to the **digital-meter** block between
-`_DIGITAL_MARKER` and `_ANALOG_MARKER` (`providers/energyvision.py:380`) - a modern SMR3
+`_DIGITAL_MARKER` and `_ANALOG_MARKER` (`providers/energyvision.py:382`) - a modern SMR3
 customer is on a digital meter - and reads the five columns:
 
 ```
@@ -339,11 +339,36 @@ subtracts it through the one finaliser every branch returns by. Three gates matt
 - **No contract start date, no credit.** There is no first year to place it in, so every
   entry that sets no date is unaffected.
 - **It belongs to the product version signed.** EnergyVision moved this figure four times
-  between March and September 2026 (300, 200, 250, 200), so an entry reading today's card
-  gets today's amount; a supplier with a month archive would want the signing month's.
+  between March and September 2026 (300, 200, 250, 200), so the amount is read off the
+  SIGNING month's card through `signing_month_snapshot`, not today's. A March cohort
+  reading September's card would be credited 200 where its own card promised 300.
 - **Never on another supplier's contract.** The compare page walks the same engine for a
   contract the household never signed, where its own start date says nothing about when it
   would have signed that one.
+
+## Month archive
+
+`fetch_for_month` reads a past month by its plain filename,
+`EV-<MMYY>-<CODE>-<token>.pdf`. The live fetch cannot do that (the CURRENT card carries
+Drupal's dedup suffix, `EV-0726-GS3JV-nl_0.pdf`, so it has to be scraped off the listing),
+but a past month is not on the listing at all and its plain name resolves directly:
+measured across GSDYN / GS3JV / GS1800V / GSVI3 / GSLP for March to September 2026, every
+month a product existed answered 200.
+
+Each product has its own horizon and the site states none: GS1800V reaches back to March
+2026, GSDYN only to June. A month before it answers Drupal's 404 page, which is HTML
+rather than a PDF, so `fetch_pdf_text_layout` rejects it on the magic bytes and the
+`except` turns that into "no archive here". Letting the 404 be the horizon keeps a
+constant from going stale behind the site.
+
+Archived months parse the WHOLE card, not just the energy block, which is what makes the
+archive safe to wire at all: all six months from March to August 2026 come back with eight
+DSO rows, a populated tax overlay and an injection leg. August is the month that would
+have shown a gap, since that is when EnergyVision deleted the supplements sub-block and
+flattened the excise, and `_extract_taxes` already tries the flat row before the tiered
+one. `archive_validity_check` then cross-checks the served card against the month asked
+for, on the authoritative `valid_until` tier, because a CDN serving the current card under
+an archived name parses perfectly cleanly.
 
 ## Wallonia (GS1JV)
 
@@ -422,7 +447,7 @@ Five things a maintainer needs to know about this card:
   the CMS may append `_0`; resolve it off the listing, do not construct it
   (`providers/energyvision.py:431`).
 - **Upper-case Fluvius labels.** EnergyVision prints them in caps, so it needs its own
-  `_DSO_ROWS` map, not `FLUVIUS_CARD_LABELS` (`providers/energyvision.py:385`).
+  `_DSO_ROWS` map, not `FLUVIUS_CARD_LABELS` (`providers/energyvision.py:387`).
 - **Two meter tables.** Slice to the digital-meter block before parsing DSO rows, or the
   analog rows leak in (`providers/energyvision.py:668`).
 - **GSC + WKC are combined; energiefonds is domiciled.** A single combined renewables value,

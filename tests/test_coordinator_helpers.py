@@ -7092,3 +7092,62 @@ def test_anniversary_credit_lands_whole_in_the_window_that_holds_it() -> None:
     # And it is NOT capped: Frank's card states no cap, unlike EnergyVision's,
     # so a tiny connection still gets the cashback its invoice will carry.
     assert credit(date(2027, 1, 1), anniversary, 5.0) == pytest.approx(120.0)
+
+
+async def test_welcome_credit_is_read_from_the_signing_month_card(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The credit belongs to the product version signed, not to today's card.
+    EnergyVision moved the figure four times between March and September 2026
+    (300, 200, 250, 200), so a March cohort reading September's card would be
+    credited 200 where its own card promised 300."""
+    freezer.move_to("2026-03-31 12:00:00+01:00")
+    march = replace(_snapshot(prosumer=None, capacity=None), welcome_credit_eur=300.0)
+    today_card = replace(
+        _snapshot(prosumer=None, capacity=None), welcome_credit_eur=200.0
+    )
+    entry = _entry(
+        region="flanders",
+        solar_regime="none",
+        meter="mono",
+        contract="test",
+        contract_start_date="2026-01-01",
+        consumption_kwh="sensor.cons_total",
+    )
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.cons_total":
+            return {date(2026, 1, 1) + timedelta(days=n): 10.0 for n in range(90)}
+        return {}
+
+    async def _fake_signing(*_a: Any, **_k: Any) -> Any:
+        return march
+
+    async def _cost(with_archive: bool) -> float:
+        stack = patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily)
+        archive = patch(
+            "custom_components.be_electricity_prices.ytd_cost.signing_month_snapshot",
+            new=_fake_signing if with_archive else _no_archive,
+        )
+        with stack, archive:
+            return cast(
+                float,
+                await _compute_current_year_cost(
+                    hass,
+                    None,  # type: ignore[arg-type]
+                    make_stub_extractor(),
+                    today_card,
+                    entry,
+                ),
+            )
+
+    async def _no_archive(*_a: Any, **_k: Any) -> Any:
+        return today_card
+
+    # 90 of the 365 days elapsed, so the two cards differ by 100 EUR of credit
+    # prorated over them.
+    without_archive = await _cost(False)
+    with_archive = await _cost(True)
+    assert without_archive - with_archive == pytest.approx((300.0 - 200.0) * 90 / 365)
